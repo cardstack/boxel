@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import {
   CardDef,
   FieldDef,
@@ -14,16 +15,16 @@ import CodeRefField from '@cardstack/base/code-ref';
 import enumField from '@cardstack/base/enum';
 import { Project, Issue } from './darkfactory';
 
-export const TestRunStatusField = enumField(StringField, {
+export const TestRunStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'running', label: 'Running' },
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
   ],
-});
+}));
 
-export const TestResultStatusField = enumField(StringField, {
+export const TestResultStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'pending', label: 'Pending' },
     { value: 'passed', label: 'Passed' },
@@ -31,7 +32,7 @@ export const TestResultStatusField = enumField(StringField, {
     { value: 'error', label: 'Error' },
     { value: 'skipped', label: 'Skipped' },
   ],
-});
+}));
 
 export class TestResultEntry extends FieldDef {
   static displayName = 'Test Result Entry';

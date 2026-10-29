@@ -6,7 +6,8 @@ import type {
   FieldDef,
 } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
-import { Loader } from './loader.ts';
+import type { Loader } from './loader.ts';
+import { exportIdentitySymbolKey } from './export-identity-plugin.ts';
 import {
   isField,
   isSpec,
@@ -48,7 +49,7 @@ export type CodeRef =
       field: string;
     };
 
-// we don't track ExportedCardRef because Loader.identify already handles those
+// we don't track ExportedCardRef because identify already handles those
 let localIdentities = new WeakMap<
   typeof BaseDef,
   | { type: 'ancestorOf'; card: typeof BaseDef }
@@ -288,6 +289,38 @@ export async function loadCardDef(
   throw err;
 }
 
+// An exported class carries its identity as a static member keyed by this
+// registered symbol, which the compiler puts there (see
+// export-identity-plugin.ts). The tag is read as an own property: a subclass
+// inherits its parent's static members, and an inherited tag names the parent.
+const identityTagKey = Symbol.for(exportIdentitySymbolKey);
+
+// A class is given the same identity object each time it is identified, so
+// callers can compare identities by reference.
+const identities = new WeakMap<Function, ResolvedCodeRef>();
+
+// The identity a class's tag gives it. The tag names the module in its
+// canonical form, which the realm that served it compiled in.
+export function identify(value: unknown): ResolvedCodeRef | undefined {
+  if (typeof value !== 'function') {
+    return undefined;
+  }
+  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
+    | [string, string]
+    | undefined;
+  if (!tag) {
+    return undefined;
+  }
+  let [module, name] = tag;
+  let known = identities.get(value);
+  if (known?.module === module && known.name === name) {
+    return known;
+  }
+  let identity = { module: module as RealmResourceIdentifier, name };
+  identities.set(value, identity);
+  return identity;
+}
+
 export function identifyCard(
   card: typeof BaseDef | undefined,
   maybeRelativeReference?: ((possibleReference: string) => string) | null,
@@ -305,7 +338,7 @@ export function identifyCard(
   }
   visited.add(card);
 
-  let ref = Loader.identify(card);
+  let ref = identify(card);
   if (ref) {
     return maybeRelativeReference
       ? {

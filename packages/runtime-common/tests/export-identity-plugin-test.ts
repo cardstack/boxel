@@ -3,7 +3,6 @@ import {
   exportIdentityPlugin,
   type Options,
 } from '../export-identity-plugin.ts';
-import { baseRealm } from '../constants.ts';
 import type { SharedTests } from '../helpers/index.ts';
 import '../helpers/code-equality-assertion.ts';
 
@@ -16,20 +15,6 @@ function moduleURL(onDisk: string): string {
     .replace(/\.gts$/, '');
 }
 
-// Spells a base realm module by its prefix, as a compile's canonicalModule
-// does for a module imported by the base realm's URL.
-function baseRealmByPrefix(module: string): string {
-  return module.startsWith(baseRealm.url)
-    ? `@cardstack/base/${module.slice(baseRealm.url.length)}`
-    : module;
-}
-
-// The class factories the cases below recognize calls to.
-const classFactories: Options['classFactories'] = [
-  ['@cardstack/base/enum', 'default'],
-  ['@cardstack/catalog/fields/status/status', 'statusField'],
-];
-
 function transform(code: string, options: Partial<Options> = {}): string {
   let result = babel.transformSync(code, {
     filename,
@@ -37,10 +22,7 @@ function transform(code: string, options: Partial<Options> = {}): string {
     babelrc: false,
     parserOpts: { plugins: ['typescript'] },
     plugins: [
-      [
-        exportIdentityPlugin,
-        { moduleIdentifier: moduleURL, classFactories, ...options },
-      ],
+      [exportIdentityPlugin, { moduleIdentifier: moduleURL, ...options }],
     ],
   });
   if (!result?.code) {
@@ -331,152 +313,124 @@ const tests = Object.freeze({
       `,
     );
   },
-  'tags the class a class factory returns for an exported binding': async (
-    assert,
-  ) => {
+  'tags a marked definition for an exported binding': async (assert) => {
     assert.codeEqual(
       transform(`
+        import { markDefinition } from '@cardstack/base';
         import enumField from '@cardstack/base/enum';
-        export const DogStatus = enumField(StringField, { options: ['good'] });
+        export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
       `),
       `
+        import { markDefinition } from '@cardstack/base';
         import enumField from '@cardstack/base/enum';
-        export const DogStatus = enumField(StringField, { options: ['good'] });
+        export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
       `,
     );
   },
 
-  'tags a class factory result exported through an export list': async (
+  'tags a marked definition exported through an export list': async (
     assert,
   ) => {
     assert.codeEqual(
       transform(`
-        import enumField from '@cardstack/base/enum';
-        const Status = enumField(StringField, { options: ['good'] });
+        import { markDefinition } from '@cardstack/base';
+        const Status = markDefinition(enumField(StringField, { options: ['good'] }));
         export { Status as DogStatus };
       `),
       `
-        import enumField from '@cardstack/base/enum';
-        const Status = enumField(StringField, { options: ['good'] });
+        import { markDefinition } from '@cardstack/base';
+        const Status = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
         export { Status as DogStatus };
       `,
     );
   },
 
-  'tags a class factory result that is the default export': async (assert) => {
+  'tags a marked definition that is the default export': async (assert) => {
     assert.codeEqual(
       transform(`
-        import enumField from '@cardstack/base/enum';
-        export default enumField(StringField, { options: ['good'] });
+        import { markDefinition } from '@cardstack/base';
+        export default markDefinition(enumField(StringField, { options: ['good'] }));
       `),
       `
-        import enumField from '@cardstack/base/enum';
-        const _default = enumField(StringField, { options: ['good'] });
+        import { markDefinition } from '@cardstack/base';
+        const _default = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof _default === 'function' && !Object.prototype.hasOwnProperty.call(_default, Symbol.for('ident'))) Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
         export default _default;
       `,
     );
   },
 
-  'recognizes a class factory imported by another spelling or through a namespace':
+  'recognizes markDefinition imported under another name or through a namespace':
     async (assert) => {
       assert.codeEqual(
-        transform(
-          `
-            import enumField from '${baseRealm.url}enum';
-            import * as status from '@cardstack/catalog/fields/status/status';
-            export const DogStatus = enumField(StringField, { options: ['good'] });
-            export const TicketStatus = status.statusField({ options: [] });
-          `,
-          { canonicalModule: baseRealmByPrefix },
-        ),
+        transform(`
+          import { markDefinition as mark } from '@cardstack/base';
+          import * as base from '@cardstack/base';
+          export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
+          export const TicketStatus = base.markDefinition(statusField({ options: [] }));
+        `),
         `
-          import enumField from '${baseRealm.url}enum';
-          import * as status from '@cardstack/catalog/fields/status/status';
-          export const DogStatus = enumField(StringField, { options: ['good'] });
+          import { markDefinition as mark } from '@cardstack/base';
+          import * as base from '@cardstack/base';
+          export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
           if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
-          export const TicketStatus = status.statusField({ options: [] });
+          export const TicketStatus = base.markDefinition(statusField({ options: [] }));
           if (typeof TicketStatus === 'function' && !Object.prototype.hasOwnProperty.call(TicketStatus, Symbol.for('ident'))) Object.defineProperty(TicketStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
         `,
       );
     },
 
-  'recognizes a class factory a module imports by a relative specifier': async (
-    assert,
-  ) => {
-    assert.codeEqual(
-      transform(
-        `
-          import enumField from './enum';
-          export const Status = enumField(StringField, { options: ['good'] });
-        `,
-        {
-          moduleIdentifier: `${baseRealm.url}status`,
-          canonicalModule: baseRealmByPrefix,
-        },
-      ),
-      `
-        import enumField from './enum';
-        export const Status = enumField(StringField, { options: ['good'] });
-        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['${baseRealm.url}status', 'Status'], configurable: true, writable: true });
-      `,
-    );
-  },
+  'refuses markDefinition imported by another spelling of the base package':
+    async (assert) => {
+      for (let source of [
+        '@cardstack/base/mark-definition',
+        // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
+        'https://cardstack.com/base/mark-definition',
+        // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
+        'https://cardstack.com/base',
+      ]) {
+        assert.throws(
+          () =>
+            transform(`
+              import { markDefinition } from '${source}';
+              export const DogStatus = markDefinition(enumField(StringField, {}));
+            `),
+          /import markDefinition from '@cardstack\/base'/,
+          source,
+        );
+      }
+    },
 
-  'recognizes a class factory the module declares and exports itself': async (
-    assert,
-  ) => {
-    assert.codeEqual(
-      transform(
-        `
-          export function statusField(config) {
-            return class Status extends StringField {};
-          }
-          export const StatusField = statusField({ options: [] });
-        `,
-        {
-          moduleIdentifier: '@cardstack/catalog/fields/status/status',
-        },
-      ),
-      `
-        export function statusField(config) {
-          return class Status extends StringField {};
-        }
-        export const StatusField = statusField({ options: [] });
-        if (typeof StatusField === 'function' && !Object.prototype.hasOwnProperty.call(StatusField, Symbol.for('ident'))) Object.defineProperty(StatusField, Symbol.for('ident'), { value: ['@cardstack/catalog/fields/status/status', 'StatusField'], configurable: true, writable: true });
-      `,
-    );
-  },
+  'refuses a marked definition that is not what an exported binding is declared with':
+    async (assert) => {
+      for (let code of [
+        `const Status = markDefinition(enumField(StringField, {}));`,
+        `export class Dog extends CardDef { static status = contains(markDefinition(enumField(StringField, {}))); }`,
+        `export const Dog = makeCard(markDefinition(enumField(StringField, {})));`,
+      ]) {
+        assert.throws(
+          () =>
+            transform(`
+              import { markDefinition } from '@cardstack/base';
+              ${code}
+            `),
+          /markDefinition\(\) must be the value an exported binding is declared with/,
+          code,
+        );
+      }
+    },
 
-  'names an imported module through the importedModule option': async (
-    assert,
-  ) => {
-    let asked: string[] = [];
-    let output = transform(
-      `
-        import makeStatus from '../shared/status';
-        export const Status = makeStatus();
-      `,
-      {
-        moduleIdentifier: moduleURL,
-        classFactories: [['@example/shared/status', 'default']],
-        importedModule: (specifier) => {
-          asked.push(specifier);
-          return specifier === '../shared/status'
-            ? '@example/shared/status'
-            : undefined;
-        },
-      },
-    );
-    assert.deepEqual(asked, ['../shared/status']);
+  'leaves a call to an unmarked function alone': async (assert) => {
     assert.codeEqual(
-      output,
+      transform(`
+        import enumField from '@cardstack/base/enum';
+        export const DogStatus = enumField(StringField, { options: ['good'] });
+      `),
       `
-        import makeStatus from '../shared/status';
-        export const Status = makeStatus();
-        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'Status'], configurable: true, writable: true });
+        import enumField from '@cardstack/base/enum';
+        export const DogStatus = enumField(StringField, { options: ['good'] });
       `,
     );
   },

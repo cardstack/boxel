@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import {
   CardDef,
   FieldDef,
@@ -17,9 +18,11 @@ export class TravelerField extends FieldDef {
   @field email = contains(EmailField);
 }
 
-export const StopKindField = enumField(StringField, {
-  options: ['meal', 'sight', 'transit', 'stay'],
-});
+export const StopKindField = markDefinition(
+  enumField(StringField, {
+    options: ['meal', 'sight', 'transit', 'stay'],
+  }),
+);
 
 export class ItineraryStop extends FieldDef {
   static displayName = 'Itinerary Stop';

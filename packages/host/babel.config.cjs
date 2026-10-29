@@ -7,9 +7,6 @@ const { externalName } = require('@embroider/reverse-exports');
 const {
   exportIdentityPlugin,
 } = require('@cardstack/runtime-common/export-identity-plugin');
-const {
-  CLASS_FACTORIES,
-} = require('@cardstack/runtime-common/class-factories');
 
 const baseDir = path.resolve(__dirname, '..', 'base') + path.sep;
 const basePackageJSON = require('../base/package.json');
@@ -51,17 +48,6 @@ function moduleIdentifier(filename) {
     return name === 'index' ? null : `@cardstack/boxel-host/tools/${name}`;
   }
   return null;
-}
-
-// A base module imports its siblings relatively (`./enum`), and the class
-// factories it calls are named by the module's package name, so a relative
-// import inside base is named the same way.
-function importedModule(specifier, { filename }) {
-  if (!filename || !/^\.\.?\//.test(specifier)) {
-    return undefined;
-  }
-  let file = path.resolve(path.dirname(filename.split('?')[0]), specifier);
-  return file.startsWith(baseDir) ? baseModuleName(file) : undefined;
 }
 
 module.exports = {
@@ -107,10 +93,7 @@ module.exports = {
       },
     ],
     ...babelCompatSupport(),
-    [
-      exportIdentityPlugin,
-      { moduleIdentifier, importedModule, classFactories: CLASS_FACTORIES },
-    ],
+    [exportIdentityPlugin, { moduleIdentifier }],
   ],
 
   generatorOpts: {

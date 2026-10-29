@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import {
   CardDef,
   FieldDef,
@@ -16,14 +17,14 @@ import enumField from '@cardstack/base/enum';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { Project, Issue } from './darkfactory';
 
-export const InstantiateResultStatusField = enumField(StringField, {
+export const InstantiateResultStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'running', label: 'Running' },
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
   ],
-});
+}));
 
 export class InstantiateCardEntry extends FieldDef {
   static displayName = 'Instantiate Card Entry';

@@ -18,7 +18,7 @@ import {
   DefaultFormatsContextName,
   PermissionsContextName,
   getField,
-  Loader,
+  identify,
   isCardInstance,
   type CodeRef,
   type Permissions,
@@ -212,7 +212,7 @@ export function getBoxComponent(
       !effectiveCardOrFieldComponent &&
       currentCardOrFieldClass
     ) {
-      let ref = Loader.identify(currentCardOrFieldClass);
+      let ref = identify(currentCardOrFieldClass);
       if (isEqual(ref, opts.componentCodeRef)) {
         effectiveCardOrFieldComponent = currentCardOrFieldClass;
         break;

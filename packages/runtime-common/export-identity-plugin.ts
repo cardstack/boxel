@@ -5,36 +5,25 @@ import type { NodePath } from '@babel/traverse';
 // Every exported class gets a static member keyed by this registered symbol,
 // whose value is `[moduleIdentifier, exportedName]`.
 //
-// A class written in the module gets the member in its body. A class the
-// module gets from a class factory — `export const Status =
-// enumField(StringField, ...)` — has no body in the module to put it in, so it
-// is tagged by a statement after the binding, once the factory has returned
-// it.
+// A class written in the module gets the member in its body. A definition the
+// module gets from a function call has no body in the module to put it in, so
+// the module marks it by wrapping the call in `markDefinition` — `export const
+// Status = markDefinition(enumField(StringField, ...))` — and it is tagged by a
+// statement after the binding, once the call has returned it.
 export const exportIdentitySymbolKey = 'ident';
 
-// A function that returns a class a module may export, named by the module
-// that exports the function and the name it is exported under.
-export type ClassFactory = readonly [module: string, exportedName: string];
+// The one specifier `markDefinition` is recognized by. Importing it by any
+// other spelling of the base package is a compile error.
+export const markDefinitionModule = '@cardstack/base';
+const markDefinitionName = 'markDefinition';
+const otherBaseSpelling =
+  /^(?:@cardstack\/base\/|https:\/\/cardstack\.com\/base(?:\/|$))/;
 
 export interface Options {
   // Names the module being compiled. A function receives the on-disk filename
   // babel was given and returns the identifier to inline, or `null` to leave
   // every class in that file untagged.
   moduleIdentifier: string | ((filename: string) => string | null);
-  // The class factories whose results are tagged. A class made by any other
-  // function is exported untagged.
-  classFactories: readonly ClassFactory[];
-  // Names the module an import specifier refers to, in the form
-  // `classFactories` names modules. Given the specifier and the module being
-  // compiled; returning undefined leaves the default in place, which resolves
-  // a relative specifier against the module's identifier when that is a URL.
-  importedModule?: (
-    specifier: string,
-    importer: { moduleIdentifier: string; filename: string | undefined },
-  ) => string | undefined;
-  // Spells a resolved module the way `classFactories` does, for a module with
-  // more than one spelling, such as a realm URL a prefix is registered for.
-  canonicalModule?: (module: string) => string;
 }
 
 interface State extends PluginPass {
@@ -136,11 +125,8 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
         }
         let moduleIdentifier: string = resolved;
         let exportedNames = collectLocalExports(program);
-        let isClassFactoryCall = classFactoryCallMatcher(
-          program,
-          state,
-          moduleIdentifier,
-        );
+        let markedDefinitionCall = markedDefinitionMatcher(program);
+        let tagged = new Set<t.Node>();
 
         function tag(
           classPath: NodePath<t.ClassDeclaration | t.ClassExpression>,
@@ -182,12 +168,11 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
                 continue;
               }
               let exportedName = exportedNameOf(id.name);
+              let marked = markedDefinitionCall(init.node);
               if (init.isClassExpression()) {
                 tag(init, exportedName);
-              } else if (
-                exportedName !== undefined &&
-                isClassFactoryCall(init.node)
-              ) {
+              } else if (exportedName !== undefined && marked) {
+                tagged.add(marked);
                 computed.push(
                   identityStatement(id, moduleIdentifier, exportedName),
                 );
@@ -209,10 +194,11 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
               tag(declaration, 'default');
             } else if (
               declaration.isExpression() &&
-              isClassFactoryCall(declaration.node)
+              markedDefinitionCall(declaration.node)
             ) {
-              // `export default enumField(...)`: the value is bound to a name
-              // the tagging statement can reach, and that name exported.
+              tagged.add(markedDefinitionCall(declaration.node)!);
+              // `export default markDefinition(...)`: the value is bound to a
+              // name the tagging statement can reach, and that name exported.
               let binding = statement.scope.generateUidIdentifier('default');
               statement.insertBefore([
                 t.variableDeclaration('const', [
@@ -236,80 +222,80 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
             );
           }
         }
+
+        // A marked definition that isn't what an exported binding is declared
+        // with has no name to be tagged with.
+        program.traverse({
+          CallExpression(call) {
+            if (
+              markedDefinitionCall(call.node) === call.node &&
+              !tagged.has(call.node)
+            ) {
+              throw call.buildCodeFrameError(
+                `${markDefinitionName}() must be the value an exported binding is declared with, or the module's default export`,
+              );
+            }
+          },
+        });
       },
     },
   };
 }
 
-// Recognizes a call to one of the configured class factories, however the
-// module reaches the factory: imported by default, by name or through a
-// namespace, or declared and exported by the module itself.
-function classFactoryCallMatcher(
+// Recognizes a call to `markDefinition` as imported from `@cardstack/base`,
+// by name or through a namespace, and returns the call. Throws on an import
+// of `markDefinition` from another spelling of the base package.
+function markedDefinitionMatcher(
   program: NodePath<t.Program>,
-  state: State,
-  moduleIdentifier: string,
-): (expression: t.Node | null | undefined) => boolean {
-  let factories = new Set(
-    (state.opts.classFactories ?? []).map(
-      ([module, name]) => `${trimExtension(module)}#${name}`,
-    ),
-  );
-  let importer = { moduleIdentifier, filename: state.filename };
-  let canonical = state.opts.canonicalModule ?? ((module: string) => module);
-  let moduleOf = (specifier: string) =>
-    trimExtension(
-      canonical(
-        state.opts.importedModule?.(specifier, importer) ??
-          defaultImportedModule(specifier, moduleIdentifier),
-      ),
-    );
-  let ownExports = collectOwnExportNames(program);
-
-  // The factory a callee names, as `module#exportedName`.
-  function factoryOf(callee: t.Node): string | undefined {
-    if (callee.type === 'Identifier') {
-      let binding = program.scope.getBinding(callee.name);
-      if (!binding) {
-        return undefined;
-      }
-      let declaration = binding.path;
+): (expression: t.Node | null | undefined) => t.CallExpression | undefined {
+  let names = new Set<string>();
+  let namespaces = new Set<string>();
+  for (let statement of program.get('body')) {
+    if (!statement.isImportDeclaration()) {
+      continue;
+    }
+    let source = statement.node.source.value;
+    for (let specifier of statement.get('specifiers')) {
       if (
-        declaration.isImportDefaultSpecifier() ||
-        declaration.isImportSpecifier()
+        specifier.isImportSpecifier() &&
+        importedName(specifier.node) === markDefinitionName
       ) {
-        let source = (declaration.parent as t.ImportDeclaration).source.value;
-        let imported = declaration.isImportDefaultSpecifier()
-          ? 'default'
-          : importedName(declaration.node);
-        return `${moduleOf(source)}#${imported}`;
+        if (source === markDefinitionModule) {
+          names.add(specifier.node.local.name);
+        } else if (otherBaseSpelling.test(source)) {
+          throw specifier.buildCodeFrameError(
+            `import ${markDefinitionName} from '${markDefinitionModule}', not '${source}'`,
+          );
+        }
+      } else if (
+        specifier.isImportNamespaceSpecifier() &&
+        source === markDefinitionModule
+      ) {
+        namespaces.add(specifier.node.local.name);
       }
-      let exported = ownExports.get(callee.name);
-      return exported === undefined
-        ? undefined
-        : `${trimExtension(canonical(moduleIdentifier))}#${exported}`;
+    }
+  }
+
+  return function markedDefinitionCall(expression) {
+    let call = unwrap(expression);
+    if (call?.type !== 'CallExpression') {
+      return undefined;
+    }
+    let callee = call.callee;
+    if (callee.type === 'Identifier' && names.has(callee.name)) {
+      return call;
     }
     if (
       callee.type === 'MemberExpression' &&
       !callee.computed &&
       callee.object.type === 'Identifier' &&
-      callee.property.type === 'Identifier'
+      namespaces.has(callee.object.name) &&
+      callee.property.type === 'Identifier' &&
+      callee.property.name === markDefinitionName
     ) {
-      let declaration = program.scope.getBinding(callee.object.name)?.path;
-      if (declaration?.isImportNamespaceSpecifier()) {
-        let source = (declaration.parent as t.ImportDeclaration).source.value;
-        return `${moduleOf(source)}#${callee.property.name}`;
-      }
+      return call;
     }
     return undefined;
-  }
-
-  return function isClassFactoryCall(expression) {
-    let call = unwrap(expression);
-    if (call?.type !== 'CallExpression') {
-      return false;
-    }
-    let factory = factoryOf(call.callee);
-    return factory !== undefined && factories.has(factory);
   };
 }
 
@@ -333,50 +319,6 @@ function importedName(specifier: t.ImportSpecifier): string {
   return specifier.imported.type === 'Identifier'
     ? specifier.imported.name
     : specifier.imported.value;
-}
-
-// A relative specifier resolved against the importing module when its
-// identifier is a URL.
-function defaultImportedModule(
-  specifier: string,
-  moduleIdentifier: string,
-): string {
-  if (!/^\.\.?\//.test(specifier)) {
-    return specifier;
-  }
-  try {
-    return new URL(specifier, moduleIdentifier).href;
-  } catch {
-    return specifier;
-  }
-}
-
-function trimExtension(module: string): string {
-  return module.replace(/\.(gts|ts|gjs|js)$/, '');
-}
-
-// Maps every local binding the module exports — by its declaration or by a
-// separate export statement — to the first name it is exported under.
-function collectOwnExportNames(
-  program: NodePath<t.Program>,
-): Map<string, string> {
-  let names = collectLocalExports(program);
-  for (let statement of program.node.body) {
-    if (statement.type !== 'ExportNamedDeclaration') {
-      continue;
-    }
-    let declaration = statement.declaration;
-    if (declaration?.type === 'FunctionDeclaration' && declaration.id) {
-      names.set(declaration.id.name, declaration.id.name);
-    } else if (declaration?.type === 'VariableDeclaration') {
-      for (let declarator of declaration.declarations) {
-        if (declarator.id.type === 'Identifier') {
-          names.set(declarator.id.name, declarator.id.name);
-        }
-      }
-    }
-  }
-  return names;
 }
 
 function resolveModuleIdentifier(state: State): string | null {

@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { Loader, getField } from '@cardstack/runtime-common';
+import { getField, identify } from '@cardstack/runtime-common';
 
 import { getTypes } from '@cardstack/host/utils/file-def-attributes-extractor';
 
@@ -16,7 +16,7 @@ module('Integration | bundled base oracle', function (hooks) {
     let officeField = getField(DocxDef, 'officeMetadata');
 
     assert.deepEqual(
-      Loader.identify(officeField!.card),
+      identify(officeField!.card),
       {
         module: '@cardstack/base/file-formats/metadata-fields',
         name: 'OfficeMetadataField',
@@ -60,7 +60,7 @@ module('Integration | bundled base oracle', function (hooks) {
     );
 
     assert.deepEqual(
-      Loader.identify(ImageDef),
+      identify(ImageDef),
       { module: '@cardstack/base/card-api', name: 'ImageDef' },
       'the ref names card-api, though the class was loaded through image-file-def',
     );

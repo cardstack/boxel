@@ -74,31 +74,31 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags the class a class factory returns for an exported binding', async function (assert) {
+    test('tags a marked definition for an exported binding', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags a class factory result exported through an export list', async function (assert) {
+    test('tags a marked definition exported through an export list', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('tags a class factory result that is the default export', async function (assert) {
+    test('tags a marked definition that is the default export', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('recognizes a class factory imported by another spelling or through a namespace', async function (assert) {
+    test('recognizes markDefinition imported under another name or through a namespace', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('recognizes a class factory a module imports by a relative specifier', async function (assert) {
+    test('refuses markDefinition imported by another spelling of the base package', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('recognizes a class factory the module declares and exports itself', async function (assert) {
+    test('refuses a marked definition that is not what an exported binding is declared with', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 
-    test('names an imported module through the importedModule option', async function (assert) {
+    test('leaves a call to an unmarked function alone', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
 

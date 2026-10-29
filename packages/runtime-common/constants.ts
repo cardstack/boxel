@@ -12,17 +12,17 @@ export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
 /**
  * The base realm's canonical RRI prefix. Use this when building code
- * refs that should match what `Loader.identify` / `identifyCard` emit
- * for base-realm classes (which canonicalise via `vn.unresolveURL`
- * to the registered `@cardstack/base/` prefix).
+ * refs that should match what `identify` / `identifyCard` emit
+ * for base-realm classes, which are tagged with the base realm's
+ * canonical name.
  */
 export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module inside the base realm.
  * Returns the prefix-form RRI (e.g. `@cardstack/base/card-api`) so the
- * value matches what `Loader.identify` / `identifyCard` emit for
- * base-realm classes after the runtime's `unresolveURL` chase.
+ * value matches what `identify` / `identifyCard` emit for
+ * base-realm classes.
  */
 export function baseRRI(path: string): RealmResourceIdentifier {
   return rri(`${baseRealmRRI}${path}`);

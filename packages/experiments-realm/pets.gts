@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import {
   CardDef,
   Component,
@@ -17,7 +18,7 @@ import PawPrintIcon from '@cardstack/boxel-icons/paw-print';
 
 // A simple enum field with rich options, including an explicit null option
 // for “Mystery”.
-export const SpeciesField = enumField(StringField, {
+export const SpeciesField = markDefinition(enumField(StringField, {
   options: [
     { value: 'cat', label: 'Cat', icon: CatIcon },
     { value: 'dog', label: 'Dog', icon: DogIcon },
@@ -25,7 +26,7 @@ export const SpeciesField = enumField(StringField, {
     { value: null, label: 'Mystery', icon: PawPrintIcon },
   ],
   displayName: 'Species',
-});
+}));
 
 export class Pet extends CardDef {
   @field name = contains(StringField);

@@ -38,6 +38,7 @@ import {
   hasNothingToShow,
   getSerializer,
   humanReadable,
+  identify,
   identifyCard,
   computeContentHash,
   inferContentType,
@@ -5208,7 +5209,7 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  let identity = Loader.identify(ctor);
+  let identity = identify(ctor);
   if (!identity) {
     return;
   }

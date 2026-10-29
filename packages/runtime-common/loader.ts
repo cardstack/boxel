@@ -14,7 +14,6 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import { exportIdentitySymbolKey } from './export-identity-plugin.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -238,45 +237,6 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 let nonce = 0;
-
-// An exported class carries its identity as a static member keyed by this
-// registered symbol, which the compiler puts there (see
-// export-identity-plugin.ts). The tag is read as an own property: a subclass
-// inherits its parent's static members, and an inherited tag names the parent.
-const identityTagKey = Symbol.for(exportIdentitySymbolKey);
-
-// The identity a class's tag gives it, in the form a code ref carries. A tag
-// records its module as compiled — a realm module by its URL — and the module
-// is canonicalized when the tag is read: the realm prefix that spells it may be
-// registered after the module was compiled.
-//
-// A class is given the same identity object each time it is identified, for as
-// long as its module canonicalizes the same way, so callers can compare
-// identities by reference.
-const identities = new WeakMap<Function, { module: string; name: string }>();
-
-function identityFromTag(
-  value: Function,
-  virtualNetwork: VirtualNetwork | undefined,
-): { module: string; name: string } | undefined {
-  let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
-    | [string, string]
-    | undefined;
-  if (!tag) {
-    return undefined;
-  }
-  let [taggedModule, name] = tag;
-  let module = virtualNetwork
-    ? virtualNetwork.unresolveURL(taggedModule)
-    : taggedModule;
-  let known = identities.get(value);
-  if (known?.module === module && known.name === name) {
-    return known;
-  }
-  let identity = { module, name };
-  identities.set(value, identity);
-  return identity;
-}
 
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
@@ -550,31 +510,6 @@ export class Loader {
       visited,
       this.canonicalIdentifier(initialHref),
     );
-  }
-
-  static identify(
-    value: unknown,
-  ): { module: string; name: string } | undefined {
-    if (typeof value !== 'function') {
-      return undefined;
-    }
-    let loader = Loader.loaders.get(value);
-    if (loader) {
-      return loader.identify(value);
-    }
-    // A class no loader has loaded a module of, such as a bundled base class
-    // reached only from inside another module's chunk, has no virtual network
-    // to canonicalize its tag through. A bundled base module's tag is already
-    // in canonical form.
-    return identityFromTag(value, undefined);
-  }
-
-  identify(value: unknown): { module: string; name: string } | undefined {
-    if (typeof value === 'function') {
-      return identityFromTag(value, this.virtualNetwork);
-    } else {
-      return undefined;
-    }
   }
 
   static getLoaderFor(value: unknown): Loader | undefined {

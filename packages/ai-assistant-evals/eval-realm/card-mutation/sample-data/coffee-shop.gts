@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import {
   CardDef,
   contains,
@@ -27,9 +28,11 @@ export class ShopOwner extends CardDef {
   });
 }
 
-export const PriceLevelField = enumField(StringField, {
-  options: ['$', '$$', '$$$'],
-});
+export const PriceLevelField = markDefinition(
+  enumField(StringField, {
+    options: ['$', '$$', '$$$'],
+  }),
+);
 
 export class CoffeeShop extends CardDef {
   static displayName = 'Coffee Shop';

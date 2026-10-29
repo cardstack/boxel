@@ -25,6 +25,7 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "paths": {
+      "@cardstack/base": ["../base/mark-definition.ts"],
       "@cardstack/base/*": [
         "../base/*.gts",
         "../base/*.ts",

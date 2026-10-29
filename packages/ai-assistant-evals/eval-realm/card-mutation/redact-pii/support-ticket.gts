@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base';
 import { CardDef, contains, field } from '@cardstack/base/card-api';
 import AddressField from '@cardstack/base/address';
 import DateField from '@cardstack/base/date';
@@ -8,18 +9,22 @@ import PhoneNumberField from '@cardstack/base/phone-number';
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
 
-export const TicketCategoryField = enumField(StringField, {
-  options: ['hardware', 'software', 'billing', 'shipping'],
-});
+export const TicketCategoryField = markDefinition(
+  enumField(StringField, {
+    options: ['hardware', 'software', 'billing', 'shipping'],
+  }),
+);
 
 // Each option stores its value; the label is only what the editor shows.
-export const TicketStatusField = enumField(StringField, {
-  options: [
-    { value: 'open', label: 'Open' },
-    { value: 'escalated_to_vendor', label: 'Escalated to vendor' },
-    { value: 'resolved', label: 'Resolved' },
-  ],
-});
+export const TicketStatusField = markDefinition(
+  enumField(StringField, {
+    options: [
+      { value: 'open', label: 'Open' },
+      { value: 'escalated_to_vendor', label: 'Escalated to vendor' },
+      { value: 'resolved', label: 'Resolved' },
+    ],
+  }),
+);
 
 export class SupportTicket extends CardDef {
   static displayName = 'Support Ticket';

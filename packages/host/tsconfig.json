@@ -32,6 +32,7 @@
       "@cardstack/boxel-host/tools/*": ["app/tools/*"],
       "@cardstack/boxel-host/commands/*": ["app/tools/*"],
       "@cardstack/boxel-host/lib/*": ["app/lib/*"],
+      "@cardstack/base": ["../base/mark-definition.ts"],
       "@cardstack/base/*": [
         "../base/*.gts",
         "../base/*.ts",

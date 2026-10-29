@@ -13,11 +13,12 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  identify,
   identifyCard,
   PermissionsContextName,
   type Permissions,
 } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   cardInfo,
@@ -130,19 +131,16 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     );
   });
 
-  test('Loader.identify returns RRI form for base-realm classes', async function (assert) {
+  test('identify returns RRI form for base-realm classes', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {},
     });
 
-    // Base-realm classes (CardDef, FieldDef, etc.) are imported via the
-    // virtual URL `https://cardstack.com/base/...`. `VirtualNetwork.
-    // unresolveURL` chases that through the registered virtual→real URL
-    // mapping and matches the resolved URL against the `@cardstack/base/`
-    // realm-prefix mapping, so the captured module identity comes out in
-    // RRI form.
-    let cardDefRef = Loader.identify(CardDef)!;
+    // Base-realm classes (CardDef, FieldDef, etc.) are compiled into the
+    // host bundle, tagged with the name they are imported by, which is
+    // their RRI form.
+    let cardDefRef = identify(CardDef)!;
     assert.strictEqual(cardDefRef.name, 'CardDef', 'CardDef name');
     assert.strictEqual(
       cardDefRef.module,
@@ -150,7 +148,7 @@ module('Integration | serialization | RRI form audit', function (hooks) {
       'CardDef module is @cardstack/base/ RRI form',
     );
 
-    let fieldDefRef = Loader.identify(FieldDef)!;
+    let fieldDefRef = identify(FieldDef)!;
     assert.strictEqual(fieldDefRef.name, 'FieldDef', 'FieldDef name');
     assert.strictEqual(
       fieldDefRef.module,
@@ -159,11 +157,9 @@ module('Integration | serialization | RRI form audit', function (hooks) {
     );
 
     // `packages/base/string.ts` is a re-export — `export default StringField`
-    // pointing at the class defined in card-api.gts. The Loader's identity
-    // capture sees card-api first (CardDef et al. are imported together),
-    // so StringField's recorded identity is the card-api named export,
-    // not the string-module default.
-    let stringFieldRef = Loader.identify(StringField)!;
+    // pointing at the class defined in card-api.gts, so StringField is tagged
+    // by card-api, the module that declares it.
+    let stringFieldRef = identify(StringField)!;
     assert.strictEqual(stringFieldRef.name, 'StringField', 'StringField name');
     assert.strictEqual(
       stringFieldRef.module,

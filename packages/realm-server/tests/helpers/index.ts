@@ -27,6 +27,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   Realm,
+  ri,
   searchEntryWireQueryFromQuery,
   parseSearchEntryQueryFromPayload,
   baseRealm,
@@ -573,6 +574,9 @@ export function makeTestReconciler(
       );
       let reconciledRealm = new Realm({
         url: row.url,
+        canonicalName: ri(
+          dynamicMountDeps.virtualNetwork.unresolveURL(row.url),
+        ),
         adapter,
         secretSeed: realmSecretSeed,
         virtualNetwork: dynamicMountDeps.virtualNetwork,
@@ -1610,6 +1614,7 @@ export async function createRealm({
   let realm = new Realm(
     {
       url: realmURL,
+      canonicalName: ri(virtualNetwork.unresolveURL(realmURL)),
       adapter,
       secretSeed: realmSecretSeed,
       virtualNetwork,

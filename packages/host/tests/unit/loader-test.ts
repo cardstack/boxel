@@ -4,7 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader, VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  identify,
+  Loader,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 
 import {
   beginTimerBlock,
@@ -239,12 +244,7 @@ module('Unit | loader', function (hooks) {
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmURL}person`,
     );
-    assert.deepEqual(loader.identify(Person), {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    // The loader knows which loader instance was used to import the card
-    assert.deepEqual(Loader.identify(Person), {
+    assert.deepEqual(identify(Person), {
       module: `${testRealmURL}person`,
       name: 'Person',
     });
@@ -722,11 +722,8 @@ module('Unit | loader', function (hooks) {
       default: StringField,
     });
 
-    // This Loader is constructed without a `virtualNetwork`, so the tag is
-    // read without canonicalizing it and the identity stays in URL form.
-    // Other test setups that build a VN alongside the Loader see the RRI
-    // canonical form here.
-    assert.deepEqual(Loader.identify(StringField), {
+    // The identity is the module the tag names.
+    assert.deepEqual(identify(StringField), {
       module: `${baseRealm.url}card-api`,
       name: 'StringField',
     });

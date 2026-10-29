@@ -1274,7 +1274,8 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 // Carries the transpiler version, so compiled output stored or cached under an
 // earlier version no longer matches the validator a request builds and is
-// compiled over.
+// compiled over. A realm adds its canonical name, which its compiled output
+// names its modules by.
 const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
@@ -2899,6 +2900,8 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
+  #canonicalPaths: RealmPaths;
+  #moduleEtagVariant: string;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
@@ -3062,6 +3065,7 @@ export class Realm {
   constructor(
     {
       url,
+      canonicalName,
       adapter,
       secretSeed,
       dbAdapter,
@@ -3082,6 +3086,12 @@ export class Realm {
       callApi,
     }: {
       url: string;
+      // The name the realm's resources have wherever they are referred to
+      // (ADR 002): its registered prefix, such as `@cardstack/catalog/`, or
+      // its own URL when it has none. It is constant for the realm, so the
+      // identities its compiled modules carry are written in it, whatever
+      // URL a client reaches the realm by.
+      canonicalName: RealmIdentifier;
       adapter: RealmAdapter;
       secretSeed: string;
       dbAdapter: DBAdapter;
@@ -3127,6 +3137,8 @@ export class Realm {
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url), virtualNetwork);
+    this.#canonicalPaths = new RealmPaths(canonicalName);
+    this.#moduleEtagVariant = `${MODULE_ETAG_VARIANT}-${canonicalName}`;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
@@ -9469,7 +9481,7 @@ export class Realm {
         await this.#fileFingerprint(fileRef),
         fileRef.lastModifiedMs ?? fileRef.lastModified,
       ) ?? fileRef.lastModified,
-      MODULE_ETAG_VARIANT,
+      this.#moduleEtagVariant,
     );
     if (etag && request.headers.get('if-none-match') === etag) {
       let headers: Record<string, string> = {
@@ -9544,7 +9556,7 @@ export class Realm {
         await this.#fileFingerprint(fileRef),
         fileRef.lastModifiedMs ?? fileRef.lastModified,
       ) ?? fileRef.lastModified,
-      MODULE_ETAG_VARIANT,
+      this.#moduleEtagVariant,
     );
     // What the caller asked for is served from here on, so a caller who isn't
     // signed in is counted against the realm's limit for it.
@@ -10112,14 +10124,12 @@ export class Realm {
       }
       this.#transpileCallCount += 1;
       compileStart = performance.now();
-      // The module's exported classes are tagged with its URL without the
-      // executable extension. The tag is canonicalized where it is read, so
-      // what is compiled does not depend on the realm prefixes registered now.
-      // Imports are canonicalized to recognize the class factories the module
-      // calls by whichever URL it imports them.
+      // The module's exported classes are tagged with its canonical
+      // identifier, without the executable extension.
       transpiled = await transpileJS(source, debugFilename, {
-        moduleIdentifier: trimExecutableExtension(canonicalPath),
-        canonicalModule: (module) => this.#virtualNetwork.unresolveURL(module),
+        moduleIdentifier: trimExecutableExtension(
+          this.#canonicalPaths.fileRRI(fileRef.path),
+        ),
       });
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that

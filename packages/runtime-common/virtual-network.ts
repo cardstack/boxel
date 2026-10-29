@@ -4,7 +4,7 @@ import {
 } from './host-package-names.ts';
 import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
-import { baseRealm } from './index.ts';
+import { baseRealm, baseRRI } from './index.ts';
 import { isPrefixForm } from './realm-identifiers.ts';
 import type {
   RealmIdentifier,
@@ -31,6 +31,12 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
+  // Exact specifiers the import map maps to another specifier, which then
+  // resolves like any other. The base package's own name is one: it names the
+  // module that holds `markDefinition` (see base/mark-definition.ts).
+  private exactImports: Map<string, string> = new Map([
+    ['@cardstack/base', baseRRI('mark-definition')],
+  ]);
   private realmMappings = new Map<string, string>();
   // Which keys of `realmMappings` are shimmed package namespaces rather than
   // realms. Both kinds live in one table because both have to resolve — a
@@ -178,6 +184,8 @@ export class VirtualNetwork {
   }
 
   resolveImport = (moduleIdentifier: string) => {
+    moduleIdentifier =
+      this.exactImports.get(moduleIdentifier) ?? moduleIdentifier;
     for (let [prefix, handler] of this.importMap) {
       if (moduleIdentifier.startsWith(prefix)) {
         return handler(moduleIdentifier.slice(prefix.length));

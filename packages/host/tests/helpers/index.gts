@@ -1664,6 +1664,7 @@ async function setupTestRealm({
   realm = new Realm(
     {
       url: realmURL,
+      canonicalName: ri(virtualNetwork.unresolveURL(realmURL)),
       adapter,
       secretSeed: testRealmSecretSeed,
       virtualNetwork,

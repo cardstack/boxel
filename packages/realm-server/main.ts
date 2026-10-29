@@ -19,6 +19,7 @@ import {
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   parseRateLimitSpec,
   markRealmPublishable,
+  ri,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -801,6 +802,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       const reconciledRealm = new Realm(
         {
           url: row.url,
+          // The prefixes are registered from this process's configuration
+          // before any realm is mounted, so a realm's name in them is fixed.
+          canonicalName: ri(virtualNetwork.unresolveURL(row.url)),
           adapter: reconciledAdapter,
           secretSeed: REALM_SECRET_SEED,
           virtualNetwork,

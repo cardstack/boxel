@@ -1,7 +1,8 @@
 {
   "name": "@cardstack/base",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "./mark-definition.ts",
+  "types": "./mark-definition.ts",
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "catalog:",

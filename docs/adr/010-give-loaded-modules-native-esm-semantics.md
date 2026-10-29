@@ -10,6 +10,12 @@ scope:
   - packages/runtime-common/package-shim-handler.ts
   - packages/runtime-common/code-ref.ts
   - packages/runtime-common/index.ts
+  - packages/runtime-common/export-identity-plugin.ts
+  - packages/runtime-common/transpile.ts
+  - packages/runtime-common/realm.ts
+  - packages/realm-server/main.ts
+  - packages/base/mark-definition.ts
+  - packages/host/babel.config.cjs
   - packages/host/app/services/loader-service.ts
   - packages/host/app/services/network.ts
   - packages/host/app/services/operations.ts
@@ -137,17 +143,33 @@ This is the closed list of ways the Loader departs from native ESM.
    them. These properties are the only way into the module map. A bundled
    module that a shim serves has no `import.meta`, and MAY reach its Loader
    through `Loader.forBundledModules`.
-3. **Observation APIs.** `identify`, `getLoaderFor`, the module-map queries
+3. **Observation APIs.** `getLoaderFor`, the module-map queries
    (`isModuleLoaded`, `moduleKey`, `loadedModuleKeys`, `canonicalURLFor`),
    `getConsumedModules`, `getKnownConsumedModules`, runtime dependency
    tracking, and evaluation timing read the module graph. They MUST NOT change
    what any module observes, and MUST NOT load or evaluate a module. They
    report each module by the URL `resolveImport` gave it. A caller that needs
    the RRI form (ADR 002) converts the URL itself. We intend to phase out
-   `identify` and `getLoaderFor`. New code SHOULD NOT add callers of either.
+   `getLoaderFor`. New code SHOULD NOT add callers of it.
 4. **Discarding modules.** The host MAY replace a Loader to pick up changed
    modules, or tell a Loader to clear its module map, for example when a realm
    mapping changes. No other path removes a module from a Loader.
+5. **Identity tags.** A class a module exports carries a static member keyed
+   by `Symbol.for('ident')`, whose value is the module's canonical identifier
+   (ADR 002) and the name the class is exported under. The compiler that
+   produces the module writes it, in
+   `packages/runtime-common/export-identity-plugin.ts`:
+   - A realm MUST be given its canonical name when it is mounted: its
+     registered prefix, or its own URL when it has none. It compiles that
+     name into its modules' tags, so a tag never depends on the URL a client
+     reaches the realm by, and no reader converts it.
+   - A definition a module gets from a call, rather than a class it writes,
+     is tagged only when the module wraps the call in `markDefinition`,
+     imported from `@cardstack/base` by that exact specifier. The compiler
+     MUST NOT recognize such definitions any other way, and MUST refuse a
+     `markDefinition` it cannot tag.
+   - The Loader MUST NOT write, read or rewrite identity tags. `identify` in
+     `code-ref.ts` reads them.
 
 ### 1.5. ESM features the Loader must gain
 
@@ -198,6 +220,14 @@ iframe with its own loader.
   spellings are one module.
 - **Let a failed fetch retry on the next import.** This differs from ESM.
   Retrying a transient failure is `fetch`'s job (§1.3).
+- **Tag modules by URL and canonicalize the tag where it is read.** Every
+  reader then needs a `VirtualNetwork` (§1.3 forbids the Loader one), and a
+  class's identity varies with the reader's mappings. A realm's canonical name
+  is constant, so it is compiled in (§1.4.5).
+- **Recognize the results of a fixed list of class factories.** The list lives
+  in the platform, so a realm's own factory needs a platform change, and the
+  compiler has to resolve where each call's callee was imported from.
+  `markDefinition` says so at the call (§1.4.5).
 
 ## 4. Remediation
 
@@ -234,9 +264,6 @@ than prose, and it is deleted when the ADR is accepted.
 - `canonicalIdentifier`, `trackingKey`, `moduleKey`, `loadedModuleKeys` and
   `getConsumedModules` break §1.4.3: they report RRIs, converted through the
   `VirtualNetwork`, instead of URLs.
-- `identify` breaks §1.4.3: it reads a class's identity tag and reports the
-  module as an RRI, converted through the `VirtualNetwork`, and the tags of
-  bundled base classes are `@cardstack/base/` RRIs.
 - `getConsumedModules` breaks §1.4.3: it imports, and so evaluates, a module
   that is not loaded yet.
 - `shimModule`, `moduleShims`, `cloneLoader` break §1.4.2: they put modules
