@@ -588,6 +588,44 @@ module('Acceptance | dashboard', function (hooks) {
       );
     });
 
+    test('the star is a toggle with a fixed label whose pressed state and tooltip follow the favorite', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let star =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
+      let deskStar =
+        '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-workspace-favorite-btn]';
+      let tip =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"] [data-test-pretui-tooltip] [role="tooltip"]';
+      assert.dom(tip).hasText('Add to Favorites');
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'false')
+        .hasAttribute('aria-describedby', find(tip)?.id ?? '')
+        .doesNotHaveAttribute('title', 'no native tooltip over the tip');
+
+      await click(star);
+
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'true');
+      assert.dom(tip).hasText('Remove from Favorites');
+      assert
+        .dom(deskStar)
+        .hasAttribute('aria-pressed', 'true', "the new desk's star is pressed");
+
+      await click(star);
+
+      assert
+        .dom(star)
+        .hasAttribute('aria-label', 'Favorite')
+        .hasAttribute('aria-pressed', 'false');
+      assert.dom(tip).hasText('Add to Favorites');
+      assert.dom(deskStar).doesNotExist();
+    });
+
     test("a hosted tile's site menu lists each published site and opens the one chosen", async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       let now = Date.now();

@@ -203,11 +203,12 @@ export default class Workspace extends Component<Signature> {
           <Tooltip @placement='top'>
             <:trigger>
               <ContextButton
-                @label={{this.favoriteLabel}}
+                @label='Favorite'
                 @icon={{if this.isFavorited StarFilled Star}}
                 @variant='ghost'
                 @width='16'
                 @height='16'
+                aria-pressed={{if this.isFavorited 'true' 'false'}}
                 {{on 'click' this.toggleFavorite}}
                 data-test-workspace-favorite-btn={{@realmIdentifier}}
               />

@@ -104,6 +104,33 @@ module('Pretui | components/icon-button', function (hooks) {
     );
   });
 
+  test('@pressedTint={{false}} drops the tint and keeps the toggle state', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Pin' @pressed={{true}} data-test-tinted />
+        <IconButton
+          @label='Pin'
+          @pressed={{true}}
+          @pressedTint={{false}}
+          data-test-untinted
+        />
+      </template>,
+    );
+    assert.false(
+      el('[data-test-tinted]').hasAttribute('data-pressed-tint'),
+      'tinted by default',
+    );
+    assert.strictEqual(
+      el('[data-test-untinted]').getAttribute('data-pressed-tint'),
+      'none',
+    );
+    assert.strictEqual(
+      el('[data-test-untinted]').getAttribute('aria-pressed'),
+      'true',
+      'still announced as pressed',
+    );
+  });
+
   test('busy keeps focus and adds @busyLabel to the accessible name', async function (assert) {
     await render(
       <template>
@@ -135,6 +162,56 @@ module('Pretui | components/icon-button', function (hooks) {
       '@loading is an alias',
     );
     assert.strictEqual(loading.getAttribute('aria-label'), 'Save');
+  });
+
+  test('@tooltip shows in a Tooltip in place of the native title', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Favorite' @tooltip='Add to Favorites'>★</IconButton>
+      </template>,
+    );
+    let btn = el();
+    let tip = el('[data-test-pretui-tooltip] [role="tooltip"]');
+    assert.false(btn.hasAttribute('title'), 'no native tooltip over the tip');
+    assert.strictEqual(
+      btn.getAttribute('aria-label'),
+      'Favorite',
+      'the name stays @label',
+    );
+    assert.strictEqual(
+      btn.getAttribute('aria-describedby'),
+      tip.id,
+      'the tip describes the button',
+    );
+    assert.strictEqual(tip.textContent?.trim(), 'Add to Favorites');
+  });
+
+  test('@tooltipSide picks the side the tip opens on', async function (assert) {
+    await render(
+      <template>
+        <IconButton
+          @label='Favorite'
+          @tooltip='Add to Favorites'
+          @tooltipSide='right'
+        >★</IconButton>
+      </template>,
+    );
+    assert.strictEqual(
+      el('[data-test-pretui-tooltip] [role="tooltip"]').dataset['side'],
+      'right',
+    );
+  });
+
+  test('without @tooltip there is no Tooltip wrapper', async function (assert) {
+    await render(
+      <template>
+        <IconButton @label='Favorite'>★</IconButton>
+      </template>,
+    );
+    assert.strictEqual(
+      document.querySelector('[data-test-pretui-tooltip]'),
+      null,
+    );
   });
 
   test('@tone and @appearance reach Button, over @variant', async function (assert) {
