@@ -18,17 +18,6 @@ import type {
   InvokeDirect,
 } from '@glint/template/-private/integration';
 import './eslint-js';
-import type { Loader } from '../runtime-common/loader.ts';
-
-declare global {
-  // The Loader that evaluated the module (ADR 010 §1.4.1). A base module
-  // compiled into the host bundle reads the host's current Loader here: the
-  // host's build compiles the read to the global its loader service keeps it
-  // in.
-  interface ImportMeta {
-    loader: Loader;
-  }
-}
 
 // Augment Glint's HTML element attributes with missing properties
 declare global {

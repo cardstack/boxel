@@ -181,11 +181,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
       // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
-      type = await getNarrowestType(
-        this.args.typeConstraint,
-        type,
-        import.meta.loader,
-      );
+      let loader = import.meta.loader;
+      type = await getNarrowestType(this.args.typeConstraint, type, loader);
     }
     let filter = {
       every: [{ type }, ...selectedCardsQuery],

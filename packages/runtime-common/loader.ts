@@ -238,6 +238,16 @@ function defaultSleep(ms: number): Promise<void> {
 
 let nonce = 0;
 
+declare global {
+  // The Loader that evaluated the module (ADR 010 §1.4.1). A base module
+  // compiled into the host bundle reads the host's current Loader here: the
+  // host's build compiles the read to the global its loader service keeps it
+  // in (bundled-module-loader.ts).
+  interface ImportMeta {
+    loader: Loader;
+  }
+}
+
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');

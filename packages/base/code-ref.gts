@@ -85,9 +85,8 @@ class EditView extends Component<typeof CodeRefField> {
         // this module is compiled into the host bundle the bundler owns that
         // call instead and the specifier reaches the platform unresolved.
         // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
-        let code = (
-          await import.meta.loader.import<Record<string, any>>(module)
-        )[name];
+        let loader = import.meta.loader;
+        let code = (await loader.import<Record<string, any>>(module))[name];
         if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
