@@ -57,9 +57,9 @@ function fetchableRef(
   codeRef: ResolvedCodeRef,
   virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
-  let module: string;
+  let moduleHref: string;
   try {
-    module = virtualNetwork.toURLHref(codeRef.module);
+    moduleHref = virtualNetwork.toURLHref(codeRef.module);
   } catch (e) {
     // Fail while planning rather than handing an unresolvable identifier to the
     // copy step, where it would surface as a bare `Invalid URL` far from its
@@ -70,7 +70,7 @@ function fetchableRef(
     (error as any).cause = e;
     throw error;
   }
-  return { ...codeRef, module: rri(module) };
+  return { ...codeRef, module: rri(moduleHref) };
 }
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
@@ -182,7 +182,7 @@ export class ListingPathResolver {
   // realms canonicalize to themselves, so this is a no-op for them.
   private canonicalRealmPath(realm: URL): RealmPaths {
     return new RealmPaths(
-      ri(canonicalModuleKey(realm.href, this.virtualNetwork)),
+      ri(canonicalModuleKey(rri(realm.href), this.virtualNetwork)),
       this.virtualNetwork,
     );
   }

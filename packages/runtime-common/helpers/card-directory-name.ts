@@ -2,7 +2,7 @@ import camelCase from 'camelcase';
 
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import {
-  isPrefixForm,
+  isAbsoluteIdentifier,
   type RealmResourceIdentifier,
 } from '../realm-identifiers.ts';
 import { trimExecutableExtension } from '../index.ts';
@@ -50,14 +50,11 @@ function directoryNameFromModule(
   );
 }
 
-const URL_SCHEME_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\//i;
-
 function lastMeaningfulSegment(pathname: string): string | undefined {
   let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
   // An absolute identifier's root (`scheme://host` or `@scope/name`) is not
   // part of its path, so `..` stops there rather than climbing into it.
-  let rootLength =
-    URL_SCHEME_AUTHORITY.test(normalized) || isPrefixForm(normalized) ? 2 : 0;
+  let rootLength = isAbsoluteIdentifier(normalized) ? 2 : 0;
   // A relative module's `.` and `..` name no directory of their own: `..`
   // removes the segment before it.
   let segments: string[] = [];
