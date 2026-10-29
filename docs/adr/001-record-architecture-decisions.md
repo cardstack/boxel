@@ -19,8 +19,9 @@ defines the format, the lifecycle, and how ADRs are enforced.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
 "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
+document and in every ADR in `docs/adr/` are to be interpreted as described in
+BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in all capitals,
+as shown here.
 
 ### 1.1. When to write an ADR
 
@@ -56,7 +57,7 @@ MUST follow the title directly. Sections MUST be numbered, in this order:
 
 | Section            | Presence                                                 |
 | ------------------ | -------------------------------------------------------- |
-| Decision           | REQUIRED. Includes the BCP 14 boilerplate above.         |
+| Decision           | REQUIRED.                                                |
 | Rationale          | REQUIRED.                                                |
 | Considered options | REQUIRED when viable alternatives existed.               |
 | Consequences       | OPTIONAL. Omit unless it adds value beyond the Decision. |
@@ -69,8 +70,9 @@ last, so deleting it on acceptance does not renumber other sections.
 
 ### 1.4. Language
 
-The Decision MUST state requirements with the BCP 14 key words. An ADR SHOULD
-follow the principles of ASD-STE100 Simplified Technical English:
+The Decision MUST state requirements with the BCP 14 key words. The key-words
+paragraph at the start of §1 covers every ADR, so an ADR SHOULD NOT repeat it.
+An ADR SHOULD follow the principles of ASD-STE100 Simplified Technical English:
 
 - Use plain language.
 - Use short, direct sentences in active voice.
@@ -116,9 +118,10 @@ remediation shows that a requirement is wrong. Such an edit MUST NOT renumber
 existing subsections. A new subsection takes the next unused number.
 
 The Decision of an accepted ADR MUST NOT be edited. A changed decision MUST be
-a new ADR that supersedes the old one. Fixes to typos, links, and `scope` globs
-after a file moves MAY be made in place. An ADR that no longer applies, with
-nothing to replace it, is `deprecated`.
+a new ADR that supersedes the old one. Edits that leave its requirements
+unchanged, such as fixes to typos, links, and `scope` globs after a file moves,
+MAY be made in place. An ADR that no longer applies, with nothing to replace
+it, is `deprecated`.
 
 ### 1.7. Retroactive ADRs
 

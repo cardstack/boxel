@@ -15,11 +15,6 @@ tell whether the rest is relevant.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. First rule
 
 Each requirement in its own sentence, with a BCP 14 key word.

@@ -37,11 +37,6 @@ the mechanics.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. When an operation needs a secure session
 
 An operation that changes a user's keys, or what their keys may be used for,

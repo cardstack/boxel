@@ -27,11 +27,6 @@ changes until they move to host.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. New code uses Pret UI components
 
 New code MUST NOT import a component from `@cardstack/boxel-ui/components`

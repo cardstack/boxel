@@ -28,11 +28,6 @@ in one room.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 In this ADR, an end user is a person's Matrix account. The realm server's
 users, the AI bot and the other bots are service users, not end users. A
 Matrix id includes its localpart, so these rules cover the username alone too.

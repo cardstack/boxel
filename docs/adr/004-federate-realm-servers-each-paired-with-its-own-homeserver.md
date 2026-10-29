@@ -35,11 +35,6 @@ recorded, not on its `date`.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. One homeserver per realm server
 
 Each realm server MUST be paired with exactly one Matrix homeserver. The realm
