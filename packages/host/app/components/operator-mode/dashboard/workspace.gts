@@ -270,7 +270,7 @@ export default class Workspace extends Component<Signature> {
                   <span aria-hidden='true'>↗</span><span class='boxel-sr-only'>
                     (opens in a new tab)</span></a>
                 {{! The other sites in the menu a tile's chin opens, which
-                    stays on screen and wraps where a tooltip can't. }}
+                    stays on screen where a tooltip can't. }}
                 {{#if (gt this.publishedRealmURLs.length 1)}}
                   <PretMenu
                     @items={{this.hostMenuItems}}
