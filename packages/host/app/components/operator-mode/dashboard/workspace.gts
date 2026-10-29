@@ -46,6 +46,7 @@ import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
 } from '@cardstack/host/lib/utils';
+import { wallpaperImage } from '@cardstack/host/lib/workspace-list';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -68,6 +69,7 @@ import {
   DuplicateWorkspaceModal,
 } from '../workspace-chooser/workspace-modals';
 
+import HostedPill from './hosted-pill';
 import ItemContainer from './item-container';
 
 import type { MenuEntry } from '@cardstack/pretui/internal/menu';
@@ -203,7 +205,7 @@ export default class Workspace extends Component<Signature> {
                 </button>
               </RealmURLTooltip>
               {{#if this.hasPublishedRealms}}
-                <span class='desk-live' data-test-workspace-hosted>Hosted</span>
+                <HostedPill class='desk-live' data-test-workspace-hosted />
               {{/if}}
             </div>
             {{! Room for the workspace's pinned cards. }}
@@ -310,9 +312,21 @@ export default class Workspace extends Component<Signature> {
         {{/if}}
 
         <div class={{cn 'favorite-btn' is-favorited=this.isFavorited}}>
+          {{! The star's fill already shows the state, so it takes no
+              pressed tint, which would show as a gray square on the chip.
+              Its tip opens to the right, into the tile: centered above the
+              corner, it would run past the tile into a narrow gutter. }}
           <IconButton
-            @label={{this.favoriteLabel}}
+            @label='Favorite'
             @appearance='plain'
+            @pressed={{this.isFavorited}}
+            @pressedTint={{false}}
+            @tooltip={{if
+              this.isFavorited
+              'Remove from Favorites'
+              'Add to Favorites'
+            }}
+            @tooltipSide='right'
             {{on 'click' this.toggleFavorite}}
             data-test-workspace-favorite-btn={{@realmIdentifier}}
           >
@@ -780,20 +794,9 @@ export default class Workspace extends Component<Signature> {
         white-space: nowrap;
       }
       .desk-live {
-        flex: none;
+        --hosted-pill-background: var(--_workspace-glass);
         margin-left: auto;
-        padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--_workspace-glass);
         backdrop-filter: var(--_workspace-glass-blur);
-        color: var(--boxel-lime);
-        font: 600 var(--boxel-font-size-2xs) / 1.5
-          var(--boxel-monospace-font-family);
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
-      .desk-live::before {
-        content: '● ' / '';
       }
       .desk-pins {
         position: relative;
@@ -1342,11 +1345,6 @@ export default class Workspace extends Component<Signature> {
     );
   }
 
-  // Both the button's accessible name and its tooltip, so they can't drift.
-  private get favoriteLabel() {
-    return this.isFavorited ? 'Remove from Favorites' : 'Add to Favorites';
-  }
-
   private get menuItems() {
     let items = [
       new MenuItem({
@@ -1476,8 +1474,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get backgroundImageURL() {
-    let { backgroundURL } = this.realmInfo;
-    return backgroundURL ? `url(${backgroundURL})` : '';
+    return wallpaperImage(this.realmInfo.backgroundURL);
   }
 
   private get visibility() {

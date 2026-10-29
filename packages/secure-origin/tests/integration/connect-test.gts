@@ -1,4 +1,4 @@
-import { click, fillIn, render, waitFor } from '@ember/test-helpers';
+import { click, fillIn, render, waitFor, waitUntil } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -196,6 +196,25 @@ module('Integration | connecting an account', function (hooks) {
       .map((r) => r.body.data.attributes);
   }
 
+  // The page sends the window on only once the realm server's answer to the
+  // connect request is read, and `settled()` doesn't wait for that: the stubbed
+  // `fetch` is a plain promise. A cold browser can still be reading it when the
+  // click returns, so a test waits for the window to go somewhere. A timeout
+  // says how far the page got: the requests made by then and any error shown.
+  async function navigated() {
+    try {
+      await waitUntil(() => navigations.length > 0);
+    } catch {
+      let requested = requests.map((r) => `${r.method} ${r.path}`).join(', ');
+      let shown = document
+        .querySelector('[data-test-keys-error]')
+        ?.textContent?.trim();
+      throw new Error(
+        `the window never went anywhere; requests made: ${requested || 'none'}; error shown: ${shown || 'none'}`,
+      );
+    }
+  }
+
   function connectRequest() {
     return requests.find(
       (r) => r.method === 'POST' && r.path === '_oauth/connections',
@@ -369,6 +388,7 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-connect-name]')
         .hasValue(' Work GitHub ', 'a typed name stays');
       await click('[data-test-connect-submit]');
+      await navigated();
 
       assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
       assert.deepEqual(connectRequest(), {
@@ -452,6 +472,7 @@ module('Integration | connecting an account', function (hooks) {
         'only the client the connection signs in through is asked for',
       );
       await click('[data-test-connect-submit]');
+      await navigated();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'conn-1' },
       ]);

@@ -6,6 +6,7 @@ import GlimmerComponent from '@glimmer/component';
 import { Button } from '@cardstack/pretui/components/button';
 import { EmailInput } from '@cardstack/pretui/components/email-input';
 import { Field } from '@cardstack/pretui/components/field';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input as PretuiInput } from '@cardstack/pretui/components/input';
 import { NativeSelect } from '@cardstack/pretui/components/native-select';
 import { Switch } from '@cardstack/pretui/components/switch';
@@ -60,6 +61,45 @@ module('Integration | pretui components', function (hooks) {
       .dom('[data-test-pretui-switch]')
       .hasAttribute('aria-checked', 'true');
     assert.deepEqual(seen, [true]);
+  });
+
+  test('a pressed IconButton is tinted unless @pressedTint is false', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <IconButton @label='Pin' @appearance='plain' data-test-unpressed />
+          <IconButton
+            @label='Pin'
+            @appearance='plain'
+            @pressed={{true}}
+            data-test-tinted
+          />
+          <IconButton
+            @label='Pin'
+            @appearance='plain'
+            @pressed={{true}}
+            @pressedTint={{false}}
+            data-test-untinted
+          />
+        </template>
+      },
+    );
+
+    let surface = (selector: string) =>
+      getComputedStyle(document.querySelector(selector)!)
+        .getPropertyValue('--pretui-btn-surface')
+        .trim();
+
+    assert.notStrictEqual(
+      surface('[data-test-tinted]'),
+      surface('[data-test-unpressed]'),
+      'pressed takes the tint',
+    );
+    assert.strictEqual(
+      surface('[data-test-untinted]'),
+      surface('[data-test-unpressed]'),
+      'the opt-out keeps the unpressed surface',
+    );
   });
 
   test('an invalid Field gives every wrapped control the -ink edge and no tint', async function (assert) {

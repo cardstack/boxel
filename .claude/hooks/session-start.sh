@@ -1,8 +1,21 @@
 #!/bin/bash
-# SessionStart hook for "Claude Code on the web" sessions: when the realm-index
-# cache is absent, teach the session how to fetch it BEFORE starting the stack,
-# so the realm-server boots from a seconds-long SQL restore instead of a
-# multi-minute live prerender indexing (see .devcontainer/claude-web-import-index.sh).
+# SessionStart hook. Two jobs:
+#
+# 1. Say which of the plugins .claude/settings.json enables this machine
+#    lacks. A project-level `enabledPlugins` entry turns a plugin on but
+#    doesn't fetch one whose marketplace entry has an external source, which
+#    `boxel-skills` has; the /plugin Errors tab is the only place that shows
+#    it, and until someone installs it a review of a UI change runs without
+#    its guidelines lens. So the session is told at start, with the command,
+#    and asks the user. The hook doesn't install anything itself: a plugin is
+#    code the user runs, so the install is theirs to confirm. A plugin already
+#    in installed_plugins.json costs one grep.
+#
+# 2. For "Claude Code on the web" sessions: when the realm-index cache is
+#    absent, teach the session how to fetch it BEFORE starting the stack, so
+#    the realm-server boots from a seconds-long SQL restore instead of a
+#    multi-minute live prerender indexing (see
+#    .devcontainer/claude-web-import-index.sh).
 #
 # The fetch cannot live in a provisioning script: the artifact's signed
 # download URL comes from api.github.com, which this VM's network proxy
@@ -14,6 +27,25 @@
 # Silent (no context cost) outside the remote VM or when the cache is already
 # in place.
 set -euo pipefail
+
+PLUGINS_DIR="${CLAUDE_CODE_PLUGIN_CACHE_DIR:-$HOME/.claude/plugins}"
+INSTALLED="$PLUGINS_DIR/installed_plugins.json"
+missing=()
+for plugin in interfaces@interfaces boxel-skills@cardstack-boxel; do
+  if ! grep -qs "\"$plugin\"" "$INSTALLED"; then
+    missing+=("$plugin")
+  fi
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  cat <<EOF
+[boxel-plugins] This machine lacks plugins .claude/settings.json enables:
+${missing[*]}. A project setting enables a plugin but doesn't fetch it. Before
+any other work, ask the user to run, for each one:
+  claude plugin install <plugin> --scope local
+then /reload-plugins. Until then a review of a UI change runs without that
+lens, and its opening sentence has to say which lens skill wasn't reviewed.
+EOF
+fi
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0

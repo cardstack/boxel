@@ -18,6 +18,7 @@ export const SECURE_WINDOW_MODES = [
   'enter-key',
   'replace-key',
   'share-key',
+  'swap-key',
   'connect',
 ] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
@@ -51,6 +52,7 @@ export type SecureWindowRequest =
       reason?: string;
     }
   | { mode: 'share-key'; realm: string; reason?: string }
+  | { mode: 'swap-key'; realm: string; share: string; reason?: string }
   | {
       mode: 'connect';
       target?: SecureWindowTarget;
@@ -83,6 +85,9 @@ export function secureWindowURL(request: SecureWindowRequest): string {
   let fragment: Record<string, string> = {};
   if (request.mode === 'share-key') {
     fragment.realm = request.realm;
+  } else if (request.mode === 'swap-key') {
+    fragment.realm = request.realm;
+    fragment.share = request.share;
   } else if (request.target?.kind === 'instance') {
     fragment.card = request.target.card;
   } else if (request.target?.kind === 'type') {
@@ -92,7 +97,11 @@ export function secureWindowURL(request: SecureWindowRequest): string {
   } else if (request.mode === 'connect' && request.realm) {
     fragment.realm = request.realm;
   }
-  if (request.mode !== 'share-key' && request.target?.operation) {
+  if (
+    request.mode !== 'share-key' &&
+    request.mode !== 'swap-key' &&
+    request.target?.operation
+  ) {
     fragment.operation = request.target.operation;
   }
   if (request.reason) {

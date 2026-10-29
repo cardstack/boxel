@@ -87,6 +87,7 @@ import { consume } from 'ember-provide-consume-context';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
+import RealmApiKeys from './realm-api-keys';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -918,6 +919,23 @@ function httpURL(pointer: string): string | undefined {
   }
 }
 
+// The realm a config card configures: its own realm, when the card is that
+// realm's `realm.json`. A RealmConfig stored anywhere else configures nothing.
+// The id is canonical RRI, so the realm is compared in the id's own form.
+function configuredRealm(config: RealmConfig): string | undefined {
+  let realm = config[realmURL];
+  let realmId = instanceRealmId(config);
+  let id = config.id;
+  if (!realm || !realmId || !id) {
+    return undefined;
+  }
+  let paths = new RealmPaths(realmId);
+  if (!paths.inRealm(rri(id)) || paths.local(rri(id)) !== 'realm') {
+    return undefined;
+  }
+  return realm.href;
+}
+
 interface PolicyStandingSignature {
   Args: { config: RealmConfig };
 }
@@ -961,21 +979,9 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     });
   }
 
-  // Only the realm's own config card names the realm's policy. A RealmConfig
-  // stored anywhere else governs nothing. The id is canonical RRI, so the
-  // realm is compared in the id's own form.
+  // Only the realm's own config card names the realm's policy.
   private get realm(): string | undefined {
-    let realm = this.args.config[realmURL];
-    let realmId = instanceRealmId(this.args.config);
-    let id = this.args.config.id;
-    if (!realm || !realmId || !id) {
-      return undefined;
-    }
-    let paths = new RealmPaths(realmId);
-    if (!paths.inRealm(rri(id)) || paths.local(rri(id)) !== 'realm') {
-      return undefined;
-    }
-    return realm.href;
+    return configuredRealm(this.args.config);
   }
 
   private get pointer(): string {
@@ -1798,6 +1804,10 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return this.args.model as unknown as RealmConfig;
   }
 
+  get realm(): string | undefined {
+    return configuredRealm(this.config);
+  }
+
   // The policy field holds a string, but what it names is a policy card, so
   // its row carries the policy card's icon rather than a string's.
   policyIcon = ShieldCheckIcon;
@@ -1868,6 +1878,11 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
               {{/if}}
             </FieldContainer>
           {{/each-in}}
+          <RealmApiKeys
+            @realm={{this.realm}}
+            @context={{@context}}
+            @format='edit'
+          />
         </section>
       {{/if}}
       <footer class='notes-footer'>
@@ -1933,6 +1948,10 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
     return this.args.model.policy?.trim() ?? '';
   }
 
+  get realm(): string | undefined {
+    return configuredRealm(this.config);
+  }
+
   <template>
     <article class='realm-config-isolated' data-test-realm-config-isolated>
       <header class='header'>
@@ -1980,6 +1999,11 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         <PolicyStanding @config={{this.config}} />
       </section>
 
+      <RealmApiKeys
+        @realm={{this.realm}}
+        @context={{@context}}
+        @format='isolated'
+      />
     </article>
     <style scoped>
       .realm-config-isolated {
