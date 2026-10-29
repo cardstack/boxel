@@ -407,7 +407,12 @@ A `google-service-account` key that Google's token endpoint refuses (see
 at one destination, so the **key** becomes `rejected` (`markKeyRejected` in
 `lib/key-grant-rejection.ts`, called from `mintedToken` in
 `lib/key-bindings.ts`), with `rejected_at` and `last_probe_at` set. Its
-grants keep their own state.
+grants keep their own state. Only a refusal that names the key, its subject or
+its scopes (an OAuth error in `REJECTED_ERRORS` in
+`lib/outbound/google-service-account.ts`, carried as `keyRefused`) does this.
+A 4xx that names no OAuth error, or an `invalid_grant` for an assertion outside
+Google's time window (the signing host's clock), refuses that call alone and
+leaves the key `active`; a 408 is retried like a 5xx.
 
 - **Calls through any grant of a rejected key** are refused
   `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkedBindings`

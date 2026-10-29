@@ -21,15 +21,19 @@ export class ServiceAccountTokenError extends Error {
   // The sealed value the failed exchange was signed with (its nonce, base64),
   // when one was opened.
   readonly copy: string | undefined;
+  // Whether Google refused the key itself, not only this exchange (see
+  // `GoogleServiceAccountRejectedError`).
+  readonly keyRefused: boolean;
   constructor(
     reason: ServiceAccountTokenFailure,
     message: string,
-    copy?: string,
+    { copy, keyRefused = false }: { copy?: string; keyRefused?: boolean } = {},
   ) {
     super(message);
     this.name = 'ServiceAccountTokenError';
     this.reason = reason;
     this.copy = copy;
+    this.keyRefused = keyRefused;
   }
 }
 
@@ -64,10 +68,15 @@ export async function serviceAccountAccessToken(
     return await googleAccessToken(keyId, credential, options);
   } catch (error) {
     if (error instanceof GoogleServiceAccountRejectedError) {
-      throw new ServiceAccountTokenError('rejected', error.message, copy);
+      throw new ServiceAccountTokenError('rejected', error.message, {
+        copy,
+        keyRefused: error.keyRefused,
+      });
     }
     if (error instanceof GoogleTokenEndpointUnavailableError) {
-      throw new ServiceAccountTokenError('unavailable', error.message, copy);
+      throw new ServiceAccountTokenError('unavailable', error.message, {
+        copy,
+      });
     }
     throw error;
   }

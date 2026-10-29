@@ -1319,7 +1319,9 @@ async function mintedToken(
       error instanceof ServiceAccountTokenError &&
       error.reason === 'rejected'
     ) {
-      if (error.copy) {
+      // Only a refusal of the key itself is held against it; any other refuses
+      // this call alone.
+      if (error.copy && error.keyRefused) {
         await markKeyRejected(dbAdapter, {
           keyId: opened.keyId,
           grantId: call.grantId,

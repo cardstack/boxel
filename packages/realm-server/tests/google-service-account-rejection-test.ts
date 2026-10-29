@@ -575,6 +575,35 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await notices(), []);
   });
 
+  test("a refusal that isn't about the key refuses the call and leaves the key active", async function (assert) {
+    let key = await addServiceAccount();
+    await approve('values', { keyId: key.id });
+    vendor.googleTokenAnswers.push(
+      { status: 403, body: {} },
+      {
+        status: 400,
+        body: {
+          error: 'invalid_grant',
+          error_description:
+            'Invalid JWT: Token must be a short-lived token (60 minutes) and in a reasonable timeframe. Check your iat and exp values in the JWT claim.',
+        },
+      },
+    );
+    for (let i = 0; i < 2; i++) {
+      let refused = await invoke('values');
+      assert.strictEqual(refused.status, 424, refused.text);
+      assert.strictEqual(refused.error?.code, 'credential-rejected');
+      assert.strictEqual((await keyRow(key.id)).state, 'active');
+    }
+    assert.strictEqual(await readiness('values'), 'ready');
+    assert.deepEqual(await notices(), []);
+    assert.deepEqual(
+      events.filter((e) => e.event === 'key-rejected'),
+      [],
+    );
+    assert.strictEqual((await invoke('values')).status, 200);
+  });
+
   test('of two calls arriving together when the probe is due, only one probes', async function (assert) {
     let key = await addServiceAccount();
     await approve('values', { keyId: key.id });

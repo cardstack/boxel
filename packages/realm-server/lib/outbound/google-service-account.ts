@@ -286,16 +286,21 @@ export function signGoogleAssertion(
   return `${signingInput}.${base64url(signature)}`;
 }
 
-// Google refused the key: it is revoked or deleted, the account is disabled,
-// the subject can't be acted as, or a scope isn't allowed. Minting again won't
-// help until the owner replaces the key. `error` is Google's OAuth error code,
-// never its description, which can quote the request.
+// Google refused the exchange. `error` is Google's OAuth error code, never its
+// description, which can quote the request. `keyRefused` says the refusal is
+// about the key itself: it is revoked or deleted, the account is disabled, the
+// subject can't be acted as, or a scope isn't allowed, so minting again won't
+// help until the owner replaces it. Any other refusal, such as a 4xx that names
+// no OAuth error or an assertion outside Google's time window, refuses this
+// exchange and says nothing about the key.
 export class GoogleServiceAccountRejectedError extends Error {
   readonly error: string;
-  constructor(error: string) {
+  readonly keyRefused: boolean;
+  constructor(error: string, keyRefused: boolean) {
     super(`Google refused the service account key (${error})`);
     this.name = 'GoogleServiceAccountRejectedError';
     this.error = error;
+    this.keyRefused = keyRefused;
   }
 }
 
@@ -309,9 +314,9 @@ export class GoogleTokenEndpointUnavailableError extends Error {
 }
 
 // The OAuth error codes that mean the key, its subject or its scopes won't be
-// accepted. Anything else from a 4xx is treated the same way, since a request
-// Google won't take now it won't take on a retry either; only these are named
-// in the log as they are.
+// accepted. Any other 4xx refuses the exchange too, since a request Google
+// won't take now it won't take on a retry either, but isn't held against the
+// key; only these are named in the log as they are.
 const REJECTED_ERRORS = new Set([
   'invalid_grant',
   'invalid_client',
@@ -319,6 +324,11 @@ const REJECTED_ERRORS = new Set([
   'access_denied',
   'invalid_scope',
 ]);
+
+// Google's description of an `invalid_grant` for an assertion whose `iat` or
+// `exp` falls outside the window it accepts: the signing host's clock is off,
+// and the key may be fine.
+const ASSERTION_WINDOW_REFUSAL = /reasonable timeframe|\biat\b|\bexp\b/i;
 
 export interface GoogleTokenSettings {
   tokenEndpoint: string;
@@ -446,8 +456,9 @@ function describe(error: unknown): string {
 }
 
 // One exchange of a freshly signed assertion for an access token. A 5xx, a
-// 429, a redirect to another origin, a `temporarily_unavailable` answer, a
-// timeout or a broken connection is thrown as retryable; any other refusal is `GoogleServiceAccountRejectedError`.
+// 408, a 429, a redirect to another origin, a `temporarily_unavailable`
+// answer, a timeout or a broken connection is thrown as retryable; any other
+// refusal is `GoogleServiceAccountRejectedError`.
 async function exchange(
   credential: GoogleServiceAccountCredential,
 ): Promise<CachedToken> {
@@ -509,6 +520,7 @@ async function exchange(
   // `sameOriginOnly`); like a 5xx, it says nothing about the key.
   if (
     response.status >= 500 ||
+    response.status === 408 ||
     response.status === 429 ||
     (response.status >= 300 && response.status < 400) ||
     oauthError === 'temporarily_unavailable'
@@ -520,14 +532,22 @@ async function exchange(
       `it answered ${response.status}`,
     );
   }
-  let code =
-    oauthError && REJECTED_ERRORS.has(oauthError)
-      ? oauthError
-      : `status ${response.status}`;
-  log.warn(
-    `minting a service account token: Google refused the key for ${credential.clientEmail} (${code})`,
-  );
-  throw new GoogleServiceAccountRejectedError(code);
+  let named = oauthError !== undefined && REJECTED_ERRORS.has(oauthError);
+  let code = named ? oauthError! : `status ${response.status}`;
+  let outsideWindow =
+    oauthError === 'invalid_grant' &&
+    typeof body?.error_description === 'string' &&
+    ASSERTION_WINDOW_REFUSAL.test(body.error_description);
+  if (outsideWindow) {
+    log.warn(
+      `minting a service account token: Google refused the assertion for ${credential.clientEmail} as outside its time window; check this host's clock`,
+    );
+  } else {
+    log.warn(
+      `minting a service account token: Google refused the key for ${credential.clientEmail} (${code})`,
+    );
+  }
+  throw new GoogleServiceAccountRejectedError(code, named && !outsideWindow);
 }
 
 function parseJSON(text: string): Record<string, unknown> | undefined {

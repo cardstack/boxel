@@ -47,6 +47,13 @@ exports.down = (pgm) => {
       ADD CONSTRAINT user_key_grant_notices_reason_check
       CHECK (reason = 'credential-rejected')
   `);
+  // The code this rolls back to never reads a service-account key's state and
+  // its replace doesn't reset it, so a key left rejected would be listed that
+  // way with nothing to clear it.
+  pgm.sql(`
+    UPDATE user_keys SET state = 'active'
+     WHERE kind = 'google-service-account' AND state = 'rejected'
+  `);
   pgm.sql(`
     ALTER TABLE user_keys
       DROP COLUMN IF EXISTS rejected_at,
