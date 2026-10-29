@@ -186,6 +186,22 @@ module('Pretui | components/icon-button', function (hooks) {
     assert.strictEqual(tip.textContent?.trim(), 'Add to Favorites');
   });
 
+  test('@tooltipSide picks the side the tip opens on', async function (assert) {
+    await render(
+      <template>
+        <IconButton
+          @label='Favorite'
+          @tooltip='Add to Favorites'
+          @tooltipSide='right'
+        >★</IconButton>
+      </template>,
+    );
+    assert.strictEqual(
+      el('[data-test-pretui-tooltip] [role="tooltip"]').dataset['side'],
+      'right',
+    );
+  });
+
   test('without @tooltip there is no Tooltip wrapper', async function (assert) {
     await render(
       <template>

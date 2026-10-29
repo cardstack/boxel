@@ -16,6 +16,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 @pressed?: boolean   (toggle state as aria-pressed; leave undefined for a plain action)
 @pressedTint?: boolean   (default true; false drops the pressed tint, for a toggle whose icon already shows its state)
 @tooltip?: string   (shown in a Tooltip in place of the native title, and read as the button's description; the name stays @label)
+@tooltipSide?: 'top' | 'bottom' | 'left' | 'right'   (the side the @tooltip opens on; top by default)
 @busy?, @loading?, @isLoading?, @isPending?   (forwarded to Button)
 @busyLabel?: string   (added after @label in the accessible name while busy; forwarded to Button, which shows it when the button is wide enough)
 @disabled?, @isDisabled?
@@ -23,7 +24,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 Element: HTMLButtonElement | HTMLAnchorElement
 ```
 
-**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight`, `@pressed`, `@pressedTint` and `@tooltip`. Only the default treatment differs: `neutral` / `outlined`.
+**Every Button argument is accepted, with the same meaning and aliases**: the signature is Button's plus `@label`, `@icon`, `@iconWidth`/`@iconHeight`, `@pressed`, `@pressedTint`, `@tooltip` and `@tooltipSide`. Only the default treatment differs: `neutral` / `outlined`.
 
 **`@label` is required, and it is the whole point of the component existing.** An icon-only `<Button>` has no accessible name and nothing warns you; `IconButton` makes the name non-optional at the type level and applies it as `aria-label`, and as `title` unless `@tooltip` is set. That is the single reason this is a separate export rather than a `size='icon'` variant.
 
@@ -64,7 +65,8 @@ What is right:
 Gaps and cautions:
 
 - **`title` is set to the same string as `aria-label`.** This is deliberate — it gives sighted mouse users a native tooltip — but it is a known double-announcement risk: some screen reader and browser combinations read the accessible name and then the `title` as a description. It is also a UA-controlled tooltip, which means no styling and, per WCAG 1.4.13's exception, no dismissible/hoverable obligation. For a styled hint, pass `@tooltip`: the button renders a **Tooltip** with that text, which describes the button, and drops `title`, so the native tooltip doesn't show over it. Wrapping the button in **Tooltip** yourself keeps the `title` and shows both.
-- **`@tooltip` adds a wrapper.** The button sits inside Tooltip's `position: relative` inline-flex span, so a class passed to the IconButton styles the button, not the outer box: place or size it through a container instead. Adding or removing `@tooltip` re-renders the button, which loses focus.
+- **`@tooltip` adds a wrapper.** The button sits inside Tooltip's `position: relative` inline-flex span, so a class passed to the IconButton styles the button, not the outer box: place or size it through a container instead. Adding or removing `@tooltip` builds a new button element: it loses focus and the caller's modifiers run again. A hint that comes and goes should keep `@tooltip` set and change its text instead.
+- **A shown `@tooltip` takes the first Escape.** Tooltip hides on Escape and stops it there (WCAG 1.4.13), so while the tip is up from hover or keyboard focus, an Escape handler above the button needs a second press.
 - **Target size**: 28×28 CSS px at the default size clears WCAG 2.5.8's 24×24 minimum, but only just, and adjacent icon buttons in a toolbar with no gap will have touching targets.
 - **Focus-visible ring inherited from Button**: `outline: 2px solid var(--ring)` with a 2px offset, which matters more here because there is no text to underline or shift.
 

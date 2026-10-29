@@ -311,7 +311,9 @@ export default class Workspace extends Component<Signature> {
 
         <div class={{cn 'favorite-btn' is-favorited=this.isFavorited}}>
           {{! The star's fill already shows the state, so it takes no
-              pressed tint, which would show as a gray square on the chip. }}
+              pressed tint, which would show as a gray square on the chip.
+              Its tip opens to the right, into the tile: centered above the
+              corner, it would run past the tile into a narrow gutter. }}
           <IconButton
             @label='Favorite'
             @appearance='plain'
@@ -322,6 +324,7 @@ export default class Workspace extends Component<Signature> {
               'Remove from Favorites'
               'Add to Favorites'
             }}
+            @tooltipSide='right'
             {{on 'click' this.toggleFavorite}}
             data-test-workspace-favorite-btn={{@realmIdentifier}}
           >

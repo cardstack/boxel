@@ -4,8 +4,10 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
+import { tracked } from '@glimmer/tracking';
 import {
   render,
+  settled,
   click,
   focus,
   blur,
@@ -69,6 +71,27 @@ module('Pretui | components/tooltip', function (hooks) {
       q('[data-test-trigger]').getAttribute('aria-describedby'),
       `existing-hint ${q('[role="tooltip"]').id}`,
       'appended, not overwritten',
+    );
+  });
+
+  test('Tooltip keeps its id when the caller changes its own describedby', async function (assert) {
+    class State {
+      @tracked hint = 'first-hint';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Tooltip @content='Extra'>
+          <button type='button' data-test-trigger aria-describedby={{state.hint}}>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    state.hint = 'second-hint';
+    await settled();
+    assert.strictEqual(
+      q('[data-test-trigger]').getAttribute('aria-describedby'),
+      `second-hint ${q('[role="tooltip"]').id}`,
+      'the new value, with the tip id put back',
     );
   });
 

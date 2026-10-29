@@ -47,8 +47,9 @@ export interface TooltipSignature {
  * - **Association.** The bubble gets a generated id and a modifier wires
  *   `aria-describedby` (or `aria-labelledby` with `@labels`) onto the first
  *   focusable descendant — the trigger is a caller block, so the component
- *   cannot put the attribute there itself. The modifier restores whatever was
- *   there before on teardown, so it composes with a caller's own value.
+ *   cannot put the attribute there itself. It appends its id to a caller's
+ *   own value, keeps it there when the caller's value changes, and removes
+ *   only its id on teardown.
  * - **Presence.** Hidden state is `visibility: hidden`, not opacity alone, so
  *   the bubble leaves the accessibility tree between reveals. A directly
  *   referenced `aria-describedby` target is still announced while hidden —
@@ -75,7 +76,7 @@ export class Tooltip extends Component<TooltipSignature> {
   get shown() {
     return (this.hovered || this.focused) && !this.dismissed;
   }
-  /** Wires the tip onto the yielded trigger and puts it back on teardown. */
+  /** Wires the tip onto the yielded trigger and takes it off on teardown. */
   describeTrigger = modifier(
     (el: HTMLElement, [id, labels]: [string, boolean | undefined]) => {
       let attr = labels ? 'aria-labelledby' : 'aria-describedby';
@@ -84,13 +85,27 @@ export class Tooltip extends Component<TooltipSignature> {
           (candidate) => candidate.id !== id,
         ) ?? (el.firstElementChild as HTMLElement | null);
       if (!trigger || trigger.id === id) return;
-      let previous = trigger.getAttribute(attr);
-      trigger.setAttribute(attr, previous ? `${previous} ${id}` : id);
+      let target = trigger;
+      let ids = () =>
+        (target.getAttribute(attr) ?? '').split(/\s+/).filter(Boolean);
+      let addId = () => {
+        let current = ids();
+        if (!current.includes(id)) {
+          target.setAttribute(attr, [...current, id].join(' '));
+        }
+      };
+      addId();
+      // The caller can rewrite the attribute after insert (a bound value that
+      // changes), which would drop the tip's id; put it back each time.
+      let observer = new MutationObserver(addId);
+      observer.observe(target, { attributeFilter: [attr] });
       return () => {
-        if (previous === null) {
-          trigger.removeAttribute(attr);
+        observer.disconnect();
+        let rest = ids().filter((token) => token !== id);
+        if (rest.length) {
+          target.setAttribute(attr, rest.join(' '));
         } else {
-          trigger.setAttribute(attr, previous);
+          target.removeAttribute(attr);
         }
       };
     },
@@ -99,6 +114,7 @@ export class Tooltip extends Component<TooltipSignature> {
     this.hovered = true;
   };
   onLeave = () => {
+    this.pressed = false;
     this.hovered = false;
     this.dismissed = false;
   };
@@ -110,6 +126,7 @@ export class Tooltip extends Component<TooltipSignature> {
   };
   onFocusIn = () => {
     this.focused = !this.pressed;
+    this.pressed = false;
   };
   onFocusOut = () => {
     this.pressed = false;

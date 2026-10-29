@@ -5,6 +5,7 @@ import type { ComponentLike } from '@glint/template';
 import { Button, resolveBusy, resolveDisabled } from './button';
 import type { ButtonSignature } from './button';
 import { Tooltip } from './tooltip';
+import type { TooltipSignature } from './tooltip';
 
 export type IconButtonIcon = ComponentLike<{ Element: SVGSVGElement }>;
 
@@ -16,11 +17,11 @@ export const ICON_SIZE = '1.25em';
 // Wraps the button in a Tooltip only when there is tip content, so a button
 // without one keeps its native title and gains no wrapper element.
 const MaybeTooltip: TemplateOnlyComponent<{
-  Args: { content?: string };
+  Args: { content?: string; side?: TooltipSignature['Args']['side'] };
   Blocks: { default: [] };
 }> = <template>
   {{#if @content}}
-    <Tooltip @content={{@content}}>{{yield}}</Tooltip>
+    <Tooltip @content={{@content}} @side={{@side}}>{{yield}}</Tooltip>
   {{else}}
     {{yield}}
   {{/if}}
@@ -44,6 +45,8 @@ export interface IconButtonSignature {
     /** shown in a Tooltip in place of the native title, and read as the
      *  button's description; the name stays @label */
     tooltip?: string;
+    /** the side the @tooltip opens on; top by default */
+    tooltipSide?: TooltipSignature['Args']['side'];
   };
   Blocks: { default: [] };
   Element: HTMLButtonElement | HTMLAnchorElement;
@@ -85,7 +88,7 @@ export class IconButton extends Component<IconButtonSignature> {
     return this.args.iconHeight ?? ICON_SIZE;
   }
   <template>
-    <MaybeTooltip @content={{@tooltip}}><Button
+    <MaybeTooltip @content={{@tooltip}} @side={{@tooltipSide}}><Button
         @variant={{@variant}}
         @tone={{this.tone}}
         @appearance={{this.appearance}}
