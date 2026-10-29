@@ -18,8 +18,12 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   setupAcceptanceTestRealm,
@@ -29,6 +33,7 @@ import {
   setupUserSubscription,
   visitOperatorMode,
   realmConfigCardJSON,
+  withholdRealmSession,
 } from '../helpers';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -118,6 +123,12 @@ function ringName() {
   return find('[data-test-workspace-ring]')?.getAttribute(
     'data-test-workspace-ring',
   );
+}
+
+// The text of each element a button's aria-describedby points at, in order.
+function descriptionOf(selector: string) {
+  let ids = find(selector)?.getAttribute('aria-describedby')?.split(' ') ?? [];
+  return ids.map((id) => document.getElementById(id)?.textContent?.trim());
 }
 
 async function pressKey(key: string) {
@@ -627,6 +638,21 @@ module('Acceptance | dashboard', function (hooks) {
       assert.dom(deskStar).doesNotExist();
     });
 
+    test("a desk's name is described by its full visibility and its address", async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [realmURL];
+      await settled();
+
+      let description = descriptionOf(
+        '[data-test-favorites-list] [data-test-workspace-button="Workspace A"]',
+      );
+      assert.deepEqual(description, [
+        'Private workspace',
+        'test-realm/testuser/workspace-a',
+      ]);
+    });
+
     test("a hosted tile's site menu lists each published site and opens the one chosen", async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       let now = Date.now();
@@ -648,7 +674,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.deepEqual(
           findAll(menuItems).map((item) => item.textContent?.trim()),
-          ['https://newer.example.com/', 'https://older.example.com/'],
+          ['newer.example.com', 'older.example.com'],
           'every published site is listed, most recently published first',
         );
 
@@ -678,6 +704,115 @@ module('Acceptance | dashboard', function (hooks) {
         .hasAttribute('href', 'https://newer.example.com/')
         .hasAttribute('target', '_blank')
         .hasAttribute('rel', 'noopener noreferrer');
+    });
+
+    test("a desk's +N opens a menu of the sites beyond its link", async function (assert) {
+      let matrixService = getService('matrix-service') as MatrixService;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      matrixService.workspaceFavorites = [realmURL];
+      let now = Date.now();
+      markHosted(realmURL, {
+        'https://older.example.com/': String(now - 60_000),
+        'https://newer.example.com/': String(now),
+      });
+      await settled();
+
+      let desk =
+        '[data-test-favorites-list] [data-test-workspace="Workspace A"]';
+      let menuItems = `${desk} [data-test-pretui-menu-panel] [role="menuitem"]`;
+      assert
+        .dom(`${desk} [data-test-desk-host-link]`)
+        .hasText(/newer\.example\.com/)
+        .hasAttribute('title', 'https://newer.example.com/');
+      assert
+        .dom(`${desk} [data-test-desk-host-more]`)
+        .hasText('+1')
+        .hasAttribute('aria-label', '+1 more hosted site');
+
+      // The +N keeps the caption's line height rather than a Button's.
+      let linkHeight = find(
+        `${desk} [data-test-desk-host-link]`,
+      )!.getBoundingClientRect().height;
+      let moreHeight = find(
+        `${desk} [data-test-desk-host-more]`,
+      )!.getBoundingClientRect().height;
+      assert.ok(
+        moreHeight <= linkHeight + 0.5,
+        `the +N (${moreHeight}px) is no taller than the link (${linkHeight}px)`,
+      );
+
+      let windowOpen = stubWindowOpen();
+      try {
+        await click(`${desk} [data-test-desk-host-more]`);
+
+        assert.deepEqual(
+          findAll(menuItems).map((item) => item.textContent?.trim()),
+          ['older.example.com'],
+          'the menu holds as many sites as the +N says',
+        );
+
+        await click(findAll(menuItems)[0]);
+
+        assert.deepEqual(windowOpen.calls, [
+          ['https://older.example.com/', '_blank', 'noopener,noreferrer'],
+        ]);
+      } finally {
+        windowOpen.restore();
+      }
+    });
+
+    module('a failed Re-index', function (hooks) {
+      const TILE =
+        '[data-test-workspace-list] [data-test-workspace="Workspace A"]';
+
+      let reindexError = '';
+      // Answers the reindex request alone, leaving auth to the module's
+      // endpoints, which make the test user the realm's owner.
+      hooks.beforeEach(function () {
+        getService('network').mount(
+          async (req: Request) =>
+            new URL(req.url).pathname === '/testuser/workspace-a/_full-reindex'
+              ? new Response(reindexError, { status: 500 })
+              : null,
+          { prepend: true },
+        );
+      });
+
+      async function reindexFails(message: string) {
+        reindexError = message;
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await click(`${TILE} [data-test-workspace-menu-trigger]`);
+        await click('[data-test-boxel-menu-item-text="Re-index"]');
+        await waitFor(`${TILE} [data-test-reindex-error]`);
+      }
+
+      test('a short error adds no Tab stop', async function (assert) {
+        await reindexFails('boom');
+
+        assert
+          .dom(`${TILE} [data-test-reindex-error-message]`)
+          .hasText('Full reindex realm failed: 500 - boom')
+          .doesNotHaveAttribute('tabindex');
+      });
+
+      test('a long error scrolls within the face, from the keyboard too', async function (assert) {
+        await reindexFails('stack trace: '.repeat(200).trim());
+
+        assert
+          .dom(`${TILE}[data-test-workspace-variant="tile"]`)
+          .exists('Workspace A shows as a tile');
+        assert
+          .dom(`${TILE} [data-test-reindex-error-message]`)
+          .hasAttribute('tabindex', '0');
+
+        let alert = find(`${TILE} [data-test-reindex-error]`)!;
+        let face = find(`${TILE} [data-test-workspace-button]`)!;
+        assert.ok(
+          alert.getBoundingClientRect().bottom <=
+            face.getBoundingClientRect().bottom + 0.5,
+          'the error stays within the face, off the name and chip below it',
+        );
+      });
     });
 
     test("Realm Settings opens the workspace's realm card in edit mode and closes the dashboard", async function (assert) {
@@ -1071,6 +1206,269 @@ module('Acceptance | dashboard', function (hooks) {
       },
     );
 
+    module('pinned cards', function (hooks) {
+      const pinnedRealmURL = 'http://test-realm/testuser/pinned/';
+      const unpinnedRealmURL = 'http://test-realm/testuser/unpinned/';
+      // Where `@cardstack/catalog/` resolves, so a pin can name it either way.
+      let catalogRealmURL: string;
+
+      function cardJSON(name: string) {
+        return {
+          data: {
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+
+      function workspaceIndexJSON(relationships: Record<string, unknown>) {
+        return {
+          data: {
+            relationships,
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        };
+      }
+
+      hooks.beforeEach(async function () {
+        catalogRealmURL = (
+          getService('network') as NetworkService
+        ).virtualNetwork.toURL('@cardstack/catalog/').href;
+        await setupAcceptanceTestRealm({
+          realmURL: pinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Pinned Workspace' }),
+            'roadmap.json': cardJSON('Roadmap'),
+            'launch-notes.json': cardJSON('Launch Notes'),
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './roadmap' } },
+              // No such card, so nothing to draw: the next pin takes its place.
+              'entryPoints.1': { links: { self: './missing' } },
+              'entryPoints.2': { links: { self: './launch-notes' } },
+              'entryPoints.3': {
+                links: { self: `${catalogRealmURL}style-guide` },
+              },
+              'entryPoints.4': {
+                links: { self: '@cardstack/catalog/glossary' },
+              },
+              // Pinned twice: drawn and counted once.
+              'entryPoints.5': { links: { self: './roadmap' } },
+            }),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: unpinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unpinned Workspace' }),
+            'index.json': workspaceIndexJSON({}),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: catalogRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '*': ['read'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Catalog' }),
+            'style-guide.json': cardJSON('Style Guide'),
+            'glossary.json': cardJSON('Glossary'),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          catalogRealmURL,
+        ]);
+      });
+
+      // The Pinned stat waits for the desk's index counts, which fixture
+      // realms don't serve, so they're seeded on the realm service.
+      async function visitWithFavorites(
+        favorites: string[],
+        beforeFavorites?: () => void,
+      ) {
+        let matrixService = getService('matrix-service') as MatrixService;
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        beforeFavorites?.();
+        let realmService = getService('realm') as any;
+        for (let favorite of favorites) {
+          realmService.indexCountsByRealm.set(favorite, {
+            cardCount: 1,
+            fileCount: 1,
+            definitionCount: null,
+          });
+        }
+        matrixService.workspaceFavorites = favorites;
+        await settled();
+      }
+
+      const DESK_PINS =
+        '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-pinned-card]';
+
+      test("a desk shows its Workspace card's pins in the workspace's order and counts them", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        assert.deepEqual(
+          findAll(DESK_PINS).map((el) => el.getAttribute('aria-label')),
+          [
+            'Open Roadmap',
+            'Open Launch Notes',
+            'Open Style Guide',
+            'Open Glossary',
+          ],
+          'a pin with nothing to draw gives its place to the next, and pins in another realm, linked by URL or by its prefix, are read from that realm',
+        );
+        assert
+          .dom(DESK_PINS)
+          .hasAttribute(
+            'data-test-pinned-card',
+            `${pinnedRealmURL}roadmap`,
+            'each pin is keyed by its own id',
+          );
+        let pinnedStat =
+          '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]';
+        await waitFor(pinnedStat);
+        assert
+          .dom(pinnedStat)
+          .hasText(
+            'Pinned 5',
+            'every pinned card is counted once, drawn or not',
+          );
+        assert
+          .dom('[data-test-workspace="Pinned Workspace"]')
+          .exists({ count: 2 }, 'it is listed as a desk and again below');
+        assert
+          .dom('[data-test-pinned-cards]')
+          .exists({ count: 1 }, 'only the desk shows pins');
+      });
+
+      // The ids in the stack a pin opens, from the bottom.
+      function openedStack() {
+        let { stacks } = (
+          getService('operator-mode-state-service') as OperatorModeStateService
+        ).state;
+        return stacks.map((stack) => stack.map((item) => item.id));
+      }
+
+      test("a pinned card opens over its workspace's Home", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        await click(`[data-test-pinned-card="${pinnedRealmURL}roadmap"]`);
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.deepEqual(openedStack(), [
+          [`${pinnedRealmURL}index`, `${pinnedRealmURL}roadmap`],
+        ]);
+      });
+
+      test("a pin in another realm opens by its own id over its workspace's Home", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        await click('[data-test-pinned-card="@cardstack/catalog/glossary"]');
+
+        assert.deepEqual(
+          openedStack(),
+          [[`${pinnedRealmURL}index`, '@cardstack/catalog/glossary']],
+          'a prefix pin keeps its prefix, and the stack is the workspace the desk is for',
+        );
+      });
+
+      test("a pin in a realm the app hasn't loaded is drawn once that realm is found", async function (assert) {
+        const elsewhereRealmURL = 'http://test-realm/testuser/elsewhere/';
+        // Readable by anyone and not one of the user's realms, so the app
+        // learns of it only by looking it up.
+        const unlistedRealmURL = 'http://test-realm/testuser/unlisted/';
+        await setupAcceptanceTestRealm({
+          realmURL: unlistedRealmURL,
+          mockMatrixUtils,
+          permissions: { '*': ['read'] },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unlisted' }),
+            'notes.json': cardJSON('Notes'),
+          },
+        });
+        withholdRealmSession(unlistedRealmURL);
+        await setupAcceptanceTestRealm({
+          realmURL: elsewhereRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Elsewhere Workspace' }),
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: `${unlistedRealmURL}notes` } },
+            }),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          catalogRealmURL,
+          elsewhereRealmURL,
+        ]);
+
+        await visitWithFavorites([elsewhereRealmURL], () => {
+          // Indexing its cards can already have taught the app the realm, so
+          // it's forgotten here, and only the desk's lookup can find it again.
+          let realmService = getService('realm') as RealmService;
+          realmService.removeRealm(unlistedRealmURL);
+          assert.strictEqual(
+            realmService.realmOf(rri(`${unlistedRealmURL}notes`)),
+            undefined,
+            "the pin's realm isn't known when the desk first searches",
+          );
+        });
+        let pins =
+          '[data-test-favorites-list] [data-test-workspace="Elsewhere Workspace"] [data-test-pinned-card]';
+        await waitUntil(() => findAll(pins).length === 1);
+
+        assert
+          .dom(pins)
+          .hasAttribute('data-test-pinned-card', `${unlistedRealmURL}notes`);
+        assert.dom(pins).hasAttribute('aria-label', 'Open Notes');
+      });
+
+      test('a desk with no pins shows no collage and no pin count', async function (assert) {
+        await visitWithFavorites([pinnedRealmURL, unpinnedRealmURL]);
+        // `settled()` in `visitWithFavorites` waits for both desks' pin
+        // searches, so the unpinned desk has had its answer.
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        let desk =
+          '[data-test-favorites-list] [data-test-workspace="Unpinned Workspace"]';
+        assert.dom(desk).exists();
+        assert.dom(`${desk} [data-test-pinned-cards]`).doesNotExist();
+        assert
+          .dom(`${desk} [data-test-workspace-stat="Pinned"]`)
+          .doesNotExist();
+      });
+    });
+
     module('workspaces', function () {
       let moreRealmURLs: string[] = [];
       let testingRoot: HTMLElement | null;
@@ -1306,9 +1704,29 @@ module('Acceptance | dashboard', function (hooks) {
             (name) => name !== 'Workspace A',
           )!;
 
-          await click(
+          // The chip takes no click of its own: the pointer reaches the row's
+          // hit area over it, so the test clicks whatever is hit there.
+          let chip = find(
             `[data-test-workspace="${rowName}"] [data-test-workspace-visibility]`,
+          )!;
+          chip.scrollIntoView({ block: 'center' });
+          let box = chip.getBoundingClientRect();
+          let target = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
           );
+          if (!(target instanceof HTMLElement)) {
+            throw new Error('no element is hit over the visibility chip');
+          }
+          assert
+            .dom(target)
+            .hasAttribute(
+              'data-test-workspace-button',
+              rowName,
+              "the row's button receives the pointer over its chip",
+            );
+
+          await click(target);
 
           assert.dom('[data-test-dashboard]').doesNotExist();
           assert.strictEqual(
@@ -1347,7 +1765,7 @@ module('Acceptance | dashboard', function (hooks) {
 
             assert.deepEqual(
               findAll(menuItems).map((item) => item.textContent?.trim()),
-              ['https://newer.example.com/', 'https://older.example.com/'],
+              ['newer.example.com', 'older.example.com'],
               'every published site is listed, most recently published first',
             );
 
@@ -1362,6 +1780,54 @@ module('Acceptance | dashboard', function (hooks) {
           assert
             .dom('[data-test-dashboard]')
             .exists('choosing a site does not open the workspace');
+        });
+
+        test("a row's button is described by its full visibility, its update time and its address", async function (assert) {
+          await visitDashboard(assert, 2);
+          let hour = 60 * 60 * 1000;
+          for (let [i, url] of [realmURL, ...moreRealmURLs].entries()) {
+            markUpdated(url, new Date(Date.now() - (i + 1) * hour));
+          }
+          await settled();
+          let rowName = workspaceNames(ROWS).at(-1)!;
+          assert.strictEqual(
+            rowName,
+            'Workspace 08',
+            'the last row is the workspace updated 9 hours ago',
+          );
+          assert
+            .dom(
+              `[data-test-workspace-rows] [data-test-workspace="${rowName}"] [data-test-workspace-updated]`,
+            )
+            .includesText('9 hrs ago', 'the row shows the short form');
+
+          let description = descriptionOf(
+            `[data-test-workspace-button="${rowName}"]`,
+          );
+          assert.deepEqual(
+            description,
+            [
+              'Private workspace',
+              'Updated 9 hours ago',
+              'test-realm/testuser/workspace-8',
+            ],
+            'the full visibility and the time in words, not only the chip and the short time',
+          );
+        });
+
+        test("a tile's button is described by its full visibility and its address", async function (assert) {
+          await visitDashboard(assert, 2);
+          let tileName = workspaceNames(RECENT_TILES).find(
+            (name) => name !== 'Workspace A',
+          )!;
+
+          let description = descriptionOf(
+            `[data-test-workspace-button="${tileName}"]`,
+          );
+          assert.deepEqual(description, [
+            'Private workspace',
+            urlFor(tileName).replace(/^http:\/\/|\/$/g, ''),
+          ]);
         });
 
         module('keyboard cursor', function () {
