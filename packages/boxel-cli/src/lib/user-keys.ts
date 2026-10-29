@@ -20,6 +20,15 @@ export interface UserKeyGrant {
   approvedVia: string;
 }
 
+// What a Google service account acts as: its email, the user it acts as
+// (null for the service account itself) and the scopes its tokens ask for.
+// Never its key file.
+export interface ServiceAccountDetails {
+  email: string;
+  subject: string | null;
+  scopes: string[];
+}
+
 export interface UserKeyMetadata {
   id: string;
   name: string;
@@ -27,6 +36,8 @@ export interface UserKeyMetadata {
   state: string;
   // Present when the realm server records grants.
   grants?: UserKeyGrant[];
+  // Only a google-service-account key has one.
+  serviceAccount?: ServiceAccountDetails;
   createdAt: string;
   updatedAt: string;
 }

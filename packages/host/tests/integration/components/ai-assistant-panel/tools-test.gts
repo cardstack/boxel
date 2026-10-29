@@ -2569,8 +2569,17 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
   // Holds every store load of the discovered skill until released, so every
   // resolution of its tool stays in flight.
+  //
+  // The drain's validation timeout runs while the hold is in place, so the
+  // hold also raises that timeout. Otherwise the time the test holds the load
+  // is taken from the time the validation has for the loads after the
+  // release, and on a busy runner the tool fails with a validation timeout
+  // instead of running.
   function holdDiscoveredSkillLoads() {
     let store = getService('store');
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
     let release = new Deferred<void>();
     let heldLoads = 0;
     let originalGet = store.get;
@@ -2595,6 +2604,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       release() {
         release.fulfill();
         (store as any).get = originalGet;
+        toolService.validateTimeoutMs = originalValidateTimeoutMs;
       },
     };
   }
@@ -2718,7 +2728,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
       'applied',
-      'the host tool ran successfully',
+      `the host tool ran successfully (failure reason: ${
+        hostToolResults[0]?.content.failureReason ?? 'none'
+      })`,
     );
     assert
       .dom('[data-test-tool-call-apply="applying"]')
@@ -2882,7 +2894,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
       'applied',
-      'the renamed tool ran',
+      `the renamed tool ran (failure reason: ${
+        hostToolResults[0]?.content.failureReason ?? 'none'
+      })`,
     );
   });
 
