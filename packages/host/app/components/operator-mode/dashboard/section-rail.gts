@@ -10,7 +10,7 @@ import { Button } from '@cardstack/pretui/components/button';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 
 import { isAimingAt, type Point } from './menu-aim';
 
@@ -263,7 +263,7 @@ export default class SectionRail extends Component<Signature> {
       data-test-section-rail-folded={{if this.isFolded 'true' 'false'}}
       ...attributes
     >
-      {{#each this.entries key='section.id' as |entry|}}
+      {{#each this.entries key='section.id' as |entry index|}}
         {{#let
           entry.section
           (eq this.currentId entry.section.id)
@@ -272,6 +272,7 @@ export default class SectionRail extends Component<Signature> {
         }}
           <div
             class='rail-item'
+            style={{cssVar _rail-item-index=index}}
             {{on 'pointerenter' (fn this.hoverEntry section)}}
             {{on 'pointerleave' this.leaveEntry}}
             data-test-section-rail-item={{section.id}}
@@ -347,18 +348,21 @@ export default class SectionRail extends Component<Signature> {
         );
         --_rail-shadow: color-mix(in oklch, var(--boxel-dark) 45%, transparent);
         --_rail-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+        /* Read by the flyout too, which must fit between them. */
+        --_rail-top: calc(
+          var(--operator-mode-top-bar-item-height) + 2 *
+            var(--operator-mode-spacing)
+        );
+        --_rail-bottom: calc(
+          var(--operator-mode-bottom-bar-item-height) + 2 *
+            var(--operator-mode-spacing)
+        );
 
         /* Centered on the column the wordmark already stands in, below the
            top bar and above the bottom bar. */
         position: absolute;
-        top: calc(
-          var(--operator-mode-top-bar-item-height) + 2 *
-            var(--operator-mode-spacing)
-        );
-        bottom: calc(
-          var(--operator-mode-bottom-bar-item-height) + 2 *
-            var(--operator-mode-spacing)
-        );
+        top: var(--_rail-top);
+        bottom: var(--_rail-bottom);
         left: calc(var(--operator-mode-spacing) - var(--_rail-pad));
         z-index: var(--host-dashboard-rail-z-index);
         display: flex;
@@ -448,7 +452,14 @@ export default class SectionRail extends Component<Signature> {
           100vw - var(--_rail-closed-width) + var(--_rail-pad) -
             var(--boxel-sp-sm) - 2 * var(--operator-mode-spacing)
         );
-        --_flyout-max-height: 26rem;
+        /* No taller than the room from its entry down to the rail's bottom,
+           since the main panel clips whatever runs past the viewport. */
+        --_flyout-max-height: min(
+          26rem,
+          100dvh - var(--_rail-top) - var(--_rail-bottom) -
+            var(--_rail-item-index) *
+            (var(--container-button-size) + var(--boxel-sp-4xs))
+        );
         position: absolute;
         top: calc(-1 * var(--_rail-pad));
         left: 100%;

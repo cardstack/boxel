@@ -8,7 +8,7 @@ import { SIDE_OPTIONS } from '../demo-structure';
 
 // Note: Pretui Tooltip is CSS-only — it reveals on hover/focus-within, with
 // no floating-ui positioning or JS listeners (prerender-safe by design).
-// Dropped knobs: offset (fixed 6px gap, no arg); variant (single always-dark
+// Dropped knobs: offset (fixed 0.375rem gap, no arg); variant (single always-dark
 // treatment — "the lining"); the six boxel-tooltip-* CSS-variable knobs
 // (CSS knob layer not yet ported).
 class TooltipUsage extends GlimmerComponent {
