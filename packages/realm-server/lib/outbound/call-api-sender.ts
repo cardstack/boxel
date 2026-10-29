@@ -98,7 +98,7 @@ export function createCallApiSender(
   return {
     fill: (lookup) =>
       fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
-    readiness: (lookup) => keyReadiness(dbAdapter, lookup),
+    readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(

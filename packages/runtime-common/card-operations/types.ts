@@ -1706,15 +1706,19 @@ export type OperationErrorCode =
   // A `callApi` invoked interactively — from a browser, the AI assistant or
   // the CLI — whose binding was approved for pipelines only. Nothing was sent.
   | 'interactive-use-not-approved'
-  // A `callApi` slot has no usable credential. Carries a 424 and
-  // `meta.reason`: `rejected` (the vendor refused the key: it answered 401 at
-  // the destination, an OAuth refresh answered `invalid_grant`, or Google's
-  // token endpoint refused a service-account key), `needs-admin`
-  // (the OAuth client it mints through was deleted, unshared, suspended or
-  // answered `invalid_client`) or `unavailable` (the token endpoint kept
-  // failing after retries). Nothing was sent, except a periodic probe of a
-  // rejected grant or service-account key; the key's owner replaces or
-  // reconnects it, or a probe the vendor accepts brings it back.
+  // A `callApi` slot has no usable credential: its key was rejected, or it
+  // mints its access token and minting failed. Carries a 424 and
+  // `meta.slot`. For a stored key the vendor answered 401 at the slot's
+  // destination (`meta.destination`); nothing is sent there except a periodic
+  // probe, and the key's owner replaces it or a probe the vendor accepts
+  // brings it back. For a minted token `meta.reason` says why: `rejected`
+  // (the vendor refused it, as an OAuth refresh answered `invalid_grant` or
+  // Google's token endpoint refused a service-account key; its owner
+  // reconnects or replaces it, and a refused service-account key is sent to
+  // Google only as a periodic probe), `needs-admin` (the OAuth client it mints through was
+  // deleted, unshared, suspended or answered `invalid_client`) or
+  // `unavailable` (the token endpoint kept failing after retries), and
+  // nothing was sent.
   | 'credential-rejected'
   // A `callApi` invoked while a card is being rendered. A render is replayed
   // and cached, and must not send requests to the world on anyone's behalf.
