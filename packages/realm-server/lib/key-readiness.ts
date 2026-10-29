@@ -26,6 +26,13 @@ import { bindingSnapshot, fingerprintOf, slotToken } from './key-bindings.ts';
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
 // the share's key, who is told what they could fix themselves.
+//
+// `needs-connect` and `needs-approval` differ only in whether one of the
+// caller's grants covers the destination, so any card can learn that about
+// the viewer for a destination it names. That tells a card nothing it can't
+// already read: card code holds the app session, and `GET /_user-keys` lists
+// every key's grants to it. A change that moves that listing behind a secure
+// session has to fold these two answers into one as well.
 
 // The order slot answers are reported in: the first slot to need something
 // further up the list decides the operation's answer. A slot only an
