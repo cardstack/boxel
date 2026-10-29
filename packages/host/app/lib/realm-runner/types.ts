@@ -30,12 +30,28 @@ export type RealmRunnerCallMethod =
   | 'index.invalidate'
   | 'index.reindex'
   | 'index.fullReindex'
-  | 'index.cancelJob';
+  | 'index.cancelJob'
+  | 'web.search'
+  | 'web.read'
+  | 'resolve'
+  | 'activity'
+  | 'plan'
+  | 'ask';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,
   args: unknown[],
 ) => Promise<unknown>;
+
+// An error the script itself threw or failed to compile with, as opposed to
+// one from a realm call or the time limit. `phase` is 'compile' for a script
+// QuickJS could not parse, and 'run' for one that threw while it ran.
+export interface RealmScriptErrorInfo {
+  name: string;
+  message: string;
+  line?: number;
+  phase: 'compile' | 'run';
+}
 
 export interface RealmRunnerResult {
   scriptResult: string;
@@ -57,6 +73,9 @@ export type RealmRunnerRequest =
       id: number;
       value?: string;
       error?: string;
+      // the call waited this long on a person (realm.ask): the script's
+      // deadline moves out by as much
+      extendMs?: number;
     };
 
 export type RealmRunnerResponse =
@@ -70,4 +89,8 @@ export type RealmRunnerResponse =
       args: unknown[];
     }
   | { type: 'success'; result: RealmRunnerResult }
-  | { type: 'error'; error: string };
+  | { type: 'error'; error: string; scriptError?: RealmScriptErrorInfo };
+
+// A user's Stop, as a stopped run's error begins: the transcript reads it as
+// stopped, never as failed.
+export const STOPPED_BY_USER = 'Stopped by you';
