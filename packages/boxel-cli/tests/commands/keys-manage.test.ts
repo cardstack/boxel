@@ -7,6 +7,8 @@ import jwt from 'jsonwebtoken';
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   keysAdd,
+  keysClients,
+  keysConnect,
   keysReplace,
   keysDelete,
   keysList,
@@ -408,11 +410,22 @@ describe('boxel keys: managing keys', () => {
         'unshare',
         'swap',
         'shares',
+        'clients',
+        'connect',
       ]),
     );
-    for (let [name, kindOption] of [
-      ['add', ['--kind']],
-      ['replace', []],
+    const oauthOptions = [
+      '--client-id',
+      '--authorize-url',
+      '--token-url',
+      '--scopes',
+      '--grant-type',
+      '--token-auth',
+      '--api-host',
+    ];
+    for (let [name, kindOption, oauthOption] of [
+      ['add', ['--kind'], oauthOptions],
+      ['replace', [], []],
     ] as const) {
       let command = keys!.commands.find((c) => c.name() === name)!;
       expect(command.registeredArguments.map((a) => a.name())).toEqual([
@@ -425,8 +438,17 @@ describe('boxel keys: managing keys', () => {
         ...kindOption,
         '--subject',
         '--scope',
+        ...oauthOption,
       ]);
     }
+    let connect = keys!.commands.find((c) => c.name() === 'connect')!;
+    expect(connect.registeredArguments.map((a) => a.name())).toEqual(['name']);
+    expect(connect.options.map((o) => o.long)).toEqual([
+      '--client',
+      '--realm',
+      '--timeout',
+      '--json',
+    ]);
   });
 });
 
@@ -663,5 +685,411 @@ describe('boxel keys: Google service accounts', () => {
     expect(requests.filter((r) => r.path === '/_key-write-tickets')).toEqual(
       [],
     );
+  });
+});
+
+describe('boxel keys: OAuth clients and connections', () => {
+  let configDir: string;
+  let manager: ProfileManager;
+  const REALM = 'https://realms.example.test/team/';
+  const CLIENT_KEY = {
+    ...KEY,
+    id: '0d6f4a8e-6c1b-4f4e-9a57-3c2b7e1f9d20',
+    name: 'forge app',
+    kind: 'oauth-client',
+  };
+  const CONNECTION = {
+    ...KEY,
+    id: '5a1e2c3d-4b5f-4a6e-8b7c-9d0e1f2a3b4c',
+    name: 'my forge',
+    kind: 'oauth-connection',
+  };
+  const PLATFORM = {
+    ref: { kind: 'platform', clientId: '9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a' },
+    kind: 'platform',
+    label: 'Boxel (read-only)',
+    name: 'github',
+    clientId: 'Iv1.boxel',
+    scopes: '',
+    apiHosts: ['https://api.github.com/'],
+    authorizeHost: 'github.com',
+  };
+  const SHARED = {
+    ref: { kind: 'share', shareId: '1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4a5b' },
+    kind: 'share',
+    label: 'team forge',
+    clientId: 'forge-team',
+    scopes: 'read:user',
+    apiHosts: [],
+    authorizeHost: 'forge.example',
+  };
+  const OWN = {
+    ref: { kind: 'own', keyId: CLIENT_KEY.id },
+    kind: 'own',
+    label: 'forge app',
+    clientId: 'forge-mine',
+    scopes: 'repo:read',
+    apiHosts: [],
+    authorizeHost: 'forge.example',
+  };
+
+  beforeEach(async () => {
+    configDir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-keys-oauth-'));
+    manager = new ProfileManager(configDir);
+    await manager.addProfileWithAuth(USER, {
+      accessToken: 'matrix-token',
+      deviceId: 'DEVICE',
+      userId: USER,
+      matrixUrl: 'https://matrix-staging.stack.cards',
+      realmServerUrl: REALM_SERVER,
+    } as any);
+    manager.setRealmServerToken(
+      jwt.sign({ user: USER }, 'a secret', { expiresIn: '1h' }),
+    );
+    manager.setSecureSession({
+      token: 'secure-session',
+      userId: USER,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it('adds a client with its secret typed at the masked prompt and its settings beside it', async () => {
+    let secret = 'forge-client-secret-0123456789';
+    let requests = stubServer(({ path }) => {
+      if (path === '/_secure-session') return { status: 204 };
+      if (path === '/_key-write-tickets') {
+        return {
+          status: 201,
+          body: { data: { attributes: { ticket: 'ticket-1' } } },
+        };
+      }
+      return {
+        status: 201,
+        body: { data: { id: CLIENT_KEY.id, attributes: CLIENT_KEY } },
+      };
+    });
+    let terminal = fakeTerminal();
+    let stdout = captureStdout();
+    try {
+      let adding = keysAdd('forge app', {
+        profileManager: manager,
+        input: terminal.input,
+        output: terminal.output,
+        kind: 'oauth-client',
+        clientId: 'forge-mine',
+        authorizeUrl: 'https://forge.example/authorize',
+        tokenUrl: 'https://forge.example/token',
+        scopes: ['repo:read', 'read:user'],
+        apiHost: ['https://api.forge.example/'],
+      });
+      terminal.type(`${secret}\r`);
+      await adding;
+    } finally {
+      stdout.restore();
+    }
+    expect(terminal.written()).toContain('*'.repeat(secret.length));
+    expect(terminal.written()).not.toContain(secret.slice(0, -4));
+    expect(stdout.text()).not.toContain(secret.slice(0, -4));
+    expect(stdout.text()).toContain('--client forge app');
+    expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'GET /_secure-session',
+      'POST /_key-write-tickets',
+      'POST /_user-keys',
+    ]);
+    expect(requests[2].body).toEqual({
+      data: {
+        type: 'user-key',
+        attributes: {
+          name: 'forge app',
+          kind: 'oauth-client',
+          value: secret,
+          oauth: {
+            clientId: 'forge-mine',
+            authorizeUrl: 'https://forge.example/authorize',
+            tokenUrl: 'https://forge.example/token',
+            scopes: 'repo:read read:user',
+            apiHosts: ['https://api.forge.example/'],
+          },
+        },
+      },
+      meta: { ticket: 'ticket-1' },
+    });
+  });
+
+  it('refuses a client missing what it needs, and OAuth options on another kind, before asking the server anything', async () => {
+    let requests = stubServer(() => ({ status: 500 }));
+    let base = {
+      profileManager: manager,
+      stdin: true,
+      input: new PassThrough() as unknown as NodeJS.ReadStream,
+    };
+    await expect(
+      keysAdd('forge app', {
+        ...base,
+        kind: 'oauth-client',
+        authorizeUrl: 'https://forge.example/authorize',
+        tokenUrl: 'https://forge.example/token',
+      }),
+    ).rejects.toThrow(/--client-id/);
+    await expect(
+      keysAdd('forge app', {
+        ...base,
+        kind: 'oauth-client',
+        clientId: 'forge-mine',
+        tokenUrl: 'https://forge.example/token',
+      }),
+    ).rejects.toThrow(/--authorize-url/);
+    await expect(
+      keysAdd('forge app', {
+        ...base,
+        kind: 'oauth-client',
+        clientId: 'forge-mine',
+        grantType: 'client_credentials',
+        authorizeUrl: 'https://forge.example/authorize',
+        tokenUrl: 'https://forge.example/token',
+      }),
+    ).rejects.toThrow(/client_credentials client has no --authorize-url/);
+    await expect(
+      keysAdd('weather', { ...base, clientId: 'forge-mine' }),
+    ).rejects.toThrow(/--client-id is only for an oauth-client key/);
+    expect(requests).toEqual([]);
+  });
+
+  it("lists the clients to connect through, each named as connect's --client takes it", async () => {
+    let requests = stubServer(() => ({
+      body: {
+        data: [PLATFORM, SHARED, OWN].map((attributes) => ({
+          type: 'oauth-client',
+          attributes,
+        })),
+      },
+    }));
+    let stdout = captureStdout();
+    let clients;
+    try {
+      clients = await keysClients({ profileManager: manager, realm: REALM });
+    } finally {
+      stdout.restore();
+    }
+    expect(clients).toHaveLength(3);
+    expect(requests.map((r) => r.path)).toEqual([
+      `/_oauth/clients?realm=${encodeURIComponent(REALM)}`,
+    ]);
+    let lines = stdout.text().trim().split('\n');
+    expect(lines[0]).toMatch(
+      /^platform:github .*Boxel \(read-only\), Boxel's own, signs in at github\.com/,
+    );
+    expect(lines[1]).toMatch(
+      /^team forge .*shared into https:\/\/realms\.example\.test\/team\/, signs in at forge\.example, scopes read:user/,
+    );
+    expect(lines[2]).toMatch(/^forge app .*yours, signs in at forge\.example/);
+  });
+
+  function serveConnect({
+    clients = [PLATFORM, SHARED, OWN],
+    appearsAfter = 1,
+    appearing = CONNECTION,
+  }: {
+    clients?: unknown[];
+    appearsAfter?: number;
+    appearing?: unknown;
+  } = {}) {
+    let listings = 0;
+    return stubServer(({ method, path }) => {
+      if (path === '/_secure-session') return { status: 204 };
+      if (path.startsWith('/_oauth/clients')) {
+        return {
+          body: {
+            data: clients.map((attributes) => ({
+              type: 'oauth-client',
+              attributes,
+            })),
+          },
+        };
+      }
+      if (path === '/_key-write-tickets') {
+        return {
+          status: 201,
+          body: { data: { attributes: { ticket: 'ticket-1' } } },
+        };
+      }
+      if (method === 'POST' && path === '/_oauth/connections') {
+        return {
+          status: 201,
+          body: {
+            data: {
+              type: 'oauth-connect',
+              attributes: {
+                authorizeUrl:
+                  'https://github.com/login/oauth/authorize?state=s',
+                expiresAt: new Date(Date.now() + 600_000).toISOString(),
+              },
+            },
+          },
+        };
+      }
+      if (method === 'GET' && path === '/_user-keys') {
+        listings++;
+        let data =
+          listings > appearsAfter
+            ? [
+                {
+                  type: 'user-key',
+                  id: (appearing as any).id,
+                  attributes: appearing,
+                },
+              ]
+            : [];
+        return { body: { data } };
+      }
+      throw new Error(`unexpected ${method} ${path}`);
+    });
+  }
+
+  it('connects through a platform client: opens the vendor in the browser and waits for the connection, printing no token', async () => {
+    let requests = serveConnect();
+    let opened: string[] = [];
+    let stdout = captureStdout();
+    let key;
+    try {
+      key = await keysConnect('my forge', {
+        profileManager: manager,
+        client: 'platform:github',
+        openBrowserFn: async (url) => {
+          opened.push(url);
+          return true;
+        },
+        pollIntervalMs: 1,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(key.id).toBe(CONNECTION.id);
+    expect(opened).toEqual([
+      'https://github.com/login/oauth/authorize?state=s',
+    ]);
+    expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'GET /_secure-session',
+      'GET /_oauth/clients',
+      'POST /_key-write-tickets',
+      'POST /_oauth/connections',
+      'GET /_user-keys',
+      'GET /_user-keys',
+    ]);
+    expect(requests[2].body.data.attributes).toEqual({ action: 'add' });
+    expect(requests[3].body).toEqual({
+      data: {
+        type: 'oauth-connect',
+        attributes: { name: 'my forge', client: PLATFORM.ref },
+      },
+      meta: { ticket: 'ticket-1' },
+    });
+    expect(stdout.text()).toContain(
+      'Connected my forge through Boxel (read-only).',
+    );
+  });
+
+  it('names a shared client by its label in the --realm, and one of your own by its name', async () => {
+    let requests = serveConnect({ appearsAfter: 0 });
+    let quiet = captureStdout();
+    try {
+      await keysConnect('my forge', {
+        profileManager: manager,
+        client: 'team forge',
+        realm: REALM,
+        openBrowserFn: async () => true,
+        pollIntervalMs: 1,
+      });
+      await keysConnect('my forge', {
+        profileManager: manager,
+        client: 'forge app',
+        openBrowserFn: async () => true,
+        pollIntervalMs: 1,
+      });
+    } finally {
+      quiet.restore();
+    }
+    let started = requests.filter((r) => r.path === '/_oauth/connections');
+    expect(started.map((r) => r.body.data.attributes.client)).toEqual([
+      SHARED.ref,
+      OWN.ref,
+    ]);
+    expect(
+      requests
+        .filter((r) => r.path.startsWith('/_oauth/clients'))
+        .map((r) => r.path),
+    ).toEqual([
+      `/_oauth/clients?realm=${encodeURIComponent(REALM)}`,
+      '/_oauth/clients',
+    ]);
+  });
+
+  it("refuses a client it can't find before starting a sign-in", async () => {
+    let requests = serveConnect();
+    let openBrowserFn = vi.fn(async () => true);
+    for (let [client, realm] of [
+      ['platform:gitlab', undefined],
+      ['team forge', undefined],
+      ['forge app', REALM],
+    ] as const) {
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client,
+          realm,
+          openBrowserFn,
+        }),
+      ).rejects.toThrow(/no client/);
+    }
+    await expect(
+      keysConnect('my forge', {
+        profileManager: manager,
+        client: 'platform:github',
+        timeout: 'soon',
+        openBrowserFn,
+      }),
+    ).rejects.toThrow(/--timeout is a number of seconds/);
+    expect(openBrowserFn).not.toHaveBeenCalled();
+    expect(requests.some((r) => r.path === '/_oauth/connections')).toBe(false);
+  });
+
+  it('gives up when the sign-in is not finished in time, and says when the name was taken meanwhile', async () => {
+    serveConnect({ appearsAfter: Infinity });
+    let quiet = captureStdout();
+    let errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client: 'platform:github',
+          timeout: '0',
+          openBrowserFn: async () => true,
+          pollIntervalMs: 1,
+        }),
+      ).rejects.toThrow(/wasn't finished in the browser in time/);
+
+      vi.unstubAllGlobals();
+      serveConnect({
+        appearsAfter: 0,
+        appearing: { ...KEY, name: 'my forge' },
+      });
+      await expect(
+        keysConnect('my forge', {
+          profileManager: manager,
+          client: 'platform:github',
+          openBrowserFn: async () => true,
+          pollIntervalMs: 1,
+        }),
+      ).rejects.toThrow(/was added while you were signing in/);
+    } finally {
+      quiet.restore();
+      errors.mockRestore();
+    }
   });
 });

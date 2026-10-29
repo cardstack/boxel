@@ -132,10 +132,11 @@ realm's `realm.json` is indexed.
 The answers to adding and replacing a key carry neither.
 
 From the terminal, `boxel keys` (`packages/boxel-cli/src/commands/keys/`)
-calls these routes and the shares routes (see the `key-shares` skill). A
-command that only reads (`list`, `show`, `shares`), and `unshare`, uses the
-profile's ordinary session. A command that changes a key or a share in a way
-that needs a ticket (`add`, `replace`, `delete`, `share`, `swap`) makes all of
+calls these routes, the shares routes (see the `key-shares` skill) and the
+OAuth routes (see the `oauth-connections` skill). A command that only reads
+(`list`, `show`, `shares`, `clients`), and `unshare`, uses the profile's
+ordinary session. A command that changes a key or a share in a way that needs
+a ticket (`add`, `replace`, `delete`, `share`, `swap`, `connect`) makes all of
 its requests with the profile's secure session, signing in through the
 browser first when the profile has none, and mints a ticket for that one
 change. It prints a refusal as `Refused (HTTP <status>):

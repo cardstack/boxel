@@ -118,6 +118,8 @@ export interface ConnectableClient {
   ref: ClientRef;
   kind: OAuthClientKind;
   label: string;
+  // A platform client's handle, such as `github`, which the CLI names it by.
+  name?: string;
   clientId: string;
   scopes: string;
   apiHosts: string[];
@@ -649,17 +651,18 @@ export async function listConnectableClients(
     ];
   }
   for (let row of await query(dbAdapter, [
-    `SELECT id, label, ${CLIENT_COLUMNS} FROM platform_oauth_clients WHERE state = 'active' ORDER BY label`,
+    `SELECT id, name, label, ${CLIENT_COLUMNS} FROM platform_oauth_clients WHERE state = 'active' ORDER BY label`,
   ])) {
     if (serves(row.api_hosts as string[])) {
-      offered.push(
-        describe(
+      offered.push({
+        ...describe(
           row,
           { kind: 'platform', clientId: row.id as string },
           'platform',
           row.label as string,
         ),
-      );
+        name: row.name as string,
+      });
     }
   }
   if (realmURL) {

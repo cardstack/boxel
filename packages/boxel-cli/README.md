@@ -101,11 +101,18 @@ boxel keys share   <name> --realm <url> [--as <label>]
 boxel keys unshare <label> --realm <url>
 boxel keys swap    <label> --realm <url> --key <your-key>
 boxel keys shares  --realm <url>
+
+# OAuth
+boxel keys add     <name> --kind oauth-client --client-id <id> --authorize-url <url> --token-url <url> [--scopes <scope>...] [--api-host <url>]
+boxel keys clients [--realm <url>]                    # the clients you can connect through
+boxel keys connect <name> --client <platform:<name> | share-label | your-client> [--realm <url>]
 ```
 
 A key's value is never a command-line argument. `add` and `replace` ask for it at a masked prompt that shows a `*` for each character and, once you press Enter, the last few characters (at most 4, never more than a quarter of it, and none of a value of 8 characters or fewer), so you can tell it's the one you meant. Without a terminal, pass `--stdin` or `--key-file`; otherwise the command refuses rather than wait. No command prints a value.
 
 Adding, replacing, deleting, sharing and swapping need you signed in on the secure origin, which `boxel profile add` or `boxel keys sign-in` does. If you aren't, the command opens the sign-in in your browser first. `boxel keys status` says whether you are, and `boxel keys sign-out` ends it. A key you add here can't be sent anywhere yet: where it may go is granted when you approve an operation that uses it.
+
+Some services sign you in with OAuth instead of handing you a key. An **OAuth client** is an app registered with the service: `add --kind oauth-client` stores one, with its client secret entered at the masked prompt like any key's value and its client id, sign-in page, token endpoint and scopes as options (`--grant-type client_credentials` for one that mints tokens with no person, which takes no `--authorize-url`). Share a client into a realm and everyone there can connect their own account through it, without seeing its secret. `clients` lists what you can connect through: Boxel's own (`platform:github`, Boxel's read-only GitHub App), yours, and with `--realm` the ones shared into that realm. `connect` opens the service's sign-in in your browser; once you approve there, the service sends the browser back through the realm server to the secure origin, which finishes the sign-in and keeps the result as one of your keys, an OAuth connection. No token passes through the CLI or is printed. Name a shared client by its label with `--realm`, one of yours by its key name, and one of Boxel's as `platform:<name>`.
 
 `swap` puts one of your keys into a suspended share in a realm you write to; the share resumes with you as its owner. Every command takes `--json`. A refusal prints the server's status and reason, and under `--json` it prints `{ "error": { "status", "reason", "errors" } }` with the server's `errors` unchanged.
 

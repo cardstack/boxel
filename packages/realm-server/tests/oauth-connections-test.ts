@@ -744,8 +744,11 @@ module(basename(import.meta.filename), function (hooks) {
       .query({ destination: `${PROVIDER}/api/` })
       .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
     assert.deepEqual(
-      offered.body.data.map((c: any) => c.attributes.label),
-      ['Boxel (read-only)'],
+      offered.body.data.map((c: any) => [
+        c.attributes.label,
+        c.attributes.name,
+      ]),
+      [['Boxel (read-only)', 'stub']],
     );
     let connected = await connect(TEAMMATE, {
       kind: 'platform',

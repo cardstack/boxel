@@ -36,11 +36,11 @@ only scope that reaches private repositories, `repo`, can also write.
 ## Connecting
 
 1. The secure window's `connect` page lists the clients a person may use
-   (`GET /_oauth/clients?realm=&destination=`): the platform's, the
-   authorization-code clients shared into the realm (to anyone who can read it)
-   and their own, each with the scopes it asks for. With a destination, only
-   clients whose API hosts cover it. A client's secret and owner are never in
-   the answer.
+   (`GET /_oauth/clients?realm=&destination=`): the platform's (each with its
+   `name`), the authorization-code clients shared into the realm (to anyone
+   who can read it) and their own, each with the scopes it asks for. With a
+   destination, only clients whose API hosts cover it. A client's secret and
+   owner are never in the answer.
 2. The window mints a key write ticket (`add`, or `replace` of the connection
    for a reconnect) and posts `POST /_oauth/connections` with its own secure
    session. The realm server spends the ticket, stores a connect request (the
@@ -61,6 +61,16 @@ only scope that reaches private repositories, `repo`, can also write.
    the vendor therefore never puts the second person's account under the
    first's. **No token ever passes through a browser**; only the one-use code
    does, and it is useless without the PKCE verifier and client secret.
+
+From the terminal, `boxel keys add <name> --kind oauth-client …` adds a
+client, `boxel keys clients [--realm]` lists the same connectable clients
+(a platform client by its `name`, as `platform:<name>`), and
+`boxel keys connect <name> --client …` starts the sign-in with the CLI's
+secure session (step 2), opens the authorization URL in the system browser,
+and polls `GET /_user-keys` until a connection of that name appears or the
+connect request expires. The sign-in still finishes in the browser's secure
+window (step 3), so the CLI never sees a code or a token; a sign-in that
+fails says why only on the `connected` page, and the CLI times out.
 
 The callback's query string carries the authorization code. `/_oauth` is a key
 route, so the request log and telemetry keep only its method and path; the load

@@ -20,6 +20,61 @@ export interface UserKeyGrant {
   approvedVia: string;
 }
 
+// An OAuth client's settings, as the owner enters them. None is secret: the
+// client secret is the key's value.
+export interface OAuthClientSettings {
+  clientId: string;
+  grantType?: 'authorization_code' | 'client_credentials';
+  authorizeUrl?: string;
+  tokenUrl: string;
+  scopes?: string;
+  tokenAuth?: 'client_secret_post' | 'client_secret_basic';
+  apiHosts?: string[];
+}
+
+// How the realm server names a client to connect through.
+export type OAuthClientRef =
+  | { kind: 'own'; keyId: string }
+  | { kind: 'share'; shareId: string }
+  | { kind: 'platform'; clientId: string };
+
+// What the key listing says about an OAuth key: for a client, its settings
+// and state; for a connection, the client it signs in through, the scopes
+// granted, and whether it needs reconnecting or an administrator.
+export interface OAuthKeyDescription {
+  client?: {
+    clientId: string;
+    grantType: string;
+    authorizeURL: string | null;
+    tokenURL: string;
+    scopes: string;
+    tokenAuth: string;
+    apiHosts: string[];
+    state: string;
+  };
+  connection?: {
+    client: { kind: string; label: string | null; ref: OAuthClientRef | null };
+    scopes: string;
+    status: 'active' | 'rejected' | 'needs-admin';
+  };
+}
+
+// A client the user may connect through: the platform's, one shared into the
+// realm asked about, or one of their own.
+export interface ConnectableClient {
+  ref: OAuthClientRef;
+  kind: 'own' | 'share' | 'platform';
+  // A share's label, the name of the user's own client key, or a platform
+  // client's label for people.
+  label: string;
+  // A platform client's handle, such as `github`.
+  name?: string;
+  clientId: string;
+  scopes: string;
+  apiHosts: string[];
+  authorizeHost: string;
+}
+
 export interface UserKeyMetadata {
   id: string;
   name: string;
@@ -27,6 +82,8 @@ export interface UserKeyMetadata {
   state: string;
   // Present when the realm server records grants.
   grants?: UserKeyGrant[];
+  // Present for an OAuth client or connection.
+  oauth?: OAuthKeyDescription;
   createdAt: string;
   updatedAt: string;
 }
@@ -132,18 +189,21 @@ export async function findUserKey(
 
 // A key's value as entered. A Google service account's value is its JSON key
 // file, with the user to act as (optional) and the scopes its tokens ask for;
-// any other key's is the value alone.
+// an OAuth client's is its client secret, with its settings beside it; any
+// other key's is the value alone.
 export interface EnteredValue {
   value: string;
   subject?: string;
   scopes?: string[];
+  oauth?: OAuthClientSettings;
 }
 
-function valueAttributes({ value, subject, scopes }: EnteredValue) {
+function valueAttributes({ value, subject, scopes, oauth }: EnteredValue) {
   return {
     value,
     ...(subject ? { subject } : {}),
     ...(scopes ? { scopes } : {}),
+    ...(oauth ? { oauth } : {}),
   };
 }
 
@@ -376,4 +436,56 @@ export async function swapKeyIntoShare(
     },
   );
   return fromResource<KeyShare>(json.data);
+}
+
+// The clients the user may connect through: the platform's, their own, and,
+// given a realm they can read, those shared into it.
+export async function listConnectableClients(
+  realmServerUrl: string,
+  token: string,
+  { realm }: { realm?: string } = {},
+  fetchFn: FetchFn = fetch,
+): Promise<ConnectableClient[]> {
+  let path = realm
+    ? `_oauth/clients?realm=${encodeURIComponent(canonicalRealmUrl(realm))}`
+    : '_oauth/clients';
+  let json = await realmServerRequest(realmServerUrl, path, {
+    token,
+    fetchFn,
+  });
+  return json.data.map(
+    (resource: { attributes: ConnectableClient }) => resource.attributes,
+  );
+}
+
+// Starts a sign-in through a client that stores a connection named `name`
+// once the user finishes it in the browser. With no ticket given, mints one
+// for the add with `token`, which must be a secure session. Answers with the
+// vendor's page to send the user to, and when the sign-in lapses.
+export async function startOAuthConnect(
+  realmServerUrl: string,
+  token: string,
+  {
+    name,
+    client,
+    ticket,
+  }: { name: string; client: OAuthClientRef; ticket?: string },
+  fetchFn: FetchFn = fetch,
+): Promise<{ authorizeUrl: string; expiresAt: string }> {
+  ticket ??= await mintKeyWriteTicket(
+    realmServerUrl,
+    token,
+    { action: 'add' },
+    fetchFn,
+  );
+  let json = await realmServerRequest(realmServerUrl, '_oauth/connections', {
+    method: 'POST',
+    token,
+    fetchFn,
+    body: {
+      data: { type: 'oauth-connect', attributes: { name, client } },
+      meta: { ticket },
+    },
+  });
+  return json.data.attributes;
 }
