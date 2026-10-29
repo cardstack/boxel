@@ -25,7 +25,11 @@ function compact(n: number): string {
  * A small ring and its percentage, beside the model picker: how full the
  * context is, so a reader sees compaction coming before it happens. The
  * ring turns to the attention colour past @warnAt, and its name says
- * "nearly full".
+ * "nearly full". A conversation larger than the window, as after a switch
+ * to a model with a smaller one, shows "Full" in the attention colour and
+ * says how far over it is: the next prompt is too long, so its earlier
+ * messages may get summarized. A limit of 0 or less is unknown, so it is
+ * never over.
  */
 export class ContextRing extends Component<ContextRingSignature> {
   get share(): number {
@@ -35,8 +39,12 @@ export class ContextRing extends Component<ContextRingSignature> {
   get percent(): number {
     return Math.round(this.share * 100);
   }
+  get over(): boolean {
+    let { used, limit } = this.args;
+    return limit > 0 && used > limit;
+  }
   get warns(): boolean {
-    return this.share >= (this.args.warnAt ?? 0.8);
+    return this.over || this.share >= (this.args.warnAt ?? 0.8);
   }
   get ringStyle() {
     return htmlSafe(`--pretui-ring-share: ${this.share * 360}deg`);
@@ -44,6 +52,10 @@ export class ContextRing extends Component<ContextRingSignature> {
   /** the accessible name and tooltip; past @warnAt it says so in words, so
    * the warning never rests on the ring's colour alone */
   get label(): string {
+    if (this.over) {
+      let { used, limit } = this.args;
+      return `Context full: ${compact(used)} tokens, ${compact(used - limit)} more than the ${compact(limit)} this model holds. Earlier messages may be summarized when the next one is sent`;
+    }
     let warning = this.warns ? ', nearly full' : '';
     return `Context ${this.percent}% used${warning}: ${compact(this.args.used)} of ${compact(this.args.limit)} tokens`;
   }
@@ -54,6 +66,7 @@ export class ContextRing extends Component<ContextRingSignature> {
       aria-label={{this.label}}
       title={{this.label}}
       data-warn={{if this.warns 'true'}}
+      data-over={{if this.over 'true'}}
       data-test-pretui-context-ring
       ...attributes
     >
@@ -64,8 +77,9 @@ export class ContextRing extends Component<ContextRingSignature> {
       ></span>
       {{#unless @compact}}<span
           class='pretui-contextring-pct'
+          data-test-pretui-context-ring-pct
           aria-hidden='true'
-        >{{this.percent}}%</span>{{/unless}}
+        >{{#if this.over}}Full{{else}}{{this.percent}}%{{/if}}</span>{{/unless}}
     </span>
     <style scoped>
       @layer PretComponent {

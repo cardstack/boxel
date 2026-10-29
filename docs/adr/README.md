@@ -26,4 +26,5 @@ or backfill one.
 | [010](010-give-loaded-modules-native-esm-semantics.md)                                          | Give the modules the Loader loads native ES module semantics                              | proposed |
 | [011](011-reveal-a-users-matrix-id-only-to-users-who-share-a-realm-with-them.md)                | Reveal a user's Matrix id only to users who share a realm with them                       | proposed |
 | [012](012-hold-one-scroll-anchor-per-change-chosen-by-priority-and-read-from-layout.md)         | Hold one scroll anchor per change, chosen by priority and read from layout                | proposed |
+| [013](013-settle-a-transcripts-scroll-anchor-in-the-render-pass-before-motion-measures.md)      | Settle a transcript's scroll anchor in the render pass, before motion measures            | proposed |
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed |

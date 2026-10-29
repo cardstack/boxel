@@ -119,9 +119,18 @@ function placeFrame(element: HTMLElement, frame: HTMLIFrameElement) {
   return { offset, width };
 }
 
-// A frame that never answers still lets a test settle, and fails on what it
-// was waiting to see.
-const LOAD_WAIT_LIMIT_MS = 15000;
+export const FRAME_WAIT_LIMITS = {
+  // A frame that has not said it is ready by then is loaded once more. Its
+  // script runs only once every stylesheet in its page has settled, so one
+  // request that never does leaves it hidden and silent for good, where a
+  // second load asks for everything again. The app can't tell a stalled
+  // frame from a slow one, so this is well past the time the frame takes to
+  // load on a slow connection, where a reload would only start it over.
+  readyMs: 20000,
+  // A frame that never answers still lets a test settle, and fails on what
+  // it was waiting to see.
+  loadMs: 15000,
+};
 
 const loadWaiter = buildWaiter('credential-fields:load');
 
@@ -208,13 +217,31 @@ export default class CredentialFieldsFrame extends Component<Signature> {
         loadToken = undefined;
       }
     };
-    let loadTimer = setTimeout(endLoadWait, LOAD_WAIT_LIMIT_MS);
+    let loadTimer = setTimeout(endLoadWait, FRAME_WAIT_LIMITS.loadMs);
+
+    let reloadFrame = () => {
+      if (requested) {
+        return;
+      }
+      let src = frame.src;
+      frame.addEventListener(
+        'load',
+        () => {
+          frame.src = src;
+        },
+        { once: true },
+      );
+      frame.src = 'about:blank';
+    };
+    let readyTimer = setTimeout(reloadFrame, FRAME_WAIT_LIMITS.readyMs);
 
     let post = (message: Record<string, unknown>) =>
       frame.contentWindow?.postMessage(message, secureOrigin);
 
+    // Off the page, the element has no styles to read, and the frame would
+    // draw the fields in none.
     let sendStyle = () => {
-      if (!requested) {
+      if (!requested || !element.isConnected) {
         return;
       }
       let computed = getComputedStyle(element);
@@ -250,6 +277,7 @@ export default class CredentialFieldsFrame extends Component<Signature> {
       }
       switch (message.type) {
         case 'ready':
+          clearTimeout(readyTimer);
           requested = Array.isArray(message.properties)
             ? message.properties.filter(
                 (name: unknown): name is string =>
@@ -278,12 +306,26 @@ export default class CredentialFieldsFrame extends Component<Signature> {
     resizeObserver.observe(element);
     // A layout centred in the window moves the fields as the window resizes.
     window.addEventListener('resize', sendStyle);
+    // A stylesheet the page loads after the frame was styled can change the
+    // values it was sent. Its `load` does not bubble, so it is heard on the
+    // way down.
+    let onStylesheetLoad = (event: Event) => {
+      if (
+        event.target instanceof HTMLLinkElement &&
+        event.target.rel === 'stylesheet'
+      ) {
+        sendStyle();
+      }
+    };
+    document.addEventListener('load', onStylesheetLoad, true);
 
     return () => {
       window.removeEventListener('message', onMessage);
       resizeObserver.disconnect();
       window.removeEventListener('resize', sendStyle);
+      document.removeEventListener('load', onStylesheetLoad, true);
       clearTimeout(loadTimer);
+      clearTimeout(readyTimer);
       endLoadWait();
       fields.disconnect();
     };

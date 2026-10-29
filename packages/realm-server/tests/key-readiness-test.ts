@@ -492,8 +492,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       await readiness(WRITER, 'shared'),
-      'needs-admin',
-      'anyone else is told an administrator needs to fix it',
+      'credential-rejected',
+      'anyone else is told too, as the call would refuse them the same way',
     );
   });
 });

@@ -26,7 +26,9 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
-// the share's key, who is told what they could fix themselves.
+// the share's key, who is told what they could fix themselves. The one
+// exception is a key the vendor rejected, which the call itself refuses
+// `credential-rejected` to everyone.
 //
 // `needs-connect` and `needs-approval` differ only in whether one of the
 // caller's grants covers the destination, so any card can learn that about
@@ -151,7 +153,9 @@ function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
     case 'interactive-use-not-approved':
       return theirs ? 'needs-approval' : 'needs-admin';
     case 'credential-rejected':
-      return theirs ? 'credential-rejected' : 'needs-admin';
+      // Every caller is refused `credential-rejected` at the call, so telling
+      // them here gives away nothing more about the share.
+      return 'credential-rejected';
     case 'share-suspended':
     case 'binding-not-approved':
       return 'needs-admin';
