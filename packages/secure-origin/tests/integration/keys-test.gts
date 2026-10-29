@@ -2206,7 +2206,20 @@ module('Integration | key pages', function (hooks) {
       visitShell(OPENED);
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-form]');
-      assert.dom('[data-test-service-account-replace-note]').exists();
+      await waitUntil(() =>
+        requests.some(
+          (r) => r.method === 'GET' && r.path === '_user-keys/key-1',
+        ),
+      );
+      await settled();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+          'a key whose details aren’t known is set anew',
+        );
+      assert.dom('[data-test-service-account-subject]').hasValue('');
+      assert.dom('[data-test-service-account-scopes]').hasValue('');
       assert
         .dom('[data-test-key-value]')
         .doesNotExist('a service account has no value to paste');
@@ -2229,6 +2242,166 @@ module('Integration | key pages', function (hooks) {
         },
         meta: { ticket: 'ticket-1' },
       });
+    });
+
+    function serviceAccountSlot() {
+      return forecastWith([
+        {
+          name: 'userKey',
+          key: 'userKey',
+          bound: {
+            rejected: true,
+            key: {
+              id: 'key-1',
+              name: 'Sheets',
+              kind: 'google-service-account',
+            },
+          },
+        },
+      ]);
+    }
+
+    function serviceAccountKey(serviceAccount: {
+      email: string;
+      subject: string | null;
+      scopes: string[];
+    }) {
+      return json(200, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: {
+            ...attributesOf(KEYS[0]),
+            name: 'Sheets',
+            kind: 'google-service-account',
+            serviceAccount,
+          },
+        },
+      });
+    }
+
+    test('a service account whose details are known starts from the user it acts as and its scopes', async function (assert) {
+      const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+      const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: [SHEETS, DRIVE],
+          }),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-service-account-replace-note]')
+          ?.textContent?.includes('start as the key has them now'),
+      );
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com', 'Act as starts as it is');
+      assert
+        .dom('[data-test-service-account-scopes]')
+        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assert
+        .dom('[data-test-replace-key-save]')
+        .isDisabled('the key file is still chosen anew');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+        {
+          value: SERVICE_ACCOUNT_FILE,
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+        'leaving the fields as they are keeps them',
+      );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+            subject: null,
+            scopes: ['openid'],
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitUntil(
+        () =>
+          (
+            document.querySelector(
+              '[data-test-service-account-scopes]',
+            ) as HTMLInputElement | null
+          )?.value === 'openid',
+      );
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('', 'a key acting as itself starts with Act as empty');
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
+    });
+
+    test('what the owner enters before the key’s details arrive is kept', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      await waitFor('[data-test-service-account-scopes]');
+      await fillIn('[data-test-service-account-scopes]', 'email');
+      answer();
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-replace-key-where]')
+          ?.textContent?.includes('workspaces use this key'),
+      );
+      await settled();
+      assert.dom('[data-test-service-account-scopes]').hasValue('email');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'all anew',
+          'the note doesn’t claim a prefill it skipped',
+        );
     });
 
     test('an OAuth connection is signed in again on the connect page, not replaced', async function (assert) {

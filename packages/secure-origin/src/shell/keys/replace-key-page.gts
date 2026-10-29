@@ -15,6 +15,11 @@
 // be replaced by them: the page says so, and names who shared it to the
 // workspace's direct writers, who see its shares already. A slot nothing is
 // bound to says that. A replaced key's row stays, saying it is replaced.
+//
+// A Google service account's form starts from the user it acts as and the
+// scopes it asks for now, as the key page's Replace does, once the key's own
+// details (`GET /_user-keys/:id`, the listing's source) say what they are;
+// its key file is always chosen anew.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
@@ -37,7 +42,12 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
-import type { KeyValue, SlotBound, WindowContext } from './context.ts';
+import type {
+  KeyValue,
+  ServiceAccountDetails,
+  SlotBound,
+  WindowContext,
+} from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
@@ -204,12 +214,36 @@ class SlotPanel extends Component<{
           data-test-replace-key-form
         >
           {{#if this.replacing.serviceAccount}}
-            <p class='note' data-test-service-account-replace-note>A replacement
-              sets the key file, the scopes and who it acts as all anew. Enter
-              the scopes again, and leave
-              <strong>Act as</strong>
-              empty only if it should act as the service account itself.</p>
+            {{#if this.current.prefilled}}
+              <p class='note' data-test-service-account-replace-note>Choose the
+                new key file.
+                <strong>Act as</strong>
+                and
+                <strong>Scopes</strong>
+                start as the key has them now: the replacement keeps them as you
+                leave them here.</p>
+            {{else}}
+              <p class='note' data-test-service-account-replace-note>A
+                replacement sets the key file, the scopes and who it acts as all
+                anew. Enter the scopes again, and leave
+                <strong>Act as</strong>
+                empty only if it should act as the service account itself.</p>
+            {{/if}}
             <ServiceAccountFields @entry={{this.serviceAccount}} />
+            {{#if this.accountChange}}
+              <p
+                class='note'
+                role='status'
+                data-test-service-account-changed
+              >This key file is for
+                <strong>{{this.accountChange.to}}</strong>, not
+                <strong>{{this.accountChange.from}}</strong>. Delegation and
+                scopes are granted per service account, so check
+                <strong>Act as</strong>
+                and
+                <strong>Scopes</strong>
+                for the new one.</p>
+            {{/if}}
           {{else}}
             <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
           {{/if}}
@@ -365,15 +399,24 @@ class SlotPanel extends Component<{
   });
   // How many workspaces the key is shared with, once the server has said.
   private use = trackedObject({ known: false, workspaces: 0 });
+  // A service account's details as the key has them now, once the server has
+  // said, and whether the form started from them.
+  private current = trackedObject({
+    serviceAccount: undefined as ServiceAccountDetails | undefined,
+    prefilled: false,
+  });
 
   constructor(owner: Owner, args: SlotPanel['args']) {
     super(owner, args);
-    this.loadUse();
+    this.loadKey();
   }
 
-  // If the key's shares can't be listed, the row says so in general terms
-  // instead, and the replace is still offered.
-  private async loadUse() {
+  // If the key can't be read, the row says how many workspaces use it in
+  // general terms instead, a service account's form starts empty, and the
+  // replace is still offered. The form starts from the key's details only
+  // while nothing has been entered in it, so what the owner types first is
+  // never overwritten.
+  private async loadKey() {
     let view = this.replacing;
     if (!view) {
       return;
@@ -382,6 +425,14 @@ class SlotPanel extends Component<{
       let key = await getKey(this.args.api.config, view.key.id);
       this.use.workspaces = key.sharedInto.length;
       this.use.known = true;
+      if (view.serviceAccount && key.serviceAccount) {
+        this.current.serviceAccount = key.serviceAccount;
+        let entry = this.serviceAccount;
+        if (!entry.fileName && !entry.subject && !entry.scopes) {
+          entry.prefill(key.serviceAccount);
+          this.current.prefilled = true;
+        }
+      }
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
@@ -456,6 +507,15 @@ class SlotPanel extends Component<{
 
   private get submitDisabled() {
     return this.form.saving || !this.replacement;
+  }
+
+  // The service account a chosen key file is for, when it isn't the one the
+  // key is now: delegation and scopes were granted to the old one, so the
+  // form says so.
+  private get accountChange(): { from: string; to: string } | undefined {
+    let from = this.current.serviceAccount?.email;
+    let to = this.serviceAccount.clientEmail;
+    return from && to && from !== to ? { from, to } : undefined;
   }
 
   private setValue = (value: string) => {
