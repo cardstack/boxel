@@ -234,9 +234,14 @@ test.describe('Login', () => {
       displayName: username,
       userId: credentials.userId,
     });
+    // The two workspaces the user was given, and the personal workspace the
+    // first sign-in on the secure origin makes.
     await expect(page.locator('[data-test-workspace-visibility]')).toHaveCount(
-      2,
+      3,
     );
+    await expect(
+      page.locator(`[data-test-workspace="${username}'s Workspace"]`),
+    ).toHaveCount(1);
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1500));
