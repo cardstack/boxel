@@ -23,7 +23,6 @@
     "experimentalDecorators": true,
     "types": ["@cardstack/local-types"],
     "paths": {
-      "@cardstack/base": ["./mark-definition.ts"],
       "@cardstack/boxel-ui": ["../boxel-ui/declarations"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/declarations/*"],
       "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],

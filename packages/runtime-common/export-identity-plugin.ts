@@ -13,11 +13,11 @@ import type { NodePath } from '@babel/traverse';
 export const exportIdentitySymbolKey = 'ident';
 
 // The one specifier `markDefinition` is recognized by. Importing it by any
-// other spelling of the base package is a compile error.
-export const markDefinitionModule = '@cardstack/base';
+// other spelling of a base module is a compile error.
+export const markDefinitionModule = '@cardstack/base/mark-definition';
 const markDefinitionName = 'markDefinition';
 const otherBaseSpelling =
-  /^(?:@cardstack\/base\/|https:\/\/cardstack\.com\/base(?:\/|$))/;
+  /^(?:@cardstack\/base(?:\/|$)|https:\/\/cardstack\.com\/base(?:\/|$))/;
 
 export interface Options {
   // Names the module being compiled. A function receives the on-disk filename
@@ -242,9 +242,9 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
   };
 }
 
-// Recognizes a call to `markDefinition` as imported from `@cardstack/base`,
+// Recognizes a call to `markDefinition` as imported from its module,
 // by name or through a namespace, and returns the call. Throws on an import
-// of `markDefinition` from another spelling of the base package.
+// of `markDefinition` by another spelling of a base module.
 function markedDefinitionMatcher(
   program: NodePath<t.Program>,
 ): (expression: t.Node | null | undefined) => t.CallExpression | undefined {

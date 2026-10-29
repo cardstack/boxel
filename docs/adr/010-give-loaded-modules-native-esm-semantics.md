@@ -165,9 +165,9 @@ This is the closed list of ways the Loader departs from native ESM.
      reaches the realm by, and no reader converts it.
    - A definition a module gets from a call, rather than a class it writes,
      is tagged only when the module wraps the call in `markDefinition`,
-     imported from `@cardstack/base` by that exact specifier. The compiler
-     MUST NOT recognize such definitions any other way, and MUST refuse a
-     `markDefinition` it cannot tag.
+     imported from `@cardstack/base/mark-definition` by that exact
+     specifier. The compiler MUST NOT recognize such definitions any other
+     way, and MUST refuse a `markDefinition` it cannot tag.
    - The Loader MUST NOT write, read or rewrite identity tags. `identify` in
      `code-ref.ts` reads them.
 

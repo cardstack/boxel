@@ -316,12 +316,12 @@ const tests = Object.freeze({
   'tags a marked definition for an exported binding': async (assert) => {
     assert.codeEqual(
       transform(`
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         import enumField from '@cardstack/base/enum';
         export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
       `),
       `
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         import enumField from '@cardstack/base/enum';
         export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
@@ -334,12 +334,12 @@ const tests = Object.freeze({
   ) => {
     assert.codeEqual(
       transform(`
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         const Status = markDefinition(enumField(StringField, { options: ['good'] }));
         export { Status as DogStatus };
       `),
       `
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         const Status = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
         export { Status as DogStatus };
@@ -350,11 +350,11 @@ const tests = Object.freeze({
   'tags a marked definition that is the default export': async (assert) => {
     assert.codeEqual(
       transform(`
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         export default markDefinition(enumField(StringField, { options: ['good'] }));
       `),
       `
-        import { markDefinition } from '@cardstack/base';
+        import { markDefinition } from '@cardstack/base/mark-definition';
         const _default = markDefinition(enumField(StringField, { options: ['good'] }));
         if (typeof _default === 'function' && !Object.prototype.hasOwnProperty.call(_default, Symbol.for('ident'))) Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
         export default _default;
@@ -366,14 +366,14 @@ const tests = Object.freeze({
     async (assert) => {
       assert.codeEqual(
         transform(`
-          import { markDefinition as mark } from '@cardstack/base';
-          import * as base from '@cardstack/base';
+          import { markDefinition as mark } from '@cardstack/base/mark-definition';
+          import * as base from '@cardstack/base/mark-definition';
           export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
           export const TicketStatus = base.markDefinition(statusField({ options: [] }));
         `),
         `
-          import { markDefinition as mark } from '@cardstack/base';
-          import * as base from '@cardstack/base';
+          import { markDefinition as mark } from '@cardstack/base/mark-definition';
+          import * as base from '@cardstack/base/mark-definition';
           export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
           if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
           export const TicketStatus = base.markDefinition(statusField({ options: [] }));
@@ -385,7 +385,7 @@ const tests = Object.freeze({
   'refuses markDefinition imported by another spelling of the base package':
     async (assert) => {
       for (let source of [
-        '@cardstack/base/mark-definition',
+        '@cardstack/base',
         // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
         'https://cardstack.com/base/mark-definition',
         // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias spelling is what this case refuses
@@ -397,7 +397,7 @@ const tests = Object.freeze({
               import { markDefinition } from '${source}';
               export const DogStatus = markDefinition(enumField(StringField, {}));
             `),
-          /import markDefinition from '@cardstack\/base'/,
+          /import markDefinition from '@cardstack\/base\/mark-definition'/,
           source,
         );
       }
@@ -413,7 +413,7 @@ const tests = Object.freeze({
         assert.throws(
           () =>
             transform(`
-              import { markDefinition } from '@cardstack/base';
+              import { markDefinition } from '@cardstack/base/mark-definition';
               ${code}
             `),
           /markDefinition\(\) must be the value an exported binding is declared with/,

@@ -1,4 +1,4 @@
-import { markDefinition } from '@cardstack/base';
+import { markDefinition } from '@cardstack/base/mark-definition';
 import { CardDef, contains, field } from '@cardstack/base/card-api';
 import AddressField from '@cardstack/base/address';
 import DateField from '@cardstack/base/date';

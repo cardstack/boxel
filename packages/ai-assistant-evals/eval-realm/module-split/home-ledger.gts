@@ -1,4 +1,4 @@
-import { markDefinition } from '@cardstack/base';
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   Component,

@@ -26,7 +26,6 @@
     "target": "es2020",
     "traceResolution": false,
     "paths": {
-      "@cardstack/base": ["../base/mark-definition.ts"],
       "@cardstack/base/*": ["../base/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["./src/types/*"],
