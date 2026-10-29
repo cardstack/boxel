@@ -2,7 +2,7 @@ import camelCase from 'camelcase';
 
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import {
-  isAbsoluteIdentifier,
+  isPrefixForm,
   type RealmResourceIdentifier,
 } from '../realm-identifiers.ts';
 import { trimExecutableExtension } from '../index.ts';
@@ -50,11 +50,17 @@ function directoryNameFromModule(
   );
 }
 
+// Matches a `scheme://authority` prefix for any scheme, in any case.
+// Directory inference needs the root of every URL spelling, not only of the
+// http(s) identifiers that `isAbsoluteIdentifier` accepts.
+const URL_SCHEME_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 function lastMeaningfulSegment(pathname: string): string | undefined {
   let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
   // An absolute identifier's root (`scheme://host` or `@scope/name`) is not
   // part of its path, so `..` stops there rather than climbing into it.
-  let rootLength = isAbsoluteIdentifier(normalized) ? 2 : 0;
+  let rootLength =
+    URL_SCHEME_AUTHORITY.test(normalized) || isPrefixForm(normalized) ? 2 : 0;
   // A relative module's `.` and `..` name no directory of their own: `..`
   // removes the segment before it.
   let segments: string[] = [];
