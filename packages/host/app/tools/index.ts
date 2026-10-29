@@ -3,6 +3,7 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 import * as AddFieldToCardDefinitionToolModule from './add-field-to-card-definition';
 import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
+import * as AskUserToolModule from './ask-user';
 import * as AuthedFetchToolModule from './authed-fetch';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
@@ -343,6 +344,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'set-active-llm', SetActiveLlmModule);
   shimHostToolModule(virtualNetwork, 'show-card', ShowCardToolModule);
   shimHostToolModule(virtualNetwork, 'show-file', ShowFileToolModule);
+  shimHostToolModule(virtualNetwork, 'ask-user', AskUserToolModule);
   shimHostToolModule(virtualNetwork, 'switch-submode', SwitchSubmodeToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -564,6 +566,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   ShowCardToolModule.default,
   ShowFileToolModule.default,
   SummarizeSessionToolModule.default,
+  AskUserToolModule.default,
   SwitchSubmodeToolModule.default,
   SyncOpenRouterModelsToolModule.default,
   TransformCardsToolModule.default,

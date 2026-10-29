@@ -193,6 +193,44 @@ export class PersistModuleInspectorViewInput extends CardDef {
   @field moduleInspectorView = contains(StringField); // 'schema' | 'spec' | 'preview'
 }
 
+// One choice the assistant offers with `ask-user`: a card, a color, or a
+// plain option. `value` is what comes back as the answer.
+export class AskUserOption extends FieldDef {
+  @field label = contains(StringField);
+  @field value = contains(StringField);
+  @field detail = contains(StringField);
+  // a card to show as the option, fitted
+  @field cardId = contains(StringField);
+  // a color to show as a swatch, as a CSS color
+  @field color = contains(StringField);
+  // for kind `recommend`: how sure the assistant is ('high', 'medium', 'low')
+  @field confidence = contains(StringField);
+}
+
+// The assistant asks the user to pick. `kind` chooses the picker: `cards`
+// (each option a card), `swatches` (each a color), `options` (pills) or
+// `recommend` (the assistant's pick first, with its reason and confidence,
+// and the others as alternatives).
+// `answer` is filled by the host from the user's pick, never by the model.
+export class AskUserInput extends CardDef {
+  @field question = contains(StringField);
+  @field kind = contains(StringField);
+  @field options = containsMany(AskUserOption);
+  @field allowOther = contains(BooleanField);
+  @field answer = contains(StringField);
+}
+
+export class AskUserResult extends CardDef {
+  @field question = contains(StringField);
+  @field answer = contains(StringField);
+  @field label = contains(StringField);
+
+  // The row says what was picked; there is nothing else to show.
+  get [hasNothingToShow](): boolean {
+    return true;
+  }
+}
+
 export class SwitchSubmodeResult extends CardDef {
   @field codePath = contains(StringField);
 }
@@ -455,10 +493,28 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
+// A URL as the reader thinks of it: the path inside the run's realm
+// (`collab/Article/a.json`), else the path on its server. Anything that is
+// not a URL is left alone.
+function shortPath(url: string | undefined, realm: string | undefined): string {
+  if (!url) {
+    return '';
+  }
+  if (realm && url.startsWith(realm) && url !== realm) {
+    return url.slice(realm.length);
+  }
+  try {
+    return new URL(url).pathname.split('/').filter(Boolean).join('/');
+  } catch {
+    return url;
+  }
+}
+
 // Shows an image a tool uploaded to the room. Room media loads only through
 // the host's `loadRoomMedia`, which answers with an object URL this releases
 // once the image is gone; without it (outside the assistant's chat) the URL
 // is used as it is.
+
 const roomMediaSrc = modifier(
   (
     img: HTMLImageElement,
@@ -521,6 +577,11 @@ export class RealmCodeFileResult extends FieldDef {
   @field fileUrl = contains(StringField);
   @field status = contains(StringField);
   @field detail = contains(StringField);
+  // What the run changed in a text file, one line per diff line signed ' ',
+  // '-' or '+', with `…N` for N unchanged lines left out and a closing
+  // `…truncated` past the size the result carries. The transcript shows it
+  // as the file's inline diff, and Undo after a reload reverses it.
+  @field diff = contains(StringField);
 }
 
 // A capture the assistant looked at, already uploaded to the room's media.
@@ -549,6 +610,8 @@ export class RealmCodeUiActionResult extends FieldDef {
 export class RunRealmCodeResult extends CardDef {
   static displayName = 'Realm Code Result';
 
+  // The realm the run worked in, ending in a slash.
+  @field realm = contains(StringField);
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
   @field uiActions = containsMany(RealmCodeUiActionResult);
@@ -562,6 +625,14 @@ export class RunRealmCodeResult extends CardDef {
   // The `realm.index` calls the script made, in order, such as `reindex` or
   // `invalidate <paths>`. The realm server does the indexing after each call.
   @field indexActions = containsMany(StringField);
+  // What the run did beyond files, one line each, in order: the steps the
+  // script reported with `realm.activity` (`Step 2 of 4 · Gather sources`),
+  // what its `realm.web.*` and `realm.resolve` calls did or why they failed,
+  // and an auto-fix of the script itself.
+  @field activity = containsMany(StringField);
+  // Each fix the runner made to the script before it ran: the error, what
+  // was changed and the diff, so the assistant sees what it got wrong.
+  @field scriptFixes = containsMany(StringField);
   // What the run changed in the room with `room.*`, one line per change, made
   // after the script finished.
   @field roomChanges = containsMany(StringField);
@@ -587,6 +658,8 @@ export class RunRealmCodeResult extends CardDef {
     return (
       !this.files?.length &&
       !this.roomChanges?.length &&
+      !this.activity?.length &&
+      !this.scriptFixes?.length &&
       !this.createdWorkspaces?.length &&
       !this.deletedWorkspaces?.length &&
       !this.failedUiActions.length &&
@@ -596,68 +669,84 @@ export class RunRealmCodeResult extends CardDef {
 
   // What the run changed and what it looked at. The script's own result is
   // for the model and stays out of the chat.
+  // What the run changed and what it looked at, as plain lines on the
+  // assistant's ToolRow grid (a 16px glyph column, an 8px gap, the text):
+  // no box of its own, so it reads as part of the call that made it. The
+  // script's own result is for the model and stays out of the chat.
   static embedded = class Embedded extends Component<
     typeof RunRealmCodeResult
   > {
     <template>
       <div class='realm-code-result'>
-        {{#if @model.files.length}}
-          <ul class='files'>
-            {{#each @model.files as |file|}}
-              <li class='file' data-test-realm-code-file={{file.fileUrl}}>
-                <span class='status'>{{file.status}}</span>
-                <a href={{file.fileUrl}}>{{file.fileUrl}}</a>
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.createdWorkspaces.length}}
-          <ul class='workspaces'>
-            {{#each @model.createdWorkspaces as |url|}}
-              <li class='workspace' data-test-realm-code-created-workspace>
-                <span class='status'>Created</span>
-                <a href={{url}}>{{url}}</a>
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.deletedWorkspaces.length}}
-          <ul class='workspaces'>
-            {{#each @model.deletedWorkspaces as |url|}}
-              <li class='workspace' data-test-realm-code-deleted-workspace>
-                <span class='status'>Deleted</span>
-                <span>{{url}}</span>
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.failedUiActions.length}}
-          <ul class='ui-actions'>
-            {{#each @model.failedUiActions as |uiAction|}}
-              <li
-                class='ui-action'
-                data-test-realm-code-ui-action={{uiAction.action}}
-              >
-                <span class='status'>{{uiAction.status}}</span>
-                <span>{{uiAction.action}} {{uiAction.target}}</span>
-                {{#if uiAction.detail}}
-                  <span class='status'>{{uiAction.detail}}</span>
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.roomChanges.length}}
-          <ul class='room-changes'>
-            {{#each @model.roomChanges as |change|}}
-              <li data-test-realm-code-room-change>{{change}}</li>
-            {{/each}}
-          </ul>
+        {{#each @model.files as |file|}}
+          <div class='line' data-test-realm-code-file={{file.fileUrl}}>
+            <span class='glyph done' aria-hidden='true'>✓</span>
+            <span class='text'>
+              <a class='path' href={{file.fileUrl}}>{{shortPath
+                  file.fileUrl
+                  @model.realm
+                }}</a>
+              <span class='status'>{{file.status}}</span>
+            </span>
+          </div>
+        {{/each}}
+        {{#each @model.createdWorkspaces as |url|}}
+          <div class='line' data-test-realm-code-created-workspace>
+            <span class='glyph done' aria-hidden='true'>✓</span>
+            <span class='text'>Created workspace
+              <a class='path' href={{url}}>{{url}}</a></span>
+          </div>
+        {{/each}}
+        {{#each @model.deletedWorkspaces as |url|}}
+          <div class='line' data-test-realm-code-deleted-workspace>
+            <span class='glyph' aria-hidden='true'>−</span>
+            <span class='text'>Deleted workspace
+              <span class='path'>{{url}}</span></span>
+          </div>
+        {{/each}}
+        {{#each @model.failedUiActions as |uiAction|}}
+          <div class='line' data-test-realm-code-ui-action={{uiAction.action}}>
+            <span class='glyph' aria-hidden='true'>→</span>
+            <span class='text'>
+              {{uiAction.action}}
+              <span class='path'>{{shortPath
+                  uiAction.target
+                  @model.realm
+                }}</span>
+              <span class='status'>{{uiAction.status}}</span>
+              {{#if uiAction.detail}}
+                <span class='status'>{{uiAction.detail}}</span>
+              {{/if}}
+            </span>
+          </div>
+        {{/each}}
+        {{#each @model.roomChanges as |change|}}
+          <div class='line' data-test-realm-code-room-change>
+            <span class='glyph' aria-hidden='true'>·</span>
+            <span class='text muted'>{{change}}</span>
+          </div>
+        {{/each}}
+        {{#each @model.activity as |activity|}}
+          <div class='line' data-test-realm-code-activity>
+            <span class='glyph' aria-hidden='true'>·</span>
+            <span class='text muted'>{{activity}}</span>
+          </div>
+        {{/each}}
+        {{#if @model.shownCard}}
+          <div class='line' data-test-realm-code-shown-card>
+            <span class='glyph' aria-hidden='true'>↗</span>
+            <span class='text'>Opened
+              <a class='path' href={{@model.shownCard}}>{{shortPath
+                  @model.shownCard
+                  @model.realm
+                }}</a></span>
+          </div>
         {{/if}}
         {{#if @model.showError}}
-          <p class='show-error' data-test-realm-code-show-error>
-            {{@model.showError}}
-          </p>
+          <div class='line failed' data-test-realm-code-show-error>
+            <span class='glyph' aria-hidden='true'>✕</span>
+            <span class='text'>{{@model.showError}}</span>
+          </div>
         {{/if}}
         {{#if @model.captures.length}}
           <div class='captures'>
@@ -677,49 +766,64 @@ export class RunRealmCodeResult extends CardDef {
         .realm-code-result {
           display: flex;
           flex-direction: column;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-sm);
-          font: var(--boxel-font-sm);
+          gap: 3px;
+          font-size: var(--boxel-font-size-sm, 13px);
+          line-height: 1.45;
+          color: inherit;
         }
-        .files,
-        .workspaces,
-        .room-changes,
-        .ui-actions {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xxxs);
+        .line {
+          display: grid;
+          grid-template-columns: 16px minmax(0, 1fr);
+          column-gap: 8px;
+          align-items: baseline;
         }
-        .file,
-        .workspace,
-        .ui-action {
-          display: flex;
-          gap: var(--boxel-sp-xs);
-          word-break: break-all;
+        .glyph {
+          text-align: center;
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: 11.5px;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .glyph.done {
+          color: var(--success, var(--boxel-highlight));
+        }
+        .text {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .path {
+          font-family: var(--boxel-monospace-font-family, monospace);
+          font-size: 12px;
+          color: inherit;
+          text-decoration: none;
+        }
+        a.path:hover {
+          text-decoration: underline;
+        }
+        .status,
+        .muted {
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .status {
-          flex-shrink: 0;
-          color: var(--boxel-450);
-          text-transform: capitalize;
+          margin-inline-start: 6px;
+          font-size: 11.5px;
+          text-transform: lowercase;
         }
-        .show-error {
-          margin: 0;
-          word-break: break-all;
-          color: var(--boxel-error-200);
+        .failed .glyph,
+        .failed .text {
+          color: var(--destructive, var(--boxel-error-200));
         }
         .captures {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--boxel-sp-xs);
+          gap: 6px;
+          padding-inline-start: 24px;
         }
         .capture {
           max-width: 8rem;
           max-height: 8rem;
           object-fit: contain;
-          border: 1px solid var(--boxel-200);
-          border-radius: var(--boxel-border-radius);
+          border-radius: 6px;
+          box-shadow: 0 0 0 1px var(--border, var(--boxel-200));
         }
       </style>
     </template>

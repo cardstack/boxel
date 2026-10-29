@@ -64,15 +64,22 @@ export class Message implements RoomMessageInterface {
   @tracked _reasoningContent?: string | null;
   @tracked _tools: TrackedArray<MessageTool>;
   @tracked created: Date;
+  /** the server time of the latest event that built this message (its last
+   * streamed edit): when a reply finished, where `created` is when it began */
+  @tracked lastEventAt?: Date;
   @tracked _isStreamingFinished?: boolean;
   @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
   @tracked continuationOf?: string | null;
 
-  attachedCardIds?: string[] | null;
-  attachedFiles?: FileDef[];
-  attachedCardsAsFiles?: FileDef[];
+  // tracked: the server's copy of a message this client sent replaces the
+  // optimistic copy's attachments, which name cards from their URLs only
+  @tracked attachedCardIds?: string[] | null;
+  @tracked attachedFiles?: FileDef[];
+  @tracked attachedCardsAsFiles?: FileDef[];
+  // the attachments the fields above were read from, as sent
+  attachmentsKey?: string;
   attachedSkillCardIds?: string[] | null;
   index?: number;
   transactionId?: string | null;
@@ -266,7 +273,11 @@ export class Message implements RoomMessageInterface {
     if (this._isCanceled) {
       htmlParts.push({
         type: 'non_pre_tag',
-        content: '<p style="font-weight: bold;">{Generation Cancelled}</p>',
+        content: `<p class="generation-cancelled" data-test-generation-stopped>${
+          this.body?.trim()
+            ? '■ Stopped · partial answer kept'
+            : '■ Stopped before it answered'
+        }</p>`,
         codeData: null,
       });
     }
