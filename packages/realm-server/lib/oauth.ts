@@ -1334,7 +1334,7 @@ export async function startConnect(
       `DELETE FROM oauth_connect_requests WHERE expires_at <= NOW()`,
     ]);
     await txQuery([
-      `INSERT INTO oauth_connect_requests (state_sha256, owner, name, client_kind, client_key_id, client_share_id, platform_client_id, reconnects_key_id, expires_at) VALUES (`,
+      `INSERT INTO oauth_connect_requests (state_sha256, owner, name, client_kind, client_key_id, client_share_id, platform_client_id, client_id, token_url, reconnects_key_id, expires_at) VALUES (`,
       param(sha256(state)),
       `, `,
       param(owner),
@@ -1348,6 +1348,10 @@ export async function startConnect(
       param(refColumns.client_share_id),
       `, `,
       param(refColumns.platform_client_id),
+      `, `,
+      param(opened.clientId),
+      `, `,
+      param(opened.tokenURL),
       `, `,
       param(reconnects),
       `, `,
@@ -1454,6 +1458,9 @@ export async function completeConnect(
   if (!request) {
     return { ok: false, error: 'expired' };
   }
+  // The request records the client it was started with, so a share swapped
+  // to another client since can't finish it: the code and verifier go only
+  // to the token endpoint they were issued for.
   let client: MintingClient;
   try {
     client = await openClientIn(
