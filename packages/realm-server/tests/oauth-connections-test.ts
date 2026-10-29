@@ -968,4 +968,72 @@ module(basename(import.meta.filename), function (hooks) {
       'no refresh token went to the swapped-in app',
     );
   });
+  test('a sign-in started before a share is swapped to another app never sends its code to that app', async function (assert) {
+    let client = await addClient(OWNER);
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: client.id,
+      label: 'Team app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: client.id,
+        realm: realmURL,
+      }),
+    });
+    // The teammate starts signing in through the share...
+    let started = await request
+      .post('/_oauth/connections')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-connect',
+          attributes: {
+            name: 'mid-swap',
+            client: { kind: 'share', shareId: share.id },
+          },
+        },
+        meta: { ticket: await ticket(OWNER, 'add') },
+      });
+    assert.strictEqual(started.status, 201, started.text);
+
+    // ...and before they finish, another writer swaps their own app in.
+    provider.clients.push({ clientId: 'their-app', clientSecret: 'theirs' });
+    let theirs = await addOAuthClient(dbAdapter, keyring, {
+      owner: TEAMMATE,
+      name: 'their app',
+      value: 'theirs',
+      oauth: clientSettings({ clientId: 'their-app' }),
+      ticket: await ticket(TEAMMATE, 'add'),
+    });
+    await suspendShare(dbAdapter, { user: TEAMMATE, shareId: share.id });
+    await swapKeyIntoShare(dbAdapter, keyring, {
+      user: TEAMMATE,
+      shareId: share.id,
+      keyId: theirs.id,
+      ticket: (
+        await mintKeyWriteTicket(dbAdapter, TEAMMATE, {
+          action: 'swap',
+          keyId: theirs.id,
+          realmURL: null,
+          shareId: share.id,
+        })
+      ).ticket,
+      via: 'window',
+    });
+
+    let authorize = await fetch(started.body.data.attributes.authorizeUrl, {
+      redirect: 'manual',
+    });
+    let callback = new URL(authorize.headers.get('location')!);
+    let back = await request.get(`${callback.pathname}${callback.search}`);
+    let finished = await complete(OWNER, back.headers.location);
+    assert.strictEqual(finished.error, 'failed');
+    assert.strictEqual(
+      provider.tokenRequests.length,
+      0,
+      'the code and verifier went nowhere',
+    );
+  });
 });
