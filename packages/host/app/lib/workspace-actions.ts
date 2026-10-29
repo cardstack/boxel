@@ -33,10 +33,7 @@ import {
   realmURLDisplayText,
   urlDisplayText,
 } from '@cardstack/host/lib/realm-utils';
-import {
-  publishedRealmURLsFromInfo,
-  skillsRealmURL,
-} from '@cardstack/host/lib/utils';
+import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
 import { wallpaperImage } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -47,6 +44,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
 const log = logger('workspace-actions');
+const SKILLS_REALM = '@cardstack/skills/';
 
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 
@@ -350,7 +348,11 @@ export class WorkspaceActions {
   }
 
   private get canDuplicateWorkspace() {
-    return ensureTrailingSlash(this.realmIdentifier) === skillsRealmURL;
+    return (
+      this.network.virtualNetwork.unresolveURL(
+        ensureTrailingSlash(this.realmIdentifier),
+      ) === SKILLS_REALM
+    );
   }
 
   get deleteSummaryText() {
