@@ -971,13 +971,15 @@ export function bindingInstance(
 // A binding as a slot is checked against it, with its share and its grant.
 // `grant_id` is the grant only while it is still there for the binding's key
 // (or its share's key): a grant that is gone or belongs to another key fills
-// nothing, so it reads as none.
+// nothing, so it reads as none. `bound_grant_id` is the grant the binding
+// names, whatever became of it.
 export interface SlotBinding {
   id: string;
   slot: string;
   key_id: string | null;
   share_id: string | null;
   grant_id: string | null;
+  bound_grant_id: string | null;
   approved_by: string;
   interactive: boolean;
   fingerprint: string;
@@ -1003,8 +1005,12 @@ export type SlotCheck =
   | {
       slot: CallApiSlot;
       binding: SlotBinding | undefined;
+      refused: 'binding-not-approved';
+    }
+  | {
+      slot: CallApiSlot;
+      binding: SlotBinding;
       refused:
-        | 'binding-not-approved'
         | 'share-suspended'
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
@@ -1031,7 +1037,7 @@ export async function checkSlots(
 ): Promise<SlotCheck[]> {
   let { request } = lookup;
   let rows = (await query(dbAdapter, [
-    `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
+    `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
             s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
             g.state AS grant_state, g.destination AS grant_destination,
             `,
@@ -1122,11 +1128,16 @@ async function checkedBindings(
     { ...lookup, instance },
     rejection,
   )) {
-    let { slot, binding } = check;
+    let { slot } = check;
     switch (check.refused) {
       case undefined:
         break;
       case 'binding-not-approved':
+        if (check.binding?.bound_grant_id) {
+          log.warn(
+            `binding ${check.binding.id} can't fill slot "${slot.name}": its grant ${check.binding.bound_grant_id} is gone or belongs to another key than the binding's`,
+          );
+        }
         throw refuseNotApproved();
       case 'share-suspended':
         throw refusal(
@@ -1137,7 +1148,11 @@ async function checkedBindings(
           slot,
         );
       case 'binding-needs-reapproval':
-        await markNeedsReapproval(dbAdapter, binding!.id, binding!.approval_id);
+        await markNeedsReapproval(
+          dbAdapter,
+          check.binding.id,
+          check.binding.approval_id,
+        );
         throw refusal(
           409,
           'binding-needs-reapproval',
@@ -1157,7 +1172,7 @@ async function checkedBindings(
         throw credentialRejected(
           lookup.operation,
           slot,
-          binding!.grant_destination!,
+          check.binding.grant_destination!,
         );
     }
     let { probe } = check;

@@ -31,8 +31,8 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // The order slot answers are reported in: the first slot to need something
 // further up the list decides the operation's answer. A slot only an
 // administrator can fix stops the call whatever the caller does, so it comes
-// first after signing in, which every other answer presupposes. Connecting a key comes before approving one, since the approval
-// names the key.
+// first after signing in, which every other answer presupposes. Connecting a
+// key comes before approving one, since the approval names the key.
 const PRECEDENCE: KeyReadiness[] = [
   'needs-sign-in',
   'needs-admin',

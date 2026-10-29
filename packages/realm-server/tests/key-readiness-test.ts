@@ -402,6 +402,11 @@ module(basename(import.meta.filename), function (hooks) {
 
     await allowInteractive(binding);
     assert.strictEqual(await readiness(WRITER, 'shared'), 'ready');
+    assert.strictEqual(
+      await readiness(undefined, 'shared'),
+      'needs-sign-in',
+      'a share serves only a signed-in caller, as a call sending a credential needs one',
+    );
 
     await dbAdapter.execute(
       `UPDATE key_shares SET state = 'suspended', suspension_reason = 'suspended-by-writer', suspended_by = $1, suspended_at = NOW() WHERE id = $2`,
