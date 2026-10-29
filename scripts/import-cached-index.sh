@@ -17,7 +17,8 @@ DB_NAME="${INDEX_CACHE_DB:-${PGDATABASE:-boxel}}"
 # tests restore a catalog index its own main runs upload.
 REPO="${INDEX_CACHE_REPO:-cardstack/boxel}"
 # A caller that has to match the snapshot to the code it checked out names the
-# run that uploaded it; otherwise the newest main run's snapshot is used.
+# run that uploaded it; otherwise the newest main run's snapshot is used. The
+# pin names one snapshot: the artifact the caller asks for, with no fallback.
 PINNED_RUN_ID="${INDEX_CACHE_RUN_ID:-}"
 # Artifacts to try, in order. `boxel-index-cache` carries every realm the
 # export job indexes; `boxel-index-cache-host` carries only the realms a host
@@ -35,7 +36,7 @@ DEFAULT_ARTIFACT="boxel-index-cache"
 ARTIFACT_NAMES="${INDEX_CACHE_ARTIFACT:-$DEFAULT_ARTIFACT}"
 case "$ARTIFACT_NAMES" in
   "$DEFAULT_ARTIFACT" | boxel-index-cache-test) ;;
-  *) ARTIFACT_NAMES="$ARTIFACT_NAMES $DEFAULT_ARTIFACT" ;;
+  *) [ -n "$PINNED_RUN_ID" ] || ARTIFACT_NAMES="$ARTIFACT_NAMES $DEFAULT_ARTIFACT" ;;
 esac
 DOWNLOAD_DIR="/tmp/boxel-index-cache-$$"
 
