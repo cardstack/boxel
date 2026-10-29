@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { allSettled, restartableTask } from 'ember-concurrency';
+import { allSettled, didCancel, restartableTask } from 'ember-concurrency';
 import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
@@ -261,6 +261,20 @@ export default class AiAssistantPanelService extends Service {
     this.localPersistenceService.setCurrentRoomId(roomId);
     if (hidePastSessionsList) {
       this.hidePastSessions();
+    }
+  }
+
+  // Opens the panel on a new session. A second press while the first is still
+  // opening restarts the panel's tasks and cancels the first, which is
+  // superseded rather than failed.
+  async openNewSession() {
+    try {
+      await this.openPanel();
+      await this.createNewSession();
+    } catch (error) {
+      if (!didCancel(error)) {
+        throw error;
+      }
     }
   }
 
@@ -655,12 +669,18 @@ export default class AiAssistantPanelService extends Service {
     return this.loadRoomsTask.isRunning;
   }
 
-  private loadRoomsTask = restartableTask(async () => {
+  // Resolves once the sync's first pass is processed, so aiSessionRooms lists
+  // every session the user has.
+  async waitForSessionRooms() {
     await this.matrixService.waitForInitialSync();
     await this.matrixService.flushAll;
     await allSettled(
       [...this.matrixService.roomResources.values()].map((r) => r.processing),
     );
+  }
+
+  private loadRoomsTask = restartableTask(async () => {
+    await this.waitForSessionRooms();
     await this.enterRoomInitially();
   });
 

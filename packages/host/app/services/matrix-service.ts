@@ -47,6 +47,7 @@ import {
 import { getPromptParts } from '@cardstack/runtime-common/ai';
 import {
   type AppBoxelDashboardContent,
+  type DashboardAgent,
   dashboardContentKey,
   mergeDashboardContent,
   parseDashboardContent,
@@ -283,6 +284,9 @@ export default class MatrixService extends Service {
   @tracked private storage: Storage | undefined;
   @tracked workspaceFavorites: string[] = [];
   @tracked dashboardState: AppBoxelDashboardContent = {};
+  @tracked private pendingDashboardAgentPick:
+    | { agent: DashboardAgent }
+    | undefined;
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -1383,6 +1387,26 @@ export default class MatrixService extends Service {
     // still sees the failure.
     this.dashboardWrites = write.catch(() => undefined);
     return write;
+  }
+
+  // The agent the dashboard shows: the latest pick until its save lands, so
+  // every picker shows it at once rather than snapping back meanwhile.
+  get dashboardAgent(): DashboardAgent | undefined {
+    return this.pendingDashboardAgentPick?.agent ?? this.dashboardState.agent;
+  }
+
+  // Only the latest pick clears the pending one, so an earlier pick's save
+  // landing doesn't show that earlier agent again.
+  public async pickDashboardAgent(agent: DashboardAgent): Promise<void> {
+    let pick = { agent };
+    this.pendingDashboardAgentPick = pick;
+    try {
+      await this.updateDashboardState({ agent });
+    } finally {
+      if (this.pendingDashboardAgentPick === pick) {
+        this.pendingDashboardAgentPick = undefined;
+      }
+    }
   }
 
   // Replaces the public realms the user added to the Catalogs section of their
@@ -2799,6 +2823,7 @@ export default class MatrixService extends Service {
     this.timelineLoadingState.clear();
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
     this.dashboardState = {};
+    this.pendingDashboardAgentPick = undefined;
     this.dashboardSession++;
     this.dashboardWrites = Promise.resolve();
     this.dashboardEchoesPending = [];

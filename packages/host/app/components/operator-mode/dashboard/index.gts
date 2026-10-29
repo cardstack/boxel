@@ -44,8 +44,11 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import ManageCatalogs from '../workspace-chooser/manage-catalogs';
 
 import AddWorkspace from './add-workspace';
+import Agents from './agents';
+import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import FavoritesFlyout from './favorites-flyout';
+import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
 import Workspace from './workspace';
@@ -499,6 +502,17 @@ export default class Dashboard extends Component<Signature> {
     flyout: FavoritesFlyout,
   };
 
+  private agentsSection: DashboardSection = {
+    id: 'agents',
+    label: 'Agents',
+    icon: Bot,
+    flyout: AgentsFlyout,
+  };
+
+  @action private showAgents() {
+    this.args.sections.scrollTo(this.agentsSection.id);
+  }
+
   private cursor = new KeyboardCursor({
     keys: () => this.walkKeys,
     defaultIndex: () => this.defaultSelectedIndex,
@@ -564,6 +578,8 @@ export default class Dashboard extends Component<Signature> {
               data-test-dashboard-filter
             />
           </header>
+
+          <GetStarted @showAgents={{this.showAgents}} />
 
           <section
             class='dashboard-section'
@@ -848,6 +864,7 @@ export default class Dashboard extends Component<Signature> {
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'agents'}}
+            {{@sections.register this.agentsSection}}
             data-test-dashboard-section='agents'
           >
             <div class='section-head'>
@@ -863,6 +880,7 @@ export default class Dashboard extends Component<Signature> {
               <p class='section-hint'>Boxel AI works here; your own agent works
                 through the Boxel plugin.</p>
             </div>
+            <Agents />
           </section>
         </div>
       </div>
