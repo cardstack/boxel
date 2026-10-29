@@ -14,6 +14,7 @@ import {
   type OperationTemplate,
 } from './types.ts';
 import { emitKeyUse, type KeyUseOutcome } from './telemetry.ts';
+import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -803,6 +804,15 @@ export interface CallApiSlotLookup {
   request: OperationCallApi;
 }
 
+// What names the bindings a readiness answer is about: the same as a call's,
+// for a caller invoking from a card, who may be nobody signed in.
+export interface CallApiReadinessLookup extends Omit<
+  CallApiSlotLookup,
+  'caller' | 'mode'
+> {
+  caller: string | undefined;
+}
+
 // One slot's credential, as the binding that fills it provides it.
 export interface CallApiFilledSlot {
   name: string;
@@ -823,8 +833,14 @@ export interface CallApiFilledSlot {
 // vendor's response, its credentials removed; a refusal or a failure to get
 // any response at all is thrown as an `OperationFailure` carrying
 // `guard-refused`, `upstream-timeout` or `response-too-large`.
+//
+// `readiness` answers, without opening any key, whether `fill` would fill
+// every slot for this caller invoking from a card, and what would fix it if
+// not, or `undefined` where no approval could make it fill. A sender that
+// can't tell leaves it out.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
+  readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],

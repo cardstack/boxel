@@ -1912,7 +1912,7 @@ async function definitionFor(
 // a binding records: the type a type target names, or the one a card adopts
 // from, its module resolved against the realm with any executable extension
 // trimmed, as an approval resolves the type it names.
-async function resolvedTypeOf(
+export async function resolvedTypeOf(
   core: OperationCore,
   target: OperationTarget,
   scope: OperationScope,
