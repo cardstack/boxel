@@ -20,7 +20,13 @@ import {
 } from '@cardstack/runtime-common';
 import { operationDisplayLabel } from '@cardstack/runtime-common/card-operations/label';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
-import { UserKeyError } from './user-keys.ts';
+import { UserKeyError, type UserKeyKind } from './user-keys.ts';
+import {
+  bindingType,
+  canonicalInstance,
+  slotBindings,
+  type SlotBinding,
+} from './key-bindings.ts';
 
 // What the secure window shows about what it was opened for, read here from
 // the realm server's own records: the realm, the card definition and the
@@ -58,8 +64,30 @@ export interface SecureWindowOperation {
   method?: string;
   destination?: DestinationDisplay;
   // The credentials the request takes: `userKey` for the caller's own,
-  // `apiKey` for one a realm share holds.
-  slots: { name: string; key: string }[];
+  // `apiKey` for one a realm share holds. Asked with `bindings`, each says
+  // what is bound to it (`bound`).
+  slots: { name: string; key: string; bound?: SlotBound | null }[];
+}
+
+// What fills a slot for the user asking, from the binding a call fills it
+// from: the key, and whether the service it is sent to rejected it (its
+// grant there, or, for an OAuth connection, the connection itself). A key
+// says its kind, since a connection is signed in again rather than replaced
+// with a value. For a share, what the user may see of a realm's shares (the `key-shares` rules):
+// the key only to its owner; the label to its owner and the realm's direct
+// writers; and who owns it to the direct writers only while the share is
+// active, since an active share's owner always holds a write row there and a
+// suspended one's may have left. Anyone else learns only that the workspace's
+// key fills the slot.
+export interface SlotBound {
+  rejected: boolean;
+  key: { id: string; name: string; kind: UserKeyKind } | null;
+  share?: {
+    label?: string;
+    suspended: boolean;
+    ownedByYou: boolean;
+    owner?: string;
+  };
 }
 
 export interface SecureWindowContext {
@@ -81,6 +109,8 @@ export interface SecureWindowContextRequest {
   realm?: RealmResourceIdentifier;
   target?: SecureWindowTarget;
   operation?: string;
+  // Whether to say what is bound to each of the operation's slots.
+  bindings?: boolean;
 }
 
 const NOT_FOUND = 'no such realm, card or operation';
@@ -123,12 +153,18 @@ export function validateContextRequest(
   attributes: Record<string, unknown>,
 ): SecureWindowContextRequest {
   for (let name of Object.keys(attributes)) {
-    if (!['realm', 'target', 'operation'].includes(name)) {
+    if (!['realm', 'target', 'operation', 'bindings'].includes(name)) {
       throw new UserKeyError(400, `'${name}' can't be asked about here`);
     }
   }
-  let { realm, target, operation } = attributes;
+  let { realm, target, operation, bindings } = attributes;
   let request: SecureWindowContextRequest = {};
+  if (bindings !== undefined) {
+    if (typeof bindings !== 'boolean') {
+      throw new UserKeyError(400, 'bindings is true or false');
+    }
+    request.bindings = bindings;
+  }
   if (realm !== undefined) {
     request.realm = identifier(realm, 'realm');
   }
@@ -161,6 +197,9 @@ export function validateContextRequest(
   }
   if (request.operation !== undefined && !request.target) {
     throw new UserKeyError(400, 'an operation is asked about on a target');
+  }
+  if (request.bindings && request.operation === undefined) {
+    throw new UserKeyError(400, 'bindings are asked about for an operation');
   }
   if (!request.realm && !request.target) {
     throw new UserKeyError(400, 'ask about a realm or a target');
@@ -354,7 +393,57 @@ export async function secureWindowContext(
         }
       : {}),
   };
+  if (request.bindings && operation.callApi) {
+    let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
+    if (type) {
+      let bound = await slotBindings(dbAdapter, {
+        realmURL: realm.url,
+        type,
+        operation: request.operation,
+        instance:
+          operation.callApi.perInstance && instanceURL
+            ? canonicalInstance(new URL(realm.url), instanceURL.href)
+            : null,
+        caller: user,
+        slots: operation.callApi.slots,
+      });
+      context.operation.slots = context.operation.slots.map((slot, i) => ({
+        ...slot,
+        bound: slotBound(bound[i]!, context.realm.directWriter),
+      }));
+    }
+  }
   return context;
+}
+
+function slotBound(
+  { bound }: SlotBinding,
+  directWriter: boolean,
+): SlotBound | null {
+  if (!bound) {
+    return null;
+  }
+  let rejected =
+    bound.grantState === 'rejected' || bound.key?.state === 'rejected';
+  let key = bound.key
+    ? { id: bound.key.id, name: bound.key.name, kind: bound.key.kind }
+    : null;
+  if (!bound.share) {
+    return { rejected, key };
+  }
+  let ownedByYou = key !== null;
+  return {
+    rejected,
+    key,
+    share: {
+      ...(directWriter || ownedByYou ? { label: bound.share.label } : {}),
+      suspended: bound.share.state !== 'active' || bound.state === 'suspended',
+      ownedByYou,
+      ...(directWriter && bound.share.state === 'active'
+        ? { owner: bound.share.owner }
+        : {}),
+    },
+  };
 }
 
 // What a realm is called before its `realm.json` is indexed, as a realm
