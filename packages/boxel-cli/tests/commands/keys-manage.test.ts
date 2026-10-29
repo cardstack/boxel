@@ -424,9 +424,9 @@ describe('boxel keys: managing keys', () => {
       '--token-auth',
       '--api-host',
     ];
-    for (let [name, kindOption, oauthOption] of [
-      ['add', ['--kind'], oauthOptions],
-      ['replace', [], []],
+    for (let [name, kindOption, oauthOption, replaceOption] of [
+      ['add', ['--kind'], oauthOptions, []],
+      ['replace', [], [], ['--no-subject']],
     ] as const) {
       let command = keys!.commands.find((c) => c.name() === name)!;
       expect(command.registeredArguments.map((a) => a.name())).toEqual([
@@ -440,6 +440,7 @@ describe('boxel keys: managing keys', () => {
         '--subject',
         '--scope',
         ...oauthOption,
+        ...replaceOption,
       ]);
     }
     let connect = keys!.commands.find((c) => c.name() === 'connect')!;
@@ -497,7 +498,19 @@ describe('boxel keys: Google service accounts', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
   });
 
-  function serveKeys() {
+  const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+  const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+  // The key as the listing gives it, with what it acts as now.
+  const DESCRIBED = {
+    ...SERVICE_ACCOUNT,
+    serviceAccount: {
+      email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      subject: 'owner@example.com',
+      scopes: [SHEETS_SCOPE, DRIVE_SCOPE],
+    },
+  };
+
+  function serveKeys(listed: Record<string, unknown> = SERVICE_ACCOUNT) {
     return stubServer(({ method, path }) => {
       if (path === '/_secure-session') {
         return { status: 204 };
@@ -508,6 +521,9 @@ describe('boxel keys: Google service accounts', () => {
           body: { data: { attributes: { ticket: 'ticket-1' } } },
         };
       }
+      if (path.startsWith('/_key-shares')) {
+        return { body: { data: [] } };
+      }
       if (method === 'GET' && path === '/_user-keys') {
         return {
           body: {
@@ -515,7 +531,7 @@ describe('boxel keys: Google service accounts', () => {
               {
                 type: 'user-key',
                 id: SERVICE_ACCOUNT.id,
-                attributes: SERVICE_ACCOUNT,
+                attributes: listed,
               },
             ],
           },
@@ -621,6 +637,7 @@ describe('boxel keys: Google service accounts', () => {
         profileManager: manager,
         keyFile,
         scope: ['https://www.googleapis.com/auth/spreadsheets'],
+        subject: false,
       });
     } finally {
       stdout.restore();
@@ -678,7 +695,157 @@ describe('boxel keys: Google service accounts', () => {
     });
   });
 
-  it('refuses to replace a service account without its scopes, before minting a ticket', async () => {
+  it('shows the service account it is, the user it acts as and its scopes', async () => {
+    serveKeys(DESCRIBED);
+    let stdout = captureStdout();
+    try {
+      await keysShow('sheets', { profileManager: manager });
+    } finally {
+      stdout.restore();
+    }
+    expect(stdout.text()).toContain(
+      'service account: sheets-bot@boxel-test.iam.gserviceaccount.com',
+    );
+    expect(stdout.text()).toContain('acts as: owner@example.com');
+    expect(stdout.text()).toContain(`scopes: ${SHEETS_SCOPE} ${DRIVE_SCOPE}`);
+  });
+
+  it('keeps the scopes and the user it acts as when a replace gives neither, and says so', async () => {
+    let requests = serveKeys(DESCRIBED);
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', { profileManager: manager, keyFile });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({
+      value: KEY_FILE,
+      subject: 'owner@example.com',
+      scopes: [SHEETS_SCOPE, DRIVE_SCOPE],
+    });
+    expect(stdout.text()).toContain(
+      `Kept its scopes: ${SHEETS_SCOPE} ${DRIVE_SCOPE}`,
+    );
+    expect(stdout.text()).toContain('Kept acting as owner@example.com');
+  });
+
+  it('replaces the scopes with --scope and acts as the service account itself with --no-subject', async () => {
+    let requests = serveKeys(DESCRIBED);
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+        subject: false,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({ value: KEY_FILE, scopes: [SHEETS_SCOPE] });
+    expect(stdout.text()).not.toContain('Kept');
+  });
+
+  it('keeps the scopes but acts as a new user when a replace gives only --subject', async () => {
+    let requests = serveKeys(DESCRIBED);
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        subject: 'admin@example.com',
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({
+      value: KEY_FILE,
+      subject: 'admin@example.com',
+      scopes: [SHEETS_SCOPE, DRIVE_SCOPE],
+    });
+    expect(stdout.text()).toContain('Kept its scopes');
+    expect(stdout.text()).not.toContain('Kept acting');
+  });
+
+  it('keeps nothing when the new key file is for another service account: --scope and the subject are needed, before minting a ticket', async () => {
+    let requests = serveKeys({
+      ...DESCRIBED,
+      serviceAccount: {
+        ...DESCRIBED.serviceAccount,
+        email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+      },
+    });
+    await expect(
+      keysReplace('sheets', { profileManager: manager, keyFile }),
+    ).rejects.toThrow(
+      /This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com/,
+    );
+    await expect(
+      keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+      }),
+    ).rejects.toThrow(/--subject <email> or --no-subject/);
+    expect(requests.filter((r) => r.path === '/_key-write-tickets')).toEqual(
+      [],
+    );
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+        subject: 'admin@example.com',
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({
+      value: KEY_FILE,
+      subject: 'admin@example.com',
+      scopes: [SHEETS_SCOPE],
+    });
+    expect(stdout.text()).not.toContain('Kept');
+  });
+
+  it('refuses to replace a service account whose details the server doesn’t report without --subject or --no-subject, before minting a ticket', async () => {
+    let requests = serveKeys();
+    await expect(
+      keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+      }),
+    ).rejects.toThrow(/give --subject <email>, or --no-subject/);
+    expect(requests.filter((r) => r.path === '/_key-write-tickets')).toEqual(
+      [],
+    );
+    let stdout = captureStdout();
+    try {
+      await keysReplace('sheets', {
+        profileManager: manager,
+        keyFile,
+        scope: [SHEETS_SCOPE],
+        subject: false,
+      });
+    } finally {
+      stdout.restore();
+    }
+    expect(
+      requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+    ).toEqual({ value: KEY_FILE, scopes: [SHEETS_SCOPE] });
+  });
+
+  it('refuses to replace a service account whose scopes the server doesn’t report without --scope, before minting a ticket', async () => {
     let requests = serveKeys();
     await expect(
       keysReplace('sheets', { profileManager: manager, keyFile }),

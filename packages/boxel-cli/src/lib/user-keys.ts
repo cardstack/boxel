@@ -75,6 +75,15 @@ export interface ConnectableClient {
   authorizeHost: string;
 }
 
+// What a Google service account acts as: its email, the user it acts as
+// (null for the service account itself) and the scopes its tokens ask for.
+// Never its key file.
+export interface ServiceAccountDetails {
+  email: string;
+  subject: string | null;
+  scopes: string[];
+}
+
 export interface UserKeyMetadata {
   id: string;
   name: string;
@@ -84,6 +93,8 @@ export interface UserKeyMetadata {
   grants?: UserKeyGrant[];
   // Present for an OAuth client or connection.
   oauth?: OAuthKeyDescription;
+  // Only a google-service-account key has one.
+  serviceAccount?: ServiceAccountDetails;
   createdAt: string;
   updatedAt: string;
 }

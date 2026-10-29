@@ -483,6 +483,34 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
     }
   });
 
+  test('file operations refuse a path that resolves outside the realm directory', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      let realmDir = join(dir, 'realm');
+      fsExtra.ensureDirSync(realmDir);
+      fsExtra.writeFileSync(join(dir, 'outside.txt'), 'outside');
+      fsExtra.writeFileSync(join(realmDir, '..inside.txt'), 'inside');
+      let adapter = new NodeAdapter(realmDir);
+      let outside = '../outside.txt' as LocalPath;
+
+      await assert.rejects(adapter.openFile(outside), /outside the realm/);
+      await assert.rejects(adapter.exists(outside), /outside the realm/);
+      await assert.rejects(adapter.write(outside, 'x'), /outside the realm/);
+      await assert.rejects(adapter.remove(outside), /outside the realm/);
+      assert.strictEqual(
+        fsExtra.readFileSync(join(dir, 'outside.txt'), 'utf8'),
+        'outside',
+        'the file outside the realm is untouched',
+      );
+      assert.true(
+        await adapter.exists('..inside.txt'),
+        'a name that only starts with two dots is inside the realm',
+      );
+    } finally {
+      fsExtra.removeSync(dir);
+    }
+  });
+
   test('lastModified and openFile report the second mtimeMs falls in, even in its last half-millisecond', async function (assert) {
     let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
     try {

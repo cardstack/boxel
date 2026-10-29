@@ -46,7 +46,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
-import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
+import {
+  realmURLDisplayText,
+  urlDisplayText,
+} from '@cardstack/host/lib/realm-utils';
 import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
@@ -1307,12 +1310,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get displayPublishedURL() {
-    try {
-      let url = new URL(this.primaryPublishedURL);
-      return url.host + url.pathname.replace(/\/$/, '');
-    } catch {
-      return this.primaryPublishedURL;
-    }
+    return urlDisplayText(this.primaryPublishedURL);
   }
 
   @action toggleHostDropdown(event: Event) {
@@ -1745,7 +1743,12 @@ export function formatRelativeTime(date: Date): string {
   return formatDate(date, 'EEE, MMM d, yyyy');
 }
 
-export function formatUpdatedTime(date: Date): string {
+// Spoken, the units are spelled out, since a screen reader may misread an
+// abbreviation ("min" as minimum).
+export function formatUpdatedTime(
+  date: Date,
+  { spoken = false }: { spoken?: boolean } = {},
+): string {
   // Clamp to 0: a clock skewed slightly ahead of the server (or a
   // just-written timestamp racing this render) can otherwise produce a
   // negative diff.
@@ -1757,15 +1760,16 @@ export function formatUpdatedTime(date: Date): string {
     return 'Updated just now';
   }
   if (diffSeconds < 60) {
-    return `Updated ${diffSeconds} sec ago`;
+    return `Updated ${diffSeconds} ${spoken ? pluralize('second', diffSeconds) : 'sec'} ago`;
   }
   let diffMinutes = Math.floor(diffSeconds / 60);
   if (diffMinutes < 60) {
-    return `Updated ${diffMinutes} min ago`;
+    return `Updated ${diffMinutes} ${spoken ? pluralize('minute', diffMinutes) : 'min'} ago`;
   }
   let diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) {
-    return `Updated ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
+    let unit = spoken ? 'hour' : 'hr';
+    return `Updated ${diffHours} ${pluralize(unit, diffHours)} ago`;
   }
   let diffDays = Math.floor(diffHours / 24);
   if (diffDays < 30) {
