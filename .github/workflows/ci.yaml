@@ -70,8 +70,6 @@ jobs:
           filters: |
             shared: &shared
               - '.github/workflows/ci.yaml'
-              # builds the host every browser suite runs against
-              - '.github/workflows/test-web-assets.yaml'
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -142,6 +140,8 @@ jobs:
               - 'packages/pretui/**'
             choreo:
               - *shared
+              # builds the host that the suites tagged *test-web-assets download
+              - &test-web-assets '.github/workflows/test-web-assets.yaml'
               - 'packages/choreo/**'
               - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'
@@ -171,6 +171,7 @@ jobs:
               - 'packages/glimmer-motion/**'
             matrix:
               - *shared
+              - *test-web-assets
               - 'packages/base/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
@@ -181,6 +182,7 @@ jobs:
               - 'packages/test-realm-cards/**'
             realm-server:
               - *shared
+              - *test-web-assets
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
@@ -193,9 +195,11 @@ jobs:
               - 'packages/test-realm-cards/**'
             vscode-boxel-tools:
               - *shared
+              - *test-web-assets
               - 'packages/vscode-boxel-tools/**'
             boxel-cli:
               - *shared
+              - *test-web-assets
               - 'packages/boxel-cli/**'
               # The boxel-skills pin lives in the marketplaces, and the
               # boxel-cli suite checks it (both refs agree, the pinned release
