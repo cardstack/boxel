@@ -33,6 +33,7 @@ import {
   setupUserSubscription,
   visitOperatorMode,
   realmConfigCardJSON,
+  withholdRealmSession,
 } from '../helpers';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -1134,6 +1135,8 @@ module('Acceptance | dashboard', function (hooks) {
               'entryPoints.4': {
                 links: { self: '@cardstack/catalog/glossary' },
               },
+              // Pinned twice: drawn and counted once.
+              'entryPoints.5': { links: { self: './roadmap' } },
             }),
           },
         });
@@ -1218,7 +1221,10 @@ module('Acceptance | dashboard', function (hooks) {
         await waitFor(pinnedStat);
         assert
           .dom(pinnedStat)
-          .hasText('Pinned 5', 'every pin is counted, drawn or not');
+          .hasText(
+            'Pinned 5',
+            'every pinned card is counted once, drawn or not',
+          );
         assert
           .dom('[data-test-workspace="Pinned Workspace"]')
           .exists({ count: 2 }, 'it is listed as a desk and again below');
@@ -1274,6 +1280,7 @@ module('Acceptance | dashboard', function (hooks) {
             'notes.json': cardJSON('Notes'),
           },
         });
+        withholdRealmSession(unlistedRealmURL);
         await setupAcceptanceTestRealm({
           realmURL: elsewhereRealmURL,
           mockMatrixUtils,

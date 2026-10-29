@@ -214,7 +214,6 @@ export default class Workspace extends Component<Signature> {
               <PinnedCards
                 class='desk-pins'
                 @cardIds={{this.pins.cardIds}}
-                @realm={{@realmIdentifier}}
                 @workspaceName={{this.name}}
               />
             {{/if}}

@@ -31,8 +31,6 @@ interface Signature {
   Args: {
     // The pinned cards' ids, in the workspace's order.
     cardIds: RealmResourceIdentifier[];
-    // The workspace's own realm.
-    realm: string;
     workspaceName: string;
   };
 }
@@ -44,6 +42,11 @@ export default class PinnedCards extends Component<Signature> {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+
+  // The pin URLs whose realm has been looked up. A lookup is started once
+  // per pin: a pin in an unreachable realm never resolves, and the query
+  // re-runs each time any realm is found.
+  private lookedUp = new Set<string>();
 
   // One search for all the pins, not just the first few, so a pin with no
   // rendering yet gives its place to the next one. `html` alone would leave
@@ -61,7 +64,10 @@ export default class PinnedCards extends Component<Signature> {
       } catch {
         continue;
       }
-      this.realm.info(url);
+      if (!this.lookedUp.has(url)) {
+        this.lookedUp.add(url);
+        this.realm.info(url);
+      }
       let realmURL = this.realm.realmURLOf(url);
       if (realmURL) {
         realms.add(realmURL);
@@ -130,7 +136,7 @@ export default class PinnedCards extends Component<Signature> {
               class='collage pins-{{pins.length}}'
               aria-label='Pinned cards in {{@workspaceName}}'
               data-pinned-collage
-              data-test-pinned-cards={{@realm}}
+              data-test-pinned-cards
             >
               {{#each pins key='id' as |pin|}}
                 <li class='pin'>
