@@ -1831,8 +1831,14 @@ let rootByPrefix = await realm.fs.list('${prefix}');
 let rootByURL = await realm.fs.list('');
 return { byPrefix, byURL, listByPrefix, listByURL, rootByPrefix, rootByURL };`,
       });
-      let { byPrefix, byURL, listByPrefix, listByURL, rootByPrefix, rootByURL } =
-        JSON.parse(result.scriptResult!);
+      let {
+        byPrefix,
+        byURL,
+        listByPrefix,
+        listByURL,
+        rootByPrefix,
+        rootByURL,
+      } = JSON.parse(result.scriptResult!);
       assert.deepEqual(byPrefix, byURL, 'a card reads the same by prefix');
       assert.deepEqual(
         listByPrefix,
