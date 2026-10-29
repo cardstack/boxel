@@ -68,6 +68,13 @@ else
   echo "[ci:import-index] no index cache available — realms will index from scratch"
 fi
 
+# A caller pinned to another repository's run has no test-realm snapshot there,
+# and boxel's own was built from a different checkout.
+if [ -n "${INDEX_CACHE_RUN_ID:-}" ]; then
+  echo "[ci:import-index] index cache pinned to run ${INDEX_CACHE_RUN_ID} — the test realms will index from scratch"
+  exit 0
+fi
+
 # The live test realms (`/test/`, `/node-test/`) index into their own database,
 # which a shard waits on just as it waits on base and skills. Seed that one too,
 # or it stays the whole remaining cost of the boot.

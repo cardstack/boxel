@@ -671,10 +671,6 @@
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/18c6e5517b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/2a4b56d7da.css"
         },
         {
@@ -688,6 +684,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/6134f21d67.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/b61fa3248b.css"
         },
         {
           "package": "@cardstack/secure-origin",
