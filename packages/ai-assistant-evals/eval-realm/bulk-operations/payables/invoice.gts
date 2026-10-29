@@ -3,7 +3,7 @@ import DateField from '@cardstack/base/date';
 import enumField from '@cardstack/base/enum';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
-import { Vendor } from './vendor';
+import { Vendor } from './vendor.gts';
 
 export const InvoiceStatusField = enumField(StringField, {
   options: [

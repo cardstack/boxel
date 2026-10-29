@@ -1,7 +1,7 @@
 import { CardDef, contains, field } from '@cardstack/base/card-api';
 import EmailField from '@cardstack/base/email';
 import StringField from '@cardstack/base/string';
-import { PaymentTermsField } from './payment-terms';
+import { PaymentTermsField } from './payment-terms.gts';
 
 export class Customer extends CardDef {
   static displayName = 'Customer';
