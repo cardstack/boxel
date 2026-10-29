@@ -655,12 +655,18 @@ export default class AiAssistantPanelService extends Service {
     return this.loadRoomsTask.isRunning;
   }
 
-  private loadRoomsTask = restartableTask(async () => {
+  // Resolves once the sync's first pass is processed, so aiSessionRooms lists
+  // every session the user has.
+  async waitForSessionRooms() {
     await this.matrixService.waitForInitialSync();
     await this.matrixService.flushAll;
     await allSettled(
       [...this.matrixService.roomResources.values()].map((r) => r.processing),
     );
+  }
+
+  private loadRoomsTask = restartableTask(async () => {
+    await this.waitForSessionRooms();
     await this.enterRoomInitially();
   });
 

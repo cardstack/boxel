@@ -1760,16 +1760,24 @@ module('Acceptance | dashboard', function (hooks) {
           findAll('[data-test-agent-picker] input').map(
             (input) => (input as HTMLInputElement).value,
           ),
-          ['claude', 'codex', 'grok', 'boxel'],
+          ['claude', 'codex', 'boxel'],
         );
+        for (let agent of ['claude', 'codex', 'boxel']) {
+          assert
+            .dom(`[data-test-agent-picker] [data-test-agent-mark="${agent}"]`)
+            .exists(`${agent} shows its mark`);
+        }
         assert.strictEqual(pickedAgent(), 'codex');
         assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'codex');
         assert.dom('[data-test-agent-panel-title]').hasText('Connect Codex');
         assert
-          .dom('[data-test-agent-setup-progress]')
-          .includesText('2 of 5 copied');
+          .dom(`${PANEL} [data-test-agent-mark="codex"]`)
+          .exists("the panel shows the picked agent's mark");
         assert
-          .dom('[data-test-agent-step="1"]')
+          .dom('[data-test-agent-setup-progress]')
+          .includesText('2 of 6 copied');
+        assert
+          .dom('[data-test-agent-step="2"]')
           .hasAttribute('data-test-agent-step-copied', 'true');
         assert
           .dom('[data-test-agent-step="3"]')
@@ -1779,9 +1787,72 @@ module('Acceptance | dashboard', function (hooks) {
           .exists({ count: 1 }, 'only the open step shows its text');
         assert
           .dom('[data-test-agent-step="3"] [data-test-agent-step-text]')
+          .hasText('/plugins', 'the next step to copy is open');
+      });
+
+      test('each coding agent lists its own setup, then the workspace steps', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        async function stepTexts(count: number) {
+          let texts = [];
+          for (let step = 1; step <= count; step++) {
+            let text = `[data-test-agent-step="${step}"] [data-test-agent-step-text]`;
+            // A click on the open step would close it.
+            if (!find(text)) {
+              await click(
+                `[data-test-agent-step="${step}"] [data-test-agent-step-head]`,
+              );
+            }
+            texts.push(find(text)?.textContent?.trim());
+          }
+          return texts;
+        }
+
+        assert.dom('[data-test-agent-step]').exists({ count: 6 });
+        assert.deepEqual(await stepTexts(4), [
+          'npm install -g @cardstack/boxel-cli',
+          'codex plugin marketplace add cardstack/boxel',
+          '/plugins',
+          `Work on my Boxel workspace ${realmURL}`,
+        ]);
+
+        await click('[data-test-agent-picker] input[value="claude"]');
+
+        assert.dom('[data-test-agent-step]').exists({ count: 6 });
+        assert.deepEqual(await stepTexts(4), [
+          'npm install -g @cardstack/boxel-cli',
+          '/plugin marketplace add cardstack/boxel',
+          '/plugin install boxel-cli@cardstack-boxel',
+          `Work on my Boxel workspace ${realmURL}`,
+        ]);
+      });
+
+      test('a stored pick that is no longer listed falls back to the first agent', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'grok',
+          agentSetup: { grok: 1 },
+        });
+        await settled();
+
+        assert.strictEqual(pickedAgent(), 'claude');
+        assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'claude');
+        assert
+          .dom('[data-test-agent-setup-progress]')
+          .includesText('0 of 6 copied');
+      });
+
+      test('the open workspace step names the workspace', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await click('[data-test-agent-step="4"] [data-test-agent-step-head]');
+
+        assert
+          .dom('[data-test-agent-step="4"] [data-test-agent-step-text]')
           .hasText(
             `Work on my Boxel workspace ${realmURL}`,
-            'the next step to copy is open, with the workspace filled in',
+            'the workspace is filled in',
           );
       });
 
@@ -1795,15 +1866,10 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(pickedAgent(), 'claude');
         assert
           .dom('[data-test-agent-setup-progress]')
-          .includesText('0 of 5 copied', 'progress is kept per agent');
+          .includesText('0 of 6 copied', 'progress is kept per agent');
         assert
           .dom('[data-test-agent-step="1"] [data-test-agent-step-text]')
-          .hasText('/plugin marketplace add cardstack/boxel');
-
-        await click('[data-test-agent-step="2"] [data-test-agent-step-head]');
-        assert
-          .dom('[data-test-agent-step="2"] [data-test-agent-step-text]')
-          .hasText('/plugin install boxel-cli');
+          .hasText('npm install -g @cardstack/boxel-cli');
       });
 
       test('copying a step puts its text on the clipboard and counts it', async function (assert) {
@@ -1811,16 +1877,14 @@ module('Acceptance | dashboard', function (hooks) {
 
         await click('[data-test-agent-copy="3"]');
 
-        assert.deepEqual(clipboard.copied, [
-          `Work on my Boxel workspace ${realmURL}`,
-        ]);
+        assert.deepEqual(clipboard.copied, ['/plugins']);
         let matrixService = getService('matrix-service') as MatrixService;
         assert.deepEqual(matrixService.dashboardState.agentSetup, {
           codex: 3,
         });
         assert
           .dom('[data-test-agent-setup-progress]')
-          .includesText('3 of 5 copied');
+          .includesText('3 of 6 copied');
         assert
           .dom('[data-test-agent-step="3"]')
           .hasAttribute('data-test-agent-step-copied', 'true');
@@ -1846,7 +1910,7 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(matrixService.dashboardState.agentSetup?.codex, 2);
         assert
           .dom('[data-test-agent-setup-progress]')
-          .includesText('2 of 5 copied');
+          .includesText('2 of 6 copied');
       });
 
       test('Boxel AI Assistant shows how it works, and Describe it starts a session', async function (assert) {
@@ -1883,8 +1947,15 @@ module('Acceptance | dashboard', function (hooks) {
           findAll(`${FLYOUT} [data-test-section-rail-agent]`).map((el) =>
             el.getAttribute('data-test-section-rail-agent'),
           ),
-          ['claude', 'codex', 'grok', 'boxel'],
+          ['claude', 'codex', 'boxel'],
         );
+        for (let agent of ['claude', 'codex', 'boxel']) {
+          assert
+            .dom(
+              `${FLYOUT} [data-test-section-rail-agent="${agent}"] [data-test-agent-mark="${agent}"]`,
+            )
+            .exists(`${agent} shows its mark`);
+        }
         assert
           .dom(`${FLYOUT} [data-test-section-rail-agent="codex"]`)
           .includesText('(picked)');
@@ -1892,14 +1963,14 @@ module('Acceptance | dashboard', function (hooks) {
           .dom(`${FLYOUT} [data-test-section-rail-ai-new-session]`)
           .exists();
 
-        await click(`${FLYOUT} [data-test-section-rail-agent="grok"]`);
+        await click(`${FLYOUT} [data-test-section-rail-agent="claude"]`);
 
         assert.dom(FLYOUT).doesNotExist('a pick closes the flyout');
         let matrixService = getService('matrix-service') as MatrixService;
-        assert.strictEqual(matrixService.dashboardState.agent, 'grok');
+        assert.strictEqual(matrixService.dashboardState.agent, 'claude');
         assert
           .dom('[data-test-agent-panel]')
-          .hasAttribute('data-test-agent-panel', 'grok');
+          .hasAttribute('data-test-agent-panel', 'claude');
         assert.dom(ENTRY).hasAttribute('aria-current', 'location');
       });
 
@@ -1985,6 +2056,57 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('open-card'), 'true');
         assert.strictEqual(stepDone('publish'), 'true');
         assert.strictEqual(stepDone('ask-ai'), 'false');
+      });
+
+      test('starting a Boxel AI session ticks the ask step', async function (assert) {
+        await visitAsNewUser();
+
+        await click('[data-test-get-started-action="ask-ai"]');
+        await waitUntil(() =>
+          find('[data-test-get-started-count]')?.textContent?.includes(
+            '1 of 4 done',
+          ),
+        );
+
+        assert
+          .dom('[data-test-get-started-count]')
+          .hasText(
+            '1 of 4 done · Next: Open a card in a workspace',
+            'a session counts before anything is asked in it',
+          );
+      });
+
+      test('finishing every step dismisses it for good', async function (assert) {
+        await visitAsNewUser();
+
+        await click('[data-test-get-started-action="ask-ai"]');
+        await waitUntil(() =>
+          find('[data-test-get-started-count]')?.textContent?.includes(
+            '1 of 4 done',
+          ),
+        );
+        (getService('recent-cards-service') as any).add(`${realmURL}index`);
+        markHosted(realmURL);
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agentSetup: { claude: 1 },
+        });
+        await settled();
+
+        let matrixService = getService('matrix-service') as MatrixService;
+        await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
+        assert.dom(GET_STARTED).doesNotExist();
+        assert.true(
+          (mockMatrixUtils.getDashboardState() as any).onboardingDismissed,
+          'the dismissal is stored',
+        );
+
+        (getService('recent-cards-service') as any).resetState();
+        await settled();
+        assert
+          .dom(GET_STARTED)
+          .doesNotExist(
+            'a step that reads as undone later does not bring it back',
+          );
       });
 
       test("the agent step's action shows the Agents section", async function (assert) {
