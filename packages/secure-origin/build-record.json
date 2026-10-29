@@ -667,7 +667,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 55800,
+      "bytes": 55867,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
