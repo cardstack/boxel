@@ -15,7 +15,8 @@ import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 // shows up here as a `securitypolicyviolation` event.
 //
 // The built pages are also where the theme's tokens resolve, so this is where
-// the error and muted text colours are checked against WCAG AA contrast.
+// the error and muted text colours are checked against WCAG AA contrast, and
+// the chosen radio tile's ring against WCAG's 3:1 for a non-text indicator.
 
 const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
 // The window's own sign-in form: the CLI's sign-in pages draw the same form,
@@ -548,11 +549,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  function assertContrast(
-    assert: Assert,
-    where: string,
-    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
-  ) {
+  // WCAG's contrast ratio between two sRGB colours.
+  function contrast(a: number[], b: number[]) {
     let luminance = (rgb: number[]) => {
       let [r, g, b] = rgb.map((channel) => {
         let c = channel / 255;
@@ -560,11 +558,15 @@ module(basename(import.meta.filename), function (hooks) {
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    let contrast = (a: number[], b: number[]) => {
-      let [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-      return (light + 0.05) / (dark + 0.05);
-    };
+    let [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (light + 0.05) / (dark + 0.05);
+  }
 
+  function assertContrast(
+    assert: Assert,
+    where: string,
+    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
+  ) {
     assert.ok(
       colors.length > 1,
       `${where}: the shell's stylesheets hold error rules (${colors.length - 1})`,
@@ -614,6 +616,86 @@ module(basename(import.meta.filename), function (hooks) {
       assert,
       'key pages',
       await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
+    );
+  });
+
+  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile's is thinner", async function (assert) {
+    // The radio tile's rules ship with the shell, so the signed-out key page
+    // holds them, under the panel whose theme and background the tiles sit
+    // on.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, rings } = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let backgroundColor = getComputedStyle(panel).backgroundColor;
+      let toRGB = (color: string) => {
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      // A ring is a box shadow with no offset or blur: its spread is its
+      // width, and its colour is resolved under the panel's theme.
+      let ring = (boxShadow: string) => {
+        let probe = document.createElement('span');
+        probe.style.setProperty('box-shadow', boxShadow);
+        panel.append(probe);
+        let computed = getComputedStyle(probe).boxShadow;
+        probe.remove();
+        let [, color, spread] =
+          /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px$/.exec(computed) ?? [];
+        return color
+          ? { rgb: toRGB(color), width: Number(spread) }
+          : { rgb: [], width: 0 };
+      };
+      let rings: Record<string, ReturnType<typeof ring> & { rule: string }> =
+        {};
+      let visit = (rules: CSSRuleList) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules);
+            continue;
+          }
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+          let state =
+            /^\.radio-tile(?:\[[^\]]+\])*(:hover|:has\(input:checked\))$/.exec(
+              rule.selectorText,
+            )?.[1];
+          let boxShadow = rule.style.getPropertyValue('box-shadow');
+          if (state && boxShadow) {
+            rings[state === ':hover' ? 'hover' : 'chosen'] = {
+              rule: `${rule.selectorText} { box-shadow: ${boxShadow} }`,
+              ...ring(boxShadow),
+            };
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      return { background: toRGB(backgroundColor), rings };
+    });
+
+    let { chosen, hover } = rings;
+    assert.ok(chosen, "the shell's stylesheets ring a chosen radio tile");
+    assert.ok(hover, "the shell's stylesheets ring a hovered radio tile");
+    let ratio = contrast(chosen.rgb, background);
+    assert.ok(
+      ratio >= 3,
+      `${chosen.rule}: rgb(${chosen.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+    );
+    assert.ok(hover.width > 0, `a hovered tile is ringed (${hover.width}px)`);
+    assert.ok(
+      hover.width < chosen.width,
+      `a hovered tile's ring (${hover.width}px) is thinner than a chosen one's (${chosen.width}px)`,
     );
   });
 
