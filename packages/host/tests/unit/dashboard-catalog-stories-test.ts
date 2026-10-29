@@ -169,6 +169,16 @@ module('Unit | dashboard catalog stories', function () {
     assert.strictEqual(stories[1]!.exampleId, undefined);
   });
 
+  test('a relative thumbnail resolves against its listing', function (assert) {
+    let [story] = storiesFrom({
+      featuredIds: [],
+      featured: [],
+      others: [listing('c/AppListing/1', { cardThumbnailURL: './thumb.png' })],
+      resolve,
+    });
+    assert.strictEqual(story!.thumbnailURL, `${catalog}c/AppListing/thumb.png`);
+  });
+
   test('with nothing featured, no story is the pick of the week', function (assert) {
     let stories = storiesFrom({
       featuredIds: [],

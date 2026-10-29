@@ -172,12 +172,14 @@ export function storiesFrom({
       let kind = kindOf(entry.item);
       let tint = STORY_TINTS[index % STORY_TINTS.length]!;
       let attributes = entry.item?.attributes ?? {};
+      // A relative thumbnail is relative to its listing, not the dashboard.
+      let thumbnailURL = text(attributes.cardThumbnailURL);
       return {
         id: entry.id,
         eyebrow: eyebrowOf(kind, index === 0 && order.has(entry.id)),
         name: shelfName(text(attributes.name)),
         copy: shelfCopy(kind, text(attributes.summary)),
-        thumbnailURL: text(attributes.cardThumbnailURL),
+        thumbnailURL: thumbnailURL && resolve(thumbnailURL, entry.id),
         exampleId: linkedIds(entry, 'examples', resolve)[0],
         tint,
         scheme: tint === 'ink' ? 'dark' : 'light',
