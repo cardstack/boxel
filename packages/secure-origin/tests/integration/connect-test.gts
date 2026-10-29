@@ -199,14 +199,20 @@ module('Integration | connecting an account', function (hooks) {
   // The page sends the window on only once the realm server's answer to the
   // connect request is read, and `settled()` doesn't wait for that: the stubbed
   // `fetch` is a plain promise. A cold browser can still be reading it when the
-  // click returns, so a test waits for the window to go somewhere. On a
-  // timeout, the message lists the requests made, to show how far it got.
+  // click returns, so a test waits for the window to go somewhere. A timeout
+  // says how far the page got: the requests made by then and any error shown.
   async function navigated() {
-    await waitUntil(() => navigations.length > 0, {
-      timeoutMessage: `the window never went anywhere; requests made: ${requests
-        .map((r) => `${r.method} ${r.path}`)
-        .join(', ')}`,
-    });
+    try {
+      await waitUntil(() => navigations.length > 0);
+    } catch {
+      let requested = requests.map((r) => `${r.method} ${r.path}`).join(', ');
+      let shown = document
+        .querySelector('[data-test-keys-error]')
+        ?.textContent?.trim();
+      throw new Error(
+        `the window never went anywhere; requests made: ${requested || 'none'}; error shown: ${shown || 'none'}`,
+      );
+    }
   }
 
   function connectRequest() {
