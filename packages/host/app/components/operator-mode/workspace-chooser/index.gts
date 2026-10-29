@@ -25,6 +25,7 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
+import { WORKSPACE_TILE_TARGET } from '@cardstack/host/lib/workspace-actions';
 import {
   favoritesTileWidth,
   isHostedRealm,
@@ -40,7 +41,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
 import ManageCatalogs from './manage-catalogs';
-import Workspace, { WORKSPACE_TILE_TARGET } from './workspace';
+import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface SortOption {

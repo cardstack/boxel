@@ -4,19 +4,11 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import ArchiveIcon from '@cardstack/boxel-icons/archive';
-import CopyIcon from '@cardstack/boxel-icons/copy';
-import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
-import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
-import { format as formatDate } from 'date-fns';
-import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-import { modifier } from 'ember-modifier';
-import pluralize from 'pluralize';
 
 import {
   BoxelDropdown,
@@ -25,40 +17,22 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt, or } from '@cardstack/boxel-ui/helpers';
+import { cssVar, gt, or } from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
-  IconTrash,
   IconX,
   Lock,
   Star,
   StarFilled,
 } from '@cardstack/boxel-ui/icons';
 
-import {
-  ensureTrailingSlash,
-  hasExecutableExtension,
-  logger,
-  RealmPaths,
-  SupportedMimeType,
-  type RealmIdentifier,
-} from '@cardstack/runtime-common';
+import type { RealmIdentifier } from '@cardstack/runtime-common';
 
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
-import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
-import {
-  publishedRealmURLsFromInfo,
-  skillsRealmURL,
-} from '@cardstack/host/lib/utils';
+import { WorkspaceActions } from '@cardstack/host/lib/workspace-actions';
 import focusWhenSelected from '@cardstack/host/modifiers/focus-when-selected';
-import type MatrixService from '@cardstack/host/services/matrix-service';
-import type NetworkService from '@cardstack/host/services/network';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
 import ItemContainer from './item-container';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
@@ -86,13 +60,9 @@ interface Signature {
   };
 }
 
-const log = logger('component:workspace-chooser/workspace');
-
-export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
-
 export default class Workspace extends Component<Signature> {
   <template>
-    {{#if this.loadRealmTask.isRunning}}
+    {{#if this.workspace.loadRealmTask.isRunning}}
       <WorkspaceLoadingIndicator />
     {{else}}
       <div
@@ -103,24 +73,24 @@ export default class Workspace extends Component<Signature> {
         style={{cssVar favorite-tile-width=@enlargedWidth}}
         data-theme='dark'
         {{on 'mouseleave' this.closeHostDropdown}}
-        {{this.captureTile}}
+        {{this.workspace.captureTile}}
         data-workspace-tile
-        data-test-workspace={{this.name}}
-        data-test-workspace-selected={{if @isSelected this.name}}
+        data-test-workspace={{this.workspace.name}}
+        data-test-workspace-selected={{if @isSelected this.workspace.name}}
         ...attributes
       >
-        {{#if this.reindexError}}
+        {{#if this.workspace.reindexError}}
           <div class='reindex-error' role='alert' data-test-reindex-error>
             <span
               class='reindex-error__message'
-              title={{this.reindexError}}
-            >{{this.reindexError}}</span>
+              title={{this.workspace.reindexError}}
+            >{{this.workspace.reindexError}}</span>
             <button
               type='button'
               class='reindex-error__dismiss'
               aria-label='Dismiss error'
               data-test-reindex-error-dismiss
-              {{on 'click' this.clearReindexError}}
+              {{on 'click' this.workspace.clearReindexError}}
             >
               <IconX width='11' height='11' />
             </button>
@@ -132,18 +102,18 @@ export default class Workspace extends Component<Signature> {
         <span
           id={{this.realmURLDescriptionId}}
           class='boxel-sr-only'
-        >{{this.realmURLText}}</span>
+        >{{this.workspace.realmURLText}}</span>
         <ItemContainer
           aria-describedby={{this.realmURLDescriptionId}}
-          data-test-workspace-button={{this.name}}
+          data-test-workspace-button={{this.workspace.name}}
           data-nav-index={{@navIndex}}
-          {{on 'click' this.openWorkspace}}
+          {{on 'click' this.workspace.openWorkspace}}
           {{focusWhenSelected @isSelected}}
         >
           <div
             class='tile-icon'
             style={{cssVar
-              workspace-background-image-url=this.backgroundImageURL
+              workspace-background-image-url=this.workspace.backgroundImageURL
             }}
           >
             {{#if @isFavoritesSection}}
@@ -153,7 +123,7 @@ export default class Workspace extends Component<Signature> {
                   <div class='realm-icon-wrapper'>
                     <RealmIcon
                       class='workspace-realm-icon'
-                      @realmInfo={{this.realmInfo}}
+                      @realmInfo={{this.workspace.realmInfo}}
                       @canAnimate={{true}}
                     />
                   </div>
@@ -162,7 +132,7 @@ export default class Workspace extends Component<Signature> {
                   <span
                     class='tile-name'
                     data-test-workspace-name
-                  >{{this.name}}</span>
+                  >{{this.workspace.name}}</span>
                   {{! Always rendered so the counts, which load after the tile,
                       fill reserved space instead of growing it. }}
                   <div
@@ -191,7 +161,7 @@ export default class Workspace extends Component<Signature> {
                 <div class='realm-icon-wrapper'>
                   <RealmIcon
                     class='workspace-realm-icon'
-                    @realmInfo={{this.realmInfo}}
+                    @realmInfo={{this.workspace.realmInfo}}
                     @canAnimate={{true}}
                   />
                 </div>
@@ -199,17 +169,20 @@ export default class Workspace extends Component<Signature> {
             {{/if}}
           </div>
         </ItemContainer>
-        <div class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'>
+        <div
+          class='tile-favorite-btn
+            {{if this.workspace.isFavorited "is-favorited"}}'
+        >
           <Tooltip @placement='top'>
             <:trigger>
               <ContextButton
                 @label='Favorite'
-                @icon={{if this.isFavorited StarFilled Star}}
+                @icon={{if this.workspace.isFavorited StarFilled Star}}
                 @variant='ghost'
                 @width='16'
                 @height='16'
-                aria-pressed={{if this.isFavorited 'true' 'false'}}
-                {{on 'click' this.toggleFavorite}}
+                aria-pressed={{if this.workspace.isFavorited 'true' 'false'}}
+                {{on 'click' this.workspace.toggleFavorite}}
                 data-test-workspace-favorite-btn={{@realmIdentifier}}
               />
             </:trigger>
@@ -221,7 +194,7 @@ export default class Workspace extends Component<Signature> {
             class='tile-status-bar'
             data-test-workspace-status-bar={{@realmIdentifier}}
           >
-            {{#if this.hasPublishedRealms}}
+            {{#if this.workspace.hasPublishedRealms}}
               <Tooltip @placement='top'>
                 <:trigger>
                   <span class='tile-status-icon'>
@@ -235,10 +208,12 @@ export default class Workspace extends Component<Signature> {
               <:trigger>
                 <span class='tile-status-visibility'>
                   <this.visibilityIcon width='12' height='12' />
-                  <span class='tile-status-label'>{{this.visibility}}</span>
+                  <span
+                    class='tile-status-label'
+                  >{{this.workspace.visibility}}</span>
                 </span>
               </:trigger>
-              <:content>{{this.visibilityLabel}}</:content>
+              <:content>{{this.workspace.visibilityLabel}}</:content>
             </Tooltip>
           </div>
         {{/if}}
@@ -251,28 +226,33 @@ export default class Workspace extends Component<Signature> {
                 @width='16'
                 @height='16'
                 {{bindings}}
-                {{this.captureMenuTrigger}}
+                {{this.workspace.captureMenuTrigger}}
                 data-test-workspace-menu-trigger={{@realmIdentifier}}
               />
             </:trigger>
             <:content as |dd|>
-              <Menu @items={{this.tileMenuItems}} @closeMenu={{dd.close}} />
-              {{#if (or this.updatedAtLabel this.createdAtLabel)}}
+              <Menu
+                @items={{this.workspace.menuItems}}
+                @closeMenu={{dd.close}}
+              />
+              {{#if
+                (or this.workspace.updatedAtLabel this.workspace.createdAtLabel)
+              }}
                 <div
                   class='workspace-menu-footer'
                   data-test-workspace-menu-footer={{@realmIdentifier}}
                 >
-                  {{#if this.updatedAtLabel}}
+                  {{#if this.workspace.updatedAtLabel}}
                     <span
                       class='workspace-menu-footer__value'
-                    >{{this.updatedAtLabel}}</span>
+                    >{{this.workspace.updatedAtLabel}}</span>
                   {{/if}}
-                  {{#if this.createdAtLabel}}
+                  {{#if this.workspace.createdAtLabel}}
                     <span class='workspace-menu-footer__row'>
                       <span class='workspace-menu-footer__label'>Created</span>
                       <span
                         class='workspace-menu-footer__value'
-                      >{{this.createdAtLabel}}</span>
+                      >{{this.workspace.createdAtLabel}}</span>
                     </span>
                   {{/if}}
                 </div>
@@ -280,7 +260,7 @@ export default class Workspace extends Component<Signature> {
             </:content>
           </BoxelDropdown>
         </div>
-        {{#if this.hasPublishedRealms}}
+        {{#if this.workspace.hasPublishedRealms}}
           <button
             class='host-trigger'
             type='button'
@@ -288,8 +268,10 @@ export default class Workspace extends Component<Signature> {
             {{on 'click' this.toggleHostDropdown}}
           >
             <span class='trigger-house'><Home width='13' height='13' /></span>
-            <span class='trigger-url'>{{this.displayPublishedURL}}</span>
-            {{#if (gt this.publishedRealmURLs.length 1)}}
+            <span
+              class='trigger-url'
+            >{{this.workspace.displayPublishedURL}}</span>
+            {{#if (gt this.workspace.publishedRealmURLs.length 1)}}
               <span class='trigger-chevron'>&#x25BE;</span>
             {{/if}}
           </button>
@@ -301,7 +283,7 @@ export default class Workspace extends Component<Signature> {
             >
               <span class='dropdown-header'>Launch in new window</span>
               <ul class='dropdown-list'>
-                {{#each this.publishedRealmURLs as |url|}}
+                {{#each this.workspace.publishedRealmURLs as |url|}}
                   <li>
                     <button
                       type='button'
@@ -320,9 +302,12 @@ export default class Workspace extends Component<Signature> {
 
         {{#unless @isFavoritesSection}}
           <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
-            <span class='name' data-test-workspace-name>{{this.name}}</span>
+            <span
+              class='name'
+              data-test-workspace-name
+            >{{this.workspace.name}}</span>
             <span class='visibility' data-test-workspace-visibility>
-              {{#if this.hasPublishedRealms}}
+              {{#if this.workspace.hasPublishedRealms}}
                 <Tooltip @placement='top'>
                   <:trigger>
                     <span class='hosted-icon'>
@@ -337,67 +322,69 @@ export default class Workspace extends Component<Signature> {
                   <this.visibilityIcon width='12' height='12' />
                 </:trigger>
                 <:content>
-                  {{this.visibilityLabel}}
+                  {{this.workspace.visibilityLabel}}
                 </:content>
               </Tooltip>
-              <span class='visibility-label'>{{this.visibility}}</span>
+              <span
+                class='visibility-label'
+              >{{this.workspace.visibility}}</span>
             </span>
           </div>
         {{/unless}}
       </div>
       {{! Sent out of the tile so a size container around the tiles can't
         trap these fixed-position modals. }}
-      {{#if this.showDeleteModal}}
+      {{#if this.workspace.showDeleteModal}}
         <ToElsewhere
           @named='modal-elsewhere'
           @send={{component
             DeleteWorkspaceModal
             realmIdentifier=@realmIdentifier
-            realmInfo=this.realmInfo
-            name=this.name
-            realmURLText=this.realmURLText
-            isLoadingSummary=this.loadDeleteSummaryTask.isRunning
-            summaryText=this.deleteSummaryText
-            publishedRealmURLs=this.publishedRealmURLs
-            error=this.deleteError
-            isDeleting=this.deleteWorkspaceTask.isRunning
-            onConfirm=(perform this.deleteWorkspaceTask)
-            onClose=this.closeDeleteModal
-            returnFocusTarget=this.returnFocusTarget
+            realmInfo=this.workspace.realmInfo
+            name=this.workspace.name
+            realmURLText=this.workspace.realmURLText
+            isLoadingSummary=this.workspace.loadDeleteSummaryTask.isRunning
+            summaryText=this.workspace.deleteSummaryText
+            publishedRealmURLs=this.workspace.publishedRealmURLs
+            error=this.workspace.deleteError
+            isDeleting=this.workspace.deleteWorkspaceTask.isRunning
+            onConfirm=(perform this.workspace.deleteWorkspaceTask)
+            onClose=this.workspace.closeDeleteModal
+            returnFocusTarget=this.workspace.returnFocusTarget
           }}
         />
       {{/if}}
-      {{#if this.showArchiveModal}}
+      {{#if this.workspace.showArchiveModal}}
         <ToElsewhere
           @named='modal-elsewhere'
           @send={{component
             ArchiveWorkspaceModal
             realmIdentifier=@realmIdentifier
-            realmInfo=this.realmInfo
-            name=this.name
-            realmURLText=this.realmURLText
-            error=this.archiveError
-            isArchiving=this.archiveWorkspaceTask.isRunning
-            onConfirm=(perform this.archiveWorkspaceTask)
-            onClose=this.closeArchiveModal
-            returnFocusTarget=this.returnFocusTarget
+            realmInfo=this.workspace.realmInfo
+            name=this.workspace.name
+            realmURLText=this.workspace.realmURLText
+            error=this.workspace.archiveError
+            isArchiving=this.workspace.archiveWorkspaceTask.isRunning
+            onConfirm=(perform this.workspace.archiveWorkspaceTask)
+            onClose=this.workspace.closeArchiveModal
+            returnFocusTarget=this.workspace.returnFocusTarget
           }}
         />
       {{/if}}
-      {{#if this.showDuplicateModal}}
+      {{#if this.workspace.showDuplicateModal}}
         <ToElsewhere
           @named='modal-elsewhere'
           @send={{component
             DuplicateWorkspaceModal
             realmIdentifier=@realmIdentifier
-            realmInfo=this.realmInfo
-            name=this.name
-            error=this.duplicateError
-            isDuplicating=this.duplicateWorkspaceTask.isRunning
-            progressLabel=this.duplicateProgressLabel
-            onConfirm=(perform this.duplicateWorkspaceTask)
-            onClose=this.closeDuplicateModal
-            returnFocusTarget=this.returnFocusTarget
+            realmInfo=this.workspace.realmInfo
+            name=this.workspace.name
+            error=this.workspace.duplicateError
+            isDuplicating=this.workspace.duplicateWorkspaceTask.isRunning
+            progressLabel=this.workspace.duplicateProgressLabel
+            onConfirm=(perform this.workspace.duplicateWorkspaceTask)
+            onClose=this.workspace.closeDuplicateModal
+            returnFocusTarget=this.workspace.returnFocusTarget
           }}
         />
       {{/if}}
@@ -1029,182 +1016,25 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  get isFavorited() {
-    return this.matrixService.workspaceFavorites.includes(
-      this.args.realmIdentifier,
-    );
-  }
+  @service declare private realm: RealmService;
+
+  @tracked private isHostDropdownOpen = false;
+
+  private workspace = new WorkspaceActions(
+    this,
+    () => this.args.realmIdentifier,
+  );
 
   // Serves as both the button's accessible label and its tooltip text, so the
   // two can't drift apart.
   private get favoriteLabel() {
-    return this.isFavorited ? 'Remove from Favorites' : 'Add to Favorites';
-  }
-
-  @service declare private workspaceDuplication: WorkspaceDuplicationService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private matrixService: MatrixService;
-  @service declare private network: NetworkService;
-  @service declare private recentFilesService: RecentFilesService;
-  @service declare private realm: RealmService;
-  @service declare private realmServer: RealmServerService;
-
-  @tracked private showDeleteModal = false;
-  @tracked private deleteError: string | undefined;
-  @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
-  @tracked private showArchiveModal = false;
-  @tracked private archiveError: string | undefined;
-  @tracked private showDuplicateModal = false;
-  @tracked private duplicateError: string | undefined;
-  private duplicateAbortController: AbortController | undefined;
-  @tracked private duplicateProgress:
-    | { copied: number; total: number }
-    | undefined;
-  @tracked private isHostDropdownOpen = false;
-
-  private tileElement: HTMLElement | undefined;
-  private captureTile = modifier((element: HTMLElement) => {
-    this.tileElement = element;
-  });
-  private menuTrigger: HTMLElement | undefined;
-  private captureMenuTrigger = modifier((element: HTMLElement) => {
-    this.menuTrigger = element;
-  });
-
-  // Recorded when a modal opens, since a delete or archive removes this tile
-  // before the modal hands focus back. The position is within this tile's own
-  // list: nav indexes shift when a removed favorite also leaves Favorites.
-  // The list's ancestors are kept too, as the list itself goes once empty.
-  private focusContext:
-    | { tileList: HTMLElement; ancestors: HTMLElement[]; position: number }
-    | undefined;
-
-  private workspaceTargets(container: HTMLElement) {
-    return [...container.querySelectorAll<HTMLElement>(WORKSPACE_TILE_TARGET)];
-  }
-
-  private rememberFocusContext() {
-    let tileList = this.tileElement?.parentElement;
-    if (!tileList) {
-      this.focusContext = undefined;
-      return;
-    }
-    let ancestors: HTMLElement[] = [];
-    for (let el = tileList.parentElement; el; el = el.parentElement) {
-      ancestors.push(el);
-    }
-    this.focusContext = {
-      tileList,
-      ancestors,
-      position: this.workspaceTargets(tileList).findIndex((target) =>
-        this.tileElement?.contains(target),
-      ),
-    };
-  }
-
-  // Focus goes back to the menu trigger. Once the tile is gone it goes to the
-  // workspace that took its place in the list, or else the last one left in
-  // it, or else the nearest one outside it. New Workspace comes last, so Enter
-  // doesn't create a workspace, and any tile keeps arrow keys working.
-  private returnFocusTarget = (): HTMLElement | undefined => {
-    if (this.menuTrigger?.isConnected) {
-      return this.menuTrigger;
-    }
-    if (!this.focusContext) {
-      return undefined;
-    }
-    let { tileList, ancestors, position } = this.focusContext;
-    if (tileList.isConnected) {
-      let targets = this.workspaceTargets(tileList);
-      let target = targets[position] ?? targets.at(-1);
-      if (target) {
-        return target;
-      }
-    }
-    for (let ancestor of ancestors) {
-      let target = ancestor.isConnected
-        ? ancestor.querySelector<HTMLElement>(WORKSPACE_TILE_TARGET)
-        : null;
-      if (target) {
-        return target;
-      }
-    }
-    for (let container of [tileList, ...ancestors]) {
-      let target = container.isConnected
-        ? container.querySelector<HTMLElement>('[data-nav-index]')
-        : null;
-      if (target) {
-        return target;
-      }
-    }
-    return undefined;
-  };
-
-  @tracked private reindexError: string | undefined;
-
-  constructor(...args: [any, any]) {
-    super(...args);
-    this.loadRealmTask
-      .perform()
-      .catch((error: unknown) => this.reportRealmLoadFailure(error));
-  }
-
-  willDestroy() {
-    super.willDestroy();
-    this.clearReindexError();
-  }
-
-  // Fills in the session and the realm metadata the tile renders from. The
-  // tile renders immediately off `realm.info()`, which answers synchronously
-  // with a placeholder, so this runs in the background and nothing awaits it.
-  private loadRealmTask = task(async () => {
-    await this.realm.login(this.args.realmIdentifier);
-    await this.realm.ensureRealmMeta(this.args.realmIdentifier);
-  });
-
-  // An unconsumed ember-concurrency task instance reports its error through
-  // `Ember.onerror`, or throws it from a run-loop timer when nothing sets
-  // that. Without a catch here a rejected load fails whichever test is
-  // running rather than the one that rendered this tile.
-  //
-  // The load is best-effort: on failure the tile keeps the placeholder name
-  // `realm.info()` returns and an empty stats row. It does not re-request on
-  // its own — the real values arrive whenever something else populates the
-  // realm resource's info. Cancellation is the ordinary teardown path, when
-  // the chooser closes mid-load, and stays silent.
-  //
-  // The stack is logged alongside the message because `TypeError: Failed to
-  // fetch` — how a realm round trip fails when the connection drops rather
-  // than answering an error status — names neither the request nor the
-  // caller on its own.
-  private reportRealmLoadFailure(error: unknown) {
-    if (didCancel(error)) {
-      return;
-    }
-    log.warn(
-      `workspace tile background realm load failed for ${this.args.realmIdentifier}: ${error}`,
-      error instanceof Error ? error.stack : undefined,
-    );
-  }
-
-  @cached
-  private get realmInfo() {
-    return this.realm.info(this.args.realmIdentifier);
-  }
-
-  private get name() {
-    return this.realmInfo.name;
+    return this.workspace.isFavorited
+      ? 'Remove from Favorites'
+      : 'Add to Favorites';
   }
 
   private get realmURLDescriptionId() {
     return `${guidFor(this)}-realm-url`;
-  }
-
-  private get realmURLText() {
-    return realmURLDisplayText(
-      this.network.virtualNetwork,
-      this.args.realmIdentifier,
-    );
   }
 
   // The selection ring is shown only once the user has actively engaged the
@@ -1214,116 +1044,15 @@ export default class Workspace extends Component<Signature> {
     return Boolean(this.args.isSelected && this.args.selectionActive);
   }
 
-  get tileMenuItems() {
-    let items = [
-      new MenuItem({
-        label: this.isFavorited ? 'Unfavorite' : 'Favorite',
-        icon: this.isFavorited ? StarFilled : Star,
-        action: this.toggleFavorite,
-      }),
-    ];
-    // Duplicating is scoped to the skills realm: it is the one realm whose
-    // contents are all-relative references, which a file-by-file copy
-    // preserves intact. Generic realm cloning needs link rewriting and is
-    // deliberately not offered here.
-    if (this.canDuplicateWorkspace) {
-      items.push(
-        new MenuItem({
-          label: 'Duplicate Workspace',
-          icon: CopyIcon,
-          action: this.openDuplicateModal,
-        }),
-      );
-    }
-    items.push(
-      new MenuItem({
-        id: 'realm-settings',
-        label: 'Realm Settings',
-        icon: FileSettingsIcon,
-        action: this.openRealmConfig,
-      }),
-    );
-    // Re-index and Archive are owner-only and appear only on tiles the user
-    // owns.
-    if (this.canReindexWorkspace) {
-      items.push(
-        new MenuItem({
-          label: 'Re-index',
-          icon: RefreshIcon,
-          action: this.reindexWorkspaceTask.perform,
-          // Gate on the live indexing flag, not reindexWorkspaceTask.isRunning:
-          // the task resolves the instant the 204 lands (sub-second), while the
-          // reindex itself runs much longer. isIndexing stays true for the whole
-          // pass. Repeat clicks are server-safe regardless (the reindex queue
-          // coalesces them), so this guard is purely a UX nicety.
-          disabled: this.isReindexing,
-        }),
-      );
-    }
-    if (this.canArchiveWorkspace) {
-      items.push(
-        new MenuItem({
-          label: 'Archive Workspace',
-          icon: ArchiveIcon,
-          action: this.openArchiveModal,
-        }),
-      );
-    }
-    items.push(
-      new MenuItem({
-        label: 'Delete Workspace',
-        icon: IconTrash,
-        action: this.openDeleteModal,
-        dangerous: true,
-        disabled: !this.canDeleteWorkspace,
-      }),
-    );
-    return items;
-  }
-
-  @action openRealmConfig() {
-    let realmURL = this.args.realmIdentifier.endsWith('/')
-      ? this.args.realmIdentifier
-      : `${this.args.realmIdentifier}/`;
-    this.operatorModeStateService.openCardInInteractMode(
-      `${realmURL}realm`,
-      'edit',
-    );
-    this.operatorModeStateService.closeWorkspaceChooser();
-  }
-
-  @action async toggleFavorite() {
-    if (this.isFavorited) {
-      await this.matrixService.removeWorkspaceFavorite(
-        this.args.realmIdentifier,
-      );
-    } else {
-      await this.matrixService.addWorkspaceFavorite(this.args.realmIdentifier);
-    }
-  }
-
-  private get primaryPublishedURL() {
-    return this.publishedRealmURLs[0] ?? '';
-  }
-
-  private get displayPublishedURL() {
-    try {
-      let url = new URL(this.primaryPublishedURL);
-      return url.host + url.pathname.replace(/\/$/, '');
-    } catch {
-      return this.primaryPublishedURL;
-    }
-  }
-
   @action toggleHostDropdown(event: Event) {
     event.stopPropagation();
-    if (!this.hasPublishedRealms) return;
+    if (!this.workspace.hasPublishedRealms) return;
     this.isHostDropdownOpen = !this.isHostDropdownOpen;
   }
 
   @action openPublishedRealm(url: string, event: MouseEvent) {
     event.stopPropagation();
-    window.open(url, '_blank', 'noopener,noreferrer');
+    this.workspace.openPublishedRealm(url);
     this.isHostDropdownOpen = false;
   }
 
@@ -1331,20 +1060,8 @@ export default class Workspace extends Component<Signature> {
     this.isHostDropdownOpen = false;
   }
 
-  private get backgroundURL() {
-    return this.realmInfo.backgroundURL;
-  }
-
-  private get backgroundImageURL() {
-    return this.backgroundURL ? `url(${this.backgroundURL})` : '';
-  }
-
-  private get visibility() {
-    return this.realmInfo.visibility;
-  }
-
   private get visibilityIcon() {
-    switch (this.visibility) {
+    switch (this.workspace.visibility) {
       case 'public':
         return IconGlobe;
       case 'shared':
@@ -1354,35 +1071,6 @@ export default class Workspace extends Component<Signature> {
       default:
         throw new Error('unknown realm visibility');
     }
-  }
-
-  private get visibilityLabel() {
-    switch (this.visibility) {
-      case 'public':
-        return 'Public workspace';
-      case 'shared':
-        return 'Shared workspace';
-      case 'private':
-        return 'Private workspace';
-      default:
-        return '';
-    }
-  }
-
-  private get createdAtLabel() {
-    let { createdAt } = this.realmInfo;
-    if (!createdAt) {
-      return undefined;
-    }
-    return formatRelativeTime(new Date(createdAt));
-  }
-
-  private get updatedAtLabel() {
-    let { updatedAt } = this.realmInfo;
-    if (!updatedAt) {
-      return undefined;
-    }
-    return formatUpdatedTime(new Date(updatedAt));
   }
 
   // Compact metadata for the enlarged favorite tile's in-tile content (see
@@ -1407,370 +1095,4 @@ export default class Workspace extends Component<Signature> {
       { label: 'Definitions', count: counts.definitionCount },
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
-
-  private get canDeleteWorkspace() {
-    return this.realm.isRealmOwner(this.args.realmIdentifier);
-  }
-
-  private get canArchiveWorkspace() {
-    return this.realm.isRealmOwner(this.args.realmIdentifier);
-  }
-
-  private get canReindexWorkspace() {
-    return this.realm.isRealmOwner(this.args.realmIdentifier);
-  }
-
-  private get canDuplicateWorkspace() {
-    return ensureTrailingSlash(this.args.realmIdentifier) === skillsRealmURL;
-  }
-
-  private get isReindexing() {
-    return this.realmInfo.isIndexing;
-  }
-
-  private get deleteSummaryText() {
-    if (!this.deleteSummary) {
-      return null;
-    }
-    let { cards, definitions, files } = this.deleteSummary;
-    return formatWorkspaceDeleteSummary([
-      { label: 'card', count: cards },
-      { label: 'definition', count: definitions },
-      { label: 'file', count: files },
-    ]);
-  }
-
-  private get publishedRealmURLs() {
-    return publishedRealmURLsFromInfo(this.realmInfo);
-  }
-
-  private get hasPublishedRealms() {
-    return this.publishedRealmURLs.length > 0;
-  }
-
-  @action async openWorkspace() {
-    await this.operatorModeStateService.openWorkspace(
-      this.args.realmIdentifier,
-    );
-  }
-
-  @action openDeleteModal() {
-    if (!this.canDeleteWorkspace) {
-      return;
-    }
-    this.deleteSummary = undefined;
-    this.deleteError = undefined;
-    this.rememberFocusContext();
-    this.showDeleteModal = true;
-    this.loadDeleteSummaryTask.perform();
-  }
-
-  @action closeDeleteModal() {
-    if (this.deleteWorkspaceTask.isRunning) {
-      return;
-    }
-    this.showDeleteModal = false;
-    this.deleteError = undefined;
-  }
-
-  @action openArchiveModal() {
-    if (!this.canArchiveWorkspace) {
-      return;
-    }
-    this.archiveError = undefined;
-    this.rememberFocusContext();
-    this.showArchiveModal = true;
-  }
-
-  @action openDuplicateModal() {
-    if (!this.canDuplicateWorkspace) {
-      return;
-    }
-    this.duplicateError = undefined;
-    this.rememberFocusContext();
-    this.showDuplicateModal = true;
-  }
-
-  @action closeDuplicateModal() {
-    if (this.duplicateWorkspaceTask.isRunning) {
-      this.cancelDuplication();
-      return;
-    }
-    this.showDuplicateModal = false;
-    this.duplicateError = undefined;
-  }
-
-  // Frees the user immediately: the modal closes here while the service
-  // notices the abort at its next batch boundary and cleans up the partial
-  // realm in the background.
-  @action private cancelDuplication() {
-    this.duplicateAbortController?.abort();
-    this.showDuplicateModal = false;
-    this.duplicateProgress = undefined;
-  }
-
-  private get duplicateProgressLabel() {
-    if (!this.duplicateProgress) {
-      return 'Preparing to copy…';
-    }
-    let { copied, total } = this.duplicateProgress;
-    return `Copying ${copied} of ${total} ${pluralize('file', total)}…`;
-  }
-
-  @action closeArchiveModal() {
-    if (this.archiveWorkspaceTask.isRunning) {
-      return;
-    }
-    this.showArchiveModal = false;
-    this.archiveError = undefined;
-  }
-
-  private archiveWorkspaceTask = dropTask(async () => {
-    this.archiveError = undefined;
-
-    try {
-      let realmPath = new RealmPaths(this.args.realmIdentifier);
-      let isActiveWorkspace =
-        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
-        this.operatorModeStateService
-          .getOpenCardIds()
-          .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.state.codePath?.startsWith(
-          this.args.realmIdentifier,
-        );
-
-      await this.realmServer.archiveRealm(this.args.realmIdentifier);
-      // Archiving seals the realm; drop its local session so background
-      // requests don't loop on 403. Restoring re-creates the session.
-      this.realm.removeRealm(this.args.realmIdentifier);
-
-      if (isActiveWorkspace) {
-        this.operatorModeStateService.clearStacks();
-        await this.operatorModeStateService.updateCodePath(null);
-        this.operatorModeStateService.openWorkspaceChooser();
-      }
-
-      this.showArchiveModal = false;
-    } catch (error: any) {
-      this.archiveError = error.message;
-    }
-  });
-
-  private duplicateWorkspaceTask = dropTask(async () => {
-    this.duplicateError = undefined;
-    this.duplicateProgress = undefined;
-    this.duplicateAbortController = new AbortController();
-
-    try {
-      await this.workspaceDuplication.duplicateWorkspace(
-        this.args.realmIdentifier,
-        {
-          onProgress: (copied, total) => {
-            this.duplicateProgress = { copied, total };
-          },
-          signal: this.duplicateAbortController.signal,
-        },
-      );
-      this.showDuplicateModal = false;
-    } catch (error: any) {
-      // A cancellation is the user's own doing; only real failures are shown.
-      if (error?.name !== 'AbortError') {
-        this.duplicateError = String(error?.message ?? error);
-      }
-    } finally {
-      // Also runs when the task is cancelled by component teardown; aborting
-      // here makes the service stop copying and clean up rather than carrying
-      // on with no UI attached. A no-op after normal completion.
-      this.duplicateAbortController?.abort();
-      this.duplicateProgress = undefined;
-      this.duplicateAbortController = undefined;
-    }
-  });
-
-  private reindexWorkspaceTask = dropTask(async () => {
-    this.clearReindexError();
-    try {
-      await this.realm.fullReindex(this.args.realmIdentifier);
-    } catch (error: any) {
-      // The error stays put until the user dismisses it or retries the
-      // reindex, so a failed pass never disappears before it's noticed.
-      this.reindexError = String(error?.message ?? error);
-    }
-  });
-
-  @action private clearReindexError() {
-    this.reindexError = undefined;
-  }
-
-  private loadDeleteSummaryTask = dropTask(async () => {
-    try {
-      let response = await this.network.authedFetch(
-        `${this.args.realmIdentifier}_mtimes`,
-        {
-          headers: {
-            Accept: SupportedMimeType.Mtimes,
-          },
-        },
-      );
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch workspace contents: ${response.status}`,
-        );
-      }
-      let json = (await response.json()) as {
-        data: {
-          attributes: {
-            mtimes: Record<string, number>;
-          };
-        };
-      };
-      this.deleteSummary = summarizeWorkspaceContents(
-        Object.keys(json.data.attributes.mtimes),
-      );
-    } catch (error) {
-      console.error(error);
-      this.deleteSummary = undefined;
-    }
-  });
-
-  private deleteWorkspaceTask = dropTask(async () => {
-    this.deleteError = undefined;
-
-    try {
-      let realmPath = new RealmPaths(this.args.realmIdentifier);
-      let isActiveWorkspace =
-        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
-        this.operatorModeStateService
-          .getOpenCardIds()
-          .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.state.codePath?.startsWith(
-          this.args.realmIdentifier,
-        );
-
-      await this.realmServer.deleteRealm(this.args.realmIdentifier);
-      await this.matrixService.removeRealmFromAccountData(
-        this.args.realmIdentifier,
-      );
-      this.recentFilesService.removeRecentFilesForRealmURL(
-        this.args.realmIdentifier,
-      );
-      for (let publishedRealmURL of this.publishedRealmURLs) {
-        this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
-      }
-      this.realm.removeRealm(this.args.realmIdentifier);
-
-      if (isActiveWorkspace) {
-        this.operatorModeStateService.clearStacks();
-        await this.operatorModeStateService.updateCodePath(null);
-        this.operatorModeStateService.openWorkspaceChooser();
-      }
-
-      this.showDeleteModal = false;
-    } catch (error: any) {
-      this.deleteError = error.message;
-    }
-  });
-}
-
-interface WorkspaceDeleteSummary {
-  cards: number;
-  definitions: number;
-  files: number;
-}
-
-export function summarizeWorkspaceContents(
-  fileURLs: string[],
-): WorkspaceDeleteSummary {
-  return fileURLs.reduce(
-    (summary, fileURL) => {
-      let path = new URL(fileURL).pathname;
-      if (path.endsWith('/realm.json')) {
-        return summary;
-      }
-      if (path.endsWith('.json')) {
-        summary.cards++;
-      } else if (hasExecutableExtension(path)) {
-        summary.definitions++;
-      } else {
-        summary.files++;
-      }
-      return summary;
-    },
-    {
-      cards: 0,
-      definitions: 0,
-      files: 0,
-    } as WorkspaceDeleteSummary,
-  );
-}
-
-export function formatWorkspaceDeleteSummary(
-  counts: { label: string; count: number }[],
-): string {
-  let nonZeroCounts = counts
-    .filter(({ count }) => count > 0)
-    .map(({ label, count }) => `${count} ${pluralize(label, count)}`);
-
-  if (nonZeroCounts.length === 0) {
-    return 'no cards, definitions, or files';
-  }
-
-  return joinWithAnd(nonZeroCounts);
-}
-
-export function joinWithAnd(parts: string[]): string {
-  if (parts.length <= 1) {
-    return parts[0] ?? '';
-  }
-
-  if (parts.length === 2) {
-    return `${parts[0]} and ${parts[1]}`;
-  }
-
-  return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
-}
-
-export function formatRelativeTime(date: Date): string {
-  let diffMinutes = Math.floor((Date.now() - date.getTime()) / (60 * 1000));
-  if (diffMinutes < 1) {
-    return formatDate(date, 'h:mm a');
-  }
-  if (diffMinutes < 60) {
-    return `${diffMinutes} min ago`;
-  }
-  let diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
-  }
-  return formatDate(date, 'EEE, MMM d, yyyy');
-}
-
-export function formatUpdatedTime(date: Date): string {
-  // Clamp to 0: a clock skewed slightly ahead of the server (or a
-  // just-written timestamp racing this render) can otherwise produce a
-  // negative diff.
-  let diffSeconds = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 1000),
-  );
-  if (diffSeconds === 0) {
-    return 'Updated just now';
-  }
-  if (diffSeconds < 60) {
-    return `Updated ${diffSeconds} sec ago`;
-  }
-  let diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) {
-    return `Updated ${diffMinutes} min ago`;
-  }
-  let diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `Updated ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
-  }
-  let diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) {
-    return `Updated ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
-  }
-  let diffMonths = Math.floor(diffDays / 30);
-  return `Updated ${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
 }
