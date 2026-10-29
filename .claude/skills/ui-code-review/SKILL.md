@@ -2,7 +2,7 @@
 name: ui-code-review
 description: Review local, unpushed UI changes — the working tree and the branch's commits over main — with the UI lens (the boxel-ui-guidelines UI review procedure and better-interface's six domains) plus pr-review's correctness and classification, and report the findings in the terminal. Nothing is posted, and no file is edited until the user picks which findings to fix. Use when asked to review local UI changes before pushing, to UI-review or design-review the working tree, a branch that has no PR yet, or uncommitted template, component or scoped-style edits. For an open pull request use pr-review; for a guided tour of a pushed branch use review-branch.
 argument-hint: '[base-ref | --uncommitted]'
-allowed-tools: Read, Grep, Glob, Bash(git merge-base *, git diff *, git log *, git ls-files *, git grep *, git rev-parse *, git status *, gh pr view *, node scripts/adr-for.mts *)
+allowed-tools: Read, Grep, Glob, Bash(git merge-base *, git diff *, git log *, git ls-files *, git grep *, git rev-parse *, git status *, gh pr view *, gh api repos/*/pulls/*/comments *, node scripts/adr-for.mts *)
 ---
 
 # UI code review
@@ -25,7 +25,7 @@ Done when: the base, the file list, and the lines the change wrote are known.
 
 - `git log --oneline <base>..HEAD` for what is already committed.
 - `node scripts/adr-for.mts <files>` lists the ADRs whose scope covers the change; read each `accepted` or `proposed` one before judging it.
-- If the branch already has an open pull request (`gh pr view --json number,url,reviews,comments`), read its threads, so a finding already raised there gets one pointer line instead of a repeat. No pull request is the common case; skip this then.
+- If the branch already has an open pull request, read its review bodies and comments (`gh pr view --json number,url,reviews,comments`) and its inline review threads (`gh api repos/{owner}/{repo}/pulls/{n}/comments --paginate`, which `gh pr view` doesn't return), so a finding already raised there gets one pointer line instead of a repeat. No pull request is the common case; skip this then.
 
 ## 3. Run the UI lens in full
 
