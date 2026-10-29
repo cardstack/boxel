@@ -1706,6 +1706,14 @@ export type OperationErrorCode =
   // A `callApi` invoked interactively — from a browser, the AI assistant or
   // the CLI — whose binding was approved for pipelines only. Nothing was sent.
   | 'interactive-use-not-approved'
+  // A `callApi` slot has no usable credential: its key was rejected, or it
+  // mints its access token and minting failed. Carries a 424 and
+  // `meta.reason`: `rejected` (the vendor refused it, as an OAuth refresh
+  // answered `invalid_grant`; its owner reconnects), `needs-admin` (the OAuth
+  // client it mints through was deleted, unshared, suspended or answered
+  // `invalid_client`) or `unavailable` (the token endpoint kept failing after
+  // retries). Nothing was sent.
+  | 'credential-rejected'
   // A `callApi` invoked while a card is being rendered. A render is replayed
   // and cached, and must not send requests to the world on anyone's behalf.
   // Nothing was sent.
