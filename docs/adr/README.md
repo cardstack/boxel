@@ -29,3 +29,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [012](012-hold-one-scroll-anchor-per-change-chosen-by-priority-and-read-from-layout.md)         | Hold one scroll anchor per change, chosen by priority and read from layout                | proposed |
 | [013](013-settle-a-transcripts-scroll-anchor-in-the-render-pass-before-motion-measures.md)      | Settle a transcript's scroll anchor in the render pass, before motion measures            | proposed |
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed |
+| [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed |
