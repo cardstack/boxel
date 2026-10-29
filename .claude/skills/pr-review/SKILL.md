@@ -22,7 +22,7 @@ Load these companion skills before writing a single comment; each applies in **b
 
 If the diff touches an area with a dedicated domain skill (index-query-engine, search, gts-component-conventions, ember-best-practices, …), load it — those files carry the invariants the change must preserve, which is exactly what a review checks.
 
-If the diff is a UI change, as `references/ui-lens.md` defines it, also run that lens. Its findings go through Phases 3–6 like any other.
+If the diff is a UI change, as `references/ui-lens.md` defines it, also run that lens in full: Phase 1 step 7 loads it, and the pre-submit self-check confirms it ran. Its findings go through Phases 3–6 like any other.
 
 ## Phase 1 — Context before judgment
 
@@ -32,6 +32,7 @@ If the diff is a UI change, as `references/ui-lens.md` defines it, also run that
 4. **Check out the head branch** read-only in a worktree under `.claude/worktrees/`. Never commit to or push another author's branch. The diff shows what changed; the review is about how that lands in the code around it, which requires the whole tree.
 5. **Read beyond the diff.** For each non-trivial hunk, read the enclosing file, then the callers and callees of everything it touches. The highest-value findings usually live one call site away from the diff.
 6. **Read the ADRs that govern the diff.** Run `node scripts/adr-for.mts $(gh pr diff {n} --name-only)` from the head worktree; it lists the ADRs whose scope globs match the changed files. Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
+7. **Load the UI lens, when the diff is a UI change.** Reading `references/ui-lens.md` is not running it. Load, with the Skill tool, every skill its §1 names: `gts-component-conventions` when a `.gts` file is in scope; `boxel-skills:boxel-ui-guidelines`, then read its three reference files and run the procedure's steps 0–9, starting with the step-0 grep; and `interfaces:better-interface`, then each of its six domain skills in order. A smaller hand-picked pass replaces none of them, whatever the diff's size or the review's effort level. Without the `boxel-skills` plugin, read `boxel-ui-guidelines` from the `fetch:skills` cache with the Read tool, starting with its `SKILL.md`, as AGENTS.md's "UI changes" section describes. A skill that can't be loaded or read that way is the only reason a lens is missing, and Phase 5's opening sentence then says it wasn't reviewed, by its skill name (`better-interface` for the whole `interfaces` plugin). The project's `PreToolUse` hook refuses to post a review of a UI change until every one of these skills that the session can load has been loaded, and refuses a review body that doesn't say one it couldn't wasn't reviewed.
 
 ## Phase 2 — Investigate like the next owner
 
@@ -152,6 +153,7 @@ Pre-submit self-check over every comment and the body:
 - Evergreen: no ticket IDs, no PR numbers, no journey narration in your prose.
 - Every claim either carries its evidence or states that it was verified and how.
 - Every finding carries its class and blocking-ness.
+- On a UI change, every skill Phase 1 step 7 names was loaded with the Skill tool and run, or the opening sentence names it as not reviewed and says why it didn't load. This holds for a draft that is never posted, too.
 - Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out. A reply that closes a thread the author opened is the exception: stating that a fix lands _is_ the answer they are waiting on.
 - **One pass with a knife, over every comment and the body.** Take each sentence and ask what the author does differently for having read it. Cut what narrates their own diff back to them, what tours a subsystem the ask doesn't turn on, what explains why other code is fine, and what reports a clean check. On a review whose findings are all non-blocking, expect this pass to remove more than it keeps — that is exactly where volume substitutes for substance.
 
