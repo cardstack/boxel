@@ -1696,15 +1696,15 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert.dom(`${CATALOGS_FLYOUT} header`).hasText('Catalogs');
         assert.deepEqual(
-          findAll(`${CATALOGS_FLYOUT} [data-test-section-rail-catalog]`).map(
-            (el) => el.getAttribute('data-test-section-rail-catalog'),
+          findAll(`${CATALOGS_FLYOUT} [data-test-section-rail-realm]`).map(
+            (el) => el.getAttribute('data-test-section-rail-realm'),
           ),
           tileNames,
           'the catalogs the page lists, in its order',
         );
 
         await click(
-          `${CATALOGS_FLYOUT} [data-test-section-rail-catalog="${tileNames[0]}"]`,
+          `${CATALOGS_FLYOUT} [data-test-section-rail-realm="${tileNames[0]}"]`,
         );
 
         assert.dom('[data-test-dashboard]').doesNotExist();
@@ -1725,12 +1725,10 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(FLYOUT).exists();
         assert.dom(`${FLYOUT} header`).hasText('Favorites');
         assert
-          .dom(`${FLYOUT} [data-test-section-rail-favorite]`)
+          .dom(`${FLYOUT} [data-test-section-rail-realm]`)
           .exists({ count: 1 });
 
-        await click(
-          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
-        );
+        await click(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
 
         assert.dom('[data-test-dashboard]').doesNotExist();
         assert.strictEqual(
@@ -1750,7 +1748,7 @@ module('Acceptance | dashboard', function (hooks) {
         await pressEntry();
 
         assert
-          .dom(`${FLYOUT} [data-test-section-rail-favorites-empty]`)
+          .dom(`${FLYOUT} [data-test-section-rail-flyout-empty]`)
           .includesText('Favorite a workspace');
       });
 
@@ -1761,12 +1759,10 @@ module('Acceptance | dashboard', function (hooks) {
         });
         favoriteWorkspaceA();
         await pressEntry();
-        await focus(
-          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
-        );
+        await focus(`${FLYOUT} [data-test-section-rail-realm="Workspace A"]`);
 
         await triggerKeyEvent(
-          `${FLYOUT} [data-test-section-rail-favorite="Workspace A"]`,
+          `${FLYOUT} [data-test-section-rail-realm="Workspace A"]`,
           'keydown',
           'Escape',
         );
