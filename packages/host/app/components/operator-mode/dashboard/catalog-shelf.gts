@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
@@ -213,6 +214,9 @@ export default class CatalogShelf extends Component<Signature> {
         )
       : undefined;
 
+  // Names the story's headline, which describes its actions.
+  private headlineId = (index: number) => `${guidFor(this)}-story-${index}`;
+
   @action private open(cardId: string) {
     this.operatorModeStateService.openCardInInteractMode(cardId);
     this.operatorModeStateService.closeWorkspaceChooser();
@@ -232,7 +236,7 @@ export default class CatalogShelf extends Component<Signature> {
           as |art|
         >
           <ul class='stories' aria-label='From the catalog'>
-            {{#each this.stories key='id' as |story|}}
+            {{#each this.stories key='id' as |story i|}}
               {{#let (this.artFor art.entries story.exampleId) as |artEntry|}}
                 {{! Each story is a scheme island on its own paper, so its
                     text and buttons read that scheme's tokens. }}
@@ -247,6 +251,7 @@ export default class CatalogShelf extends Component<Signature> {
                       above it. }}
                   <h3 class='headline'>
                     <button
+                      id={{this.headlineId i}}
                       type='button'
                       class='story-open'
                       {{on 'click' (fn this.open story.id)}}
@@ -284,7 +289,7 @@ export default class CatalogShelf extends Component<Signature> {
                         @tone='neutral'
                         @appearance='outlined'
                         @shape='pill'
-                        aria-label='Try it {{story.name}}'
+                        aria-describedby={{this.headlineId i}}
                         {{on 'click' (fn this.open story.exampleId)}}
                         data-test-catalog-story-try
                       >Try it</Button>
@@ -294,7 +299,7 @@ export default class CatalogShelf extends Component<Signature> {
                       @tone='neutral'
                       @appearance='accent'
                       @shape='pill'
-                      aria-label='Details {{story.name}}'
+                      aria-describedby={{this.headlineId i}}
                       {{on 'click' (fn this.open story.id)}}
                       data-test-catalog-story-action
                     >Details</Button>
@@ -543,6 +548,11 @@ export default class CatalogShelf extends Component<Signature> {
         --pretui-button-px: var(--boxel-sp-sm);
         position: relative;
         z-index: 2;
+      }
+      /* The theme's ring vanishes on the light papers; the accent shows on
+         every paper. */
+      .action:focus-visible {
+        outline-color: var(--_story-accent);
       }
       .see-all {
         align-self: flex-start;

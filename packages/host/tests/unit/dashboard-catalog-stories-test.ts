@@ -34,7 +34,7 @@ function listing(
         examples.map((link, i) => [`examples.${i}`, { links: { self: link } }]),
       ),
       meta: {
-        adoptsFrom: { module: './listing', name: 'Listing' },
+        adoptsFrom: { module: './listing', name: path.split('/')[1] },
         sparseFields: ['name', 'summary', 'cardThumbnailURL', 'examples'],
       },
     } as unknown as ListingEntry['item'],
@@ -42,11 +42,20 @@ function listing(
 }
 
 module('Unit | dashboard catalog stories', function () {
-  test('a listing’s kind comes from the folder named for its class', function (assert) {
-    assert.strictEqual(kindOf(`${catalog}wine/CardListing/1`), 'Card');
-    assert.strictEqual(kindOf(`${catalog}x/ThemeListing/1`), 'Theme');
-    assert.strictEqual(kindOf(`${catalog}x/Listing/1`), 'Listing');
-    assert.strictEqual(kindOf(`${catalog}x/Other/1`), 'Listing');
+  test('a listing’s kind comes from its class, not its folder', function (assert) {
+    assert.strictEqual(kindOf(listing('wine/CardListing/1').item), 'Card');
+    assert.strictEqual(kindOf(listing('x/ThemeListing/1').item), 'Theme');
+    assert.strictEqual(kindOf(listing('x/Listing/1').item), 'Listing');
+    assert.strictEqual(kindOf(listing('x/Other/1').item), 'Listing');
+    assert.strictEqual(
+      kindOf({
+        ...listing('x/CardListing/1').item!,
+        meta: { adoptsFrom: { module: './listing', name: 'AppListing' } },
+      } as ListingEntry['item']),
+      'App',
+      'a class that disagrees with the folder wins',
+    );
+    assert.strictEqual(kindOf(undefined), 'Listing');
   });
 
   test('the lead story is the pick of the week; the rest say what you get', function (assert) {

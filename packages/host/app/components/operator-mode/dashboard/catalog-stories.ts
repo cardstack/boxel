@@ -4,6 +4,7 @@ import type {
   Relationship,
   Saved,
 } from '@cardstack/runtime-common';
+import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 // Stories on the shelf: few enough that the catalog stays a shelf beside the
 // workspaces rather than the page's main event.
@@ -80,14 +81,13 @@ export function linkedIds(
     .filter((id): id is string => Boolean(id));
 }
 
-// Search reports a listing's base type, but an instance lives in a folder
-// named for its own class ("…/CardListing/<id>"), which says what the
-// listing offers ("Card").
-const LISTING_FOLDER = /^([A-Za-z]+)Listing$/;
+// A listing's own class says what it offers: a `CardListing` offers a card.
+const LISTING_CLASS = /^([A-Za-z]+)Listing$/;
 
-export function kindOf(listingId: string): string {
-  let folder = listingId.split('/').slice(-2, -1)[0] ?? '';
-  return LISTING_FOLDER.exec(folder)?.[1] ?? 'Listing';
+export function kindOf(item: ListingEntry['item']): string {
+  let adoptsFrom = item?.meta?.adoptsFrom;
+  let name = isResolvedCodeRef(adoptsFrom) ? adoptsFrom.name : '';
+  return LISTING_CLASS.exec(name)?.[1] ?? 'Listing';
 }
 
 // The label over a story: the lead is the catalog's pick of the week, the
@@ -169,7 +169,7 @@ export function storiesFrom({
     .filter((entry) => text(entry.item?.attributes?.cardThumbnailURL))
     .slice(0, STORY_COUNT)
     .map((entry, index): Story => {
-      let kind = kindOf(entry.id);
+      let kind = kindOf(entry.item);
       let tint = STORY_TINTS[index % STORY_TINTS.length]!;
       let attributes = entry.item?.attributes ?? {};
       return {
