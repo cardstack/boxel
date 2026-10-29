@@ -153,7 +153,14 @@ export default class KeysWindow extends Component<Signature> {
         width: 0.625rem;
         height: 0.625rem;
       }
+      /* On the white panel the theme's teal is 1.31:1, too faint for an
+         indicator, so focus rings drawn in --ring take the primary ink
+         (4.95:1) there, and a checkbox's edge the muted foreground, which
+         marks an unticked box clearly. The bar keeps the teal, which reads
+         on the purple. */
       .body {
+        --ring: var(--primary-ink);
+        --boxel-checkbox-border-color: var(--muted-foreground);
         flex: 1;
         display: flex;
         flex-direction: column;

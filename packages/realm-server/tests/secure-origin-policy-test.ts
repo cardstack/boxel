@@ -16,7 +16,9 @@ import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 //
 // The built pages are also where the theme's tokens resolve, so this is where
 // the error and muted text colours are checked against WCAG AA contrast, and
-// the chosen radio tile's ring against WCAG's 3:1 for a non-text indicator.
+// the key panel's focus rings and choice indicators (the chosen radio tile's
+// ring, a checkbox's edge, a radio's accent) against WCAG's 3:1 for a non-text
+// indicator.
 
 const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
 // The window's own sign-in form: the CLI's sign-in pages draw the same form,
@@ -697,6 +699,109 @@ module(basename(import.meta.filename), function (hooks) {
       hover.width < chosen.width,
       `a hovered tile's ring (${hover.width}px) is thinner than a chosen one's (${chosen.width}px)`,
     );
+  });
+
+  test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
+    // Every stylesheet the shell ships is on the signed-out key page, so this
+    // finds every focus ring a control draws, each resolved under the panel
+    // the key pages draw their controls on.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, indicators } = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let backgroundColor = getComputedStyle(panel).backgroundColor;
+      let toRGB = (color: string) => {
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      // The colour a declaration paints, set on a probe under the panel so
+      // the panel's theme resolves it.
+      let paints = (property: string, value: string, read: string) => {
+        let probe = document.createElement('span');
+        probe.style.setProperty(property, value);
+        panel.append(probe);
+        let color = getComputedStyle(probe).getPropertyValue(read);
+        probe.remove();
+        return toRGB(color);
+      };
+      let indicators: { label: string; rgb: number[] }[] = [];
+      let visit = (rules: CSSRuleList) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules);
+            continue;
+          }
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+          let selector = rule.selectorText;
+          let style = rule.style;
+          if (
+            selector.includes(':focus-visible') &&
+            !selector.includes(':not(:focus-visible)')
+          ) {
+            for (let property of ['outline', 'outline-color']) {
+              let value = style.getPropertyValue(property);
+              // An outline drawn transparent on purpose shows nothing to
+              // measure.
+              if (value && !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)) {
+                indicators.push({
+                  label: `${selector} { ${property}: ${value} }`,
+                  rgb: paints(property, value, 'outline-color'),
+                });
+              }
+            }
+          }
+          // An unticked checkbox is drawn by its edge alone.
+          let edge = style.getPropertyValue('--checkbox-border-color');
+          if (edge) {
+            indicators.push({
+              label: `${selector} { --checkbox-border-color: ${edge} }`,
+              rgb: paints('color', edge, 'color'),
+            });
+          }
+          let accent = style.getPropertyValue('accent-color');
+          if (accent) {
+            indicators.push({
+              label: `${selector} { accent-color: ${accent} }`,
+              rgb: paints('color', accent, 'color'),
+            });
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      return { background: toRGB(backgroundColor), indicators };
+    });
+
+    assert.ok(
+      indicators.some(({ label }) => label.includes('.radio-tile')),
+      "the radio tile's focus ring is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => label.includes('--checkbox-border-color')),
+      "the checkbox's edge is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => label.includes('accent-color')),
+      "the radio choices' accent is among them",
+    );
+    for (let { label, rgb } of indicators) {
+      let ratio = contrast(rgb, background);
+      assert.ok(
+        ratio >= 3,
+        `${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      );
+    }
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {
