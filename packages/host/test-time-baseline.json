@@ -107,7 +107,7 @@
     {
       "run": 39919811466,
       "at": "2026-10-23T07:44:34Z",
-      "minutes": 215.0,
+      "minutes": 215,
       "slowestShard": 16.3,
       "shards": 16,
       "runsOn": true
@@ -132,7 +132,7 @@
       "run": 39963181413,
       "at": "2026-10-23T13:40:35Z",
       "minutes": 217.5,
-      "slowestShard": 17.0,
+      "slowestShard": 17,
       "shards": 16,
       "runsOn": true
     },
@@ -162,718 +162,6 @@
     }
   ],
   "pullRequest": [
-    {
-      "run": 39687601079,
-      "at": "2026-10-21T22:35:33Z",
-      "minutes": 192.9,
-      "slowestShard": 15.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39687957296,
-      "at": "2026-10-21T22:38:36Z",
-      "minutes": 205.4,
-      "slowestShard": 16.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39690966442,
-      "at": "2026-10-21T23:04:26Z",
-      "minutes": 202.1,
-      "slowestShard": 15.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39691627613,
-      "at": "2026-10-21T23:10:14Z",
-      "minutes": 195.5,
-      "slowestShard": 14.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39692335147,
-      "at": "2026-10-21T23:16:29Z",
-      "minutes": 210.3,
-      "slowestShard": 15.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39695790151,
-      "at": "2026-10-21T23:48:38Z",
-      "minutes": 208.1,
-      "slowestShard": 15.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39695831913,
-      "at": "2026-10-21T23:49:03Z",
-      "minutes": 212.1,
-      "slowestShard": 14.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39699345227,
-      "at": "2026-10-22T00:22:57Z",
-      "minutes": 146.3,
-      "slowestShard": 13.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39706850634,
-      "at": "2026-10-22T01:38:28Z",
-      "minutes": 154.8,
-      "slowestShard": 11.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39710169265,
-      "at": "2026-10-22T02:13:16Z",
-      "minutes": 202.9,
-      "slowestShard": 15.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39710190097,
-      "at": "2026-10-22T02:13:29Z",
-      "minutes": 206.0,
-      "slowestShard": 15.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39710205485,
-      "at": "2026-10-22T02:13:39Z",
-      "minutes": 202.7,
-      "slowestShard": 15.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39710215430,
-      "at": "2026-10-22T02:13:45Z",
-      "minutes": 208.0,
-      "slowestShard": 16.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39710239383,
-      "at": "2026-10-22T02:14:01Z",
-      "minutes": 205.8,
-      "slowestShard": 15.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39714628480,
-      "at": "2026-10-22T03:02:09Z",
-      "minutes": 148.2,
-      "slowestShard": 12.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39720638889,
-      "at": "2026-10-22T04:07:55Z",
-      "minutes": 208.6,
-      "slowestShard": 16.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39721969446,
-      "at": "2026-10-22T04:22:00Z",
-      "minutes": 176.8,
-      "slowestShard": 18.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39722705140,
-      "at": "2026-10-22T04:29:59Z",
-      "minutes": 193.6,
-      "slowestShard": 16.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39732852216,
-      "at": "2026-10-22T06:15:43Z",
-      "minutes": 210.0,
-      "slowestShard": 16.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39745028642,
-      "at": "2026-10-22T08:04:22Z",
-      "minutes": 137.3,
-      "slowestShard": 10.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39749009373,
-      "at": "2026-10-22T08:36:32Z",
-      "minutes": 196.3,
-      "slowestShard": 23.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39749764702,
-      "at": "2026-10-22T08:42:34Z",
-      "minutes": 197.9,
-      "slowestShard": 14.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39757351175,
-      "at": "2026-10-22T09:41:21Z",
-      "minutes": 155.1,
-      "slowestShard": 11.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39757943606,
-      "at": "2026-10-22T09:45:58Z",
-      "minutes": 186.1,
-      "slowestShard": 15.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39764023986,
-      "at": "2026-10-22T10:33:44Z",
-      "minutes": 182.7,
-      "slowestShard": 14.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39765114060,
-      "at": "2026-10-22T10:42:29Z",
-      "minutes": 149.3,
-      "slowestShard": 11.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39765660566,
-      "at": "2026-10-22T10:46:54Z",
-      "minutes": 168.4,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39766113988,
-      "at": "2026-10-22T10:50:35Z",
-      "minutes": 166.8,
-      "slowestShard": 12.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39768659659,
-      "at": "2026-10-22T11:11:03Z",
-      "minutes": 167.3,
-      "slowestShard": 12.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39771628133,
-      "at": "2026-10-22T11:34:40Z",
-      "minutes": 155.2,
-      "slowestShard": 11.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39775509099,
-      "at": "2026-10-22T12:05:14Z",
-      "minutes": 152.2,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39779036967,
-      "at": "2026-10-22T12:31:25Z",
-      "minutes": 162.2,
-      "slowestShard": 12.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39780610321,
-      "at": "2026-10-22T12:42:48Z",
-      "minutes": 144.8,
-      "slowestShard": 10.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39780862145,
-      "at": "2026-10-22T12:44:36Z",
-      "minutes": 178.1,
-      "slowestShard": 13.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39782020101,
-      "at": "2026-10-22T12:52:52Z",
-      "minutes": 198.6,
-      "slowestShard": 16.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39784788886,
-      "at": "2026-10-22T13:12:15Z",
-      "minutes": 208.2,
-      "slowestShard": 16.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39787858880,
-      "at": "2026-10-22T13:33:18Z",
-      "minutes": 173.8,
-      "slowestShard": 13.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39788067849,
-      "at": "2026-10-22T13:34:43Z",
-      "minutes": 184.0,
-      "slowestShard": 13.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39788136489,
-      "at": "2026-10-22T13:35:10Z",
-      "minutes": 179.9,
-      "slowestShard": 13.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39788485136,
-      "at": "2026-10-22T13:37:32Z",
-      "minutes": 190.2,
-      "slowestShard": 14.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39792139495,
-      "at": "2026-10-22T14:01:38Z",
-      "minutes": 177.8,
-      "slowestShard": 15.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39792305547,
-      "at": "2026-10-22T14:02:46Z",
-      "minutes": 193.5,
-      "slowestShard": 19.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39792773358,
-      "at": "2026-10-22T14:05:55Z",
-      "minutes": 177.9,
-      "slowestShard": 14.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39795693463,
-      "at": "2026-10-22T14:26:31Z",
-      "minutes": 210.9,
-      "slowestShard": 16.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39799782955,
-      "at": "2026-10-22T14:54:06Z",
-      "minutes": 139.7,
-      "slowestShard": 10.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39800522144,
-      "at": "2026-10-22T14:59:00Z",
-      "minutes": 137.6,
-      "slowestShard": 11.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39801255265,
-      "at": "2026-10-22T15:03:47Z",
-      "minutes": 178.7,
-      "slowestShard": 15.0,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39801312422,
-      "at": "2026-10-22T15:04:08Z",
-      "minutes": 181.3,
-      "slowestShard": 13.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39801562838,
-      "at": "2026-10-22T15:05:43Z",
-      "minutes": 149.2,
-      "slowestShard": 11.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39801696671,
-      "at": "2026-10-22T15:06:35Z",
-      "minutes": 152.2,
-      "slowestShard": 12.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39801891894,
-      "at": "2026-10-22T15:07:50Z",
-      "minutes": 180.3,
-      "slowestShard": 17.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39806579699,
-      "at": "2026-10-22T15:37:30Z",
-      "minutes": 165.1,
-      "slowestShard": 14.0,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39809736624,
-      "at": "2026-10-22T15:57:52Z",
-      "minutes": 151.3,
-      "slowestShard": 13.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39809859867,
-      "at": "2026-10-22T15:58:41Z",
-      "minutes": 142.2,
-      "slowestShard": 11.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39810300644,
-      "at": "2026-10-22T16:01:27Z",
-      "minutes": 185.5,
-      "slowestShard": 14.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39814346915,
-      "at": "2026-10-22T16:28:19Z",
-      "minutes": 138.2,
-      "slowestShard": 10.7,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39820111644,
-      "at": "2026-10-22T17:08:58Z",
-      "minutes": 149.4,
-      "slowestShard": 11.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39820274430,
-      "at": "2026-10-22T17:10:07Z",
-      "minutes": 144.1,
-      "slowestShard": 10.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39820415798,
-      "at": "2026-10-22T17:11:05Z",
-      "minutes": 151.5,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39821936176,
-      "at": "2026-10-22T17:21:32Z",
-      "minutes": 169.1,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39824771054,
-      "at": "2026-10-22T17:40:33Z",
-      "minutes": 210.1,
-      "slowestShard": 16.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39825924222,
-      "at": "2026-10-22T17:48:43Z",
-      "minutes": 166.3,
-      "slowestShard": 12.5,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39826051278,
-      "at": "2026-10-22T17:49:37Z",
-      "minutes": 213.4,
-      "slowestShard": 17.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39829457197,
-      "at": "2026-10-22T18:13:29Z",
-      "minutes": 136.8,
-      "slowestShard": 15.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39835955468,
-      "at": "2026-10-22T18:57:58Z",
-      "minutes": 137.0,
-      "slowestShard": 10.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39842907794,
-      "at": "2026-10-22T19:45:44Z",
-      "minutes": 165.1,
-      "slowestShard": 20.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39844603285,
-      "at": "2026-10-22T19:57:22Z",
-      "minutes": 216.8,
-      "slowestShard": 18.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39847411405,
-      "at": "2026-10-22T20:16:30Z",
-      "minutes": 211.9,
-      "slowestShard": 17.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39848591369,
-      "at": "2026-10-22T20:24:34Z",
-      "minutes": 164.4,
-      "slowestShard": 13.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39849541492,
-      "at": "2026-10-22T20:31:05Z",
-      "minutes": 151.9,
-      "slowestShard": 12.0,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39849732903,
-      "at": "2026-10-22T20:32:25Z",
-      "minutes": 136.8,
-      "slowestShard": 12.4,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39852012727,
-      "at": "2026-10-22T20:48:28Z",
-      "minutes": 176.3,
-      "slowestShard": 14.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39852170309,
-      "at": "2026-10-22T20:49:36Z",
-      "minutes": 168.7,
-      "slowestShard": 14.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39853468409,
-      "at": "2026-10-22T20:59:00Z",
-      "minutes": 160.3,
-      "slowestShard": 12.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39857279959,
-      "at": "2026-10-22T21:26:31Z",
-      "minutes": 168.9,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39861582137,
-      "at": "2026-10-22T21:59:39Z",
-      "minutes": 180.2,
-      "slowestShard": 14.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39862284609,
-      "at": "2026-10-22T22:05:05Z",
-      "minutes": 131.8,
-      "slowestShard": 12.9,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39862653879,
-      "at": "2026-10-22T22:07:58Z",
-      "minutes": 139.3,
-      "slowestShard": 14.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39862911903,
-      "at": "2026-10-22T22:10:03Z",
-      "minutes": 125.3,
-      "slowestShard": 12.6,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39865669787,
-      "at": "2026-10-22T22:32:11Z",
-      "minutes": 212.6,
-      "slowestShard": 17.2,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39867548015,
-      "at": "2026-10-22T22:48:12Z",
-      "minutes": 193.2,
-      "slowestShard": 17.0,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39867977830,
-      "at": "2026-10-22T22:52:04Z",
-      "minutes": 152.7,
-      "slowestShard": 12.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39869737939,
-      "at": "2026-10-22T23:07:50Z",
-      "minutes": 170.2,
-      "slowestShard": 13.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39873728222,
-      "at": "2026-10-22T23:44:10Z",
-      "minutes": 195.0,
-      "slowestShard": 17.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39875510271,
-      "at": "2026-10-23T00:01:15Z",
-      "minutes": 215.0,
-      "slowestShard": 17.0,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39875711123,
-      "at": "2026-10-23T00:03:10Z",
-      "minutes": 172.7,
-      "slowestShard": 13.1,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39880849538,
-      "at": "2026-10-23T00:54:02Z",
-      "minutes": 215.8,
-      "slowestShard": 17.3,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39880862781,
-      "at": "2026-10-23T00:54:09Z",
-      "minutes": 170.5,
-      "slowestShard": 13.8,
-      "shards": 16,
-      "runsOn": true
-    },
-    {
-      "run": 39902687424,
-      "at": "2026-10-23T04:52:54Z",
-      "minutes": 163.5,
-      "slowestShard": 12.3,
-      "shards": 16,
-      "runsOn": true
-    },
     {
       "run": 39905882068,
       "at": "2026-10-23T05:27:47Z",
@@ -909,7 +197,7 @@
     {
       "run": 39914615189,
       "at": "2026-10-23T06:56:42Z",
-      "minutes": 169.0,
+      "minutes": 169,
       "slowestShard": 13.2,
       "shards": 16,
       "runsOn": true
@@ -918,7 +206,7 @@
       "run": 39921352577,
       "at": "2026-10-23T07:58:12Z",
       "minutes": 169.3,
-      "slowestShard": 15.0,
+      "slowestShard": 15,
       "shards": 16,
       "runsOn": true
     },
@@ -1165,7 +453,7 @@
     {
       "run": 40024405813,
       "at": "2026-10-23T21:07:16Z",
-      "minutes": 190.0,
+      "minutes": 190,
       "slowestShard": 16.1,
       "shards": 16,
       "runsOn": true
@@ -1301,7 +589,7 @@
     {
       "run": 40131675219,
       "at": "2026-10-24T20:51:42Z",
-      "minutes": 308.0,
+      "minutes": 308,
       "slowestShard": 23.6,
       "shards": 16,
       "runsOn": true
@@ -1350,7 +638,7 @@
       "run": 40258355257,
       "at": "2026-10-26T02:17:15Z",
       "minutes": 290.2,
-      "slowestShard": 23.0,
+      "slowestShard": 23,
       "shards": 16,
       "runsOn": true
     },
@@ -1397,7 +685,7 @@
     {
       "run": 40311432891,
       "at": "2026-10-26T10:57:42Z",
-      "minutes": 270.0,
+      "minutes": 270,
       "slowestShard": 19.7,
       "shards": 16,
       "runsOn": true
@@ -1406,7 +694,7 @@
       "run": 40311671514,
       "at": "2026-10-26T10:59:37Z",
       "minutes": 261.6,
-      "slowestShard": 19.0,
+      "slowestShard": 19,
       "shards": 16,
       "runsOn": true
     },
@@ -1470,7 +758,7 @@
       "run": 40323484570,
       "at": "2026-10-26T12:33:47Z",
       "minutes": 254.2,
-      "slowestShard": 18.0,
+      "slowestShard": 18,
       "shards": 16,
       "runsOn": true
     },
@@ -1542,7 +830,7 @@
       "run": 40350755177,
       "at": "2026-10-26T15:35:07Z",
       "minutes": 252.2,
-      "slowestShard": 21.0,
+      "slowestShard": 21,
       "shards": 16,
       "runsOn": true
     },
@@ -1566,7 +854,7 @@
       "run": 40353063696,
       "at": "2026-10-26T15:49:13Z",
       "minutes": 227.4,
-      "slowestShard": 23.0,
+      "slowestShard": 23,
       "shards": 16,
       "runsOn": true
     },
@@ -1646,7 +934,7 @@
       "run": 40402406456,
       "at": "2026-10-26T21:12:38Z",
       "minutes": 228.8,
-      "slowestShard": 19.0,
+      "slowestShard": 19,
       "shards": 16,
       "runsOn": true
     },
@@ -1702,7 +990,7 @@
       "run": 40410285605,
       "at": "2026-10-26T22:09:56Z",
       "minutes": 222.3,
-      "slowestShard": 20.0,
+      "slowestShard": 20,
       "shards": 16,
       "runsOn": true
     },
@@ -1726,7 +1014,7 @@
       "run": 40436384757,
       "at": "2026-10-27T02:05:20Z",
       "minutes": 228.2,
-      "slowestShard": 23.0,
+      "slowestShard": 23,
       "shards": 16,
       "runsOn": true
     },
@@ -1781,7 +1069,7 @@
     {
       "run": 40455318359,
       "at": "2026-10-27T05:26:21Z",
-      "minutes": 309.0,
+      "minutes": 309,
       "slowestShard": 27.7,
       "shards": 16,
       "runsOn": true
@@ -1790,7 +1078,7 @@
       "run": 40455505389,
       "at": "2026-10-27T05:28:24Z",
       "minutes": 216.2,
-      "slowestShard": 19.0,
+      "slowestShard": 19,
       "shards": 16,
       "runsOn": true
     },
@@ -1853,8 +1141,8 @@
     {
       "run": 40510657404,
       "at": "2026-10-27T13:16:57Z",
-      "minutes": 263.0,
-      "slowestShard": 23.0,
+      "minutes": 263,
+      "slowestShard": 23,
       "shards": 16,
       "runsOn": true
     },
@@ -1878,7 +1166,7 @@
       "run": 40512148617,
       "at": "2026-10-27T13:27:11Z",
       "minutes": 318.7,
-      "slowestShard": 28.0,
+      "slowestShard": 28,
       "shards": 16,
       "runsOn": true
     },
@@ -1893,7 +1181,7 @@
     {
       "run": 40528788853,
       "at": "2026-10-27T15:13:12Z",
-      "minutes": 325.0,
+      "minutes": 325,
       "slowestShard": 26.7,
       "shards": 16,
       "runsOn": true
@@ -1910,7 +1198,7 @@
       "run": 40544967233,
       "at": "2026-10-27T16:51:12Z",
       "minutes": 311.3,
-      "slowestShard": 26.0,
+      "slowestShard": 26,
       "shards": 16,
       "runsOn": true
     },
@@ -1974,7 +1262,7 @@
       "run": 40566765149,
       "at": "2026-10-27T19:10:57Z",
       "minutes": 252.6,
-      "slowestShard": 22.0,
+      "slowestShard": 22,
       "shards": 16,
       "runsOn": true
     },
@@ -1997,7 +1285,7 @@
     {
       "run": 40567032195,
       "at": "2026-10-27T19:12:42Z",
-      "minutes": 235.0,
+      "minutes": 235,
       "slowestShard": 21.9,
       "shards": 16,
       "runsOn": true
@@ -2093,7 +1381,7 @@
     {
       "run": 40594570684,
       "at": "2026-10-27T22:24:24Z",
-      "minutes": 253.0,
+      "minutes": 253,
       "slowestShard": 22.6,
       "shards": 16,
       "runsOn": true
@@ -2182,7 +1470,7 @@
       "run": 40606164591,
       "at": "2026-10-28T00:02:33Z",
       "minutes": 325.2,
-      "slowestShard": 27.0,
+      "slowestShard": 27,
       "shards": 16,
       "runsOn": true
     },
@@ -2197,7 +1485,7 @@
     {
       "run": 40613481468,
       "at": "2026-10-28T01:11:07Z",
-      "minutes": 251.0,
+      "minutes": 251,
       "slowestShard": 18.9,
       "shards": 16,
       "runsOn": true
@@ -2205,7 +1493,7 @@
     {
       "run": 40614789213,
       "at": "2026-10-28T01:23:49Z",
-      "minutes": 249.0,
+      "minutes": 249,
       "slowestShard": 18.8,
       "shards": 16,
       "runsOn": true
@@ -2277,7 +1565,7 @@
     {
       "run": 40629550331,
       "at": "2026-10-28T03:57:06Z",
-      "minutes": 294.0,
+      "minutes": 294,
       "slowestShard": 23.4,
       "shards": 16,
       "runsOn": true
@@ -2373,7 +1661,7 @@
     {
       "run": 40706860407,
       "at": "2026-10-28T14:32:00Z",
-      "minutes": 326.0,
+      "minutes": 326,
       "slowestShard": 26.3,
       "shards": 16,
       "runsOn": true
@@ -2389,7 +1677,7 @@
     {
       "run": 40713454041,
       "at": "2026-10-28T15:11:39Z",
-      "minutes": 254.0,
+      "minutes": 254,
       "slowestShard": 20.6,
       "shards": 16,
       "runsOn": true
@@ -2451,10 +1739,15 @@
       "runsOn": true
     },
     {
+      "run": 40731026708,
+      "at": "2026-10-28T16:57:26Z",
+      "minutes": null
+    },
+    {
       "run": 40731158276,
       "at": "2026-10-28T16:58:15Z",
-      "minutes": 277.0,
-      "slowestShard": 26.0,
+      "minutes": 277,
+      "slowestShard": 26,
       "shards": 16,
       "runsOn": true
     },
@@ -2469,7 +1762,7 @@
     {
       "run": 40742584083,
       "at": "2026-10-28T18:10:13Z",
-      "minutes": 283.0,
+      "minutes": 283,
       "slowestShard": 23.1,
       "shards": 16,
       "runsOn": true
@@ -2477,7 +1770,7 @@
     {
       "run": 40749557708,
       "at": "2026-10-28T18:55:10Z",
-      "minutes": 267.0,
+      "minutes": 267,
       "slowestShard": 23.2,
       "shards": 16,
       "runsOn": true
@@ -2494,7 +1787,7 @@
       "run": 40759797096,
       "at": "2026-10-28T20:03:13Z",
       "minutes": 266.4,
-      "slowestShard": 22.0,
+      "slowestShard": 22,
       "shards": 16,
       "runsOn": true
     },
@@ -2509,7 +1802,7 @@
     {
       "run": 40762205791,
       "at": "2026-10-28T20:19:13Z",
-      "minutes": 293.0,
+      "minutes": 293,
       "slowestShard": 24.9,
       "shards": 16,
       "runsOn": true
@@ -2539,9 +1832,17 @@
       "runsOn": true
     },
     {
+      "run": 40775474574,
+      "at": "2026-10-28T21:52:15Z",
+      "minutes": 292.6,
+      "slowestShard": 23.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
       "run": 40777944686,
       "at": "2026-10-28T22:10:51Z",
-      "minutes": 316.0,
+      "minutes": 316,
       "slowestShard": 25.4,
       "shards": 16,
       "runsOn": true
@@ -2559,6 +1860,696 @@
       "at": "2026-10-28T22:13:28Z",
       "minutes": 225.7,
       "slowestShard": 15.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40779280931,
+      "at": "2026-10-28T22:21:02Z",
+      "minutes": null
+    },
+    {
+      "run": 40779296713,
+      "at": "2026-10-28T22:21:09Z",
+      "minutes": 328.3,
+      "slowestShard": 25.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40780967890,
+      "at": "2026-10-28T22:34:12Z",
+      "minutes": 211.7,
+      "slowestShard": 16.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40781235909,
+      "at": "2026-10-28T22:36:15Z",
+      "minutes": 292,
+      "slowestShard": 25,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40783886947,
+      "at": "2026-10-28T22:57:49Z",
+      "minutes": 315.4,
+      "slowestShard": 25.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40788116711,
+      "at": "2026-10-28T23:32:53Z",
+      "minutes": 293,
+      "slowestShard": 24.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40788136937,
+      "at": "2026-10-28T23:33:04Z",
+      "minutes": 227.4,
+      "slowestShard": 17.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40790075562,
+      "at": "2026-10-28T23:50:20Z",
+      "minutes": 323.3,
+      "slowestShard": 26,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40792182996,
+      "at": "2026-10-29T00:09:27Z",
+      "minutes": 324.4,
+      "slowestShard": 25.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40792292526,
+      "at": "2026-10-29T00:10:27Z",
+      "minutes": 266.9,
+      "slowestShard": 20.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40792340832,
+      "at": "2026-10-29T00:10:52Z",
+      "minutes": 327.2,
+      "slowestShard": 26.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40792365112,
+      "at": "2026-10-29T00:11:05Z",
+      "minutes": 327.4,
+      "slowestShard": 24.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40793908562,
+      "at": "2026-10-29T00:25:00Z",
+      "minutes": 253.7,
+      "slowestShard": 19.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40797376595,
+      "at": "2026-10-29T00:57:18Z",
+      "minutes": 314.2,
+      "slowestShard": 25.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40798479091,
+      "at": "2026-10-29T01:07:37Z",
+      "minutes": 331.1,
+      "slowestShard": 26.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40798545688,
+      "at": "2026-10-29T01:08:14Z",
+      "minutes": 271.5,
+      "slowestShard": 20.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40798563097,
+      "at": "2026-10-29T01:08:24Z",
+      "minutes": 334.3,
+      "slowestShard": 26.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40798567343,
+      "at": "2026-10-29T01:08:27Z",
+      "minutes": 340.6,
+      "slowestShard": 25.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40806372831,
+      "at": "2026-10-29T02:26:36Z",
+      "minutes": 181.1,
+      "slowestShard": 13,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40806847693,
+      "at": "2026-10-29T02:31:21Z",
+      "minutes": 251.9,
+      "slowestShard": 23.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40810472209,
+      "at": "2026-10-29T03:08:50Z",
+      "minutes": 216.7,
+      "slowestShard": 19.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40822265839,
+      "at": "2026-10-29T05:14:50Z",
+      "minutes": 180.3,
+      "slowestShard": 14.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40822300048,
+      "at": "2026-10-29T05:15:09Z",
+      "minutes": 216,
+      "slowestShard": 20.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40822768626,
+      "at": "2026-10-29T05:19:56Z",
+      "minutes": 260.1,
+      "slowestShard": 25.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40822824097,
+      "at": "2026-10-29T05:20:28Z",
+      "minutes": 261.2,
+      "slowestShard": 21.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40837139332,
+      "at": "2026-10-29T07:42:19Z",
+      "minutes": 198,
+      "slowestShard": 15.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40852978722,
+      "at": "2026-10-29T09:52:01Z",
+      "minutes": 141,
+      "slowestShard": 10.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40854405155,
+      "at": "2026-10-29T10:02:51Z",
+      "minutes": 152.1,
+      "slowestShard": 11.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40854860551,
+      "at": "2026-10-29T10:06:15Z",
+      "minutes": 150.6,
+      "slowestShard": 12.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40869588866,
+      "at": "2026-10-29T11:59:08Z",
+      "minutes": 187.3,
+      "slowestShard": 14.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40869830399,
+      "at": "2026-10-29T12:00:57Z",
+      "minutes": 210,
+      "slowestShard": 19.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40871839261,
+      "at": "2026-10-29T12:15:57Z",
+      "minutes": 152.9,
+      "slowestShard": 12.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40879185328,
+      "at": "2026-10-29T13:08:14Z",
+      "minutes": 203.2,
+      "slowestShard": 17.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40881468594,
+      "at": "2026-10-29T13:23:22Z",
+      "minutes": 203.7,
+      "slowestShard": 15.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40881517950,
+      "at": "2026-10-29T13:23:41Z",
+      "minutes": 162,
+      "slowestShard": 13,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40881604054,
+      "at": "2026-10-29T13:24:15Z",
+      "minutes": 205.4,
+      "slowestShard": 14.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40881892054,
+      "at": "2026-10-29T13:26:07Z",
+      "minutes": 211.5,
+      "slowestShard": 16.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40882074631,
+      "at": "2026-10-29T13:27:19Z",
+      "minutes": 157.3,
+      "slowestShard": 11.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40882188354,
+      "at": "2026-10-29T13:28:05Z",
+      "minutes": 215.8,
+      "slowestShard": 17.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40882326227,
+      "at": "2026-10-29T13:28:59Z",
+      "minutes": 172.5,
+      "slowestShard": 13.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40883172880,
+      "at": "2026-10-29T13:34:29Z",
+      "minutes": 186.4,
+      "slowestShard": 15.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40884093786,
+      "at": "2026-10-29T13:40:25Z",
+      "minutes": 174.5,
+      "slowestShard": 14.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40889701983,
+      "at": "2026-10-29T14:15:39Z",
+      "minutes": 164.2,
+      "slowestShard": 11.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40890820713,
+      "at": "2026-10-29T14:22:30Z",
+      "minutes": 182.7,
+      "slowestShard": 13.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40892054632,
+      "at": "2026-10-29T14:29:55Z",
+      "minutes": 179.9,
+      "slowestShard": 13.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40892504684,
+      "at": "2026-10-29T14:32:33Z",
+      "minutes": 236.9,
+      "slowestShard": 18.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40896092413,
+      "at": "2026-10-29T14:54:02Z",
+      "minutes": 160.8,
+      "slowestShard": 17.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40898412229,
+      "at": "2026-10-29T15:07:52Z",
+      "minutes": 208.8,
+      "slowestShard": 18.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899060792,
+      "at": "2026-10-29T15:11:42Z",
+      "minutes": 156.2,
+      "slowestShard": 11.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899066645,
+      "at": "2026-10-29T15:11:44Z",
+      "minutes": 212.6,
+      "slowestShard": 18.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899106998,
+      "at": "2026-10-29T15:11:59Z",
+      "minutes": 217,
+      "slowestShard": 19.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899148520,
+      "at": "2026-10-29T15:12:13Z",
+      "minutes": 253.5,
+      "slowestShard": 24.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899648189,
+      "at": "2026-10-29T15:15:08Z",
+      "minutes": 190.7,
+      "slowestShard": 14.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40899736633,
+      "at": "2026-10-29T15:15:39Z",
+      "minutes": 235.2,
+      "slowestShard": 19,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40902766920,
+      "at": "2026-10-29T15:33:27Z",
+      "minutes": 242.3,
+      "slowestShard": 25.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40902786142,
+      "at": "2026-10-29T15:33:33Z",
+      "minutes": 243.5,
+      "slowestShard": 24.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40903384039,
+      "at": "2026-10-29T15:37:04Z",
+      "minutes": 185.8,
+      "slowestShard": 14.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40904737669,
+      "at": "2026-10-29T15:45:15Z",
+      "minutes": 247.7,
+      "slowestShard": 25.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40912713743,
+      "at": "2026-10-29T16:33:15Z",
+      "minutes": 210.5,
+      "slowestShard": 16,
+      "shards": 16,
+      "runsOn": false
+    },
+    {
+      "run": 40913330046,
+      "at": "2026-10-29T16:37:00Z",
+      "minutes": 181,
+      "slowestShard": 15.3,
+      "shards": 16,
+      "runsOn": false
+    },
+    {
+      "run": 40913436998,
+      "at": "2026-10-29T16:37:40Z",
+      "minutes": 162.5,
+      "slowestShard": 14.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40913552302,
+      "at": "2026-10-29T16:38:23Z",
+      "minutes": 166.8,
+      "slowestShard": 20.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40913822031,
+      "at": "2026-10-29T16:40:03Z",
+      "minutes": 173.6,
+      "slowestShard": 21,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40913878936,
+      "at": "2026-10-29T16:40:23Z",
+      "minutes": 198,
+      "slowestShard": 14.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40915149389,
+      "at": "2026-10-29T16:48:17Z",
+      "minutes": 234.8,
+      "slowestShard": 16.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40915263869,
+      "at": "2026-10-29T16:49:00Z",
+      "minutes": 188.5,
+      "slowestShard": 14.4,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40919724497,
+      "at": "2026-10-29T17:16:22Z",
+      "minutes": 193.5,
+      "slowestShard": 15.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40920458173,
+      "at": "2026-10-29T17:20:56Z",
+      "minutes": 208.4,
+      "slowestShard": 26.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40923525969,
+      "at": "2026-10-29T17:40:11Z",
+      "minutes": 183.7,
+      "slowestShard": 14.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40925822354,
+      "at": "2026-10-29T17:54:48Z",
+      "minutes": 194.2,
+      "slowestShard": 20.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40925956250,
+      "at": "2026-10-29T17:55:41Z",
+      "minutes": 194.4,
+      "slowestShard": 20.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40929619808,
+      "at": "2026-10-29T18:18:55Z",
+      "minutes": 212,
+      "slowestShard": 18.1,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40929643730,
+      "at": "2026-10-29T18:19:04Z",
+      "minutes": 190,
+      "slowestShard": 14.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40930971481,
+      "at": "2026-10-29T18:27:25Z",
+      "minutes": 189.2,
+      "slowestShard": 14.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40931201068,
+      "at": "2026-10-29T18:28:53Z",
+      "minutes": 232.8,
+      "slowestShard": 18,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40931426025,
+      "at": "2026-10-29T18:30:17Z",
+      "minutes": 188.4,
+      "slowestShard": 14.3,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40932923870,
+      "at": "2026-10-29T18:39:52Z",
+      "minutes": 188,
+      "slowestShard": 14.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40938863360,
+      "at": "2026-10-29T19:18:17Z",
+      "minutes": 179.8,
+      "slowestShard": 14.7,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40939446446,
+      "at": "2026-10-29T19:22:06Z",
+      "minutes": 233.2,
+      "slowestShard": 17.5,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40939484396,
+      "at": "2026-10-29T19:22:21Z",
+      "minutes": 231.5,
+      "slowestShard": 16.9,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40939613907,
+      "at": "2026-10-29T19:23:13Z",
+      "minutes": null
+    },
+    {
+      "run": 40940169935,
+      "at": "2026-10-29T19:26:54Z",
+      "minutes": 187,
+      "slowestShard": 14.8,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40940285315,
+      "at": "2026-10-29T19:27:42Z",
+      "minutes": 256.5,
+      "slowestShard": 26.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40940332387,
+      "at": "2026-10-29T19:28:01Z",
+      "minutes": 235.2,
+      "slowestShard": 18.2,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40940398773,
+      "at": "2026-10-29T19:28:28Z",
+      "minutes": 236.9,
+      "slowestShard": 18,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40940402098,
+      "at": "2026-10-29T19:28:30Z",
+      "minutes": 185.7,
+      "slowestShard": 13.6,
+      "shards": 16,
+      "runsOn": true
+    },
+    {
+      "run": 40940686672,
+      "at": "2026-10-29T19:30:23Z",
+      "minutes": 238.7,
+      "slowestShard": 18.5,
       "shards": 16,
       "runsOn": true
     }
