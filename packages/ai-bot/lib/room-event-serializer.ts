@@ -24,9 +24,15 @@ export class RoomEventSerializer {
   //
   // The release function must be called once the caller is done with the room,
   // on every exit path. Calling it more than once is harmless.
+  //
+  // An event whose history does not cover what an older event asks for (an
+  // approval reaction, which answers held calls and writes no reply) claims
+  // with `supersedes: false`: it waits its turn like any other, but never
+  // makes an older event stand down, and never stands down itself.
   async claim(
     roomId: string,
     eventId: string,
+    { supersedes = true }: { supersedes?: boolean } = {},
   ): Promise<(() => void) | undefined> {
     let previousTurn = this.turns.get(roomId) ?? Promise.resolve();
     let finishTurn!: () => void;
@@ -34,7 +40,9 @@ export class RoomEventSerializer {
       finishTurn = resolve;
     });
     this.turns.set(roomId, turn);
-    this.newestEventIds.set(roomId, eventId);
+    if (supersedes) {
+      this.newestEventIds.set(roomId, eventId);
+    }
 
     let released = false;
     let release = () => {
@@ -51,7 +59,7 @@ export class RoomEventSerializer {
 
     await previousTurn;
 
-    if (this.newestEventIds.get(roomId) !== eventId) {
+    if (supersedes && this.newestEventIds.get(roomId) !== eventId) {
       release();
       return undefined;
     }

@@ -5,8 +5,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import { CollapsedTurn } from '@cardstack/pretui/components/collapsed-turn';
+import { ToolGroup } from '@cardstack/pretui/components/tool-group';
+
+import { humanizeToolName } from '@cardstack/pretui/components/tool-row';
 import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -19,8 +22,18 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
+import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
+import { isRunDelivery } from '@cardstack/host/lib/run-delivery';
+import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
+import type {
+  AnswerFooterData,
+  ReasoningMode,
+  TurnFold,
+  TurnHead,
+} from '@cardstack/host/lib/turn-summary';
 import type { RoomResource } from '@cardstack/host/resources/room';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type ToolService from '@cardstack/host/services/tool-service';
 
@@ -29,21 +42,46 @@ import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageTool from './room-message-tool';
 
+import type { ToolPart } from '@cardstack/pretui/components/tool-group';
+
+interface ToolRun {
+  key: string;
+  command: MessageTool;
+  count?: number;
+  group?: MessageTool[];
+  parts?: ToolPart[];
+  summary?: string;
+  // some calls in the group are still running
+  pending?: boolean;
+}
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     roomId: string;
-    // use a RoomResource as an arg instead of message to keep this component stable
-    // when new messages are received--otherwise a RoomMessage component is created for
-    // _every_ matrix event received regardless if the event had anything to do with this
-    // message.
+    // The keyed #each over the room's messages keeps this component when other
+    // messages change. The message itself comes as an arg so that only a change to
+    // it re-renders this one: read through roomResource.messages, every getter here
+    // reran on every event in the room (a new list each time), and the cached
+    // ones (the attached cards) rebuilt for every message in the transcript.
     roomResource: RoomResource;
+    message?: Message;
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    // the message is in the room's latest turn, where it can still change
+    inLatestTurn?: boolean;
     isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
+    // this message stands for a run of N identical calls folded into it
+    foldCount?: number;
+    // the settled turn this message belongs to folds its tool rows
+    turnFold?: TurnFold;
+    turnHead?: TurnHead;
+    reasoningMode?: ReasoningMode;
+    // this message is its turn's final reply: the quiet actions under it
+    answerFooter?: AnswerFooterData;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -62,6 +100,9 @@ export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 // A message from the same author landing within this window of the previous
 // message renders without its avatar/timestamp header.
 const MESSAGE_GROUPING_WINDOW_MS = 2 * 60 * 1000;
+// A conversation reads as one sitting until it pauses this long or the day
+// changes; only then does a turn earn its date stamp again.
+const CONVERSATION_PAUSE_MS = 15 * 60 * 1000;
 
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
@@ -74,8 +115,10 @@ export default class RoomMessage extends Component<Signature> {
     this.checkStreamingTimeout.perform();
   }
 
-  private get message() {
-    return this.args.roomResource.messages[this.args.index];
+  private get message(): Message {
+    return (
+      this.args.message ?? this.args.roomResource.messages[this.args.index]!
+    );
   }
 
   @cached
@@ -140,6 +183,12 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
+  // before the Matrix SDK has loaded, no message is the reader's own
+  private get isSelf() {
+    let self = this.matrixService.loadedUserId;
+    return Boolean(self) && this.message.author.userId === self;
+  }
+
   private get isFromAssistant() {
     return this.message.author.userId === aiBotUserId;
   }
@@ -152,21 +201,19 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   // A call ai-bot holds for approval is "run" by approving it; ai-bot then
-  // runs it. Every other call runs on the host.
-  private run = task(async (command: MessageTool) => {
+  // runs it. Every other call runs on the host. The work is the tool
+  // service's: a settled turn folds and can take this message away while
+  // the call runs, and that must not cancel it.
+  private run = (command: MessageTool) => {
     if (command.awaitsApproval) {
-      return this.toolService.answerApproval
-        .unlinked()
-        .perform(command, 'approve');
+      return this.toolService.answerApproval.perform(command, 'approve');
     }
-    return this.toolService.run.unlinked().perform(command);
-  });
+    return this.toolService.run.perform(command);
+  };
 
-  private decline = task(async (command: MessageTool) => {
-    return this.toolService.answerApproval
-      .unlinked()
-      .perform(command, 'decline');
-  });
+  private decline = (command: MessageTool) => {
+    return this.toolService.answerApproval.perform(command, 'decline');
+  };
 
   // Correctness-check messages render all their tools compactly; bot-executed
   // tools (e.g. readRealmFile) render compactly even inside a regular message,
@@ -175,6 +222,113 @@ export default class RoomMessage extends Component<Signature> {
   private isCompactTool = (tool: MessageTool) =>
     this.message.isCodePatchCorrectness ||
     (tool.isBotExecuted && !tool.awaitsApproval);
+
+  // Three or more finished calls to one tool in a row (a correctness check
+  // after each file a script wrote) read as one row, "×N": the latest call
+  // stands for the run. Anything unfinished or failed stays on its own.
+  // Each run carries its call's id as the key its row is rendered by: the
+  // runs are rebuilt on every streamed update, and a row keyed by the run
+  // object itself would be torn down and drawn again each time.
+  // the call a ToolGroup entry stands for, by its id
+  private toolInRun = (run: ToolRun, id: string) =>
+    run.group?.find(
+      (tool, index) => (tool.id ?? run.parts?.[index]?.id) === id,
+    );
+
+  private get toolRuns(): ToolRun[] {
+    let tools = this.message.tools ?? [];
+    let runs: ToolRun[] = [];
+    let keyOf = (k: number) => tools[k]!.id ?? `call-${k}`;
+    // A call joins a group while it runs, not only once it is done: a burst
+    // of forty checks reads as one counting line from its third call. A
+    // call that failed, or that waits on the reader (held for approval, or
+    // ready but not one the host runs on its own), stays its own row, where
+    // its gate is.
+    let runsOnItsOwn = (tool: MessageTool) =>
+      isAutoExecutableTool(
+        tool,
+        this.args.roomResource.getActiveLLMModeForMessage(this.message.eventId),
+        tool.message.agentId === this.matrixService.agentId,
+      ) && !tool.clickReasons.length;
+    let groupable = (tool: MessageTool) =>
+      (tool.status === 'applied' ||
+        tool.status === 'applying' ||
+        (tool.status === 'ready' && runsOnItsOwn(tool))) &&
+      !tool.awaitsApproval;
+    let i = 0;
+    while (i < tools.length) {
+      let j = i;
+      while (
+        j + 1 < tools.length &&
+        tools[j + 1]!.name === tools[i]!.name &&
+        groupable(tools[j + 1]!) &&
+        groupable(tools[i]!)
+      ) {
+        j += 1;
+      }
+      let count = j - i + 1;
+      if (count >= 3) {
+        let group = tools.slice(i, j + 1);
+        let done = group.filter((tool) => tool.status === 'applied').length;
+        let pending = done < count;
+        let isCheck = tools[i]!.name === 'checkCorrectness';
+        let name = humanizeToolName(tools[i]!.name ?? 'tool');
+        runs.push({
+          key: keyOf(i),
+          command: tools[j]!,
+          count,
+          group,
+          pending,
+          parts: group.map((tool, index) => ({
+            id: tool.id ?? `call-${i + index}`,
+            name: tool.name ?? 'tool',
+            state: tool.status === 'applied' ? 'completed' : 'running',
+          })),
+          // a check that found errors still ends applied, so the group
+          // counts checks and leaves their outcome to the rows inside it
+          summary: isCheck
+            ? pending
+              ? `Running ${count} checks · ${done} done`
+              : `Ran ${count} checks`
+            : pending
+              ? `${name} ×${count} · ${done} done`
+              : `${name} ×${count}`,
+        });
+      } else {
+        for (let k = i; k <= j; k++) {
+          runs.push({ key: keyOf(k), command: tools[k]! });
+        }
+      }
+      i = j + 1;
+    }
+    return runs;
+  }
+
+  // Whether a later call to the same tool in the same stretch of assistant
+  // work (this message and the ones after it, up to the user's next message)
+  // succeeded. A failure the assistant recovered from then reads as retried,
+  // not as an error waiting on the reader; a different tool that worked
+  // afterwards is not a retry.
+  private isRetriedLater = (tool: MessageTool) => {
+    let retried = (t: MessageTool) =>
+      t.status === 'applied' && t.name === tool.name;
+    let tools = this.message.tools ?? [];
+    let laterHere = tools.slice(tools.indexOf(tool) + 1);
+    if (laterHere.some(retried)) {
+      return true;
+    }
+    let messages = this.args.roomResource.messages;
+    for (let i = this.args.index + 1; i < messages.length; i++) {
+      let next = messages[i]!;
+      if (next.author.userId !== aiBotUserId) {
+        return false;
+      }
+      if (next.tools?.some(retried)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   // A message carrying only bot-executed tool indicators — no prose,
   // reasoning, or attachments — stacks flush against a neighboring message of
@@ -193,19 +347,113 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
+  // A part of a turn that only shows the work (its thinking, its calls) and
+  // says nothing to the reader: consecutive work parts stack as one list
+  private get isWorkPart() {
+    return (
+      this.isFromAssistant &&
+      !this.message.htmlParts?.length &&
+      !this.message.attachedFiles?.length &&
+      !this.message.attachedCardsAsFiles?.length &&
+      !this.message.attachedCardIds?.length &&
+      (!!this.message.tools?.length || !!this.message.reasoningContent)
+    );
+  }
+
   // A quick succession of messages from one author reads as a single run of
   // conversation, so only the first message in the run gets an avatar and
   // timestamp header.
-  private get isGroupedWithPreviousMessage() {
+  // the same person's messages back to back, in one run: the bubble sits
+  // closer to the one above
+  private get continuesOwnRun() {
     let previousMessage = this.args.roomResource.messages[this.args.index - 1];
+    return Boolean(
+      previousMessage &&
+      previousMessage.author.userId === this.message.author.userId &&
+      this.message.created.getTime() - previousMessage.created.getTime() <
+        MESSAGE_GROUPING_WINDOW_MS,
+    );
+  }
+
+  private get isGroupedWithPreviousMessage() {
+    let messages = this.args.roomResource.messages;
+    let previousMessage = messages[this.args.index - 1];
     if (!previousMessage) {
       return false;
     }
+    let gap =
+      this.message.created.getTime() - previousMessage.created.getTime();
+    if (previousMessage.author.userId === this.message.author.userId) {
+      return gap < MESSAGE_GROUPING_WINDOW_MS;
+    }
+    // A turn and its answer, in one sitting, share one header: the
+    // assistant's reply follows the bubble without one of its own. A
+    // person's message, though, always carries theirs.
+    if (
+      gap >= CONVERSATION_PAUSE_MS ||
+      this.message.created.toDateString() !==
+        previousMessage.created.toDateString()
+    ) {
+      return false;
+    }
+    if (this.isFromAssistant) {
+      return true;
+    }
+    // a person's message after the assistant's reply always says who wrote
+    // it: their avatar and name over the bubble
+    return false;
+  }
+
+  // The user's previous message shared exactly these cards and files, so
+  // its chips already say what this one is about.
+  private get repeatsContext() {
+    if (this.isFromAssistant) {
+      return false;
+    }
+    let ids = (message: { attachedCardIds?: string[] | null }) =>
+      [...(message.attachedCardIds ?? [])].sort().join(' ');
+    let files = (message: { attachedFiles?: { sourceUrl?: string }[] }) =>
+      (message.attachedFiles ?? [])
+        .map((file) => file.sourceUrl ?? '')
+        .sort()
+        .join(' ');
+    let messages = this.args.roomResource.messages;
+    for (let i = this.args.index - 1; i >= 0; i--) {
+      let earlier = messages[i]!;
+      if (earlier.author.userId === this.message.author.userId) {
+        let same =
+          ids(earlier) === ids(this.message) &&
+          files(earlier as any) === files(this.message as any);
+        return same && Boolean(ids(this.message) || files(this.message as any));
+      }
+    }
+    return false;
+  }
+
+  // The host posted this for the reader: a background run finished and its
+  // result went to the assistant. It reads as a line in the thread, never
+  // as something the reader typed.
+  private get deliveryNote() {
+    return !this.isFromAssistant &&
+      isRunDelivery(this.message.clientGeneratedId)
+      ? 'Background run finished · result posted for the assistant'
+      : undefined;
+  }
+
+  // Folded, a turn's message with no prose of its own has nothing left to
+  // show: it takes no line. The turn's first one stays, for the summary.
+  private get foldedAway() {
     return (
-      previousMessage.author.userId === this.message.author.userId &&
-      this.message.created.getTime() - previousMessage.created.getTime() <
-        MESSAGE_GROUPING_WINDOW_MS
+      this.rowsFolded &&
+      !this.args.turnFold?.isFirst &&
+      !this.message.body?.trim() &&
+      !this.errorMessage
     );
+  }
+
+  private get rowsFolded() {
+    let fold = this.args.turnFold;
+    return Boolean(fold && !fold.expanded);
   }
 
   private get hideMeta() {
@@ -226,6 +474,8 @@ export default class RoomMessage extends Component<Signature> {
         id='message-container-{{@index}}'
         @messageHTML={{this.message.bodyHTML}}
         @messageHTMLParts={{this.message.htmlParts}}
+        @messageBody={{this.message.body}}
+        @isCanceled={{this.message.isCanceled}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
@@ -250,38 +500,103 @@ export default class RoomMessage extends Component<Signature> {
         @reloadBillingData={{this.message.reloadBillingData}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
+        @inLatestTurn={{@inLatestTurn}}
         @retryAction={{@retryAction}}
         @waitAction={{if this.streamingTimeout this.waitLonger}}
         @isPending={{@isPending}}
         @hideMeta={{this.hideMeta}}
+        @authorName={{this.message.author.name}}
+        @isSelf={{this.isSelf}}
+        @continuesRun={{this.continuesOwnRun}}
+        @repeatsContext={{this.repeatsContext}}
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         @usage={{this.message.usage}}
         @compaction={{this.message.compaction}}
+        @deliveryNote={{this.deliveryNote}}
+        @reasoningFolded={{this.rowsFolded}}
+        @turnHead={{@turnHead}}
+        @reasoningMode={{@reasoningMode}}
+        hidden={{this.foldedAway}}
+        @answerFooter={{@answerFooter}}
         data-test-boxel-message-from={{this.message.author.name}}
-        class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
+        class={{cn
+          bot-tools-only=this.isBotToolsOnlyMessage
+          work-part=this.isWorkPart
+        }}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#each this.message.tools as |command|}}
-          <RoomMessageTool
-            @messageTool={{command}}
-            @roomResource={{@roomResource}}
-            @runCommand={{fn (perform this.run) command}}
-            @declineCommand={{fn (perform this.decline) command}}
-            @roomId={{@roomId}}
-            @isPending={{@isPending}}
-            @isCompact={{this.isCompactTool command}}
-            @monacoSDK={{@monacoSDK}}
-            @isError={{bool this.errorMessage}}
-            @isStreaming={{@isStreaming}}
+        {{#if @turnFold.isFirst}}
+          {{! The settled turn's tool rows, folded to what they did. The rows
+              stay mounted while folded: a background run inside the turn
+              keeps reporting, and can still post its result. }}
+          <CollapsedTurn
+            class='turn-fold'
+            @summary={{@turnFold.summary}}
+            @expanded={{@turnFold.expanded}}
+            @onExpand={{@turnFold.toggle}}
+            @variant='row'
+            data-test-turn-fold={{@turnFold.key}}
           />
+        {{/if}}
+        {{#each this.toolRuns key='key' as |run|}}
+          {{#if run.group}}
+            {{! three or more finished calls to one tool, as Pret UI's
+                ToolGroup: one receipt line that opens onto every call }}
+            <ToolGroup
+              hidden={{this.rowsFolded}}
+              @tools={{run.parts}}
+              @merge='none'
+              @pending={{run.pending}}
+              @summary={{run.summary}}
+              data-test-tool-run-group={{run.count}}
+            >
+              <:tool as |entry|>
+                {{#let (this.toolInRun run entry.id) as |command|}}
+                  {{#if command}}
+                    <RoomMessageTool
+                      @messageTool={{command}}
+                      @roomResource={{@roomResource}}
+                      @runCommand={{fn this.run command}}
+                      @declineCommand={{fn this.decline command}}
+                      @roomId={{@roomId}}
+                      @isPending={{@isPending}}
+                      @isCompact={{this.isCompactTool command}}
+                      @monacoSDK={{@monacoSDK}}
+                      @isError={{bool this.errorMessage}}
+                      @isStreaming={{@isStreaming}}
+                    />
+                  {{/if}}
+                {{/let}}
+              </:tool>
+            </ToolGroup>
+          {{else}}
+            {{#let run.command as |command|}}
+              <RoomMessageTool
+                hidden={{this.rowsFolded}}
+                @messageTool={{command}}
+                @roomResource={{@roomResource}}
+                @runCommand={{fn this.run command}}
+                @declineCommand={{fn this.decline command}}
+                @roomId={{@roomId}}
+                @isPending={{@isPending}}
+                @isCompact={{this.isCompactTool command}}
+                @monacoSDK={{@monacoSDK}}
+                @isError={{bool this.errorMessage}}
+                @isStreaming={{@isStreaming}}
+                @isSuperseded={{this.isRetriedLater command}}
+                @foldCount={{@foldCount}}
+              />
+            {{/let}}
+          {{/if}}
         {{/each}}
       </AiAssistantMessage>
     {{/if}}
   </template>
 
   @service declare toolService: ToolService;
+  @service declare matrixService: MatrixService;
 
   knownErrorMessagePrefixes: { [errorMessagePrefix: string]: string }[] = [
     {

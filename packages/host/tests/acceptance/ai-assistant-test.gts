@@ -144,6 +144,12 @@ function modelNameFor(llmId: string): string {
   return TEST_MODEL_NAMES[llmId] ?? llmId;
 }
 
+// The picker's trigger names the model without its provider prefix; the
+// list and the trigger's title keep the full name.
+function triggerName(name: string): string {
+  return name.replace(/^[^:]{1,24}:\s*/, '');
+}
+
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -745,7 +751,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let defaultModelId = 'anthropic/claude-sonnet-4.6';
     let defaultModelName = modelNameFor(defaultModelId);
 
-    assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(defaultModelName));
     await click('[data-test-llm-select-selected]');
 
     // Should have 6 models from our system card (including duplicate modelId with different config)
@@ -762,7 +770,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(llmNameToChangeTo);
     await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
-    assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(llmNameToChangeTo));
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
@@ -937,12 +947,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(defaultSystemModelId, 'system card provides a default model');
     let expectedName = modelNameFor(defaultSystemModelId!);
 
-    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(expectedName));
 
     // Switching submodes should not change the active LLM
     await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
+    assert
+      .dom('[data-test-llm-select-selected]')
+      .hasText(triggerName(expectedName));
 
     await click('[data-test-close-ai-assistant]');
   });
@@ -984,7 +998,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
+      .hasText(triggerName(modelNameFor('deepseek/deepseek-chat-v3-0324')));
     await click('[data-test-llm-select-selected]');
     assert
       .dom(
@@ -1715,7 +1729,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .doesNotExist();
   });
 
-  test('displays "Generating results..." when streaming', async function (assert) {
+  test('displays "Writing the answer" when streaming', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1745,10 +1759,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       isStreamingFinished: false,
     });
 
-    await waitFor('[data-test-ai-assistant-action-bar]');
+    await waitFor('[data-test-ai-assistant-action-bar]', { timeout: 5000 });
     assert
       .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+      .containsText('Writing the answer');
     assert.dom('[data-test-stop-generating]').exists();
 
     simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
@@ -1761,12 +1775,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         rel_type: 'm.replace',
       },
     });
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
   });
 
-  test('displays "Generation Cancelled" in the bottom of the message', async function (assert) {
+  test('says a cancelled reply was stopped, and kept, at the bottom of the message', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1801,7 +1817,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
     assert
       .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+      .containsText('Writing the answer');
     assert.dom('[data-test-stop-generating]').exists();
     assert
       .dom('[data-test-ai-message-content]')
@@ -1819,17 +1835,19 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
     });
 
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
     assert
       .dom('[data-test-ai-message-content]')
       .hasText(
-        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. {Generation Cancelled}',
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ■ Stopped · partial answer kept',
       );
   });
 
-  test(`displays "Generation Cancelled" in the bottom of the message when it's stopped during reasoning`, async function (assert) {
+  test(`says a reply stopped during reasoning was stopped`, async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -1863,14 +1881,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await waitFor('[data-test-ai-assistant-message]');
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
-    assert
-      .dom('[data-test-ai-assistant-action-bar]')
-      .containsText('Generating results...');
+    assert.dom('[data-test-ai-assistant-action-bar]').containsText('Thinking');
     assert.dom('[data-test-stop-generating]').exists();
-    assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
+    assert.dom('[data-test-ai-message-content]').containsText('Thinking');
     assert
       .dom('[data-test-ai-message-content]')
-      .doesNotContainText('{Generation Cancelled}');
+      .doesNotContainText('■ Stopped');
     assert
       .dom('[data-test-reasoning]')
       .containsText(
@@ -1890,13 +1906,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
     });
 
+    // the cap stays a beat after the reply ends, then closes
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+      { timeout: 5000 },
     );
-    assert.dom('[data-test-ai-message-content]').containsText('Thinking...');
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText('{Generation Cancelled}');
+    // a stopped reply's reasoning reads as done
+    assert.dom('[data-test-ai-message-content]').containsText('Thought');
+    assert.dom('[data-test-ai-message-content]').containsText('■ Stopped');
     await click('[data-test-reasoning]');
     assert
       .dom('[data-test-reasoning]')
@@ -3190,11 +3207,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-room-settled]');
 
     assert
-      .dom('[data-test-llm-mode-option="ask"]')
-      .hasClass('selected', 'Ask is selected by default on new session');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="ask"]',
+      )
+      .isChecked('Ask is selected by default on new session');
     assert
-      .dom('[data-test-llm-mode-option="act"]')
-      .doesNotHaveClass('selected', 'Act is not selected by default');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isNotChecked('Act is not selected by default');
   });
 
   test('new session inherits llm mode from current room', async function (assert) {
@@ -3212,10 +3233,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
 
-    await click('[data-test-llm-mode-option="act"]');
+    await click(
+      '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+    );
     assert
-      .dom('[data-test-llm-mode-option="act"]')
-      .hasClass('selected', 'LLM mode is set to act');
+      .dom(
+        '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+      )
+      .isChecked('LLM mode is set to act');
 
     await fillIn(
       '[data-test-message-field]',
@@ -3574,11 +3599,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       assert
         .dom('[data-test-session-preparation]')
         .includesText('Takes 10-20 seconds');
-      await waitFor('[data-test-session-preparation-skip-button]');
-      assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
+      await waitFor('[data-test-pretui-session-prep-skip]');
+      assert.dom('[data-test-pretui-session-prep-skip]').hasText('Skip');
 
       // Click the skip button to skip session preparation
-      await click('[data-test-session-preparation-skip-button]');
+      await click('[data-test-pretui-session-prep-skip]');
 
       // Verify that the session preparation UI is no longer shown
       await waitFor('[data-test-session-preparation]', { count: 0 });

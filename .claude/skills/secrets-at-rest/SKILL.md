@@ -623,6 +623,10 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   -c "SELECT * FROM key_write_tickets LIMIT 0" \
   -c "SELECT * FROM user_key_grants LIMIT 0" \
   -c "SELECT * FROM secure_sessions LIMIT 0" \
+  -c "SELECT * FROM oauth_clients LIMIT 0" \
+  -c "SELECT * FROM platform_oauth_clients LIMIT 0" \
+  -c "SELECT * FROM oauth_connections LIMIT 0" \
+  -c "SELECT * FROM oauth_connect_requests LIMIT 0" \
   -c "WITH RECURSIVE reader (oid) AS (
         SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
         UNION
@@ -633,7 +637,9 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
       CROSS JOIN pg_class t JOIN pg_attribute c ON c.attrelid = t.oid
       WHERE t.oid IN (to_regclass('proxy_endpoints'), to_regclass('incoming_webhooks'),
                       to_regclass('user_keys'), to_regclass('key_write_tickets'),
-                      to_regclass('user_key_grants'), to_regclass('secure_sessions'))
+                      to_regclass('user_key_grants'), to_regclass('secure_sessions'),
+                      to_regclass('oauth_clients'), to_regclass('platform_oauth_clients'),
+                      to_regclass('oauth_connections'), to_regclass('oauth_connect_requests'))
         AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
         AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')" \
   -c "SELECT attrelid::regclass, attname FROM pg_attribute
@@ -662,7 +668,8 @@ exist` instead. Check that against the revision from step 0 before taking it
 
 The list of tables is the one that migration
 (`check-readonly-role-cant-read-withheld-tables`) checks, plus
-`user_key_grants` and `secure_sessions`, whose own migrations check them. A table added to either one
+`user_key_grants`, `secure_sessions` and the four OAuth tables, whose own
+migrations check them. A table added to either one
 goes here too.
 
 The role is also denied the wrapped data key itself. Expect

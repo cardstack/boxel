@@ -122,3 +122,31 @@ export async function publishCanceledResult(
   );
   return { commandRequestId: call.id, published };
 }
+
+// Answers a held call a person declined with a 👎 (see
+// runtime-common/ai/approval-reaction.ts) with an 'invalid' result naming
+// who declined it, as the host's Decline does, so the call settles and the
+// model reads why on its next turn.
+export async function publishDeclinedResult(
+  call: BotToolCall,
+  target: BotToolTarget,
+  reason: string,
+): Promise<BotToolOutcome> {
+  let published = await publishToolResult(
+    target.client,
+    target.roomId,
+    {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      commandRequestId: call.id,
+      failureReason: reason,
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'invalid',
+        event_id: target.requestEventId,
+      },
+      data: { context: { agentId: target.agentId } },
+    },
+    call.function.name,
+  );
+  return { commandRequestId: call.id, published };
+}

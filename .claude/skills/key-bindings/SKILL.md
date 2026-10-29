@@ -157,7 +157,10 @@ the request. `fillSlots` checks, per slot, in this order:
 | The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
 
 The value is the grant's copy (`openGrantForSending`), never the key's master
-copy, with `|basic` applied (the raw value is registered with the scrubber
+copy — or, for a key that mints its access tokens (an OAuth connection, a
+`client_credentials` client), the access token minted now, once the grant's
+marker has opened; a key that can't mint one is refused `credential-rejected`
+(424) with `meta.reason` (see the `oauth-connections` skill) — with `|basic` applied (the raw value is registered with the scrubber
 too). Back in the executor, after building, the request — every slot still a
 token — must be under the **grant's stored destination**
 (`destinationCovers`), not the declaration's, or it is refused

@@ -1328,9 +1328,10 @@ export default class RealmServerService
   });
 
   // How the token refresher waits for its next mint. Tests replace it to run
-  // the refresher against a virtual clock.
-  async waitForTokenRefresh(ms: number): Promise<void> {
-    await rawTimeout(ms);
+  // the refresher against a virtual clock. Not `async`, for the reason given on
+  // `RealmService.waitForTokenRefresh`.
+  waitForTokenRefresh(ms: number): PromiseLike<void> {
+    return rawTimeout(ms);
   }
 
   private refreshSchedule = new TokenRefreshSchedule();

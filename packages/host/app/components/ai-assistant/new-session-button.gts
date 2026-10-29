@@ -75,7 +75,7 @@ export default class NewSessionButton extends Component<Signature> {
             @size='extra-small'
             @width='18'
             @height='18'
-            @variant='highlight-icon'
+            @variant='ghost'
             @label='Create new session (Shift+Click for options)'
             aria-expanded='{{this.showMenu}}'
             {{on 'click' this.handleCreateNewSession}}
@@ -110,16 +110,28 @@ export default class NewSessionButton extends Component<Signature> {
       }
       .new-session-menu-wrapper {
         position: absolute;
-        top: 20px;
+        top: calc(1.75rem + var(--boxel-sp-4xs));
         right: 0;
         z-index: 1000;
       }
       .button {
         --host-outline-offset: 2px;
-        transform: translateY(-1px);
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 0.5rem;
+        color: inherit;
+      }
+      .button:hover:not(:disabled),
+      .button[aria-expanded='true'] {
+        color: var(--boxel-light);
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 10%,
+          transparent
+        );
       }
       .button :deep(svg) {
-        stroke-width: 2.5;
+        stroke-width: 2;
       }
     </style>
   </template>
