@@ -57,44 +57,22 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
     );
   }
 
-  // if (typeof X === "function" &&
-  //     !Object.prototype.hasOwnProperty.call(X, Symbol.for("ident")))
-  //   Object.defineProperty(X, Symbol.for("ident"), {
-  //     value: [moduleIdentifier, exportedName], configurable: true,
-  //     writable: true });
+  // Object.defineProperty(X, Symbol.for("ident"), {
+  //   value: [moduleIdentifier, exportedName], configurable: true,
+  //   writable: true });
   function identityStatement(
     binding: t.Identifier,
     moduleIdentifier: string,
     exportedName: string,
   ): t.Statement {
-    let value = () => t.identifier(binding.name);
-    let objectMethod = (name: string) =>
-      t.memberExpression(t.identifier('Object'), t.identifier(name));
-    return t.ifStatement(
-      t.logicalExpression(
-        '&&',
-        t.binaryExpression(
-          '===',
-          t.unaryExpression('typeof', value()),
-          t.stringLiteral('function'),
+    return t.expressionStatement(
+      t.callExpression(
+        t.memberExpression(
+          t.identifier('Object'),
+          t.identifier('defineProperty'),
         ),
-        t.unaryExpression(
-          '!',
-          t.callExpression(
-            t.memberExpression(
-              t.memberExpression(
-                objectMethod('prototype'),
-                t.identifier('hasOwnProperty'),
-              ),
-              t.identifier('call'),
-            ),
-            [value(), identityKey()],
-          ),
-        ),
-      ),
-      t.expressionStatement(
-        t.callExpression(objectMethod('defineProperty'), [
-          value(),
+        [
+          t.identifier(binding.name),
           identityKey(),
           t.objectExpression([
             t.objectProperty(
@@ -110,7 +88,7 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
             ),
             t.objectProperty(t.identifier('writable'), t.booleanLiteral(true)),
           ]),
-        ]),
+        ],
       ),
     );
   }

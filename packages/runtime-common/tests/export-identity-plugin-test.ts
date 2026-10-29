@@ -324,7 +324,7 @@ const tests = Object.freeze({
         import { markDefinition } from '@cardstack/base/mark-definition';
         import enumField from '@cardstack/base/enum';
         export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
-        if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
       `,
     );
   },
@@ -341,7 +341,7 @@ const tests = Object.freeze({
       `
         import { markDefinition } from '@cardstack/base/mark-definition';
         const Status = markDefinition(enumField(StringField, { options: ['good'] }));
-        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
         export { Status as DogStatus };
       `,
     );
@@ -356,7 +356,7 @@ const tests = Object.freeze({
       `
         import { markDefinition } from '@cardstack/base/mark-definition';
         const _default = markDefinition(enumField(StringField, { options: ['good'] }));
-        if (typeof _default === 'function' && !Object.prototype.hasOwnProperty.call(_default, Symbol.for('ident'))) Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
+        Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
         export default _default;
       `,
     );
@@ -375,9 +375,9 @@ const tests = Object.freeze({
           import { markDefinition as mark } from '@cardstack/base/mark-definition';
           import * as base from '@cardstack/base/mark-definition';
           export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
-          if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+          Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
           export const TicketStatus = base.markDefinition(statusField({ options: [] }));
-          if (typeof TicketStatus === 'function' && !Object.prototype.hasOwnProperty.call(TicketStatus, Symbol.for('ident'))) Object.defineProperty(TicketStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
+          Object.defineProperty(TicketStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
         `,
       );
     },
