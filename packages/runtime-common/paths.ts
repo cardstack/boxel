@@ -80,8 +80,12 @@ export class RealmPaths {
       }
 
       if (opts.preserveQuerystring !== true) {
-        // strip query params
-        input = new URL(decodeURI(input.pathname), input);
+        // Strip the query and fragment on a copy. Re-resolving the pathname
+        // against the URL instead would read a pathname that starts with `//`
+        // as a protocol-relative reference to another host.
+        input = new URL(input.href);
+        input.search = '';
+        input.hash = '';
       }
 
       // this will always remove a leading slash because our constructor ensures
