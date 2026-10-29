@@ -224,6 +224,8 @@ export class StickToBottom extends Component<StickToBottomSignature> {
   @tracked anchoring = false;
   /** with @holdTail: the last row id the reader had when they detached */
   @tracked private heldAfter: string | undefined;
+  /** counts resizes: each one is settled in the render pass it starts */
+  @tracked private resizes = 0;
 
   private viewport: HTMLElement | undefined;
   private content: HTMLElement | undefined;
@@ -711,12 +713,20 @@ export class StickToBottom extends Component<StickToBottomSignature> {
     }
   };
 
+  // A resize is not settled here: it starts a render pass and is settled
+  // in its commit, so a motion layer measuring that pass sees the follow
+  // it implies as a move, not a jump after it (ADR 013 §1.7). The render
+  // runs in a microtask, before the frame paints.
   private onResize = () => {
+    this.resizes++;
+  };
+
+  resizeChanged = () => {
     let el = this.viewport;
     if (!el) {
       return;
     }
-    this.settle();
+    this.settle({ inRender: true });
     this.lastTop = el.scrollTop;
     // a frame's scroll events run before its resize callbacks, so a clamp
     // that a shrink caused still compares against the heights before it
@@ -1068,6 +1078,7 @@ export class StickToBottom extends Component<StickToBottomSignature> {
         {{watch this.activeChanged @active}}
         {{watch this.followingArgChanged @following}}
         {{watch this.revisionChanged @revision}}
+        {{watch this.resizeChanged this.resizes}}
       >
         <div
           class='pretui-stick-to-bottom-content'
