@@ -213,6 +213,31 @@ export interface ClientErrorEvent extends BaseEvent {
   realm: TelemetryRealm;
 }
 
+// One `realm.entries.search` call in an AI assistant's run-realm-code script
+// that searched the catalog: the realms it reached, after the room's feature
+// gate, include the catalog. A search the gate kept out of the catalog is not
+// one.
+export interface CatalogSearchEvent extends BaseEvent {
+  event_type: 'catalog-search';
+  // The query's full-text `matches` terms, space-separated. Empty for a
+  // search by type alone.
+  query_text: string;
+  // The card type the query's filter names with `on` or `type`, as
+  // `module#name`. Empty when it names none.
+  query_type: string;
+  // How many entries matched across the searched realms, and how many rows
+  // the script got back. Null when the search threw.
+  total: number | null;
+  returned: number | null;
+  // Whether a searched realm failed to answer, so `total` undercounts. Null
+  // when the search threw.
+  incomplete: boolean | null;
+  // The message of the error the search threw. Empty when it answered.
+  error: string;
+  // The workspace the script ran in.
+  realm: TelemetryRealm;
+}
+
 export type TelemetryEvent =
   | ServerRequestEvent
   | DeserializeEvent
@@ -221,7 +246,8 @@ export type TelemetryEvent =
   | RebuildEvent
   | RealmEvent
   | KeepaliveEvent
-  | ClientErrorEvent;
+  | ClientErrorEvent
+  | CatalogSearchEvent;
 
 // Distributive omit of `ts` — callers hand us the event minus its timestamp,
 // which the service stamps as it enters the ring buffer.

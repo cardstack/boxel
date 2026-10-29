@@ -6,6 +6,7 @@ import {
   assertQuery,
   clearReplacedArrayFieldMeta,
   coerceErrorMessage,
+  collectPositiveMatchTerms,
   ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
@@ -22,6 +23,7 @@ import {
   validateWriteSize,
   type CardResource,
   type EntryCollectionDocument,
+  type Filter,
   type Format,
   type LooseSingleCardDocument,
   type Query,
@@ -30,6 +32,7 @@ import {
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
+  type TypedFilter,
 } from '@cardstack/runtime-common';
 import {
   realmsOfDisabledFeatures,
@@ -124,6 +127,7 @@ import type {
 } from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
@@ -183,6 +187,9 @@ const MAX_ENTRY_RESULTS = 50;
 // An answer is parsed inside the sandbox, within its memory limit, and each
 // entry carries its full readMe, so it is bounded by size as well as count.
 const MAX_ENTRY_RESULT_SIZE = 1_000_000;
+// A search whose realms include this one is recorded in client telemetry as
+// a catalog search.
+const CATALOG_REALM = '@cardstack/catalog/';
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -451,6 +458,16 @@ type SearchCards = (
 // relative to `base` — to a URL.
 type ResolveURL = (reference: string, base?: string) => string;
 
+// Told about each realm.entries.search that ran: what it asked for and what
+// it found, or the error its search threw. A query refused before it is sent
+// is not reported.
+type RecordEntriesSearch = (search: {
+  query: Query;
+  realms: string[] | undefined;
+  found?: { total: number; returned: number; incomplete: boolean };
+  error?: unknown;
+}) => void;
+
 // One card a search found, as plain data. `id` is the card's URL and `path`
 // its file relative to the realm root, which `realm.fs` takes. The type and
 // links are full URLs, so a type can go back into a query's `on` or `type`.
@@ -609,6 +626,7 @@ class RealmFsSession {
     private cardSizeLimitBytes: number,
     readonly room: RoomActions,
     private research: Research,
+    private recordEntriesSearch: RecordEntriesSearch,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -1714,11 +1732,24 @@ class RealmFsSession {
         : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
     let query = pruneEmptyQueryParts(rawQuery as Query);
     assertQuery(query);
-    let { rows, total, incomplete } = await searchEntrySummaries(
-      this.searchEntries,
+    let searchRealms = realms as string[] | undefined;
+    let found;
+    try {
+      found = await searchEntrySummaries(this.searchEntries, query, {
+        scope,
+        limit: size,
+        realms: searchRealms,
+      });
+    } catch (error) {
+      this.recordEntriesSearch({ query, realms: searchRealms, error });
+      throw error;
+    }
+    let { rows, total, incomplete } = found;
+    this.recordEntriesSearch({
       query,
-      { scope, limit: size, realms: realms as string[] | undefined },
-    );
+      realms: searchRealms,
+      found: { total, returned: rows.length, incomplete },
+    });
     let resultSize = 0;
     for (let [index, row] of rows.entries()) {
       resultSize += JSON.stringify(row).length;
@@ -2474,11 +2505,39 @@ function noSearchResults() {
   return { data: [], meta: { page: { total: 0 } } };
 }
 
+// The card type a filter names with `on` or `type`, as `module#name`: the
+// outermost one, and the first of its siblings. Empty when it names none.
+function filterTypeOf(filter: Filter | undefined): string {
+  if (!filter) {
+    return '';
+  }
+  let ref = 'type' in filter ? filter.type : (filter as TypedFilter).on;
+  if (ref && isResolvedCodeRef(ref)) {
+    return `${ref.module}#${ref.name}`;
+  }
+  let children =
+    'every' in filter
+      ? filter.every
+      : 'any' in filter
+        ? filter.any
+        : 'not' in filter
+          ? [filter.not]
+          : [];
+  for (let child of children) {
+    let type = filterTypeOf(child);
+    if (type) {
+      return type;
+    }
+  }
+  return '';
+}
+
 export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -2742,6 +2801,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           knownModels: () => this.matrixService.pickableModelIds(roomId),
         }),
         this.research(roomId),
+        (search) => this.recordCatalogSearch(gatedRealms(), rootURL, search),
       );
     let session = newSession();
     session.onActivity = this.publishActivity;
@@ -3647,6 +3707,46 @@ export default class RunRealmCodeTool extends HostBaseTool<
       realm,
     );
     return gated.some((gatedRealm) => identifier.startsWith(gatedRealm));
+  }
+
+  // Records a realm.entries.search in client telemetry when the realms it
+  // reached include the catalog: the realms it named, or every realm the user
+  // can read when it named none, less those the room's feature gate keeps out.
+  private recordCatalogSearch(
+    gated: RealmIdentifier[],
+    rootURL: string,
+    { query, realms, found, error }: Parameters<RecordEntriesSearch>[0],
+  ): void {
+    try {
+      // An empty list searches every realm, the same as none.
+      let reached =
+        this.searchableRealms(gated, realms?.length ? realms : undefined) ??
+        this.realmServer.availableRealmIdentifiers;
+      if (!reached.some((realm) => this.isCatalog(realm))) {
+        return;
+      }
+      this.clientTelemetry.recordEvent({
+        event_type: 'catalog-search',
+        query_text: collectPositiveMatchTerms(query.filter).join(' '),
+        query_type: filterTypeOf(query.filter),
+        total: found?.total ?? null,
+        returned: found?.returned ?? null,
+        incomplete: found?.incomplete ?? null,
+        error:
+          error === undefined ? '' : coerceErrorMessage(error, 'unknown error'),
+        realm: rootURL,
+      });
+    } catch (e) {
+      // Telemetry must never break the search it reports on.
+      console.error('recording a catalog search failed', e);
+    }
+  }
+
+  private isCatalog(realm: string): boolean {
+    return canonicalRealmIdentifier(
+      this.network.virtualNetwork,
+      realm,
+    ).startsWith(CATALOG_REALM);
   }
 
   private searchableRealms(
