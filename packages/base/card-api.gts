@@ -100,6 +100,7 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  decodedLastSegmentOfIdentifier,
   fileNameFromUrl,
   referenceNamesFile,
   isDeclaredCaptureFormat,
@@ -4164,10 +4165,7 @@ export class FileDef extends BaseDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile> {
-    let parsed = new URL(url);
-    let name = decodeURIComponent(
-      parsed.pathname.split('/').pop() ?? parsed.pathname,
-    );
+    let name = decodedLastSegmentOfIdentifier(url);
     let contentType = inferContentType(name);
     let contentHash: string | undefined = options.contentHash;
     let contentSize: number | undefined = options.contentSize;

@@ -1,7 +1,7 @@
 import { modifier } from 'ember-modifier';
 import {
   hasNothingToShow,
-  lastSegmentOfIdentifier,
+  decodedLastSegmentOfIdentifier,
 } from '@cardstack/runtime-common';
 import {
   CardDef,
@@ -506,15 +506,7 @@ function lastPathSegment(url: string | undefined): string | undefined {
   if (!url) {
     return undefined;
   }
-  let segment = lastSegmentOfIdentifier(url);
-  if (!segment) {
-    return url;
-  }
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
+  return decodedLastSegmentOfIdentifier(url) || url;
 }
 
 export class RunRealmCodeInput extends CardDef {
