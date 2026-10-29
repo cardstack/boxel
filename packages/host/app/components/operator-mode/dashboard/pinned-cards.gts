@@ -73,7 +73,8 @@ export default class PinnedCards extends Component<Signature> {
   // with no prerendered HTML yet is left out rather than rendered live, and
   // the desk draws the first pins that have it.
   // Entries are named by URL and pins by either form, so both are folded
-  // to one before they're matched.
+  // to one before they're matched. Each pin keeps its own id, which is what
+  // opens it.
   private inPinOrder = (entries: RenderableSearchEntryLike[]) => {
     let { virtualNetwork } = this.network;
     let byId = new Map(
@@ -85,8 +86,10 @@ export default class PinnedCards extends Component<Signature> {
         ]),
     );
     return this.args.cardIds
-      .map((id) => byId.get(virtualNetwork.unresolveURL(id)))
-      .filter((entry): entry is RenderableSearchEntryLike => Boolean(entry))
+      .flatMap((id) => {
+        let entry = byId.get(virtualNetwork.unresolveURL(id));
+        return entry ? [{ id, entry }] : [];
+      })
       .slice(0, MAX_DESK_PINS);
   };
 
@@ -118,20 +121,20 @@ export default class PinnedCards extends Component<Signature> {
               data-pinned-collage
               data-test-pinned-cards={{@realm}}
             >
-              {{#each pins key='id' as |entry|}}
+              {{#each pins key='id' as |pin|}}
                 <li class='pin'>
                   <button
                     type='button'
                     class='pin-button'
-                    aria-label={{this.pinLabel entry}}
-                    {{on 'click' (fn this.openPin entry.id)}}
-                    data-test-pinned-card={{entry.id}}
+                    aria-label={{this.pinLabel pin.entry}}
+                    {{on 'click' (fn this.openPin pin.id)}}
+                    data-test-pinned-card={{pin.id}}
                   >
                     {{! A preview, not the card: nothing in it takes focus.
                         The dashboard is dark; a card shows in its own theme,
                         which defaults to light. }}
                     <span class='pin-render' data-theme='light' inert>
-                      <entry.component class='pin-card' />
+                      <pin.entry.component class='pin-card' />
                     </span>
                   </button>
                 </li>

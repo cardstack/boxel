@@ -1194,7 +1194,7 @@ module('Acceptance | dashboard', function (hooks) {
           .hasAttribute(
             'data-test-pinned-card',
             `${pinnedRealmURL}roadmap`,
-            'each pin is keyed by its card URL',
+            'each pin is keyed by its own id',
           );
         let pinnedStat =
           '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]';
@@ -1224,6 +1224,22 @@ module('Acceptance | dashboard', function (hooks) {
             ) as OperatorModeStateService
           ).getOpenCardIds(),
           [`${pinnedRealmURL}roadmap`],
+        );
+      });
+
+      test('a pin linked by prefix opens by that prefix', async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        await click('[data-test-pinned-card="@cardstack/catalog/glossary"]');
+
+        assert.deepEqual(
+          (
+            getService(
+              'operator-mode-state-service',
+            ) as OperatorModeStateService
+          ).getOpenCardIds(),
+          ['@cardstack/catalog/glossary'],
         );
       });
 
