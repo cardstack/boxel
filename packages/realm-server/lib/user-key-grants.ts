@@ -62,7 +62,9 @@ import {
 // the routes check that (`handle-user-key-grants.ts`) and record which client
 // it was as `approvedVia`.
 
-export type UserKeyGrantState = 'active';
+// `rejected` when the vendor answered the key with 401 at this destination
+// (see `key-grant-rejection.ts`).
+export type UserKeyGrantState = 'active' | 'rejected';
 
 export interface UserKeyGrant {
   id: string;
@@ -71,9 +73,14 @@ export interface UserKeyGrant {
   state: UserKeyGrantState;
   approvedAt: string;
   approvedVia: SecureSessionClient;
+  // When the vendor rejected the key here; null while the grant is active.
+  rejectedAt: string | null;
+  // The latest 403 the vendor answered under the grant, which changes no
+  // state: when, and from which host.
+  vendorForbidden: { at: string; host: string } | null;
 }
 
-const GRANT_COLUMNS = `id, key_id, destination, state, approved_at, approved_via`;
+const GRANT_COLUMNS = `id, key_id, destination, state, approved_at, approved_via, rejected_at, last_forbidden_at, last_forbidden_host`;
 
 function toGrant(row: Record<string, unknown>): UserKeyGrant {
   return {
@@ -83,6 +90,15 @@ function toGrant(row: Record<string, unknown>): UserKeyGrant {
     state: row.state as UserKeyGrantState,
     approvedAt: new Date(row.approved_at as string).toISOString(),
     approvedVia: row.approved_via as SecureSessionClient,
+    rejectedAt: row.rejected_at
+      ? new Date(row.rejected_at as string).toISOString()
+      : null,
+    vendorForbidden: row.last_forbidden_at
+      ? {
+          at: new Date(row.last_forbidden_at as string).toISOString(),
+          host: row.last_forbidden_host as string,
+        }
+      : null,
   };
 }
 
@@ -330,13 +346,12 @@ export async function createOrReuseGrantIn(
     ` AND owner = `,
     param(owner),
   ]);
+  // A rejected grant covers its destination as much as an active one: the
+  // vendor refused this key there, and a second grant at the same place would
+  // send the refused value again with nothing held back.
   let covering = rows
     .map((row) => ({ row, grant: toGrant(row) }))
-    .filter(
-      ({ grant }) =>
-        grant.state === 'active' &&
-        destinationCovers(grant.destination, normalized),
-    )
+    .filter(({ grant }) => destinationCovers(grant.destination, normalized))
     .sort((a, b) => b.grant.destination.length - a.grant.destination.length)
     .find(({ row, grant }) =>
       opensUnder(
@@ -443,7 +458,8 @@ export async function createOrReuseGrantForOperation(
 // stored on the grant, and answers with that destination beside it. It reads
 // only the grant: never the key's master copy and never the operation. A copy
 // that doesn't open throws `SecretDecryptionError`, which names none of its
-// inputs.
+// inputs. A rejected grant opens too, for the probe that may bring it back;
+// whether a call may send under it is the caller's to decide.
 export async function openGrantForSending(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -453,6 +469,9 @@ export async function openGrantForSending(
   kind: UserKeyKind;
   destination: string;
   value: string;
+  // Identifies the sealed copy that was opened, which changes whenever the
+  // key's value is replaced.
+  copy: string;
 }> {
   if (!UUID.test(grantId)) {
     throw new UserKeyError(404, 'no such grant');
@@ -462,7 +481,7 @@ export async function openGrantForSending(
     param(grantId),
     ` AND g.owner = `,
     param(owner),
-    ` AND g.state = 'active'`,
+    ` AND g.state IN ('active', 'rejected')`,
   ]);
   if (!row) {
     throw new UserKeyError(404, 'no such grant');
@@ -482,7 +501,13 @@ export async function openGrantForSending(
       destination,
     }),
   );
-  return { keyId, kind: row.kind as UserKeyKind, destination, value };
+  return {
+    keyId,
+    kind: row.kind as UserKeyKind,
+    destination,
+    value,
+    copy: copy.nonce.toString('base64'),
+  };
 }
 
 // Removes one of the owner's grants, and answers with the bindings that sent

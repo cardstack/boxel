@@ -154,6 +154,7 @@ the request. `fillSlots` checks, per slot, in this order:
 | `state` isn't `needs-reapproval` and the fingerprint matches                         | `binding-needs-reapproval`     | 409    |
 | Interactive invocation needs `interactive`                                           | `interactive-use-not-approved` | 403    |
 | A grant is set, opens, and belongs to the binding's key (or the share's current key) | `binding-not-approved`         | 409    |
+| The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
 
 The value is the grant's copy (`openGrantForSending`), never the key's master
 copy — or, for a key that mints its access tokens (an OAuth connection, a
@@ -192,7 +193,9 @@ order, and maps each way a slot falls short to an answer: no binding →
 `needs-connect`, or `needs-approval` where one of the caller's grants already
 covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
-to anyone but the share key's owner; nobody signed in → `needs-sign-in`. It
+to anyone but the share key's owner; a grant the vendor rejected, with no
+probe due → `credential-rejected` (to everyone, since the call says the
+same); nobody signed in → `needs-sign-in`. It
 opens no key and writes nothing: a changed fingerprint is reported, not moved
 to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or

@@ -27,7 +27,7 @@ const BusyMessage: TemplateOnlyComponent<Signature> = <template>
       text-align: center;
     }
     .busy-title {
-      font: 600 var(--boxel-font-md);
+      font: 500 var(--boxel-font-sm);
       color: var(--foreground, var(--boxel-light));
     }
     .busy-spinner {
