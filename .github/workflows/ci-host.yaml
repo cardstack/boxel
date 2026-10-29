@@ -298,7 +298,8 @@ jobs:
       # chrome against the env-mode service stack at
       # `https://*.ci.localhost`, so environment.js needs to bake those
       # URLs into the host bundle. The standard-mode build still exists
-      # in ci.yaml for `matrix-client-test` / `vscode-boxel-tools-package`.
+      # in ci.yaml for its other jobs; `matrix-client-test` has its own
+      # there, with DASHBOARD_V2 on.
       boxel_environment: ci
       # host-test waits on this build, so it follows host-test onto RunsOn,
       # under the same variables and the same fork guard; see host-test.

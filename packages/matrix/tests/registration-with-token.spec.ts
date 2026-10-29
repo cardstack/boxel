@@ -130,7 +130,7 @@ test.describe('User Registration w/ Token', () => {
 
     await page.bringToFront();
 
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await expect(
       page.locator(
         '[data-test-workspace-list] [data-test-workspace="Unknown Workspace"]',
@@ -159,7 +159,7 @@ test.describe('User Registration w/ Token', () => {
       'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png");',
     );
     await expect(
-      page.locator(`[data-test-workspace="Test User's Workspace"] .tile-icon`),
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
     await expect(
@@ -175,7 +175,7 @@ test.describe('User Registration w/ Token', () => {
     let newRealmURL = new URL(`${firstUser.username}/personal/`, serverIndexUrl)
       .href;
 
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(1);
@@ -193,7 +193,7 @@ test.describe('User Registration w/ Token', () => {
     ).toHaveCount(1);
     await showAllCards(page);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
@@ -210,7 +210,7 @@ test.describe('User Registration w/ Token', () => {
       userId: secondUser.credentials.userId,
       displayName: secondUser.username,
     });
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await expect(page.locator(`[data-test-workspace-list]`)).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace-list] [data-test-workspace]`),
@@ -238,7 +238,7 @@ test.describe('User Registration w/ Token', () => {
       displayName: firstUser.displayName,
       userId: firstUserCredentials.userId,
     });
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(1);

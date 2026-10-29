@@ -70,6 +70,8 @@ jobs:
           filters: |
             shared: &shared
               - '.github/workflows/ci.yaml'
+              # builds the host every browser suite runs against
+              - '.github/workflows/test-web-assets.yaml'
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -260,12 +262,27 @@ jobs:
     needs: change-check
     # choreo: the gallery's tests run against this host, which bundles
     # glimmer-motion and Choreo from the same commit
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
     concurrency:
       group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+
+  # The matrix specs drive the dashboard, which replaces the workspace chooser
+  # behind the build-time DASHBOARD_V2 flag, so they get a host build of their
+  # own with the flag on. Every other job keeps the default build.
+  matrix-test-web-assets:
+    name: Build test web assets (matrix)
+    needs: change-check
+    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: ci-matrix
+      dashboard_v2: true
+    concurrency:
+      group: ci-matrix-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
   ai-bot-test:
@@ -806,7 +823,7 @@ jobs:
 
   matrix-client-test:
     name: Matrix Client Tests
-    needs: [change-check, test-web-assets]
+    needs: [change-check, matrix-test-web-assets]
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -831,7 +848,7 @@ jobs:
       - name: Download test web assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          name: ${{ needs.matrix-test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
       - name: Restore test web assets into workspace
         shell: bash

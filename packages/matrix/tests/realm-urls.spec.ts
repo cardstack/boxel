@@ -37,9 +37,7 @@ test.describe('Realm URLs in Matrix account data', () => {
 
     await page.locator('[data-test-workspace-chooser-toggle]').click();
 
-    await page
-      .locator('[data-test-workspace-chooser]')
-      .waitFor({ state: 'visible' });
+    await page.locator('[data-test-dashboard]').waitFor({ state: 'visible' });
 
     await expect(
       page.locator('[data-test-workspace-list] [data-test-workspace]'),

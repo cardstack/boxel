@@ -644,7 +644,7 @@ export async function enterWorkspace(
   page: Page,
   workspace = 'Test Workspace A',
 ) {
-  await page.locator(`[data-test-workspace="${workspace}"]`).click();
+  await page.locator(`[data-test-workspace-button="${workspace}"]`).click();
 }
 
 export async function showAllCards(page: Page) {
