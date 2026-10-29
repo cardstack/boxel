@@ -216,17 +216,7 @@ export default class SectionRail extends Component<Signature> {
       return;
     }
     event.stopPropagation();
-    let openId = this.openId;
-    this.flyoutIntentTask.cancelAll();
-    // Focus inside the flyout would be lost with it, so it goes back to the
-    // flyout's entry first.
-    if (this.flyoutElement?.contains(document.activeElement)) {
-      let entry = this.railElement?.querySelector<HTMLElement>(
-        `[data-section-rail-entry="${openId}"]`,
-      );
-      entry?.focus();
-    }
-    this.openId = null;
+    this.closeFlyout();
   }
 
   // A click jumps to the section and toggles its flyout. A mouse's hover has
@@ -240,21 +230,21 @@ export default class SectionRail extends Component<Signature> {
     this.args.sections.scrollTo(section.id);
   }
 
-  // A pick inside the flyout removes the focused row, so focus goes back to
-  // the flyout's entry, as it does on Escape.
   @action private showSection(section: DashboardSection) {
-    if (this.flyoutElement?.contains(document.activeElement)) {
-      this.railElement
-        ?.querySelector<HTMLElement>(
-          `[data-section-rail-entry="${section.id}"]`,
-        )
-        ?.focus();
-    }
     this.args.sections.scrollTo(section.id);
   }
 
+  // Focus inside the flyout would be lost with it, so it goes back to the
+  // flyout's entry first.
   @action private closeFlyout() {
     this.flyoutIntentTask.cancelAll();
+    if (this.openId && this.flyoutElement?.contains(document.activeElement)) {
+      this.railElement
+        ?.querySelector<HTMLElement>(
+          `[data-section-rail-entry="${this.openId}"]`,
+        )
+        ?.focus();
+    }
     this.openId = null;
   }
 

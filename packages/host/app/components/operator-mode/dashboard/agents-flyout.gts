@@ -9,6 +9,7 @@ import Check from '@cardstack/boxel-icons/check';
 import Plus from '@cardstack/boxel-icons/plus';
 import { Button } from '@cardstack/pretui/components/button';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
+import { didCancel } from 'ember-concurrency';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -60,10 +61,18 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
     }
   }
 
+  // Entering the room first persists it, so the panel's open reselects it.
   @action private async openSession(roomId: string) {
     this.args.close();
     this.aiAssistantPanelService.enterRoom(roomId);
-    await this.aiAssistantPanelService.openPanel();
+    try {
+      await this.aiAssistantPanelService.openPanel();
+    } catch (error) {
+      // A later open superseded this one.
+      if (!didCancel(error)) {
+        throw error;
+      }
+    }
   }
 
   @action private async newSession() {

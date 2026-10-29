@@ -18,6 +18,8 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -1966,6 +1968,7 @@ module('Acceptance | dashboard', function (hooks) {
         await click(`${FLYOUT} [data-test-section-rail-agent="claude"]`);
 
         assert.dom(FLYOUT).doesNotExist('a pick closes the flyout');
+        assert.dom(ENTRY).isFocused('focus goes back to the entry');
         let matrixService = getService('matrix-service') as MatrixService;
         assert.strictEqual(matrixService.dashboardState.agent, 'claude');
         assert
@@ -1987,6 +1990,7 @@ module('Acceptance | dashboard', function (hooks) {
         await click(`${FLYOUT} [data-test-section-rail-ai-new-session]`);
 
         assert.dom(FLYOUT).doesNotExist();
+        assert.dom(ENTRY).isFocused('focus goes back to the entry');
         assert.dom('[data-test-ai-assistant-panel]').exists();
       });
     });
@@ -2006,6 +2010,23 @@ module('Acceptance | dashboard', function (hooks) {
         (getService('recent-cards-service') as any).resetState();
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
         await settled();
+      }
+
+      // Opens the AI panel from the ask step, which makes an empty session.
+      async function openBoxelAiSession() {
+        await click('[data-test-get-started-action="ask-ai"]');
+        let matrixService = getService('matrix-service') as MatrixService;
+        await waitUntil(() => matrixService.currentRoomId);
+        await settled();
+        return matrixService.currentRoomId!;
+      }
+
+      function sendMessage(roomId: string) {
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          body: 'Make me a card for tracking tasks',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+        });
       }
 
       test('a new account sees every step, none done', async function (assert) {
@@ -2058,10 +2079,17 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('ask-ai'), 'false');
       });
 
-      test('starting a Boxel AI session ticks the ask step', async function (assert) {
+      test('asking Boxel AI something ticks the ask step, and opening a session does not', async function (assert) {
         await visitAsNewUser();
 
-        await click('[data-test-get-started-action="ask-ai"]');
+        let roomId = await openBoxelAiSession();
+        assert.strictEqual(
+          stepDone('ask-ai'),
+          'false',
+          'an empty session has not been asked anything',
+        );
+
+        sendMessage(roomId);
         await waitUntil(() =>
           find('[data-test-get-started-count]')?.textContent?.includes(
             '1 of 4 done',
@@ -2070,16 +2098,13 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert
           .dom('[data-test-get-started-count]')
-          .hasText(
-            '1 of 4 done · Next: Open a card in a workspace',
-            'a session counts before anything is asked in it',
-          );
+          .hasText('1 of 4 done · Next: Open a card in a workspace');
       });
 
       test('finishing every step dismisses it for good', async function (assert) {
         await visitAsNewUser();
 
-        await click('[data-test-get-started-action="ask-ai"]');
+        sendMessage(await openBoxelAiSession());
         await waitUntil(() =>
           find('[data-test-get-started-count]')?.textContent?.includes(
             '1 of 4 done',
