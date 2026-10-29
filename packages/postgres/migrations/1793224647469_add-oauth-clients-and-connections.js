@@ -94,6 +94,12 @@ exports.up = (pgm) => {
       client_share_id uuid REFERENCES key_shares (id) ON DELETE SET NULL,
       platform_client_id uuid REFERENCES platform_oauth_clients (id) ON DELETE SET NULL,
       token_kind varchar NOT NULL,
+      -- The client the vendor issued the connection's tokens to, as it was
+      -- when the person signed in. A connection mints only through a client
+      -- that is still this one, so a client swapped into a share can't
+      -- receive the refresh tokens another client was issued.
+      client_id varchar NOT NULL,
+      token_url varchar NOT NULL,
       -- The scopes the vendor said it granted, which may be fewer than asked.
       scopes varchar NOT NULL DEFAULT '',
       rejected_at timestamptz,
