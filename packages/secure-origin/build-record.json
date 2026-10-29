@@ -45,7 +45,7 @@
       "bytes": 1052
     },
     "credentials.js": {
-      "bytes": 16622,
+      "bytes": 16749,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -65,7 +65,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/style.ts",
-          "size": 2472
+          "size": 2763
         },
         {
           "package": "@cardstack/secure-origin",
