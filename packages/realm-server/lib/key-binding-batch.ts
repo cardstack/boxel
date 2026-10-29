@@ -1,4 +1,5 @@
 import {
+  logger,
   param,
   query,
   rri,
@@ -54,6 +55,8 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // caller's keys a slot can take and the shares of theirs in the realm, each
 // with the destinations in the batch its grants already cover. Nothing of any
 // key's value is read.
+
+const log = logger('realm:key-bindings');
 
 export type BatchSlotStatus = 'new' | 'changed';
 
@@ -320,10 +323,15 @@ export async function approvalBatch(
 
 // What the key page names each of the owner's bindings by, as the approval
 // batch names them: its operation's label and its card definition's display
-// name. Each type is read from the definition cache once, under the read
-// checks a batch is read under, so a realm or module the owner can't read
-// says nothing here. A type that can't be read is named by its export name,
-// and its operations by their names split into words.
+// name. Each type is looked up once, the way a batch looks it up
+// (`resolveWindowRequest`), so a realm or module the owner can't read says
+// nothing here, and a name never depends on what the definition cache happens
+// to hold: the lookup mounts a realm that isn't mounted yet and fills the
+// cache on a miss, as opening the approve page would. A type that can't be
+// read, for any reason, is named by its export name, and its operations by
+// their names split into words, which tells nothing the binding row doesn't
+// already hold. So one realm that fails to mount names only its own
+// bindings that way, and the listing still answers.
 export interface BindingNames {
   operationLabel: string;
   cardName: string;
@@ -350,10 +358,12 @@ export async function bindingNames(
       }).then(
         ({ target }) => target?.definition,
         (error) => {
-          if (error instanceof UserKeyError) {
-            return undefined;
+          if (!(error instanceof UserKeyError)) {
+            log.warn(
+              `naming bindings of ${type.module}#${type.name} in ${realm}: ${String(error)}`,
+            );
           }
-          throw error;
+          return undefined;
         },
       );
       definitions.set(cacheKey, definition);
