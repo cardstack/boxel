@@ -82,6 +82,12 @@ const sheetModule = `
       headers: { authorization: 'Bearer {{userKey}}' },
     };
 
+    @operation static denied = {
+      base: 'callApi',
+      url: '${VENDOR}/status/401',
+      headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
     @operation static ping = {
       base: 'callApi',
       url: '${VENDOR}/echo/ping',
@@ -398,6 +404,25 @@ module(basename(import.meta.filename), function (hooks) {
       recovered.status,
       200,
       'a failure is not cached: the next call mints again',
+    );
+  });
+  test("an API's 401 to a minted token is its answer and leaves the grant open", async function (assert) {
+    let key = await addServiceAccount();
+    await approve(key.id, ['denied']);
+
+    for (let attempt of [1, 2]) {
+      let response = await invoke('denied');
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(
+        JSON.parse(response.text)['atomic:results'][0].status,
+        401,
+        `call ${attempt}: the card reads the API's 401`,
+      );
+    }
+    assert.strictEqual(
+      sentTo('/status/401').length,
+      2,
+      "a 401 doesn't reject the grant, so the next call reaches the API too",
     );
   });
 });
