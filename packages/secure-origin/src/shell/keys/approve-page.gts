@@ -514,6 +514,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .new-grant-icon {
         flex-shrink: 0;
+        fill: var(--boxel-warning-200);
         width: var(--boxel-icon-xs);
         height: var(--boxel-icon-xs);
         margin-top: var(--boxel-sp-5xs);

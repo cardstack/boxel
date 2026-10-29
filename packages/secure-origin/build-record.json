@@ -667,7 +667,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 65203,
+      "bytes": 65233,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -791,6 +791,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/759f03ede3.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/89454eb3c6.css"
         },
         {
@@ -816,10 +820,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/bd13cff975.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/c70be3122d.css"
         },
         {
           "package": "@cardstack/secure-origin",
