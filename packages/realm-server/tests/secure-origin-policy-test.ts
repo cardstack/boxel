@@ -180,14 +180,7 @@ const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
 ];
 
 // Every form the credential fields present.
-const CREDENTIAL_FORMS = [
-  'login',
-  'cli-login',
-  'register',
-  'reset',
-  'change-password',
-  'confirm-password',
-];
+const CREDENTIAL_FORMS = ['change-password', 'confirm-password'];
 
 // Records every policy violation in a frame, from before any of its own
 // script runs.
