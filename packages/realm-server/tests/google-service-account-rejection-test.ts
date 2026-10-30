@@ -537,7 +537,10 @@ module(basename(import.meta.filename), function (hooks) {
       share_id: n.share_id,
     }));
     let expected = [
-      ...new Set([OWNER, ...(await fetchDirectWriters(dbAdapter, realmURL))]),
+      ...new Set([
+        OWNER,
+        ...(await fetchDirectWriters(dbAdapter, realmURL, 'localhost')),
+      ]),
     ]
       .sort()
       .map((recipient) => ({

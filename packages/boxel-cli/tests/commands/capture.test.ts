@@ -570,6 +570,7 @@ describe('boxel capture: --spec batch', () => {
     let result = await capture(undefined, {
       specPath,
       realmSecretSeed: 'test-seed',
+      matrixServerName: 'example.test',
     });
     expect(result.error).toContain('one realm owner per invocation');
 
@@ -585,6 +586,7 @@ describe('boxel capture: --spec batch', () => {
     let crossOrigin = await capture(undefined, {
       specPath,
       realmSecretSeed: 'test-seed',
+      matrixServerName: 'example.test',
       asUser: '@owner-a:example.test',
     });
     expect(crossOrigin.error).toContain('one realm owner per invocation');

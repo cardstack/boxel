@@ -50,7 +50,7 @@ Read a file from a realm
 **Options:**
 
 - `--realm <realm-url>` — The realm URL or @cardstack/<realm>/ identifier to read from (required unless <path> is a full @cardstack/ identifier)
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 - `--json` — Output raw JSON response
 
 ### `boxel file write <path>`
@@ -65,7 +65,7 @@ Write a file to a realm (reads content from STDIN or --file)
 
 - `--realm <realm-url>` — The realm URL to write to
 - `--file <filepath>` — Read content from a local file instead of STDIN
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 - `--no-realm-events` — Index the write without announcing it to open tabs, which pick it up on their next load (for deploys)
 - `--json` — Output raw JSON response
 

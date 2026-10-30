@@ -761,7 +761,7 @@ export function registerStartCommand(watch: Command): void {
     )
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .option(
       '--overwrite-local',

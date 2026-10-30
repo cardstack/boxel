@@ -6,39 +6,46 @@ import { realmFetch } from './realm-fetch.ts';
 /**
  * The realm server's shared matrix-client username in every deployed
  * environment (local, staging, production). Bot user ids are formed as
- * `@realm_server:<host>` and the realm short-circuits authorization for that
- * id — see packages/runtime-common/realm.ts:2221.
+ * `@realm_server:<matrix server name>` and the realm short-circuits
+ * authorization for that id — see packages/runtime-common/realm.ts:2221.
  */
 export const DEFAULT_REALM_BOT_USERNAME = 'realm_server';
 
 /**
- * Derive the Matrix host portion (`:<host>`) for a bot user id from a realm
- * URL, mirroring `userIdFromUsername` in
- * `packages/runtime-common/matrix-client.ts`:
- *   - hostname ending in `.localhost` (and bare `localhost`) collapses to `localhost`
- *   - otherwise the last two labels of the hostname are used
- * So:
- *   - http://localhost:4201/…             → localhost
- *   - https://realms-staging.stack.cards/… → stack.cards
- *   - https://app.boxel.ai/…              → boxel.ai
+ * The environment variable naming the Matrix server paired with the realm
+ * server (ADR 004 §1.1). It is the variable the realm server itself is
+ * configured with, so an operator sets one value for both.
  */
-export function deriveHostFromRealmUrl(realmUrl: string): string {
-  const { hostname } = new URL(realmUrl);
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    return 'localhost';
+export const MATRIX_SERVER_NAME_ENV = 'MATRIX_SERVER_NAME';
+
+export const MATRIX_SERVER_NAME_MISSING_ERROR =
+  `Seed mode needs the name of the Matrix server paired with the realm ` +
+  `server, for example "localhost" for a local stack. Set ` +
+  `${MATRIX_SERVER_NAME_ENV} in the environment.`;
+
+/**
+ * The name of the Matrix server a seed-minted token names its user on: the
+ * explicit value when one is given, else `MATRIX_SERVER_NAME`. A realm URL's
+ * hostname is never a source. Matrix delegation lets a server be named by one
+ * host and served by another (ADR 004 §1.2), so only the operator can say
+ * which server the realm server's accounts are on.
+ */
+export function resolveMatrixServerName(explicit?: string): string {
+  const name = explicit?.trim() || process.env[MATRIX_SERVER_NAME_ENV]?.trim();
+  if (!name) {
+    throw new Error(MATRIX_SERVER_NAME_MISSING_ERROR);
   }
-  const labels = hostname.split('.');
-  if (labels.length <= 2) {
-    return hostname;
-  }
-  return labels.slice(-2).join('.');
+  return name;
 }
 
-export function deriveBotUserId(
-  realmUrl: string,
+/**
+ * The full Matrix id of the realm server's own account on `matrixServerName`.
+ */
+export function botUserId(
+  matrixServerName: string,
   username: string = DEFAULT_REALM_BOT_USERNAME,
 ): string {
-  return `@${username}:${deriveHostFromRealmUrl(realmUrl)}`;
+  return `@${username}:${matrixServerName}`;
 }
 
 /**
@@ -50,13 +57,17 @@ export function deriveRealmServerUrl(realmUrl: string): string {
 }
 
 /**
- * Derive the realm owner's Matrix user id from a realm URL. The CLI-visible
- * realm URL convention is `https://<host>/<owner>/<realm>/`, so the first path
- * segment is the owner's username and the host maps to the Matrix domain (the
- * same mapping `deriveHostFromRealmUrl` applies). Used to mint an owner-scoped
- * realm-server token for owner-gated admin endpoints (e.g. realm publish).
+ * The realm owner's Matrix user id, from a realm URL and the name of the
+ * Matrix server paired with the realm server. A realm path is
+ * `/<owner localpart>/<realm>/` only for an owner on the paired homeserver
+ * (ADR 004 §1.5), so the first path segment is that owner's localpart on
+ * `matrixServerName`. Used to mint an owner-scoped realm-server token for
+ * owner-gated admin endpoints (e.g. realm publish).
  */
-export function deriveOwnerUserId(realmUrl: string): string {
+export function deriveOwnerUserId(
+  realmUrl: string,
+  matrixServerName: string,
+): string {
   // A realm URL is `https://<host>/<owner>/<realm>/` — two path segments, the
   // first being the owner. Require both so a non-realm URL (a 1-segment path or
   // the server root) doesn't silently yield a bogus owner.
@@ -66,7 +77,7 @@ export function deriveOwnerUserId(realmUrl: string): string {
       `Cannot derive realm owner: ${realmUrl} is not a <host>/<owner>/<realm>/ realm URL`,
     );
   }
-  return `@${segments[0]}:${deriveHostFromRealmUrl(realmUrl)}`;
+  return `@${segments[0]}:${matrixServerName}`;
 }
 
 /**
@@ -175,6 +186,13 @@ export interface SeedAuthenticatorOptions {
   /** Raw realm secret seed used to sign JWTs (HS256). */
   seed: string;
   /**
+   * The name of the Matrix server the realm server's account is on. When
+   * absent it is read from `MATRIX_SERVER_NAME` (`resolveMatrixServerName`),
+   * and construction fails when neither names it. Not consulted when
+   * `botUserId` names the account in full.
+   */
+  matrixServerName?: string;
+  /**
    * @internal Override the realm-server's matrix-client username. Real
    * deployments all use `realm_server`; tests against a server with a
    * different username inject their own.
@@ -182,9 +200,8 @@ export interface SeedAuthenticatorOptions {
   botUsername?: string;
   /**
    * @internal Full override for the bot matrix user id (e.g.
-   * `@node-test_realm-server:localhost`). Used by integration tests that run
-   * against a realm on `127.0.0.1`, where the two-label host-derivation
-   * formula is nonsensical.
+   * `@node-test_realm-server:localhost`), for a test realm server whose
+   * account is not `realm_server`'s on the configured server.
    */
   botUserId?: string;
   /** @internal Override the 7-day JWT expiry used by real deployments. */
@@ -207,15 +224,15 @@ export interface RealmJwtClaims {
  * How it works: the realm short-circuits authorization when the JWT's `user`
  * claim equals the realm's own matrix-client user id
  * (packages/runtime-common/realm.ts:2221). That id is stable per deployment —
- * `@realm_server:<host>` in every real environment. So given the seed, we mint
- * a token with `user = @realm_server:<derived-host>`, `realm = <normalized
- * realm url>`, `realmServerURL = <origin>/`, `permissions = []`, and
- * everything else is ignored by the short-circuit.
+ * `@realm_server:<matrix server name>` in every real environment. So given
+ * the seed and the server name, we mint a token with `user =
+ * @realm_server:<matrix server name>`, `realm = <normalized realm url>`,
+ * `realmServerURL = <origin>/`, `permissions = []`, and everything else is
+ * ignored by the short-circuit.
  */
 export class SeedAuthenticator implements RealmAuthenticator {
   readonly #seed: string;
-  readonly #botUsername: string;
-  readonly #botUserIdOverride: string | undefined;
+  readonly #botUserId: string;
   readonly #expiresIn: jwt.SignOptions['expiresIn'];
   readonly #tokenCache = new Map<string, string>();
 
@@ -224,8 +241,12 @@ export class SeedAuthenticator implements RealmAuthenticator {
       throw new Error('SeedAuthenticator requires a non-empty seed');
     }
     this.#seed = options.seed;
-    this.#botUsername = options.botUsername ?? DEFAULT_REALM_BOT_USERNAME;
-    this.#botUserIdOverride = options.botUserId;
+    this.#botUserId =
+      options.botUserId ??
+      botUserId(
+        resolveMatrixServerName(options.matrixServerName),
+        options.botUsername ?? DEFAULT_REALM_BOT_USERNAME,
+      );
     this.#expiresIn = options.expiresIn ?? '7d';
   }
 
@@ -235,9 +256,7 @@ export class SeedAuthenticator implements RealmAuthenticator {
    */
   buildClaims(realmUrl: string): RealmJwtClaims {
     const normalizedRealm = normalizeRealmUrl(realmUrl);
-    const user =
-      this.#botUserIdOverride ??
-      deriveBotUserId(normalizedRealm, this.#botUsername);
+    const user = this.#botUserId;
     return {
       user,
       realm: normalizedRealm,

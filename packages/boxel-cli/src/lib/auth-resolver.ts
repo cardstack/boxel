@@ -14,6 +14,12 @@ export interface AuthResolverOptions {
    * resolution should go through `resolveRealmSecretSeed` in `./prompt` first.
    */
   realmSecretSeed?: string;
+  /**
+   * The name of the Matrix server paired with the realm server, for the user
+   * id a seed-minted token carries. Read from `MATRIX_SERVER_NAME` when
+   * absent; seed mode fails with a clear error when neither names it.
+   */
+  matrixServerName?: string;
   /** Override the ProfileManager (tests). When seed mode is active we won't touch it. */
   profileManager?: ProfileManager;
   /**
@@ -47,11 +53,13 @@ export function resolveRealmAuthenticator(
     return { ok: true, authenticator: options.authenticator, mode: 'injected' };
   }
   if (options.realmSecretSeed) {
-    // registerRealmUrl throws on a malformed realm URL; surface that as a
-    // resolver error so pull/push/sync keep their friendly CLI error path.
+    // The constructor throws when no Matrix server name is configured, and
+    // registerRealmUrl on a malformed realm URL; surface both as resolver
+    // errors so pull/push/sync keep their friendly CLI error path.
     try {
       const authenticator = new SeedAuthenticator({
         seed: options.realmSecretSeed,
+        matrixServerName: options.matrixServerName,
       });
       authenticator.registerRealmUrl(options.realmUrl);
       return { ok: true, authenticator, mode: 'seed' };

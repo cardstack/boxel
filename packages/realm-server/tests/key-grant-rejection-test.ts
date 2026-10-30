@@ -600,12 +600,14 @@ module(basename(import.meta.filename), function (hooks) {
         realm_url: n.realm_url,
         share_id: n.share_id,
       })),
-      (await fetchDirectWriters(dbAdapter, realmURL)).map((recipient) => ({
-        recipient,
-        grant_id: shared.meta.grant.id,
-        realm_url: realmURL.href,
-        share_id: share.id,
-      })),
+      (await fetchDirectWriters(dbAdapter, realmURL, 'localhost')).map(
+        (recipient) => ({
+          recipient,
+          grant_id: shared.meta.grant.id,
+          realm_url: realmURL.href,
+          share_id: share.id,
+        }),
+      ),
       "the owner and the realm's direct writers, and not its readers",
     );
     assert.false(

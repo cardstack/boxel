@@ -96,7 +96,7 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--delete` — Sync deletions both ways
 - `--dry-run` — Preview without making changes
 - `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 
 ### `boxel realm watch start <realm-url> <local-dir>`
 
@@ -111,7 +111,7 @@ Start watching a Boxel realm for server-side changes and pull them into a local 
 
 - `-i, --interval <seconds>` — Polling interval in seconds
 - `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 - `--overwrite-local` — Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.
 - `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 
@@ -135,7 +135,7 @@ Push local files to a Boxel realm
 - `--force` — Upload all files, even if unchanged
 - `--changed-since <revision>` — Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision
 - `--no-realm-events` — Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 
 ### `boxel realm pull <realm-url> <local-dir>`
 
@@ -151,7 +151,7 @@ Pull files from a Boxel realm to a local directory
 - `--delete` — Delete local files that do not exist in the realm
 - `--dry-run` — Show what would be done without making changes
 - `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)
 
 ### `boxel realm create <realm-name> <display-name>`
 
