@@ -11,7 +11,7 @@
 #
 # Usage: verify-index-cache.sh <dump.sql[.gz]> [tables-file]
 #   tables-file defaults to <dump-dir>/boxel-index-cache.tables and lists one
-#   expected table per line. mise-tasks/ci/cache-index writes it from the same
+#   expected table per line. scripts/dump-index-cache.sh writes it from the same
 #   list it feeds to pg_dump, so the two never drift.
 
 set -euo pipefail
@@ -53,7 +53,7 @@ done < "$TABLES_FILE"
 
 if [ "${#missing[@]}" -gt 0 ]; then
   for table in "${missing[@]}"; do
-    echo "::error title=Index cache incomplete::pg_dump produced no COPY block for table '${table}'. It was likely renamed or removed by a migration. Update CACHE_TABLES in mise-tasks/ci/cache-index and the TRUNCATE list in scripts/import-cached-index.sh."
+    echo "::error title=Index cache incomplete::pg_dump produced no COPY block for table '${table}'. It was likely renamed or removed by a migration. Update CACHE_TABLES in scripts/index-cache-tables.sh and the TRUNCATE list in scripts/import-cached-index.sh."
   done
   echo "Index cache verification FAILED: ${#missing[@]} of $(( ${#present[@]} + ${#missing[@]} )) expected tables missing: ${missing[*]}"
   exit 1
