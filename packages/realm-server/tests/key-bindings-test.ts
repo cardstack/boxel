@@ -5,6 +5,7 @@ import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
+  DefinitionLookup,
   LooseSingleCardDocument,
   Realm,
   VirtualNetwork,
@@ -32,8 +33,10 @@ import {
   bindingSnapshot,
   fillSlots,
   fingerprintOf,
+  listOwnBindings,
   pipelineAdmission,
 } from '../lib/key-bindings.ts';
+import { bindingNames } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
 // ============================================================================
@@ -871,6 +874,35 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       "a card the owner can't read is named by its export name, and its operations by their names in words",
     );
+  });
+
+  test('a type whose realm fails to mount is named from its binding row, and the listing still answers', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let bindings = await listOwnBindings(dbAdapter, OWNER);
+
+    // Finding a realm mounts it, so a mount that fails surfaces here, as an
+    // error that isn't a not-found.
+    let names = await bindingNames(
+      {
+        dbAdapter,
+        findRealm: async () => {
+          throw new Error('the realm failed to start');
+        },
+        definitionLookup: {
+          forRealm() {
+            throw new Error('a definition is never read for this type');
+          },
+        } as unknown as DefinitionLookup,
+        virtualNetwork,
+      },
+      OWNER,
+      bindings,
+    );
+    assert.deepEqual(names, [{ operationLabel: 'List', cardName: 'Inbox' }]);
   });
 
   test('an operation approved per instance serves only the card it was approved for', async function (assert) {
