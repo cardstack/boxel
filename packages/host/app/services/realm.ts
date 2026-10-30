@@ -1421,13 +1421,8 @@ export default class RealmService extends Service {
   // run refreshers against a virtual clock. A method rather than a field, since
   // the resources restored from storage start refreshing while this service's
   // fields are still being initialized.
-  //
-  // Not `async`: it returns the yieldable itself, so the refresher task awaits
-  // it directly and cancelling the task clears its timer. Wrapped in an async
-  // function, the timer keeps running after the task is cancelled, and holds
-  // the destroyed resource and its owner until the session's refresh time.
-  waitForTokenRefresh(ms: number): PromiseLike<void> {
-    return rawTimeout(ms);
+  async waitForTokenRefresh(ms: number): Promise<void> {
+    await rawTimeout(ms);
   }
 
   async publish(realmURL: string, publishedRealmURLs: string[]) {
