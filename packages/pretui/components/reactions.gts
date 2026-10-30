@@ -102,7 +102,8 @@ export class Reactions extends Component<ReactionsSignature> {
           padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-2xs);
           border: 0;
           border-radius: var(--boxel-border-radius-pill);
-          background-color: var(--muted);
+          /* knob: a reaction hung over an edge takes the ground it sits on */
+          background-color: var(--pretui-reaction-surface, var(--muted));
           box-shadow: inset 0 0 0 1px var(--border);
           font-family: inherit;
           font-size: var(--boxel-font-size-xs);
@@ -115,7 +116,11 @@ export class Reactions extends Component<ReactionsSignature> {
         }
         .pretui-reaction[data-mine],
         .pretui-reaction[aria-pressed='true'] {
-          background-color: color-mix(in oklch, var(--primary) 14%, var(--card));
+          background-color: color-mix(
+            in oklch,
+            var(--primary) 14%,
+            var(--card)
+          );
           box-shadow: inset 0 0 0 1px
             color-mix(in oklch, var(--primary) 45%, transparent);
           color: var(--foreground);

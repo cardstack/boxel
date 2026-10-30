@@ -8,6 +8,8 @@ import { CardEmbed } from '@cardstack/pretui/components/card-embed';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu } from '@cardstack/pretui/components/menu';
 
+import { cn } from '@cardstack/boxel-ui/helpers';
+
 import {
   cardTypeDisplayName,
   cardTypeIcon,
@@ -27,6 +29,7 @@ interface Signature {
   Args: {
     card: CardDef;
     format: Format;
+    heightless?: boolean;
   };
 }
 
@@ -88,6 +91,7 @@ export default class AnswerCard extends Component<Signature> {
       </:actions>
       <:default>
         <CardRenderer
+          class={{cn 'answer-card-render' heightless=@heightless}}
           @card={{@card}}
           @format={{@format}}
           @displayContainer={{false}}
@@ -104,6 +108,15 @@ export default class AnswerCard extends Component<Signature> {
       .answer-card :deep(.pretui-embed-hat) {
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 var(--boxel-200);
+      }
+      /* the slot is the one rounded box: the card meets its edge square.
+         A fitted card the answer gives no height takes a tile's height,
+         as its content cannot grow a size container */
+      .answer-card-render {
+        border-radius: 0;
+      }
+      .answer-card-render.heightless {
+        height: 5.5rem;
       }
       /* the menu's trigger fits the hat's line, in the hat's gray */
       .answer-card-options {
