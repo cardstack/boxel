@@ -29,9 +29,15 @@ interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
 ## Every other position
 
 Anywhere else, a string or template literal that contains the alias is flagged,
-as is a `<template>`'s text, attribute value or string argument that contains it,
-unless it sits in one of the positions that define the alias or recognize data
-written in it:
+as is a `<template>`'s text, attribute value or string argument that contains it.
+So is the alias built from `baseRealm.url`, the constant that holds it: a
+template that appends a path to it (`` `${baseRealm.url}cards/skill` ``),
+`baseRealm.url + path`, and `new URL(path, baseRealm.url)` each spell an
+alias-form resource. Reading `baseRealm.url` on its own is not flagged, nor is
+embedding it whole in a larger string (`` `[data-test-realm-url="${baseRealm.url}"]` ``):
+that is the base realm's registered URL, which the constant exists to name.
+None of these is flagged where it sits in one of the positions that define the
+alias or recognize data written in it:
 
 - the initializer of `baseRealm`;
 - the functions `equivalentURLForms`, `internalKeyFor` and
@@ -45,7 +51,8 @@ permission rows live in realm-server configuration, which this rule does not
 lint, and tsconfig `paths` are JSON.
 
 Where the base realm's registered URL is meant, read `baseRealm.url`. Where a
-base-realm resource is named, write `@cardstack/base/…`.
+base-realm resource is named, write `@cardstack/base/…`, or build it with
+`baseRRI(path)`.
 
 Only one of these is auto-fixed: a string that is the whole `module` of a code
 ref, which is rewritten to `@cardstack/base/…`. Anywhere else the alias may be a
@@ -68,6 +75,8 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 let api = await loader.import('https://cardstack.com/base/card-api');
 let mod = await import(`https://cardstack.com/base/${name}`);
 let ref = { module: 'https://cardstack.com/base/spec', name: 'Spec' };
+let skillId = `${baseRealm.url}cards/skill`;
+let canary = new URL('card-api', baseRealm.url).href;
 ```
 
 Correct:
@@ -77,5 +86,6 @@ import { CardDef } from '@cardstack/base/card-api';
 let api = await loader.import('@cardstack/base/card-api');
 let mod = await import(`@cardstack/base/${name}`);
 let ref = { module: '@cardstack/base/spec', name: 'Spec' };
-let skillId = `${baseRealm.url}cards/skill`;
+let skillId = baseRRI('cards/skill');
+let isBase = realmURL === baseRealm.url;
 ```

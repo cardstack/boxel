@@ -95,6 +95,7 @@ export async function runFileExtract({
     buildError: buildFileExtractError,
     toolContext,
   });
+  // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the alias-form `file-api` id is the key the indexer invalidates file extracts by
   let fileApiURL = `${baseRealm.url}file-api`;
   // The dependency tracker is page-global, so an import still running when
   // the extract begins can land in its deps without the extract reading it.

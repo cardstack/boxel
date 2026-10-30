@@ -6,6 +6,7 @@ retroactive: true
 scope:
   - packages/runtime-common/**
   - packages/host/app/**
+  - packages/host/tests/**
   - packages/base/**
   - packages/eslint-plugin-boxel/**
   - packages/realm-server/**
