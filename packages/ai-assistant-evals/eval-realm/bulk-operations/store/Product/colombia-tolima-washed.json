@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Colombia Tolima Washed",
+      "category": "coffee",
+      "origin": "Tolima, Colombia",
+      "variants": [
+        {
+          "sku": "CF-021-250",
+          "size": "250 g",
+          "price": 11.79
+        },
+        {
+          "sku": "CF-021-500",
+          "size": "500 g",
+          "price": 21.79
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

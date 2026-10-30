@@ -29,7 +29,8 @@ has lost track of a value replaces it.
 | `owner`                                                                                                    | The owner's Matrix user id                                                                                                                                                                                                    |
 | `name`                                                                                                     | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name                                                                                                                   |
 | `kind`                                                                                                     | `static`; `google-service-account` (see [Google service accounts](#google-service-accounts)); `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)                                                        |
-| `state`                                                                                                    | `active`, or `rejected` for a connection its vendor refused to refresh                                                                                                                                                        |
+| `state`                                                                                                    | `active`, or `rejected` for a connection its vendor refused to refresh or a service-account key Google refused (see [Rejected keys](#rejected-keys))                                                                          |
+| `rejected_at`, `last_probe_at`                                                                             | For a rejected service-account key: when Google refused it, and when a call was last let through to Google as its probe                                                                                                       |
 | `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id`                                             | The sealed value                                                                                                                                                                                                              |
 | `service_account_email`, `service_account_subject`, `service_account_scopes`, `service_account_details_at` | A `google-service-account` key's email, the user it acts as (null for itself) and its scopes, none of them secret, and the `updated_at` they were written with; null for every other kind (`user_keys_service_account_check`) |
 | `created_at`, `updated_at`                                                                                 | `timestamptz`                                                                                                                                                                                                                 |
@@ -133,10 +134,11 @@ realm's `realm.json` is indexed.
 The answers to adding and replacing a key carry neither.
 
 From the terminal, `boxel keys` (`packages/boxel-cli/src/commands/keys/`)
-calls these routes and the shares routes (see the `key-shares` skill). A
-command that only reads (`list`, `show`, `shares`), and `unshare`, uses the
-profile's ordinary session. A command that changes a key or a share in a way
-that needs a ticket (`add`, `replace`, `delete`, `share`, `swap`) makes all of
+calls these routes, the shares routes (see the `key-shares` skill) and the
+OAuth routes (see the `oauth-connections` skill). A command that only reads
+(`list`, `show`, `shares`, `clients`), and `unshare`, uses the profile's
+ordinary session. A command that changes a key or a share in a way that needs
+a ticket (`add`, `replace`, `delete`, `share`, `swap`, `connect`) makes all of
 its requests with the profile's secure session, signing in through the
 browser first when the profile has none, and mints a ticket for that one
 change. It prints a refusal as `Refused (HTTP <status>):
@@ -218,9 +220,11 @@ never the key file. The code is `lib/outbound/google-service-account.ts`.
   email, never Google's description, which can quote the request. A 5xx, a
   429, `temporarily_unavailable`, a timeout or a broken connection is retried
   after 250 ms and 1 s, then `GoogleTokenEndpointUnavailableError`. Neither
-  is cached, so the next call asks Google again. `fillSlots` answers both as
-  `credential-rejected` (424) with `meta.reason` `rejected` or `unavailable`,
-  and nothing reaches the API.
+  is cached in memory. `fillSlots` answers both as `credential-rejected`
+  (424) with `meta.reason` `rejected` or `unavailable`, and nothing reaches
+  the API. An unavailable endpoint leaves the key as it is, so the next call
+  asks Google again; a refusal makes the key `rejected` (see
+  [Rejected keys](#rejected-keys)).
 
 ## Grants
 
@@ -413,6 +417,55 @@ The `boxel:key-grant` log channel carries one JSON line per event:
 probe got no answer) and `vendor-outcome` (`host`, `status`) for every
 `callApi` the vendor answered. Hosts and ids only, never a path or a value.
 
-A user whose card shows Reconnect has a rejected grant. If the key is good
+### Rejected keys
+
+A `google-service-account` key that Google's token endpoint refuses (see
+[Google service accounts](#google-service-accounts)) is refused as a key, not
+at one destination, so the **key** becomes `rejected` (`markKeyRejected` in
+`lib/key-grant-rejection.ts`, called from `mintedToken` in
+`lib/key-bindings.ts`), with `rejected_at` and `last_probe_at` set. Its
+grants keep their own state. Only a refusal that names the key, its subject or
+its scopes (an OAuth error in `REJECTED_ERRORS` in
+`lib/outbound/google-service-account.ts`, carried as `keyRefused`) does this.
+A 4xx that names no OAuth error, or an `invalid_grant` for an assertion outside
+Google's time window (the signing host's clock), refuses that call alone and
+leaves the key `active`; a 408 is retried like a 5xx.
+
+- **Calls through any grant of a rejected key** are refused
+  `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkSlots`
+  without contacting Google, except **one probe per key per interval**,
+  claimed on `user_keys.last_probe_at` in one `UPDATE` (`claimKeyProbe`), with
+  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. A pipeline admission admits a
+  run only while the probe is due.
+- **A probe that mints clears the key**; one Google refuses again leaves it
+  rejected and starts a new interval; one the endpoint fails to answer leaves
+  it as it was.
+- **Replacing the key clears it**, and every rejected grant of it, in the
+  transaction that seals the new value (`clearKeyRejected`,
+  `clearKeyRejections`).
+- **One notice on entering the state**, in `user_key_grant_notices` with
+  `reason` `key-rejected` (a grant's is `credential-rejected`), naming the
+  grant the refused call came through and its destination: to the key's owner
+  and, through a share, the direct writers of the share's realm.
+- **A refusal only rejects the value it was signed with.** The exchange
+  carries the sealed value's nonce, and the move to `rejected` matches it, so
+  an exchange that started before a replace can't reject the new value.
+- **A probe always asks Google.** It skips the in-memory token cache
+  (`googleAccessToken(…, { fresh: true })`), since a token another process
+  cached before the refusal says nothing about the key now.
+- **Readiness** (`lib/key-readiness.ts`) answers `credential-rejected` for a
+  binding whose key is `rejected`, to every caller.
+
+```sql
+-- A user's rejected keys, and when each was last probed.
+SELECT id, name, kind, rejected_at, last_probe_at
+FROM user_keys WHERE owner = '@someone:boxel.ai' AND state = 'rejected';
+```
+
+The `boxel:key-grant` channel carries `key-rejected` (`key`, `realm`,
+`share`), `key-probe` (`minted`) and `key-cleared` (`reason`: `probe` or
+`key-replaced`).
+
+A user whose card shows Reconnect has a rejected grant or key. If the key is good
 (a vendor outage that answered 401), the next probe brings it back on its
 own, within one interval; otherwise the owner replaces the key.

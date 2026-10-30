@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Bolivia Caranavi Natural",
+      "category": "coffee",
+      "origin": "Caranavi, Bolivia",
+      "variants": [
+        {
+          "sku": "CF-003-250",
+          "size": "250 g",
+          "price": 11.29
+        },
+        {
+          "sku": "CF-003-500",
+          "size": "500 g",
+          "price": 22.9
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

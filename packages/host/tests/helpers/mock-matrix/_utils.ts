@@ -278,7 +278,14 @@ export class MockUtils {
   setUploadContentInterceptor = (fn: (() => Promise<void>) | undefined) => {
     this.testState.opts!.uploadContentInterceptor = fn;
   };
-  setSendEventInterceptor = (fn: (() => Promise<void>) | undefined) => {
+  setSendEventInterceptor = (
+    fn:
+      | ((event: {
+          type: string;
+          content: Record<string, any>;
+        }) => Promise<void>)
+      | undefined,
+  ) => {
     this.testState.opts!.sendEventInterceptor = fn;
   };
 
