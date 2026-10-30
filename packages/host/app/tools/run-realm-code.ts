@@ -1629,6 +1629,8 @@ class RealmFsSession {
     let url: string;
     if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
       url = new URL(path).href;
+    } else if (isPrefixForm(path)) {
+      url = this.prefixPathURL(path);
     } else {
       if (
         path.startsWith('/') ||
@@ -1645,6 +1647,17 @@ class RealmFsSession {
       throw new Error(`Path is outside this realm: ${path}`);
     }
     return url;
+  }
+
+  // A prefix-form path (`@cardstack/catalog/...`) names a realm by its
+  // prefix, so it resolves to that realm's URL, not to a path inside this
+  // realm. A prefix that is not registered names no realm this run can reach.
+  private prefixPathURL(path: string): string {
+    try {
+      return this.resolveURL(path);
+    } catch {
+      throw new Error(`Path is outside this realm: ${path}`);
+    }
   }
 
   // Finds cards, specs and files across realms, the catalog among them, and
@@ -1755,8 +1768,13 @@ class RealmFsSession {
     ) {
       return this.realmURL;
     }
-    if (typeof path === 'string' && /^[a-z][a-z0-9+.-]*:/i.test(path)) {
-      let url = new URL(path).href;
+    if (
+      typeof path === 'string' &&
+      (/^[a-z][a-z0-9+.-]*:/i.test(path) || isPrefixForm(path))
+    ) {
+      let url = isPrefixForm(path)
+        ? this.prefixPathURL(path)
+        : new URL(path).href;
       if ((url.endsWith('/') ? url : `${url}/`) === this.realmURL) {
         return this.realmURL;
       }
