@@ -256,7 +256,9 @@ module('Pretui | toaster | render', function (hooks) {
 
   test('the life bar starts full and a sticky toast has none', async function (assert) {
     let store = new ToastStore();
-    store.show({ id: 'timed', title: 'Timed', duration: 9 });
+    // The longest allowed clock: a few ticks before the assertion cannot
+    // move the three-decimal fraction, so it reads as full on a slow runner.
+    store.show({ id: 'timed', title: 'Timed', duration: 600 });
     store.show({ id: 'sticky', title: 'Sticky', duration: 0 });
 
     await render(<template><Toaster @store={{store}} /></template>);

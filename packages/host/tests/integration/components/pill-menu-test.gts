@@ -1,4 +1,4 @@
-import { click, render, waitUntil } from '@ember/test-helpers';
+import { click, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -42,13 +42,7 @@ module('Integration | Component | pill-menu', function (hooks) {
     assert
       .dom('[data-test-pill-menu-collapsed]')
       .exists('the pill is back in the same render as the state change');
-
-    // Host tests run with motion off: the leaving menu has no exit to play,
-    // and the presence layer removes it on its next pass.
-    await waitUntil(
-      () => !document.querySelector('[data-test-pill-menu-header]'),
-      { timeoutMessage: 'the collapsed menu never left the DOM' },
-    );
+    assert.dom('[data-test-pill-menu-header]').doesNotExist();
     assert.dom('[data-test-menu-content]').doesNotExist();
 
     await click('[data-test-pill-menu-collapsed]');
