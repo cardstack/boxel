@@ -738,6 +738,7 @@ module(basename(import.meta.filename), function (hooks) {
       label: 'Boxel (read-only)',
       secret: CLIENT_SECRET,
       oauth: clientSettings(),
+      note: 'adding the platform client for tests',
     });
     let offered = await request
       .get('/_oauth/clients')
@@ -768,6 +769,7 @@ module(basename(import.meta.filename), function (hooks) {
       label: 'Boxel (read-only)',
       secret: CLIENT_SECRET,
       oauth: clientSettings(),
+      note: 'adding the platform client for tests',
     });
     await addClient(TEAMMATE, {}, 'my app');
     let offered = async () =>
@@ -814,6 +816,7 @@ module(basename(import.meta.filename), function (hooks) {
       label: 'Other service',
       secret: CLIENT_SECRET,
       oauth: clientSettings({ apiHosts: [`${OTHER_HOST}/api/`] }),
+      note: 'adding the platform client for tests',
     });
     let realmOnly = await request
       .get('/_oauth/clients')

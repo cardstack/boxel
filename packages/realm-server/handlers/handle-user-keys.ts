@@ -174,10 +174,17 @@ async function readRawBody(ctxt: Koa.Context): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// `emptyIsObject` reads an empty body as `{}`, for a DELETE whose body is
+// optional, so a caller that sends none gets the route's own refusal rather
+// than a parse error.
 export async function readJSON(
   ctxt: Koa.Context,
+  { emptyIsObject = false }: { emptyIsObject?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   let raw = await readRawBody(ctxt);
+  if (emptyIsObject && raw.trim() === '') {
+    return {};
+  }
   let json: unknown;
   try {
     json = JSON.parse(raw);
