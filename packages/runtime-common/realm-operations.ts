@@ -382,7 +382,8 @@ export interface WaitForReadyInput {
   // is sampled (`onProgress`), it counts from the last change in the reading,
   // so a publish that is still advancing keeps waiting. Defaults to 300_000ms.
   timeoutMs?: number;
-  // Bounds a wait that `timeoutMs` keeps extending. Defaults to 3_600_000ms.
+  // Bounds a wait that `timeoutMs` keeps extending, so only consulted when
+  // `onProgress` is supplied. Defaults to 3_600_000ms.
   maxWaitMs?: number;
   // Defaults to 1000ms.
   pollIntervalMs?: number;
@@ -428,7 +429,9 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   let terminalFailure: string | undefined;
   let onProgress = input.onProgress;
   let deadline = () =>
-    Math.min(startedAt + maxWaitMs, lastAdvancedAt + timeoutMs);
+    onProgress
+      ? Math.min(startedAt + maxWaitMs, lastAdvancedAt + timeoutMs)
+      : startedAt + timeoutMs;
 
   let stopSamplingProgress = onProgress
     ? sampleProgress(
@@ -495,7 +498,7 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   }
   let waitedMs = Date.now() - startedAt;
   let stalled =
-    onProgress && waitedMs < maxWaitMs
+    onProgress && lastAdvancedAt + timeoutMs <= startedAt + maxWaitMs
       ? `, with no progress for the last ${timeoutMs}ms`
       : '';
   throw new ReadinessTimeoutError(

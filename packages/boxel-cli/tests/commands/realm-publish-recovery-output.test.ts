@@ -50,6 +50,7 @@ vi.mock('../../src/commands/realm/unpublish.ts', () => ({
   })),
 }));
 
+import { waitForReady } from '@cardstack/runtime-common/realm-operations';
 import { publishRealm } from '../../src/commands/realm/publish.ts';
 import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 
@@ -95,5 +96,46 @@ describe('publishRealm republish-recovery output routing', () => {
     // The progress line is emitted (recovery path was taken) — on stderr only.
     expect(stderr.join('')).toContain('Unpublishing and retrying');
     expect(stdout.join('')).not.toContain('Unpublishing and retrying');
+  });
+});
+
+describe('publishRealm readiness deadline', () => {
+  beforeEach(() => {
+    // Skip the conflict branch of the publish mock.
+    publishCallCount = 1;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('caps the whole wait at an explicit timeout', async () => {
+    await publishRealm(
+      'http://localhost:4201/source/',
+      'http://published.localhost:4201/',
+      {
+        profileManager: fakeProfileManager,
+        timeoutMs: 600_000,
+        onProgress: () => {},
+      },
+    );
+
+    expect(vi.mocked(waitForReady)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ timeoutMs: 600_000, maxWaitMs: 600_000 }),
+    );
+  });
+
+  it('keeps waiting while progress advances when no timeout is given', async () => {
+    await publishRealm(
+      'http://localhost:4201/source/',
+      'http://published.localhost:4201/',
+      { profileManager: fakeProfileManager, onProgress: () => {} },
+    );
+
+    expect(vi.mocked(waitForReady)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ timeoutMs: 300_000, maxWaitMs: undefined }),
+    );
   });
 });

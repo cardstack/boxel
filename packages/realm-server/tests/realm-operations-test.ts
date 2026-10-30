@@ -297,20 +297,20 @@ module(basename(import.meta.filename), function () {
           });
         }
         return new Response(null, {
-          status: Date.now() - startedAt > 150 ? 200 : 503,
+          status: Date.now() - startedAt > 600 ? 200 : 503,
         });
       });
 
       await waitForReady(client, {
         publishedRealmURL: 'https://mike.boxel.space/notes/',
-        timeoutMs: 50,
+        timeoutMs: 200,
         pollIntervalMs: 5,
         progressPollIntervalMs: 5,
         onProgress: () => {},
       });
 
       assert.true(
-        Date.now() - startedAt > 150,
+        Date.now() - startedAt > 600,
         'outlived timeoutMs because every reading moved',
       );
     });
@@ -335,7 +335,7 @@ module(basename(import.meta.filename), function () {
       try {
         await waitForReady(client, {
           publishedRealmURL: 'https://mike.boxel.space/notes/',
-          timeoutMs: 50,
+          timeoutMs: 200,
           pollIntervalMs: 5,
           progressPollIntervalMs: 5,
           onProgress: () => {},
@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function () {
       } catch (err) {
         assert.ok(err instanceof ReadinessTimeoutError);
         assert.ok(
-          /with no progress for the last 50ms: HTTP 503 \(not ready: prerender-html\)$/.test(
+          /with no progress for the last 200ms: HTTP 503 \(not ready: prerender-html\)$/.test(
             (err as Error).message,
           ),
           (err as Error).message,
@@ -375,8 +375,8 @@ module(basename(import.meta.filename), function () {
       try {
         await waitForReady(client, {
           publishedRealmURL: 'https://mike.boxel.space/notes/',
-          timeoutMs: 50,
-          maxWaitMs: 120,
+          timeoutMs: 200,
+          maxWaitMs: 500,
           pollIntervalMs: 5,
           progressPollIntervalMs: 5,
           onProgress: () => {},
@@ -388,7 +388,28 @@ module(basename(import.meta.filename), function () {
           /no progress/.test((err as Error).message),
           'the ceiling is not reported as a stall',
         );
-        assert.true(Date.now() - startedAt < 1000, 'bounded by maxWaitMs');
+        assert.true(Date.now() - startedAt < 2000, 'bounded by maxWaitMs');
+      }
+    });
+
+    test('waitForReady ignores maxWaitMs when progress is not sampled', async function (assert) {
+      let { client } = makeClient(() => new Response(null, { status: 503 }));
+
+      let startedAt = Date.now();
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 300,
+          maxWaitMs: 50,
+          pollIntervalMs: 5,
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.true(
+          Date.now() - startedAt >= 300,
+          'timeoutMs alone bounds the wait',
+        );
       }
     });
 

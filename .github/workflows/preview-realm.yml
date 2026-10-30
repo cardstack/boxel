@@ -55,7 +55,7 @@ on:
           Readiness-poll budget for `boxel realm publish`. Covers indexing
           *and* prerendering every instance in every format, so it scales
           with realm render cost rather than file count. The CLI's own
-          default is 300000, which a render-heavy realm outgrows.
+          default gives up after 300000 without progress.
         type: number
         default: 900000
     secrets:

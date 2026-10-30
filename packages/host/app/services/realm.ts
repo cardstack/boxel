@@ -646,7 +646,7 @@ class RealmResource {
     try {
       this._isPublishing = true;
       // A publish is durable once `_publish-realm` accepts it, so its
-      // `lastPublishedAt` holds even when the readiness wait gives up.
+      // `lastPublishedAt` holds when the readiness wait only ran out of time.
       let accepted: Awaited<ReturnType<RealmServerService['publishRealm']>>[] =
         [];
       const publishPromises = urls.map(async (url) => {
@@ -658,7 +658,6 @@ class RealmResource {
 
         try {
           let result = await this.realmServer.publishRealm(this.url, url);
-          accepted.push(result);
           // `_publish-realm` returns 202 before the published realm is
           // indexed. Keep the "Publishing…" state until the realm passes its
           // readiness check so "Open Site" only enables once the page is
@@ -673,11 +672,13 @@ class RealmResource {
             if (!(error instanceof ReadinessTimeoutError)) {
               throw error;
             }
+            accepted.push(result);
             throw new Error(
               'Published, but the site is taking longer than usual to finish rendering. It goes live when rendering finishes.',
               { cause: error },
             );
           }
+          accepted.push(result);
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
