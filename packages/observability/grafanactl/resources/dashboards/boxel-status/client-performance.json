@@ -4386,7 +4386,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Catalog searches the AI assistant made with realm.entries.search in run-realm-code, per interval: every search whose realms, after the room's catalog-reuse feature gate, include the catalog. A room without the feature never searches the catalog, so it records none. found something is a search whose total was above 0; failed is one that threw, such as a realm-server error.",
+            "description": "Catalog searches the AI assistant made, per interval: realm.entries.search in run-realm-code, and search-entries calls, sent to a catalog realm (@cardstack/catalog/, a catalog the realm server lists, or one the user added). In run-realm-code the room's catalog-reuse feature gate keeps @cardstack/catalog/ out of rooms without the feature. found something is a search in which the catalog realms themselves matched an entry; realms searched beside them are not counted. failed is one that threw, whose catalog realm did not answer, or whose answer was too large to return to the script.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -4474,7 +4474,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total > 0 [$__interval]))",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total > 0 [$__interval]))",
                 "queryType": "range",
                 "refId": "B",
                 "legendFormat": "found something"
@@ -4499,7 +4499,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Of the catalog searches in the time range that answered, the share whose total was above 0. Searches that threw are left out of both sides.",
+            "description": "Of the catalog searches in the time range that answered with a catalog count, the share in which the catalog realms matched an entry. Failed searches, and searches whose answer gave no count per realm, are left out of both sides.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -4549,7 +4549,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total > 0 [$__range])) / sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" [$__range]))",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total > 0 [$__range])) / sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" [$__range]))",
                 "queryType": "instant",
                 "refId": "A"
               }
@@ -4562,7 +4562,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "What the assistant searched the catalog for, most frequent first: the full-text matches text, and the card type the query was filtered on. An empty search text is a search by type alone.",
+            "description": "What the assistant searched the catalog for, most frequent first: the full-text matches text, the card type the query was filtered on, and the tool that searched. An empty search text is a search by type alone.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -4621,7 +4621,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(100, sum by (query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" [$__range])))",
+                "expr": "topk(100, sum by (tool, query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               }
@@ -4648,12 +4648,14 @@
                   "renameByName": {
                     "Value #A": "searches",
                     "query_text": "search text",
-                    "query_type": "type"
+                    "query_type": "type",
+                    "tool": "tool"
                   },
                   "indexByName": {
                     "query_text": 0,
                     "query_type": 1,
-                    "Value #A": 2
+                    "tool": 2,
+                    "Value #A": 3
                   }
                 }
               }
@@ -4664,7 +4666,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Catalog searches whose total was 0, most frequent first. A search here that the catalog should answer points at a missing entry or at ranking.",
+            "description": "Catalog searches in which the catalog realms matched nothing, most frequent first. A search here that the catalog should answer points at a missing entry or at ranking.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -4723,7 +4725,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(100, sum by (query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total == 0 [$__range])))",
+                "expr": "topk(100, sum by (tool, query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total == 0 [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               }
@@ -4750,12 +4752,14 @@
                   "renameByName": {
                     "Value #A": "searches",
                     "query_text": "search text",
-                    "query_type": "type"
+                    "query_type": "type",
+                    "tool": "tool"
                   },
                   "indexByName": {
                     "query_text": 0,
                     "query_type": 1,
-                    "Value #A": 2
+                    "tool": 2,
+                    "Value #A": 3
                   }
                 }
               }
