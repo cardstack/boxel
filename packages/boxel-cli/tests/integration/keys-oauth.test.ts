@@ -263,6 +263,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
       name: 'github',
       label: 'Boxel (read-only)',
       secret: PLATFORM_CLIENT.clientSecret,
+      note: 'adding the platform client for tests',
       oauth: {
         clientId: PLATFORM_CLIENT.clientId,
         authorizeUrl: `${provider.url}/authorize`,
