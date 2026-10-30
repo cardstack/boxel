@@ -177,6 +177,7 @@ import {
   handleListPlatformClients,
   handleOAuthCallback,
   handleReplacePlatformClient,
+  handleShowPlatformClient,
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
 
@@ -711,6 +712,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     PLATFORM_OAUTH_CLIENTS_PATH,
     systemKeysAuthorization,
     handleAddPlatformClient(args),
+  );
+  router.get(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleShowPlatformClient(args),
   );
   router.patch(
     `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,

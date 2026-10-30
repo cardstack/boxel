@@ -29,16 +29,6 @@ function hostAndPath(destination: string): string {
   return `${url.host}${url.pathname}`;
 }
 
-// An operation's name split into words, as the window names an operation
-// that has no label: `listPRs` as `List PRs`.
-function operationWords(name: string): string {
-  let words = name
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 export default class KeyGrants extends Component<Signature> {
   <template>
     {{#if @key.grants.length}}
@@ -71,9 +61,9 @@ export default class KeyGrants extends Component<Signature> {
             <ul class='bindings'>
               {{#each (this.bindingsOf grant) as |binding|}}
                 <li data-test-key-grant-binding={{binding.operation}}>
-                  {{operationWords binding.operation}}
+                  {{binding.operationLabel}}
                   on
-                  {{binding.type.name}}
+                  {{binding.cardName}}
                   in
                   {{addressOf binding.realm}}
                 </li>

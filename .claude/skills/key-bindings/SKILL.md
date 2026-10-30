@@ -127,7 +127,12 @@ nothing about another card calling the same host, which gets its own batch
 and reuses the grant.
 
 The answer carries each binding with `meta.request` (the snapshot below) and
-`meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own;
+`meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own,
+each with `operationLabel` and `cardName`: what the key page names it by, as
+the approve page does. They are read per type as a batch reads its definition
+(`bindingNames` in `lib/key-binding-batch.ts`), under the same read checks; a
+type the caller can't read, or whose realm fails to mount, is named by its
+export name and its operation's name split into words;
 `DELETE /_key-bindings/:id` revokes one (secure session again) and leaves its
 grant.
 
@@ -292,7 +297,8 @@ the application role.
   edits), approving refused when the request shown has changed, share
   approval only by its key's owner and only while active, grant removal, key
   deletion, share suspension and swap, per-instance bindings, keyless
-  operations untouched, and the fingerprint pinned to a fixed value. It indexes a card using `perInstance`, so it needs a
+  operations untouched, the fingerprint pinned to a fixed value, and the
+  listing's names with and without read on the card. It indexes a card using `perInstance`, so it needs a
   host dist built from your tree (see the `call-api` skill).
 - `packages/realm-server/tests/key-binding-batch-test.ts` — the batch: six
   operations approved as one with one grant, an unticked one left

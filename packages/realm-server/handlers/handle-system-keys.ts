@@ -67,8 +67,9 @@ async function readJSONBody(ctxt: Koa.Context): Promise<Record<string, any>> {
 
 // What the server observed about the caller: the address the client-address
 // middleware worked out, and when the operator token that
-// `operatorAuthorization` verified was signed.
-function caller(ctxt: Koa.Context): SystemKeyCaller {
+// `operatorAuthorization` verified was signed. The platform OAuth client
+// routes record the same.
+export function operatorCaller(ctxt: Koa.Context): SystemKeyCaller {
   let address = ctxt.req.headers[CLIENT_IP_HEADER];
   let token = ctxt.state.operatorToken as OperatorTokenClaim | undefined;
   return {
@@ -146,7 +147,7 @@ export function handleAddSystemKey({ dbAdapter }: CreateRoutesArgs) {
       supportsStreaming: body.supportsStreaming ?? false,
       value: body.value,
       note: body.note,
-      caller: caller(ctxt),
+      caller: operatorCaller(ctxt),
     });
     return { status: 201, body: { key } };
   });
@@ -159,7 +160,7 @@ export function handleReplaceSystemKey({ dbAdapter }: CreateRoutesArgs) {
     let key = await replaceSystemKey(dbAdapter, ctxt.params.id, {
       value: body.value,
       note: body.note,
-      caller: caller(ctxt),
+      caller: operatorCaller(ctxt),
     });
     return { status: 200, body: { key } };
   });
@@ -171,7 +172,7 @@ export function handleDeleteSystemKey({ dbAdapter }: CreateRoutesArgs) {
     let body = await readJSONBody(ctxt);
     let key = await deleteSystemKey(dbAdapter, ctxt.params.id, {
       note: body.note,
-      caller: caller(ctxt),
+      caller: operatorCaller(ctxt),
     });
     return { status: 200, body: { deleted: key } };
   });
