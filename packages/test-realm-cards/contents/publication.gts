@@ -5,7 +5,7 @@ import {
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { Post } from './post';
 

@@ -49,7 +49,7 @@
       },
       "adoptsFrom": {
         "name": "Spec",
-        "module": "https://cardstack.com/base/spec"
+        "module": "@cardstack/base/spec"
       }
     },
     "type": "card",
