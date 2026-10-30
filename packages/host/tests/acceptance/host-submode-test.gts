@@ -307,6 +307,76 @@ module('Acceptance | host submode', function (hooks) {
     });
   });
 
+  module('with a host home in the realm config', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(true),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
+      ]);
+      // The index card stays the interact home; `/` routes host mode to
+      // Person/1.
+      realmContents['realm.json'] = {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Test Workspace B' },
+            hostRoutingRules: [{ path: '/' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './Person/1' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      };
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
+      });
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
+    });
+
+    test('entering from the index card shows the host home', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert
+        .dom(`[data-test-host-mode-card="${testRealmURL}Person/1"]`)
+        .exists('host mode opens the card the realm routes `/` to');
+    });
+
+    test('entering from another card stays on that card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}ViewCardDemo/1`, format: 'isolated' }]],
+      });
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert
+        .dom(`[data-test-host-mode-card="${testRealmURL}ViewCardDemo/1"]`)
+        .exists();
+    });
+  });
+
   module('with a realm that is not publishable', function (hooks) {
     // Each snapshot this module's tests create stays attached until it is
     // deleted, and SQLite caps attached databases per connection. The prefix is
