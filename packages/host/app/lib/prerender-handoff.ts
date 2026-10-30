@@ -8,9 +8,8 @@
 // pointer events, so it can load its card, fonts and images behind the
 // prerender. When the primary card reports itself ready (or errored, or the
 // wait times out), the visitor's scroll offset is carried onto the live
-// scroll container, the live element fades in over the prerender, and only
-// then is the prerendered markup removed and the live element put back in
-// flow.
+// scroll container, and in one task the prerendered markup is removed and the
+// live element is put back in flow.
 
 const READY_SELECTOR =
   '[data-host-mode-card-state="ready"], [data-host-mode-card-state="error"]';
@@ -18,7 +17,6 @@ const SCROLL_CONTAINER_SELECTOR = '[data-host-mode-card-scroll-container]';
 const POLL_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const MEDIA_TIMEOUT_MS = 1_500;
-const FADE_MS = 180;
 const FRAME_TIMEOUT_MS = 100;
 
 const PINNED_STYLE: Partial<Record<keyof CSSStyleDeclaration, string>> = {
@@ -155,24 +153,8 @@ export function startPrerenderHandoff(live: HTMLElement): () => void {
       live.querySelector<HTMLElement>(SCROLL_CONTAINER_SELECTOR) ?? live;
     scrollContainer.scrollTop = scrollTop;
 
-    let reduceMotion = window.matchMedia?.(
-      '(prefers-reduced-motion: reduce)',
-    ).matches;
-    if (!reduceMotion && typeof live.animate === 'function') {
-      live.style.opacity = '1';
-      // A paused page never finishes the animation, so it gets a deadline.
-      await withTimeout(
-        live.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: FADE_MS,
-          easing: 'ease-out',
-        }).finished,
-        FADE_MS + FRAME_TIMEOUT_MS,
-      );
-    }
-    if (cancelled) {
-      return;
-    }
-
+    // The swap is a cut, not a fade: everything below runs in one task, so the
+    // browser paints the prerender and then the live page, never a mix.
     for (let node of nodes) {
       node.remove();
     }
