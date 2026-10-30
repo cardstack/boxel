@@ -13,6 +13,9 @@ import {
   PREFIX_REALMS,
   RealmPaths,
   SCOPED_CSS_SERVING_PREFIX,
+  SupportedMimeType,
+  CLIENT_CLASS_HEADER,
+  CLIENT_IP_HEADER,
   foreignQueryParams,
   hasExtension,
   isCaptureServingPath,
@@ -49,6 +52,51 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 // routed to where it holds it, and otherwise the one a routing rule pointed
 // into. A card no realm holds is served no markup at all, since nothing can say
 // which of its formats its type withholds.
+// Whether a visitor who isn't signed in may read the card at `cardURL`, as
+// the realm holding it answers: its permissions and its policy decide, as
+// they would for that visitor's own request. A routing rule into another realm
+// serves that realm's prerendered page only when this is true.
+// The check carries the visitor's address, as the client-address middleware
+// set it, because a policy admits a visitor only when it knows where they are
+// calling from.
+async function anonymousMayRead(
+  cardURL: URL,
+  routingDeps: RealmRoutingDeps,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Promise<boolean> {
+  let realm = await findOrMountRealm(cardURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  let url = new URL(cardURL);
+  url.protocol = new URL(realm.url).protocol;
+  let headers: Record<string, string> = { Accept: SupportedMimeType.CardJson };
+  for (let name of [CLIENT_IP_HEADER, CLIENT_CLASS_HEADER]) {
+    let value = requestHeaders[name];
+    if (typeof value === 'string') {
+      headers[name] = value;
+    }
+  }
+  let response = await realm.handle(new Request(url.href, { headers }));
+  return response?.status === 200;
+}
+
+// Whether the request's path is routed into another realm. Such a page can
+// change, or stop being served, without the routing realm changing, so its
+// response carries no ETag a cache could revalidate against.
+async function routesCrossRealm(
+  requestURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  let matched = await matchHostRoutingRule(requestURL, routingDeps);
+  return Boolean(
+    matched &&
+    !isRedirectRoutingRule(matched.rule) &&
+    'crossRealm' in matched.rule &&
+    matched.rule.crossRealm,
+  );
+}
+
 async function unshareableFormatsForPage(
   readURL: URL,
   routedRealm: Realm | undefined,
@@ -527,7 +575,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
     let etag =
-      lastPublishedAt && indexHTMLHash
+      lastPublishedAt &&
+      indexHTMLHash &&
+      !(await routesCrossRealm(requestURL, routingDeps))
         ? `"${lastPublishedAt}-${indexHTMLHash}"`
         : null;
 
@@ -625,8 +675,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           return;
         }
         // Rewrite cardURL so the head/isolated/scoped CSS fetched below
-        // render the routed target.
-        cardURL = new URL(matched.rule.id);
+        // render the routed target. A target in another realm (a site card
+        // opted in) is served as that realm prerendered it, and only when a
+        // visitor who isn't signed in may read it; otherwise the path is
+        // served as if unrouted.
+        let target = new URL(matched.rule.id);
+        if (
+          !('crossRealm' in matched.rule && matched.rule.crossRealm) ||
+          (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
+        ) {
+          cardURL = target;
+        } else {
+          log.warn(
+            `not serving ${target.href} at ${requestURL.pathname}: a visitor who isn't signed in may not read it`,
+          );
+        }
       }
     }
 

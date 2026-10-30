@@ -144,6 +144,7 @@ function setupPublishedRealm(
     endpoint,
     publishedRealmURL,
     cards,
+    otherRealmFiles,
     onSetup,
   }: {
     // Names the template, and the realms root directory.
@@ -152,8 +153,12 @@ function setupPublishedRealm(
     endpoint: string;
     publishedRealmURL: string;
     // The card documents to write into the source realm before it is
-    // published, in order, keyed by the path each is written to.
-    cards: (sourceRealmURL: string) => [path: string, doc: object][];
+    // published, in order, keyed by the path each is written to. A string is
+    // written as is, for a module.
+    cards: (sourceRealmURL: string) => [path: string, doc: object | string][];
+    // Files to write into the server's public `test` realm first, for a
+    // source realm that routes to a card another realm holds.
+    otherRealmFiles?: [path: string, doc: object | string][];
     onSetup: (args: { request: SuperTest<Test>; dbAdapter: PgAdapter }) => void;
   },
 ) {
@@ -244,16 +249,26 @@ function setupPublishedRealm(
       VALUES ('${sourceRealmURL}', '*', true, true, true)
     `);
 
-    for (let [path, doc] of cards(sourceRealmURL)) {
+    let write = async (
+      realmPath: string,
+      path: string,
+      doc: object | string,
+    ) => {
       let response = await request
-        .post(`${sourceRealmPath}${path}`)
+        .post(`${realmPath}${path}`)
         .set('Accept', 'application/vnd.card+source')
-        .send(JSON.stringify(doc));
+        .send(typeof doc === 'string' ? doc : JSON.stringify(doc));
       if (response.status !== 204) {
         throw new Error(
-          `Failed to write ${path}: ${response.status} ${response.text}`,
+          `Failed to write ${realmPath}${path}: ${response.status} ${response.text}`,
         );
       }
+    };
+    for (let [path, doc] of otherRealmFiles ?? []) {
+      await write('/test/', path, doc);
+    }
+    for (let [path, doc] of cards(sourceRealmURL)) {
+      await write(sourceRealmPath, path, doc);
     }
 
     // Publishing triggers a full from-scratch index of the published copy.
@@ -2080,6 +2095,201 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   // a realm whose routed instance lives in a subdirectory (its id therefore
   // does NOT equal the routed path, so the card-id fallback cannot mask the
   // bug) and asserts both forms plus the 308 canonical redirect.
+  module(
+    'Published realm: a site card routes to another realm’s card',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let publishedRealmURLString =
+        'http://crossrealm.localhost:4444/cross-realm-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
+      let otherRealmURL = 'http://127.0.0.1:4444/test/';
+      let siteModule = `
+        import { CardDef, contains, field } from '@cardstack/base/card-api';
+        import BooleanField from '@cardstack/base/boolean';
+        export class TestSite extends CardDef {
+          @field serveSourcePrerender = contains(BooleanField);
+        }
+      `;
+      let siteCard = (serveSourcePrerender: boolean) => ({
+        data: {
+          type: 'card',
+          attributes: { serveSourcePrerender },
+          meta: { adoptsFrom: { module: '../site', name: 'TestSite' } },
+        },
+      });
+      let realmConfig = (site: string | undefined, path: string) => ({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Cross-realm Source Realm' },
+            ...(site ? { site } : {}),
+            hostRoutingRules: [{ path }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: `${otherRealmURL}elsewhere` },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      });
+
+      setupPublishedRealm(hooks, {
+        setup: 'cross-realm host routing',
+        sourceRealmName: 'Cross-realm Source Realm',
+        endpoint: 'cross-realm-source',
+        publishedRealmURL: publishedRealmURLString,
+        // The target lives in the server's public `test` realm, so a visitor
+        // who isn't signed in may read it.
+        otherRealmFiles: [
+          [
+            'elsewhere-page.gts',
+            `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              export class ElsewherePage extends CardDef {
+                static isolated = class extends Component<typeof ElsewherePage> {
+                  <template><p>Prerendered by the test realm</p></template>
+                };
+              }
+            `,
+          ],
+          [
+            'elsewhere.json',
+            {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: './elsewhere-page',
+                    name: 'ElsewherePage',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        cards: () => [
+          ['site.gts', siteModule],
+          ['Site/on.json', siteCard(true)],
+          ['realm.json', realmConfig('./Site/on', '/elsewhere')],
+        ],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      test('a site card that opts in serves the other realm’s card as that realm prerendered it', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}elsewhere`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, '/elsewhere serves');
+        assert.true(
+          response.text.includes('Prerendered by the test realm'),
+          'the page carries the isolated HTML the other realm prerendered',
+        );
+        assert.strictEqual(
+          response.headers['etag'],
+          undefined,
+          'the page carries no ETag, since the other realm can change it without a republish',
+        );
+      });
+    },
+  );
+
+  module(
+    'Published realm: a cross-realm routing rule without a site card that opts in',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let publishedRealmURLString =
+        'http://nocrossrealm.localhost:4444/no-cross-realm-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
+      let otherRealmURL = 'http://127.0.0.1:4444/test/';
+
+      setupPublishedRealm(hooks, {
+        setup: 'cross-realm host routing, not opted in',
+        sourceRealmName: 'No Cross-realm Source Realm',
+        endpoint: 'no-cross-realm-source',
+        publishedRealmURL: publishedRealmURLString,
+        otherRealmFiles: [
+          [
+            'elsewhere-page.gts',
+            `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              export class ElsewherePage extends CardDef {
+                static isolated = class extends Component<typeof ElsewherePage> {
+                  <template><p>Prerendered by the test realm</p></template>
+                };
+              }
+            `,
+          ],
+          [
+            'elsewhere.json',
+            {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: './elsewhere-page',
+                    name: 'ElsewherePage',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        cards: () => [
+          [
+            'realm.json',
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: { name: 'No Cross-realm Source Realm' },
+                  hostRoutingRules: [{ path: '/elsewhere' }],
+                },
+                relationships: {
+                  'hostRoutingRules.0.instance': {
+                    links: { self: `${otherRealmURL}elsewhere` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/realm-config',
+                    name: 'RealmConfig',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      test('the rule is dropped, and the other realm’s HTML is not served', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}elsewhere`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.false(
+          response.text.includes('Prerendered by the test realm'),
+          'without the opt-in, a card another realm holds is never served at a routed path',
+        );
+      });
+    },
+  );
+
   module(
     'Published realm: host routing rules + trailing-slash canonicalization',
     function (hooks) {
