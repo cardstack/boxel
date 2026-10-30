@@ -171,16 +171,22 @@ export async function fetchEffectiveRealmPermissions(
 // Boxel account).
 const wildcardUsernames = new Set(['*', 'users']);
 
-// The platform's service accounts, by matrix localpart.
-const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
+// The platform's service accounts, by matrix localpart. `realm_server` is the
+// account a deployed realm server signs in as.
+const botLocalparts = new Set([
+  aiBotUsername,
+  submissionBotUsername,
+  'realm_server',
+]);
 
 // A realm's own matrix user is `@realm/…` for a published realm and
 // `@<name>_realm` for a bootstrap realm; the shared accounts that sync content
-// into bootstrap realms are `@<name>_writer`. Matching the naming convention,
-// rather than listing the accounts, keeps a newly added bootstrap realm from
-// counting as a person. Registration doesn't reserve the suffixes, so a person
-// who picks one is treated as a bot, which only ever withholds something.
-const botLocalpartSuffixes = ['_realm', '_writer'];
+// into bootstrap realms are `@<name>_writer`; a test stack's realm server is
+// `@<name>_realm-server`. Matching the naming convention, rather than listing
+// the accounts, keeps a newly added bootstrap realm from counting as a person.
+// Registration doesn't reserve the suffixes, so a person who picks one is
+// treated as a bot, which only ever withholds something.
+const botLocalpartSuffixes = ['_realm', '_writer', '_realm-server'];
 
 // The localpart of `userId` when it is the full Matrix id of an account on
 // `matrixServerName`. Undefined for an account on any other server, and for
@@ -206,8 +212,10 @@ export function isPublishedRealmAccount(
   return localpartOn(userId, matrixServerName)?.startsWith('realm/') ?? false;
 }
 
-// Whether `userId` is one of the platform's service accounts: an account on
-// the paired homeserver named by one of the conventions above.
+// Whether `userId` is one of the platform's service accounts rather than a
+// person: an account on the paired homeserver named by one of the conventions
+// above. ADR 011 calls these service users; a room may hold any number of
+// them beside one end user.
 export function isBotAccount(
   userId: string,
   matrixServerName: string,
@@ -262,6 +270,36 @@ export async function isDirectWriter(
     param(userId),
   ])) as { write: boolean }[];
   return !!row && isDirectWriterRow(userId, row.write, matrixServerName);
+}
+
+/**
+ * Whether two users each hold a permission row that names them in the same
+ * realm and grants them something: the condition under which ADR 011 §1.2
+ * lets Boxel reveal each one's Matrix id to the other. Both arguments are
+ * full Matrix ids, so the `*` and `users` rows, which name no one, can't
+ * match either side; a policy grant is not a row at all. Read fresh on each
+ * call, like every permission check, so a removed row stops counting at once.
+ */
+export async function shareARealmGrant(
+  dbAdapter: DBAdapter,
+  userIdA: string,
+  userIdB: string,
+): Promise<boolean> {
+  if (wildcardUsernames.has(userIdA) || wildcardUsernames.has(userIdB)) {
+    return false;
+  }
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM realm_user_permissions a`,
+    `JOIN realm_user_permissions b ON a.realm_url = b.realm_url`,
+    `WHERE a.username =`,
+    param(userIdA),
+    `AND b.username =`,
+    param(userIdB),
+    `AND (a.read OR a.write OR a.realm_owner)`,
+    `AND (b.read OR b.write OR b.realm_owner)`,
+    `LIMIT 1`,
+  ]);
+  return rows.length > 0;
 }
 
 /**
