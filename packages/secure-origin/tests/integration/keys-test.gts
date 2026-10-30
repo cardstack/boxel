@@ -913,11 +913,16 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
-      // Not awaited: the share list is held back until released.
+      // Not awaited: the share list is held back until released. It is
+      // released on every path: a stubbed request still open keeps its waiter
+      // pending, and every later test's `settled()` with it.
       click('[data-test-key-row="Maps"] [data-test-key-delete]');
-      await waitFor('[data-test-key-delete-loading]');
-      assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
-      release();
+      try {
+        await waitFor('[data-test-key-delete-loading]');
+        assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
+      } finally {
+        release?.();
+      }
       await settled();
       assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
       assert

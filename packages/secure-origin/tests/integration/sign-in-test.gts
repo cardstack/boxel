@@ -981,12 +981,18 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       let rendered = render(GoogleCallback);
-      await waitFor('[data-test-secure-signing-in]');
-      assert
-        .dom('[data-test-secure-signing-in]')
-        .includesText('Signing you in…');
-      await requested;
-      answer(SIGNED_IN);
+      // The held request is answered on every path: a stubbed request still
+      // open keeps its waiter pending, and every later test's `settled()`
+      // with it.
+      try {
+        await waitFor('[data-test-secure-signing-in]');
+        assert
+          .dom('[data-test-secure-signing-in]')
+          .includesText('Signing you in…');
+        await requested;
+      } finally {
+        answer?.(SIGNED_IN);
+      }
       await rendered;
       await waitFor('[data-test-secure-signed-in]');
       assert.dom('[data-test-secure-signing-in]').doesNotExist();
