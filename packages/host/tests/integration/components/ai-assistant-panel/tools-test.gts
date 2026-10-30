@@ -407,13 +407,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // wait therefore needs a budget sized for that whole chain on a loaded CI
   // runner, not the 1s `waitFor` default. The elapsed time is always logged,
   // and a timeout logs where the chain stopped, so a slow run and a stalled
-  // one read differently in CI output.
+  // one read differently in CI output. Every wait for a tool's result goes
+  // through here, whichever element of the result it waits for.
   const TOOL_RESULT_TIMEOUT_MS = 10_000;
 
-  async function waitForToolResult() {
+  async function waitForToolResult(
+    selector = '[data-test-tool-result-header]',
+  ) {
     let startedAt = performance.now();
     try {
-      await waitFor('[data-test-tool-result-header]', {
+      await waitFor(selector, {
         timeout: TOOL_RESULT_TIMEOUT_MS,
       });
     } catch (e) {
@@ -421,7 +424,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         ...document.querySelectorAll('[data-test-tool-call-apply]'),
       ].map((el) => el.getAttribute('data-test-tool-call-apply'));
       console.error(
-        `[tool-result-wait] no result header after ${Math.round(
+        `[tool-result-wait] no ${selector} after ${Math.round(
           performance.now() - startedAt,
         )}ms; messages=${
           document.querySelectorAll('[data-test-message-idx]').length
@@ -430,7 +433,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       throw e;
     }
     console.log(
-      `[tool-result-wait] result header after ${Math.round(
+      `[tool-result-wait] ${selector} after ${Math.round(
         performance.now() - startedAt,
       )}ms`,
     );
@@ -4131,7 +4134,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Stale');
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     assert
@@ -4182,7 +4185,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Stale');
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     let store = getService('store');
@@ -4208,7 +4211,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     simulateShowCardResult(roomId, 'Snapshot', deletedId);
 
-    await waitFor('[data-test-boxel-tool-call-result]');
+    await waitForToolResult('[data-test-boxel-tool-call-result]');
     await settled();
 
     assert
@@ -4329,7 +4332,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }),
     });
 
-    await waitFor('[data-test-tool-result-container]');
+    await waitForToolResult('[data-test-tool-result-container]');
     assert
       .dom('[data-test-tool-result-header]')
       .containsText('patchFields', "the result's meta line names the call");
