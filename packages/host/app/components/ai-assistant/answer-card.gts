@@ -8,20 +8,19 @@ import { CardEmbed } from '@cardstack/pretui/components/card-embed';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu } from '@cardstack/pretui/components/menu';
 
-import { cn } from '@cardstack/boxel-ui/helpers';
-
 import {
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import CardRenderer from '@cardstack/host/components/card-renderer';
 import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
+
+import ReplyCard from './reply-card';
 
 import type { CardDef, Format } from '@cardstack/base/card-api';
 
@@ -90,11 +89,10 @@ export default class AnswerCard extends Component<Signature> {
         {{/if}}
       </:actions>
       <:default>
-        <CardRenderer
-          class={{cn 'answer-card-render' heightless=@heightless}}
+        <ReplyCard
           @card={{@card}}
           @format={{@format}}
-          @displayContainer={{false}}
+          @heightless={{@heightless}}
         />
       </:default>
     </CardEmbed>
@@ -108,15 +106,6 @@ export default class AnswerCard extends Component<Signature> {
       .answer-card :deep(.pretui-embed-hat) {
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 var(--boxel-200);
-      }
-      /* the slot is the one rounded box: the card meets its edge square.
-         A fitted card the answer gives no height takes a tile's height,
-         as its content cannot grow a size container */
-      .answer-card-render {
-        border-radius: 0;
-      }
-      .answer-card-render.heightless {
-        height: 5.5rem;
       }
       /* the menu's trigger fits the hat's line, in the hat's gray */
       .answer-card-options {

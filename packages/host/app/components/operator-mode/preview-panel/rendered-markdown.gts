@@ -114,7 +114,7 @@ function wrapTablesHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-interface SlotCardSignature {
+export interface SlotCardSignature {
   Args: {
     card: CardDef | FileDef;
     format: Format;
@@ -363,7 +363,7 @@ export default class RenderedMarkdown extends Component<Signature> {
           let style: ReturnType<typeof htmlSafe> | undefined = styleRaw
             ? htmlSafe(styleRaw)
             : undefined;
-          let heightless = Boolean(styleRaw && !styleRaw.includes('height'));
+          let heightless = format === 'fitted' && !derived.hasHeight;
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 

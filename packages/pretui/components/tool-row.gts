@@ -763,7 +763,9 @@ export class ToolReceiptAction extends Component<ToolReceiptActionSignature> {
   <template>
     {{! one live region, present from the first render, whose text changes:
         a region created already holding its text is often not announced }}
-    <span class='pretui-toolaction-status' role='status'>{{#if @refusal}}<span
+    <span class='pretui-toolaction-status' role='status'>{{#if
+        @refusal
+      }}<span
           class='pretui-toolaction-refusal'
           tabindex='-1'
           {{this.takeFocus}}
@@ -1795,10 +1797,13 @@ export class ToolRow extends Component<ToolRowSignature> {
         }
         /* a settled row hands its card pills the ink and weight its
            container names for them, so they recede with the row instead
-           of standing out bright over it. Unset, the pills keep their own */
+           of standing out bright over it. Unset, the settled values are
+           invalid and the pills fall back to their own knobs */
         .pretui-toolrow[data-recede] {
-          --pretui-cardpill-ink: var(--pretui-toolrow-settled-pill-ink);
-          --pretui-cardpill-weight: var(--pretui-toolrow-settled-pill-weight);
+          --pretui-cardpill-settled-ink: var(--pretui-toolrow-settled-pill-ink);
+          --pretui-cardpill-settled-weight: var(
+            --pretui-toolrow-settled-pill-weight
+          );
         }
         /* an open row has room to say all of it, and a row that needs the
            reader says all of what it asks: its title wraps */

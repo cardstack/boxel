@@ -760,6 +760,8 @@ export default class AiAssistantMessage extends Component<Signature> {
       .ai-assistant-message.code-patch-correctness {
         --pretui-toolrow-header-min-h: 1.5rem;
         --pretui-toolrow-header-pad-block: 0.25rem;
+        --pretui-toolgroup-header-min-h: 1.5rem;
+        --pretui-toolgroup-header-pad-block: 0.25rem;
       }
       .ai-assistant-message.code-patch-correctness
         .content

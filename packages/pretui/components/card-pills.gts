@@ -329,11 +329,13 @@ export class CardPills extends Component<CardPillsSignature> {
               {{on 'click' (fn this.press card index)}}
               data-test-pretui-card-pill={{card.title}}
             >
-              <span class='pretui-cardpill-mark' aria-hidden='true'>{{#if
-                  (this.isPicked card)
-                }}<StateGlyph @glyph='done' @size={{10}} />{{else if
-                  card.image
-                }}<img
+              <span
+                class='pretui-cardpill-mark'
+                aria-hidden='true'
+              >{{#if (this.isPicked card)}}<StateGlyph
+                    @glyph='done'
+                    @size={{10}}
+                  />{{else if card.image}}<img
                     class='pretui-cardpill-image'
                     src={{card.image}}
                     alt=''
@@ -480,9 +482,17 @@ export class CardPills extends Component<CardPillsSignature> {
           font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
-          /* knobs: a settled ToolRow sets both so its pills recede with it */
-          font-weight: var(--pretui-cardpill-weight, 600);
-          color: var(--pretui-cardpill-ink, var(--foreground));
+          /* knobs: --pretui-cardpill-ink / -weight for every pill; a settled
+             ToolRow passes --pretui-cardpill-settled-ink / -weight, which
+             win where its container set them */
+          font-weight: var(
+            --pretui-cardpill-settled-weight,
+            var(--pretui-cardpill-weight, 600)
+          );
+          color: var(
+            --pretui-cardpill-settled-ink,
+            var(--pretui-cardpill-ink, var(--foreground))
+          );
           vertical-align: middle;
           cursor: pointer;
           transition:
