@@ -170,7 +170,7 @@ jobs:
             } >> comment.md
           fi
 
-          for slot in host-tests realm-tests; do
+          for slot in host-tests host-test-time host-peak-heap realm-tests; do
             if emit_section "$slot" >>comment.md; then
               echo >> comment.md
             fi
