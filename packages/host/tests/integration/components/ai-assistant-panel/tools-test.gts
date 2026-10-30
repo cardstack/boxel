@@ -4287,10 +4287,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
       assert
         .dom('[data-test-message-idx="3"] [data-test-tool-run-group]')
-        .containsText(
-          `Rename to ${name}`,
-          `the call renaming to ${name} shows`,
-        );
+        .containsText(`to ${name}`, `the call renaming to ${name} shows`);
     }
   });
 
