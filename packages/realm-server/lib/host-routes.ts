@@ -129,8 +129,20 @@ export async function searchPageTypeCards(
         attributes?: Record<string, unknown>;
       }[];
     };
+    // `included` also carries the cards the matches link to (a product's
+    // category); keep only the matches themselves.
+    let matched = new Set(
+      (doc.data ?? []).map(
+        (entry) =>
+          (entry as { relationships?: { item?: { data?: { id?: string } } } })
+            .relationships?.item?.data?.id,
+      ),
+    );
     let found = (doc.included ?? []).filter(
-      (resource) => resource.type === 'card' && typeof resource.id === 'string',
+      (resource) =>
+        resource.type === 'card' &&
+        typeof resource.id === 'string' &&
+        matched.has(resource.id),
     );
     for (let resource of found) {
       cards.push({ id: resource.id!, attributes: resource.attributes ?? {} });
