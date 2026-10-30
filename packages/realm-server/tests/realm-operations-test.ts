@@ -6,6 +6,7 @@ import {
   fetchPublishabilityReport,
   fetchPublishProgress,
   publishRealm,
+  ReadinessTimeoutError,
   RealmOperationError,
   unpublishRealm,
   waitForReady,
@@ -275,6 +276,119 @@ module(basename(import.meta.filename), function () {
       } catch (err) {
         assert.ok(err instanceof Error);
         assert.ok(/Timed out after 20ms/.test((err as Error).message));
+      }
+    });
+
+    test('waitForReady keeps waiting past timeoutMs while progress advances', async function (assert) {
+      let progressPolls = 0;
+      let startedAt = Date.now();
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: {
+                phase: 'render',
+                filesCompleted: progressPolls++,
+                totalFiles: 1000,
+              },
+            },
+          });
+        }
+        return new Response(null, {
+          status: Date.now() - startedAt > 150 ? 200 : 503,
+        });
+      });
+
+      await waitForReady(client, {
+        publishedRealmURL: 'https://mike.boxel.space/notes/',
+        timeoutMs: 50,
+        pollIntervalMs: 5,
+        progressPollIntervalMs: 5,
+        onProgress: () => {},
+      });
+
+      assert.true(
+        Date.now() - startedAt > 150,
+        'outlived timeoutMs because every reading moved',
+      );
+    });
+
+    test('waitForReady times out once progress stops changing', async function (assert) {
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: { phase: 'render', filesCompleted: 3, totalFiles: 9 },
+            },
+          });
+        }
+        return new Response(null, {
+          status: 503,
+          headers: { 'X-Boxel-Not-Ready': 'prerender-html' },
+        });
+      });
+
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 50,
+          pollIntervalMs: 5,
+          progressPollIntervalMs: 5,
+          onProgress: () => {},
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.ok(
+          /with no progress for the last 50ms: HTTP 503 \(not ready: prerender-html\)$/.test(
+            (err as Error).message,
+          ),
+          (err as Error).message,
+        );
+      }
+    });
+
+    test('waitForReady gives up at maxWaitMs even while progress advances', async function (assert) {
+      let progressPolls = 0;
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: {
+                phase: 'render',
+                filesCompleted: progressPolls++,
+                totalFiles: 1000,
+              },
+            },
+          });
+        }
+        return new Response(null, { status: 503 });
+      });
+
+      let startedAt = Date.now();
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 50,
+          maxWaitMs: 120,
+          pollIntervalMs: 5,
+          progressPollIntervalMs: 5,
+          onProgress: () => {},
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.false(
+          /no progress/.test((err as Error).message),
+          'the ceiling is not reported as a stall',
+        );
+        assert.true(Date.now() - startedAt < 1000, 'bounded by maxWaitMs');
       }
     });
 

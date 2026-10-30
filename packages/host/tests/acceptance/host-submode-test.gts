@@ -18,6 +18,7 @@ import {
   baseRealm,
   param,
   query,
+  ReadinessTimeoutError,
   type PublishProgress,
 } from '@cardstack/runtime-common';
 
@@ -1917,6 +1918,36 @@ module('Acceptance | host submode', function (hooks) {
 
         // Verify the modal stays open when there's an error
         assert.dom('[data-test-publish-realm-modal]').exists();
+      });
+
+      test('a publish whose readiness wait times out still records its publish time', async function (assert) {
+        getService('realm-server').waitForRealmReady = async () => {
+          throw new ReadinessTimeoutError(
+            'Timed out after 300000ms waiting for the realm to pass readiness check',
+          );
+        };
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        await waitFor(`[data-test-domain-publish-error="${defaultUrl}"]`);
+
+        assert
+          .dom(`[data-test-domain-publish-error="${defaultUrl}"] .error-text`)
+          .hasText(
+            'Published, but the site is taking longer than usual to finish rendering. It goes live when rendering finishes.',
+          );
+        assert
+          .dom('[data-test-last-published-at]')
+          .containsText('Published', 'the accepted publish keeps its time');
       });
 
       test('shows inline error for failed domain while allowing successful ones', async function (assert) {

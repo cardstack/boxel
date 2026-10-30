@@ -29,7 +29,7 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 export interface PublishOptions {
   /** Wait for the published realm to pass readiness check (default: true). */
   waitForReady?: boolean;
-  /** Readiness-poll timeout in milliseconds (default: 300_000). */
+  /** How long the readiness wait goes without progress before giving up, in milliseconds (default: 300_000). */
   timeoutMs?: number;
   /**
    * When the server returns 400/409 (e.g. an existing publication conflicts),
@@ -223,7 +223,7 @@ export function registerPublishCommand(realm: Command): void {
     .option('--no-wait', 'Return as soon as the server accepts the publish')
     .option(
       '--timeout <ms>',
-      `Readiness-poll timeout in milliseconds (default: ${DEFAULT_TIMEOUT_MS})`,
+      `How long to wait without progress before giving up, in milliseconds (default: ${DEFAULT_TIMEOUT_MS})`,
       parseTimeoutOption,
     )
     .option(

@@ -15,6 +15,7 @@ const JSONAPI_MIME = 'application/vnd.api+json';
 const JSON_MIME = 'application/json';
 
 const DEFAULT_READINESS_TIMEOUT_MS = 300_000;
+const DEFAULT_READINESS_MAX_WAIT_MS = 3_600_000;
 const DEFAULT_READINESS_POLL_INTERVAL_MS = 1000;
 // Progress is sampled on its own cadence rather than piggy-backing the
 // readiness poll: `_readiness-check` holds each request open while it waits on
@@ -41,6 +42,15 @@ export class RealmOperationError extends Error {
     if (options?.cause !== undefined) {
       (this as { cause?: unknown }).cause = options.cause;
     }
+  }
+}
+
+// Thrown when `waitForReady` gives up before the realm became ready. The work
+// it waited on may still finish, unlike a refusal such as a failed boot index.
+export class ReadinessTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReadinessTimeoutError';
   }
 }
 
@@ -368,8 +378,12 @@ export const fetchPublishProgress: RealmOperation<
 
 export interface WaitForReadyInput {
   publishedRealmURL: string;
-  // Defaults to 300_000ms.
+  // How long the wait goes on without the realm becoming ready. While progress
+  // is sampled (`onProgress`), it counts from the last change in the reading,
+  // so a publish that is still advancing keeps waiting. Defaults to 300_000ms.
   timeoutMs?: number;
+  // Bounds a wait that `timeoutMs` keeps extending. Defaults to 3_600_000ms.
+  maxWaitMs?: number;
   // Defaults to 1000ms.
   pollIntervalMs?: number;
   // Called with a fresh reading whenever the realm's publish progress changes,
@@ -400,6 +414,7 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
 ) => {
   let publishedRealmURL = ensureTrailingSlash(input.publishedRealmURL);
   let timeoutMs = input.timeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS;
+  let maxWaitMs = input.maxWaitMs ?? DEFAULT_READINESS_MAX_WAIT_MS;
   let pollIntervalMs =
     input.pollIntervalMs ?? DEFAULT_READINESS_POLL_INTERVAL_MS;
   let readinessUrlObj = new URL('_readiness-check', publishedRealmURL);
@@ -408,20 +423,27 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   }
   let readinessUrl = readinessUrlObj.href;
   let startedAt = Date.now();
+  let lastAdvancedAt = startedAt;
   let lastError: string | undefined;
   let terminalFailure: string | undefined;
+  let onProgress = input.onProgress;
+  let deadline = () =>
+    Math.min(startedAt + maxWaitMs, lastAdvancedAt + timeoutMs);
 
-  let stopSamplingProgress = input.onProgress
+  let stopSamplingProgress = onProgress
     ? sampleProgress(
         client,
         publishedRealmURL,
-        input.onProgress,
+        (progress) => {
+          lastAdvancedAt = Date.now();
+          onProgress(progress);
+        },
         input.progressPollIntervalMs ?? DEFAULT_PROGRESS_POLL_INTERVAL_MS,
       )
     : undefined;
 
   try {
-    while (Date.now() - startedAt < timeoutMs) {
+    while (Date.now() < deadline()) {
       try {
         let response = await client.authedFetch(readinessUrl, {
           headers: { Accept: JSONAPI_MIME },
@@ -456,7 +478,7 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
           })`;
         }
       }
-      let remaining = timeoutMs - (Date.now() - startedAt);
+      let remaining = deadline() - Date.now();
       if (remaining <= 0) {
         break;
       }
@@ -471,8 +493,13 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   if (terminalFailure) {
     throw new Error(terminalFailure);
   }
-  throw new Error(
-    `Timed out after ${timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${
+  let waitedMs = Date.now() - startedAt;
+  let stalled =
+    onProgress && waitedMs < maxWaitMs
+      ? `, with no progress for the last ${timeoutMs}ms`
+      : '';
+  throw new ReadinessTimeoutError(
+    `Timed out after ${onProgress ? waitedMs : timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${stalled}${
       lastError ? `: ${lastError}` : ''
     }`,
   );
