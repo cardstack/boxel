@@ -121,7 +121,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 - Use scalable units such as rem
   - Exception: hairline values stay in px — border widths (`1px`), focus outline widths and offsets (`2px`), box-shadow offsets, blurs and spreads, and similar small strokes. They should stay crisp rather than scale with font size.
-- Use CSS variables from packages/boxel-ui/src/styles/variables.css
+- Use the shared design tokens, never literals: the semantic theme tokens for color (`--background`/`--foreground`, `--card`/`--card-foreground`, `--primary`/`--primary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`, `--border`, `--ring`), and the `--boxel-*` tokens for spacing (`--boxel-sp-*`), type (`--boxel-font-*`, `--boxel-font-size-*`, `--boxel-line-height-*`, `--boxel-lsp-*`), radii (`--boxel-border-radius*`), shadows (`--boxel-box-shadow*`) and motion (`--boxel-transition`). The `gts-component-conventions` skill (§3) says how to choose between them.
 
 #### Iterating on host tests with the Chrome MCP server
 
