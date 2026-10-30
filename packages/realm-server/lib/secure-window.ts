@@ -615,7 +615,7 @@ export async function realmCardsWithRequests(
     if (!readable.has(moduleRealm.url)) {
       readable.set(
         moduleRealm.url,
-        (await mayRead(dbAdapter, moduleRealm.url, user)) &&
+        (await mayRead(deps, moduleRealm.url, user)) &&
           Boolean(await moduleRealm.mount()),
       );
     }

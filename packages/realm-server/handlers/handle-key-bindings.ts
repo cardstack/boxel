@@ -358,6 +358,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
     let batch = await approvalBatch(
       {
         dbAdapter,
+        matrixServerName: args.matrixClient.serverName,
         findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
         definitionLookup,
         virtualNetwork,

@@ -148,6 +148,7 @@ export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
     let cards = await realmCardsWithRequests(
       {
         dbAdapter,
+        matrixServerName: args.matrixClient.serverName,
         findRealm: realmFinder(args),
         definitionLookup,
         virtualNetwork,
