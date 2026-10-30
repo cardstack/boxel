@@ -1,4 +1,25 @@
-import { baseRealm, baseRealmRRI } from './constants.ts';
+import { ri, type RealmIdentifier } from './realm-identifiers.ts';
+
+// This module imports only `realm-identifiers.ts`, itself import-free, so a
+// dependency-light consumer whose type-check cannot reach `@cardstack/base/*`
+// (boxel-cli, the VS Code extension) can read the declaration. Keep it that
+// way: `constants.ts` imports the base realm's spellings from here, not the
+// other way round.
+
+/**
+ * The base realm's canonical RRI prefix. Code refs built from it match what
+ * `Loader.identify` / `identifyCard` emit for base-realm classes, which
+ * canonicalise through `VirtualNetwork.unresolveURL` to this prefix.
+ */
+export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
+
+/**
+ * The base realm's registered identity: a `https://` URL that nothing serves,
+ * mapped onto wherever the base realm is actually served. ADR 002 §1.4 confines
+ * it to the registration, the alias-tolerant paths, and their tests.
+ */
+// eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- the base realm's registration: `baseRealm` and the declaration below are both built from this one spelling
+export const baseRealmAliasURL = 'https://cardstack.com/base/';
 
 /**
  * The realms addressed by a registered `@cardstack/…` prefix.
@@ -50,7 +71,7 @@ export interface PrefixRealm {
 export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
   {
     prefix: baseRealmRRI,
-    alias: baseRealm.url,
+    alias: baseRealmAliasURL,
     hostConfigKey: 'resolvedBaseRealmURL',
   },
   {

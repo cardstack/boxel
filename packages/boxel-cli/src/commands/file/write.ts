@@ -57,7 +57,7 @@ export async function write(
   content: string | Uint8Array,
   options?: WriteCommandOptions,
 ): Promise<WriteResult> {
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options?.profileManager,
   });
   if (!resolvedRealm.ok) {

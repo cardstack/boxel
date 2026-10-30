@@ -58,7 +58,9 @@ export async function lintRealm(
     return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return emptyErrorResult(resolvedRealm.error);
   }

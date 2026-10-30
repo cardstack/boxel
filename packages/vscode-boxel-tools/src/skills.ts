@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { prefixRealmNetworkFor } from '@cardstack/runtime-common/prefix-realm-network';
 import type { RealmAuth } from './realm-auth.ts';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -22,6 +23,18 @@ export interface SkillStateData {
   enabledSkillIds: string[];
   lastUpdated: number;
 }
+
+/**
+ * The well-known realms the Skills view lists ahead of the user's own, by the
+ * prefix each is registered under and the label it is shown with. Where each
+ * is served comes from the configured realm server's prefix map at refresh
+ * time (ADR 002 §1.4), never from here.
+ */
+const WELL_KNOWN_SKILL_REALMS: { prefix: string; label: string }[] = [
+  { prefix: '@cardstack/base/', label: 'Base' },
+  { prefix: '@cardstack/catalog/', label: 'Catalog' },
+  { prefix: '@cardstack/skills/', label: 'Skills' },
+];
 
 export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<
@@ -234,8 +247,43 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     }
   }
 
+  /**
+   * The well-known realms, placed by the network built from the configured
+   * realm server's prefix map. A server that cannot be reached, or that does
+   * not serve a realm, drops that realm from the list rather than guessing
+   * where it might be.
+   */
+  private async wellKnownSkillLists(): Promise<SkillList[]> {
+    const realmServerUrl = vscode.workspace
+      .getConfiguration('boxel-tools')
+      .get<string>('realmServer');
+    if (!realmServerUrl) {
+      return [];
+    }
+    let prefixRealmURLs: Record<string, string>;
+    try {
+      prefixRealmURLs = (
+        await prefixRealmNetworkFor(realmServerUrl)
+      ).prefixRealmURLs();
+    } catch (error) {
+      console.error(
+        `[SkillsProvider] Could not read the prefix realm map from ${realmServerUrl}:`,
+        error,
+      );
+      vscode.window.showWarningMessage(
+        `Could not reach the realm server at ${realmServerUrl}; only your workspaces' skills are listed.`,
+      );
+      return [];
+    }
+    return WELL_KNOWN_SKILL_REALMS.flatMap(({ prefix, label }) => {
+      const realmUrl = prefixRealmURLs[prefix];
+      return realmUrl ? [new SkillList(label, realmUrl, true)] : [];
+    });
+  }
+
   async refresh(): Promise<void> {
     const realmUrls = await this.realmAuth.getRealmUrls();
+    const wellKnownSkillLists = await this.wellKnownSkillLists();
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
@@ -244,13 +292,9 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
       },
       async (progress) => {
         this.skillLists = [
-          new SkillList('Base', 'https://app.boxel.ai/base/', true),
-          new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
-          new SkillList('Skills', 'https://app.boxel.ai/skills/', true),
-        ];
-        this.skillLists.push(
+          ...wellKnownSkillLists,
           ...realmUrls.map((url) => new SkillList(url, url)),
-        );
+        ];
 
         const total = this.skillLists.length;
         let completed = 0;

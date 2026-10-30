@@ -1,9 +1,11 @@
 import type { Command } from 'commander';
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
+import { isPrefixForm } from '@cardstack/runtime-common/realm-identifiers';
 import {
   resolveRealmIdentifier,
-  splitRealmResourceIdentifier,
+  resolveRealmNetwork,
+  type PrefixRealmNetwork,
 } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
@@ -49,16 +51,24 @@ export type ReadTarget =
   | { ok: false; error: string };
 
 /**
- * Derive the realm identifier and realm-relative path for `file read` from
- * its CLI inputs: a full @cardstack/ identifier as <path> carries its own
- * realm; otherwise --realm is required.
+ * Derive the realm and realm-relative path for `file read` from its CLI
+ * inputs: a full @cardstack/ identifier as <path> carries its own realm, which
+ * `network` places (the realm server's network, needed only then); otherwise
+ * --realm is required. The realm comes back as the network answers it, in URL
+ * form.
  */
 export function resolveReadTarget(
   path: string,
   realm: string | undefined,
+  network?: Pick<
+    PrefixRealmNetwork,
+    'realmForReference' | 'pathBelowNamespace'
+  >,
 ): ReadTarget {
-  let split = splitRealmResourceIdentifier(path);
-  if (split) {
+  let ownRealm = isPrefixForm(path)
+    ? network?.realmForReference(path)
+    : undefined;
+  if (ownRealm) {
     if (realm) {
       return {
         ok: false,
@@ -66,7 +76,14 @@ export function resolveReadTarget(
           'Pass either a full @cardstack/ identifier as <path> or --realm with a realm-relative path, not both',
       };
     }
-    return { ok: true, ...split };
+    let realmPath = network!.pathBelowNamespace(path);
+    if (!realmPath) {
+      return {
+        ok: false,
+        error: `"${path}" names a realm, not a file in one: add the file's path, or pass --realm with a realm-relative path`,
+      };
+    }
+    return { ok: true, realm: ownRealm, path: realmPath };
   }
   if (!realm) {
     return {
@@ -92,7 +109,7 @@ export async function read(
   path: string,
   options?: ReadCommandOptions,
 ): Promise<ReadResult> {
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options?.profileManager,
   });
   if (!resolvedRealm.ok) {
@@ -171,7 +188,18 @@ export function registerReadCommand(parent: Command): void {
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: ReadCliOptions) => {
-      let target = resolveReadTarget(filePath, opts.realm);
+      // Only a prefix-form <path> can carry its own realm, and only the realm
+      // server's network can say which; a relative path needs no round trip.
+      let network: PrefixRealmNetwork | undefined;
+      if (isPrefixForm(filePath)) {
+        let resolved = await resolveRealmNetwork();
+        if (!resolved.ok) {
+          console.error(`${FG_RED}Error:${RESET} ${resolved.error}`);
+          process.exit(1);
+        }
+        network = resolved.network;
+      }
+      let target = resolveReadTarget(filePath, opts.realm, network);
       if (!target.ok) {
         console.error(`${FG_RED}Error:${RESET} ${target.error}`);
         process.exit(1);

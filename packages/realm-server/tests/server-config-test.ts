@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
+import { PrefixRealmNetwork } from '@cardstack/runtime-common/prefix-realm-network';
 import { createServeIndex } from '../handlers/serve-index.ts';
 
 module(basename(import.meta.filename), function () {
@@ -30,6 +31,7 @@ module(basename(import.meta.filename), function () {
               publishedRealmBoxelSiteDomain: 'localhost:4201',
             }),
           )}"></head><body></body></html>`,
+        virtualNetwork: new PrefixRealmNetwork(),
         cardSizeLimitBytes: 0,
         fileSizeLimitBytes: 0,
         audioSizeLimitBytes: 0,

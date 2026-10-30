@@ -45,6 +45,7 @@ import {
 } from '../commands/realm/indexing-errors.ts';
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready.ts';
 import { getProfileManager, type ProfileManager } from './profile-manager.ts';
+import { resolveRealmNetwork } from './resolve-realm-identifier.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 export type {
@@ -200,6 +201,20 @@ export class BoxelCLIClient {
       matrixId: active.id,
       realmServerUrl: active.profile.realmServerUrl,
     };
+  }
+
+  /**
+   * The prefix map of the active profile's realm server: each registered
+   * `@cardstack/<realm>/` prefix and the URL that realm is served at, read
+   * off the network built from the server's `/_prefix-realms`. Throws when
+   * there is no realm server to ask or its map cannot be read.
+   */
+  async prefixRealmURLs(): Promise<Record<string, string>> {
+    let resolved = await resolveRealmNetwork({ profileManager: this.pm });
+    if (!resolved.ok) {
+      throw new Error(resolved.error);
+    }
+    return resolved.network.prefixRealmURLs();
   }
 
   /**

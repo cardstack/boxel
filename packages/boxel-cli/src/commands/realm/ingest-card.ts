@@ -570,13 +570,15 @@ export async function ingestCard(
   // card path rather than the realm) and realm auto-detection below.
   cardUrl = cardUrl.replace(/\/$/, '');
   let pm = options.profileManager ?? getProfileManager();
-  let resolvedCard = resolveRealmIdentifier(cardUrl, { profileManager: pm });
+  let resolvedCard = await resolveRealmIdentifier(cardUrl, {
+    profileManager: pm,
+  });
   if (!resolvedCard.ok) {
     return { files: [], error: resolvedCard.error };
   }
   cardUrl = resolvedCard.url;
   if (options.realm) {
-    let resolvedRealm = resolveRealmIdentifier(options.realm, {
+    let resolvedRealm = await resolveRealmIdentifier(options.realm, {
       profileManager: pm,
     });
     if (!resolvedRealm.ok) {

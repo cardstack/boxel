@@ -15,7 +15,6 @@ import { runGlintCheck } from '../../src/commands/parse.ts';
 // exists to avoid) breaks `typeof BaseDef` on every class that sets it as
 // `static icon`.
 
-const TARGET_REALM = 'https://realms.example.test/user/target/';
 const CATALOG_URL = 'https://realms.example.test/catalog/';
 
 const CATALOG_FILES: Record<string, string> = {
@@ -114,7 +113,7 @@ describe('boxel parse — realm-prefixed imports (in-process glint)', () => {
       let { errors, warnings } = await runGlintCheck(
         Object.entries(SHAPES).map(([path, content]) => ({ path, content })),
         {
-          realmOrigin: TARGET_REALM,
+          prefixRealmURLs: { '@cardstack/catalog/': CATALOG_URL },
           fetchFn: stubRealmFetch(),
         },
       );
