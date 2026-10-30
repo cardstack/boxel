@@ -675,7 +675,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           return;
         }
         // Rewrite cardURL so the head/isolated/scoped CSS fetched below
-        // render the routed target. A target in another realm (a site card
+        // render the routed target. A target in another realm (realm.json
         // opted in) is served as that realm prerendered it, and only when a
         // visitor who isn't signed in may read it; otherwise the path is
         // served as if unrouted.

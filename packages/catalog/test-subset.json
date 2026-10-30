@@ -20,6 +20,7 @@
     ],
     "realmServer": [
       "catalog-test-subset-test",
+      "cross-realm-routing-policy-test",
       "direct-writer-queries-test",
       "realm-endpoints/search-test",
       "realm-policy-activation-test",
@@ -56,8 +57,7 @@
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
-      "server-endpoints/policy-scoped-search-test",
-      "site-cross-realm-policy-test"
+      "server-endpoints/policy-scoped-search-test"
     ]
   }
 }

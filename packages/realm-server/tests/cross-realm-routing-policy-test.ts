@@ -27,7 +27,7 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // A site realm anyone may read routes two paths to cards a store realm holds.
 // The store realm is private: no one but its owner is on its ACL. Its policy
 // opens one of the two cards to visitors who aren't signed in, and the site
-// card opts in to serving the store's own prerender (ADR 016). The page at the
+// realm's realm.json opts in to serving the store's own prerender (ADR 016). The page at the
 // opened card's path is the store's; the other path is served as if unrouted.
 const SITE = 'http://127.0.0.1:4444/site/';
 const STORE = 'http://127.0.0.1:4444/store/';
@@ -58,14 +58,6 @@ const PAGE_MODULE = `
   }
 `;
 
-const SITE_MODULE = `
-  import { CardDef, contains, field } from '@cardstack/base/card-api';
-  import BooleanField from '@cardstack/base/boolean';
-  export class TestSite extends CardDef {
-    @field serveSourcePrerender = contains(BooleanField);
-  }
-`;
-
 function page(label: string, open: boolean) {
   return JSON.stringify({
     data: {
@@ -82,7 +74,7 @@ function siteRealmConfig() {
       type: 'card',
       attributes: {
         cardInfo: { name: 'Site' },
-        site: './Site/main',
+        serveSourcePrerender: true,
         hostRoutingRules: [{ path: '/opened' }, { path: '/closed' }],
       },
       relationships: {
@@ -130,14 +122,6 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(SITE),
           fileSystem: {
             'realm.json': siteRealmConfig(),
-            'site.gts': SITE_MODULE,
-            'Site/main.json': JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: { serveSourcePrerender: true },
-                meta: { adoptsFrom: { module: '../site', name: 'TestSite' } },
-              },
-            }),
           },
           permissions: {
             '*': ['read'],

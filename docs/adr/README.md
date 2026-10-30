@@ -30,4 +30,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [013](013-settle-a-transcripts-scroll-anchor-in-the-render-pass-before-motion-measures.md)      | Settle a transcript's scroll anchor in the render pass, before motion measures            | proposed |
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed |
 | [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed |
-| [016](016-let-a-site-card-route-to-another-realms-card-served-as-that-realm-prerendered-it.md)  | Let a site card route to another realm's card, served as that realm prerendered it        | proposed |
+| [016](016-let-a-realm-route-to-another-realms-card-served-as-that-realm-prerendered-it.md)      | Let a realm route to another realm's card, served as that realm prerendered it            | proposed |

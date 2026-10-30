@@ -2114,13 +2114,12 @@ export class RealmConfig extends CardDef {
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
   });
 
-  // The card that configures this realm's published site, by its id: an
-  // absolute URL or a path relative to the realm, like `policy` and for the
-  // same reason (a link would be followed on every read of realm.json).
-  // Host mode reads the fields it knows from that card's index entry.
-  @field site = contains(StringField, {
+  // Whether a host routing rule may serve a card another realm holds, as
+  // that realm prerendered it. Host mode serves such a card only when a
+  // visitor who isn't signed in may read it (ADR 016).
+  @field serveSourcePrerender = contains(BooleanField, {
     description:
-      "The card that configures this realm's published site, by its URL or a path relative to the realm. Absent for a realm whose site is configured by hostRoutingRules alone",
+      "Lets a host routing rule serve a card another realm holds, as that realm prerendered it, when a visitor who isn't signed in may read it. Off by default: rules into other realms are dropped",
   });
 
   // What the policy this realm names compiles to, as the realm compiles it:

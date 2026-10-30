@@ -2096,7 +2096,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   // does NOT equal the routed path, so the card-id fallback cannot mask the
   // bug) and asserts both forms plus the 308 canonical redirect.
   module(
-    'Published realm: a site card routes to another realm’s card',
+    'Published realm: realm.json routes to another realm’s card',
     function (hooks) {
       let request: SuperTest<Test>;
       let publishedRealmURLString =
@@ -2104,26 +2104,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let publishedRealmHost = new URL(publishedRealmURLString).host;
       let publishedRealmPath = new URL(publishedRealmURLString).pathname;
       let otherRealmURL = 'http://127.0.0.1:4444/test/';
-      let siteModule = `
-        import { CardDef, contains, field } from '@cardstack/base/card-api';
-        import BooleanField from '@cardstack/base/boolean';
-        export class TestSite extends CardDef {
-          @field serveSourcePrerender = contains(BooleanField);
-        }
-      `;
-      let siteCard = (serveSourcePrerender: boolean) => ({
-        data: {
-          type: 'card',
-          attributes: { serveSourcePrerender },
-          meta: { adoptsFrom: { module: '../site', name: 'TestSite' } },
-        },
-      });
-      let realmConfig = (site: string | undefined, path: string) => ({
+      let realmConfig = (path: string) => ({
         data: {
           type: 'card',
           attributes: {
             cardInfo: { name: 'Cross-realm Source Realm' },
-            ...(site ? { site } : {}),
+            serveSourcePrerender: true,
             hostRoutingRules: [{ path }],
           },
           relationships: {
@@ -2174,17 +2160,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
           ],
         ],
-        cards: () => [
-          ['site.gts', siteModule],
-          ['Site/on.json', siteCard(true)],
-          ['realm.json', realmConfig('./Site/on', '/elsewhere')],
-        ],
+        cards: () => [['realm.json', realmConfig('/elsewhere')]],
         onSetup(args) {
           ({ request } = args);
         },
       });
 
-      test('a site card that opts in serves the other realm’s card as that realm prerendered it', async function (assert) {
+      test('a realm that opts in serves the other realm’s card as that realm prerendered it', async function (assert) {
         let response = await request
           .get(`${publishedRealmPath}elsewhere`)
           .set('Host', publishedRealmHost)
@@ -2205,7 +2187,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   );
 
   module(
-    'Published realm: a cross-realm routing rule without a site card that opts in',
+    'Published realm: a cross-realm routing rule in a realm that does not opt in',
     function (hooks) {
       let request: SuperTest<Test>;
       let publishedRealmURLString =

@@ -8,7 +8,7 @@ scope:
   - packages/realm-server/handlers/serve-index.ts
 ---
 
-# 016. Let a site card route to another realm's card, served as that realm prerendered it
+# 016. Let a realm route to another realm's card, served as that realm prerendered it
 
 A published realm prerenders its pages as itself, and a render gets a token
 only for the realms its user is listed on. A page whose content comes from a
@@ -16,9 +16,9 @@ private realm, such as a storefront that searches a store realm whose policy
 opens its catalog to visitors, therefore prerenders without that content: the
 render can't read the realm, and a realm's policy is never consulted for a
 render. The realm that holds the card can render it in full. This ADR lets a
-realm's site card opt in to routing a path to a card another realm holds,
-served as the realm holding it prerendered it, and only where a visitor who
-isn't signed in may read that card.
+realm opt in, in `realm.json`, to routing a path to a card another realm
+holds. Host mode serves that card as the realm holding it prerendered it, and
+only where a visitor who isn't signed in may read it.
 
 ## 1. Decision
 
@@ -27,35 +27,30 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
 document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
 and only when, they appear in all capitals, as shown here.
 
-### 1.1. The site pointer
+### 1.1. Opting in
 
-`realm.json` MAY name the card that configures the realm's published site, in
-a `site` attribute that holds the card's id as a string: an absolute URL, a
-realm-prefixed id, or a path relative to the realm, resolved as ADR 002 §1.2
-requires. It MUST NOT be a link, for the reason `policy` is
-not one: a link is side-loaded on every read of `realm.json`. The site card
-MUST live in the realm that names it. Host mode MUST read only the fields it
-knows from the site card's index entry, and MUST NOT load or render the card
-to do so.
-
-### 1.2. Opting in to another realm's card
-
-A host routing rule's target MUST be in the routing realm unless the site card
+A host routing rule's target MUST be in the routing realm unless `realm.json`
 sets `serveSourcePrerender` to `true`. With that set, a rule whose target is in
-another realm MUST be kept and marked as cross-realm instead of dropped.
+another realm MUST be kept and marked as cross-realm instead of dropped. Host
+mode MUST read the setting from `realm.json`'s index entry, with the rules, as
+ADR 015 §1.2 requires.
 
-### 1.3. Serving it
+### 1.2. Serving it
 
 For a cross-realm target, the realm server MUST ask the realm holding the card
 whether a request with no credentials may read it, by handling such a request
-for the card. Only on success MUST it serve the page with that card's
-prerendered HTML, as the holding realm rendered it. On any other answer it
-MUST serve the path as if the rule did not match, so a card a visitor may not
-read never reaches a public path. The check MUST carry the visitor's address,
-so a policy that admits visitors by where they call from can answer it. The
-page MUST NOT carry a cache validator derived from the routing realm alone,
-since the holding realm can change the card, or stop admitting visitors,
-without the routing realm changing.
+for the card. The request MUST carry the visitor's address as the
+client-address middleware set it, so a policy that admits visitors by where
+they call from can answer it. Only on success MUST it serve the page with that
+card's prerendered HTML, as the holding realm rendered it. On any other answer
+it MUST serve the path as if the rule did not match, so a card a visitor may
+not read never reaches a public path.
+
+### 1.3. Caching
+
+The page MUST NOT carry a cache validator derived from the routing realm
+alone, since the holding realm can change the card, or stop admitting
+visitors, without the routing realm changing.
 
 ## 2. Rationale
 
@@ -69,24 +64,28 @@ reimplementing either here. A search already hands a visitor the prerendered
 HTML of rows its policy admits, so serving the prerendered page of a card the
 policy admits exposes nothing more.
 
-The opt-in lives on the site card rather than on `RealmConfig` so the realm's
-config only points at the site, and a site's settings stay in one card.
+The opt-in lives in `realm.json` with the rules it governs, which ADR 015
+§1.2 says the server reads from there. A site's editing experience can still
+come from a site card: the realm's `realm.json` can adopt a `RealmConfig`
+subclass whose fields and editors the site realm supplies, and the server
+reads only the base fields.
 
 ## 3. Considered options
 
-- **Opt in on the site card, served only if an unauthenticated read
-  succeeds (chosen).**
+- **Opt in on `realm.json`, served only if an unauthenticated read succeeds
+  (chosen).**
+- **Opt in on a separate site card that `realm.json` names.** Keeps a site's
+  settings in one card, but the server would read a routing input from a card
+  other than `realm.json`, which ADR 015 §1.2 rules out.
 - **Grant the published realm's render read access to the private realm.**
   Published realms share a server identity, so every published realm's card
   code could then render the private realm's drafts into public HTML.
 - **Make the private realm publicly readable.** Its drafts and back office
   would be public too.
-- **A `RealmConfig` flag.** It works, but puts site configuration back on the
-  realm config.
 - **Leave the page to fill in after the app loads.** Visitors who run the app
   see the content after a delay; search engines and link previewers, which
   read the prerendered HTML, never do.
 
 ## 4. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/016.md](remediation/016.md).
