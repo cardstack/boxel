@@ -217,6 +217,7 @@ module('Integration | key pages', function (hooks) {
           },
         }),
       'GET _user-keys': () => json(200, keyResources()),
+      'GET _key-bindings': () => json(200, { data: [] }),
     };
     window.fetch = async (
       input: Parameters<typeof fetch>[0],
@@ -664,7 +665,7 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys'],
+        ['GET _user-keys', 'GET _key-bindings'],
         'the page asks nothing per key',
       );
     });
