@@ -130,8 +130,9 @@ module(basename(import.meta.filename), function () {
     const CLOSED = 'https://realms.example.test/closed/';
     const LAZY = 'https://realms.example.test/lazy/';
     const USER = '@someone:example.test';
+    const BOT = '@node-test_realm:example.test';
     const PERMISSIONS: Record<string, Record<string, [boolean, boolean]>> = {
-      [OPEN]: { [USER]: [true, true] },
+      [OPEN]: { [USER]: [true, true], [BOT]: [true, true] },
       [CLOSED]: { '@owner:example.test': [true, true] },
       [LAZY]: { [USER]: [true, true] },
       // A permission row left behind by a realm the server no longer serves.
@@ -362,7 +363,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(mounted, [OPEN, CLOSED], 'listing mounts nothing');
       assert.deepEqual(
-        await writableRealms(deps(), '@node-test_realm:example.test'),
+        await writableRealms(deps(), BOT),
         [],
         'a bot account writes nowhere a key could be shared',
       );

@@ -555,7 +555,10 @@ module(basename(import.meta.filename), function (hooks) {
       rateBurst: 100,
     });
     let recipients = [
-      ...new Set([OWNER, ...(await fetchDirectWriters(dbAdapter, realmURL))]),
+      ...new Set([
+        OWNER,
+        ...(await fetchDirectWriters(dbAdapter, realmURL, 'localhost')),
+      ]),
     ].sort();
     assert.true(recipients.includes(WRITER));
     assert.false(recipients.includes(READER));
@@ -637,7 +640,10 @@ module(basename(import.meta.filename), function (hooks) {
       rateBurst: 100,
     });
     let recipients = [
-      ...new Set([OWNER, ...(await fetchDirectWriters(dbAdapter, realmURL))]),
+      ...new Set([
+        OWNER,
+        ...(await fetchDirectWriters(dbAdapter, realmURL, 'localhost')),
+      ]),
     ].sort();
 
     for (let i = 0; i < 3; i++) {

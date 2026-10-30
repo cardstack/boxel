@@ -13,6 +13,7 @@ import {
   type RateLimitStore,
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import {
   OperationFailure,
   type AnonymousCallApiCaller,
@@ -679,6 +680,7 @@ async function noticeThresholds(
       for (let writer of await fetchDirectWriters(
         dbAdapter,
         new URL(limited.realmURL),
+        matrixServerNameFromEnv(),
       )) {
         recipients.add(writer);
       }
@@ -848,7 +850,12 @@ export async function setShareLimits(
   ]);
   if (
     share &&
-    (await isDirectWriter(dbAdapter, new URL(share.realm_url as string), user))
+    (await isDirectWriter(
+      dbAdapter,
+      new URL(share.realm_url as string),
+      user,
+      matrixServerNameFromEnv(),
+    ))
   ) {
     throw new UserKeyError(
       403,

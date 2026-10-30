@@ -78,7 +78,13 @@ describe('realm publish with seed-based auth (integration)', () => {
           '--no-wait', // isolate the assertion to the /_publish-realm call
           '--json',
         ],
-        { home: emptyHome, env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed } },
+        {
+          home: emptyHome,
+          env: {
+            BOXEL_REALM_SECRET_SEED: realmSecretSeed,
+            MATRIX_SERVER_NAME: 'localhost',
+          },
+        },
       );
       expect(res.ok, res.stderr).toBe(true);
       let result = res.json<PublishResultJson>();
@@ -100,7 +106,13 @@ describe('realm publish with seed-based auth (integration)', () => {
           OWNER_USER_ID,
           '--tolerate-missing',
         ],
-        { home: emptyHome, env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed } },
+        {
+          home: emptyHome,
+          env: {
+            BOXEL_REALM_SECRET_SEED: realmSecretSeed,
+            MATRIX_SERVER_NAME: 'localhost',
+          },
+        },
       );
       fs.rmSync(emptyHome, { recursive: true, force: true });
     }
@@ -125,7 +137,13 @@ describe('realm publish with seed-based auth (integration)', () => {
           '--force',
           '--no-wait',
         ],
-        { home: emptyHome, env: { BOXEL_REALM_SECRET_SEED: realmSecretSeed } },
+        {
+          home: emptyHome,
+          env: {
+            BOXEL_REALM_SECRET_SEED: realmSecretSeed,
+            MATRIX_SERVER_NAME: 'localhost',
+          },
+        },
       );
       expect(res.exitCode).toBe(1);
       expect(res.stderr).not.toBe('');

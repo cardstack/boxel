@@ -5,6 +5,7 @@ import {
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import type {
   CallApiSlotLookup,
   CallApiUse,
@@ -453,7 +454,12 @@ export async function shareUsage(
   ]);
   if (
     !share ||
-    !(await isDirectWriter(dbAdapter, new URL(share.realm_url as string), user))
+    !(await isDirectWriter(
+      dbAdapter,
+      new URL(share.realm_url as string),
+      user,
+      matrixServerNameFromEnv(),
+    ))
   ) {
     throw noSuchShare();
   }

@@ -101,7 +101,14 @@ export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
     }
     let found = await (
       ctxt.query.access === 'read' ? readableRealms : writableRealms
-    )({ dbAdapter, findRealm: realmFinder(args) }, user);
+    )(
+      {
+        dbAdapter,
+        findRealm: realmFinder(args),
+        matrixServerName: args.matrixClient.serverName,
+      },
+      user,
+    );
     await sendJSON(ctxt, 200, {
       data: found.map(({ url, name }) => ({
         type: 'secure-window-realm',

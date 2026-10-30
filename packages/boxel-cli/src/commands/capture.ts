@@ -16,6 +16,7 @@ import type { RealmAuthenticator } from '../lib/realm-authenticator.ts';
 import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
 import {
   deriveOwnerUserId,
+  resolveMatrixServerName,
   deriveRealmServerUrl,
   mintRealmServerToken,
 } from '../lib/seed-auth.ts';
@@ -94,8 +95,10 @@ export interface CaptureOptions {
   maxWaitMs?: number;
   /** Administrative auth: mint tokens locally from the realm secret seed. */
   realmSecretSeed?: string;
-  /** Matrix id for the seed-minted server token (default: owner derived from the card URL). */
+  /** Matrix id for the seed-minted server token (default: the owner the card URL's realm path names, on the paired Matrix server). */
   asUser?: string;
+  /** The name of the Matrix server paired with the realm server, for seed mode (default: `MATRIX_SERVER_NAME`). */
+  matrixServerName?: string;
   /** Realm-server base URL override (default: derived from each card's origin). */
   realmServerUrl?: string;
   /** @internal Override the ProfileManager (tests). */
@@ -205,6 +208,7 @@ export async function capture(
   let resolution = resolveRealmAuthenticator({
     realmUrl: realmFlag ?? jobs[0].card,
     realmSecretSeed: options.realmSecretSeed,
+    matrixServerName: options.matrixServerName,
     profileManager: options.profileManager,
     authenticator: options.authenticator,
   });
@@ -225,14 +229,17 @@ export async function capture(
       let base = realmFlag ?? jobs[0].card;
       let asUser: string;
       try {
-        asUser = options.asUser ?? deriveOwnerUserId(base);
-        let baseIdentity = `${deriveRealmServerUrl(base)} ${
-          options.asUser ?? deriveOwnerUserId(base)
-        }`;
+        // The authenticator above resolved the same server name, so a
+        // missing one has already been reported without this suffix.
+        let matrixServerName = resolveMatrixServerName(
+          options.matrixServerName,
+        );
+        let ownerOf = (url: string) =>
+          options.asUser ?? deriveOwnerUserId(url, matrixServerName);
+        asUser = ownerOf(base);
+        let baseIdentity = `${deriveRealmServerUrl(base)} ${asUser}`;
         for (let job of jobs) {
-          let jobIdentity = `${deriveRealmServerUrl(job.card)} ${
-            options.asUser ?? deriveOwnerUserId(job.card)
-          }`;
+          let jobIdentity = `${deriveRealmServerUrl(job.card)} ${ownerOf(job.card)}`;
           if (jobIdentity !== baseIdentity) {
             return topLevelError(
               'Seed mode authorizes one realm owner per invocation, but the --spec cards span more than one realm server or owner. Pass --as-user for a shared identity, or split the spec by realm.',
@@ -771,7 +778,7 @@ export function registerCaptureCommand(program: Command): void {
     )
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint tokens locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint tokens locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .option(
       '--as-user <matrix-id>',

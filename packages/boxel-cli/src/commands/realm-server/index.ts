@@ -9,7 +9,7 @@ export function registerRealmServerCommand(program: Command): void {
   let realmServer = program
     .command('realm-server', { hidden: true })
     .description(
-      'Operate a realm server with its realm secret seed (env: BOXEL_REALM_SECRET_SEED)',
+      'Operate a realm server with its realm secret seed (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     );
 
   registerDataKeysCommand(realmServer);
