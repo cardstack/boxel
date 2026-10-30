@@ -670,5 +670,195 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${operatorToken()}`);
       assert.strictEqual(response.status, 401);
     });
+
+    const CLIENT_SECRET = 'platform-client-secret-0001';
+    const ROTATED_CLIENT_SECRET = 'platform-client-secret-0002';
+
+    async function addPlatformClient(overrides: Record<string, unknown> = {}) {
+      return await request
+        .post('/_platform-oauth-clients')
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .set('Content-Type', 'application/json')
+        .send({
+          name: 'github',
+          label: 'Boxel (read-only)',
+          secret: CLIENT_SECRET,
+          oauth: {
+            clientId: 'Iv1.platform-client',
+            authorizeUrl: 'https://github.com/login/oauth/authorize',
+            tokenUrl: 'https://github.com/login/oauth/access_token',
+            apiHosts: ['https://api.github.com/'],
+          },
+          note: 'registering the GitHub App',
+          ...overrides,
+        });
+    }
+
+    async function platformClientHistory() {
+      return await dbAdapter.execute(
+        `SELECT platform_client_id, name, client_id, action, note, key_id FROM platform_oauth_client_history ORDER BY id`,
+      );
+    }
+
+    test('each change to a platform client is recorded with its note and the caller the server observed, never its secret', async function (assert) {
+      let iat = Math.floor(Date.now() / 1000) - 30;
+      let token = jsonwebtoken.sign(
+        { operator: 'system-keys', iat, exp: iat + 5 * 60 },
+        realmSecretSeed,
+        { audience: SERVER_ORIGIN },
+      );
+      let added = await addPlatformClient();
+      assert.strictEqual(added.status, 201);
+      let id = added.body.client.id;
+      let replaced = await request
+        .patch('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          secret: ROTATED_CLIENT_SECRET,
+          note: 'rotating the GitHub App secret',
+        });
+      assert.strictEqual(replaced.status, 200);
+
+      let shown = await request
+        .get('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(shown.status, 200);
+      assert.strictEqual(shown.body.client.id, id);
+      assert.deepEqual(
+        shown.body.history.map((change: any) => [change.action, change.note]),
+        [
+          ['replace', 'rotating the GitHub App secret'],
+          ['add', 'registering the GitHub App'],
+        ],
+        'the history is newest first',
+      );
+      let [rotation] = shown.body.history;
+      assert.strictEqual(rotation.clientId, 'Iv1.platform-client');
+      assert.strictEqual(rotation.keyId, 'local-development');
+      assert.true(
+        /127\.0\.0\.1|::1/.test(String(rotation.clientAddress)),
+        `the caller's address is recorded (${rotation.clientAddress})`,
+      );
+      assert.strictEqual(
+        rotation.tokenIssuedAt,
+        new Date(iat * 1000).toISOString(),
+        'the time the token was signed is recorded',
+      );
+
+      let deleted = await request
+        .delete('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ note: 'retiring the GitHub App' });
+      assert.strictEqual(deleted.status, 200);
+      let history = await platformClientHistory();
+      assert.deepEqual(
+        history,
+        [
+          ['add', 'registering the GitHub App'],
+          ['replace', 'rotating the GitHub App secret'],
+          ['delete', 'retiring the GitHub App'],
+        ].map(([action, note]) => ({
+          platform_client_id: id,
+          name: 'github',
+          client_id: 'Iv1.platform-client',
+          action,
+          note,
+          key_id: 'local-development',
+        })),
+        'a deleted client keeps its history',
+      );
+
+      let readded = await addPlatformClient({
+        oauth: {
+          clientId: 'Iv1.another-app',
+          authorizeUrl: 'https://github.com/login/oauth/authorize',
+          tokenUrl: 'https://github.com/login/oauth/access_token',
+          apiHosts: ['https://api.github.com/'],
+        },
+        note: 'registering a new GitHub App under the same name',
+      });
+      assert.strictEqual(readded.status, 201);
+      assert.notStrictEqual(readded.body.client.id, id, 'it has a new id');
+      let reshown = await request
+        .get('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.deepEqual(
+        reshown.body.history.map((change: any) => [
+          change.action,
+          change.clientId,
+        ]),
+        [
+          ['add', 'Iv1.another-app'],
+          ['delete', 'Iv1.platform-client'],
+          ['replace', 'Iv1.platform-client'],
+          ['add', 'Iv1.platform-client'],
+        ],
+        'a client added again under a name shows the earlier client’s history too',
+      );
+      let everything = JSON.stringify([
+        added.body,
+        replaced.body,
+        shown.body,
+        await dbAdapter.execute(`SELECT * FROM platform_oauth_client_history`),
+      ]);
+      assert.false(everything.includes(CLIENT_SECRET), 'no secret is shown');
+      assert.false(
+        everything.includes(ROTATED_CLIENT_SECRET),
+        'no rotated secret is shown',
+      );
+    });
+
+    test('a platform client change with no note, or a note holding a secret, is refused and changes nothing', async function (assert) {
+      assert.strictEqual(
+        (await addPlatformClient({ note: undefined })).status,
+        400,
+      );
+      assert.strictEqual(
+        (await addPlatformClient({ note: `secret ${CLIENT_SECRET}` })).status,
+        400,
+      );
+      assert.strictEqual(
+        (await addPlatformClient({ note: 'one\ntwo' })).status,
+        400,
+        'a note with a line break is refused',
+      );
+      assert.deepEqual(await platformClientHistory(), []);
+
+      assert.strictEqual((await addPlatformClient()).status, 201);
+      let refusals = [
+        { secret: ROTATED_CLIENT_SECRET },
+        { secret: ROTATED_CLIENT_SECRET, note: `to ${ROTATED_CLIENT_SECRET}` },
+        { secret: ROTATED_CLIENT_SECRET, note: `was ${CLIENT_SECRET}` },
+      ];
+      for (let body of refusals) {
+        let response = await request
+          .patch('/_platform-oauth-clients/github')
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, 400, JSON.stringify(body.note));
+      }
+      for (let body of [{}, { note: `was ${CLIENT_SECRET}` }]) {
+        let response = await request
+          .delete('/_platform-oauth-clients/github')
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, 400, JSON.stringify(body));
+      }
+      assert.deepEqual(
+        (await platformClientHistory()).map(({ action }) => action),
+        ['add'],
+      );
+      let [stored] = await dbAdapter.execute(
+        `SELECT updated_at = created_at AS untouched FROM platform_oauth_clients WHERE name = 'github'`,
+      );
+      assert.true(Boolean(stored.untouched), 'the client is unchanged');
+    });
+
+    test('show answers 404 for a platform client that does not exist', async function (assert) {
+      let response = await request
+        .get('/_platform-oauth-clients/nothing-here')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(response.status, 404);
+    });
   });
 });
