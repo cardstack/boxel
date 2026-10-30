@@ -94,6 +94,7 @@ import {
 } from '@cardstack/host/lib/turn-summary';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
 import { isReady } from '@cardstack/host/resources/file';
+import { isPendingMessage } from '@cardstack/host/resources/room';
 import type { RoomResource } from '@cardstack/host/resources/room';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
@@ -250,7 +251,7 @@ export default class Room extends Component<Signature> {
                   @isMostRecentMessage={{this.isLastMessage i}}
                   @registerScroller={{this.registerMessageScroller}}
                   @unregisterScroller={{this.unregisterMessageScroller}}
-                  @isPending={{this.isPendingMessage message}}
+                  @isPending={{isPendingMessage message}}
                   @monacoSDK={{@monacoSDK}}
                   @isStreaming={{this.isMessageStreaming message}}
                   @inLatestTurn={{this.isInLatestTurn i}}
@@ -2400,10 +2401,6 @@ export default class Room extends Component<Signature> {
   @action
   private isLastMessage(messageIndex: number) {
     return (this.room && messageIndex === this.messages.length - 1) ?? false;
-  }
-
-  private isPendingMessage(message: Message) {
-    return message.status === 'sending' || message.status === 'queued';
   }
 
   private attachSkillTask = task(async (cardId: string) => {
