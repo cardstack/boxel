@@ -374,8 +374,37 @@ module(basename(import.meta.filename), function () {
           (e as GoogleServiceAccountRejectedError).error,
           'invalid_grant',
         );
+        assert.true((e as GoogleServiceAccountRejectedError).keyRefused);
       }
       assert.strictEqual(vendor.requests.length, 1);
+    });
+
+    test('a refusal that names no OAuth error, or an assertion outside the time window, is not held against the key', async function (assert) {
+      vendor.googleTokenAnswers.push(
+        { status: 403, body: {} },
+        {
+          status: 400,
+          body: {
+            error: 'invalid_grant',
+            error_description:
+              'Invalid JWT: Token must be a short-lived token (60 minutes) and in a reasonable timeframe. Check your iat and exp values in the JWT claim.',
+          },
+        },
+      );
+      for (let expected of ['status 403', 'invalid_grant']) {
+        try {
+          await googleAccessToken('key-1', credential());
+          assert.ok(false, 'expected a refusal');
+        } catch (e) {
+          assert.true(e instanceof GoogleServiceAccountRejectedError);
+          assert.strictEqual(
+            (e as GoogleServiceAccountRejectedError).error,
+            expected,
+          );
+          assert.false((e as GoogleServiceAccountRejectedError).keyRefused);
+        }
+      }
+      assert.strictEqual(vendor.requests.length, 2, 'neither was retried');
     });
 
     test('a refusal is not cached: the next call asks again', async function (assert) {
@@ -400,6 +429,15 @@ module(basename(import.meta.filename), function () {
         'stub-access-1',
       );
       assert.strictEqual(vendor.requests.length, 3);
+    });
+
+    test('a request timeout is retried', async function (assert) {
+      vendor.googleTokenAnswers.push({ status: 408, body: {} });
+      assert.strictEqual(
+        await googleAccessToken('key-1', credential()),
+        'stub-access-1',
+      );
+      assert.strictEqual(vendor.requests.length, 2);
     });
 
     test('a redirect to another origin is not followed with the assertion, and reads as unavailable', async function (assert) {

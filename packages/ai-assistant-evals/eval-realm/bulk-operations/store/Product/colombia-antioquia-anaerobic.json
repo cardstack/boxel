@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Colombia Antioquia Anaerobic",
+      "category": "coffee",
+      "origin": "Antioquia, Colombia",
+      "variants": [
+        {
+          "sku": "CF-014-250",
+          "size": "250 g",
+          "price": 13.79
+        },
+        {
+          "sku": "CF-014-500",
+          "size": "500 g",
+          "price": 24.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

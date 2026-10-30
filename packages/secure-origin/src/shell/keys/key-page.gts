@@ -6,6 +6,10 @@
 // says what it is and when it has stopped working; a connection is signed in
 // again (Reconnect) rather than replaced, as its value is the service's to
 // issue.
+// Each key also lists where it may be sent, its grants, with the approvals
+// that send it there; removing a grant lists those first, then revokes them.
+// Use with a card sets a key up for a card's requests ahead of the card
+// asking, on the approve page.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
@@ -19,10 +23,14 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import {
   deleteKey,
+  listBindings,
   listKeys,
+  removeGrant,
   replaceKey,
   sharesOfKey,
   unshare,
+  type KeyBinding,
+  type KeyGrant,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
@@ -32,7 +40,7 @@ import Trash from '../../components/icons/trash-2.gts';
 import IconPlus from '../../components/icons/icon-plus.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
-import { keySharePath } from '../pages.js';
+import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
 import {
@@ -50,6 +58,7 @@ import type {
 } from './context.ts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
+import KeyGrants from './key-grants.gts';
 import KeyTile from './key-tile.gts';
 import ServiceAccountDetails from './service-account-details.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
@@ -99,6 +108,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           />
                           <ServiceAccountDetails @key={{key}} />
                         </KeyUse>
+                        <KeyGrants
+                          @key={{key}}
+                          @bindings={{this.state.bindings}}
+                          @onRemove={{this.removeGrant}}
+                        />
                         <div class='tile-actions'>
                           {{#unless (eq key.kind 'oauth-connection')}}
                             <Button
@@ -124,6 +138,16 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                                 aria-hidden='true'
                               />Replace</Button>
                           {{/unless}}
+                          {{#if (this.usableWithCard key)}}
+                            <Button
+                              class='action'
+                              @kind='secondary'
+                              @size='extra-small'
+                              aria-describedby='key-name-{{key.id}}'
+                              data-test-key-use
+                              {{on 'click' (fn this.useWithCard key)}}
+                            >Use with a card…</Button>
+                          {{/if}}
                         </div>
                       </KeyTile>
                       {{#if (this.isActing 'replacing' key)}}
@@ -426,6 +450,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private state = trackedObject({
     loading: true,
     keys: [] as ListedKey[],
+    // The user's approvals, each under one of their keys' grants.
+    bindings: undefined as KeyBinding[] | undefined,
     error: undefined as string | undefined,
     // What went wrong when the key list didn't load.
     loadFailed: undefined as LoadFailure | undefined,
@@ -458,6 +484,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private async load() {
     try {
       this.state.keys = await listKeys(this.args.api.config);
+      this.state.bindings = await this.readBindings();
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -543,6 +570,40 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // page, which asks which realm.
   private share = (key: UserKey) =>
     navigation.assign(pageURL(keySharePath(key.id)));
+
+  // A key a card's request can send: any but an OAuth app people sign in
+  // through, which only connects accounts.
+  private usableWithCard = (key: ListedKey) =>
+    key.kind !== 'oauth-client' ||
+    key.oauth?.client?.grantType === 'client_credentials';
+
+  // Setting a key up for a card's requests is made on its own page, which
+  // asks which workspace and card, then approves them.
+  private useWithCard = (key: UserKey) =>
+    navigation.assign(pageURL(keyUsePath(key.id)));
+
+  // Removing a grant revokes the approvals that send under it, so both lists
+  // are read again.
+  private removeGrant = async (grant: KeyGrant) =>
+    await this.guard(async () => {
+      await removeGrant(this.args.api.config, grant.id);
+      this.state.keys = await listKeys(this.args.api.config);
+      this.state.bindings = await this.readBindings();
+    });
+
+  // The approvals each grant is used by. The keys are the page; when these
+  // can't be read, each grant is listed without them, and removing one says
+  // it revokes whatever uses it.
+  private readBindings = async (): Promise<KeyBinding[] | undefined> => {
+    try {
+      return await listBindings(this.args.api.config);
+    } catch (e) {
+      if (isSignedOut(e)) {
+        throw e;
+      }
+      return undefined;
+    }
+  };
 
   private setValue = (value: string) => {
     this.form.value = value;

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Guatemala Cobán Anaerobic",
+      "category": "coffee",
+      "origin": "Cobán, Guatemala",
+      "variants": [
+        {
+          "sku": "CF-051-250",
+          "size": "250 g",
+          "price": 13.79
+        },
+        {
+          "sku": "CF-051-500",
+          "size": "500 g",
+          "price": 24.5
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

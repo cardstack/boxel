@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Colombia Cauca Natural",
+      "category": "coffee",
+      "origin": "Cauca, Colombia",
+      "variants": [
+        {
+          "sku": "CF-016-250",
+          "size": "250 g",
+          "price": 12.5
+        },
+        {
+          "sku": "CF-016-500",
+          "size": "500 g",
+          "price": 24.5
+        },
+        {
+          "sku": "CF-016-1KG",
+          "size": "1 kg",
+          "price": 43.99
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

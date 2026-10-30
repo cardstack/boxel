@@ -26,6 +26,11 @@ import {
   sendJSON,
 } from './handle-user-keys.ts';
 import { codeRefOf, secureClientOf } from './handle-user-key-grants.ts';
+import { approvalBatch } from '../lib/key-binding-batch.ts';
+import { findRealm } from '../lib/realm-routing.ts';
+import { isSecureSession } from '../lib/secure-session.ts';
+import { validateContextRequest } from '../lib/secure-window.ts';
+import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
 // The bindings API: approving operations in a realm with the signed-in user's
 // keys and shares, revoking those approvals, and listing them. What a binding
@@ -264,6 +269,87 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
           type: {
             ...preview.type,
             module: args.virtualNetwork.unresolveURL(preview.type.module),
+          },
+        },
+      },
+    });
+  });
+}
+
+const BATCH_ATTRIBUTES = new Set(['target', 'review']);
+
+// The batch the secure window approves in one confirmation
+// (`lib/key-binding-batch.ts`): `attributes.{target, review?}`,
+// where `target` names a card or a card type in its realm as the window's
+// context does. Answers every operation on the card's definition that needs
+// the caller's approval, grouped by destination, with the caller's keys and
+// shares a slot can take. Asked with the window's own session, as every
+// request the window makes is.
+export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
+  let { dbAdapter, definitionLookup, virtualNetwork, realms, reconciler } =
+    args;
+  return keysHandler(async (ctxt) => {
+    let user = ownerOf(ctxt);
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new UserKeyError(
+        403,
+        'the secure window asks this with its own session',
+      );
+    }
+    let body = await readJSON(ctxt);
+    let data = body.data as
+      | { type?: unknown; attributes?: Record<string, unknown> }
+      | undefined;
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      data.type !== 'key-binding-batch'
+    ) {
+      throw new UserKeyError(400, `the resource type is 'key-binding-batch'`);
+    }
+    let attributes = data.attributes ?? {};
+    if (typeof attributes !== 'object' || Array.isArray(attributes)) {
+      throw new UserKeyError(400, 'attributes must be an object');
+    }
+    for (let name of Object.keys(attributes)) {
+      if (!BATCH_ATTRIBUTES.has(name)) {
+        throw new UserKeyError(400, `'${name}' can't be asked about here`);
+      }
+    }
+    let { review } = attributes;
+    if (review !== undefined && typeof review !== 'boolean') {
+      throw new UserKeyError(400, 'review is true or false');
+    }
+    let { target } = validateContextRequest({ target: attributes.target });
+    if (!target) {
+      throw new UserKeyError(400, 'a batch is asked for on a card or type');
+    }
+    let batch = await approvalBatch(
+      {
+        dbAdapter,
+        findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
+        definitionLookup,
+        virtualNetwork,
+      },
+      user,
+      {
+        target,
+        review: review === true,
+      },
+    );
+    await sendJSON(ctxt, 200, {
+      data: {
+        type: 'key-binding-batch',
+        attributes: {
+          ...batch,
+          card: {
+            ...batch.card,
+            module: virtualNetwork.unresolveURL(batch.card.module),
           },
         },
       },
