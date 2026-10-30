@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Bolivia Caranavi Anaerobic",
+      "category": "coffee",
+      "origin": "Caranavi, Bolivia",
+      "variants": [
+        {
+          "sku": "CF-001-250",
+          "size": "250 g",
+          "price": 17.4
+        },
+        {
+          "sku": "CF-001-500",
+          "size": "500 g",
+          "price": 31.29
+        },
+        {
+          "sku": "CF-001-1KG",
+          "size": "1 kg",
+          "price": 59.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

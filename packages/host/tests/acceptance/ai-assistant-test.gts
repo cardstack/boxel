@@ -769,13 +769,40 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom(`[data-test-llm-select-item="${llmConfigId}"]`)
       .hasText(llmNameToChangeTo);
     await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
-    await click('[data-test-llm-select-selected]');
     assert
       .dom('[data-test-llm-select-selected]')
       .hasText(triggerName(llmNameToChangeTo));
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, llmIdToChangeTo);
+  });
+
+  test('model selector closes when a model is selected', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-llm-select-selected]');
+    assert.dom('[data-test-llm-select-item]').exists();
+
+    let llmName = modelNameFor('openai/gpt-4o-mini');
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-4o-mini')}"] button`,
+    );
+
+    assert
+      .dom('[data-test-llm-select-item]')
+      .doesNotExist('the model list closes after a selection');
+    assert.dom('[data-test-llm-select-selected]').hasText(triggerName(llmName));
   });
 
   test('active LLM event includes metadata when switching models', async function (assert) {
@@ -796,7 +823,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       `[data-test-llm-select-item="${configIdFor('openai/gpt-4o-mini')}"] button`,
     );
-    await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
       let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
@@ -823,7 +849,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       `[data-test-llm-select-item="${configIdFor('openai/gpt-5')}"] button`,
     );
-    await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
       let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
@@ -881,7 +906,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Select the extended thinking variant
     await click(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"] button`);
-    await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
       let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
@@ -903,7 +927,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Now select the minimal variant
     await click('[data-test-llm-select-selected]');
     await click(`[data-test-llm-select-item="${gpt5ConfigId}"] button`);
-    await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
       let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');

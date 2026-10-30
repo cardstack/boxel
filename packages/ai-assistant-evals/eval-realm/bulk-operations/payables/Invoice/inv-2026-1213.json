@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "invoiceNumber": "INV-2026-1213",
+      "amount": 8825.87,
+      "issuedOn": "2026-05-12",
+      "dueDate": "2026-05-27",
+      "status": "void"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/willowmere-event-rentals"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}
