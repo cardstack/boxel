@@ -695,6 +695,7 @@ export class RealmServer {
   private realmSecretSeed: string;
   private grafanaSecret: string;
   private aiBotDelegationSecret: string | undefined;
+  private matrixInviteCheckSecret: string | undefined;
 
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
@@ -742,6 +743,7 @@ export class RealmServer {
     realmSecretSeed,
     grafanaSecret,
     aiBotDelegationSecret,
+    matrixInviteCheckSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -774,6 +776,7 @@ export class RealmServer {
     realmSecretSeed: string;
     grafanaSecret: string;
     aiBotDelegationSecret?: string;
+    matrixInviteCheckSecret?: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -854,6 +857,7 @@ export class RealmServer {
 
     this.realmSecretSeed = realmSecretSeed;
     this.aiBotDelegationSecret = aiBotDelegationSecret;
+    this.matrixInviteCheckSecret = matrixInviteCheckSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
@@ -1024,6 +1028,7 @@ export class RealmServer {
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
           aiBotDelegationSecret: this.aiBotDelegationSecret,
+          matrixInviteCheckSecret: this.matrixInviteCheckSecret,
           virtualNetwork: this.virtualNetwork,
           serveHostApp,
           serveIndex,

@@ -56,6 +56,7 @@ import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
+import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
@@ -201,6 +202,11 @@ export type CreateRoutesArgs = {
   // than minting tokens, so the feature stays inert until a secret is
   // provisioned.
   aiBotDelegationSecret?: string;
+  // Shared secret the homeserver's invite module presents to `/_invite-check`
+  // (ADR 011 §1.6). Optional: when unset the endpoint responds 503, which the
+  // module treats as a denial, so an unconfigured homeserver admits no invite
+  // between end users rather than every one.
+  matrixInviteCheckSecret?: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
@@ -766,6 +772,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleSetRealmCatalog(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
+  // Shared-secret authenticated inside the handler, which also answers 503
+  // while no secret is configured.
+  router.get('/_invite-check', handleInviteCheck(args));
   router.post(
     '/_realm-auth',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

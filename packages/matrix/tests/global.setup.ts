@@ -7,6 +7,7 @@ import {
   createRegistrationToken,
 } from '../support/synapse/index.ts';
 import {
+  appURL,
   startServer as startRealmServer,
   startPrerenderServer,
 } from '../support/isolated-realm-server.ts';
@@ -30,6 +31,9 @@ export default async function setup() {
   // The run's specs were chosen for this template (see playwright.config.ts).
   const synapse = await synapseStart({
     template: synapseTemplateOf(process.env.MATRIX_SYNAPSE_TEMPLATE),
+    // The invite module asks the realm server the specs start below, which
+    // listens on the host at appURL's port.
+    realmServerURL: `https://host.docker.internal:${new URL(appURL).port}`,
   });
   await registerRealmUsers(synapse);
   let admin = await registerUser(synapse, 'admin', 'adminpass', true);

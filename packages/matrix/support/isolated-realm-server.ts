@@ -458,6 +458,8 @@ export async function startServer({
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
+  // The value the Synapse templates give the invite module.
+  process.env.MATRIX_INVITE_CHECK_SECRET = "shhh! it's a secret";
   let matrixURL = `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';

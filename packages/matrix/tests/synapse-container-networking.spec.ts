@@ -24,6 +24,24 @@ test.describe('Synapse container networking', () => {
     expect(params.filter((p) => p.startsWith('--ip'))).toEqual([]);
   });
 
+  test('resolves the host, and the realm server, to the host gateway', async () => {
+    const params = synapseDockerParams({
+      configDir: '/tmp/sf-test-synapse-abc123',
+      ownerPid: 4242,
+      ownerHost: 'build-box',
+      hostPort: 8008,
+      hostNames: ['realm-server.example.localhost', 'host.docker.internal'],
+    });
+
+    let added = params
+      .map((p, i) => (p === '--add-host' ? params[i + 1] : undefined))
+      .filter((p): p is string => p !== undefined);
+    expect(added).toEqual([
+      'host.docker.internal:host-gateway',
+      'realm-server.example.localhost:host-gateway',
+    ]);
+  });
+
   test('publishes the requested host port', async () => {
     const params = synapseDockerParams({
       configDir: '/tmp/sf-test-synapse-abc123',

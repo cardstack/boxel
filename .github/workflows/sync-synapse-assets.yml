@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "packages/matrix/support/synapse/templates/**"
+      - "packages/matrix/support/synapse/modules/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -65,6 +66,12 @@ jobs:
       - name: S3 Sync templates
         run: |
           aws s3 sync packages/matrix/support/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
+
+      # The invite module (boxel_invite_check) each homeserver loads under
+      # `modules:`. Its tests and their vectors stay in the repository.
+      - name: S3 Sync modules
+        run: |
+          aws s3 sync packages/matrix/support/synapse/modules s3://${{ env.AWS_S3_BUCKET }}/modules --exclude "test_*"
 
       - name: Restart Synapse ECS Service
         run: |
