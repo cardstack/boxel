@@ -9,15 +9,24 @@
 // connection as the key listing does. The window can't tell whether it was opened for
 // something, so it offers to close and to go back to the user's keys, and
 // closes itself only when the user asks.
+//
+// A sign-in `boxel keys connect` started also names the CLI's loopback
+// listener (`cli_port`, `cli_state`). The page then finishes nothing itself
+// and needs no session of its own: once the user confirms, it hands the code
+// and `state`, or why there is none, to the CLI, which finishes the sign-in
+// with its own secure session.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
+import { cliCallback, handToCli } from '../../security/cli-handoff.js';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import { completeConnect, showKey } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
+import MessagePage from '../sign-in/message-page.gts';
 import { pageURL } from '../urls.js';
 
 import { isSignedOut, LinkError, loadFailure } from './context.ts';
@@ -50,14 +59,18 @@ const FAILURES: Record<string, { heading: string; message: string }> = {
   },
 };
 
-// What the fragment says, read once as the page starts and then taken out of
-// the address bar, so going back or reloading doesn't show it again.
-function takeOutcome(): {
+interface Outcome {
   code?: string;
   state?: string;
   connected?: string;
   error?: string;
-} {
+  // The CLI waiting for this sign-in, when the CLI started it.
+  cli?: CliCallback;
+}
+
+// What the fragment says, read once as the page starts and then taken out of
+// the address bar, so going back or reloading doesn't show it again.
+function takeOutcome(): Outcome {
   let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   if (window.location.hash) {
     history.replaceState(
@@ -66,11 +79,21 @@ function takeOutcome(): {
       `${window.location.pathname}${window.location.search}`,
     );
   }
+  let cli = fragment.has('cli_port')
+    ? cliCallback(
+        new URLSearchParams({
+          port: fragment.get('cli_port') ?? '',
+          state: fragment.get('cli_state') ?? '',
+        }),
+        { profile: false },
+      )
+    : undefined;
   return {
     code: fragment.get('code') || undefined,
     state: fragment.get('state') || undefined,
     connected: fragment.get('connected') || undefined,
     error: fragment.get('error') || undefined,
+    ...(cli ? { cli } : {}),
   };
 }
 
@@ -80,7 +103,9 @@ type State =
   | { name: 'failed'; heading: string; message: string }
   | { name: 'unknown' };
 
-class Connected extends Component<{ Args: { api: KeysWindowAPI } }> {
+class Connected extends Component<{
+  Args: { api: KeysWindowAPI; outcome: Outcome };
+}> {
   <template>
     {{#if this.loading}}
       <BusyMessage class='busy' @title='Loading…' />
@@ -141,7 +166,7 @@ class Connected extends Component<{ Args: { api: KeysWindowAPI } }> {
     </style>
   </template>
 
-  private outcome = takeOutcome();
+  private outcome = this.args.outcome;
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -152,7 +177,7 @@ class Connected extends Component<{ Args: { api: KeysWindowAPI } }> {
     ),
   );
 
-  constructor(owner: Owner, args: { api: KeysWindowAPI }) {
+  constructor(owner: Owner, args: { api: KeysWindowAPI; outcome: Outcome }) {
     super(owner, args);
     this.load();
   }
@@ -223,10 +248,70 @@ class Connected extends Component<{ Args: { api: KeysWindowAPI } }> {
   private keys = () => navigation.assign(pageURL('keys'));
 }
 
+// Hands a sign-in the CLI started back to it, once the user says to: the
+// service's code and `state`, or why the sign-in ended without them.
+class ReturnToCli extends Component<{
+  Args: { outcome: Outcome & { cli: CliCallback } };
+}> {
+  <template>
+    {{#if this.state.handedOver}}
+      <MessagePage @heading='Returning to your terminal…' @info='One moment.' />
+    {{else}}
+      <MessagePage
+        @heading='Finish connecting in your terminal'
+        @info={{this.info}}
+      >
+        <div class='actions'>
+          <Button
+            @kind='primary'
+            data-test-connected-cli-continue
+            {{on 'click' this.handOver}}
+          >Continue in the terminal</Button>
+        </div>
+      </MessagePage>
+    {{/if}}
+
+    <style scoped>
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--boxel-sp-sm);
+      }
+    </style>
+  </template>
+
+  private state = trackedObject({ handedOver: false });
+
+  private get info() {
+    return this.args.outcome.code
+      ? 'The Boxel CLI started this sign-in. Continue to hand it back to your terminal, which saves the connection as one of your keys.'
+      : 'The Boxel CLI started this sign-in, and it didn’t finish. Continue to tell your terminal why.';
+  }
+
+  private handOver = () => {
+    let { cli, code, state, error } = this.args.outcome;
+    this.state.handedOver = true;
+    handToCli(cli, {
+      oauth: code && state ? { code, state } : { error: error ?? 'failed' },
+    });
+  };
+}
+
 export default class ConnectedPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='connected' as |api|>
-      <Connected @api={{api}} />
-    </KeysWindow>
+    {{#if this.cliOutcome}}
+      <ReturnToCli @outcome={{this.cliOutcome}} />
+    {{else}}
+      <KeysWindow @title='Boxel · Your keys' @page='connected' as |api|>
+        <Connected @api={{api}} @outcome={{this.outcome}} />
+      </KeysWindow>
+    {{/if}}
   </template>
+
+  private outcome = takeOutcome();
+
+  private get cliOutcome() {
+    let { cli } = this.outcome;
+    return cli ? { ...this.outcome, cli } : undefined;
+  }
 }
