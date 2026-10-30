@@ -25,7 +25,7 @@ Agents trained on shadcn will type `<Toaster />` and `toast('Saved')`; the secon
 
 **`ToastStore.show({ title, message?, tone?, duration?, dismissible?, actionLabel?, onAction?, onDismiss?, id? })`** returns the id. Ids come from a counter, so they are reproducible. Showing with an id that already exists replaces that toast in place — a "Saving…" becomes a "Saved" without the stack jumping. `store.dismiss(id)` and `store.clear()` remove, firing each toast's own `onDismiss`. The controlled half exists because a host that can only be told a toast left is not a host a parent controls; `@toasts` wins when both are given.
 
-**The clock is a CSS animation, not a timer.** Each toast with a duration renders a life bar running for its own seconds, and the toast is removed on that element's `animationend`. That one decision is what the rest follows from: pausing is `animation-play-state`, so no elapsed time is measured or re-armed; a tab going hidden toggles the same property; where the animation never runs the toast simply waits to be dismissed rather than vanishing early. What it costs is an exit animation — removal is immediate and the survivors reflow with a transition. The duration is seconds, not milliseconds, and is clamped to 600.
+**The clock is state, and the life bar draws it.** Each toast with a duration has a countdown, advanced in tenth-of-a-second ticks by a timer the life bar's modifier owns and clears, and the toast is removed when the countdown reaches zero — whether or not anything animates. Pausing (hover, focus within, a hidden tab) means the ticks leave the countdown alone, so no elapsed time is ever measured against a wall clock or re-armed; the bar, which renders the countdown, stands still with it. Where no stylesheet loads the bar is invisible and the toast still leaves on time. What it costs is an exit animation — removal is immediate and the survivors reflow with a transition. The duration is seconds, not milliseconds, and is clamped to 600.
 
 **The cap is a queue, not a clip.** The first `@limit` toasts to arrive are the ones on screen; a toast already shown stays until it is dismissed, so a new arrival never pushes a running toast out. Toasts past the cap are not rendered, so their clock has not started, and the region shows how many are waiting. A `show` with an existing id replaces that toast and restarts its clock.
 
@@ -37,7 +37,7 @@ Agents trained on shadcn will type `<Toaster />` and `toast('Saved')`; the secon
 
 Where this is better: the cap is honest and announced; pause is a genuine pause with no clock to drift; a keyboard user can reach a toast at all (F6, and back out with F6); focus never strands on dismissal; and severity picks the live-region politeness instead of every toast interrupting equally.
 
-Where it is thinner, plainly: **no exit animation** and **no swipe to dismiss** — both would need the timer this component refuses. **No `toast.promise`** — show once, then show again with the same id and a new title. **No module-level `toast()`** by design; every consumer instantiates a store. **No rich per-toast icon slot** in the default body — `<:toast>` replaces the whole body, not one part of it. **One live region per toast rather than one shared, persistent region** (Web Awesome's shape), which is the weaker architecture for announcements; see Accessibility.
+Where it is thinner, plainly: **no exit animation** and **no swipe to dismiss**. **No `toast.promise`** — show once, then show again with the same id and a new title. **No module-level `toast()`** by design; every consumer instantiates a store. **No rich per-toast icon slot** in the default body — `<:toast>` replaces the whole body, not one part of it. **One live region per toast rather than one shared, persistent region** (Web Awesome's shape), which is the weaker architecture for announcements; see Accessibility.
 
 ## Accessibility
 
@@ -49,7 +49,7 @@ Governing pattern: APG **Alert** for the announcement, plus the live-region rule
 - **A keyboard user can reach a toast.** F6 from anywhere moves focus to the first focusable control in the newest toast; F6 from inside returns focus to where it came from. The test asserts both halves. `@hotkey={{false}}` removes it, and then the region is reachable only by tabbing to wherever it sits in the DOM.
 - **Dismissal never drops focus on the body.** Focus goes to the neighbouring toast's dismiss control, or back to the element that had focus before the region was entered. Asserted.
 - **The clock pauses on focus** as well as hover, so a toast you have reached with F6 does not expire under you. A sticky toast (`duration: 0`) has no life bar at all.
-- **The life bar is `aria-hidden`** and is the remaining time as a non-colour channel. It is deliberately exempt from the reduced-motion branch: stopping it would stop the dismissal itself, which WCAG 2.3.3 allows for motion essential to the information conveyed. Only the entrance transition is removed.
+- **The life bar is `aria-hidden`** and is the remaining time as a non-colour channel. It is deliberately exempt from the reduced-motion branch, which WCAG 2.3.3 allows for motion essential to the information conveyed. Only the entrance transition is removed.
 - **The dismiss control has an accessible name** (`@dismissLabel`, default 'Dismiss') and grows its hit area to 44px on a coarse pointer without growing its ink.
 - What is the caller's: **2.2.1 Timing Adjustable.** The default five seconds is short for anything with an action. Give a toast with an Undo a longer `duration`, or `0` and let the user dismiss it. And `<:toast>` replaces the body only — the roles, clock and controls stay — so do not put another live region inside it.
 
@@ -59,7 +59,7 @@ Surface: `--popover` and `--popover-foreground` (the toast reads as "floating ab
 
 The tone stripe and the life bar share one hue per severity through `--pretui-toast-tone`: `--pretui-info`, `--success`, `--warning`, `--destructive`, and `--muted-foreground` for neutral. The stripe is the only place a tone paints, so a neutral toast is genuinely neutral.
 
-The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toaster-width` (380px, capped to the viewport less 24px), and `--pretui-toast-life`, which the component sets per toast to its own duration — a theme does not set it. Entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
+The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toaster-width` (380px, capped to the viewport less 24px), and `--pretui-toast-remaining` / `--pretui-toast-tick`, which the component sets on each life bar from its countdown — a theme does not set them. Entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 Fixed: the 3px stripe, the 2px life bar at 0.55 opacity, the 20px dismiss control (28px on coarse pointers), and the 12px entrance offset.
 
