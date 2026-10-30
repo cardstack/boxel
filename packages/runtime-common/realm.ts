@@ -26,6 +26,7 @@ import {
   type AnonymousRateLimiter,
 } from './anonymous-rate-limiter.ts';
 import { resolveRangeHeader } from './http-range.ts';
+import { resolveRRIReference } from './url.ts';
 import {
   awaitRealmIndexSettled,
   INDEX_WRITING_JOB_TYPES,
@@ -16998,10 +16999,15 @@ export class Realm {
     if (typeof site !== 'string' || !site.trim()) {
       return false;
     }
+    // An absolute URL, a realm-prefixed id, or a path relative to the realm,
+    // resolved the way the policy pointer is: through the virtual network.
     let siteURL: URL;
     try {
-      siteURL = new URL(site.trim(), this.url);
+      siteURL = this.#virtualNetwork.toURL(
+        resolveRRIReference(site.trim(), new URL(this.url)),
+      );
     } catch {
+      this.#log.warn(`ignoring site card ${site}: it is not a card id`);
       return false;
     }
     if (!this.paths.inRealm(siteURL)) {
