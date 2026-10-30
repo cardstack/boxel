@@ -107,6 +107,16 @@ function pathOf(
   compiled: CompiledRouteExpression,
   card: RouteCard,
 ): { path: string } | { problem: string } {
+  // A field the expression reads that the card lacks would otherwise reach
+  // the path as the text "null".
+  if (compiled.ok) {
+    let missing = compiled.prepared.deps.filter(
+      (field) => card.attributes[field] == null,
+    );
+    if (missing.length) {
+      return { problem: `the card has no ${missing.join(', ')}` };
+    }
+  }
   let value: unknown;
   try {
     value = run(compiled, card);

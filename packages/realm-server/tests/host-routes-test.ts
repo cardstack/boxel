@@ -36,4 +36,8 @@ module(basename(import.meta.filename), function () {
   test('projectHostRoutes: an href that gives no usable path is reported', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
+
+  test('projectHostRoutes: a card without the field its href reads gets no path', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
 });

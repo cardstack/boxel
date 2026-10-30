@@ -239,6 +239,24 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.deepEqual(rows, []);
     assert.strictEqual(problems.length, 2);
   },
+
+  'projectHostRoutes: a card without the field its href reads gets no path':
+    async (assert) => {
+      let { rows, problems } = projectHostRoutes(
+        { pageTypes: [products] },
+        new Map([[0, [driver, card('Product/nameless', { sku: 'X' })]]]),
+        [],
+        1000,
+      );
+      assert.false(
+        rows.some((row) => row.path.includes('null')),
+        'no path is made from a missing field',
+      );
+      assert.true(
+        problems.some((p) => p.includes('Product/nameless')),
+        problems.join('\n'),
+      );
+    },
 });
 
 export default tests;
