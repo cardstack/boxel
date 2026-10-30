@@ -21,14 +21,16 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // as `needs-reapproval` without being moved there; the call that is refused
 // for it moves it and notifies its owner. A grant the vendor rejected reads as
 // `credential-rejected` until its next probe is due, and then as the call
-// would treat it: sent, as that probe.
+// would treat it: sent, as that probe. A rejected key, such as a
+// service-account key Google refused, reads as `credential-rejected` whether
+// or not its probe is due: what brings it back is its owner replacing it.
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
 // the share's key, who is told what they could fix themselves. The one
-// exception is a key the vendor rejected, which the call itself refuses
-// `credential-rejected` to everyone.
+// exception is a key the vendor rejected, at a grant or as a whole, which the
+// call itself refuses `credential-rejected` to everyone.
 //
 // `needs-connect` and `needs-approval` differ only in whether one of the
 // caller's grants covers the destination, so any card can learn that about
@@ -100,6 +102,14 @@ export async function keyReadiness(
   );
 }
 
+// The vendor refused the key itself, such as Google's token endpoint refusing
+// a service-account key or an OAuth connection its service won't refresh, so
+// every grant of it is refused until its owner replaces or reconnects it, or a
+// periodic retry is accepted.
+function keyRejected(check: SlotCheck): boolean {
+  return check.binding?.key_state === 'rejected';
+}
+
 // A `{{userKey}}` slot is filled only from the caller's own binding, so every
 // way it falls short is the caller's to fix.
 async function userKeyReadiness(
@@ -108,12 +118,13 @@ async function userKeyReadiness(
 ): Promise<KeyReadiness> {
   switch (check.refused) {
     case undefined:
-      return 'ready';
+      return keyRejected(check) ? 'credential-rejected' : 'ready';
     case 'binding-needs-reapproval':
       return 'needs-reapproval';
     case 'interactive-use-not-approved':
       return 'needs-approval';
     case 'credential-rejected':
+    case 'key-rejected':
       return 'credential-rejected';
     case 'share-suspended':
     case 'binding-not-approved':
@@ -144,7 +155,7 @@ async function callerHasCoveringGrant(
 // administrator needs to set it up, however it falls short.
 function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
   if (check.refused === undefined) {
-    return 'ready';
+    return keyRejected(check) ? 'credential-rejected' : 'ready';
   }
   let theirs = check.binding?.share_owner === caller;
   switch (check.refused) {
@@ -153,6 +164,7 @@ function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
     case 'interactive-use-not-approved':
       return theirs ? 'needs-approval' : 'needs-admin';
     case 'credential-rejected':
+    case 'key-rejected':
       // Every caller is refused `credential-rejected` at the call, so telling
       // them here gives away nothing more about the share.
       return 'credential-rejected';
