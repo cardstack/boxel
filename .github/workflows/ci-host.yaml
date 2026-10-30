@@ -810,6 +810,9 @@ jobs:
             TEST_CMD="pnpm ember-test-pre-built"
           fi
 
+          # STRESS HACK: keep every core busy so the browser competes for CPU
+          # the way it does on a loaded shard.
+          for i in $(seq "$(nproc)"); do (while :; do :; done) & done
           set +e
           dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
