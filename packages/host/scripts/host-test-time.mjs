@@ -18,7 +18,9 @@
 // A pull request run is compared with recent pull request runs, and a main run
 // with recent main runs. Main indexes from scratch while pull requests import
 // the index cache, so their totals sit on different scales. Runs on RunsOn and
-// on GitHub's runners are kept apart for the same reason.
+// on GitHub's runners are kept apart for the same reason, and so are pull
+// request runs that index from scratch because they change how indexing
+// behaves (see check-index-cache in ci-host.yaml).
 //
 // `check` exits 0 and prints `slower=true|false` to GITHUB_OUTPUT, so the
 // workflow can publish the PR comment section before it fails the job.
@@ -89,6 +91,9 @@ async function api(path) {
 
 // The run's test-step time, or undefined when a shard was cancelled or skipped
 // or did not finish its test step, since its total would not be comparable.
+// Also undefined when the shards disagree on the runner kind or on whether they
+// imported the index cache, as after a re-run of failed jobs under different
+// settings: the total would mix two scales.
 async function measureRun(runId) {
   let { jobs } = await api(
     `actions/runs/${runId}/jobs?filter=latest&per_page=100`,
@@ -96,21 +101,33 @@ async function measureRun(runId) {
   let shards = jobs.filter((j) => j.name.startsWith('Host Tests ('));
   if (shards.length === 0) return undefined;
   let stepMinutes = [];
+  let importedCache = [];
   for (let job of shards) {
     if (!['success', 'failure'].includes(job.conclusion)) return undefined;
     let step = job.steps?.find(
       (s) => s.name.startsWith('host test suite') && s.completed_at,
     );
     if (!step) return undefined;
+    let cacheStep = job.steps.find(
+      (s) => s.name === 'Import cached realm index',
+    );
+    importedCache.push(cacheStep?.conclusion === 'success');
     stepMinutes.push(
       (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 60000,
     );
+  }
+  let onRunsOn = shards.map((j) =>
+    j.labels.some((l) => l.startsWith('runs-on')),
+  );
+  if (new Set(onRunsOn).size > 1 || new Set(importedCache).size > 1) {
+    return undefined;
   }
   return {
     minutes: round(stepMinutes.reduce((a, b) => a + b, 0)),
     slowestShard: round(Math.max(...stepMinutes)),
     shards: shards.length,
-    runsOn: shards.every((j) => j.labels.some((l) => l.startsWith('runs-on'))),
+    runsOn: onRunsOn[0],
+    indexCache: importedCache[0],
   };
 }
 
@@ -131,13 +148,17 @@ function readBaseline() {
   }
 }
 
-// The samples a run is compared with: the same event, runner kind and shard
-// count, newest last.
+// The samples a run is compared with: the same event, runner kind, index cache
+// use and shard count, newest last.
 function comparable(baseline, event, run, now) {
   if (event === 'push') {
     return baseline.main
       .filter(
-        (r) => !r.flagged && r.runsOn === run.runsOn && r.shards === run.shards,
+        (r) =>
+          !r.flagged &&
+          r.runsOn === run.runsOn &&
+          r.indexCache === run.indexCache &&
+          r.shards === run.shards,
       )
       .slice(-MAIN_WINDOW);
   }
@@ -147,6 +168,7 @@ function comparable(baseline, event, run, now) {
       (r) =>
         r.minutes != null &&
         r.runsOn === run.runsOn &&
+        r.indexCache === run.indexCache &&
         r.shards === run.shards &&
         Date.parse(r.at) >= oldest,
     )
@@ -163,7 +185,8 @@ function compare(baseline, event, run, now) {
   return { count: samples.length, base, ratio, slower: ratio > THRESHOLD };
 }
 
-const runner = (run) => (run.runsOn ? 'RunsOn' : "GitHub's runners");
+const runner = (run) =>
+  `${run.runsOn ? 'RunsOn' : "GitHub's runners"}, ${run.indexCache ? 'importing the index cache' : 'indexing from scratch'}`;
 
 async function check() {
   let event = GITHUB_EVENT_NAME === 'push' ? 'push' : 'pull_request';
@@ -174,7 +197,8 @@ async function check() {
 
   if (!run) {
     lines.push(
-      'Not measured: a shard was cancelled or skipped, or did not finish its test step.',
+      'Not measured: a shard was cancelled or skipped or did not finish its test step, ' +
+        'or the shards differ in runner kind or index cache use.',
     );
   } else {
     let result = compare(baseline, event, run, Date.now());
