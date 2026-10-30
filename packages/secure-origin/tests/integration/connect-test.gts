@@ -1,4 +1,4 @@
-import { click, fillIn, render, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, fillIn, render, waitFor } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -12,6 +12,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { waitedFetch } from '../helpers/waiters.ts';
 
 // OAuth on the key pages, against a realm server that answers the requests
 // they make: connecting an account through an app the realm server offers,
@@ -196,25 +197,6 @@ module('Integration | connecting an account', function (hooks) {
       .map((r) => r.body.data.attributes);
   }
 
-  // The page sends the window on only once the realm server's answer to the
-  // connect request is read, and `settled()` doesn't wait for that: the stubbed
-  // `fetch` is a plain promise. A cold browser can still be reading it when the
-  // click returns, so a test waits for the window to go somewhere. A timeout
-  // says how far the page got: the requests made by then and any error shown.
-  async function navigated() {
-    try {
-      await waitUntil(() => navigations.length > 0);
-    } catch {
-      let requested = requests.map((r) => `${r.method} ${r.path}`).join(', ');
-      let shown = document
-        .querySelector('[data-test-keys-error]')
-        ?.textContent?.trim();
-      throw new Error(
-        `the window never went anywhere; requests made: ${requested || 'none'}; error shown: ${shown || 'none'}`,
-      );
-    }
-  }
-
   function connectRequest() {
     return requests.find(
       (r) => r.method === 'POST' && r.path === '_oauth/connections',
@@ -259,27 +241,29 @@ module('Integration | connecting an account', function (hooks) {
           },
         }),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let body = init.body ? JSON.parse(String(init.body)) : undefined;
-      let path = url.pathname.replace(/^\//, '');
-      requests.push({ method, path, url, body });
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? await route({ url, method, body })
-        : refusal(404, 'Not found');
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let body = init.body ? JSON.parse(String(init.body)) : undefined;
+        let path = url.pathname.replace(/^\//, '');
+        requests.push({ method, path, url, body });
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? await route({ url, method, body })
+          : refusal(404, 'Not found');
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = (url: string) =>
       navigations.push({ how: 'assign', url });
     navigation.replace = (url: string) =>
@@ -379,7 +363,6 @@ module('Integration | connecting an account', function (hooks) {
         .dom('[data-test-connect-name]')
         .hasValue(' Work GitHub ', 'a typed name stays');
       await click('[data-test-connect-submit]');
-      await navigated();
 
       assert.deepEqual(ticketRequests(), [{ action: 'add' }]);
       assert.deepEqual(connectRequest(), {
@@ -547,7 +530,6 @@ module('Integration | connecting an account', function (hooks) {
         'only the client the connection signs in through is asked for',
       );
       await click('[data-test-connect-submit]');
-      await navigated();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'conn-1' },
       ]);
@@ -671,6 +653,70 @@ module('Integration | connecting an account', function (hooks) {
       });
       assert.dom('[data-test-connected-name]').hasText('Work GitHub');
       assert.strictEqual(window.location.hash, '', 'the code is gone');
+    });
+
+    test('a sign-in the CLI started is handed back to it once the user confirms, with no session of the window’s', async function (assert) {
+      serve({ 'GET _secure-session': () => ({ status: 401 }) });
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        visitShell(
+          `connected#code=one-use-code&state=sign-in-state&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await waitFor('[data-test-connected-cli-continue]');
+        assert.strictEqual(window.location.hash, '', 'the code is gone');
+        assert.deepEqual(submitted, [], 'nothing leaves before the user says');
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['oauth_code', 'one-use-code'],
+              ['oauth_state', 'sign-in-state'],
+            ],
+          },
+        ]);
+        assert.notOk(
+          requests.some((r) => r.path === '_oauth/connections/complete'),
+          'the window finishes nothing itself',
+        );
+        assert
+          .dom('[data-test-secure-title]')
+          .hasText('Returning to your terminal…');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('a sign-in the CLI started that the service declined tells the CLI why', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        visitShell(
+          `connected#error=denied&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['oauth_error', 'denied'],
+          ],
+        ]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
     });
 
     test('a sign-in the realm server won’t finish for this user says it expired', async function (assert) {

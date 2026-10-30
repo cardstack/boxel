@@ -744,8 +744,11 @@ module(basename(import.meta.filename), function (hooks) {
       .query({ destination: `${PROVIDER}/api/` })
       .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
     assert.deepEqual(
-      offered.body.data.map((c: any) => c.attributes.label),
-      ['Boxel (read-only)'],
+      offered.body.data.map((c: any) => [
+        c.attributes.label,
+        c.attributes.name,
+      ]),
+      [['Boxel (read-only)', 'stub']],
     );
     let connected = await connect(TEAMMATE, {
       kind: 'platform',
@@ -866,6 +869,91 @@ module(basename(import.meta.filename), function (hooks) {
       `SELECT owner FROM user_keys WHERE kind = 'oauth-connection'`,
     );
     assert.deepEqual(rows, [], 'nothing was stored for anyone');
+  });
+
+  test('a sign-in the CLI starts names its listener, which the callback passes on, and the CLI finishes it with its own session', async function (assert) {
+    let client = await addClient();
+    let cliAuth = await secureSessionAuth(dbAdapter, OWNER, { client: 'cli' });
+    let cli = { port: 51234, state: 'c'.repeat(32) };
+    let start = async (auth: string, attributes: Record<string, unknown>) =>
+      await request
+        .post('/_oauth/connections')
+        .set('Authorization', auth)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'oauth-connect',
+            attributes: {
+              name: 'from the terminal',
+              client: { kind: 'own', keyId: client.id },
+              ...attributes,
+            },
+          },
+          meta: { ticket: await ticket(OWNER, 'add') },
+        });
+
+    let fromWindow = await request
+      .post('/_oauth/connections')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-connect',
+          attributes: {
+            name: 'from the window',
+            client: { kind: 'own', keyId: client.id },
+            cli,
+          },
+        },
+        meta: { ticket: await ticket(OWNER, 'add') },
+      });
+    assert.strictEqual(fromWindow.status, 400, 'only the CLI names a listener');
+    let badListener = await start(cliAuth, { cli: { port: 0, state: 'x' } });
+    assert.strictEqual(badListener.status, 400, badListener.text);
+
+    let started = await start(cliAuth, { cli });
+    assert.strictEqual(started.status, 201, started.text);
+    let authorize = await fetch(started.body.data.attributes.authorizeUrl, {
+      redirect: 'manual',
+    });
+    let callback = new URL(authorize.headers.get('location')!);
+    let back = await request.get(`${callback.pathname}${callback.search}`);
+    let landing = new URL(back.headers.location as string);
+    let fragment = new URLSearchParams(landing.hash.slice(1));
+    assert.deepEqual(
+      [...fragment.keys()].sort(),
+      ['cli_port', 'cli_state', 'code', 'state'],
+      'the page is told where the CLI waits, beside the code and state',
+    );
+    assert.strictEqual(fragment.get('cli_port'), '51234');
+    assert.strictEqual(fragment.get('cli_state'), cli.state);
+
+    let finished = await request
+      .post('/_oauth/connections/complete')
+      .set('Authorization', cliAuth)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-callback',
+          attributes: {
+            state: fragment.get('state'),
+            code: fragment.get('code'),
+          },
+        },
+      });
+    assert.strictEqual(finished.status, 201, finished.text);
+    let keyId = finished.body.data.attributes.connected;
+    assert.ok(keyId);
+    for (let token of provider.issued) {
+      assert.notOk(finished.text.includes(token), 'no token reaches the CLI');
+    }
+
+    // Once the sign-in is spent, the callback names no listener for it.
+    let again = await request.get(`${callback.pathname}${callback.search}`);
+    assert.false(
+      new URL(again.headers.location as string).hash.includes('cli_port'),
+    );
   });
 
   test("GitHub's own error codes are classified", async function (assert) {

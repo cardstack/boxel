@@ -17,7 +17,7 @@
     "test": "pnpm test:unit && pnpm test:components",
     "lint:types": "ember-tsc --noEmit",
     "test:unit": "node --test 'tests/**/*.test.ts'",
-    "test:components": "vite build --mode=development --outDir dist-tests && ember test --config-file testem.cjs --path dist-tests"
+    "test:components": "NODE_ENV=development vite build --mode=development --outDir dist-tests && ember test --config-file testem.cjs --path dist-tests"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -39,6 +39,7 @@
     "@babel/plugin-transform-runtime": "^7.29.0",
     "@babel/plugin-transform-typescript": "catalog:",
     "@ember/test-helpers": "catalog:",
+    "@ember/test-waiters": "catalog:",
     "@embroider/core": "^4.6.3",
     "@embroider/macros": "^1.20.5",
     "@embroider/vite": "^1.7.10",
