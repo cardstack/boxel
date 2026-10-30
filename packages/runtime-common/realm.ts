@@ -162,6 +162,7 @@ import {
   type HostRoutingRule,
 } from './host-routing-validation.ts';
 import { readSiteSettings, type SiteSettings } from './site-settings.ts';
+import { readDynamicRoutes, type DynamicRoute } from './dynamic-routes.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -2984,6 +2985,7 @@ export class Realm {
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
   #cachedSiteSettings: SiteSettings | null = null;
+  #cachedDynamicRoutes: DynamicRoute[] | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -4614,6 +4616,7 @@ export class Realm {
     });
     this.#cachedHostRoutingMap = null;
     this.#cachedSiteSettings = null;
+    this.#cachedDynamicRoutes = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -17114,6 +17117,35 @@ export class Realm {
       );
       // Don't cache a transient read failure — leave `null` so the next
       // call retries the index query.
+      return [];
+    }
+  }
+
+  // The realm's routing rules with `:name` segments, validated, in order.
+  // Cached until the next index, like the routing map.
+  async getDynamicRoutes(): Promise<DynamicRoute[]> {
+    if (this.#cachedDynamicRoutes) {
+      return this.#cachedDynamicRoutes;
+    }
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+      let rules =
+        indexEntry?.type === 'instance'
+          ? (indexEntry.searchDoc ?? {}).hostRoutingRules
+          : undefined;
+      let { routes, problems } = readDynamicRoutes(rules);
+      for (let problem of problems) {
+        this.#log.warn(`dynamic routes of ${this.url}: ${problem}`);
+      }
+      return (this.#cachedDynamicRoutes = routes);
+    } catch (e) {
+      this.#log.warn(
+        `failed to read dynamic routes from RealmConfig card: ${e}`,
+      );
       return [];
     }
   }

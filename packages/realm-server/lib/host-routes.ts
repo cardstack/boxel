@@ -1,5 +1,10 @@
 import {
   CLIENT_CLASS_HEADER,
+  CLIENT_IP_HEADER,
+  dynamicRouteQuery,
+  matchDynamicRoute,
+  RealmPaths,
+  searchEntryWireQueryFromQuery,
   INFRA_CLIENT_CLASS,
   logger,
   normalizeRoutingPath,
@@ -320,4 +325,73 @@ export async function matchHostTableRoute(
   await refreshHostRoutes(realm, routingDeps);
   let row = await lookupHostRoute(routingDeps.dbAdapter, realm.url, path);
   return row ? { realm, row } : undefined;
+}
+
+// The card a dynamic routing rule (`/posts/:slug` with a query) serves at a
+// path, searched as the visitor: the request's own address headers go with
+// the search, so the realm's permissions and policy answer for them (spec
+// D8). Rules are tried in order; one whose query finds nothing falls through
+// to the next (D6). Only a card in the rule's own realm is served.
+export async function resolveDynamicRoute(
+  realm: Realm,
+  requestURL: URL,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Promise<string | undefined> {
+  let routes = await realm.getDynamicRoutes();
+  if (!routes.length) {
+    return undefined;
+  }
+  let mount = new URL(realm.url).pathname;
+  let pathname = requestURL.pathname.endsWith('/')
+    ? requestURL.pathname
+    : `${requestURL.pathname}/`;
+  if (!pathname.startsWith(mount)) {
+    return undefined;
+  }
+  let path = normalizeRoutingPath(
+    `/${requestURL.pathname.slice(mount.length)}`,
+  );
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.CardJson,
+    'Content-Type': 'application/json',
+    'X-HTTP-Method-Override': 'QUERY',
+  };
+  for (let name of [CLIENT_IP_HEADER, CLIENT_CLASS_HEADER]) {
+    let value = requestHeaders[name];
+    if (typeof value === 'string') {
+      headers[name] = value;
+    }
+  }
+  for (let route of routes) {
+    let params = matchDynamicRoute(route, path);
+    if (!params) {
+      continue;
+    }
+    let query = dynamicRouteQuery(route, params);
+    if (!query) {
+      log.warn(
+        `dynamic route ${route.path} of ${realm.url}: the query is not a Boxel query for ${path}`,
+      );
+      continue;
+    }
+    let response = await realm.handle(
+      new Request(new URL('_search', realm.url).href, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(searchEntryWireQueryFromQuery(query)),
+      }),
+    );
+    if (!response || response.status !== 200) {
+      log.warn(
+        `dynamic route ${route.path} of ${realm.url}: search answered ${response?.status}`,
+      );
+      continue;
+    }
+    let doc = (await response.json()) as { data?: { id?: string }[] };
+    let id = doc.data?.[0]?.id;
+    if (id && new RealmPaths(new URL(realm.url)).inRealm(new URL(id))) {
+      return id;
+    }
+  }
+  return undefined;
 }

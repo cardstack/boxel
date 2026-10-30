@@ -410,6 +410,11 @@ export class RoutingRuleField extends FieldDef {
       'HTTP status for a redirect rule: 301 (permanent) or 302 (temporary, the default)',
   });
 
+  @field query = contains(StringField, {
+    description:
+      'For a path with :name segments (e.g. "/posts/:slug"): BXL turning {route: {slug}} into a Boxel query. The first card it finds is served',
+  });
+
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;
 }

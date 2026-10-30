@@ -46,7 +46,10 @@ import {
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
-import { matchHostTableRoute } from '../lib/host-routes.ts';
+import {
+  matchHostTableRoute,
+  resolveDynamicRoute,
+} from '../lib/host-routes.ts';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -759,6 +762,16 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
               `not serving ${target.href} at ${requestURL.pathname}: it is in another realm, and either realm.json doesn't opt in or a visitor who isn't signed in may not read it`,
             );
           }
+        }
+      } else {
+        // Last, the `:name` routing rules: a query finds the card.
+        let id = await resolveDynamicRoute(
+          routedRealm,
+          requestURL,
+          ctxt.req.headers,
+        );
+        if (id) {
+          cardURL = new URL(id);
         }
       }
     }
