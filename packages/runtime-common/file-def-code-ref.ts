@@ -1,7 +1,7 @@
 import { baseFileRef, baseRRI } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
-import { lastSegmentOfIdentifier } from './realm-identifiers.ts';
+import { lastSegmentOfIdentifier, rri } from './realm-identifiers.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -92,8 +92,8 @@ export function isFileDefCodeRef(
   ) {
     return false;
   }
-  let refKey = canonicalModuleKey(ref.module, virtualNetwork);
-  let matchesModule = (candidate: string) =>
+  let refKey = canonicalModuleKey(rri(ref.module), virtualNetwork);
+  let matchesModule = (candidate: RealmResourceIdentifier) =>
     refKey === canonicalModuleKey(candidate, virtualNetwork);
   if (matchesModule(baseFileRef.module) && ref.name === baseFileRef.name) {
     return true;
