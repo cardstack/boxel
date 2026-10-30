@@ -1712,8 +1712,10 @@ export type OperationErrorCode =
   // destination (`meta.destination`); nothing is sent there except a periodic
   // probe, and the key's owner replaces it or a probe the vendor accepts
   // brings it back. For a minted token `meta.reason` says why: `rejected`
-  // (the vendor refused it, as an OAuth refresh answered `invalid_grant`; its
-  // owner reconnects), `needs-admin` (the OAuth client it mints through was
+  // (the vendor refused it, as an OAuth refresh answered `invalid_grant` or
+  // Google's token endpoint refused a service-account key; its owner
+  // reconnects or replaces it, and a refused service-account key is sent to
+  // Google only as a periodic probe), `needs-admin` (the OAuth client it mints through was
   // deleted, unshared, suspended or answered `invalid_client`) or
   // `unavailable` (the token endpoint kept failing after retries), and
   // nothing was sent.
