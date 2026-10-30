@@ -382,6 +382,31 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     await assertScrolledToBottom(assert);
   });
 
+  test('a message the reader sent from another tab does not move them from where they scrolled', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'sent from another tab',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      clientGeneratedId: 'sent-from-another-tab',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="40"]');
+    await settled();
+    // give a follow, which would scroll smoothly, time to move the reader
+    await new Promise((r) => setTimeout(r, 1000));
+
+    assert.ok(
+      isAiAssistantScrolledToTop(),
+      `the reader stays where they scrolled — ${describeScrollPosition()}`,
+    );
+  });
+
   test('it does not show unread message indicator when new message received and scrolled to bottom', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     fillRoomWithReadMessages(roomId);
