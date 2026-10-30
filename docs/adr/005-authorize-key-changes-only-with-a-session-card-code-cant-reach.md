@@ -459,6 +459,3 @@ beside a device of its own, and `boxel keys sign-in` signs it in again.
   permissions change the app's session can make.
 - `packages/realm-server/handlers/realm-destruction-utils.ts` breaks §1.1.
   Deleting a realm deletes its key shares without a secure session.
-- `packages/realm-server/handlers/handle-secure-session.ts`
-  (`handleGoogleSignInStart`) breaks §1.3. The Google sign-in start route
-  answers a request from any `Origin`.
