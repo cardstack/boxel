@@ -119,6 +119,9 @@ interface SlotCardSignature {
     card: CardDef | FileDef;
     format: Format;
     heightless?: boolean;
+    /** the card is named in a sentence (an atom in an inline slot), not
+     * drawn in a box of its own */
+    inline?: boolean;
   };
 }
 
@@ -512,6 +515,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                   @card={{slot.file}}
                   @format={{slot.format}}
                   @heightless={{slot.heightless}}
+                  @inline={{eq slot.format 'atom'}}
                 />
               </span>
             {{else}}
@@ -564,6 +568,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 @card={{slot.card}}
                 @format={{slot.format}}
                 @heightless={{slot.heightless}}
+                @inline={{eq slot.format 'atom'}}
               />
             </span>
           {{else}}

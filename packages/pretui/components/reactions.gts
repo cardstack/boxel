@@ -119,7 +119,7 @@ export class Reactions extends Component<ReactionsSignature> {
           background-color: color-mix(
             in oklch,
             var(--primary) 14%,
-            var(--card)
+            var(--pretui-reaction-surface, var(--card))
           );
           box-shadow: inset 0 0 0 1px
             color-mix(in oklch, var(--primary) 45%, transparent);

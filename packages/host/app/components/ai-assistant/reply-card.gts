@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
@@ -11,6 +11,7 @@ interface Signature {
     card: CardDef | FileDef;
     format: Format;
     heightless?: boolean;
+    inline?: boolean;
   };
 }
 
@@ -19,7 +20,7 @@ interface Signature {
 // named in a sentence takes the pill's type and no surface of its own.
 const ReplyCard: TemplateOnlyComponent<Signature> = <template>
   <CardRenderer
-    class={{cn 'reply-card' inline=(eq @format 'atom') heightless=@heightless}}
+    class={{cn 'reply-card' inline=@inline heightless=@heightless}}
     @card={{@card}}
     @format={{@format}}
     @displayContainer={{false}}
