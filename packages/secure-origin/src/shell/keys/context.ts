@@ -3,11 +3,15 @@
 export type {
   ConnectableClient,
   DestinationDisplay,
+  KeyKind,
   KeyShare,
+  KeyValue,
   ListedKey,
   OAuthClientRef,
   OAuthKeyDescription,
+  ServiceAccountDetails,
   SharedWorkspace,
+  SlotBound,
   UserKey,
   WindowContext,
 } from '../../security/keys.ts';

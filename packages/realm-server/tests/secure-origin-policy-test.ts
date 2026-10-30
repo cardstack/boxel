@@ -108,6 +108,12 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     marker: '[data-test-keys-page="swap-key"]',
   },
   {
+    page: 'replace-key',
+    address:
+      'replace-key#card=https%3A%2F%2Frealm.example%2Fcard&operation=example',
+    marker: '[data-test-keys-page="replace-key"]',
+  },
+  {
     page: 'connect',
     address: 'connect#realm=https%3A%2F%2Frealm.example%2F',
     marker: '[data-test-keys-page="connect"]',
@@ -116,6 +122,22 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     page: 'connected',
     address: 'connected#error=denied',
     marker: '[data-test-keys-page="connected"]',
+  },
+  {
+    page: `keys/${KEY_ID}/use`,
+    address: `keys/${KEY_ID}/use`,
+    marker: '[data-test-keys-page="use-key"]',
+  },
+  {
+    page: 'approve',
+    address: 'approve#card=https%3A%2F%2Frealm.example%2Fcard&operation=list',
+    marker: '[data-test-keys-page="approve"]',
+  },
+  {
+    page: 'review-changes',
+    address:
+      'review-changes#card=https%3A%2F%2Frealm.example%2Fcard&operation=list',
+    marker: '[data-test-keys-page="review-changes"]',
   },
 ];
 

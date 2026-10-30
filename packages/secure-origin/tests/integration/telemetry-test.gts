@@ -15,6 +15,7 @@ import {
   stopTelemetry,
 } from '../../src/shell/telemetry.ts';
 import { SecureTelemetry } from '../../src/telemetry/instrument.ts';
+import { waitedFetch } from '../helpers/waiters.ts';
 
 // The secure origin's telemetry, driven through the key page and sharing a
 // key with known secret values: every value a person types, every name, label
@@ -128,25 +129,27 @@ module('Integration | telemetry', function (hooks) {
           },
         }),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let path = url.pathname.replace(/^\//, '');
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? route(init.body ? JSON.parse(String(init.body)) : undefined)
-        : json(404, { errors: [{ status: 404, detail: 'Not found' }] });
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let path = url.pathname.replace(/^\//, '');
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? route(init.body ? JSON.parse(String(init.body)) : undefined)
+          : json(404, { errors: [{ status: 404, detail: 'Not found' }] });
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = () => {};
     navigation.replace = () => {};
     navigation.close = () => {};

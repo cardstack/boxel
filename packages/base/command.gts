@@ -239,12 +239,16 @@ export class SwitchSubmodeResult extends CardDef {
 }
 
 // What the secure window is opened for. Every field names something; none
-// carries a value. `mode` is `enter-key`, `share-key`, `swap-key` or
-// `connect`. A key is entered, or an account connected, for an operation on a
-// card instance (`cardId`) or on a card type (`module`, `name` and `realm`); a
-// key is shared with `realm`; one of the user's keys is swapped into the
-// suspended share `share` of `realm`; and an account may also be connected
-// for `realm` alone.
+// carries a value. `mode` is `enter-key`, `replace-key`, `share-key`,
+// `swap-key`, `connect`, `approve` or `review-changes`. A key is entered, the
+// key an operation sends is replaced, an account connected, or a card's
+// requests approved or their changes reviewed, for an operation on a card
+// instance (`cardId`) or on a card type (`module`, `name` and `realm`);
+// `replace-key`, `approve` and `review-changes` always name the operation, and
+// the last two name only the one a card is blocked on: the window gathers the
+// card's others. A key is shared with `realm`; one of the user's
+// keys is swapped into the suspended share `share` of `realm`; and an account
+// may also be connected for `realm` alone.
 // `reason` is one line the window shows as written by whoever opened it.
 export class OpenSecureWindowInput extends CardDef {
   @field mode = contains(StringField);
@@ -1374,9 +1378,9 @@ export class PublishRealmInput extends CardDef {
   @field force = contains(BooleanField);
 }
 
-// Per-target outcome. The command resolves once the publish request is
-// accepted (the realm-server reindex then runs in the background), so 'status'
-// is 'published' (request accepted) or 'error'.
+// Per-target outcome. 'status' is 'published' (the site is live),
+// 'published-pending' (accepted, and its HTML is still rendering after the
+// readiness wait ran out; it goes live without another publish) or 'error'.
 export class PublishTargetResult extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);

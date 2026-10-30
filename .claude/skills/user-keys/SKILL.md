@@ -1,6 +1,6 @@
 ---
 name: user-keys
-description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Also covers grants — where a key may be sent, one `user_key_grants` row per destination its owner approved, each holding its own sealed copy of the key — the master and grant copies and which code opens each, how a grant is created or reused from an operation's lowered destination, why a grant row added by hand sends nothing, and the `/_user-key-grants` routes. Use when a user reports a key they can't add, replace or delete, when a key change or a grant is refused with 403, when reading or querying `user_keys` / `key_write_tickets` / `user_key_grants` as an operator, when a key's value or a grant's copy fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts`, `lib/user-key-grants.ts`, `handlers/handle-user-keys.ts` or `handlers/handle-user-key-grants.ts`.
+description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Also covers Google service-account keys — the key file, subject and scopes they are entered with, what is sealed, and how `lib/outbound/google-service-account.ts` mints, caches and classifies failures of their access tokens. Also covers grants — where a key may be sent, one `user_key_grants` row per destination its owner approved, each holding its own sealed copy of the key — the master and grant copies and which code opens each, how a grant is created or reused from an operation's lowered destination, why a grant row added by hand sends nothing, and the `/_user-key-grants` routes. Use when a user reports a key they can't add, replace or delete, when a key change or a grant is refused with 403, when reading or querying `user_keys` / `key_write_tickets` / `user_key_grants` as an operator, when a key's value or a grant's copy fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts`, `lib/user-key-grants.ts`, `handlers/handle-user-keys.ts` or `handlers/handle-user-key-grants.ts`.
 ---
 
 # User keys (operators)
@@ -23,15 +23,17 @@ has lost track of a value replaces it.
 
 `user_keys` — one row per key:
 
-| Column                                                         | Holds                                                                                                       |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `id`                                                           | UUID, minted by the realm server before sealing (the value is bound to it)                                  |
-| `owner`                                                        | The owner's Matrix user id                                                                                  |
-| `name`                                                         | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name |
-| `kind`                                                         | `static`, `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)                          |
-| `state`                                                        | `active`, or `rejected` for a connection its vendor refused to refresh                                      |
-| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id` | The sealed value                                                                                            |
-| `created_at`, `updated_at`                                     | `timestamptz`                                                                                               |
+| Column                                                                                                     | Holds                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                                                                       | UUID, minted by the realm server before sealing (the value is bound to it)                                                                                                                                                    |
+| `owner`                                                                                                    | The owner's Matrix user id                                                                                                                                                                                                    |
+| `name`                                                                                                     | A label for people, unique among the owner's keys (`user_keys_owner_name_key`); two owners may share a name                                                                                                                   |
+| `kind`                                                                                                     | `static`; `google-service-account` (see [Google service accounts](#google-service-accounts)); `oauth-client` or `oauth-connection` (see the `oauth-connections` skill)                                                        |
+| `state`                                                                                                    | `active`, or `rejected` for a connection its vendor refused to refresh or a service-account key Google refused (see [Rejected keys](#rejected-keys))                                                                          |
+| `rejected_at`, `last_probe_at`                                                                             | For a rejected service-account key: when Google refused it, and when a call was last let through to Google as its probe                                                                                                       |
+| `value_ciphertext`, `value_nonce`, `value_tag`, `value_key_id`                                             | The sealed value                                                                                                                                                                                                              |
+| `service_account_email`, `service_account_subject`, `service_account_scopes`, `service_account_details_at` | A `google-service-account` key's email, the user it acts as (null for itself) and its scopes, none of them secret, and the `updated_at` they were written with; null for every other kind (`user_keys_service_account_check`) |
+| `created_at`, `updated_at`                                                                                 | `timestamptz`                                                                                                                                                                                                                 |
 
 `key_write_tickets` — one row per unused ticket: `ticket_sha256`, `owner`,
 `action` (`add`, `replace`, `delete`, `share`, `swap` or `resume`), `key_id`
@@ -47,7 +49,7 @@ Both are excluded from the SQLite schema dump and withheld from
 select metadata columns only:
 
 ```sql
-SELECT id, owner, name, kind, state, value_key_id, created_at, updated_at
+SELECT id, owner, name, kind, state, service_account_email, service_account_scopes, value_key_id, created_at, updated_at
 FROM user_keys WHERE owner = '@someone:boxel.ai' ORDER BY name;
 ```
 
@@ -109,8 +111,8 @@ request log line and Sentry breadcrumbs.
 | `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                      |
 | `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                          |
 | `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                    |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                                                           |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key); re-seals every grant's copy                                                                |
+| `POST /_user-keys`         | Add: `attributes.{name, kind?, value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account`                            |
+| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                      |
 | `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
 
 An attribute other than these, such as a `destination`, is refused with 400.
@@ -132,10 +134,11 @@ realm's `realm.json` is indexed.
 The answers to adding and replacing a key carry neither.
 
 From the terminal, `boxel keys` (`packages/boxel-cli/src/commands/keys/`)
-calls these routes and the shares routes (see the `key-shares` skill). A
-command that only reads (`list`, `show`, `shares`), and `unshare`, uses the
-profile's ordinary session. A command that changes a key or a share in a way
-that needs a ticket (`add`, `replace`, `delete`, `share`, `swap`) makes all of
+calls these routes, the shares routes (see the `key-shares` skill) and the
+OAuth routes (see the `oauth-connections` skill). A command that only reads
+(`list`, `show`, `shares`, `clients`), and `unshare`, uses the profile's
+ordinary session. A command that changes a key or a share in a way that needs
+a ticket (`add`, `replace`, `delete`, `share`, `swap`, `connect`) makes all of
 its requests with the profile's secure session, signing in through the
 browser first when the profile has none, and mints a ticket for that one
 change. It prints a refusal as `Refused (HTTP <status>):
@@ -153,6 +156,76 @@ unchanged, so a user's report carries the server's own words.
 
 A failure that isn't one of these is a 500 logged on `realm:user-keys` with
 the error's name and message only, never the request.
+
+## Google service accounts
+
+A `google-service-account` key is a Google service account's JSON key file.
+What reaches a Google API is an access token the realm server mints from it,
+never the key file. The code is `lib/outbound/google-service-account.ts`.
+
+- **What the owner enters.** `value` is the JSON key file, as Google issues
+  it; `subject` is the user to act as, for domain-wide delegation (optional,
+  an email address); `scopes` is a list of scope names or URLs, at least one.
+  The secure window's add-a-key page takes the file from disk, and
+  `boxel keys add <name> --kind google-service-account --key-file <path>
+--scope <scope> [--subject <email>]` takes it from a file or `--stdin`.
+- **Checked when entered.** The file must be `"type": "service_account"`
+  with a `client_email` and an RSA private key in PEM form, or it is refused
+  with 400. The refusal names what is wrong and never quotes the file (the
+  JSON parser's own message does, so it is never passed on). A `static` key
+  given a `subject` or `scopes` is refused 400. A replace takes the key's own
+  kind and needs the whole set again: file, scopes and subject. The routes
+  default none of it; the key page, the `replace-key` page a card's
+  Reconnect opens (from `GET /_user-keys/:id`) and `boxel keys replace` start
+  from the key's current scopes and subject, so leaving them as they are keeps
+  them (`replace --no-subject` acts as the service account itself). A key file for another service account keeps neither: the CLI then needs `--scope` and `--subject` or `--no-subject`, and both pages say the account changed.
+- **What is sealed.** The key file's `client_email`, `private_key_id` and
+  `private_key`, with the subject and scopes, as one JSON value in a fixed
+  member order (`serializeGoogleServiceAccount`). The file's own `token_uri`
+  is dropped: the token endpoint is the platform's to choose.
+- **What is shown.** The email, subject and scopes are also written, in the
+  clear, to the `service_account_*` columns in the same statement that seals
+  the value, so the key listing, `GET /_user-keys/:id` and the answers to an
+  add or replace carry them as `serviceAccount: {email, subject, scopes}`.
+  Minting reads only the sealed value. `service_account_details_at` is the
+  `updated_at` of the statement that wrote them, and they are returned only
+  while it equals the row's `updated_at`: a revision that seals a new value
+  without writing them (one still serving during a rollout, or after a
+  rollback) moves `updated_at`, and the key then lists without
+  `serviceAccount` until it is replaced again. The key file, its private key and its
+  `private_key_id` are never returned. The key page's tile and
+  `boxel keys show` show them.
+- **Its grants hold markers.** A service account is a minting kind
+  (`MINTING_KINDS`): each grant seals a marker bound to its destination, never
+  the key file. Sending opens the grant's marker to prove the grant real, then
+  `serviceAccountAccessToken` (`lib/google-service-account-keys.ts`) opens the
+  key's own sealed value and mints. The private key goes only to the token
+  endpoint; `https://oauth2.googleapis.com/token` is in
+  `FIXED_TOKEN_ENDPOINTS`, so no grant covers it, and `createCallApiSender`
+  refuses any `callApi` addressed to it or to Google's other token addresses
+  (see the `call-api` skill).
+- **Minting.** `googleAccessToken(keyId, credential)` signs an RS256 JWT
+  (issuer the service account, `sub` the subject when there is one, `scope`
+  the scopes, `aud` the token endpoint, one hour) and exchanges it at
+  `https://oauth2.googleapis.com/token` through the guarded outbound client,
+  with the private key and the assertion registered with the scrubber.
+  The access token is kept in memory only, keyed by the key and a hash of the
+  credential it was minted from (so a replaced key never serves the old one's
+  token), until
+  five minutes before Google's `expires_in` (half the life of a token shorter
+  than ten minutes). Concurrent calls for one key share one exchange.
+- **Failures.** An `invalid_grant`, `invalid_client`, `unauthorized_client`,
+  `access_denied` or `invalid_scope` answer, or any other 4xx but 429, is
+  `GoogleServiceAccountRejectedError`: not retried, and logged on
+  `google-service-account` with Google's error code and the service account's
+  email, never Google's description, which can quote the request. A 5xx, a
+  429, `temporarily_unavailable`, a timeout or a broken connection is retried
+  after 250 ms and 1 s, then `GoogleTokenEndpointUnavailableError`. Neither
+  is cached in memory. `fillSlots` answers both as `credential-rejected`
+  (424) with `meta.reason` `rejected` or `unavailable`, and nothing reaches
+  the API. An unavailable endpoint leaves the key as it is, so the next call
+  asks Google again; a refusal makes the key `rejected` (see
+  [Rejected keys](#rejected-keys)).
 
 ## Grants
 
@@ -345,6 +418,55 @@ The `boxel:key-grant` log channel carries one JSON line per event:
 probe got no answer) and `vendor-outcome` (`host`, `status`) for every
 `callApi` the vendor answered. Hosts and ids only, never a path or a value.
 
-A user whose card shows Reconnect has a rejected grant. If the key is good
+### Rejected keys
+
+A `google-service-account` key that Google's token endpoint refuses (see
+[Google service accounts](#google-service-accounts)) is refused as a key, not
+at one destination, so the **key** becomes `rejected` (`markKeyRejected` in
+`lib/key-grant-rejection.ts`, called from `mintedToken` in
+`lib/key-bindings.ts`), with `rejected_at` and `last_probe_at` set. Its
+grants keep their own state. Only a refusal that names the key, its subject or
+its scopes (an OAuth error in `REJECTED_ERRORS` in
+`lib/outbound/google-service-account.ts`, carried as `keyRefused`) does this.
+A 4xx that names no OAuth error, or an `invalid_grant` for an assertion outside
+Google's time window (the signing host's clock), refuses that call alone and
+leaves the key `active`; a 408 is retried like a 5xx.
+
+- **Calls through any grant of a rejected key** are refused
+  `credential-rejected` (424, `meta.reason: 'rejected'`) by `checkSlots`
+  without contacting Google, except **one probe per key per interval**,
+  claimed on `user_keys.last_probe_at` in one `UPDATE` (`claimKeyProbe`), with
+  the same `KEY_GRANT_PROBE_INTERVAL_SECONDS`. A pipeline admission admits a
+  run only while the probe is due.
+- **A probe that mints clears the key**; one Google refuses again leaves it
+  rejected and starts a new interval; one the endpoint fails to answer leaves
+  it as it was.
+- **Replacing the key clears it**, and every rejected grant of it, in the
+  transaction that seals the new value (`clearKeyRejected`,
+  `clearKeyRejections`).
+- **One notice on entering the state**, in `user_key_grant_notices` with
+  `reason` `key-rejected` (a grant's is `credential-rejected`), naming the
+  grant the refused call came through and its destination: to the key's owner
+  and, through a share, the direct writers of the share's realm.
+- **A refusal only rejects the value it was signed with.** The exchange
+  carries the sealed value's nonce, and the move to `rejected` matches it, so
+  an exchange that started before a replace can't reject the new value.
+- **A probe always asks Google.** It skips the in-memory token cache
+  (`googleAccessToken(…, { fresh: true })`), since a token another process
+  cached before the refusal says nothing about the key now.
+- **Readiness** (`lib/key-readiness.ts`) answers `credential-rejected` for a
+  binding whose key is `rejected`, to every caller.
+
+```sql
+-- A user's rejected keys, and when each was last probed.
+SELECT id, name, kind, rejected_at, last_probe_at
+FROM user_keys WHERE owner = '@someone:boxel.ai' AND state = 'rejected';
+```
+
+The `boxel:key-grant` channel carries `key-rejected` (`key`, `realm`,
+`share`), `key-probe` (`minted`) and `key-cleared` (`reason`: `probe` or
+`key-replaced`).
+
+A user whose card shows Reconnect has a rejected grant or key. If the key is good
 (a vendor outage that answered 401), the next probe brings it back on its
 own, within one interval; otherwise the owner replaces the key.

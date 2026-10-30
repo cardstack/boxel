@@ -11,6 +11,7 @@ import {
   readKeyValue,
   type KeyValueSource,
 } from '../../lib/key-value.ts';
+import { openBrowser } from '../../lib/open-browser.ts';
 import { prompt } from '../../lib/prompt.ts';
 import {
   realmServerRequest,
@@ -18,20 +19,31 @@ import {
   secureSignOut,
   SecureSessionRequestError,
 } from '../../lib/secure-session.ts';
-import type { PostedSecureSession } from '../../lib/sso-login.ts';
+import {
+  SsoTimeoutError,
+  startLoopbackCallback,
+  type PostedSecureSession,
+} from '../../lib/sso-login.ts';
 import {
   addUserKey,
   canonicalRealmUrl,
   deleteUserKey,
   findUserKey,
+  listConnectableClients,
   listOwnShares,
   listRealmShares,
   listUserKeys,
   replaceUserKey,
   shareUserKey,
+  completeOAuthConnect,
+  startOAuthConnect,
   swapKeyIntoShare,
   unshareUserKey,
+  type ConnectableClient,
   type KeyShare,
+  type OAuthClientSettings,
+  type OAuthConnectOutcome,
+  type ServiceAccountDetails,
   type UserKeyMetadata,
 } from '../../lib/user-keys.ts';
 
@@ -39,12 +51,12 @@ import {
 // put them into realms. Keys belong to the user, so only the share commands
 // name a realm.
 //
-// Reading (`list`, `show`, `shares`) and unsharing use the profile's ordinary
-// realm-server session. A change that stores or hands out a key (`add`,
-// `replace`, `delete`, `share`, `swap`) takes a key write ticket for that
-// change, which only a session signed in on the secure origin can mint, so
-// those commands first make sure the profile holds one, opening the secure
-// window's sign-in in the browser when it doesn't.
+// Reading (`list`, `show`, `shares`, `clients`) and unsharing use the
+// profile's ordinary realm-server session. A change that stores or hands out
+// a key (`add`, `replace`, `delete`, `share`, `swap`, `connect`) takes a key
+// write ticket for that change, which only a session signed in on the secure
+// origin can mint, so those commands first make sure the profile holds one,
+// opening the secure window's sign-in in the browser when it doesn't.
 //
 // A key's value is typed at a masked prompt or read with `--stdin` or
 // `--key-file`, never taken as an argument, and nothing prints one. A refusal
@@ -219,6 +231,33 @@ function printKey(key: UserKeyMetadata): void {
   console.log(`  kind: ${key.kind}`);
   console.log(`  state: ${key.state}`);
   console.log(`  updated: ${key.updatedAt}`);
+  let { client, connection } = key.oauth ?? {};
+  if (client) {
+    console.log(`  client id: ${client.clientId}`);
+    console.log(`  grant: ${client.grantType}`);
+    if (client.authorizeURL) {
+      console.log(`  authorization URL: ${client.authorizeURL}`);
+    }
+    console.log(`  token URL: ${client.tokenURL}`);
+    console.log(`  scopes: ${client.scopes || 'none'}`);
+    if (client.apiHosts.length > 0) {
+      console.log(`  API hosts: ${client.apiHosts.join(', ')}`);
+    }
+    console.log(`  client state: ${client.state}`);
+  }
+  if (connection) {
+    console.log(
+      `  signs in through: ${connection.client.label ?? 'a client that is gone'} (${connection.client.kind})`,
+    );
+    console.log(`  scopes: ${connection.scopes || 'none'}`);
+    console.log(`  connection: ${connection.status}`);
+  }
+  if (key.serviceAccount) {
+    let { email, subject, scopes } = key.serviceAccount;
+    console.log(`  service account: ${email}`);
+    console.log(`  acts as: ${subject ?? 'the service account itself'}`);
+    console.log(`  scopes: ${scopes.join(' ')}`);
+  }
   if (key.grants) {
     if (key.grants.length === 0) {
       console.log('  grants: none');
@@ -280,16 +319,299 @@ export async function keysShow(
   return shown;
 }
 
+// The kinds of key `add` takes. A `google-service-account` key is a Google
+// service account's JSON key file, read with --key-file or --stdin, with the
+// scopes its tokens ask for (--scope) and optionally the user to act as
+// (--subject). An `oauth-client` key is an app registered with a vendor: its
+// value is the client secret, entered as any secret, and its settings are
+// options (--client-id, --authorize-url, --token-url, --scopes, ...). An
+// OAuth connection is never added: `connect` makes one by signing in.
+export const KEY_KINDS = [
+  'static',
+  'google-service-account',
+  'oauth-client',
+] as const;
+
+export interface ServiceAccountOptions {
+  kind?: string;
+  // `false` is `replace --no-subject`: act as the service account itself.
+  subject?: string | false;
+  scope?: string[];
+}
+
+export interface OAuthClientOptions {
+  clientId?: string;
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  scopes?: string[];
+  grantType?: string;
+  tokenAuth?: string;
+  apiHost?: string[];
+}
+
+const OAUTH_CLIENT_OPTIONS = {
+  clientId: '--client-id',
+  authorizeUrl: '--authorize-url',
+  tokenUrl: '--token-url',
+  scopes: '--scopes',
+  grantType: '--grant-type',
+  tokenAuth: '--token-auth',
+  apiHost: '--api-host',
+} as const;
+
+// Refuses a `--kind` that `add` doesn't take, before anything that would make
+// the person wait.
+function checkAddKind(kind: string): void {
+  if (!(KEY_KINDS as readonly string[]).includes(kind)) {
+    throw new Error(`--kind is one of: ${KEY_KINDS.join(', ')}`);
+  }
+}
+
+// Refuses options that don't fit the key's kind. A service account's key file
+// is JSON, so it is read from a file or stdin, never typed at the masked
+// prompt, and it needs scopes: given with --scope, or for a replace, the ones
+// the key has. A replace of a key whose details the server doesn't report has
+// nothing to keep, so it needs the subject chosen too (--subject or
+// --no-subject). Any other kind, an OAuth app's included, takes neither
+// --subject nor --scope, and what its replacement may be is the realm
+// server's to say.
+function checkKindOptions(
+  kind: string,
+  options: ServiceAccountOptions & KeyValueSource,
+  replacing?: { current: ServiceAccountDetails | undefined },
+): void {
+  let current = replacing?.current;
+  if (kind === 'google-service-account') {
+    if (!options.keyFile && !options.stdin) {
+      throw new Error(
+        "A Google service account's JSON key file is read with --key-file or --stdin",
+      );
+    }
+    if (!options.scope?.length && !current?.scopes.length) {
+      throw new Error(
+        'A Google service account needs at least one --scope, such as https://www.googleapis.com/auth/spreadsheets',
+      );
+    }
+    if (replacing && !current && options.subject === undefined) {
+      throw new Error(
+        "This key's details aren't known: give --subject <email>, or --no-subject to act as the service account itself",
+      );
+    }
+  } else if (options.subject !== undefined || options.scope !== undefined) {
+    throw new Error(
+      '--subject and --scope are only for a google-service-account key',
+    );
+  }
+}
+
+// Refuses an OAuth client that lacks what every client needs, before
+// anything that would make the person wait, and OAuth options on any other
+// kind. The realm server checks the settings themselves.
+function checkOAuthClientOptions(
+  kind: string,
+  options: OAuthClientOptions,
+): void {
+  let given = (
+    Object.keys(OAUTH_CLIENT_OPTIONS) as (keyof OAuthClientOptions)[]
+  ).filter((name) => options[name] !== undefined);
+  if (kind !== 'oauth-client') {
+    if (given.length > 0) {
+      throw new Error(
+        `${given.map((name) => OAUTH_CLIENT_OPTIONS[name]).join(', ')} ${given.length === 1 ? 'is' : 'are'} only for an oauth-client key`,
+      );
+    }
+    return;
+  }
+  if (!options.clientId) {
+    throw new Error('An OAuth client needs its --client-id');
+  }
+  if (!options.tokenUrl) {
+    throw new Error('An OAuth client needs its --token-url');
+  }
+  let grantType = options.grantType ?? 'authorization_code';
+  if (
+    grantType !== 'authorization_code' &&
+    grantType !== 'client_credentials'
+  ) {
+    throw new Error('--grant-type is authorization_code or client_credentials');
+  }
+  if (grantType === 'authorization_code' && !options.authorizeUrl) {
+    throw new Error(
+      'An OAuth client people sign in through needs its --authorize-url',
+    );
+  }
+  if (grantType === 'client_credentials' && options.authorizeUrl) {
+    throw new Error('A client_credentials client has no --authorize-url');
+  }
+  if (
+    options.tokenAuth !== undefined &&
+    options.tokenAuth !== 'client_secret_post' &&
+    options.tokenAuth !== 'client_secret_basic'
+  ) {
+    throw new Error(
+      '--token-auth is client_secret_post or client_secret_basic',
+    );
+  }
+}
+
+// An OAuth client's settings as the realm server takes them. Scopes may be
+// given as several arguments or as one space-separated one.
+function oauthClientSettings(
+  kind: string,
+  options: OAuthClientOptions,
+): { oauth?: OAuthClientSettings } {
+  if (kind !== 'oauth-client') {
+    return {};
+  }
+  let scopes = (options.scopes ?? []).join(' ').trim();
+  return {
+    oauth: {
+      clientId: options.clientId!,
+      tokenUrl: options.tokenUrl!,
+      ...(options.authorizeUrl ? { authorizeUrl: options.authorizeUrl } : {}),
+      ...(options.grantType
+        ? { grantType: options.grantType as OAuthClientSettings['grantType'] }
+        : {}),
+      ...(scopes ? { scopes } : {}),
+      ...(options.tokenAuth
+        ? { tokenAuth: options.tokenAuth as OAuthClientSettings['tokenAuth'] }
+        : {}),
+      ...(options.apiHost?.length ? { apiHosts: options.apiHost } : {}),
+    },
+  };
+}
+
+// Whether a value is a Google service account's JSON key file, which is only
+// ever added as a google-service-account key: sent as it is, it would hand
+// the private key to the API.
+function isServiceAccountKeyFile(value: string): boolean {
+  if (!value.trimStart().startsWith('{')) {
+    return false;
+  }
+  try {
+    return JSON.parse(value)?.type === 'service_account';
+  } catch {
+    return false;
+  }
+}
+
+function checkNotAKeyFile(kind: string, value: string): void {
+  if (kind !== 'google-service-account' && isServiceAccountKeyFile(value)) {
+    throw new Error(
+      "This is a Google service account's JSON key file. Add it with --kind google-service-account and the --scope its tokens may use",
+    );
+  }
+}
+
+// A service account's subject and scopes as entered. For a replace, `current`
+// is what the key has now, and whatever isn't given is kept: its scopes
+// without --scope, and the user it acts as without --subject or --no-subject.
+function serviceAccountAttributes(
+  kind: string,
+  options: ServiceAccountOptions,
+  current?: ServiceAccountDetails,
+): { subject?: string; scopes?: string[] } {
+  if (kind !== 'google-service-account') {
+    return {};
+  }
+  let subject =
+    options.subject === false
+      ? undefined
+      : (options.subject ?? current?.subject ?? undefined);
+  return {
+    ...(subject ? { subject } : {}),
+    scopes: options.scope?.length ? options.scope : (current?.scopes ?? []),
+  };
+}
+
+// The key's current scopes and subject, if a replace with this key file may
+// keep them. Domain-wide delegation and the scopes it allows are granted per
+// service account, so a key file for another service account keeps neither:
+// its replace needs --scope and --subject or --no-subject, like a key whose
+// details aren't known. Checked before a ticket is minted.
+function keepableDetails(
+  keyFile: string,
+  options: ServiceAccountOptions,
+  current: ServiceAccountDetails | undefined,
+): ServiceAccountDetails | undefined {
+  if (!current) {
+    return undefined;
+  }
+  let email = keyFileEmail(keyFile);
+  if (email === current.email) {
+    return current;
+  }
+  if (!options.scope?.length || options.subject === undefined) {
+    throw new Error(
+      `This key file is for ${email ?? 'another service account'}, not ${current.email}. ` +
+        'Delegation and scopes are granted per service account, so give --scope, and --subject <email> or --no-subject',
+    );
+  }
+  return undefined;
+}
+
+function keyFileEmail(keyFile: string): string | undefined {
+  try {
+    let email = JSON.parse(keyFile)?.client_email;
+    return typeof email === 'string' ? email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// What a service account's replace kept of the key as it was, to say so.
+function keptByReplace(
+  options: ServiceAccountOptions,
+  current: ServiceAccountDetails | undefined,
+): string[] {
+  if (!current) {
+    return [];
+  }
+  let kept: string[] = [];
+  if (!options.scope?.length) {
+    kept.push(`Kept its scopes: ${current.scopes.join(' ')}`);
+  }
+  if (options.subject === undefined) {
+    kept.push(
+      current.subject
+        ? `Kept acting as ${current.subject} (--no-subject acts as the service account itself)`
+        : 'Kept acting as the service account itself (--subject acts as a user)',
+    );
+  }
+  return kept;
+}
+
 export async function keysAdd(
   name: string,
-  options: { json?: boolean } & KeyValueSource & KeysCommandDeps = {},
+  options: { json?: boolean } & KeyValueSource &
+    ServiceAccountOptions &
+    OAuthClientOptions &
+    KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
+  let kind = options.kind ?? 'static';
+  checkAddKind(kind);
+  checkKindOptions(kind, options);
+  checkOAuthClientOptions(kind, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
   let value = await readValue(ctx, options);
-  let key = await addUserKey(ctx.realmServerUrl, token, { name, value });
+  checkNotAKeyFile(kind, value);
+  let key = await addUserKey(ctx.realmServerUrl, token, {
+    name,
+    ...(options.kind ? { kind } : {}),
+    value,
+    ...serviceAccountAttributes(kind, options),
+    ...oauthClientSettings(kind, options),
+  });
   emit(ctx, key, () => {
+    if (kind === 'oauth-client' && options.grantType !== 'client_credentials') {
+      console.log(`${FG_GREEN}Added the OAuth client ${key.name}.${RESET}`);
+      console.log(
+        `${DIM}Connect your account through it with \`boxel keys connect <name> --client ${key.name}\`, or share it into a realm for the people there to connect through.${RESET}`,
+      );
+      return;
+    }
     console.log(`${FG_GREEN}Added the key ${key.name}.${RESET}`);
     console.log(
       `${DIM}It can't be sent anywhere until you approve an operation that uses it.${RESET}`,
@@ -298,22 +620,43 @@ export async function keysAdd(
   return key;
 }
 
+// A key is replaced with a value of its own kind: a service account with a
+// new key file, keeping its scopes and the user it acts as unless new ones
+// are given.
 export async function keysReplace(
   name: string,
-  options: { json?: boolean } & KeyValueSource & KeysCommandDeps = {},
+  options: { json?: boolean } & KeyValueSource &
+    Omit<ServiceAccountOptions, 'kind'> &
+    KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   checkKeyValueSource(options, ctx.deps.input ?? process.stdin);
   let token = await secureToken(ctx);
-  let { id } = await findUserKey(ctx.realmServerUrl, token, name);
+  let {
+    id,
+    kind,
+    serviceAccount: current,
+  } = await findUserKey(ctx.realmServerUrl, token, name);
+  checkKindOptions(kind, options, { current });
   let value = await readValue(ctx, options);
+  checkNotAKeyFile(kind, value);
+  let keep =
+    kind === 'google-service-account'
+      ? keepableDetails(value, options, current)
+      : undefined;
   let key = await replaceUserKey(ctx.realmServerUrl, token, {
     keyId: id,
     value,
+    ...serviceAccountAttributes(kind, options, keep),
   });
   emit(ctx, key, () => {
     console.log(`${FG_GREEN}Replaced the value of ${key.name}.${RESET}`);
   });
+  if (kind === 'google-service-account') {
+    for (let line of keptByReplace(options, keep)) {
+      say(ctx, line);
+    }
+  }
   return key;
 }
 
@@ -459,6 +802,202 @@ export async function keysShares(
     }
   });
   return shares;
+}
+
+// How `connect --client` names a client: `platform:<name>` for one of
+// Boxel's own, a share's label for one shared into the realm given with
+// `--realm`, and otherwise the name of one of the user's own client keys.
+function clientArgument(client: ConnectableClient): string {
+  return client.kind === 'platform' ? `platform:${client.name}` : client.label;
+}
+
+export async function keysClients(
+  options: { realm?: string; json?: boolean } & KeysCommandDeps = {},
+): Promise<ConnectableClient[]> {
+  let ctx = context(options.json, options);
+  let clients = await listConnectableClients(
+    ctx.realmServerUrl,
+    await ordinaryToken(ctx),
+    { realm: options.realm },
+  );
+  emit(ctx, clients, () => {
+    if (clients.length === 0) {
+      console.log(
+        options.realm
+          ? `There are no clients to connect through in ${canonicalRealmUrl(options.realm)}.`
+          : 'There are no clients to connect through.',
+      );
+    }
+    for (let client of clients) {
+      let whose =
+        client.kind === 'platform'
+          ? `${client.label}, Boxel's own`
+          : client.kind === 'share'
+            ? `shared into ${canonicalRealmUrl(options.realm!)}`
+            : 'yours';
+      let scopes = client.scopes ? `, scopes ${client.scopes}` : '';
+      console.log(
+        `${clientArgument(client)}  ${DIM}${whose}, signs in at ${client.authorizeHost}${scopes}${RESET}`,
+      );
+    }
+  });
+  return clients;
+}
+
+// The client `--client` names, among those the user may connect through:
+// `platform:<name>` for one of Boxel's own; otherwise a client shared into
+// the `--realm` under that label, or, failing that, one of the user's own
+// client keys of that name, which `clients --realm` lists too.
+function findClient(
+  clients: ConnectableClient[],
+  argument: string,
+  realm: string | undefined,
+): ConnectableClient {
+  let found: ConnectableClient | undefined;
+  if (argument.startsWith('platform:')) {
+    let name = argument.slice('platform:'.length);
+    found = clients.find((c) => c.kind === 'platform' && c.name === name);
+  } else {
+    found =
+      (realm
+        ? clients.find((c) => c.kind === 'share' && c.label === argument)
+        : undefined) ??
+      clients.find((c) => c.kind === 'own' && c.label === argument);
+  }
+  if (!found) {
+    throw new Error(
+      realm
+        ? `${canonicalRealmUrl(realm)} has no client shared as ${argument}, and you have no client of that name, to connect through. \`boxel keys clients --realm ${realm}\` lists them`
+        : `You have no client named ${argument} to connect through. A client shared into a realm takes --realm; \`boxel keys clients\` lists them`,
+    );
+  }
+  return found;
+}
+
+// How long a sign-in at a service lasts on the realm server.
+const CONNECT_WINDOW_MS = 10 * 60 * 1000;
+
+// Why a sign-in ended without a connection, as the realm server or the
+// service names it, in the words `connect` says it.
+const CONNECT_FAILURES: Record<string, string> = {
+  expired:
+    'The sign-in took too long, or was already used, so nothing was connected. Run it again to start a new one',
+  denied:
+    "The service didn't give Boxel access: the sign-in was cancelled there, or the service refused it. Nothing was connected",
+  failed:
+    "The service didn't complete the sign-in, so nothing was connected. Try again; if it keeps happening, the client's settings may need checking",
+  'name-taken':
+    'A key of that name was added while you were signing in, so nothing was connected. Connect again under another name',
+};
+
+// Signs in to a service through a client, in the browser, and keeps what the
+// sign-in yields as the user's connection `name`. The CLI waits on a
+// loopback port it names when it starts the sign-in. The service sends the
+// browser back through the realm server's callback to the secure window's
+// `connected` page, which hands the service's one-use code to that port once
+// the user confirms; the CLI then finishes the sign-in with its own secure
+// session, so the browser needs no Boxel session of its own. The code is
+// useless without the PKCE verifier and client secret, which only the realm
+// server holds, and no token the service issues reaches the CLI.
+export async function keysConnect(
+  name: string,
+  options: {
+    client: string;
+    realm?: string;
+    timeout?: string;
+    json?: boolean;
+  } & KeysCommandDeps,
+): Promise<UserKeyMetadata> {
+  let ctx = context(options.json, options);
+  let timeoutSeconds =
+    options.timeout === undefined ? undefined : Number(options.timeout);
+  if (
+    timeoutSeconds !== undefined &&
+    !(Number.isFinite(timeoutSeconds) && timeoutSeconds >= 0)
+  ) {
+    throw new Error('--timeout is a number of seconds');
+  }
+  // Found with the ordinary session, so a client that isn't there never costs
+  // a sign-in in the browser.
+  let client = findClient(
+    await listConnectableClients(ctx.realmServerUrl, await ordinaryToken(ctx), {
+      realm: options.realm,
+    }),
+    options.client,
+    options.realm,
+  );
+  let token = await secureToken(ctx);
+  let listener = await startLoopbackCallback({
+    timeoutMs: Math.min(
+      CONNECT_WINDOW_MS,
+      timeoutSeconds === undefined ? Infinity : timeoutSeconds * 1000,
+    ),
+  });
+  let outcome: OAuthConnectOutcome;
+  try {
+    let started = await startOAuthConnect(ctx.realmServerUrl, token, {
+      name,
+      client: client.ref,
+      cli: { port: listener.port, state: listener.state },
+    });
+    let open = ctx.deps.openBrowserFn ?? openBrowser;
+    if (await open(started.authorizeUrl)) {
+      say(ctx, `Opening your browser to sign in at ${client.authorizeHost}...`);
+      say(ctx, `If it didn't open, visit:\n  ${started.authorizeUrl}`);
+    } else {
+      say(
+        ctx,
+        `Open this URL in your browser to sign in at ${client.authorizeHost}:\n  ${started.authorizeUrl}`,
+      );
+    }
+    say(
+      ctx,
+      'Waiting for you to sign in, then to continue in the Boxel page the browser comes back to...',
+    );
+    let result;
+    try {
+      result = await listener.waitForResult();
+    } catch (e) {
+      if (e instanceof SsoTimeoutError) {
+        throw new Error(
+          "The sign-in wasn't finished in the browser in time, so nothing was connected. Run it again to start a new one",
+        );
+      }
+      throw e;
+    }
+    if (result.kind !== 'oauth') {
+      throw new Error('The browser returned a different kind of sign-in.');
+    }
+    outcome =
+      'error' in result.outcome
+        ? { error: result.outcome.error }
+        : await completeOAuthConnect(ctx.realmServerUrl, token, result.outcome);
+  } finally {
+    listener.close();
+  }
+  if ('error' in outcome) {
+    throw new Error(
+      CONNECT_FAILURES[outcome.error] ?? CONNECT_FAILURES.failed!,
+    );
+  }
+  let connectedId = outcome.connected;
+  let key = (await listUserKeys(ctx.realmServerUrl, token)).find(
+    (candidate) => candidate.id === connectedId,
+  );
+  if (!key) {
+    throw new Error(
+      `The connection was made, but ${name} isn't among your keys; \`boxel keys list\` shows what you have`,
+    );
+  }
+  emit(ctx, key, () => {
+    console.log(
+      `${FG_GREEN}Connected ${key.name} through ${client.kind === 'platform' ? client.label : clientArgument(client)}.${RESET}`,
+    );
+    console.log(
+      `${DIM}Nothing can use it until an operation is approved for it.${RESET}`,
+    );
+  });
+  return key;
 }
 
 // Runs a command, printing a refusal with the server's status and reason.

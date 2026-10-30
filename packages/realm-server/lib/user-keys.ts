@@ -13,7 +13,13 @@ import {
   sealedFromColumns,
 } from './secrets-at-rest/sealed-columns.ts';
 import { revokeBindingsIn } from './key-binding-revocation.ts';
-import { clearKeyRejections } from './key-grant-rejection.ts';
+import {
+  GoogleServiceAccountKeyError,
+  isGoogleServiceAccountKeyFile,
+  parseGoogleServiceAccountKey,
+  serializeGoogleServiceAccount,
+} from './outbound/google-service-account.ts';
+import { clearKeyRejected, clearKeyRejections } from './key-grant-rejection.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -38,13 +44,17 @@ import { clearKeyRejections } from './key-grant-rejection.ts';
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
 export const USER_KEY_GRANT_VALUE_FIELD = 'user_key_grants.value';
 
-// `static` is a secret sent as it is. `oauth-client` is an app registered with
-// a vendor, whose value is the client secret; `oauth-connection` is a person's
-// sign-in through one, whose value is the token that mints its access tokens
-// (see `lib/oauth.ts`). Only a static key or a client is added with a value; a
-// connection is made by signing in through a client.
+// `static` is a secret sent as it is. `google-service-account` is a Google
+// service account's key file, subject and scopes, whose value mints the access
+// tokens sent (see `lib/outbound/google-service-account.ts`). `oauth-client`
+// is an app registered with a vendor, whose value is the client secret;
+// `oauth-connection` is a person's sign-in through one, whose value is the
+// token that mints its access tokens (see `lib/oauth.ts`). Only a static key,
+// a service account or a client is added with a value; a connection is made
+// by signing in through a client.
 export const USER_KEY_KINDS = [
   'static',
+  'google-service-account',
   'oauth-client',
   'oauth-connection',
 ] as const;
@@ -55,12 +65,15 @@ export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 // grant of such a key holds no copy of the value, only a marker that proves
 // the grant was made by the realm server (see `createOrReuseGrantIn`).
 export const MINTING_KINDS: ReadonlySet<UserKeyKind> = new Set([
+  'google-service-account',
   'oauth-client',
   'oauth-connection',
 ]);
 
 // `rejected` is an OAuth connection its vendor refused to refresh
-// (`invalid_grant`); signing in through its client again makes it `active`.
+// (`invalid_grant`), which signing in through its client again makes `active`,
+// or a service-account key Google's token endpoint refused, which a probe that
+// mints or replacing the key makes `active`.
 export type UserKeyState = 'active' | 'rejected';
 
 export const KEY_WRITE_ACTIONS = [
@@ -85,6 +98,25 @@ export interface UserKeyMetadata {
   state: UserKeyState;
   createdAt: string;
   updatedAt: string;
+  // Only a google-service-account key has one.
+  serviceAccount?: ServiceAccountDetails;
+}
+
+// What a google-service-account key acts as, none of it secret: the service
+// account's email, the user it acts as for domain-wide delegation (null when
+// it acts as itself) and the scopes its tokens ask for. Kept beside the
+// sealed value so its owner can see what a replace would change; never the
+// key file or its private key.
+export interface ServiceAccountDetails {
+  email: string;
+  subject: string | null;
+  scopes: string[];
+}
+
+// A value to seal as a key's master copy, with a service account's details.
+export interface EnteredUserKeyValue {
+  value: string;
+  serviceAccount: ServiceAccountDetails | null;
 }
 
 // A refusal the caller can act on. `status` is the HTTP status the routes
@@ -327,6 +359,58 @@ export function validateUserKeyValue(value: unknown): string {
   return value;
 }
 
+// What the owner entered, as the value a key of `kind` seals. A static key,
+// or an OAuth client's secret, seals its value as it is. A service account's value is its JSON key file,
+// sealed with the subject and scopes as one canonical value, so a key file that
+// can't mint a token is refused here rather than at its first call. Only a
+// service account takes a subject or scopes, and only it has details to keep
+// beside the sealed value.
+export function sealedValueFor(
+  kind: UserKeyKind,
+  {
+    value,
+    subject,
+    scopes,
+  }: { value: unknown; subject?: unknown; scopes?: unknown },
+): EnteredUserKeyValue {
+  let validValue = validateUserKeyValue(value);
+  if (kind !== 'google-service-account') {
+    if (subject !== undefined || scopes !== undefined) {
+      throw new UserKeyError(
+        400,
+        'only a google-service-account key takes a subject or scopes',
+      );
+    }
+    if (isGoogleServiceAccountKeyFile(validValue)) {
+      throw new UserKeyError(
+        400,
+        `this is a Google service account's JSON key file, which is never sent as it is: add it as a google-service-account key, with the scopes its tokens may use`,
+      );
+    }
+    return { value: validValue, serviceAccount: null };
+  }
+  try {
+    let credential = parseGoogleServiceAccountKey({
+      keyFile: validValue,
+      subject,
+      scopes,
+    });
+    return {
+      value: serializeGoogleServiceAccount(credential),
+      serviceAccount: {
+        email: credential.clientEmail,
+        subject: credential.subject,
+        scopes: credential.scopes,
+      },
+    };
+  } catch (e) {
+    if (e instanceof GoogleServiceAccountKeyError) {
+      throw new UserKeyError(400, e.message);
+    }
+    throw e;
+  }
+}
+
 // A key's master copy is bound to its field, its owner and its row, so a value
 // moved to another row or owner doesn't open.
 export function userKeyBinding(owner: string, id: string): SecretBinding {
@@ -358,7 +442,11 @@ export function grantCopyBinding({
   };
 }
 
-const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at`;
+// A service account's details are returned only while they describe the
+// sealed value: they carry the `updated_at` of the statement that wrote them,
+// and anything that seals a new value without writing them moves `updated_at`
+// past that stamp.
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
@@ -368,6 +456,16 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
+    ...(typeof row.service_account_email === 'string' &&
+    row.service_account_current
+      ? {
+          serviceAccount: {
+            email: row.service_account_email,
+            subject: (row.service_account_subject as string | null) ?? null,
+            scopes: (row.service_account_scopes as string[] | null) ?? [],
+          },
+        }
+      : {}),
   };
 }
 
@@ -426,6 +524,23 @@ export const SEALED_COLUMN_VALUES = (sealed: SealedSecret): Expression => [
   param(sealed.keyId),
 ];
 
+// A service account's details as the values of the `service_account_*`
+// columns (email, subject, scopes, and the stamp that ties them to this
+// statement's `updated_at`), in that order; nulls for any other kind.
+const SERVICE_ACCOUNT_VALUES = (
+  serviceAccount: ServiceAccountDetails | null,
+): Expression =>
+  serviceAccount
+    ? [
+        param(serviceAccount.email),
+        `, `,
+        param(serviceAccount.subject),
+        `, ARRAY(SELECT jsonb_array_elements_text(`,
+        param(JSON.stringify(serviceAccount.scopes)),
+        `::jsonb)), NOW()`,
+      ]
+    : [`NULL, NULL, NULL, NULL`];
+
 export async function addUserKey(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -434,24 +549,28 @@ export async function addUserKey(
     name,
     kind,
     value,
+    subject,
+    scopes,
     ticket,
   }: {
     owner: string;
     name: unknown;
     kind?: unknown;
     value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
     ticket: unknown;
   },
 ): Promise<UserKeyMetadata> {
   let validName = validateUserKeyName(name);
   let validKind = validateUserKeyKind(kind);
-  if (validKind !== 'static') {
+  if (validKind === 'oauth-client' || validKind === 'oauth-connection') {
     throw new UserKeyError(
       400,
       'an OAuth client is added with its client id and endpoints (`oauth`)',
     );
   }
-  let validValue = validateUserKeyValue(value);
+  let entered = sealedValueFor(validKind, { value, subject, scopes });
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'add',
@@ -464,14 +583,15 @@ export async function addUserKey(
       owner,
       name: validName,
       kind: validKind,
-      value: validValue,
+      ...entered,
     });
   });
 }
 
 // Inserts a key, its value sealed as its master copy, in the caller's
-// transaction. The caller has validated the name and value and spent the
-// ticket for the change; a name the owner already uses is refused 409.
+// transaction, with a service account's details beside it. The caller has
+// validated the name and value and spent the ticket for the change; a name
+// the owner already uses is refused 409.
 export async function insertUserKeyIn(
   txQuery: Querier,
   keyring: SecretsKeyring,
@@ -481,17 +601,19 @@ export async function insertUserKeyIn(
     name,
     kind,
     value,
+    serviceAccount = null,
   }: {
     id: string;
     owner: string;
     name: string;
     kind: UserKeyKind;
     value: string;
+    serviceAccount?: ServiceAccountDetails | null;
   },
 ): Promise<UserKeyMetadata> {
   let sealed = keyring.seal(value, userKeyBinding(owner, id));
   let rows = await txQuery([
-    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
+    `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at) VALUES (`,
     param(id),
     `, `,
     param(owner),
@@ -501,6 +623,8 @@ export async function insertUserKeyIn(
     param(kind),
     `, 'active', `,
     ...SEALED_COLUMN_VALUES(sealed),
+    `, `,
+    ...SERVICE_ACCOUNT_VALUES(serviceAccount),
     `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
   ]);
   if (rows.length === 0) {
@@ -530,7 +654,8 @@ export function opensUnder(
   }
 }
 
-// Replaces a key's value, keeping its name and kind. The master copy and every
+// Replaces a key's value, keeping its name and kind. A service account's
+// replacement is a whole new key file, subject and scopes. The master copy and every
 // grant's copy are sealed again in the same transaction, so the old value
 // opens nowhere afterwards and no grant asks for approval again. Every grant
 // the vendor rejected the old value at is active again: the new value hasn't
@@ -546,11 +671,19 @@ export async function replaceUserKeyValue(
     owner,
     id,
     value,
+    subject,
+    scopes,
     ticket,
-  }: { owner: string; id: string; value: unknown; ticket: unknown },
+  }: {
+    owner: string;
+    id: string;
+    value: unknown;
+    subject?: unknown;
+    scopes?: unknown;
+    ticket: unknown;
+  },
 ): Promise<UserKeyMetadata> {
   assertKeyId(id);
-  let validValue = validateUserKeyValue(value);
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'replace',
@@ -574,10 +707,16 @@ export async function replaceUserKeyValue(
         'an OAuth connection is replaced by signing in through its client again',
       );
     }
+    let { value: validValue, serviceAccount } = sealedValueFor(
+      current.kind as UserKeyKind,
+      { value, subject, scopes },
+    );
     let sealed = keyring.seal(validValue, userKeyBinding(owner, id));
     let [updated] = await txQuery([
-      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
+      `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, service_account_email, service_account_subject, service_account_scopes, service_account_details_at, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
+      `, `,
+      ...SERVICE_ACCOUNT_VALUES(serviceAccount),
       `, NOW()) WHERE id = `,
       param(id),
       ` AND owner = `,
@@ -585,15 +724,20 @@ export async function replaceUserKeyValue(
       ` RETURNING ${METADATA_COLUMNS}`,
     ]);
     if (MINTING_KINDS.has(updated.kind as UserKeyKind)) {
-      // A client's new secret is the fix for a token endpoint that refused the
-      // old one, so the client, and every connection through it, mints again.
-      // Its grants hold markers, not the secret, so they stay as they are.
+      // A minting key's grants hold markers, not its value; each gets a new
+      // one, so a vendor's answer to the old value is told apart from one to
+      // the new. A new value is the fix for a token endpoint or a vendor that
+      // refused the old one, so the key and every one of its grants is
+      // accepted again, and a client, with every connection through it, mints
+      // again.
       await txQuery([
         `UPDATE oauth_clients SET state = 'active', broken_at = NULL WHERE key_id = `,
         param(id),
       ]);
       await resealGrantMarkersIn(txQuery, keyring, owner, id);
-      return toMetadata(updated);
+      await clearKeyRejections(txQuery, id);
+      let cleared = await clearKeyRejected(txQuery, id, 'key-replaced');
+      return toMetadata(cleared ? { ...updated, state: 'active' } : updated);
     }
     let grants = await txQuery([
       `SELECT id, destination, ${sealedColumnsSelect('value')} FROM user_key_grants WHERE key_id = `,

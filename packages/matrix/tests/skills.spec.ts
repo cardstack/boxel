@@ -450,7 +450,7 @@ test.describe('Skills', () => {
     // pending bubble hydrated from localStorage.
     await page
       .locator(
-        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending])',
       )
       .waitFor();
 

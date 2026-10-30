@@ -342,7 +342,7 @@ test.describe('Commands', () => {
     // the bot ends up timestamped *before* the user — flipping idx 0/1.
     await page
       .locator(
-        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending="true"])',
+        '[data-test-message-idx="0"]:not([data-test-ai-assistant-message-pending])',
       )
       .waitFor();
 

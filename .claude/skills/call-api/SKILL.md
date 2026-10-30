@@ -159,8 +159,9 @@ refusal also writes a key-use line.
    `meta.slots: [{name, key}]`), `share-suspended` (409),
    `binding-needs-reapproval` (409), `interactive-use-not-approved` (403) or
    `credential-rejected` (424: the vendor rejected the key at the grant's
-   destination, and no probe is due; see the `user-keys` skill, _Rejected
-   grants_).
+   destination, or Google's token endpoint refused the service-account key,
+   and no probe is due; see the `user-keys` skill, _Rejected grants_ and
+   _Rejected keys_).
    Every invocation off the network is interactive, and every binding is
    approved for pipelines only, so a slotted request is sent only from a
    pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names
@@ -197,7 +198,15 @@ application/json` unless the declaration set one.
    tokens.
 6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
-   in-browser test realm) answers 501.
+   in-browser test realm) answers 501. The realm server's sender first
+   refuses a request addressed to one of the platform's token endpoints
+   (`tokenEndpointAt` in `lib/outbound/token-endpoints.ts`: Google's, at each
+   address Google exchanges an assertion, and each platform OAuth client's
+   token URL), key or no key, with `guard-refused` (502,
+   `meta.reason: 'platform-only'`). A user's own OAuth client is never
+   consulted: any user may store one with any token URL, and one user's must
+   not refuse another's requests. The check is made on the address the
+   operation declares.
 
 The same sender answers `readiness`: what a card learns from
 `@context.keyReadiness` before it calls, through a `_capabilities` pair that
@@ -260,13 +269,13 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                  | Status                           | When                                                                                                                                                                                            |
-| --------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; or the built request left its lowered destination |
-| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                      |
-| `response-too-large`  | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                               |
-| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                |
-| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                         |
+| Code                  | Status                           | When                                                                                                                                                                                                                                                                  |
+| --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`) |
+| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                            |
+| `response-too-large`  | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                                                                                                     |
+| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                      |
+| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                               |
 
 ## The key-use channel
 

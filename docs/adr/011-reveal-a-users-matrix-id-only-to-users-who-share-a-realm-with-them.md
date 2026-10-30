@@ -28,11 +28,6 @@ in one room.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 In this ADR, an end user is a person's Matrix account. The realm server's
 users, the AI bot and the other bots are service users, not end users. A
 Matrix id includes its localpart, so these rules cover the username alone too.
@@ -186,38 +181,4 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
 
 ## 5. Remediation
 
-- `packages/host/app/tools/invite-user-to-room.ts` (`InviteUserToRoomTool`)
-  breaks §1.5. It invites any Matrix id to a room, with no check that the
-  invitee shares a realm with the room's other end users.
-- `packages/matrix/support/synapse/dev/homeserver.yaml`,
-  `packages/matrix/support/synapse/test/homeserver.yaml` and
-  `packages/matrix/support/synapse/test-without-registration-token/homeserver.yaml`
-  break §1.6. They leave the user directory, unauthenticated profile requests,
-  profile lookup over federation, and profile data in invites at their
-  defaults, which are all on. `limit_profile_requests_to_users_who_share_rooms`
-  has to be turned on together with `require_auth_for_profile_requests`:
-  Synapse refuses to start with the first and not the second.
-- `packages/runtime-common/db-queries/realm-permission-queries.ts`
-  (`fetchEffectiveRealmPermissions`) and
-  `packages/realm-server/middleware/multi-realm-authorization.ts`
-  (`hasMatrixProfile`) depend on what §1.6 forbids. Both send an
-  unauthenticated profile request, through `fetchMatrixProfile`, to learn
-  whether the account exists. Under §1.6 that request fails, and a failed
-  lookup withholds the user's `users` grant. In
-  `multi-realm-authorization.ts` the user is the signed-in principal, whose
-  account the realm server verified when it issued their session, so the
-  lookup may not be needed there. `fetchEffectiveRealmPermissions` runs in worker
-  processes that hold no Matrix client, so it needs another way to check an
-  account. Both have to change before the homeserver applies §1.6.
-- `packages/matrix/support/synapse/dev/homeserver.yaml`,
-  `packages/matrix/support/synapse/test/homeserver.yaml` and
-  `packages/matrix/support/synapse/test-without-registration-token/homeserver.yaml`
-  also break §1.6 because they load no module (`modules:`) that implements
-  `user_may_invite` to reject invites between end users who don't share a
-  realm.
-- The homeserver configurations for staging and production are kept outside
-  this repository, so no entry here can name them. They break §1.6 in the same
-  ways as the files above until each one sets the profile and invite settings
-  and loads the invite module. `.github/workflows/sync-synapse-assets.yml`
-  copies `packages/matrix/support/synapse/modules/` to those homeservers, but
-  each configuration still has to list the module under `modules:`.
+Known gaps are listed in [remediation/011.md](remediation/011.md).

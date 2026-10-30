@@ -55,9 +55,18 @@ interface KeyRequestBody {
   meta?: Record<string, unknown>;
 }
 
-// The attributes a request may set.
-const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value', 'oauth']);
-const REPLACE_ATTRIBUTES = new Set(['value']);
+// The attributes a request may set. `subject` and `scopes` belong to a
+// google-service-account key, whose `value` is its JSON key file; `oauth` to
+// an OAuth client.
+const ADD_ATTRIBUTES = new Set([
+  'name',
+  'kind',
+  'value',
+  'subject',
+  'scopes',
+  'oauth',
+]);
+const REPLACE_ATTRIBUTES = new Set(['value', 'subject', 'scopes']);
 
 function serialize(key: UserKeyMetadata) {
   let { id, ...attributes } = key;
@@ -379,7 +388,8 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
     let body = await readBody(ctxt);
     let attributes = attributesOf(body, ADD_ATTRIBUTES);
     // An OAuth client is added with its settings beside its secret; every
-    // other kind is the value alone.
+    // other kind is the value alone, with a service account's subject and
+    // scopes.
     let key: UserKeyMetadata;
     if (attributes.kind === 'oauth-client') {
       key = await addOAuthClient(dbAdapter, secretsKeyring(), {
@@ -397,6 +407,8 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
         name: attributes.name,
         kind: attributes.kind,
         value: attributes.value,
+        subject: attributes.subject,
+        scopes: attributes.scopes,
         ticket: ticketOf(body),
       });
     }
@@ -413,6 +425,8 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       owner,
       id: ctxt.params.keyId,
       value: attributes.value,
+      subject: attributes.subject,
+      scopes: attributes.scopes,
       ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 200, { data: serialize(key) });

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "subject": "Calendar sync drops recurring events",
+      "requester": "Mateo Rossi",
+      "status": "open",
+      "openedOn": "2026-10-11"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../Agent/sam-rivera"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}

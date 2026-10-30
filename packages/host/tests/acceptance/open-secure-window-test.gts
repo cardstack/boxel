@@ -65,10 +65,10 @@ module('Acceptance | open the secure window', function (hooks) {
       static displayName = 'Weather Station';
       static isolated = class Isolated extends Component<typeof this> {
         result = new TrackedObject({ status: '' });
-        open = async (mode: 'enter-key' | 'share-key') => {
+        open = async (mode: 'enter-key' | 'replace-key' | 'share-key') => {
           let tool = new OpenSecureWindowTool(this.args.context!.toolContext!);
           let result = await tool.execute(
-            mode === 'enter-key'
+            mode !== 'share-key'
               ? {
                   mode,
                   cardId: this.args.model.id,
@@ -81,12 +81,16 @@ module('Acceptance | open the secure window', function (hooks) {
         };
         enterKey = () => this.open('enter-key');
         shareKey = () => this.open('share-key');
+        reconnect = () => this.open('replace-key');
         <template>
           <button data-test-enter-key {{on 'click' this.enterKey}}>
             Enter key
           </button>
           <button data-test-share-key {{on 'click' this.shareKey}}>
             Share key
+          </button>
+          <button data-test-reconnect {{on 'click' this.reconnect}}>
+            Reconnect
           </button>
           <span data-test-status>{{this.result.status}}</span>
         </template>
@@ -189,6 +193,35 @@ module('Acceptance | open the secure window', function (hooks) {
     assert.dom('[data-test-status]').hasText('opened');
   });
 
+  test('a card’s Reconnect opens the window to replace the key its operation sends', async function (assert) {
+    let { calls, popups } = stubWindowOpen();
+    await visitWeatherStation();
+    await click('[data-test-reconnect]');
+    await waitFor('[data-test-status]:not(:empty)');
+
+    assert.strictEqual(calls.length, 1, 'one window opened');
+    let opened = new URL(calls[0].url);
+    assert.strictEqual(opened.origin, secureOrigin.origin);
+    assert.strictEqual(
+      opened.pathname,
+      `${secureOrigin.pathname.replace(/\/+$/, '')}/replace-key`,
+      'at the replace-key page',
+    );
+    assert.strictEqual(opened.search, '', 'nothing in the query string');
+    let fragment = new URLSearchParams(opened.hash.slice(1));
+    assert.deepEqual(
+      Object.fromEntries(fragment),
+      {
+        card: `${testRealmURL}WeatherStation/home`,
+        operation: OPERATION,
+        reason: REASON,
+      },
+      'the card and operation name the key; the card never names one itself',
+    );
+    assert.strictEqual(popups[0].opener, null, 'the opener is cut');
+    assert.dom('[data-test-status]').hasText('opened');
+  });
+
   test('a blocked popup shows a button that opens the window', async function (assert) {
     let stub = stubWindowOpen();
     stub.state.blocked = true;
@@ -274,6 +307,41 @@ module('Acceptance | open the secure window', function (hooks) {
     assert.strictEqual(calls.length, 0, 'no window opened');
   });
 
+  test('approving opens the window for the one operation a card is blocked on', async function (assert) {
+    let { calls } = stubWindowOpen();
+    await visitWeatherStation();
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    for (let mode of ['approve', 'review-changes']) {
+      await tool.execute({
+        mode,
+        cardId: `${testRealmURL}WeatherStation/home`,
+        operation: OPERATION,
+      });
+    }
+    assert.deepEqual(
+      calls.map(({ url }) => new URL(url).pathname.split('/').pop()),
+      ['approve', 'review-changes'],
+    );
+    for (let { url } of calls) {
+      let opened = new URL(url);
+      assert.strictEqual(opened.search, '');
+      assert.deepEqual(
+        Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+        { card: `${testRealmURL}WeatherStation/home`, operation: OPERATION },
+        'the card and its one operation, never the others it has',
+      );
+    }
+    await assert.rejects(
+      tool.execute({
+        mode: 'approve',
+        cardId: `${testRealmURL}WeatherStation/home`,
+      }),
+      /an approval names the operation/,
+      'an approval names the operation it is blocked on',
+    );
+  });
+
   test('what the window is opened for must name things it can read', async function (assert) {
     let { calls } = stubWindowOpen();
     await visitWeatherStation();
@@ -281,7 +349,7 @@ module('Acceptance | open the secure window', function (hooks) {
     let tool = new OpenSecureWindowTool(toolContext);
     await assert.rejects(
       tool.execute({ mode: 'delete-key', realm: testRealmURL }),
-      /mode must be one of "enter-key", "share-key", "swap-key"/,
+      /mode must be one of "enter-key", "replace-key", "share-key", "swap-key", "connect", "approve", "review-changes"/,
       'an unsupported mode',
     );
     await assert.rejects(
@@ -307,6 +375,19 @@ module('Acceptance | open the secure window', function (hooks) {
       tool.execute({ mode: 'enter-key', operation: OPERATION }),
       /an operation needs the card/,
       'an operation with nothing it is on',
+    );
+    await assert.rejects(
+      tool.execute({
+        mode: 'replace-key',
+        cardId: `${testRealmURL}WeatherStation/home`,
+      }),
+      /replace-key is for an operation/,
+      'a replace with no operation, whose key the window could not find',
+    );
+    await assert.rejects(
+      tool.execute({ mode: 'replace-key' }),
+      /replace-key is for an operation/,
+      'a replace with nothing it is for',
     );
     assert.strictEqual(calls.length, 0, 'no window opened');
   });

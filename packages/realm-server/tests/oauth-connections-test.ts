@@ -744,8 +744,11 @@ module(basename(import.meta.filename), function (hooks) {
       .query({ destination: `${PROVIDER}/api/` })
       .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
     assert.deepEqual(
-      offered.body.data.map((c: any) => c.attributes.label),
-      ['Boxel (read-only)'],
+      offered.body.data.map((c: any) => [
+        c.attributes.label,
+        c.attributes.name,
+      ]),
+      [['Boxel (read-only)', 'stub']],
     );
     let connected = await connect(TEAMMATE, {
       kind: 'platform',
@@ -758,6 +761,95 @@ module(basename(import.meta.filename), function (hooks) {
     let served = await call(TEAMMATE);
     assert.strictEqual(served.status, 200, JSON.stringify(served.body));
   });
+
+  test("a client shared into the realm is offered in place of the platform's, ahead of the person's own", async function (assert) {
+    await addPlatformClient(dbAdapter, keyring, {
+      name: 'stub',
+      label: 'Boxel (read-only)',
+      secret: CLIENT_SECRET,
+      oauth: clientSettings(),
+    });
+    await addClient(TEAMMATE, {}, 'my app');
+    let offered = async () =>
+      (
+        await request
+          .get('/_oauth/clients')
+          .query({ realm: realmURL.href, destination: `${PROVIDER}/api/` })
+          .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`)
+      ).body.data.map((c: any) => [c.attributes.kind, c.attributes.label]);
+
+    assert.deepEqual(
+      await offered(),
+      [
+        ['platform', 'Boxel (read-only)'],
+        ['own', 'my app'],
+      ],
+      "with no client shared into the realm, the platform's comes first",
+    );
+
+    let client = await addClient(OWNER);
+    let share = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: realmURL.href,
+      keyId: client.id,
+      label: 'Team GitHub app',
+      ticket: await ticket(OWNER, 'share', {
+        keyId: client.id,
+        realm: realmURL,
+      }),
+    });
+    assert.deepEqual(
+      await offered(),
+      [
+        ['share', 'Team GitHub app'],
+        ['own', 'my app'],
+      ],
+      "the realm's shared client takes the platform's place",
+    );
+
+    // Opened for the realm alone, with no destination: a platform client
+    // for another service is still offered beside the shared one.
+    await addPlatformClient(dbAdapter, keyring, {
+      name: 'other-service',
+      label: 'Other service',
+      secret: CLIENT_SECRET,
+      oauth: clientSettings({ apiHosts: [`${OTHER_HOST}/api/`] }),
+    });
+    let realmOnly = await request
+      .get('/_oauth/clients')
+      .query({ realm: realmURL.href })
+      .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
+    assert.deepEqual(
+      realmOnly.body.data.map((c: any) => [
+        c.attributes.kind,
+        c.attributes.label,
+      ]),
+      [
+        ['share', 'Team GitHub app'],
+        ['platform', 'Other service'],
+        ['own', 'my app'],
+      ],
+      "a shared client hides only the platform's client for the same service",
+    );
+
+    let elsewhere = await request
+      .get('/_oauth/clients')
+      .query({ destination: `${PROVIDER}/api/` })
+      .set('Authorization', `Bearer ${createJWT(realm, TEAMMATE, [])}`);
+    assert.deepEqual(
+      elsewhere.body.data.map((c: any) => c.attributes.kind),
+      ['platform', 'own'],
+      "outside the realm, the platform's client is offered",
+    );
+
+    await suspendShare(dbAdapter, { user: OWNER, shareId: share.id });
+    assert.deepEqual(
+      (await offered()).map(([kind]: [string]) => kind),
+      ['platform', 'own'],
+      "a suspended share gives the platform's client back its place",
+    );
+  });
+
   test('a sign-in finishes only for the person who started it', async function (assert) {
     // Someone starts a sign-in and gets another person to approve it at the
     // vendor: the code comes back to the other person's window.
@@ -777,6 +869,91 @@ module(basename(import.meta.filename), function (hooks) {
       `SELECT owner FROM user_keys WHERE kind = 'oauth-connection'`,
     );
     assert.deepEqual(rows, [], 'nothing was stored for anyone');
+  });
+
+  test('a sign-in the CLI starts names its listener, which the callback passes on, and the CLI finishes it with its own session', async function (assert) {
+    let client = await addClient();
+    let cliAuth = await secureSessionAuth(dbAdapter, OWNER, { client: 'cli' });
+    let cli = { port: 51234, state: 'c'.repeat(32) };
+    let start = async (auth: string, attributes: Record<string, unknown>) =>
+      await request
+        .post('/_oauth/connections')
+        .set('Authorization', auth)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'oauth-connect',
+            attributes: {
+              name: 'from the terminal',
+              client: { kind: 'own', keyId: client.id },
+              ...attributes,
+            },
+          },
+          meta: { ticket: await ticket(OWNER, 'add') },
+        });
+
+    let fromWindow = await request
+      .post('/_oauth/connections')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-connect',
+          attributes: {
+            name: 'from the window',
+            client: { kind: 'own', keyId: client.id },
+            cli,
+          },
+        },
+        meta: { ticket: await ticket(OWNER, 'add') },
+      });
+    assert.strictEqual(fromWindow.status, 400, 'only the CLI names a listener');
+    let badListener = await start(cliAuth, { cli: { port: 0, state: 'x' } });
+    assert.strictEqual(badListener.status, 400, badListener.text);
+
+    let started = await start(cliAuth, { cli });
+    assert.strictEqual(started.status, 201, started.text);
+    let authorize = await fetch(started.body.data.attributes.authorizeUrl, {
+      redirect: 'manual',
+    });
+    let callback = new URL(authorize.headers.get('location')!);
+    let back = await request.get(`${callback.pathname}${callback.search}`);
+    let landing = new URL(back.headers.location as string);
+    let fragment = new URLSearchParams(landing.hash.slice(1));
+    assert.deepEqual(
+      [...fragment.keys()].sort(),
+      ['cli_port', 'cli_state', 'code', 'state'],
+      'the page is told where the CLI waits, beside the code and state',
+    );
+    assert.strictEqual(fragment.get('cli_port'), '51234');
+    assert.strictEqual(fragment.get('cli_state'), cli.state);
+
+    let finished = await request
+      .post('/_oauth/connections/complete')
+      .set('Authorization', cliAuth)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'oauth-callback',
+          attributes: {
+            state: fragment.get('state'),
+            code: fragment.get('code'),
+          },
+        },
+      });
+    assert.strictEqual(finished.status, 201, finished.text);
+    let keyId = finished.body.data.attributes.connected;
+    assert.ok(keyId);
+    for (let token of provider.issued) {
+      assert.notOk(finished.text.includes(token), 'no token reaches the CLI');
+    }
+
+    // Once the sign-in is spent, the callback names no listener for it.
+    let again = await request.get(`${callback.pathname}${callback.search}`);
+    assert.false(
+      new URL(again.headers.location as string).hash.includes('cli_port'),
+    );
   });
 
   test("GitHub's own error codes are classified", async function (assert) {

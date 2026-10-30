@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Rooibos Vanilla",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-008-050",
+          "size": "50 g",
+          "price": 13.5
+        },
+        {
+          "sku": "TE-008-100",
+          "size": "100 g",
+          "price": 24.5
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

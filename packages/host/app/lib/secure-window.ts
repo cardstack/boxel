@@ -5,6 +5,10 @@ import { pageURL, withFragment } from './secure-sign-in';
 // secure origin, never in the app page, where card code could read it. Its
 // connect mode signs the user in to a service through an OAuth app, from that
 // same window, so no token the service issues passes through the app page.
+// Its approve mode approves a card's operations, every one on the card's
+// definition that needs the user's approval in one confirmation, and its
+// review-changes mode the same for the ones whose request changed since they
+// were approved; the caller names only the one operation it is blocked on.
 //
 // The app tells the window which page to show and what it is for, and nothing
 // else. Everything it says names something (a realm, a card or a card type,
@@ -16,9 +20,12 @@ import { pageURL, withFragment } from './secure-sign-in';
 
 export const SECURE_WINDOW_MODES = [
   'enter-key',
+  'replace-key',
   'share-key',
   'swap-key',
   'connect',
+  'approve',
+  'review-changes',
 ] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
 
@@ -39,16 +46,28 @@ export type SecureWindowTarget =
       operation?: string;
     };
 
-// An account is connected for a target, or for a realm whose shared apps
-// the window offers, or for nothing in particular.
+// `replace-key` is for an operation, whose key the window finds from the
+// user's binding for it, so its target always names one. An account is
+// connected for a target, or for a realm whose shared apps the window offers,
+// or for nothing in particular.
 export type SecureWindowRequest =
   | { mode: 'enter-key'; target?: SecureWindowTarget; reason?: string }
+  | {
+      mode: 'replace-key';
+      target: SecureWindowTarget & { operation: string };
+      reason?: string;
+    }
   | { mode: 'share-key'; realm: string; reason?: string }
   | { mode: 'swap-key'; realm: string; share: string; reason?: string }
   | {
       mode: 'connect';
       target?: SecureWindowTarget;
       realm?: string;
+      reason?: string;
+    }
+  | {
+      mode: 'approve' | 'review-changes';
+      target: SecureWindowTarget;
       reason?: string;
     };
 
