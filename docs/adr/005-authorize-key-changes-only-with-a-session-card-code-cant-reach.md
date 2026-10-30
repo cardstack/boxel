@@ -40,11 +40,6 @@ the mechanics.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. When an operation needs a secure session
 
 An operation that changes a user's keys, or what their keys may be used for,
@@ -461,19 +456,4 @@ beside a device of its own, and `boxel keys sign-in` signs it in again.
 
 ## 5. Remediation
 
-- The staging and production homeserver configurations are kept outside this
-  repository, so no entry here can name their files. They break §1.7 while
-  they configure Google single sign-on (`oidc_providers`, with an
-  `sso.client_whitelist` that returns to the app).
-- `packages/realm-server/lib/key-shares.ts` (`unshareKey`, `suspendShare`)
-  breaks §1.1. Each changes what a key may be used for without a key write
-  ticket.
-- `packages/postgres/migrations/1792187770930_add-key-shares.js`
-  (`key_shares_follow_permissions`) breaks §1.1. Restoring a user's write
-  access to a realm resumes their suspended shares there, through a
-  permissions change the app's session can make.
-- `packages/realm-server/handlers/realm-destruction-utils.ts` breaks §1.1.
-  Deleting a realm deletes its key shares without a secure session.
-- `packages/realm-server/handlers/handle-secure-session.ts`
-  (`handleGoogleSignInStart`) breaks §1.3. The Google sign-in start route
-  answers a request from any `Origin`.
+Known gaps are listed in [remediation/005.md](remediation/005.md).

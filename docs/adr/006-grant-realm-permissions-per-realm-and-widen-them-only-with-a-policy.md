@@ -35,11 +35,6 @@ a policy.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. Permissions apply to the whole realm
 
 A realm permission MUST be granted for a whole realm. The permission store
@@ -157,4 +152,4 @@ may read a realm, nothing elsewhere takes that away.
 
 ## 5. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/006.md](remediation/006.md).
