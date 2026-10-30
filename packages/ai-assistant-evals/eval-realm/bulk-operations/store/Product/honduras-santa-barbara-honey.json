@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Honduras Santa Bárbara Honey",
+      "category": "coffee",
+      "origin": "Santa Bárbara, Honduras",
+      "variants": [
+        {
+          "sku": "CF-064-250",
+          "size": "250 g",
+          "price": 18.99
+        },
+        {
+          "sku": "CF-064-500",
+          "size": "500 g",
+          "price": 35.99
+        },
+        {
+          "sku": "CF-064-1KG",
+          "size": "1 kg",
+          "price": 63.5
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
