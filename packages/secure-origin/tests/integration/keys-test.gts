@@ -145,6 +145,24 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
 
 // Chooses a key file. The module waits on file reads
 // (`setupWaitedBrowserWork`), so this returns once the page has read it.
+// Choosing a file and typing, without settling: for a test that holds a
+// request open, where `triggerEvent` and `fillIn` would wait on it.
+function chooseKeyFileNow(contents: string, name = 'boxel-test.json') {
+  let input = document.querySelector<HTMLInputElement>(
+    '[data-test-service-account-file]',
+  )!;
+  let files = new DataTransfer();
+  files.items.add(new File([contents], name, { type: 'application/json' }));
+  input.files = files.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function typeNow(selector: string, text: string) {
+  let input = document.querySelector<HTMLInputElement>(selector)!;
+  input.value = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
@@ -2189,12 +2207,12 @@ module('Integration | key pages', function (hooks) {
       visitShell(OPENED);
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-form]');
-      await waitUntil(() =>
+      assert.true(
         requests.some(
           (r) => r.method === 'GET' && r.path === '_user-keys/key-1',
         ),
+        'asks for the key’s details',
       );
-      await settled();
       assert
         .dom('[data-test-service-account-replace-note]')
         .includesText(
@@ -2288,11 +2306,9 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell(OPENED);
       await render(ReplaceKeyPage);
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-service-account-replace-note]')
-          ?.textContent?.includes('start as the key has them now'),
-      );
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
@@ -2333,14 +2349,7 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell(OPENED);
       await render(ReplaceKeyPage);
-      await waitUntil(
-        () =>
-          (
-            document.querySelector(
-              '[data-test-service-account-scopes]',
-            ) as HTMLInputElement | null
-          )?.value === 'openid',
-      );
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('', 'a key acting as itself starts with Act as empty');
@@ -2368,23 +2377,26 @@ module('Integration | key pages', function (hooks) {
         },
       });
       visitShell(OPENED);
-      await render(ReplaceKeyPage);
-      await waitFor('[data-test-service-account-file]');
-      assert
-        .dom('[data-test-service-account-replace-note]')
-        .doesNotExist(
-          'nothing is said about the replace until the key is read',
-        );
-      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
-      answer();
-      await waitUntil(
-        () =>
-          (
-            document.querySelector(
-              '[data-test-service-account-scopes]',
-            ) as HTMLInputElement | null
-          )?.value === 'openid',
-      );
+      // Not awaited: the key read is held back until answered, and anything
+      // that settles waits for it. It is answered on every path: a stubbed
+      // request still open keeps its waiter pending, and every later test's
+      // `settled()` with it.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-file]');
+        assert
+          .dom('[data-test-service-account-replace-note]')
+          .doesNotExist(
+            'nothing is said about the replace until the key is read',
+          );
+        chooseKeyFileNow(SERVICE_ACCOUNT_FILE);
+        await waitFor('[data-test-service-account-email]');
+      } finally {
+        answer();
+      }
+      await rendered;
+      await settled();
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com');
@@ -2412,16 +2424,19 @@ module('Integration | key pages', function (hooks) {
         },
       });
       visitShell(OPENED);
-      await render(ReplaceKeyPage);
-      await waitFor('[data-test-service-account-scopes]');
-      await fillIn('[data-test-service-account-scopes]', 'email');
-      answer();
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-replace-key-where]')
-          ?.textContent?.includes('workspaces use this key'),
-      );
+      // Not awaited, and answered on every path, as above.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-scopes]');
+        typeNow('[data-test-service-account-scopes]', 'email');
+      } finally {
+        answer();
+      }
+      await rendered;
       await settled();
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('workspaces use this key', 'the key read has answered');
       assert.dom('[data-test-service-account-scopes]').hasValue('email');
       assert
         .dom('[data-test-service-account-replace-note]')
