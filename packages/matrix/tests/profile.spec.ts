@@ -113,12 +113,13 @@ test.describe('Profile', () => {
     await page.locator('[data-test-login-btn]').click();
   }
 
-  // CI HACK (do not merge): Synapse's answer to the sign-out is held until the
-  // user has signed back in, then released partway through the signed-in
-  // checks: even repeats with the profile popover open, odd repeats before it.
-  test('HACK sign-out answered after signing back in', async ({
-    page,
-  }, testInfo) => {
+  // CI HACK (do not merge): Synapse's answer to the sign-out is held, then
+  // released a set time after the sign-in button is clicked, a different time
+  // on each repeat, so it lands at each point of the sign-in.
+  const RELEASE_OFFSETS_MS = [0, 100, 250, 500, 750, 1000, 1500, 2500];
+  test('HACK sign-out answered during sign-in', async ({ page }, testInfo) => {
+    let offset =
+      RELEASE_OFFSETS_MS[testInfo.repeatEachIndex % RELEASE_OFFSETS_MS.length];
     await page.locator('[data-test-confirm-cancel-button]').click();
     let release!: () => void;
     let held = new Promise<void>((resolve) => (release = resolve));
@@ -136,11 +137,18 @@ test.describe('Profile', () => {
       }
     });
     page.on('request', (request) => {
+      let url = request.url();
+      if (url.includes('/_matrix/client/v3/login')) {
+        note(`${request.method()} ${new URL(url).pathname}`);
+      }
+    });
+    page.on('response', (response) => {
+      let url = response.url();
       if (
-        request.method() === 'GET' &&
-        request.url().endsWith('/_matrix/client/v3/login')
+        url.includes('/_matrix/client/v3/login') ||
+        url.includes('/_matrix/client/v3/logout')
       ) {
-        note('login form built');
+        note(`answered ${response.status()} ${new URL(url).pathname}`);
       }
     });
     page.on('console', (message) => {
@@ -151,42 +159,39 @@ test.describe('Profile', () => {
     page.on('pageerror', (error) => note(`pageerror: ${error.message}`));
 
     await signOutAndBackIn(page, user.username, user.password);
-    await expect(page.locator('[data-test-profile-icon-button]')).toBeVisible();
-    note('signed back in');
-
-    let releaseIt = async () => {
-      let answered = page.waitForResponse('**/_matrix/client/v3/logout');
+    note(`sign-in clicked; releasing logout in ${offset}ms`);
+    let released = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, offset));
+      note('releasing logout');
       release();
-      let response = await answered;
-      note(`logout answered ${response.status()}`);
-    };
+    })();
     page.setDefaultTimeout(30_000);
     try {
-      if (testInfo.repeatEachIndex % 2 === 0) {
-        await page.locator('[data-test-profile-icon-button]').click();
-        await releaseIt();
-        await page.locator('[data-test-settings-button]').click();
-        await expect(page.locator('[data-test-current-email]')).toContainText(
-          userEmail,
-          { timeout: 30_000 },
-        );
-        await page.locator('[data-test-confirm-cancel-button]').click();
-      } else {
-        await releaseIt();
-      }
-      note('checking signed-in state');
       await assertLoggedIn(page, {
         userId: user.credentials.userId,
         displayName: user.username,
         email: userEmail,
       });
-      note(`url ${page.url()}`);
+      note('signed-in checks passed');
+      await released;
+      // Leave time for a late route change, then check again.
+      await page.waitForTimeout(1500);
+      await assertLoggedIn(page, {
+        userId: user.credentials.userId,
+        displayName: user.username,
+        email: userEmail,
+      });
+      note(`second signed-in checks passed at ${page.url()}`);
     } catch (e) {
       if (e instanceof Error) {
         note(`url ${page.url()}`);
-        e.message += `\n\nEvents:\n${events.join('\n')}`;
+        e.message += `\n\nOffset ${offset}ms. Events:\n${events.join('\n')}`;
       }
       throw e;
+    } finally {
+      console.log(
+        `HACK-EVENTS offset=${offset} repeat=${testInfo.repeatEachIndex}\n${events.join('\n')}`,
+      );
     }
   });
 

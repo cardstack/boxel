@@ -28,4 +28,4 @@ export MATRIX_TEST_SHARD
 WAIT_ON_TIMEOUT=600000 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY" \
-  'pnpm playwright test tests/profile.spec.ts --grep "HACK|change password in settings|new password does not meet|current password is invalid" --repeat-each=16 --retries=0'
+  'pnpm playwright test tests/profile.spec.ts --grep "HACK" --repeat-each=32 --retries=0'
