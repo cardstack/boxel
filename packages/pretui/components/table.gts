@@ -1,6 +1,6 @@
 // Pretui — Table: the DataGrid shell as a yieldable primitive for custom tables.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '../internal/template-helpers';
 
 // Table — the DataGrid shell as a yieldable primitive (added for the
 // freestyle dogfood pass: composite tables that need custom cell content —

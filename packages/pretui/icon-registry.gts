@@ -1,68 +1,37 @@
-// GENERATED from scripts/pretui-icon-assignments.json by
-// scripts/pretui-inventory.py — do not hand-edit.
-import {
-  AiBw,
-  ArrowRight,
-  ArrowUp,
-  Atom,
-  BoxelIcon,
-  Card,
-  CardInstance,
-  CaretDown,
-  CheckMark,
-  ChevronRight,
-  Copy,
-  DiagonalArrowLeftUp,
-  DropdownArrowDown,
-  DropdownArrowFilled,
-  Embedded,
-  ExclamationCircle,
-  Eye,
-  Field,
-  File,
-  FileAlert,
-  Fitted,
-  Folder,
-  Form,
-  FourLines,
-  Grid3x3,
-  Group,
-  Head,
-  HighlightIcon,
-  IconCircle,
-  IconCircleSelected,
-  IconCode,
-  IconFunnel,
-  IconGlobe,
-  IconGrid,
-  IconHexagon,
-  IconInherit,
-  IconLink,
-  IconList,
-  IconMinusCircle,
-  IconPencil,
-  IconPlus,
-  IconPlusCircle,
-  IconPlusThin,
-  IconSearch,
-  IconSearchThick,
-  IconTurnDownRight,
-  ImagePlaceholder,
-  Isolated,
-  LoadingIndicator,
-  Lock,
-  Rows4,
-  Send,
-  Sparkle,
-  StarFilled,
-  StarHalfFill,
-  SuccessBordered,
-  ThreeDotsHorizontal,
-  TriangleLeft,
-  TriangleRight,
-  Warning,
-} from '@cardstack/boxel-ui/icons';
+// The kebab-case entries are GENERATED from scripts/pretui-icon-assignments.json
+// by scripts/pretui-inventory.py — do not hand-edit them. The PascalCase
+// entries at the end of REGISTRY are maintained by hand.
+import LegacyAlignJustify from '@cardstack/boxel-icons/align-justify';
+import LegacyAperture from '@cardstack/boxel-icons/aperture';
 import LegacyArrowDown from '@cardstack/boxel-icons/arrow-down';
+import LegacyArrowUp from '@cardstack/boxel-icons/arrow-up';
+import LegacyArrowUpLeft from '@cardstack/boxel-icons/arrow-up-left';
+import LegacyAtom from '@cardstack/boxel-icons/atom';
+import LegacyBookCopy from '@cardstack/boxel-icons/book-copy';
+import LegacyBox from '@cardstack/boxel-icons/box';
+import LegacyCaretDown from '@cardstack/boxel-icons/caret-down';
+import LegacyCaretLeft from '@cardstack/boxel-icons/caret-left';
+import LegacyCaretRight from '@cardstack/boxel-icons/caret-right';
+import LegacyChevronRight from '@cardstack/boxel-icons/chevron-right';
+import LegacyCircle from '@cardstack/boxel-icons/circle';
+import LegacyCornerDownRight from '@cardstack/boxel-icons/corner-down-right';
+import LegacyCreditCard from '@cardstack/boxel-icons/credit-card';
+import LegacyCropPortrait from '@cardstack/boxel-icons/crop-portrait';
+import LegacyFile from '@cardstack/boxel-icons/file';
+import LegacyFileAlert from '@cardstack/boxel-icons/file-alert';
+import LegacyFolder from '@cardstack/boxel-icons/folder';
+import LegacyForm from '@cardstack/boxel-icons/form';
+import LegacyFunnel from '@cardstack/boxel-icons/funnel';
+import LegacyGitFork from '@cardstack/boxel-icons/git-fork';
+import LegacyGlobe from '@cardstack/boxel-icons/globe';
+import LegacyHexagon from '@cardstack/boxel-icons/hexagon';
+import LegacyHighlighter from '@cardstack/boxel-icons/highlighter';
+import LegacyLock from '@cardstack/boxel-icons/lock';
+import LegacyRectangleVertical from '@cardstack/boxel-icons/rectangle-vertical';
+import LegacySend from '@cardstack/boxel-icons/send';
+import LegacyShare2 from '@cardstack/boxel-icons/share-2';
+import LegacySparkle from '@cardstack/boxel-icons/sparkle';
+import LegacyStarHalf from '@cardstack/boxel-icons/star-half';
 import PretuiIcon001 from '@cardstack/boxel-icons/activity';
 import PretuiIcon002 from '@cardstack/boxel-icons/activity-heartbeat';
 import PretuiIcon003 from '@cardstack/boxel-icons/adjustments-horizontal';
@@ -684,66 +653,68 @@ const REGISTRY: Record<string, any> = {
   workflow: PretuiIcon307,
   'zoom-in': PretuiIcon308,
   'zoom-pan': PretuiIcon309,
-  AiBw,
-  ArrowRight,
-  ArrowUp,
-  Atom,
-  BoxelIcon,
-  Card,
-  CardInstance,
-  CaretDown,
-  CheckMark,
-  ChevronRight,
-  Copy,
-  DiagonalArrowLeftUp,
-  DropdownArrowDown,
-  DropdownArrowFilled,
-  Embedded,
-  ExclamationCircle,
-  Eye,
-  Field,
-  File,
-  FileAlert,
-  Fitted,
-  Folder,
-  Form,
-  FourLines,
-  Grid3x3,
-  Group,
-  Head,
-  HighlightIcon,
-  IconCircle,
-  IconCircleSelected,
-  IconCode,
-  IconFunnel,
-  IconGlobe,
-  IconGrid,
-  IconHexagon,
-  IconInherit,
-  IconLink,
-  IconList,
-  IconMinusCircle,
-  IconPencil,
-  IconPlus,
-  IconPlusCircle,
-  IconPlusThin,
-  IconSearch,
-  IconSearchThick,
-  IconTurnDownRight,
-  ImagePlaceholder,
-  Isolated,
-  LoadingIndicator,
-  Lock,
-  Rows4,
-  Send,
-  Sparkle,
-  StarFilled,
-  StarHalfFill,
-  SuccessBordered,
-  ThreeDotsHorizontal,
-  TriangleLeft,
-  TriangleRight,
-  Warning,
+  // Names Spec cards' `icon` fields store, each resolved to a boxel-icons
+  // icon; a boxel-ui export name is stored data, so its key stays.
+  AiBw: LegacyAperture,
+  ArrowRight: PretuiIcon009,
+  ArrowUp: LegacyArrowUp,
+  Atom: LegacyAtom,
+  BoxelIcon: LegacyBox,
+  Card: LegacyCreditCard,
+  CardInstance: LegacyBookCopy,
+  CaretDown: LegacyCaretDown,
+  CheckMark: PretuiIcon059,
+  ChevronRight: LegacyChevronRight,
+  Copy: PretuiIcon092,
+  DiagonalArrowLeftUp: LegacyArrowUpLeft,
+  DropdownArrowDown: PretuiIcon061,
+  DropdownArrowFilled: LegacyCaretDown,
+  Embedded: PretuiIcon232,
+  ExclamationCircle: PretuiIcon066,
+  Eye: PretuiIcon102,
+  Field: PretuiIcon289,
+  File: LegacyFile,
+  FileAlert: LegacyFileAlert,
+  Fitted: LegacyCropPortrait,
+  Folder: LegacyFolder,
+  Form: LegacyForm,
+  FourLines: LegacyAlignJustify,
+  Grid3x3: PretuiIcon129,
+  Group: PretuiIcon300,
+  Head: LegacyShare2,
+  HighlightIcon: LegacyHighlighter,
+  IconCircle: LegacyCircle,
+  IconCircleSelected: PretuiIcon070,
+  IconCode: PretuiIcon085,
+  IconFunnel: LegacyFunnel,
+  IconGlobe: LegacyGlobe,
+  IconGrid: PretuiIcon159,
+  IconHexagon: LegacyHexagon,
+  IconInherit: LegacyGitFork,
+  IconLink: PretuiIcon167,
+  IconList: PretuiIcon169,
+  IconMinusCircle: PretuiIcon073,
+  IconPencil: PretuiIcon218,
+  IconPlus: PretuiIcon225,
+  IconPlusCircle: PretuiIcon074,
+  IconPlusThin: PretuiIcon225,
+  IconSearch: PretuiIcon250,
+  IconSearchThick: PretuiIcon250,
+  IconTurnDownRight: LegacyCornerDownRight,
+  ImagePlaceholder: PretuiIcon140,
+  Isolated: LegacyRectangleVertical,
+  LoadingIndicator: PretuiIcon183,
+  Lock: LegacyLock,
+  Rows4: PretuiIcon241,
+  Send: LegacySend,
+  Sparkle: LegacySparkle,
+  StarFilled: PretuiIcon277,
+  StarHalfFill: LegacyStarHalf,
+  SuccessBordered: PretuiIcon067,
+  ThreeDotsHorizontal: PretuiIcon100,
+  TriangleLeft: LegacyCaretLeft,
+  TriangleRight: LegacyCaretRight,
+  Warning: PretuiIcon297,
   ArrowDown: LegacyArrowDown,
 };
 
