@@ -388,6 +388,16 @@ interface RelationshipOptions extends Options {
   eager?: boolean;
 }
 
+// Who owns a click on a linked card rendered as a field
+// (`<@fields.author @interactions='self' />`):
+//   'open'   (default) the card opens: a link over it on a published site,
+//            the environment's click in the app;
+//   'self'   the card itself, for live children (a player, a form). The app
+//            still outlines it on hover, but never opens it on a click;
+//   'chrome' the app's click only; inert on a published site;
+//   'none'   nobody: no link, no outline, no click.
+export type CardInteractions = 'open' | 'self' | 'chrome' | 'none';
+
 export interface CardContext<T extends CardDef = CardDef> {
   actions?: { openCard: OpenCardFn };
   // On a published site, the page's path relative to the site, with its
@@ -414,6 +424,7 @@ export interface CardContext<T extends CardDef = CardDef> {
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;
+        interactions?: CardInteractions;
       };
     };
   }>;

@@ -1,9 +1,11 @@
 import type {
   CardContext,
+  CardInteractions,
   FieldFormats,
   CardCrudFunctions,
   OpenCardFn,
 } from './card-api';
+import { CardLink } from './card-link';
 import {
   type Box,
   type Field,
@@ -70,6 +72,11 @@ export interface BoxComponentSignature {
        * preview) thread the owning card's realm in directly.
        */
       consumingRealm?: URL;
+      /**
+       * Who owns a click on a linked card rendered here. See
+       * `CardInteractions`. Default: 'open'.
+       */
+      interactions?: CardInteractions;
     };
   };
   Blocks: {};
@@ -95,6 +102,29 @@ const DEFAULT_CARD_CONTEXT = {
   getCards: () => {},
   getCardCollection: () => {},
 };
+
+// Whether a linked card rendered as a field gets a link over it, so it opens
+// on a click. In the app the environment's own click opens it (the hover
+// outline and label come with that), so the link is for everywhere else: a
+// published site and its prerendered HTML. Isolated and edit formats are a
+// card shown in full or being edited, not a tile pointing at one.
+function coversCard(
+  field: Field | undefined,
+  format: Format,
+  interactions: CardInteractions | undefined,
+  context: CardContext,
+  card: CardDef,
+): boolean {
+  return Boolean(
+    field &&
+    (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
+    format !== 'isolated' &&
+    format !== 'edit' &&
+    (interactions ?? 'open') === 'open' &&
+    context.mode !== 'operator' &&
+    card.id,
+  );
+}
 
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {
   @consume(CardContextName) declare dynamicCardContext: CardContext;
@@ -433,6 +463,7 @@ export function getBoxComponent(
                             format=effectiveFormats.cardDef
                             fieldType=field.fieldType
                             fieldName=field.name
+                            interactions=@interactions
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
@@ -464,6 +495,20 @@ export function getBoxComponent(
                               @typeConstraint={{@typeConstraint}}
                             />
                           </CurrentCardProvider>
+                          {{#if
+                            (coversCard
+                              field
+                              effectiveFormats.cardDef
+                              @interactions
+                              context
+                              card
+                            )
+                          }}
+                            <CardLink
+                              @id={{card.id}}
+                              @cover={{true}}
+                            >{{card.cardTitle}}</CardLink>
+                          {{/if}}
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}
