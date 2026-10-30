@@ -1081,8 +1081,10 @@ export default class Room extends Component<Signature> {
       this.landedRoomIds.add(this.args.roomId);
       this.landOnFirstUnread(scrollState);
     }
-    // The reader's own new message, however it was sent (the composer, "Fix
-    // with AI", a card's command): follow the reply from here.
+    // The reader's own new message, however this tab sent it (the composer,
+    // "Fix with AI", a card's command): follow the reply from here. One the
+    // same user sent from another tab or device does not move a reader who
+    // scrolled up.
     // Once per message, as main does it: a message's scroller re-registers
     // on every change inside it (pills loading, a ring turning), and
     // following again each time would drag a reader who scrolled up back
@@ -1093,6 +1095,7 @@ export default class Room extends Component<Signature> {
     if (
       index === this.messages.length - 1 &&
       own?.author.userId === this.matrixService.profile.userId &&
+      this.matrixService.wasSentFromThisTab(own.clientGeneratedId) &&
       !isRunDelivery(own.clientGeneratedId) &&
       own.eventId !== this.followedOwnMessageId
     ) {
