@@ -36,11 +36,11 @@ only scope that reaches private repositories, `repo`, can also write.
 ## Connecting
 
 1. The secure window's `connect` page lists the clients a person may use
-   (`GET /_oauth/clients?realm=&destination=`): the platform's, the
-   authorization-code clients shared into the realm (to anyone who can read it)
-   and their own, each with the scopes it asks for. With a destination, only
-   clients whose API hosts cover it. A client's secret and owner are never in
-   the answer.
+   (`GET /_oauth/clients?realm=&destination=`): the platform's (each with its
+   `name`), the authorization-code clients shared into the realm (to anyone
+   who can read it) and their own, each with the scopes it asks for. With a
+   destination, only clients whose API hosts cover it. A client's secret and
+   owner are never in the answer.
 2. The window mints a key write ticket (`add`, or `replace` of the connection
    for a reconnect) and posts `POST /_oauth/connections` with its own secure
    session. The realm server spends the ticket, stores a connect request (the
@@ -61,6 +61,24 @@ only scope that reaches private repositories, `repo`, can also write.
    the vendor therefore never puts the second person's account under the
    first's. **No token ever passes through a browser**; only the one-use code
    does, and it is useless without the PKCE verifier and client secret.
+
+From the terminal, `boxel keys add <name> --kind oauth-client …` adds a
+client, `boxel keys clients [--realm]` lists the same connectable clients
+(a platform client by its `name`, as `platform:<name>`), and
+`boxel keys connect <name> --client …` signs in through one without the
+browser holding a session of its own. The CLI listens on a loopback port and
+starts the sign-in (step 2) with its own secure session, naming that listener
+as `cli: {port, state}` (only a CLI session may name one, 400 otherwise); the
+sign-in in progress records it (`oauth_connect_requests.cli_port`,
+`cli_state`). In step 3 the callback reads it back by the `state` and adds
+`cli_port` and `cli_state` to the `connected` page's fragment. The page then
+finishes nothing and needs no session: once the user presses **Continue in
+the terminal** it posts the code and `state` (or `oauth_error`) to the
+listener, and the CLI finishes the sign-in with
+`POST /_oauth/connections/complete` under its own secure session, which the
+realm server accepts only for the user who started it. The CLI sees the
+one-use code, which is useless without the PKCE verifier and client secret,
+and never a token.
 
 The callback's query string carries the authorization code. `/_oauth` is a key
 route, so the request log and telemetry keep only its method and path; the load
