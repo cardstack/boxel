@@ -1920,10 +1920,11 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('[data-test-publish-realm-modal]').exists();
       });
 
-      test('a publish whose readiness wait times out still records its publish time', async function (assert) {
+      test('a publish whose HTML is still rendering when the wait times out says so and records its publish time', async function (assert) {
         getService('realm-server').waitForRealmReady = async () => {
           throw new ReadinessTimeoutError(
             'Timed out after 300000ms waiting for the realm to pass readiness check',
+            { stage: 'prerender-html' },
           );
         };
         publishDeferred.fulfill();
@@ -1948,6 +1949,35 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-last-published-at]')
           .containsText('Published', 'the accepted publish keeps its time');
+      });
+
+      test('a readiness timeout after rendering stalls shows its own reason', async function (assert) {
+        let reason =
+          'Timed out after 300000ms waiting for the realm to pass readiness check, with no progress for the last 300000ms: HTTP 503 (not ready: prerender-html)';
+        getService('realm-server').waitForRealmReady = async () => {
+          throw new ReadinessTimeoutError(reason, {
+            stage: 'prerender-html',
+            stalled: true,
+          });
+        };
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        await waitFor(`[data-test-domain-publish-error="${defaultUrl}"]`);
+
+        assert
+          .dom(`[data-test-domain-publish-error="${defaultUrl}"] .error-text`)
+          .hasText(reason);
+        assert.dom('[data-test-last-published-at]').containsText('Published');
       });
 
       test('shows inline error for failed domain while allowing successful ones', async function (assert) {

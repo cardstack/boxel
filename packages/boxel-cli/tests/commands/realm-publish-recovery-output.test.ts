@@ -109,7 +109,7 @@ describe('publishRealm readiness deadline', () => {
     vi.clearAllMocks();
   });
 
-  it('caps the whole wait at an explicit timeout', async () => {
+  it('caps the whole wait at an explicit timeout, keeping the stall window', async () => {
     await publishRealm(
       'http://localhost:4201/source/',
       'http://published.localhost:4201/',
@@ -122,7 +122,7 @@ describe('publishRealm readiness deadline', () => {
 
     expect(vi.mocked(waitForReady)).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ timeoutMs: 600_000, maxWaitMs: 600_000 }),
+      expect.objectContaining({ timeoutMs: 300_000, maxWaitMs: 600_000 }),
     );
   });
 

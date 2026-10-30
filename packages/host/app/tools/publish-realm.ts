@@ -11,6 +11,8 @@ import config from '@cardstack/host/config/environment';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import { PublishPendingError } from '../services/realm';
+
 import type RealmService from '../services/realm';
 import type { PublishabilityViolation } from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -89,6 +91,16 @@ export default class PublishRealmTool extends HostBaseTool<
         return new PublishTargetResult({
           publishedRealmURL,
           status: 'published',
+        });
+      }
+      if (
+        outcome?.status === 'rejected' &&
+        outcome.reason instanceof PublishPendingError
+      ) {
+        return new PublishTargetResult({
+          publishedRealmURL,
+          status: 'published-pending',
+          error: errorMessage(outcome.reason),
         });
       }
       return new PublishTargetResult({

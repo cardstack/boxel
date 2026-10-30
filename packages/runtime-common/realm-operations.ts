@@ -48,9 +48,20 @@ export class RealmOperationError extends Error {
 // Thrown when `waitForReady` gives up before the realm became ready. The work
 // it waited on may still finish, unlike a refusal such as a failed boot index.
 export class ReadinessTimeoutError extends Error {
-  constructor(message: string) {
+  // The `X-Boxel-Not-Ready` stage of the last readiness response, if the last
+  // poll got one.
+  stage: string | undefined;
+  // Whether the wait gave up because progress stopped advancing, rather than
+  // at its ceiling or with no progress to read.
+  stalled: boolean;
+  constructor(
+    message: string,
+    { stage, stalled = false }: { stage?: string; stalled?: boolean } = {},
+  ) {
     super(message);
     this.name = 'ReadinessTimeoutError';
+    this.stage = stage;
+    this.stalled = stalled;
   }
 }
 
@@ -425,7 +436,11 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   let readinessUrl = readinessUrlObj.href;
   let startedAt = Date.now();
   let lastAdvancedAt = startedAt;
+  // The most files completed in each pass seen so far, keyed by phase and
+  // total, since every indexing or render job starts its counts from zero.
+  let furthest = new Map<string, number>();
   let lastError: string | undefined;
+  let lastStage: string | undefined;
   let terminalFailure: string | undefined;
   let onProgress = input.onProgress;
   let deadline = () =>
@@ -438,7 +453,15 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
         client,
         publishedRealmURL,
         (progress) => {
-          lastAdvancedAt = Date.now();
+          let pass = `${progress.phase}:${progress.totalFiles}`;
+          let best = furthest.get(pass);
+          if (best === undefined || progress.filesCompleted > best) {
+            // The first reading is only a baseline.
+            if (furthest.size > 0) {
+              lastAdvancedAt = Date.now();
+            }
+            furthest.set(pass, progress.filesCompleted);
+          }
           onProgress(progress);
         },
         input.progressPollIntervalMs ?? DEFAULT_PROGRESS_POLL_INTERVAL_MS,
@@ -447,9 +470,17 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
 
   try {
     while (Date.now() < deadline()) {
+      // The readiness check holds the request open, so abort it at the
+      // deadline rather than letting a held request carry the wait past it.
+      let controller = new AbortController();
+      let abortTimer = setTimeout(
+        () => controller.abort(),
+        Math.max(0, deadline() - Date.now()),
+      );
       try {
         let response = await client.authedFetch(readinessUrl, {
           headers: { Accept: JSONAPI_MIME },
+          signal: controller.signal,
         });
         if (response.ok) {
           return;
@@ -467,7 +498,11 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
           break;
         }
         lastError = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}`;
+        lastStage = stage ?? undefined;
       } catch (error) {
+        if (controller.signal.aborted) {
+          continue;
+        }
         // Node's fetch reports transport failures as a bare "fetch failed" and
         // puts the real reason (DNS, TLS, ECONNRESET) on `cause`, so the timeout
         // message needs both to be attributable.
@@ -480,6 +515,9 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
             cause instanceof Error ? cause.message : String(cause)
           })`;
         }
+        lastStage = undefined;
+      } finally {
+        clearTimeout(abortTimer);
       }
       let remaining = deadline() - Date.now();
       if (remaining <= 0) {
@@ -498,13 +536,12 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
   }
   let waitedMs = Date.now() - startedAt;
   let stalled =
-    onProgress && lastAdvancedAt + timeoutMs <= startedAt + maxWaitMs
-      ? `, with no progress for the last ${timeoutMs}ms`
-      : '';
+    furthest.size > 0 && lastAdvancedAt + timeoutMs <= startedAt + maxWaitMs;
   throw new ReadinessTimeoutError(
-    `Timed out after ${onProgress ? waitedMs : timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${stalled}${
-      lastError ? `: ${lastError}` : ''
-    }`,
+    `Timed out after ${onProgress ? waitedMs : timeoutMs}ms waiting for ${publishedRealmURL} to pass readiness check${
+      stalled ? `, with no progress for the last ${timeoutMs}ms` : ''
+    }${lastError ? `: ${lastError}` : ''}`,
+    { stage: lastStage, stalled },
   );
 };
 

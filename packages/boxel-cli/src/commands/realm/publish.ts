@@ -30,8 +30,8 @@ export interface PublishOptions {
   /** Wait for the published realm to pass readiness check (default: true). */
   waitForReady?: boolean;
   /**
-   * Total time the readiness wait may take, in milliseconds. Without it, the
-   * wait gives up after 300_000ms without progress, or after an hour.
+   * Total time the readiness wait may take, in milliseconds (default: an
+   * hour). Either way the wait gives up after 300_000ms without progress.
    */
   timeoutMs?: number;
   /**
@@ -174,7 +174,10 @@ export async function publishRealm(
     try {
       await waitForReady(client, {
         publishedRealmURL: result.publishedRealmURL,
-        timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        timeoutMs: Math.min(
+          DEFAULT_TIMEOUT_MS,
+          options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        ),
         maxWaitMs: options.timeoutMs,
         // A published realm's rendered HTML is its deliverable, so wait until it
         // is live (not just indexed) before reporting the publish complete.
@@ -227,7 +230,7 @@ export function registerPublishCommand(realm: Command): void {
     .option('--no-wait', 'Return as soon as the server accepts the publish')
     .option(
       '--timeout <ms>',
-      `Total time to wait for readiness, in milliseconds (default: give up after ${DEFAULT_TIMEOUT_MS} without progress, or after an hour)`,
+      `Total time to wait for readiness, in milliseconds (default: an hour). Gives up sooner after ${DEFAULT_TIMEOUT_MS} without progress`,
       parseTimeoutOption,
     )
     .option(

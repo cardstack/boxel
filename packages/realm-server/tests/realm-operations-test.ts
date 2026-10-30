@@ -352,6 +352,145 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('waitForReady counts only forward progress as an advance', async function (assert) {
+      let progressPolls = 0;
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          // Alternates between two readings, so it changes on every poll
+          // without moving forward.
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: {
+                phase: 'render',
+                filesCompleted: progressPolls++ % 2 ? 0 : 5,
+                totalFiles: 9,
+              },
+            },
+          });
+        }
+        return new Response(null, {
+          status: 503,
+          headers: { 'X-Boxel-Not-Ready': 'prerender-html' },
+        });
+      });
+
+      let startedAt = Date.now();
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 200,
+          pollIntervalMs: 5,
+          progressPollIntervalMs: 5,
+          onProgress: () => {},
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.strictEqual(
+          (err as ReadinessTimeoutError).stage,
+          'prerender-html',
+        );
+        assert.true((err as ReadinessTimeoutError).stalled);
+        assert.true(
+          /with no progress for the last 200ms/.test((err as Error).message),
+          (err as Error).message,
+        );
+        assert.true(Date.now() - startedAt < 2000, 'gave up as a stall');
+      }
+    });
+
+    test('waitForReady counts a new pass as an advance', async function (assert) {
+      let progressPolls = 0;
+      let startedAt = Date.now();
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          // Each job counts from zero, and a later one finishes below the
+          // furthest count an earlier one reached.
+          let pass = Math.floor(progressPolls++ / 10);
+          return jsonResponse(200, {
+            data: {
+              type: 'publish-progress',
+              id: 'https://mike.boxel.space/notes/',
+              attributes: {
+                phase: 'render',
+                filesCompleted: 3,
+                totalFiles: 100 + pass,
+              },
+            },
+          });
+        }
+        return new Response(null, {
+          status: Date.now() - startedAt > 600 ? 200 : 503,
+        });
+      });
+
+      await waitForReady(client, {
+        publishedRealmURL: 'https://mike.boxel.space/notes/',
+        timeoutMs: 200,
+        pollIntervalMs: 5,
+        progressPollIntervalMs: 5,
+        onProgress: () => {},
+      });
+
+      assert.true(
+        Date.now() - startedAt > 600,
+        'outlived timeoutMs because new passes kept starting',
+      );
+    });
+
+    test('waitForReady does not report a stall when progress was never read', async function (assert) {
+      let { client } = makeClient((url) => {
+        if (url.includes('_publish-progress')) {
+          return new Response('not found', { status: 404 });
+        }
+        return new Response(null, { status: 503 });
+      });
+
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 100,
+          pollIntervalMs: 5,
+          progressPollIntervalMs: 5,
+          onProgress: () => {},
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.false(
+          /no progress/.test((err as Error).message),
+          (err as Error).message,
+        );
+        assert.false((err as ReadinessTimeoutError).stalled);
+      }
+    });
+
+    test('waitForReady aborts a held readiness request at its deadline', async function (assert) {
+      let { client } = makeClient(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted')),
+            );
+          }),
+      );
+
+      let startedAt = Date.now();
+      try {
+        await waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 100,
+          pollIntervalMs: 5,
+        });
+        assert.ok(false, 'expected waitForReady to throw');
+      } catch (err) {
+        assert.ok(err instanceof ReadinessTimeoutError);
+        assert.true(Date.now() - startedAt < 2000, 'the held request ended');
+      }
+    });
+
     test('waitForReady gives up at maxWaitMs even while progress advances', async function (assert) {
       let progressPolls = 0;
       let { client } = makeClient((url) => {
