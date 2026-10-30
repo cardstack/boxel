@@ -152,8 +152,8 @@ jobs:
       repository: "boxel-ai-bot-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/ai-bot/Dockerfile"
-      # Staging images are built for arm64 too, each platform on a native
-      # runner; production images stay amd64 until its services move to ARM.
+      # Staging images are built for amd64 and arm64, each platform on a
+      # native runner. Production images are amd64 only.
       platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
 
   build-bot-runner:
