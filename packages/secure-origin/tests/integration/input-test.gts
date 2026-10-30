@@ -1,5 +1,5 @@
 import { trackedObject } from '@ember/reactive/collections';
-import { render, settled } from '@ember/test-helpers';
+import { render, settled, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
@@ -51,6 +51,43 @@ module('Integration | BoxelInput', function (hooks) {
     assert.ok(
       textarea.clientHeight < fitted,
       'it fits again, shorter, when the value shrinks',
+    );
+  });
+
+  test('a textarea the browser doesn’t size by its content fits again when its width changes', async function (assert) {
+    const field = trackedObject({ value: SCOPES[0] });
+    await render(
+      <template>
+        <div data-test-narrow>
+          <BoxelInput
+            @type='textarea'
+            @value={{field.value}}
+            @onInput={{noop}}
+          />
+        </div>
+      </template>,
+    );
+    let container = document.querySelector<HTMLElement>('[data-test-narrow]')!;
+    let textarea = document.querySelector<HTMLTextAreaElement>('textarea')!;
+    container.style.setProperty('width', '40rem');
+    textarea.style.setProperty('field-sizing', 'fixed');
+    field.value = SCOPES.join('\n');
+    await settled();
+    let wide = textarea.clientHeight;
+
+    container.style.setProperty('width', '12rem');
+    await waitUntil(() => textarea.clientHeight > wide);
+    assert.ok(
+      textarea.scrollHeight <= textarea.clientHeight + 1,
+      `narrower, it shows every wrapped line without scrolling (${textarea.scrollHeight}px of content in ${textarea.clientHeight}px)`,
+    );
+
+    container.style.setProperty('width', '40rem');
+    await waitUntil(() => textarea.clientHeight === wide);
+    assert.strictEqual(
+      textarea.clientHeight,
+      wide,
+      'wider again, it drops the rows it no longer needs',
     );
   });
 

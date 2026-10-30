@@ -127,7 +127,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 286785,
+      "bytes": 287032,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -187,7 +187,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/modifiers/fit-content.ts",
-          "size": 424
+          "size": 864
         },
         {
           "package": "@cardstack/secure-origin",
