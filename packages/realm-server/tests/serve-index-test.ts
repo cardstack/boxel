@@ -14,6 +14,8 @@ function buildDeps(getIndexHTML: () => Promise<string>) {
     dbAdapter: {} as any,
     matrixClient: {
       matrixURL: new URL('http://localhost:8008/'),
+      isLoggedIn: () => true,
+      getUserId: () => '@realm_server:localhost',
     } as any,
     getIndexHTML,
     cardSizeLimitBytes: 0,

@@ -57,4 +57,54 @@ module(basename(import.meta.filename), function () {
       }
     }
   });
+
+  test("without MATRIX_SERVER_NAME, takes the server name from the realm server's Matrix user, not the homeserver hostname", async function (assert) {
+    let originalMatrixServerName = process.env.MATRIX_SERVER_NAME;
+    delete process.env.MATRIX_SERVER_NAME;
+
+    try {
+      let { retrieveIndexHTML } = createServeIndex({
+        serverURL: new URL('http://127.0.0.1:4448'),
+        assetsURL: new URL('http://example.com/notional-assets-host/'),
+        realms: [],
+        reconciler: {} as any,
+        dbAdapter: {} as any,
+        matrixClient: {
+          matrixURL: new URL('http://matrix.example.test/'),
+          isLoggedIn: () => true,
+          getUserId: () => '@realm_server:example.test',
+        } as any,
+        getIndexHTML: async () =>
+          `<html><head><meta name="@cardstack/host/config/environment" content="${encodeURIComponent(
+            JSON.stringify({
+              matrixURL: 'http://localhost:8008',
+              matrixServerName: 'localhost',
+              realmServerURL: 'http://localhost:4201/',
+            }),
+          )}"></head><body></body></html>`,
+        cardSizeLimitBytes: 0,
+        fileSizeLimitBytes: 0,
+        audioSizeLimitBytes: 0,
+        videoSizeLimitBytes: 0,
+      });
+
+      let html = await retrieveIndexHTML();
+      let match = html.match(
+        /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)">/,
+      );
+
+      assert.ok(match, 'host config environment meta tag is present');
+
+      let config = JSON.parse(decodeURIComponent(match![1]));
+      assert.strictEqual(
+        config.matrixServerName,
+        'example.test',
+        "uses the server name in the realm server's Matrix user id",
+      );
+    } finally {
+      if (originalMatrixServerName != null) {
+        process.env.MATRIX_SERVER_NAME = originalMatrixServerName;
+      }
+    }
+  });
 });

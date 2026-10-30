@@ -3,7 +3,6 @@ import {
   asExpressions,
   dbAdapterQuerier,
   fetchRealmPermissions,
-  getMatrixUsername,
   notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
@@ -37,6 +36,7 @@ import {
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
 import { retireRealmEventRoom } from '../realm-event-rooms.ts';
+import { matrixServerName } from '../lib/secure-session.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -135,10 +135,13 @@ export default function handleDeleteRealm({
         return;
       }
 
+      // A realm's namespace is the localpart of an account on this realm
+      // server's Matrix server, so only that account's full id matches it.
       let ownerNamespace = getRealmNamespace(parsedRealmURL);
       if (
         !ownerNamespace ||
-        ownerNamespace !== getMatrixUsername(ownerUserId)
+        ownerUserId !==
+          `@${ownerNamespace}:${await matrixServerName({ matrixClient })}`
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

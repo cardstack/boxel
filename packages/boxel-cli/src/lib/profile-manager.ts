@@ -830,19 +830,20 @@ export class ProfileManager implements RealmAuthenticator {
       return null;
     }
 
-    const isProduction = matrixUrl.includes('boxel.ai');
-    const domain = isProduction ? 'boxel.ai' : 'stack.cards';
-    const matrixId = `@${username}:${domain}`;
+    // The homeserver names the account it signs in. Its server name can
+    // differ from the hostname in MATRIX_URL, so the profile is keyed by the
+    // user id the sign-in returns.
+    const auth = await this.matrixLoginFn(matrixUrl, username, password);
+    const matrixId = auth.userId;
 
-    const created = !this.config.profiles[matrixId];
-    await this.addProfile(
+    const existing = this.config.profiles[matrixId];
+    await this.addProfileWithAuth(
       matrixId,
-      password,
-      undefined,
-      matrixUrl,
+      auth,
+      existing?.displayName,
       realmServerUrl,
     );
-    return { profileId: matrixId, created };
+    return { profileId: matrixId, created: !existing };
   }
 
   printStatus(): void {
