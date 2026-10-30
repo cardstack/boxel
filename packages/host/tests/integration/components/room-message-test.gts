@@ -1,7 +1,15 @@
 import { service } from '@ember/service';
-import { click, waitUntil, render } from '@ember/test-helpers';
+import {
+  click,
+  focus,
+  triggerEvent,
+  waitUntil,
+  render,
+} from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+
+import { format as formatDate } from 'date-fns';
 
 import { provide } from 'ember-provide-consume-context';
 
@@ -771,5 +779,53 @@ module('Integration | Component | RoomMessage', function (hooks) {
     await renderRoomMessageComponent(testScenario);
 
     assert.dom(header).exists();
+  });
+
+  test("hovering or focusing a person's message time shows its full date", async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 5,
+      minutesAgoForUpdated: 5,
+      messageContent: 'A user question',
+      renderIndex: 1,
+      extraMessages: [followUpMessage(2)],
+    });
+    (testScenario as any).message.author = testUser;
+    await renderRoomMessageComponent(testScenario);
+
+    // the message at index 1 is the follow-up; its time is what shows
+    let created = (testScenario as any).messages[1].created as Date;
+    let time = `${header} [data-test-pretui-speaker-time]`;
+    let tip = `${header} [role="tooltip"]`;
+    let fullDate = formatDate(created, 'iiii MMM d, yyyy, h:mm aa');
+
+    assert.dom(time).hasText(formatDate(created, 'h:mm aa'));
+    assert.dom(tip).hasText(fullDate);
+    assert
+      .dom(tip)
+      .doesNotHaveAttribute(
+        'data-open',
+        'the full date is hidden until asked for',
+      );
+    let tipId = document.querySelector(tip)!.id;
+    assert
+      .dom(time)
+      .hasAttribute('aria-describedby', tipId, 'the time is described by it');
+
+    await triggerEvent(`${header} [data-test-pretui-tooltip]`, 'mouseenter');
+    assert
+      .dom(tip)
+      .hasAttribute(
+        'data-open',
+        'true',
+        'hovering the time shows the full date',
+      );
+    await triggerEvent(`${header} [data-test-pretui-tooltip]`, 'mouseleave');
+    assert.dom(tip).doesNotHaveAttribute('data-open');
+
+    await focus(time);
+    assert
+      .dom(tip)
+      .hasAttribute('data-open', 'true', 'keyboard focus shows the full date');
   });
 });

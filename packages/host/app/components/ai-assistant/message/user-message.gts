@@ -21,6 +21,10 @@ interface Signature {
     continued?: boolean;
     /** when, as the label shows it */
     time?: string;
+    /** the full date, in a tooltip on the time */
+    fullTime?: string;
+    /** the time as an ISO string */
+    datetime?: string;
     /** the author's profile avatar, the same mark as in the top bar */
     avatar?: ComponentLike;
   };
@@ -38,6 +42,8 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
     @self={{@isSelf}}
     @continued={{@continued}}
     @time={{@time}}
+    @fullTime={{@fullTime}}
+    @datetime={{@datetime}}
     @delivery={{if @isPending 'pending'}}
     data-test-user-message
     ...attributes

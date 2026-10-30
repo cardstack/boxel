@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 import { SpeakerLabel } from './speaker-label';
+import { Tooltip } from './tooltip';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 import { cssNumber, cssStyleFrom } from '../pretui-css';
 
@@ -37,6 +38,10 @@ export interface UserBubbleSignature {
     onEdit?: (text: string) => void;
     /** when, as the caller formats it; on hover */
     time?: string;
+    /** the full date, as the caller formats it: a tooltip on the time */
+    fullTime?: string;
+    /** the time as an ISO string, for the time element's `datetime` */
+    datetime?: string;
     /** who posted it. Shown above the bubble, so a room where several
      * people talk to the same assistant reads as one conversation with
      * names, not as a special case */
@@ -210,6 +215,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
             class='pretui-bubble-author'
             @name={{this.authorName}}
             @time={{@time}}
+            @fullTime={{@fullTime}}
+            @datetime={{@datetime}}
             data-test-pretui-user-bubble-author={{this.authorName}}
           >
             <:mark>{{yield to='avatar'}}</:mark>
@@ -219,6 +226,8 @@ export class UserBubble extends Component<UserBubbleSignature> {
             class='pretui-bubble-author'
             @name={{this.authorName}}
             @time={{@time}}
+            @fullTime={{@fullTime}}
+            @datetime={{@datetime}}
             data-test-pretui-user-bubble-author={{this.authorName}}
           />
         {{/if}}
@@ -333,9 +342,22 @@ export class UserBubble extends Component<UserBubbleSignature> {
               data-test-pretui-user-bubble-edit
             >Edit</button>
           {{/unless}}{{/if}}
-        {{#if (if @time (if this.authorName false true))}}<span
-            class='pretui-bubble-time pretui-bubble-hover'
-          >{{@time}}</span>{{/if}}
+        {{#if (if @time (if this.authorName false true))}}
+          {{#if @fullTime}}
+            <Tooltip @content={{@fullTime}} @side='right'>
+              <time
+                class='pretui-bubble-time pretui-bubble-hover'
+                datetime={{@datetime}}
+                tabindex='0'
+                data-test-pretui-user-bubble-time
+              >{{@time}}</time>
+            </Tooltip>
+          {{else}}
+            <span
+              class='pretui-bubble-time pretui-bubble-hover'
+            >{{@time}}</span>
+          {{/if}}
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -485,6 +507,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           color: var(--foreground);
         }
         .pretui-bubble-link:focus-visible,
+        .pretui-bubble-time:focus-visible,
         .pretui-bubble-more:focus-visible,
         .pretui-bubble-act:focus-visible {
           outline: 2px solid var(--ring);

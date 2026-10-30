@@ -1,6 +1,7 @@
 // Pretui — SpeakerLabel: who said a message in a room with more than one person.
 import Component from '@glimmer/component';
 import { AgentMark } from './agent-mark';
+import { Tooltip } from './tooltip';
 
 export interface SpeakerLabelSignature {
   Args: {
@@ -13,6 +14,11 @@ export interface SpeakerLabelSignature {
     agent?: boolean;
     /** when, as the caller formats it: '2:04 PM' */
     time?: string;
+    /** the full date, as the caller formats it: shown in a tooltip when the
+     * time is hovered or focused, which makes the time a keyboard stop */
+    fullTime?: string;
+    /** the time as an ISO string, for the time element's `datetime` */
+    datetime?: string;
     /** the assistant is working: its mark animates */
     working?: boolean;
   };
@@ -56,7 +62,20 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
       {{#if @via}}<span class='pretui-speaker-via' data-test-pretui-speaker-via>
           via
           {{@via}}</span>{{/if}}
-      {{#if @time}}<span class='pretui-speaker-time'>{{@time}}</span>{{/if}}
+      {{#if @time}}
+        {{#if @fullTime}}
+          <Tooltip @content={{@fullTime}} @side='right'>
+            <time
+              class='pretui-speaker-time'
+              datetime={{@datetime}}
+              tabindex='0'
+              data-test-pretui-speaker-time
+            >{{@time}}</time>
+          </Tooltip>
+        {{else}}
+          <span class='pretui-speaker-time'>{{@time}}</span>
+        {{/if}}
+      {{/if}}
     </div>
     <style scoped>
       @layer PretComponent {
@@ -125,6 +144,11 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
         }
         .pretui-speaker-time {
           font-variant-numeric: tabular-nums;
+        }
+        .pretui-speaker-time:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+          border-radius: var(--boxel-border-radius-xs);
         }
       }
     </style>
