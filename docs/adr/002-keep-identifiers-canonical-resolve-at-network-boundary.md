@@ -46,8 +46,8 @@ and only when, they appear in all capitals, as shown here.
 Card ids, FileDef ids, module references, code-ref modules, and link targets
 MUST be typed as `RealmResourceIdentifier` or `RealmIdentifier`. Code MUST
 compare, key, store, and pass them as strings, without parsing them. Code MUST
-test which form an identifier has only with the exported `isPrefixForm()`
-helper.
+test which form an identifier has only with the exported `isPrefixForm()` and
+`isAbsoluteIdentifier()` helpers.
 
 A resource's realm is `meta.realmIdentifier`, a `RealmIdentifier`.
 `meta.realmURL` is deprecated, and new code MUST NOT read it.
