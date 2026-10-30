@@ -220,6 +220,51 @@ export async function deletePlatformClient(
   );
 }
 
+/**
+ * Deleting a platform client leaves every connection through it needing an
+ * administrator, and adding it again under the same name doesn't take them
+ * back. So the command shows the client and asks first, unless `--yes` says
+ * not to; without a terminal to ask in, `--yes` is required.
+ */
+export async function confirmPlatformClientDelete(
+  options: SystemKeysOptions,
+  name: string,
+  {
+    yes,
+    json,
+    isTTY = Boolean(process.stdin.isTTY),
+    confirm = async (question: string) =>
+      /^y(es)?$/i.test(await prompt(question)),
+  }: {
+    yes?: boolean;
+    json?: boolean;
+    isTTY?: boolean;
+    confirm?: (question: string) => Promise<boolean>;
+  },
+): Promise<void> {
+  if (yes) {
+    return;
+  }
+  if (json || !isTTY) {
+    throw new Error(
+      'Pass --yes to delete a platform client without a terminal to confirm in',
+    );
+  }
+  let client = (await listPlatformClients(options)).find(
+    (candidate) => candidate.name === name,
+  );
+  if (!client) {
+    throw new Error(`No platform client is named ${name}`);
+  }
+  printClient(client);
+  console.log(
+    'Every connection made through it will need an administrator, and adding the client again does not restore them.',
+  );
+  if (!(await confirm(`Delete the platform client ${name}? [y/N] `))) {
+    throw new Error('Not deleted');
+  }
+}
+
 // The id of the key named by `--id`, or of the key for `--destination`,
 // compared as the server stores destinations (as the URL parser spells them).
 export async function resolveSystemKeyId(
@@ -342,6 +387,7 @@ export interface KeysCliOptions {
   stdin?: boolean;
   keyFile?: string;
   note?: string;
+  yes?: boolean;
   json?: boolean;
 }
 
@@ -416,6 +462,7 @@ export function refuseClientOptions(options: KeysCliOptions): void {
       ['scopes', '--scopes'],
       ['tokenAuth', '--token-auth'],
       ['apiHost', '--api-host'],
+      ['yes', '--yes'],
     ] as const
   ).filter(([option]) => options[option] !== undefined);
   if (clientOnly.length > 0) {
@@ -672,12 +719,18 @@ export function registerKeysCommand(realmServer: Command): void {
       '--note <text>',
       'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
     )
+    .option(
+      '--yes',
+      "With --kind oauth-client, don't show the client and ask to confirm",
+    )
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
         if (kindOf(options) === 'oauth-client') {
           let name = clientName(options);
-          await deletePlatformClient(await seedOptions(options), name);
+          let seed = await seedOptions(options);
+          await confirmPlatformClientDelete(seed, name, options);
+          await deletePlatformClient(seed, name);
           output(options.json, { deleted: name }, () => {
             console.log(
               `${FG_GREEN}Deleted the platform client ${name}.${RESET}`,

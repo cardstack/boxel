@@ -184,7 +184,7 @@ boxel realm-server keys add     --realm-server <url> --kind oauth-client --name 
                                 [--scopes <scopes>] [--token-auth client_secret_post|client_secret_basic] \
                                 [--stdin | --key-file <path>]
 boxel realm-server keys replace --realm-server <url> --kind oauth-client --name <name> [--stdin | --key-file <path>]
-boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name>
+boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name> [--yes]
 ```
 
 The command calls these routes:
@@ -197,7 +197,9 @@ The command calls these routes:
 | `DELETE /_platform-oauth-clients/:name` | Delete; its connections stay and need an administrator, and a client re-added under the name doesn't take them back |
 
 Unlike a system key, a platform client keeps no history and takes no operator
-note; the command refuses `--note` with `--kind oauth-client`.
+note; the command refuses `--note` with `--kind oauth-client`. Its delete
+shows the client and asks to confirm, since the connections it leaves behind
+can't be restored; `--yes` skips that, and is needed without a terminal.
 
 A platform client is always `authorization_code`. Its `apiHosts` decide where
 connect mode offers it (`https://api.github.com/` for the GitHub App). A

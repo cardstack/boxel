@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import {
   addPlatformClient,
   addSystemKey,
+  confirmPlatformClientDelete,
   deletePlatformClient,
   deleteSystemKey,
   listPlatformClients,
@@ -337,6 +338,49 @@ describe('boxel realm-server keys', () => {
       expect(() => refuseSystemOptions(base)).not.toThrow();
       expect(() => refuseClientOptions(base)).not.toThrow();
       expect(() => refuseNoteForClient(base)).not.toThrow();
+    });
+
+    it('shows the client and asks before deleting it, unless --yes is given', async () => {
+      let { fetch, requests } = fakeServer([{ body: { clients: [client] } }]);
+      let questions: string[] = [];
+      await confirmPlatformClientDelete(options(fetch), 'github', {
+        isTTY: true,
+        confirm: async (question) => (questions.push(question), true),
+      });
+      expect(questions).toEqual(['Delete the platform client github? [y/N] ']);
+
+      let declining = fakeServer([{ body: { clients: [client] } }]);
+      await expect(
+        confirmPlatformClientDelete(options(declining.fetch), 'github', {
+          isTTY: true,
+          confirm: async () => false,
+        }),
+      ).rejects.toThrow(/Not deleted/);
+
+      let unknown = fakeServer([{ body: { clients: [client] } }]);
+      await expect(
+        confirmPlatformClientDelete(options(unknown.fetch), 'gitlab', {
+          isTTY: true,
+          confirm: async () => true,
+        }),
+      ).rejects.toThrow(/No platform client is named gitlab/);
+
+      for (let unattended of [{ isTTY: false }, { isTTY: true, json: true }]) {
+        await expect(
+          confirmPlatformClientDelete(options(fetch), 'github', unattended),
+        ).rejects.toThrow(/Pass --yes/);
+      }
+      await confirmPlatformClientDelete(options(fetch), 'github', {
+        yes: true,
+        isTTY: false,
+      });
+      expect(requests).toHaveLength(1);
+    });
+
+    it('refuses --yes for a system key, whose delete asks for a note instead', () => {
+      expect(() =>
+        refuseClientOptions({ realmServer: 'https://x.test', yes: true }),
+      ).toThrow(/--yes/);
     });
 
     it('exposes --kind, --name and the client settings as flags', async () => {
