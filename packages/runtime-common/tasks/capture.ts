@@ -95,6 +95,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
   prerenderer,
   createPrerenderAuth,
   matrixURL,
+  matrixServerName,
   mediaCacheAdapter,
 }) =>
   async function (args) {
@@ -187,7 +188,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
     let anonymous = runAs === ANONYMOUS_RENDER;
     let renderedAs = anonymous
       ? ANONYMOUS_RENDER
-      : ensureFullMatrixUserId(runAs, matrixURL);
+      : ensureFullMatrixUserId(runAs, matrixServerName);
     try {
       // The effective set the realm itself enforces: its `users` and `*`
       // grants unioned with the runner's own row. A session token is rejected
@@ -203,6 +204,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
             new URL(normalizedRealmURL),
             renderedAs,
             matrixURL,
+            matrixServerName,
           );
       if (userPermissions.length === 0) {
         let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
@@ -250,6 +252,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
             new URL(realm),
             renderedAs,
             matrixURL,
+            matrixServerName,
           );
         }
         allUserPermissions[normalizedRealmURL] = userPermissions;

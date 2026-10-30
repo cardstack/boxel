@@ -8,6 +8,7 @@ scope:
   - packages/runtime-common/realm-auth-client.ts
   - packages/runtime-common/matrix-backend-authentication.ts
   - packages/runtime-common/matrix-client.ts
+  - packages/runtime-common/matrix-server-name.ts
   - packages/runtime-common/realm-permission-checker.ts
   - packages/runtime-common/db-queries/realm-permission-queries.ts
   - packages/runtime-common/realm.ts

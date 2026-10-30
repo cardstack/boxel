@@ -47,6 +47,7 @@ export type PrepareRunCommandResult =
 export async function prepareRunCommand({
   dbAdapter,
   matrixURL,
+  matrixServerName,
   createPrerenderAuth,
   realmURL,
   runAs,
@@ -55,6 +56,8 @@ export async function prepareRunCommand({
 }: {
   dbAdapter: DBAdapter;
   matrixURL: string;
+  // The paired homeserver's server name, which a bare `runAs` localpart is on.
+  matrixServerName: string;
   createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -66,7 +69,7 @@ export async function prepareRunCommand({
 }): Promise<PrepareRunCommandResult> {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
   let context = { command, realmURL: normalizedRealmURL };
-  let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
+  let runAsUserId = ensureFullMatrixUserId(runAs, matrixServerName);
   // The effective set the realm itself enforces: its `users` and `*` grants
   // unioned with the runner's own row. A session token is rejected when its
   // permissions claim differs from that union in either direction, so on a
@@ -77,6 +80,7 @@ export async function prepareRunCommand({
     new URL(normalizedRealmURL),
     runAsUserId,
     matrixURL,
+    matrixServerName,
   );
   if (userPermissions.length === 0) {
     return {

@@ -787,6 +787,7 @@ module(basename(import.meta.filename), function (hooks) {
         virtualNetwork,
         log: logger('index-commit-validation-test'),
         matrixURL: 'http://localhost:8008',
+        matrixServerName: 'localhost',
         getReader: () => reader,
         getAuthedFetch: async () => {
           return (async () => {

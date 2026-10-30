@@ -274,6 +274,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       await archiveRealm(dbAdapter, new URL(testRealmHref));
 
       let matrixClient = new MatrixClient({
+        serverName: 'localhost',
         matrixURL: realmServerTestMatrix.url,
         username: realmServerTestMatrix.username,
         seed: realmSecretSeed,

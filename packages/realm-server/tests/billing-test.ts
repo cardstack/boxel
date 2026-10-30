@@ -90,6 +90,7 @@ function buildDailyCreditGrantTaskArgs(dbAdapter: PgAdapter): TaskArgs {
     virtualNetwork: {} as TaskArgs['virtualNetwork'],
     log: logger('test-daily-credit-grant'),
     matrixURL: 'http://matrix.invalid',
+    matrixServerName: 'localhost',
     getReader: () => {
       throw new Error('getReader should not be called in daily credit grant');
     },

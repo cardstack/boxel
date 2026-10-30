@@ -70,6 +70,7 @@ module(basename(import.meta.filename), function (hooks) {
       definitionLookup: null as unknown as DefinitionLookup,
       virtualNetwork: null as unknown as VirtualNetwork,
       matrixURL: 'http://localhost:8008',
+      matrixServerName: 'localhost',
       getReader: () => {
         throw new Error('getReader is not used by prerender-html-reconcile');
       },

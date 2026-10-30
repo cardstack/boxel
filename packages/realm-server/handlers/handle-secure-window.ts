@@ -66,6 +66,7 @@ export function handleSecureWindowContext(args: CreateRoutesArgs): Handler {
     let context = await secureWindowContext(
       {
         dbAdapter,
+        matrixServerName: args.matrixClient.serverName,
         findRealm: realmFinder(args),
         definitionLookup,
         virtualNetwork,

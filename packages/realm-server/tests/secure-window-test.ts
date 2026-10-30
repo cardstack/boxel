@@ -190,6 +190,8 @@ module(basename(import.meta.filename), function () {
       mounted = [OPEN, CLOSED];
       return {
         dbAdapter,
+        // Every user these tests name is on the paired homeserver.
+        matrixServerName: 'example.test',
         findRealm: async (url: URL) => {
           let realmURL = [OPEN, CLOSED, LAZY].find((r) =>
             url.href.startsWith(r),
