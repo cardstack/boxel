@@ -505,38 +505,25 @@ mise run infra:stop-admin
 
 #### Google Sign-In (local dev)
 
-The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button appears whenever the homeserver's login flows advertise the `oidc-google` IdP, so it shows up automatically once the OIDC block is in place.
+Users sign in with Google on the secure origin's sign-in page, and the realm server is its own OpenID Connect client (`packages/realm-server/lib/google-sign-in.ts`). It resolves a Google identity to a Matrix account itself: by the Google subject already linked to an account, then by verified email, and otherwise it makes a new account. The page offers Google only when the realm server has a Google client.
 
 To enable Google sign-in locally:
 
-1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `http://localhost:8008/_synapse/client/oidc/callback` as an authorized redirect URI (exact match — `http`, no trailing slash, port `8008`). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
+1. **Create a Google Cloud OAuth 2.0 client** (Web application) in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Add `https://localhost:4208/secure/google-callback` as an authorized redirect URI (exact match). If you haven't configured an OAuth consent screen, create one in **Testing** mode and add your own Google account as a test user.
 
-2. **Export the client ID and secret** in the same shell that runs `mise`:
+2. **Export the client ID and secret** in the same shell that runs `mise`, so the realm server reads them:
 
    ```sh
    export GOOGLE_OAUTH_CLIENT_ID='<your-id>.apps.googleusercontent.com'
    export GOOGLE_OAUTH_CLIENT_SECRET='<your-secret>'
    ```
 
-3. **Restart Synapse** so the OIDC block is interpolated into the generated `homeserver.yaml`:
-
-   ```sh
-   pnpm stop:synapse
-   mise run infra:start-synapse
-   ```
-
-4. **Verify** Synapse advertises the Google IDP:
-
-   ```sh
-   curl -s http://localhost:8008/_matrix/client/v3/login | jq
-   ```
-
-   You should see a flow with `type: "m.login.sso"` and an `identity_providers` entry whose `id` is `"oidc-google"`. The "Sign in with Google" button will now appear on the host login screen.
+3. **Restart the realm server.** The secure origin's sign-in page now shows "Sign in with Google".
 
 Notes:
 
 - Each developer uses their own Google OAuth client locally. The shared client used for staging/prod is provisioned separately.
-- To reset the link and see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions). To also re-trigger Synapse's username picker, wipe the dev Synapse DB: `pnpm stop:synapse && rm -rf packages/matrix/synapse-data && mise run infra:start-synapse`.
+- To see Google's consent screen again, revoke the OAuth client at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
 #### SMTP Server
 

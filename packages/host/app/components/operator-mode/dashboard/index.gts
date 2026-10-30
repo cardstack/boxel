@@ -335,13 +335,7 @@ export default class Dashboard extends Component<Signature> {
     return sortByUpdatedAtDesc(
       this.userRealmIdentifiers,
       this.realm.info,
-    ).slice(
-      0,
-      recentWorkspaceCount(
-        this.recentColumns,
-        this.matrixService.isInitializingNewUser ? 2 : 1,
-      ),
-    );
+    ).slice(0, recentWorkspaceCount(this.recentColumns));
   }
 
   // Everything else, in list order, as rows.
@@ -658,14 +652,6 @@ export default class Dashboard extends Component<Signature> {
                       }}
                       @selectionActive={{this.cursor.isRingShown}}
                     />
-                    {{#if this.matrixService.isInitializingNewUser}}
-                      <div
-                        class='new-workspace-pending'
-                        data-test-workspace-loading-indicator
-                      >
-                        <Spinner @size={{20}} aria-label='Creating workspace' />
-                      </div>
-                    {{/if}}
                     {{#each this.recentRealmIdentifiers as |realmIdentifier i|}}
                       {{#let (add this.recentNavBase i) as |navIndex|}}
                         <Workspace
@@ -1136,14 +1122,6 @@ export default class Dashboard extends Component<Signature> {
         );
         gap: var(--boxel-sp-lg) var(--boxel-sp);
         padding: var(--boxel-sp-xs) 0;
-      }
-      .new-workspace-pending {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: var(--dashboard-tile-height);
-        border-radius: var(--dashboard-tile-radius);
-        background-color: var(--boxel-dark-50);
       }
       .row-list {
         display: grid;

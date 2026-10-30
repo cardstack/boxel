@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Assam Breakfast",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-002-050",
+          "size": "50 g",
+          "price": 11.99
+        },
+        {
+          "sku": "TE-002-100",
+          "size": "100 g",
+          "price": 22.99
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

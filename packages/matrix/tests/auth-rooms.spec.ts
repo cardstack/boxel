@@ -5,7 +5,7 @@ import {
   getRoomRetentionPolicy,
 } from '../support/synapse/index.ts';
 import {
-  credentialFields,
+  signInOnSecureOrigin,
   createSubscribedUser,
   openAiAssistant,
 } from '../helpers/index.ts';
@@ -18,16 +18,7 @@ test.describe('Auth rooms', () => {
       await createSubscribedUser('auth-rooms');
     await page.goto(appURL);
 
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await credentialFields(page)
-      .locator('[data-test-username-field]')
-      .fill(username);
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await credentialFields(page)
-      .locator('[data-test-password-field]')
-      .fill(password);
-    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    await page.locator('[data-test-login-btn]').click();
+    await signInOnSecureOrigin(page, username, password);
 
     await openAiAssistant(page);
     await page.locator('[data-test-room-settled]').waitFor();

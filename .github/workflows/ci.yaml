@@ -877,12 +877,6 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
-      - name: Run OIDC mapping provider unit tests
-        # Fast (~no boot) and stack-independent — it only needs the warmed
-        # Synapse image — so run it once on shard 1 rather than every shard.
-        if: matrix.shardIndex == 1
-        run: pnpm test:oidc-mapping-provider
-        working-directory: packages/matrix
       - name: Run shard-assignment unit tests
         # Guards the property the split below rests on: the shards partition
         # the spec files, so every spec runs on exactly one of them. Needs

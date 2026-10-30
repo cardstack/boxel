@@ -19,7 +19,11 @@ import {
 } from '../support/synapse/index.ts';
 import { realmPassword } from './realm-credentials.ts';
 import type { SQLExecutor } from '../support/isolated-realm-server.ts';
-import { appURL, BasicSQLExecutor } from '../support/isolated-realm-server.ts';
+import {
+  appURL,
+  BasicSQLExecutor,
+  secureOriginURL,
+} from '../support/isolated-realm-server.ts';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
 import { randomUUID } from 'crypto';
 
@@ -529,87 +533,6 @@ export async function validateEmail(
   }
 }
 
-export async function validateEmailForResetPassword(
-  appPage: Page,
-  email: string,
-  opts?: {
-    onEmailPage?: (page: Page) => Promise<void>;
-    onValidationPage?: (page: Page) => Promise<void>;
-    sendAttempts?: number;
-    isLoggedInWhenValidated?: true;
-  },
-): Promise<Page> {
-  let sendAttempts = opts?.sendAttempts ?? 1;
-  await expect(appPage.locator('[data-test-email-validation]')).toContainText(
-    'Please check your email to reset your password',
-  );
-
-  for (let i = 0; i < sendAttempts - 1; i++) {
-    await appPage.waitForTimeout(500);
-    await appPage.locator('[data-test-resend-validation-btn]').click();
-  }
-
-  let context = appPage.context();
-  let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
-  await expect(
-    emailPage.locator('.messagelist .unread').filter({ hasText: email }),
-  ).toHaveCount(sendAttempts);
-  await emailPage
-    .locator('.messagelist .unread')
-    .filter({ hasText: email })
-    .first()
-    .click();
-  await expect(
-    emailPage.frameLocator('.messageview iframe').locator('body'),
-  ).toContainText('Reset Password');
-  await expect(
-    emailPage.locator('.messageview .messageviewheader'),
-  ).toContainText(`To:${email}`);
-  await logEmailFrameState(emailPage);
-
-  if (opts?.onEmailPage) {
-    await opts.onEmailPage(emailPage);
-  }
-
-  const pagePromise = context.waitForEvent('page');
-  let btn = emailPage
-    .frameLocator('.messageview iframe')
-    .getByText('Reset Password')
-    .last();
-  // We have to delay before going to validation window
-  // to avoid the validation window won't open
-  await emailPage.waitForTimeout(500);
-  await btn.click();
-
-  const validationPage = await pagePromise;
-  await validationPage.waitForLoadState();
-  if (opts?.onValidationPage) {
-    await opts.onValidationPage(validationPage);
-  }
-  let validationBtn = validationPage
-    .locator('body')
-    .getByText('Confirm changing my password');
-  await validationPage.waitForTimeout(500);
-  await validationBtn.click();
-
-  const resetPasswordPage = await pagePromise;
-  await resetPasswordPage.waitForLoadState();
-  return resetPasswordPage;
-}
-
-export async function gotoRegistration(page: Page, appURL = testHost) {
-  await openRoot(page, appURL);
-
-  await page.locator('[data-test-register-user]').click();
-}
-
-export async function gotoForgotPassword(page: Page, appURL = testHost) {
-  await openRoot(page, appURL);
-
-  await page.locator('[data-test-forgot-password]').click();
-}
-
 export async function login(
   page: Page,
   username: string,
@@ -684,7 +607,7 @@ export async function logout(page: Page) {
     .waitFor({ state: 'attached', timeout: 5000 })
     .catch(() => undefined);
   await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+    page.locator('[data-test-ai-assistant-message-pending]'),
   ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
@@ -848,9 +771,29 @@ export async function sendMessage(
     messageCountBeforeSend + 1,
   );
   await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+    page.locator('[data-test-ai-assistant-message-pending]'),
   ).toHaveCount(0);
   await page.waitForSelector(`[data-test-room-settled]`);
+}
+
+// The transcript as rendered: each message's index, author, delivery state and
+// text, for an assertion's failure message.
+export async function describeMessages(page: Page) {
+  let rows = await page.locator('[data-test-message-idx]').evaluateAll((els) =>
+    els.map((el) => ({
+      idx: el.getAttribute('data-test-message-idx'),
+      from: el.getAttribute('data-test-boxel-message-from'),
+      pending: el.hasAttribute('data-test-ai-assistant-message-pending'),
+      delivery:
+        el
+          .querySelector('[data-test-pretui-user-bubble]')
+          ?.getAttribute('data-test-pretui-user-bubble') ?? null,
+      text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 80),
+    })),
+  );
+  return `messages at ${new Date().toISOString()}:\n${rows
+    .map((row) => JSON.stringify(row))
+    .join('\n')}`;
 }
 
 export async function assertMessages(
@@ -973,17 +916,28 @@ export function credentialFields(page: Page, form?: string): FrameLocator {
   );
 }
 
+// Signs in on the secure origin's sign-in page, which a signed-out app sends
+// the user to, and waits to be handed back to the app.
+export async function signInOnSecureOrigin(
+  page: Page,
+  username: string,
+  password: string,
+) {
+  let secureOrigin = new URL(secureOriginURL).origin;
+  await page.waitForURL(
+    (url) => url.origin === secureOrigin && url.pathname.endsWith('/sign-in'),
+  );
+  await page.locator('[data-test-secure-username]').fill(username);
+  await page.locator('[data-test-secure-password]').fill(password);
+  await page.locator('[data-test-secure-password-submit]').click();
+  await page.waitForURL((url) => url.origin !== secureOrigin, {
+    timeout: 60_000,
+  });
+}
+
 export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   await page.locator('[data-test-profile-icon-button]').click();
 
-  await expect(
-    credentialFields(page).locator('[data-test-username-field]'),
-    'username field is not displayed',
-  ).toHaveCount(0);
-  await expect(
-    credentialFields(page).locator('[data-test-password-field]'),
-    'password field is not displayed',
-  ).toHaveCount(0);
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
     opts.displayName!,
   );
@@ -1148,15 +1102,17 @@ export async function createSubscribedUserAndLogin(
   return user;
 }
 
+// A signed-out app sends the user to the secure origin's sign-in page.
 export async function assertLoggedOut(page: Page) {
+  await page.waitForURL(
+    (url) =>
+      url.origin === new URL(secureOriginURL).origin &&
+      url.pathname.endsWith('/sign-in'),
+  );
   await expect(
-    credentialFields(page).locator('[data-test-username-field]'),
-    'username field is displayed',
-  ).toHaveCount(1);
-  await expect(
-    credentialFields(page).locator('[data-test-password-field]'),
-    'password field is displayed',
-  ).toHaveCount(1);
+    page.locator('[data-test-secure-sign-in-form]'),
+    'the secure origin’s sign-in form is displayed',
+  ).toBeVisible();
   await expect(
     page.locator('[data-test-field-value="userId"]'),
     'user profile - user ID is not displayed',

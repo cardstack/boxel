@@ -18,8 +18,12 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   setupAcceptanceTestRealm,
@@ -29,6 +33,7 @@ import {
   setupUserSubscription,
   visitOperatorMode,
   realmConfigCardJSON,
+  withholdRealmSession,
 } from '../helpers';
 import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -1200,6 +1205,269 @@ module('Acceptance | dashboard', function (hooks) {
         });
       },
     );
+
+    module('pinned cards', function (hooks) {
+      const pinnedRealmURL = 'http://test-realm/testuser/pinned/';
+      const unpinnedRealmURL = 'http://test-realm/testuser/unpinned/';
+      // Where `@cardstack/catalog/` resolves, so a pin can name it either way.
+      let catalogRealmURL: string;
+
+      function cardJSON(name: string) {
+        return {
+          data: {
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        };
+      }
+
+      function workspaceIndexJSON(relationships: Record<string, unknown>) {
+        return {
+          data: {
+            relationships,
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        };
+      }
+
+      hooks.beforeEach(async function () {
+        catalogRealmURL = (
+          getService('network') as NetworkService
+        ).virtualNetwork.toURL('@cardstack/catalog/').href;
+        await setupAcceptanceTestRealm({
+          realmURL: pinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Pinned Workspace' }),
+            'roadmap.json': cardJSON('Roadmap'),
+            'launch-notes.json': cardJSON('Launch Notes'),
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: './roadmap' } },
+              // No such card, so nothing to draw: the next pin takes its place.
+              'entryPoints.1': { links: { self: './missing' } },
+              'entryPoints.2': { links: { self: './launch-notes' } },
+              'entryPoints.3': {
+                links: { self: `${catalogRealmURL}style-guide` },
+              },
+              'entryPoints.4': {
+                links: { self: '@cardstack/catalog/glossary' },
+              },
+              // Pinned twice: drawn and counted once.
+              'entryPoints.5': { links: { self: './roadmap' } },
+            }),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: unpinnedRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unpinned Workspace' }),
+            'index.json': workspaceIndexJSON({}),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          realmURL: catalogRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '*': ['read'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Catalog' }),
+            'style-guide.json': cardJSON('Style Guide'),
+            'glossary.json': cardJSON('Glossary'),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          catalogRealmURL,
+        ]);
+      });
+
+      // The Pinned stat waits for the desk's index counts, which fixture
+      // realms don't serve, so they're seeded on the realm service.
+      async function visitWithFavorites(
+        favorites: string[],
+        beforeFavorites?: () => void,
+      ) {
+        let matrixService = getService('matrix-service') as MatrixService;
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        beforeFavorites?.();
+        let realmService = getService('realm') as any;
+        for (let favorite of favorites) {
+          realmService.indexCountsByRealm.set(favorite, {
+            cardCount: 1,
+            fileCount: 1,
+            definitionCount: null,
+          });
+        }
+        matrixService.workspaceFavorites = favorites;
+        await settled();
+      }
+
+      const DESK_PINS =
+        '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-pinned-card]';
+
+      test("a desk shows its Workspace card's pins in the workspace's order and counts them", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        assert.deepEqual(
+          findAll(DESK_PINS).map((el) => el.getAttribute('aria-label')),
+          [
+            'Open Roadmap',
+            'Open Launch Notes',
+            'Open Style Guide',
+            'Open Glossary',
+          ],
+          'a pin with nothing to draw gives its place to the next, and pins in another realm, linked by URL or by its prefix, are read from that realm',
+        );
+        assert
+          .dom(DESK_PINS)
+          .hasAttribute(
+            'data-test-pinned-card',
+            `${pinnedRealmURL}roadmap`,
+            'each pin is keyed by its own id',
+          );
+        let pinnedStat =
+          '[data-test-favorites-list] [data-test-workspace="Pinned Workspace"] [data-test-workspace-stat="Pinned"]';
+        await waitFor(pinnedStat);
+        assert
+          .dom(pinnedStat)
+          .hasText(
+            'Pinned 5',
+            'every pinned card is counted once, drawn or not',
+          );
+        assert
+          .dom('[data-test-workspace="Pinned Workspace"]')
+          .exists({ count: 2 }, 'it is listed as a desk and again below');
+        assert
+          .dom('[data-test-pinned-cards]')
+          .exists({ count: 1 }, 'only the desk shows pins');
+      });
+
+      // The ids in the stack a pin opens, from the bottom.
+      function openedStack() {
+        let { stacks } = (
+          getService('operator-mode-state-service') as OperatorModeStateService
+        ).state;
+        return stacks.map((stack) => stack.map((item) => item.id));
+      }
+
+      test("a pinned card opens over its workspace's Home", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        await click(`[data-test-pinned-card="${pinnedRealmURL}roadmap"]`);
+
+        assert.dom('[data-test-dashboard]').doesNotExist();
+        assert.deepEqual(openedStack(), [
+          [`${pinnedRealmURL}index`, `${pinnedRealmURL}roadmap`],
+        ]);
+      });
+
+      test("a pin in another realm opens by its own id over its workspace's Home", async function (assert) {
+        await visitWithFavorites([pinnedRealmURL]);
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        await click('[data-test-pinned-card="@cardstack/catalog/glossary"]');
+
+        assert.deepEqual(
+          openedStack(),
+          [[`${pinnedRealmURL}index`, '@cardstack/catalog/glossary']],
+          'a prefix pin keeps its prefix, and the stack is the workspace the desk is for',
+        );
+      });
+
+      test("a pin in a realm the app hasn't loaded is drawn once that realm is found", async function (assert) {
+        const elsewhereRealmURL = 'http://test-realm/testuser/elsewhere/';
+        // Readable by anyone and not one of the user's realms, so the app
+        // learns of it only by looking it up.
+        const unlistedRealmURL = 'http://test-realm/testuser/unlisted/';
+        await setupAcceptanceTestRealm({
+          realmURL: unlistedRealmURL,
+          mockMatrixUtils,
+          permissions: { '*': ['read'] },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Unlisted' }),
+            'notes.json': cardJSON('Notes'),
+          },
+        });
+        withholdRealmSession(unlistedRealmURL);
+        await setupAcceptanceTestRealm({
+          realmURL: elsewhereRealmURL,
+          mockMatrixUtils,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Elsewhere Workspace' }),
+            'index.json': workspaceIndexJSON({
+              'entryPoints.0': { links: { self: `${unlistedRealmURL}notes` } },
+            }),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([
+          realmURL,
+          pinnedRealmURL,
+          unpinnedRealmURL,
+          catalogRealmURL,
+          elsewhereRealmURL,
+        ]);
+
+        await visitWithFavorites([elsewhereRealmURL], () => {
+          // Indexing its cards can already have taught the app the realm, so
+          // it's forgotten here, and only the desk's lookup can find it again.
+          let realmService = getService('realm') as RealmService;
+          realmService.removeRealm(unlistedRealmURL);
+          assert.strictEqual(
+            realmService.realmOf(rri(`${unlistedRealmURL}notes`)),
+            undefined,
+            "the pin's realm isn't known when the desk first searches",
+          );
+        });
+        let pins =
+          '[data-test-favorites-list] [data-test-workspace="Elsewhere Workspace"] [data-test-pinned-card]';
+        await waitUntil(() => findAll(pins).length === 1);
+
+        assert
+          .dom(pins)
+          .hasAttribute('data-test-pinned-card', `${unlistedRealmURL}notes`);
+        assert.dom(pins).hasAttribute('aria-label', 'Open Notes');
+      });
+
+      test('a desk with no pins shows no collage and no pin count', async function (assert) {
+        await visitWithFavorites([pinnedRealmURL, unpinnedRealmURL]);
+        // `settled()` in `visitWithFavorites` waits for both desks' pin
+        // searches, so the unpinned desk has had its answer.
+        await waitUntil(() => findAll(DESK_PINS).length === 4);
+
+        let desk =
+          '[data-test-favorites-list] [data-test-workspace="Unpinned Workspace"]';
+        assert.dom(desk).exists();
+        assert.dom(`${desk} [data-test-pinned-cards]`).doesNotExist();
+        assert
+          .dom(`${desk} [data-test-workspace-stat="Pinned"]`)
+          .doesNotExist();
+      });
+    });
 
     module('workspaces', function () {
       let moreRealmURLs: string[] = [];

@@ -5,7 +5,6 @@ import {
   settled,
   triggerEvent,
   triggerKeyEvent,
-  waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -19,6 +18,7 @@ import {
   whenStyled,
 } from '../../src/credentials/style.ts';
 import { CredentialFrame, FORMS } from '../../src/security/credentials.js';
+import { nextResize } from '../helpers/waiters.ts';
 
 const APP_ORIGIN = 'https://app.example.test';
 
@@ -74,92 +74,6 @@ module('Integration | credential fields', function (hooks) {
   setupRenderingTest(hooks);
 
   module('the fields each form draws', function () {
-    test('login: username and password, each in an AuthFormField', async function (assert) {
-      await renderForm('login');
-      assert.dom('#credential-fields').hasClass('layout-auth');
-      assert
-        .dom('[data-test-boxel-field]')
-        .exists({ count: 2 })
-        .hasClass('auth-form-field')
-        .hasTagName('label');
-      assert.deepEqual(
-        [...document.querySelectorAll('[data-test-boxel-field-label]')].map(
-          (label) => label.textContent!.trim(),
-        ),
-        ['Email Address or Username', 'Password'],
-      );
-      assert
-        .dom('[data-test-username-field]')
-        .hasAttribute('type', 'text')
-        .hasAttribute('id', 'boxel-login-username')
-        .hasAttribute('name', 'username')
-        .hasAttribute('autocomplete', 'username')
-        .hasAttribute('placeholder', 'Your email address')
-        .hasAttribute('data-test-boxel-input-id', 'boxel-login-username')
-        .doesNotHaveAttribute('data-test-boxel-input-validation-state');
-      assert
-        .dom('[data-test-password-field]')
-        .hasAttribute('type', 'password')
-        .hasAttribute('id', 'boxel-login-password')
-        .hasAttribute('name', 'password')
-        .hasAttribute('autocomplete', 'current-password')
-        .hasAttribute('placeholder', 'Your password');
-      assert
-        .dom('input[name="username"][hidden]')
-        .doesNotExist('no hidden username');
-    });
-
-    test('cli-login: username and password', async function (assert) {
-      await renderForm('cli-login');
-      assert
-        .dom('[data-test-cli-auth-username]')
-        .hasAttribute('id', 'boxel-cli-auth-username')
-        .hasAttribute('autocomplete', 'username');
-      assert
-        .dom('[data-test-cli-auth-password]')
-        .hasAttribute('type', 'password')
-        .hasAttribute('id', 'boxel-cli-auth-password')
-        .hasAttribute('autocomplete', 'current-password');
-      assert.strictEqual(inputs().length, 2);
-    });
-
-    test('register: a new password and its confirmation, with a hidden username', async function (assert) {
-      let { receive } = await renderForm('register');
-      assert
-        .dom('[data-test-password-field]')
-        .hasAttribute('id', 'boxel-register-password')
-        .hasAttribute('autocomplete', 'new-password')
-        .hasAttribute('data-test-boxel-input-validation-state', 'initial');
-      assert
-        .dom('[data-test-confirm-password-field]')
-        .hasAttribute('id', 'boxel-register-confirm-password')
-        .hasAttribute('name', 'confirm-password')
-        .hasAttribute('autocomplete', 'new-password')
-        .hasAttribute('placeholder', 'Re-enter your password');
-      receive({ type: 'context', username: 'new-user' });
-      await settled();
-      assert
-        .dom('input[name="username"][hidden]')
-        .hasAttribute('autocomplete', 'username')
-        .hasAttribute('tabindex', '-1')
-        .hasValue('new-user');
-    });
-
-    test('reset: a new password and its confirmation', async function (assert) {
-      await renderForm('reset');
-      assert.deepEqual(
-        [...document.querySelectorAll('[data-test-boxel-field-label]')].map(
-          (label) => label.textContent!.trim(),
-        ),
-        ['Enter New Password', 'Re-Enter New Password'],
-      );
-      assert.deepEqual(
-        inputs().map((input) => input.autocomplete),
-        ['new-password', 'new-password'],
-      );
-      assert.dom('input[name="username"][hidden]').doesNotExist();
-    });
-
     test('change-password: three horizontal fields, as the settings modal draws them', async function (assert) {
       await renderForm('change-password');
       assert.dom('#credential-fields').hasClass('layout-settings');
@@ -175,7 +89,17 @@ module('Integration | credential fields', function (hooks) {
         inputs().map((input) => input.autocomplete),
         ['current-password', 'new-password', 'new-password'],
       );
-      assert.dom('input[name="username"][hidden]').exists();
+      assert
+        .dom('input[name="username"][hidden]')
+        .hasAttribute('autocomplete', 'username')
+        .hasAttribute('tabindex', '-1');
+    });
+
+    test('change-password: the hidden username is the one the app names', async function (assert) {
+      let { receive } = await renderForm('change-password');
+      receive({ type: 'context', username: '@ada:localhost' });
+      await settled();
+      assert.dom('input[name="username"][hidden]').hasValue('@ada:localhost');
     });
 
     test('confirm-password: one unlabelled field, as the change-email modal draws it', async function (assert) {
@@ -192,28 +116,30 @@ module('Integration | credential fields', function (hooks) {
 
   module('validity', function () {
     test('reports what is typed to the frame, and the app hears only that a field is filled in', async function (assert) {
-      let { frame, sent } = await renderForm('login');
-      await fillIn('[data-test-username-field]', 'example-user');
-      await fillIn('[data-test-password-field]', 'a-long-password');
-      assert.strictEqual(frame.value('username'), 'example-user');
+      let { frame, sent } = await renderForm('change-password');
+      await fillIn('[data-test-current-password-field]', 'the-old-password');
+      await fillIn('[data-test-new-password-field]', 'a-long-password');
+      await fillIn('[data-test-confirm-password-field]', 'a-long-password');
+      assert.strictEqual(frame.value('current'), 'the-old-password');
       assert.strictEqual(frame.value('password'), 'a-long-password');
       assert.deepEqual(
         sent.filter((message) => message.type === 'state').at(-1),
         {
           type: 'state',
-          filled: { username: true, password: true },
+          filled: { current: true, password: true, confirm: true },
           complete: true,
         },
       );
+      assert.notOk(JSON.stringify(sent).includes('the-old-password'));
       assert.notOk(JSON.stringify(sent).includes('a-long-password'));
     });
 
     test('shows an invalid field as BoxelInput does, and clears it on typing', async function (assert) {
-      await renderForm('reset');
-      await fillIn('[data-test-password-field]', 'short');
-      await blur('[data-test-password-field]');
+      await renderForm('change-password');
+      await fillIn('[data-test-new-password-field]', 'short');
+      await blur('[data-test-new-password-field]');
       assert
-        .dom('[data-test-password-field]')
+        .dom('[data-test-new-password-field]')
         .hasClass('invalid')
         .hasAttribute('aria-invalid', 'true')
         .hasAttribute('data-test-boxel-input-validation-state', 'invalid');
@@ -224,12 +150,12 @@ module('Integration | credential fields', function (hooks) {
         .querySelector('[data-test-boxel-input-error-message]')!
         .getAttribute('id');
       assert
-        .dom('[data-test-password-field]')
+        .dom('[data-test-new-password-field]')
         .hasAttribute('aria-errormessage', errorId!);
 
-      await fillIn('[data-test-password-field]', 'shorter');
+      await fillIn('[data-test-new-password-field]', 'shorter');
       assert
-        .dom('[data-test-password-field]')
+        .dom('[data-test-new-password-field]')
         .doesNotHaveClass('invalid')
         .doesNotHaveAttribute('aria-invalid')
         .hasAttribute('data-test-boxel-input-validation-state', 'initial');
@@ -237,46 +163,46 @@ module('Integration | credential fields', function (hooks) {
     });
 
     test('takes a value that arrives with only a `change` event', async function (assert) {
-      let { frame, sent } = await renderForm('login');
+      let { frame, sent } = await renderForm('confirm-password');
       let password = document.querySelector<HTMLInputElement>(
         '[data-test-password-field]',
       )!;
       password.value = 'a-long-password';
       await triggerEvent(password, 'change');
-      assert.strictEqual(frame.value('password'), 'a-long-password');
+      assert.strictEqual(frame.value('current'), 'a-long-password');
       assert.deepEqual(
         sent.filter((message) => message.type === 'state').at(-1).filled,
-        { username: false, password: true },
+        { current: true },
       );
     });
 
     test('a `change` after typing keeps the error the field was given', async function (assert) {
-      let { frame, receive } = await renderForm('login');
+      let { frame, receive } = await renderForm('confirm-password');
       await fillIn('[data-test-password-field]', 'a-password');
       receive({
         type: 'field-error',
-        field: 'password',
+        field: 'current',
         message: 'Wrong password',
       });
       await triggerEvent('[data-test-password-field]', 'change');
-      assert.strictEqual(frame.error('password'), 'Wrong password');
+      assert.strictEqual(frame.error('current'), 'Wrong password');
       assert
         .dom('[data-test-boxel-input-error-message]')
         .hasText('Wrong password');
     });
 
     test('a field is named by its label alone, not by its error message', async function (assert) {
-      await renderForm('reset');
-      await fillIn('[data-test-password-field]', 'short');
-      await blur('[data-test-password-field]');
+      await renderForm('change-password');
+      await fillIn('[data-test-new-password-field]', 'short');
+      await blur('[data-test-new-password-field]');
       assert.dom('[data-test-boxel-input-error-message]').exists();
-      let input = document.querySelector('[data-test-password-field]')!;
+      let input = document.querySelector('[data-test-new-password-field]')!;
       let labelId = input.getAttribute('aria-labelledby');
       assert.ok(labelId, 'the input names its label');
       assert
         .dom(document.getElementById(labelId!))
         .hasAttribute('data-test-boxel-field-label')
-        .hasText('Enter New Password');
+        .hasText('New Password');
     });
 
     test('a field with no label is still named', async function (assert) {
@@ -306,35 +232,21 @@ module('Integration | credential fields', function (hooks) {
     });
 
     test('shows the error the app reports for a field', async function (assert) {
-      let { receive } = await renderForm('login');
+      let { receive } = await renderForm('change-password');
       receive({
         type: 'field-error',
-        field: 'password',
-        message: 'Sign in failed. Please check your credentials and try again.',
+        field: 'current',
+        message: 'Invalid password',
       });
       await settled();
       assert
         .dom('[data-test-boxel-input-error-message]')
-        .hasText(
-          'Sign in failed. Please check your credentials and try again.',
-        );
-      assert.dom('[data-test-password-field]').hasClass('invalid');
-    });
-
-    test('register: shows that the password is valid, and that the passwords match', async function (assert) {
-      await renderForm('register');
-      await fillIn('[data-test-password-field]', 'a-long-password');
-      assert.dom('[data-test-password-valid]').hasText('password is valid');
-      assert.dom('[data-test-password-valid] svg').exists('with a check mark');
-      assert.dom('[data-test-passwords-match]').doesNotExist();
-      await fillIn('[data-test-confirm-password-field]', 'a-long-password');
-      assert.dom('[data-test-passwords-match]').hasText('passwords match');
-      await fillIn('[data-test-confirm-password-field]', 'a-long-passwor');
-      assert.dom('[data-test-passwords-match]').doesNotExist();
+        .hasText('Invalid password');
+      assert.dom('[data-test-current-password-field]').hasClass('invalid');
     });
 
     test('Enter in a field asks the app to submit', async function (assert) {
-      let { sent } = await renderForm('login');
+      let { sent } = await renderForm('confirm-password');
       let before = sent.length;
       await triggerKeyEvent('[data-test-password-field]', 'keydown', 'Enter');
       // The fields may also report their size or state meanwhile; Enter
@@ -346,18 +258,11 @@ module('Integration | credential fields', function (hooks) {
         );
       assert.deepEqual(requests, [{ type: 'submit-request' }]);
     });
-
-    test('a username the app knows fills in the username field', async function (assert) {
-      let { receive } = await renderForm('login');
-      receive({ type: 'context', username: 'example-user' });
-      await settled();
-      assert.dom('[data-test-username-field]').hasValue('example-user');
-    });
   });
 
   module('sizing and theming', function () {
     test('reports the height of the fields, and again when it changes', async function (assert) {
-      let { sent, receive } = await renderForm('reset');
+      let { sent, receive } = await renderForm('change-password');
       let sizes = () => sent.filter((message) => message.type === 'size');
       let formHeight = () =>
         document.getElementById('credential-fields')!.getBoundingClientRect()
@@ -365,12 +270,13 @@ module('Integration | credential fields', function (hooks) {
       receive({ type: 'style', properties: {} });
       // The frame measures itself once the styles are drawn, so the report
       // arrives after this message is handled.
-      await waitUntil(() => sizes().length > 0);
+      await settled();
       let first = sizes().at(-1);
       assert.strictEqual(first.height, formHeight(), 'the height of the form');
-      await fillIn('[data-test-password-field]', 'short');
-      await blur('[data-test-password-field]');
-      await waitUntil(() => sizes().at(-1).height > first.height);
+      await fillIn('[data-test-new-password-field]', 'short');
+      await blur('[data-test-new-password-field]');
+      await nextResize(document.getElementById('credential-fields')!);
+      assert.true(sizes().at(-1).height > first.height, 'reports a new height');
       assert.strictEqual(
         sizes().at(-1).height,
         formHeight(),

@@ -1,0 +1,454 @@
+{
+  "description": "How a Google identity with no linked account resolves to a Matrix account in the realm server's Google sign-in on the secure origin (tests/google-account-test.ts). `usersByEmail` lists the accounts holding the email; `existingLocalparts` the localparts already taken, which a candidate matches without case, as Synapse compares localparts. `expected.outcome` is `existing` (the Google identity is linked to that account), `new` (an account is made) or `refused` (with the message the user sees).",
+  "vectors": [
+    {
+      "name": "a missing email is refused",
+      "userinfo": {
+        "sub": "g-1",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "refused",
+        "message": "Google sign-in requires a verified email address."
+      }
+    },
+    {
+      "name": "an unverified email is refused",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": false,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "refused",
+        "message": "Google sign-in requires a verified email address."
+      }
+    },
+    {
+      "name": "an email verified only as a string is refused",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": "true",
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "refused",
+        "message": "Google sign-in requires a verified email address."
+      }
+    },
+    {
+      "name": "the one account holding the email is linked",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "Alice@Gmail.com",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": ["@existing:localhost"],
+      "existingLocalparts": ["existing", "alice"],
+      "expected": {
+        "outcome": "existing",
+        "localpart": "existing",
+        "displayName": "Alice",
+        "email": "alice@gmail.com"
+      }
+    },
+    {
+      "name": "two accounts holding the email are refused",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": ["@one:localhost", "@two:localhost"],
+      "existingLocalparts": ["one", "two"],
+      "expected": {
+        "outcome": "refused",
+        "message": "Multiple Matrix accounts already use this email address; please contact support to resolve before signing in with Google."
+      }
+    },
+    {
+      "name": "a new account takes the email's local part",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": true,
+        "name": "Alice Example"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Alice Example",
+        "email": "alice@gmail.com"
+      }
+    },
+    {
+      "name": "a new account lowercases the email",
+      "userinfo": {
+        "sub": "g-1",
+        "email": " Alice.Smith@Example.COM ",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice.smith",
+        "displayName": "Alice",
+        "email": "alice.smith@example.com"
+      }
+    },
+    {
+      "name": "a new account replaces characters Matrix forbids",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "O'Brien!x#y@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "o-brien-x-y",
+        "displayName": "Pat",
+        "email": "o'brien!x#y@gmail.com"
+      }
+    },
+    {
+      "name": "a new account keeps the characters Matrix allows",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a.b_c=d-e/f+g@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a.b_c=d-e/f+g",
+        "displayName": "Pat",
+        "email": "a.b_c=d-e/f+g@gmail.com"
+      }
+    },
+    {
+      "name": "a character outside the Basic Multilingual Plane becomes one -",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a😀b@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a-b",
+        "displayName": "Pat",
+        "email": "a😀b@gmail.com"
+      }
+    },
+    {
+      "name": "a local part of only forbidden characters becomes user",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "!!!@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "!!!@gmail.com"
+      }
+    },
+    {
+      "name": "an all-digit local part is prefixed, since Synapse reserves it for guests",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-12345",
+        "displayName": "Pat",
+        "email": "12345@example.com"
+      }
+    },
+    {
+      "name": "an all-digit local part that is taken suffixes after the prefix",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user-12345"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-123451",
+        "displayName": "Pat",
+        "email": "12345@example.com"
+      }
+    },
+    {
+      "name": "a leading _ is dropped, since Synapse reserves it for application services",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_alice@example.com"
+      }
+    },
+    {
+      "name": "a leading _ is dropped before the collision check, so its account is never linked into one that merely has the rest",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["alice"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice1",
+        "displayName": "Pat",
+        "email": "_alice@example.com"
+      }
+    },
+    {
+      "name": "a leading run of _ and - is dropped",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_-_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_-_alice@example.com"
+      }
+    },
+    {
+      "name": "an _ after the first character is kept",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a_lice_@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a_lice_",
+        "displayName": "Pat",
+        "email": "a_lice_@example.com"
+      }
+    },
+    {
+      "name": "digits left after dropping a leading _ are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "__42@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "__42@example.com"
+      }
+    },
+    {
+      "name": "digits left after dropping forbidden characters are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "#42!@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "#42!@example.com"
+      }
+    },
+    {
+      "name": "digits with other allowed characters are not prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "42.7@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "42.7",
+        "displayName": "Pat",
+        "email": "42.7@example.com"
+      }
+    },
+    {
+      "name": "digits outside ASCII are forbidden characters, not digits",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "٤٢@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "٤٢@example.com"
+      }
+    },
+    {
+      "name": "a local part of only _ becomes user",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "___@example.com"
+      }
+    },
+    {
+      "name": "a taken user fallback is suffixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user1",
+        "displayName": "Pat",
+        "email": "___@example.com"
+      }
+    },
+    {
+      "name": "a new account is never linked into an account that merely has its localpart",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["alice"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice1",
+        "displayName": "Alice",
+        "email": "alice@gmail.com"
+      }
+    },
+    {
+      "name": "a new account suffixes past a run of taken localparts",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["alice", "alice1", "alice2"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice3",
+        "displayName": "Alice",
+        "email": "alice@gmail.com"
+      }
+    },
+    {
+      "name": "a new account suffixes past an account whose localpart differs only in case",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@example.com",
+        "email_verified": true,
+        "name": "Alice"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["Alice"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice1",
+        "displayName": "Alice",
+        "email": "alice@example.com"
+      }
+    },
+    {
+      "name": "a new account with no Google name has no display name",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "alice@gmail.com",
+        "email_verified": true
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": null,
+        "email": "alice@gmail.com"
+      }
+    }
+  ]
+}

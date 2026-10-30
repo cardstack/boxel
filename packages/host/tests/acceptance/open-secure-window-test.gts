@@ -52,13 +52,9 @@ module('Acceptance | open the secure window', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let originalFlag: boolean;
   let secureOrigin = new URL(ENV.secureOriginURL);
 
   hooks.beforeEach(async function () {
-    originalFlag = ENV.signInOnSecureOrigin;
-    ENV.signInOnSecureOrigin = true;
-
     // A card that asks for a key the way any card does: through the tool
     // its context hands it, naming itself, the operation and a reason.
     class WeatherStation extends CardDef {
@@ -115,10 +111,6 @@ module('Acceptance | open the secure window', function (hooks) {
         },
       },
     });
-  });
-
-  hooks.afterEach(function () {
-    ENV.signInOnSecureOrigin = originalFlag;
   });
 
   async function visitWeatherStation() {
@@ -291,20 +283,39 @@ module('Acceptance | open the secure window', function (hooks) {
     });
   });
 
-  test('the window is not opened on a deployment that does not sign in on the secure origin', async function (assert) {
+  test('approving opens the window for the one operation a card is blocked on', async function (assert) {
     let { calls } = stubWindowOpen();
     await visitWeatherStation();
-    ENV.signInOnSecureOrigin = false;
     let { toolContext } = getService('tool-service');
-    await assert.rejects(
-      new OpenSecureWindowTool(toolContext).execute({
-        mode: 'enter-key',
+    let tool = new OpenSecureWindowTool(toolContext);
+    for (let mode of ['approve', 'review-changes']) {
+      await tool.execute({
+        mode,
         cardId: `${testRealmURL}WeatherStation/home`,
         operation: OPERATION,
-      }),
-      /does not offer/,
+      });
+    }
+    assert.deepEqual(
+      calls.map(({ url }) => new URL(url).pathname.split('/').pop()),
+      ['approve', 'review-changes'],
     );
-    assert.strictEqual(calls.length, 0, 'no window opened');
+    for (let { url } of calls) {
+      let opened = new URL(url);
+      assert.strictEqual(opened.search, '');
+      assert.deepEqual(
+        Object.fromEntries(new URLSearchParams(opened.hash.slice(1))),
+        { card: `${testRealmURL}WeatherStation/home`, operation: OPERATION },
+        'the card and its one operation, never the others it has',
+      );
+    }
+    await assert.rejects(
+      tool.execute({
+        mode: 'approve',
+        cardId: `${testRealmURL}WeatherStation/home`,
+      }),
+      /an approval names the operation/,
+      'an approval names the operation it is blocked on',
+    );
   });
 
   test('what the window is opened for must name things it can read', async function (assert) {
@@ -314,7 +325,7 @@ module('Acceptance | open the secure window', function (hooks) {
     let tool = new OpenSecureWindowTool(toolContext);
     await assert.rejects(
       tool.execute({ mode: 'delete-key', realm: testRealmURL }),
-      /mode must be one of "enter-key", "replace-key", "share-key", "swap-key"/,
+      /mode must be one of "enter-key", "replace-key", "share-key", "swap-key", "connect", "approve", "review-changes"/,
       'an unsupported mode',
     );
     await assert.rejects(

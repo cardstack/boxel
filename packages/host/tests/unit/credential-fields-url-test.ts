@@ -25,7 +25,11 @@ module('Unit | credential-fields-url', function () {
       'http://[::1]:4200',
     ]) {
       let { path, query, fragment } = parts(
-        credentialFieldsURL('https://secure.stack.cards/', 'login', origin),
+        credentialFieldsURL(
+          'https://secure.stack.cards/',
+          'change-password',
+          origin,
+        ),
       );
       assert.strictEqual(
         path,
@@ -35,7 +39,7 @@ module('Unit | credential-fields-url', function () {
       assert.deepEqual(query, {}, `${origin}: no query`);
       assert.deepEqual(
         fragment,
-        { form: 'login', origin },
+        { form: 'change-password', origin },
         `${origin}: the fragment`,
       );
     }
@@ -44,10 +48,18 @@ module('Unit | credential-fields-url', function () {
   test('a page anywhere else passes them in the query as well', function (assert) {
     let origin = 'https://realms-staging.stack.cards';
     let { query, fragment } = parts(
-      credentialFieldsURL('https://secure.stack.cards/', 'register', origin),
+      credentialFieldsURL(
+        'https://secure.stack.cards/',
+        'confirm-password',
+        origin,
+      ),
     );
-    assert.deepEqual(query, { form: 'register', origin }, 'the query');
-    assert.deepEqual(fragment, { form: 'register', origin }, 'the fragment');
+    assert.deepEqual(query, { form: 'confirm-password', origin }, 'the query');
+    assert.deepEqual(
+      fragment,
+      { form: 'confirm-password', origin },
+      'the fragment',
+    );
   });
 
   test('the frame is beneath the secure origin path, with or without a trailing slash', function (assert) {
@@ -59,7 +71,7 @@ module('Unit | credential-fields-url', function () {
         parts(
           credentialFieldsURL(
             secureOriginURL,
-            'reset',
+            'change-password',
             'https://localhost:4200',
           ),
         ).path,

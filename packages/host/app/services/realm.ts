@@ -41,6 +41,7 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   logger,
+  ReadinessTimeoutError,
   ri,
   rri,
   SupportedMimeType,
@@ -102,6 +103,18 @@ export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 // realm polls slowly rather than hot-looping; short enough that a transient blip
 // recovers without a reload.
 const INDEX_COUNTS_RETRY_MS = 5000;
+
+// The publish was accepted and its HTML is still rendering when the readiness
+// wait ran out of time, so the site goes live without another publish.
+export class PublishPendingError extends Error {
+  constructor(options: { cause: unknown }) {
+    super(
+      'Published, but the site is taking longer than usual to finish rendering. It goes live when rendering finishes.',
+      options,
+    );
+    this.name = 'PublishPendingError';
+  }
+}
 
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
@@ -644,6 +657,10 @@ class RealmResource {
 
     try {
       this._isPublishing = true;
+      // A publish is durable once `_publish-realm` accepts it, so its
+      // `lastPublishedAt` holds whatever the readiness wait reports.
+      let accepted: Awaited<ReturnType<RealmServerService['publishRealm']>>[] =
+        [];
       const publishPromises = urls.map(async (url) => {
         if (this._publishingRealms.includes(url)) {
           return;
@@ -653,14 +670,27 @@ class RealmResource {
 
         try {
           let result = await this.realmServer.publishRealm(this.url, url);
+          accepted.push(result);
           // `_publish-realm` returns 202 before the published realm is
           // indexed. Keep the "Publishing…" state until the realm passes its
           // readiness check so "Open Site" only enables once the page is
           // actually viewable. Poll the URL the server actually published to —
           // a server-side domain override can make that differ from `url`.
-          await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
-            onProgress: (progress) => this._publishProgress.set(url, progress),
-          });
+          try {
+            await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
+              onProgress: (progress) =>
+                this._publishProgress.set(url, progress),
+            });
+          } catch (error) {
+            if (
+              error instanceof ReadinessTimeoutError &&
+              error.stage === 'prerender-html' &&
+              !error.stalled
+            ) {
+              throw new PublishPendingError({ cause: error });
+            }
+            throw error;
+          }
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
@@ -673,15 +703,11 @@ class RealmResource {
 
       const results = await Promise.allSettled(publishPromises);
       if (this.info) {
-        let lastPublishedAt = results.reduce(
-          (acc, result) => {
-            if (result.status === 'fulfilled' && result.value) {
-              acc[result.value.publishedRealmURL] =
-                result.value.lastPublishedAt;
-            }
-            return acc;
-          },
-          {} as Record<string, any>,
+        let lastPublishedAt = Object.fromEntries(
+          accepted.map((result) => [
+            result.publishedRealmURL,
+            result.lastPublishedAt,
+          ]),
         );
         this.info = {
           ...this.info,

@@ -123,6 +123,22 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     address: 'connected#error=denied',
     marker: '[data-test-keys-page="connected"]',
   },
+  {
+    page: `keys/${KEY_ID}/use`,
+    address: `keys/${KEY_ID}/use`,
+    marker: '[data-test-keys-page="use-key"]',
+  },
+  {
+    page: 'approve',
+    address: 'approve#card=https%3A%2F%2Frealm.example%2Fcard&operation=list',
+    marker: '[data-test-keys-page="approve"]',
+  },
+  {
+    page: 'review-changes',
+    address:
+      'review-changes#card=https%3A%2F%2Frealm.example%2Fcard&operation=list',
+    marker: '[data-test-keys-page="review-changes"]',
+  },
 ];
 
 // Addresses that name a page by the `mode` query parameter, as earlier CLI
@@ -186,14 +202,7 @@ const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
 ];
 
 // Every form the credential fields present.
-const CREDENTIAL_FORMS = [
-  'login',
-  'cli-login',
-  'register',
-  'reset',
-  'change-password',
-  'confirm-password',
-];
+const CREDENTIAL_FORMS = ['change-password', 'confirm-password'];
 
 // Records every policy violation in a frame, from before any of its own
 // script runs.

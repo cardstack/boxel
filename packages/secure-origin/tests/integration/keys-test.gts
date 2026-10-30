@@ -6,7 +6,6 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -23,6 +22,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -143,28 +143,35 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
-// Chooses a key file and waits until the page has read this one. The read is
-// a browser promise `settled()` doesn't track, so the wait is for what the
-// page says of this file by name: the service account it holds, or why it
-// can't be used.
+// Chooses a key file. The module waits on file reads
+// (`setupWaitedBrowserWork`), so this returns once the page has read it.
+// Choosing a file and typing, without settling: for a test that holds a
+// request open, where `triggerEvent` and `fillIn` would wait on it.
+function chooseKeyFileNow(contents: string, name = 'boxel-test.json') {
+  let input = document.querySelector<HTMLInputElement>(
+    '[data-test-service-account-file]',
+  )!;
+  let files = new DataTransfer();
+  files.items.add(new File([contents], name, { type: 'application/json' }));
+  input.files = files.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function typeNow(selector: string, text: string) {
+  let input = document.querySelector<HTMLInputElement>(selector)!;
+  input.value = text;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
   });
-  await waitUntil(
-    () =>
-      document
-        .querySelector('[data-test-service-account-email]')
-        ?.textContent?.includes(name) ||
-      document
-        .querySelector('[data-test-service-account-problem]')
-        ?.getAttribute('data-test-service-account-problem-file') === name,
-  );
-  await settled();
 }
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
+  setupWaitedBrowserWork(hooks);
 
   let requests: { method: string; path: string; url: URL; body: any }[];
   let routes: Record<string, Route>;
@@ -217,28 +224,31 @@ module('Integration | key pages', function (hooks) {
           },
         }),
       'GET _user-keys': () => json(200, keyResources()),
+      'GET _key-bindings': () => json(200, { data: [] }),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let body = init.body ? JSON.parse(String(init.body)) : undefined;
-      let path = url.pathname.replace(/^\//, '');
-      requests.push({ method, path, url, body });
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? await route({ url, method, body })
-        : refusal(404, 'Not found');
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let body = init.body ? JSON.parse(String(init.body)) : undefined;
+        let path = url.pathname.replace(/^\//, '');
+        requests.push({ method, path, url, body });
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? await route({ url, method, body })
+          : refusal(404, 'Not found');
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = (url: string) =>
       navigations.push({ how: 'assign', url });
     navigation.replace = (url: string) =>
@@ -471,7 +481,6 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-key-row="Maps"] [data-test-key-replace]');
       await fillIn('[data-test-key-value]', 'new-value');
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
       assert.dom('[data-test-keys-signed-out]').doesNotExist();
       assert.strictEqual(
         requests.filter((r) => r.path === '_key-write-tickets').length,
@@ -597,8 +606,6 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-2' },
       ]);
@@ -664,7 +671,7 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys'],
+        ['GET _user-keys', 'GET _key-bindings'],
         'the page asks nothing per key',
       );
     });
@@ -713,8 +720,6 @@ module('Integration | key pages', function (hooks) {
 
       await click(`${team} [data-test-key-unshare]`);
       await click(`${team} [data-test-key-unshare-confirm-button]`);
-      await waitUntil(() => listings === 2);
-      await settled();
       assert.deepEqual(
         requests
           .filter((r) => r.method === 'DELETE')
@@ -908,8 +913,6 @@ module('Integration | key pages', function (hooks) {
           'Someone with direct write access to one of them can put their own key in its place.',
         );
       await click('[data-test-key-delete-confirm-button]');
-      await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'delete', keyId: 'key-1' },
       ]);
@@ -929,14 +932,17 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
-      // Not awaited: the share list is held back until released.
+      // Not awaited: the share list is held back until released. It is
+      // released on every path: a stubbed request still open keeps its waiter
+      // pending, and every later test's `settled()` with it.
       click('[data-test-key-row="Maps"] [data-test-key-delete]');
-      await waitFor('[data-test-key-delete-loading]');
-      assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
-      release();
-      await waitUntil(
-        () => !document.querySelector('[data-test-key-delete-loading]'),
-      );
+      try {
+        await waitFor('[data-test-key-delete-loading]');
+        assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
+      } finally {
+        release?.();
+      }
+      await settled();
       assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
       assert
         .dom('[data-test-key-delete-confirm]')
@@ -1189,7 +1195,6 @@ module('Integration | key pages', function (hooks) {
       await fillIn('[data-test-key-name]', 'Forecasts');
       await fillIn('[data-test-key-value]', 'sk-forecast');
       await click('[data-test-enter-key-save]');
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
@@ -1503,8 +1508,6 @@ module('Integration | key pages', function (hooks) {
         'https://www.googleapis.com/auth/spreadsheets',
       );
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-sa' },
       ]);
@@ -1519,6 +1522,160 @@ module('Integration | key pages', function (hooks) {
         },
         meta: { ticket: 'ticket-1' },
       });
+    });
+
+    test('the key page shows a service account’s email, subject and scopes, and a replace starts from them', async function (assert) {
+      const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+      const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+      };
+      let actsAsItself = {
+        ...serviceAccount,
+        id: 'key-sa-2',
+        name: 'Reports',
+        serviceAccount: { ...serviceAccount.serviceAccount, subject: null },
+      };
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([KEYS[1], actsAsItself, serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+        'PATCH _user-keys/key-sa': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-sa',
+              attributes: attributesOf(serviceAccount),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      let row = '[data-test-key-row="Sheets"]';
+      assert
+        .dom(`${row} [data-test-service-account-detail="email"]`)
+        .hasText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert
+        .dom(`${row} [data-test-service-account-detail="subject"]`)
+        .hasText('owner@example.com');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll(
+            `${row} [data-test-service-account-scope]`,
+          ),
+        ].map((scope) => scope.textContent?.trim()),
+        [SHEETS, DRIVE],
+      );
+      assert
+        .dom(
+          '[data-test-key-row="Reports"] [data-test-service-account-detail="subject"]',
+        )
+        .hasText('The service account itself');
+      assert
+        .dom('[data-test-key-row="Maps"] [data-test-service-account-details]')
+        .doesNotExist('a key pasted in as it is has none');
+
+      await click(`${row} [data-test-key-replace]`);
+      await settled();
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com', 'Act as starts as it is');
+      assert
+        .dom('[data-test-service-account-scopes]')
+        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assert
+        .dom('[data-test-key-replace-save]')
+        .isDisabled('the key file is still chosen anew');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
+      await click('[data-test-key-replace-save]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+        {
+          value: SERVICE_ACCOUNT_FILE,
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+        'leaving the fields as they are keeps them',
+      );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: ['openid'],
+        },
+      };
+      serve({
+        'GET _user-keys': () => json(200, keyResources([serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
+    });
+
+    test('a replace cancelled after editing the prefilled fields starts from the key again', async function (assert) {
+      let serviceAccount = {
+        ...KEYS[1],
+        id: 'key-sa',
+        name: 'Sheets',
+        kind: 'google-service-account',
+        serviceAccount: {
+          email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+          subject: 'owner@example.com',
+          scopes: ['openid'],
+        },
+      };
+      serve({
+        'GET _user-keys': () => json(200, keyResources([serviceAccount])),
+        'GET _key-shares': () => json(200, { data: [] }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Sheets"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      await fillIn('[data-test-service-account-subject]', '');
+      await fillIn('[data-test-service-account-scopes]', 'email');
+      await click('[data-test-key-replace-form] button[type="button"]');
+      await click('[data-test-key-row="Sheets"] [data-test-key-replace]');
+      await settled();
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com');
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
     });
   });
 
@@ -2050,7 +2207,20 @@ module('Integration | key pages', function (hooks) {
       visitShell(OPENED);
       await render(ReplaceKeyPage);
       await waitFor('[data-test-replace-key-form]');
-      assert.dom('[data-test-service-account-replace-note]').exists();
+      assert.true(
+        requests.some(
+          (r) => r.method === 'GET' && r.path === '_user-keys/key-1',
+        ),
+        'asks for the key’s details',
+      );
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'sets the key file, the scopes and who it acts as all anew',
+          'a key whose details aren’t known is set anew',
+        );
+      assert.dom('[data-test-service-account-subject]').hasValue('');
+      assert.dom('[data-test-service-account-scopes]').hasValue('');
       assert
         .dom('[data-test-key-value]')
         .doesNotExist('a service account has no value to paste');
@@ -2073,6 +2243,207 @@ module('Integration | key pages', function (hooks) {
         },
         meta: { ticket: 'ticket-1' },
       });
+    });
+
+    function serviceAccountSlot() {
+      return forecastWith([
+        {
+          name: 'userKey',
+          key: 'userKey',
+          bound: {
+            rejected: true,
+            key: {
+              id: 'key-1',
+              name: 'Sheets',
+              kind: 'google-service-account',
+            },
+          },
+        },
+      ]);
+    }
+
+    function serviceAccountKey(serviceAccount: {
+      email: string;
+      subject: string | null;
+      scopes: string[];
+    }) {
+      return json(200, {
+        data: {
+          type: 'user-key',
+          id: 'key-1',
+          attributes: {
+            ...attributesOf(KEYS[0]),
+            name: 'Sheets',
+            kind: 'google-service-account',
+            serviceAccount,
+          },
+        },
+      });
+    }
+
+    test('a service account whose details are known starts from the user it acts as and its scopes', async function (assert) {
+      const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+      const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: [SHEETS, DRIVE],
+          }),
+        'PATCH _user-keys/key-1': () =>
+          json(200, {
+            data: {
+              type: 'user-key',
+              id: 'key-1',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                kind: 'google-service-account',
+              },
+            },
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com', 'Act as starts as it is');
+      assert
+        .dom('[data-test-service-account-scopes]')
+        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assert
+        .dom('[data-test-replace-key-save]')
+        .isDisabled('the key file is still chosen anew');
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .doesNotExist(
+          'a key file for the same service account changes nothing',
+        );
+      await click('[data-test-replace-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
+        {
+          value: SERVICE_ACCOUNT_FILE,
+          subject: 'owner@example.com',
+          scopes: [SHEETS, DRIVE],
+        },
+        'leaving the fields as they are keeps them',
+      );
+    });
+
+    test('a key file for another service account says the prefilled fields were granted to the old one', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': () =>
+          serviceAccountKey({
+            email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+            subject: null,
+            scopes: ['openid'],
+          }),
+      });
+      visitShell(OPENED);
+      await render(ReplaceKeyPage);
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('', 'a key acting as itself starts with Act as empty');
+      assert.dom('[data-test-service-account-changed]').doesNotExist();
+      await chooseKeyFile(SERVICE_ACCOUNT_FILE);
+      assert
+        .dom('[data-test-service-account-changed]')
+        .includesText(
+          'This key file is for sheets-bot@boxel-test.iam.gserviceaccount.com, not reports-bot@boxel-test.iam.gserviceaccount.com',
+        );
+    });
+
+    test('a key file chosen before the key’s details arrive stays, and the fields still start from them', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      // Not awaited: the key read is held back until answered, and anything
+      // that settles waits for it. It is answered on every path: a stubbed
+      // request still open keeps its waiter pending, and every later test's
+      // `settled()` with it.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-file]');
+        assert
+          .dom('[data-test-service-account-replace-note]')
+          .doesNotExist(
+            'nothing is said about the replace until the key is read',
+          );
+        chooseKeyFileNow(SERVICE_ACCOUNT_FILE);
+        await waitFor('[data-test-service-account-email]');
+      } finally {
+        answer();
+      }
+      await rendered;
+      await settled();
+      assert.dom('[data-test-service-account-scopes]').hasValue('openid');
+      assert
+        .dom('[data-test-service-account-subject]')
+        .hasValue('owner@example.com');
+      assert
+        .dom('[data-test-service-account-email]')
+        .includesText('sheets-bot@boxel-test.iam.gserviceaccount.com');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText('start as the key has them now');
+      assert.dom('[data-test-replace-key-save]').isEnabled();
+    });
+
+    test('what the owner enters before the key’s details arrive is kept', async function (assert) {
+      let answer!: () => void;
+      let arrived = new Promise<void>((resolve) => (answer = resolve));
+      serve({
+        'POST _secure-window/context': () => serviceAccountSlot(),
+        'GET _user-keys/key-1': async () => {
+          await arrived;
+          return serviceAccountKey({
+            email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+            subject: 'owner@example.com',
+            scopes: ['openid'],
+          });
+        },
+      });
+      visitShell(OPENED);
+      // Not awaited, and answered on every path, as above.
+      let rendered = render(ReplaceKeyPage);
+      try {
+        await waitFor('[data-test-service-account-scopes]');
+        typeNow('[data-test-service-account-scopes]', 'email');
+      } finally {
+        answer();
+      }
+      await rendered;
+      await settled();
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('workspaces use this key', 'the key read has answered');
+      assert.dom('[data-test-service-account-scopes]').hasValue('email');
+      assert
+        .dom('[data-test-service-account-replace-note]')
+        .includesText(
+          'all anew',
+          'the note doesn’t claim a prefill it skipped',
+        );
     });
 
     test('an OAuth connection is signed in again on the connect page, not replaced', async function (assert) {
@@ -2285,14 +2656,9 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-replace-key-slot="second"] h2')
         .hasText('second', 'the remaining row keeps its heading');
-      await waitUntil(
-        () =>
-          document.activeElement ===
-          document.querySelector(
-            '[data-test-replace-key-slot="second"] [data-test-key-value]',
-          ),
-      );
-      assert.ok(true, 'focus moves to the next key’s value');
+      assert
+        .dom('[data-test-replace-key-slot="second"] [data-test-key-value]')
+        .isFocused('focus moves to the next key’s value');
       assert.deepEqual(navigations, [], 'one key is still to replace');
       await fillIn(
         '[data-test-replace-key-slot="second"] [data-test-key-value]',
@@ -2384,12 +2750,9 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell(OPENED);
       await render(ReplaceKeyPage);
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-replace-key-where]')
-          ?.textContent?.replace(/\s+/g, ' ')
-          .includes('3 workspaces use this key'),
-      );
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('3 workspaces use this key');
       assert
         .dom('[data-test-replace-key-where]')
         .includesText(

@@ -9,6 +9,7 @@ export type {
   ListedKey,
   OAuthClientRef,
   OAuthKeyDescription,
+  ServiceAccountDetails,
   SharedWorkspace,
   SlotBound,
   UserKey,

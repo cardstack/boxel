@@ -752,6 +752,136 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(reopened.scopes, ['openid', SHEETS_SCOPE]);
     });
 
+    test('a service account’s email, subject and scopes are listed and shown beside it, never its key file', async function (assert) {
+      let { file, privateKey } = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let added = await add(
+        {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: file,
+          subject: 'owner@example.com',
+          scopes: [SHEETS_SCOPE, 'openid'],
+        },
+        { ticket: await ticketFor() },
+      );
+      assert.strictEqual(added.status, 201, added.text);
+      let id = added.body.data.id as string;
+      await addKey('weather');
+      let details = {
+        email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
+        subject: 'owner@example.com',
+        scopes: [SHEETS_SCOPE, 'openid'],
+      };
+      assert.deepEqual(
+        added.body.data.attributes.serviceAccount,
+        details,
+        'the answer to the add carries them',
+      );
+
+      let pemLine = privateKey.split('\n')[1];
+      let listed = await request
+        .get('/_user-keys')
+        .set('Authorization', auth());
+      assert.strictEqual(listed.status, 200, listed.text);
+      let [sheets, weather] = listed.body.data;
+      assert.strictEqual(sheets.attributes.name, 'sheets');
+      assert.deepEqual(sheets.attributes.serviceAccount, details, 'listed');
+      assert.strictEqual(weather.attributes.name, 'weather');
+      assert.false(
+        'serviceAccount' in weather.attributes,
+        'a static key has none',
+      );
+      let shown = await request
+        .get(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.strictEqual(shown.status, 200, shown.text);
+      assert.deepEqual(shown.body.data.attributes.serviceAccount, details);
+      for (let [name, response] of [
+        ['add', added],
+        ['listing', listed],
+        ['show', shown],
+      ] as const) {
+        assert.false(response.text.includes(pemLine), `${name}: no key`);
+        assert.false(
+          response.text.includes('kid-1'),
+          `${name}: nor the key's id`,
+        );
+      }
+
+      let next = serviceAccountKeyFile(
+        'reports-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let replaced = await request
+        .patch(`/_user-keys/${id}`)
+        .set('Authorization', auth())
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'user-key',
+            id,
+            attributes: { value: next.file, scopes: [SHEETS_SCOPE] },
+          },
+          meta: { ticket: await ticketFor('replace', id) },
+        });
+      assert.strictEqual(replaced.status, 200, replaced.text);
+      let replacedDetails = {
+        email: 'reports-bot@boxel-test.iam.gserviceaccount.com',
+        subject: null,
+        scopes: [SHEETS_SCOPE],
+      };
+      assert.deepEqual(
+        replaced.body.data.attributes.serviceAccount,
+        replacedDetails,
+        'a replace sets them anew',
+      );
+      let reshown = await request
+        .get(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.deepEqual(
+        reshown.body.data.attributes.serviceAccount,
+        replacedDetails,
+      );
+      assert.false(reshown.text.includes(next.privateKey.split('\n')[1]));
+    });
+
+    test('a service account’s details are not shown once its value is sealed without them', async function (assert) {
+      let { file } = serviceAccountKeyFile(
+        'sheets-bot@boxel-test.iam.gserviceaccount.com',
+      );
+      let added = await add(
+        {
+          name: 'sheets',
+          kind: 'google-service-account',
+          value: file,
+          subject: 'owner@example.com',
+          scopes: [SHEETS_SCOPE],
+        },
+        { ticket: await ticketFor() },
+      );
+      assert.strictEqual(added.status, 201, added.text);
+      let id = added.body.data.id as string;
+      // What a revision that seals a new value without writing the details
+      // leaves behind: `updated_at` moves, the details stay as they were.
+      await dbAdapter.execute(
+        `UPDATE user_keys SET updated_at = updated_at + interval '1 second' WHERE id = $1`,
+        { bind: [id] },
+      );
+      let shown = await request
+        .get(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.strictEqual(shown.status, 200, shown.text);
+      assert.false(
+        'serviceAccount' in shown.body.data.attributes,
+        'details written for an earlier value are not shown',
+      );
+      let listed = await request
+        .get('/_user-keys')
+        .set('Authorization', auth());
+      assert.false('serviceAccount' in listed.body.data[0].attributes);
+    });
+
     test('a key file, subject or scopes a service account can’t use are refused, and leave the ticket unspent', async function (assert) {
       let { file, privateKey } = serviceAccountKeyFile(
         'sheets-bot@boxel-test.iam.gserviceaccount.com',

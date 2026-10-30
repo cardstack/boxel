@@ -117,7 +117,6 @@ import {
   clearRedirectGuard,
   framing,
   secureSignOutURL,
-  signInOnSecureOrigin,
 } from '../lib/secure-sign-in';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
@@ -242,7 +241,6 @@ export default class MatrixService extends Service {
   @service declare private store: StoreService;
   @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
-  @tracked private _isInitializingNewUser = false;
   // Set while a sign-out the user asked for is on its way to the secure
   // origin, so the signed-out page says so rather than sending them to sign
   // in.
@@ -322,6 +320,10 @@ export default class MatrixService extends Service {
   private aiRoomIds: Set<string> = new Set();
   private restoredDraftRooms = new Set<string>();
   private hydratedPendingSendRooms = new Set<string>();
+  // The client ids of the messages this tab sent. Another tab or device of
+  // the same user sends as the same author, so the author alone can't tell
+  // a message the reader just sent here from one sent elsewhere.
+  private sentClientGeneratedIds = new Set<string>();
   @tracked private _isLoadingMoreAIRooms = false;
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
@@ -902,18 +904,17 @@ export default class MatrixService extends Service {
     }
   }
 
-  // The sign-out the user asks for. With sign-in on the secure origin, the app
-  // signs out of its own session first, exactly as `logout()` always does
-  // (the service worker's realm tokens included, so the next user's images
-  // never carry them), and then sends the user to the secure origin to end
-  // its session too. That page comes back to the app's root, signed out, and
+  // The sign-out the user asks for. The app signs out of its own session
+  // first, exactly as `logout()` always does (the service worker's realm
+  // tokens included, so the next user's images never carry them), and then
+  // sends the user to the secure origin to end its session too. That page comes back to the app's root, signed out, and
   // the full navigation drops any card code that was running.
   //
   // A framed app is never navigated (the secure origin refuses to be framed):
   // it signs out of its own session only, and its signed-out page offers
   // sign-in in a tab of its own.
   async signOut() {
-    if (!signInOnSecureOrigin() || framing.isFramed()) {
+    if (framing.isFramed()) {
       await this.logout();
       return;
     }
@@ -982,49 +983,6 @@ export default class MatrixService extends Service {
       // the login form rather than offering "back to your account".
       throw new AccountSwitchError('boot', e);
     }
-  }
-
-  get isInitializingNewUser() {
-    return this._isInitializingNewUser;
-  }
-
-  async initializeNewUser(
-    auth: LoginResponse,
-    displayName: string,
-    registrationToken?: string,
-  ) {
-    await this.ready;
-
-    displayName = displayName.trim();
-    this._isInitializingNewUser = true;
-
-    this.configureClientWithAuth(auth);
-
-    let userId = auth.user_id;
-
-    if (!userId) {
-      throw new Error(
-        `bug: there is no userId associated with the matrix client`,
-      );
-    }
-
-    await this.start({ auth, registrationToken });
-    this.setDisplayName(displayName);
-
-    await this.realmServer.authenticateToAllAccessibleRealms();
-
-    await Promise.all([
-      this.createPersonalRealmForUser({
-        endpoint: PERSONAL_REALM_ENDPOINT,
-        name: `${displayName}'s Workspace`,
-        iconURL: iconURLFor(displayName),
-        backgroundURL: getRandomBackgroundURL(),
-      }),
-      this.realmServer.fetchCatalogRealms(),
-    ]);
-
-    this.router.refresh();
-    this._isInitializingNewUser = false;
   }
 
   private configureClientWithAuth(auth: LoginResponse) {
@@ -1424,14 +1382,13 @@ export default class MatrixService extends Service {
     await this.profile.load.perform();
   }
 
-  // Every sign-in path — password, token hand-off, registration, and the boot
-  // from persisted auth — converges on the boot below, so holding the waiter
-  // here covers all of them whichever one a caller came in through.
+  // Every sign-in path — the token hand-off and the boot from persisted auth —
+  // converges on the boot below, so holding the waiter here covers all of them
+  // whichever one a caller came in through.
   async start(
     opts: {
       auth?: MatrixSDK.LoginResponse;
       refreshRoutes?: true;
-      registrationToken?: string;
     } = {},
   ) {
     let waiterToken = signInWaiter.beginAsync();
@@ -1445,11 +1402,10 @@ export default class MatrixService extends Service {
   private async boot(opts: {
     auth?: MatrixSDK.LoginResponse;
     refreshRoutes?: true;
-    registrationToken?: string;
   }) {
     await this.ready;
 
-    let { auth, refreshRoutes, registrationToken } = opts;
+    let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = this.getAuth();
       if (!auth) {
@@ -1465,7 +1421,7 @@ export default class MatrixService extends Service {
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       if (isTesting()) console.warn('[start-phase] realmServer.login');
-      await this.realmServer.login(registrationToken);
+      await this.realmServer.login();
       this.subscribeToRealmsListUpdatesOnce();
       this.saveAuth(auth);
       this.bindEventListeners();
@@ -1739,7 +1695,7 @@ export default class MatrixService extends Service {
         // Symmetric to logout()'s notifySessionEnded(): tell every session
         // participant a session is now established so they can re-arm the
         // session-scoped state their resetState() tore down. All login paths
-        // (boot, SSO, password, /connect, new-user) converge here. Fires after
+        // (boot, token hand-off, /connect) converge here. Fires after
         // loginToRealms so realm auth is established; participants that need
         // rooms (e.g. the AI panel) already tolerate sliding sync not having
         // delivered them yet.
@@ -1768,9 +1724,8 @@ export default class MatrixService extends Service {
         // path (the keyless account with no realms of its own, this feature's
         // primary target) picks up the `app.boxel.realms` write that
         // `createPersonalRealmForUser` appends, via the AccountData listener.
-        // Off by default in the test suites (see autoProvisionPersonalRealm),
-        // and skipped for the new-user flow, which already creates one.
-        if (this.autoProvisionPersonalRealm && !this._isInitializingNewUser) {
+        // Off by default in the test suites (see autoProvisionPersonalRealm).
+        if (this.autoProvisionPersonalRealm) {
           this.ensurePersonalRealmTask.perform();
         }
       } catch (e) {
@@ -2106,6 +2061,9 @@ export default class MatrixService extends Service {
       | ToolResultWithNoOutputContent
       | ToolResultWithOutputContent,
   ) {
+    if ('clientGeneratedId' in content && content.clientGeneratedId) {
+      this.sentClientGeneratedIds.add(content.clientGeneratedId);
+    }
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
       if ('data' in content) {
@@ -2118,6 +2076,12 @@ export default class MatrixService extends Service {
         return await this.client.sendEvent(roomId, eventType, content);
       }
     });
+  }
+
+  wasSentFromThisTab(clientGeneratedId: string | null | undefined): boolean {
+    return Boolean(
+      clientGeneratedId && this.sentClientGeneratedIds.has(clientGeneratedId),
+    );
   }
 
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
@@ -2437,6 +2401,7 @@ export default class MatrixService extends Service {
     // the common case), and `MessageBuilder.updateMessage` early-returns when
     // the cached message's `created` is later than an incoming event — which
     // would silently drop the status transition from 'sending' to 'sent'.
+    this.sentClientGeneratedIds.add(content.clientGeneratedId);
     let originServerTs = this.resolveOptimisticTimestamp(roomId);
     let event: TempEvent = {
       event_id: `local-${content.clientGeneratedId}`,
@@ -2647,45 +2612,16 @@ export default class MatrixService extends Service {
     return Math.max(...candidates);
   }
 
-  async requestRegisterEmailToken(
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ) {
-    // The standalone /cli-auth route can reach registration before the SDK has
-    // finished loading (operator mode always boots first, so the register form
-    // is only reached once `ready` has resolved). Wait for it here so the client
-    // exists before the first registration request touches it.
-    await this.ready;
-    return await this.client.requestEmailToken(
-      'registration',
-      email,
-      clientSecret,
-      sendAttempt,
-    );
-  }
-
   async requestChangeEmailToken(
     email: string,
     clientSecret: string,
     sendAttempt: number,
   ) {
     return await this.client.requestEmailToken(
-      'threepid',
       email,
       clientSecret,
       sendAttempt,
     );
-  }
-
-  async loginFlows() {
-    await this.ready;
-    return this.client.loginFlows();
-  }
-
-  async getSsoLoginUrl(callbackUrl: string, idpId: string) {
-    await this.ready;
-    return this.client.getSsoLoginUrl(callbackUrl, 'sso', idpId);
   }
 
   // Redeems a login token. A hand-off from the secure origin names the device
@@ -2803,7 +2739,6 @@ export default class MatrixService extends Service {
     this.dashboardWrites = Promise.resolve();
     this.dashboardEchoesPending = [];
     this._currentRoomId = undefined;
-    this._isInitializingNewUser = false;
     if (isTesting() && this.session.isAuthenticated) {
       console.warn(
         '[login-diag] postLoginCompleted reset to false via resetState()\n' +
@@ -2819,6 +2754,7 @@ export default class MatrixService extends Service {
     this.currentUserEventReadReceipts.clear();
     this.restoredDraftRooms = new Set();
     this.hydratedPendingSendRooms = new Set();
+    this.sentClientGeneratedIds.clear();
     this.aiRoomIds.clear();
     this.initialSyncCompleted = false;
     this.initialSyncCompletedDeferred = new Deferred<void>();
@@ -3034,33 +2970,12 @@ export default class MatrixService extends Service {
     });
   }
 
-  async requestPasswordEmailToken(
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-    nextLink?: string,
-  ) {
-    return await this.client.requestPasswordEmailToken(
-      email,
-      clientSecret,
-      sendAttempt,
-      nextLink,
-    );
-  }
-
   // Type of matrixEvent is a partial MatrixEvent because a couple of places
   // where this method is called don't have the full MatrixEvent type available
   async sendReadReceipt(
     matrixEvent: Pick<MatrixEvent, 'getId' | 'getRoomId' | 'getTs'>,
   ) {
     return await this.client.sendReadReceipt(matrixEvent as MatrixEvent);
-  }
-
-  async isUsernameAvailable(username: string) {
-    // See requestRegisterEmailToken: the username check runs while the register
-    // form is filled, which on /cli-auth can precede the SDK finishing loading.
-    await this.ready;
-    return await this.client.isUsernameAvailable(username);
   }
 
   private async loadAllTimelineEvents(roomId: string) {
@@ -3635,21 +3550,6 @@ export default class MatrixService extends Service {
   private clearAuth() {
     this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
-  }
-
-  // Drop this browser's persisted session locally, without the server-side
-  // logout() performs — that would revoke the device. The CLI-auth register
-  // flow uses this after handing the just-minted registration device to the
-  // CLI: the CLI is that device's sole owner, so the browser must not keep it
-  // as its own persisted session (a later browser-side logout would otherwise
-  // revoke the CLI's session too). Account-level bootstrap side-effects
-  // (personal realm, realm auth) stay put; only this browser's local link to
-  // the device is forgotten.
-  //
-  // Storage-only, and all three keys of it.
-  forgetPersistedSession() {
-    this.clearAuth();
-    this.forgetRealmSessionTokens();
   }
 
   // The realm-server and per-realm session tokens are persisted apart from the
