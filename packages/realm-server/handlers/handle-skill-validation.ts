@@ -6,6 +6,7 @@ import {
   fetchUserPermissions,
   logger,
   markdownDefRef,
+  readRealmLoaderEpoch,
   skillCardRef,
   systemInitiatedPriority,
   type IndexedFile,
@@ -403,6 +404,14 @@ async function validateToolModules({
     realm.url,
   );
   let auth = createPrerenderAuth(owner, permissions, { realmAuthority: true });
+  // These renders land on the realm's authority tabs, which keep every module
+  // they have already evaluated. Indexing resets a tab only when it next
+  // renders there, so between a module write and that render a sweep would
+  // judge the tool module the tab evaluated before the write. The module route
+  // resets the tab's loader when this epoch differs from the one it last
+  // cleared for. It is the committed epoch, the same series the definition
+  // lookup sends to these tabs.
+  let loaderEpoch = await readRealmLoaderEpoch(dbAdapter, realm.url);
 
   // One prerender per unique module; the prerender server's admission
   // control paces concurrent renders, and system priority keeps this
@@ -419,6 +428,7 @@ async function validateToolModules({
           url: module,
           auth,
           priority: systemInitiatedPriority,
+          renderOptions: { loaderEpoch },
         }),
       );
     }),
