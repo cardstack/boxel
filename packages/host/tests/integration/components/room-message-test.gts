@@ -9,8 +9,6 @@ import {
 
 import GlimmerComponent from '@glimmer/component';
 
-import { format as formatDate } from 'date-fns';
-
 import { provide } from 'ember-provide-consume-context';
 
 import { module, test } from 'qunit';
@@ -797,9 +795,18 @@ module('Integration | Component | RoomMessage', function (hooks) {
     let created = (testScenario as any).messages[1].created as Date;
     let time = `${header} [data-test-pretui-speaker-time]`;
     let tip = `${header} [role="tooltip"]`;
-    let fullDate = formatDate(created, 'iiii MMM d, yyyy, h:mm aa');
+    let fullDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(created);
 
-    assert.dom(time).hasText(formatDate(created, 'h:mm aa'));
+    let shortTime = new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(created);
+
+    assert.dom(time).hasText(shortTime);
+    assert.dom(time).hasAttribute('datetime', created.toISOString());
     assert.dom(tip).hasText(fullDate);
     assert
       .dom(tip)

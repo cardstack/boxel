@@ -15,7 +15,7 @@ import { SpeakerLabel } from '@cardstack/pretui/components/speaker-label';
 import { StickToBottom } from '@cardstack/pretui/components/stick-to-bottom';
 import { formatToolDuration } from '@cardstack/pretui/components/tool-row';
 import { TurnChanges } from '@cardstack/pretui/components/turn-changes';
-import { format as formatDate, formatISO } from 'date-fns';
+import { format as formatDate } from 'date-fns';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier, { modifier } from 'ember-modifier';
@@ -482,18 +482,6 @@ export default class AiAssistantMessage extends Component<Signature> {
     return at ? formatDate(at, 'iiii MMM d, yyyy, h:mm aa') : undefined;
   }
 
-  private get shortTime() {
-    return formatDate(this.args.datetime, 'h:mm aa');
-  }
-
-  private get fullTime() {
-    return formatDate(this.args.datetime, 'iiii MMM d, yyyy, h:mm aa');
-  }
-
-  private get isoTime() {
-    return formatISO(this.args.datetime);
-  }
-
   <template>
     <section
       data-scroll-anchor
@@ -607,9 +595,7 @@ export default class AiAssistantMessage extends Component<Signature> {
             @authorName={{unless @hideMeta @authorName}}
             @isSelf={{unless @hideMeta @isSelf}}
             @continued={{@continuesRun}}
-            @time={{this.shortTime}}
-            @fullTime={{this.fullTime}}
-            @datetime={{this.isoTime}}
+            @timestamp={{@datetime}}
             @avatar={{@profileAvatar}}
           >
             <:attachments>{{#if this.hasItems}}<Attachments

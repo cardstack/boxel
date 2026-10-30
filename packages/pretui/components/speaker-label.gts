@@ -2,6 +2,7 @@
 import Component from '@glimmer/component';
 import { AgentMark } from './agent-mark';
 import { Tooltip } from './tooltip';
+import { fullDate, shortTime } from '../internal/message-time';
 
 export interface SpeakerLabelSignature {
   Args: {
@@ -12,13 +13,12 @@ export interface SpeakerLabelSignature {
     via?: string;
     /** the speaker is the assistant, not a person */
     agent?: boolean;
-    /** when, as the caller formats it: '2:04 PM' */
+    /** what follows the name, as the caller formats it: '2:04 PM', or a
+     * turn's 'Worked for 24s' */
     time?: string;
-    /** the full date, as the caller formats it: shown in a tooltip when the
-     * time is hovered or focused, which makes the time a keyboard stop */
-    fullTime?: string;
-    /** the time as an ISO string, for the time element's `datetime` */
-    datetime?: string;
+    /** when it was said, in place of `@time`: shown as '2:04 PM', with the
+     * full date in a tooltip on hover and keyboard focus */
+    timestamp?: Date;
     /** the assistant is working: its mark animates */
     working?: boolean;
   };
@@ -36,6 +36,15 @@ export interface SpeakerLabelSignature {
  * host's icon, animated while it works), so the two never read alike.
  */
 export class SpeakerLabel extends Component<SpeakerLabelSignature> {
+  get shortTime(): string | undefined {
+    return this.args.timestamp ? shortTime(this.args.timestamp) : undefined;
+  }
+  get fullDate(): string | undefined {
+    return this.args.timestamp ? fullDate(this.args.timestamp) : undefined;
+  }
+  get isoTime(): string | undefined {
+    return this.args.timestamp?.toISOString();
+  }
   get initial(): string {
     return this.args.name.trim()[0] ?? '?';
   }
@@ -62,20 +71,18 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
       {{#if @via}}<span class='pretui-speaker-via' data-test-pretui-speaker-via>
           via
           {{@via}}</span>{{/if}}
-      {{#if @time}}
-        {{#if @fullTime}}
-          <span class='pretui-speaker-dot' aria-hidden='true'>·</span>
-          <Tooltip @content={{@fullTime}} @side='right'>
-            <time
-              class='pretui-speaker-tiptime'
-              datetime={{@datetime}}
-              tabindex='0'
-              data-test-pretui-speaker-time
-            >{{@time}}</time>
-          </Tooltip>
-        {{else}}
-          <span class='pretui-speaker-time'>{{@time}}</span>
-        {{/if}}
+      {{#if this.fullDate}}
+        <span class='pretui-speaker-dot' aria-hidden='true'>·</span>
+        <Tooltip @content={{this.fullDate}} @side='right'>
+          <time
+            class='pretui-speaker-tiptime'
+            datetime={{this.isoTime}}
+            tabindex='0'
+            data-test-pretui-speaker-time
+          >{{this.shortTime}}</time>
+        </Tooltip>
+      {{else if @time}}
+        <span class='pretui-speaker-time'>{{@time}}</span>
       {{/if}}
     </div>
     <style scoped>
