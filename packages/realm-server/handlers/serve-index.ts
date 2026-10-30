@@ -13,6 +13,7 @@ import {
   PREFIX_REALMS,
   RealmPaths,
   SCOPED_CSS_SERVING_PREFIX,
+  SupportedMimeType,
   foreignQueryParams,
   hasExtension,
   isCaptureServingPath,
@@ -49,6 +50,28 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 // routed to where it holds it, and otherwise the one a routing rule pointed
 // into. A card no realm holds is served no markup at all, since nothing can say
 // which of its formats its type withholds.
+// Whether a visitor who isn't signed in may read the card at `cardURL`, as
+// the realm holding it answers: its permissions and its policy decide, as
+// they would for that visitor's own request. A routing rule into another realm
+// serves that realm's prerendered page only when this is true.
+async function anonymousMayRead(
+  cardURL: URL,
+  routingDeps: RealmRoutingDeps,
+): Promise<boolean> {
+  let realm = await findOrMountRealm(cardURL, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  let url = new URL(cardURL);
+  url.protocol = new URL(realm.url).protocol;
+  let response = await realm.handle(
+    new Request(url.href, {
+      headers: { Accept: SupportedMimeType.CardJson },
+    }),
+  );
+  return response?.status === 200;
+}
+
 async function unshareableFormatsForPage(
   readURL: URL,
   routedRealm: Realm | undefined,
@@ -625,8 +648,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           return;
         }
         // Rewrite cardURL so the head/isolated/scoped CSS fetched below
-        // render the routed target.
-        cardURL = new URL(matched.rule.id);
+        // render the routed target. A target in another realm (a site card
+        // opted in) is served as that realm prerendered it, and only when a
+        // visitor who isn't signed in may read it; otherwise the path is
+        // served as if unrouted.
+        let target = new URL(matched.rule.id);
+        if (
+          !('crossRealm' in matched.rule && matched.rule.crossRealm) ||
+          (await anonymousMayRead(target, routingDeps))
+        ) {
+          cardURL = target;
+        } else {
+          log.warn(
+            `not serving ${target.href} at ${requestURL.pathname}: a visitor who isn't signed in may not read it`,
+          );
+        }
       }
     }
 

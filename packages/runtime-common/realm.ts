@@ -16990,6 +16990,31 @@ export class Realm {
   // Returns absolute URLs. A rule may instead declare a redirect
   // (`redirectTo` + optional `statusCode`); those surface as redirect
   // entries in the map.
+  // Whether the site card realm.json names opts in to serving cards other
+  // realms hold, each as the realm holding it prerendered it. The card must
+  // live in this realm; host mode reads only this one field of it, from its
+  // index entry, and never runs its code.
+  async #siteServesSourcePrerender(site: unknown): Promise<boolean> {
+    if (typeof site !== 'string' || !site.trim()) {
+      return false;
+    }
+    let siteURL: URL;
+    try {
+      siteURL = new URL(site.trim(), this.url);
+    } catch {
+      return false;
+    }
+    if (!this.paths.inRealm(siteURL)) {
+      this.#log.warn(`ignoring site card ${site}: it is outside this realm`);
+      return false;
+    }
+    let entry = await this.#realmIndexQueryEngine.instance(siteURL);
+    if (entry?.type !== 'instance') {
+      return false;
+    }
+    return (entry.searchDoc ?? {}).serveSourcePrerender === true;
+  }
+
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
@@ -17007,6 +17032,9 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return (this.#cachedHostRoutingMap = []);
       }
+      let crossRealmAllowed = await this.#siteServesSourcePrerender(
+        (indexEntry.searchDoc ?? {}).site,
+      );
       let map = rules.flatMap((rule): HostRoutingRule[] => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
@@ -17070,6 +17098,13 @@ export class Realm {
         // (`/realm-evil/` vs `/realm/`) and trailing-slash variance
         // are handled correctly.
         if (!this.paths.inRealm(idURL)) {
+          // The site card may opt in to routing to a card another realm
+          // holds. The rule is kept and marked, and serve-index serves the
+          // card only when a visitor who isn't signed in may read it, so a
+          // private realm's card still never reaches a public path.
+          if (crossRealmAllowed) {
+            return [{ path: normalizedPath, id, crossRealm: true }];
+          }
           this.#log.warn(
             `dropping host routing rule for path "${normalizedPath}" — target ${id} is outside this realm`,
           );
