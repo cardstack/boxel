@@ -400,11 +400,11 @@ module('Integration | connecting an account', function (hooks) {
       assert.dom(`${shared} [data-test-client-permissions]`).doesNotExist();
       assert.dom(`${shared} input`).isChecked();
       await click('[data-test-connect-submit]');
-      await navigated();
       assert.deepEqual(connectRequest().data.attributes, {
         client: SHARE_REF,
         name: 'Team GitHub App',
       });
+      assert.deepEqual(navigations, [{ how: 'assign', url: AUTHORIZE_URL }]);
     });
 
     module('the app that starts out chosen', function () {
