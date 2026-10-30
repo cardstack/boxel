@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
-import { writeFileSync } from 'fs';
+import { unlinkSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
@@ -1851,6 +1851,134 @@ module(basename(import.meta.filename), function (hooks) {
           0,
           'still without a compile',
         );
+      });
+
+      test('a granted caller is not served a module from memory that is not the version the gate judged', async function (assert) {
+        await policy('anyCode');
+        await get(TS_MODULE, '*/*', AS.reader());
+        // New bytes the realm is not told about, so the reader's compile of
+        // the old ones stays in memory under the name.
+        storeUnindexed('format.ts', "export const format = 'rewritten';\n");
+        let compiles = education.__testOnlyGetTranspileCallCount();
+        let granted = await get(TS_MODULE, '*/*', AS.teacher());
+        assert.strictEqual(granted.status, 200, 'the granted caller reads it');
+        assert.strictEqual(
+          granted.get('x-boxel-cache'),
+          'miss',
+          'not from the entry compiled from the old bytes',
+        );
+        assert.true(
+          textOf(granted).includes('rewritten'),
+          'but compiled from the bytes on disk',
+        );
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount() - compiles,
+          1,
+          'in a compile of its own',
+        );
+      });
+
+      // Two modules one import name resolves to, the `.ts` ahead of the
+      // `.gts`, and a grant that opens only the `.gts`.
+      async function twins() {
+        await policy('gtsCode');
+        await education.write('twin.ts', "export const twin = 'from-ts';\n");
+        await education.write('twin.gts', "export const twin = 'from-gts';\n");
+        await education.indexing();
+        education.__testOnlyClearCaches();
+      }
+
+      // Parks the first compile, of the reader's import of `twin`, until the
+      // returned release is called. Later compiles run at once.
+      async function parkReadersCompile() {
+        let release!: () => void;
+        let parked = new Promise<void>((resolve) => (release = resolve));
+        let calls = 0;
+        education.__testOnlyDelayTranspile(() =>
+          calls++ === 0 ? parked : Promise.resolve(),
+        );
+        let read = get(`${EDUCATION}twin`, '*/*', AS.reader()).then((r) => r);
+        let waitedFor = Date.now();
+        while (calls === 0) {
+          if (Date.now() - waitedFor > 10_000) {
+            throw new Error("the reader's compile never started");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return { read, release };
+      }
+
+      test('a granted caller who joins a compile of another file under the same name is not served it', async function (assert) {
+        await twins();
+        let { read, release } = await parkReadersCompile();
+        try {
+          // The `.ts` goes without the realm hearing of it, so the compile
+          // in flight under `twin` stays where a request for the name finds
+          // it.
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let granted = get(`${EDUCATION}twin`, '*/*', AS.teacher()).then(
+            (r) => r,
+          );
+          let waitedFor = Date.now();
+          while (education.__testOnlyGetTranspileJoinCount() === joins) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error(
+                "the granted caller never joined the reader's compile",
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          release();
+          let response = await granted;
+          assert.strictEqual(response.status, 200, 'the granted caller');
+          assert.true(
+            response.get('x-boxel-canonical-path')?.endsWith('/twin.gts'),
+            'is served the module the gate judged',
+          );
+          assert.true(
+            textOf(response).includes('from-gts'),
+            'compiled from the `.gts`',
+          );
+          assert.false(
+            textOf(response).includes('from-ts'),
+            "and not the compile of the `.ts` they joined, which their grant doesn't open",
+          );
+          await read;
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('a write drops the compile in flight under the import name of the file written', async function (assert) {
+        await twins();
+        let { read, release } = await parkReadersCompile();
+        try {
+          await education.delete('twin.ts');
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let after = await get(`${EDUCATION}twin`, '*/*', AS.reader());
+          assert.strictEqual(
+            education.__testOnlyGetTranspileJoinCount() - joins,
+            0,
+            'a reader asking for the name after the delete starts a compile of its own',
+          );
+          assert.true(
+            textOf(after).includes('from-gts'),
+            'of the module the name resolves to now',
+          );
+          release();
+          await read;
+          let later = await get(`${EDUCATION}twin`, '*/*', AS.reader());
+          assert.strictEqual(later.get('x-boxel-cache'), 'hit', 'cached');
+          assert.true(
+            textOf(later).includes('from-gts'),
+            'and what the cache holds under the name is that module',
+          );
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
       });
 
       test("a granted caller's validator is honored once the gate admits them", async function (assert) {

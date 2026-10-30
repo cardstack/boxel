@@ -225,6 +225,7 @@ import {
   isModuleResource,
   executableExtensions,
   hasExecutableExtension,
+  trimExecutableExtension,
   isNode,
   logger,
   fetchRealmPermissions,
@@ -4668,6 +4669,15 @@ export class Realm {
     // about to be discarded by the generation guard); they install
     // their own pending against current source instead.
     this.#inFlightTranspiles.delete(path);
+    // A compile in flight is keyed by the name its request asked for, and an
+    // import names a module without its extension, so the compile of this
+    // file may sit under that name instead. Dropped too: a caller asking for
+    // the name after this point resolves it afresh, perhaps to a sibling with
+    // another extension, and must not be handed this file's old compile.
+    let extensionless = trimExecutableExtension(path);
+    if (extensionless !== path) {
+      this.#inFlightTranspiles.delete(extensionless);
+    }
     // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
     // because invalidateCache is sync (called from the LISTEN handler
     // among others). Best-effort by design — every peer's listener
@@ -9639,7 +9649,24 @@ export class Realm {
         }),
       };
     }
-    return this.#transpileModuleDeduped(localPath, fileRef, etag, caller);
+    // A compile in flight under the requested name may be of another file the
+    // name resolved to, or of an earlier version of this one, so what it
+    // produced is served only when it is a compile of what the gate judged.
+    // Anything else is compiled over, by the canonical path, which is what
+    // the transpile cache row is keyed and validated on.
+    let compiled = await this.#transpileModuleDeduped(
+      localPath,
+      fileRef,
+      etag,
+      caller,
+    );
+    if (
+      compiled.canonicalPath === fileRef.path &&
+      compiled.headers.etag === etag
+    ) {
+      return compiled;
+    }
+    return await this.#transpileWithLayers(fileRef, etag, caller);
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
