@@ -667,7 +667,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 63871,
+      "bytes": 64671,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -775,6 +775,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/319c6453ca.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/3653f035ec.css"
         },
         {
@@ -803,15 +807,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/a04007ed79.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/a9020baded.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/b3cfb478f6.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/b7a38fea87.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -900,7 +904,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 281417,
+      "bytes": 286239,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1095,7 +1099,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 22387
+          "size": 22981
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1150,7 +1154,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 19137
+          "size": 21432
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1214,8 +1218,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/service-account-details.gts",
+          "size": 2465
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-entry.ts",
-          "size": 2285
+          "size": 2414
         },
         {
           "package": "@cardstack/secure-origin",
