@@ -326,13 +326,13 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     await keysShare('team app', { ...deps, realm, as: 'team forge' });
   });
 
-  it("lists the platform's clients, the realm's shared ones and the user's own", async () => {
+  it("lists the realm's shared clients, the platform's and the user's own", async () => {
     let clients = await keysClients({ ...deps, realm });
     expect(
       clients.map((c) => [c.kind, c.kind === 'platform' ? c.name : c.label]),
     ).toEqual([
-      ['platform', 'github'],
       ['share', 'team forge'],
+      ['platform', 'github'],
       ['own', 'team app'],
     ]);
     expect(JSON.stringify(clients)).not.toContain('client-secret');

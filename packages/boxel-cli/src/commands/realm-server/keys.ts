@@ -8,13 +8,15 @@ import { operatorRequest } from '../../lib/seed-auth.ts';
 export { readKeyValue, type KeyValueSource } from '../../lib/key-value.ts';
 
 // `boxel realm-server keys`: the realm server's system keys, the platform's
-// own vendor keys that `_request-forward` attaches. Authorized with the realm
+// own vendor keys that `_request-forward` attaches, and with
+// `--kind oauth-client` its platform clients, the OAuth apps Boxel registered
+// with a vendor that connect mode offers everyone. Authorized with the realm
 // secret seed. A value is typed at a masked prompt or read from stdin or a
 // file, never taken as an argument, and no command prints one: the server
-// never answers with a value. Every change carries an operator note, which
-// the server records in the key's history next to what it observed itself: the
-// caller's address and when the operator token was signed. A name in a note is
-// as the operator typed it; nothing verifies it.
+// never answers with a value. Every change to a system key carries an
+// operator note, which the server records in the key's history next to what
+// it observed itself: the caller's address and when the operator token was
+// signed. A name in a note is as the operator typed it; nothing verifies it.
 
 export type SystemKeyAuthMethod = 'header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
@@ -56,6 +58,38 @@ export interface NewSystemKey {
   supportsStreaming?: boolean;
   value: string;
   note: string;
+}
+
+export type SystemKeyKind = 'system' | 'oauth-client';
+
+export interface PlatformClient {
+  id: string;
+  name: string;
+  label: string;
+  clientId: string;
+  grantType: string;
+  authorizeURL: string | null;
+  tokenURL: string;
+  scopes: string;
+  tokenAuth: string;
+  apiHosts: string[];
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewPlatformClient {
+  name: string;
+  label: string;
+  secret: string;
+  oauth: {
+    clientId: string;
+    authorizeUrl: string;
+    tokenUrl: string;
+    scopes?: string;
+    tokenAuth?: 'client_secret_post' | 'client_secret_basic';
+    apiHosts: string[];
+  };
 }
 
 async function operatorFetch(
@@ -143,6 +177,94 @@ export async function deleteSystemKey(
   ).deleted;
 }
 
+export async function listPlatformClients(
+  options: SystemKeysOptions,
+): Promise<PlatformClient[]> {
+  return (await operatorFetch(options, '_platform-oauth-clients', 'GET'))
+    .clients;
+}
+
+export async function addPlatformClient(
+  options: SystemKeysOptions,
+  client: NewPlatformClient,
+): Promise<PlatformClient> {
+  return (
+    await operatorFetch(options, '_platform-oauth-clients', 'POST', client)
+  ).client;
+}
+
+// Replacing the secret also clears a client its token endpoint refused.
+export async function replacePlatformClientSecret(
+  options: SystemKeysOptions,
+  name: string,
+  secret: string,
+): Promise<PlatformClient> {
+  return (
+    await operatorFetch(
+      options,
+      `_platform-oauth-clients/${encodeURIComponent(name)}`,
+      'PATCH',
+      { secret },
+    )
+  ).client;
+}
+
+export async function deletePlatformClient(
+  options: SystemKeysOptions,
+  name: string,
+): Promise<void> {
+  await operatorFetch(
+    options,
+    `_platform-oauth-clients/${encodeURIComponent(name)}`,
+    'DELETE',
+  );
+}
+
+/**
+ * Deleting a platform client leaves every connection through it needing an
+ * administrator, and adding it again under the same name doesn't take them
+ * back. So the command shows the client and asks first, unless `--yes` says
+ * not to; without a terminal to ask in, `--yes` is required.
+ */
+export async function confirmPlatformClientDelete(
+  options: SystemKeysOptions,
+  name: string,
+  {
+    yes,
+    json,
+    isTTY = Boolean(process.stdin.isTTY),
+    confirm = async (question: string) =>
+      /^y(es)?$/i.test(await prompt(question)),
+  }: {
+    yes?: boolean;
+    json?: boolean;
+    isTTY?: boolean;
+    confirm?: (question: string) => Promise<boolean>;
+  },
+): Promise<void> {
+  if (yes) {
+    return;
+  }
+  if (json || !isTTY) {
+    throw new Error(
+      'Pass --yes to delete a platform client without a terminal to confirm in',
+    );
+  }
+  let client = (await listPlatformClients(options)).find(
+    (candidate) => candidate.name === name,
+  );
+  if (!client) {
+    throw new Error(`No platform client is named ${name}`);
+  }
+  printClient(client);
+  console.log(
+    'Every connection made through it will need an administrator, and adding the client again does not restore them.',
+  );
+  if (!(await confirm(`Delete the platform client ${name}? [y/N] `))) {
+    throw new Error('Not deleted');
+  }
+}
+
 // The id of the key named by `--id`, or of the key for `--destination`,
 // compared as the server stores destinations (as the URL parser spells them).
 export async function resolveSystemKeyId(
@@ -215,6 +337,22 @@ function printKey(key: SystemKey): void {
   console.log(`  updated: ${key.updatedAt}`);
 }
 
+function printClient(client: PlatformClient): void {
+  console.log(`${client.name}: ${client.label}`);
+  console.log(`  id: ${client.id}`);
+  console.log(`  client id: ${client.clientId}`);
+  console.log(`  signs in at: ${client.authorizeURL}`);
+  console.log(`  token endpoint: ${client.tokenURL} (${client.tokenAuth})`);
+  console.log(`  scopes: ${client.scopes || 'none'}`);
+  console.log(
+    `  offered for: ${client.apiHosts.length > 0 ? client.apiHosts.join(', ') : 'no API host'}`,
+  );
+  console.log(
+    `  state: ${client.state === 'broken' ? 'broken: its token endpoint refused the secret; replace it' : client.state}`,
+  );
+  console.log(`  updated: ${client.updatedAt}`);
+}
+
 function printHistory(history: SystemKeyChange[]): void {
   if (history.length === 0) {
     console.log('  history: none recorded');
@@ -229,8 +367,17 @@ function printHistory(history: SystemKeyChange[]): void {
   }
 }
 
-interface KeysCliOptions {
+export interface KeysCliOptions {
   realmServer: string;
+  kind?: string;
+  name?: string;
+  label?: string;
+  clientId?: string;
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  scopes?: string;
+  tokenAuth?: string;
+  apiHost?: string[];
   id?: string;
   destination?: string;
   auth?: SystemKeyAuthMethod;
@@ -240,6 +387,7 @@ interface KeysCliOptions {
   stdin?: boolean;
   keyFile?: string;
   note?: string;
+  yes?: boolean;
   json?: boolean;
 }
 
@@ -270,9 +418,71 @@ function output(json: boolean | undefined, value: unknown, print: () => void) {
   }
 }
 
+function kindOf(options: KeysCliOptions): SystemKeyKind {
+  let kind = options.kind ?? 'system';
+  if (kind !== 'system' && kind !== 'oauth-client') {
+    throw new Error('--kind must be system or oauth-client');
+  }
+  return kind;
+}
+
+// A platform client is named by `--name`; a system key by `--id` or
+// `--destination`. Each refuses the other's selectors.
+function clientName(options: KeysCliOptions): string {
+  refuseNoteForClient(options);
+  if (options.id || options.destination) {
+    throw new Error(
+      'Name a platform client with --name, not --id or --destination',
+    );
+  }
+  if (!options.name) {
+    throw new Error('Name the platform client with --name');
+  }
+  return options.name;
+}
+
+// The server keeps no history of platform clients, so a note would be
+// recorded nowhere.
+export function refuseNoteForClient(options: KeysCliOptions): void {
+  if (options.note !== undefined) {
+    throw new Error(
+      "--note is recorded in a system key's history; the server keeps none for a platform client",
+    );
+  }
+}
+
+export function refuseClientOptions(options: KeysCliOptions): void {
+  let clientOnly = (
+    [
+      ['name', '--name'],
+      ['label', '--label'],
+      ['clientId', '--client-id'],
+      ['authorizeUrl', '--authorize-url'],
+      ['tokenUrl', '--token-url'],
+      ['scopes', '--scopes'],
+      ['tokenAuth', '--token-auth'],
+      ['apiHost', '--api-host'],
+      ['yes', '--yes'],
+    ] as const
+  ).filter(([option]) => options[option] !== undefined);
+  if (clientOnly.length > 0) {
+    throw new Error(
+      `${clientOnly.map(([, flag]) => flag).join(', ')} ${clientOnly.length === 1 ? 'is' : 'are'} for a platform client: pass --kind oauth-client`,
+    );
+  }
+}
+
+const KIND_HELP =
+  'system (the default): a system key; oauth-client: a platform client, an OAuth app Boxel registered with a vendor';
+
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
 const SELECT_HELP = {
   id: 'The key, by its id',
   destination: 'The key, by its destination URL',
+  name: 'The platform client, by its name (with --kind oauth-client)',
 };
 
 function valueOptions(command: Command): Command {
@@ -289,16 +499,27 @@ export function registerKeysCommand(realmServer: Command): void {
   let keys = realmServer
     .command('keys')
     .description(
-      "Manage the realm server's system keys: the platform's own vendor keys that the proxy attaches. No command shows a value",
+      "Manage the realm server's system keys (the platform's own vendor keys that the proxy attaches) and, with --kind oauth-client, its platform clients. No command shows a value",
     );
 
   keys
     .command('list')
-    .description('List the system keys, without their values')
+    .description('List the system keys or platform clients, without secrets')
     .requiredOption('--realm-server <url>', 'The realm server to ask')
+    .option('--kind <kind>', KIND_HELP)
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
+        if (kindOf(options) === 'oauth-client') {
+          let clients = await listPlatformClients(await seedOptions(options));
+          output(options.json, clients, () => {
+            if (clients.length === 0) {
+              console.log('No platform clients.');
+            }
+            clients.forEach(printClient);
+          });
+          return;
+        }
         let list = await listSystemKeys(await seedOptions(options));
         output(options.json, list, () => {
           if (list.length === 0) {
@@ -312,14 +533,28 @@ export function registerKeysCommand(realmServer: Command): void {
   keys
     .command('show')
     .description(
-      'Show one system key and its recent history, without its value',
+      'Show one system key and its recent history, or one platform client, without secrets',
     )
     .requiredOption('--realm-server <url>', 'The realm server to ask')
+    .option('--kind <kind>', KIND_HELP)
     .option('--id <id>', SELECT_HELP.id)
     .option('--destination <url>', SELECT_HELP.destination)
+    .option('--name <name>', SELECT_HELP.name)
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
+        if (kindOf(options) === 'oauth-client') {
+          let name = clientName(options);
+          let client = (
+            await listPlatformClients(await seedOptions(options))
+          ).find((c) => c.name === name);
+          if (!client) {
+            throw new Error(`No platform client is named ${name}`);
+          }
+          output(options.json, client, () => printClient(client));
+          return;
+        }
+        refuseClientOptions(options);
         let seed = await seedOptions(options);
         let shown = await showSystemKey(
           seed,
@@ -336,35 +571,74 @@ export function registerKeysCommand(realmServer: Command): void {
     keys
       .command('add')
       .description(
-        'Add a system key for a destination that has none. The value is typed at a masked prompt, or read with --stdin or --key-file',
+        "Add a system key for a destination that has none, or with --kind oauth-client a platform client. The value (a platform client's client secret) is typed at a masked prompt, or read with --stdin or --key-file",
       )
       .requiredOption('--realm-server <url>', 'The realm server to change')
-      .requiredOption(
+      .option('--kind <kind>', KIND_HELP)
+      .option(
         '--destination <url>',
         'The URL the key is sent to; requests under it get the key',
       )
-      .requiredOption(
+      .option(
         '--credit-strategy <strategy>',
         'How calls are charged: openrouter or none',
       )
       .option(
         '--auth <method>',
-        'Where the key goes: header or url-parameter',
-        'header',
+        'Where the key goes: header (the default) or url-parameter',
       )
       .option(
         '--param-name <name>',
         'The header (default Authorization) or URL parameter (default key) that carries the key. A header always carries it as a Bearer token',
       )
-      .option('--streaming', 'The destination supports streamed responses'),
+      .option('--streaming', 'The destination supports streamed responses')
+      .option(
+        '--name <name>',
+        'A platform client: its name, lower-case letters, digits and dashes (such as github)',
+      )
+      .option(
+        '--label <label>',
+        'A platform client: the name connect mode shows (such as "Boxel (read-only)")',
+      )
+      .option('--client-id <id>', "A platform client: the vendor's client id")
+      .option(
+        '--authorize-url <url>',
+        "A platform client: the vendor's authorization page",
+      )
+      .option(
+        '--token-url <url>',
+        "A platform client: the vendor's token endpoint",
+      )
+      .option(
+        '--scopes <scopes>',
+        'A platform client: the scopes it asks for, space-separated (none for a GitHub App, whose permissions are its own)',
+      )
+      .option(
+        '--token-auth <method>',
+        'A platform client: client_secret_post (the default) or client_secret_basic',
+      )
+      .option(
+        '--api-host <url>',
+        'A platform client: an API host it serves, where connect mode offers it; repeat for more',
+        collect,
+      ),
   )
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
-        if (!['openrouter', 'none'].includes(options.creditStrategy!)) {
+        if (kindOf(options) === 'oauth-client') {
+          await addClientCommand(options);
+          return;
+        }
+        refuseClientOptions(options);
+        if (!options.destination) {
+          throw new Error('A system key needs --destination');
+        }
+        if (!['openrouter', 'none'].includes(options.creditStrategy ?? '')) {
           throw new Error('--credit-strategy must be openrouter or none');
         }
-        if (!['header', 'url-parameter'].includes(options.auth!)) {
+        let auth = options.auth ?? 'header';
+        if (!['header', 'url-parameter'].includes(auth)) {
           throw new Error('--auth must be header or url-parameter');
         }
         let seed = await seedOptions(options);
@@ -373,8 +647,8 @@ export function registerKeysCommand(realmServer: Command): void {
           stdinUsed: Boolean(options.stdin),
         });
         let key = await addSystemKey(seed, {
-          destination: options.destination!,
-          authMethod: options.auth,
+          destination: options.destination,
+          authMethod: auth as SystemKeyAuthMethod,
           paramName: options.paramName,
           creditStrategy: options.creditStrategy!,
           supportsStreaming: Boolean(options.streaming),
@@ -392,15 +666,31 @@ export function registerKeysCommand(realmServer: Command): void {
     keys
       .command('replace')
       .description(
-        "Replace a system key's value, keeping its destination and settings",
+        "Replace a system key's value, keeping its destination and settings, or with --kind oauth-client a platform client's secret, which also clears a secret its token endpoint refused",
       )
       .requiredOption('--realm-server <url>', 'The realm server to change')
+      .option('--kind <kind>', KIND_HELP)
       .option('--id <id>', SELECT_HELP.id)
-      .option('--destination <url>', SELECT_HELP.destination),
+      .option('--destination <url>', SELECT_HELP.destination)
+      .option('--name <name>', SELECT_HELP.name),
   )
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
+        if (kindOf(options) === 'oauth-client') {
+          let name = clientName(options);
+          let seed = await seedOptions(options);
+          let secret = await readKeyValue(options);
+          let client = await replacePlatformClientSecret(seed, name, secret);
+          output(options.json, client, () => {
+            console.log(
+              `${FG_GREEN}Replaced the platform client's secret.${RESET}`,
+            );
+            printClient(client);
+          });
+          return;
+        }
+        refuseClientOptions(options);
         let seed = await seedOptions(options);
         let id = await resolveSystemKeyId(seed, options);
         let value = await readKeyValue(options);
@@ -417,17 +707,38 @@ export function registerKeysCommand(realmServer: Command): void {
 
   keys
     .command('delete')
-    .description('Delete a system key; the proxy stops serving its destination')
+    .description(
+      'Delete a system key, so the proxy stops serving its destination, or with --kind oauth-client a platform client, whose connections then need an administrator',
+    )
     .requiredOption('--realm-server <url>', 'The realm server to change')
+    .option('--kind <kind>', KIND_HELP)
     .option('--id <id>', SELECT_HELP.id)
     .option('--destination <url>', SELECT_HELP.destination)
+    .option('--name <name>', SELECT_HELP.name)
     .option(
       '--note <text>',
       'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
     )
+    .option(
+      '--yes',
+      "With --kind oauth-client, don't show the client and ask to confirm",
+    )
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>
       run(async () => {
+        if (kindOf(options) === 'oauth-client') {
+          let name = clientName(options);
+          let seed = await seedOptions(options);
+          await confirmPlatformClientDelete(seed, name, options);
+          await deletePlatformClient(seed, name);
+          output(options.json, { deleted: name }, () => {
+            console.log(
+              `${FG_GREEN}Deleted the platform client ${name}.${RESET}`,
+            );
+          });
+          return;
+        }
+        refuseClientOptions(options);
         let seed = await seedOptions(options);
         let id = await resolveSystemKeyId(seed, options);
         let note = await readNote(options.note, { stdinUsed: false });
@@ -439,4 +750,75 @@ export function registerKeysCommand(realmServer: Command): void {
         });
       }),
     );
+}
+
+// A platform client takes none of a system key's settings.
+export function refuseSystemOptions(options: KeysCliOptions): void {
+  let systemOnly = (
+    [
+      ['destination', '--destination'],
+      ['creditStrategy', '--credit-strategy'],
+      ['auth', '--auth'],
+      ['paramName', '--param-name'],
+      ['streaming', '--streaming'],
+    ] as const
+  ).filter(([option]) => options[option] !== undefined);
+  if (systemOnly.length > 0) {
+    throw new Error(
+      `${systemOnly.map(([, flag]) => flag).join(', ')} ${systemOnly.length === 1 ? 'is' : 'are'} for a system key, not a platform client`,
+    );
+  }
+}
+
+async function addClientCommand(options: KeysCliOptions): Promise<void> {
+  refuseNoteForClient(options);
+  refuseSystemOptions(options);
+  let missing = (
+    [
+      ['name', '--name'],
+      ['label', '--label'],
+      ['clientId', '--client-id'],
+      ['authorizeUrl', '--authorize-url'],
+      ['tokenUrl', '--token-url'],
+      ['apiHost', '--api-host'],
+    ] as const
+  ).filter(([option]) => !options[option]);
+  if (missing.length > 0) {
+    throw new Error(
+      `A platform client needs ${missing.map(([, flag]) => flag).join(', ')}`,
+    );
+  }
+  if (
+    options.tokenAuth !== undefined &&
+    !['client_secret_post', 'client_secret_basic'].includes(options.tokenAuth)
+  ) {
+    throw new Error(
+      '--token-auth must be client_secret_post or client_secret_basic',
+    );
+  }
+  let seed = await seedOptions(options);
+  let secret = await readKeyValue(options);
+  let client = await addPlatformClient(seed, {
+    name: options.name!,
+    label: options.label!,
+    secret,
+    oauth: {
+      clientId: options.clientId!,
+      authorizeUrl: options.authorizeUrl!,
+      tokenUrl: options.tokenUrl!,
+      ...(options.scopes !== undefined ? { scopes: options.scopes } : {}),
+      ...(options.tokenAuth !== undefined
+        ? {
+            tokenAuth: options.tokenAuth as
+              | 'client_secret_post'
+              | 'client_secret_basic',
+          }
+        : {}),
+      apiHosts: options.apiHost!,
+    },
+  });
+  output(options.json, client, () => {
+    console.log(`${FG_GREEN}Added the platform client.${RESET}`);
+    printClient(client);
+  });
 }
