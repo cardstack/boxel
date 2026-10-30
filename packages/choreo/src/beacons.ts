@@ -67,7 +67,10 @@ export function measureBeacons(
     if (!el?.isConnected) {
       continue;
     }
-    out.set(name, measureBounds(el, root));
+    const bounds = measureBounds(el, root);
+    if (bounds) {
+      out.set(name, bounds);
+    }
   }
   return out;
 }
