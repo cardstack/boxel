@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Yemen Haraz Decaf",
+      "category": "coffee",
+      "origin": "Haraz, Yemen",
+      "variants": [
+        {
+          "sku": "CF-108-250",
+          "size": "250 g",
+          "price": 14.5
+        },
+        {
+          "sku": "CF-108-500",
+          "size": "500 g",
+          "price": 26.79
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Indonesia Toraja Anaerobic",
+      "category": "coffee",
+      "origin": "Toraja, Indonesia",
+      "variants": [
+        {
+          "sku": "CF-069-250",
+          "size": "250 g",
+          "price": 17.79
+        },
+        {
+          "sku": "CF-069-500",
+          "size": "500 g",
+          "price": 32.5
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

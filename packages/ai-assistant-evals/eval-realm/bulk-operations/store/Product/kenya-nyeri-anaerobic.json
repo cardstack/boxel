@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Kenya Nyeri Anaerobic",
+      "category": "coffee",
+      "origin": "Nyeri, Kenya",
+      "variants": [
+        {
+          "sku": "CF-075-250",
+          "size": "250 g",
+          "price": 16.4
+        },
+        {
+          "sku": "CF-075-500",
+          "size": "500 g",
+          "price": 30.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

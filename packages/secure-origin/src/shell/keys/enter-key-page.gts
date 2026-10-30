@@ -19,7 +19,9 @@
 //
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
-// closing the window.
+// closing the window. Reached from the approve page's "Add a new key"
+// (`then=approve` or `then=review-changes` beside what that page was opened
+// for), it goes back to that page with the new key chosen.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -519,6 +521,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         navigation.back(pageURL('keys'));
         return;
       }
+      let approval = approvalPageAfter(key.id);
+      if (approval) {
+        navigation.replace(approval);
+        return;
+      }
       this.page.state = {
         name: 'done',
         key,
@@ -536,6 +543,24 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       this.form.saving = false;
     }
   };
+}
+
+// The approve page this one was opened from, to go back to once `keyId` is
+// added, with what it was opened for and the new key chosen.
+function approvalPageAfter(keyId: string): string | undefined {
+  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  let then = fragment.get('then');
+  if (then !== 'approve' && then !== 'review-changes') {
+    return undefined;
+  }
+  fragment.delete('then');
+  // The approve page goes back to the key page it was reached from.
+  if (fragment.get('after') === 'keys') {
+    fragment.set('then', 'keys');
+  }
+  fragment.delete('after');
+  fragment.set('key', keyId);
+  return `${pageURL(then)}#${fragment}`;
 }
 
 export default class EnterKeyPage extends Component<{

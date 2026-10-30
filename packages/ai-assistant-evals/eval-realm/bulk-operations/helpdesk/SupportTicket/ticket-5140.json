@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "subject": "Report totals differ from the invoice",
+      "requester": "Lukas Weber",
+      "status": "closed",
+      "openedOn": "2026-10-25"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../Agent/priya-shah"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}
