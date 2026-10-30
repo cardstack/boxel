@@ -2,12 +2,11 @@ import { logger } from '@cardstack/runtime-common';
 import type { GoogleIdentity } from './google-account.ts';
 
 // Google sign-in for the secure window, run by the realm server as its own
-// OpenID Connect client. It uses the same Google client as the Matrix server,
-// so a user who signs in to Boxel with Google sees no new consent, and it
-// finds the user's account the way the Matrix server does: by the Google
-// account's subject (`sub`), which Boxel's OIDC mapping provider stores as the
-// account's external id under `oidc-google`, and otherwise by the mapping
-// provider's rules (`google-account.ts`).
+// OpenID Connect client. It uses the Google client the Matrix server's single
+// sign-on used, so a user who signed in to Boxel with Google there sees no new
+// consent. It finds the user's account by the Google account's subject
+// (`sub`), the account's external id under `oidc-google` in the Matrix
+// server, and otherwise by the rules in `google-account.ts`.
 //
 // What makes this a credential card code can't reach: Google sends the
 // authorization code only to the redirect URI registered for the client — the

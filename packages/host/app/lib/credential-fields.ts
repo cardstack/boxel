@@ -8,13 +8,7 @@ import { tracked } from '@glimmer/tracking';
 // them, and asks the frame to make the Matrix request that carries the
 // password, passing the parts of the request that aren't secret.
 
-export type CredentialForm =
-  | 'login'
-  | 'cli-login'
-  | 'register'
-  | 'reset'
-  | 'change-password'
-  | 'confirm-password';
+export type CredentialForm = 'change-password' | 'confirm-password';
 
 // The Matrix server's response, as the frame relays it.
 export interface CredentialFieldsResult {
@@ -24,30 +18,12 @@ export interface CredentialFieldsResult {
 }
 
 export type CredentialOperation =
-  | { operation: 'login' }
-  | { operation: 'cli-login' }
-  | {
-      operation: 'register';
-      args: { username: string; auth: Record<string, unknown> };
-    }
   | {
       operation: 'set-password';
-      // The change form sends the app's access token; the Matrix server
-      // checks the current password from the frame's own field, and the realm
-      // server ends the secure sessions of the token's account. The reset
-      // form sends the email validation session as `auth`, and `account`, the
-      // email address the reset was sent to: the realm server ends the secure
-      // sessions of the account that names once the new password checks out
-      // for it.
-      args:
-        | { accessToken: string }
-        | {
-            auth: {
-              type: 'm.login.email.identity';
-              threepid_creds: { sid: string; client_secret: string };
-            };
-            account?: string;
-          };
+      // The app's access token; the Matrix server checks the current password
+      // from the frame's own field, and the realm server ends the secure
+      // sessions of the token's account.
+      args: { accessToken: string };
     }
   | {
       operation: 'add-threepid';

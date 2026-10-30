@@ -13,11 +13,7 @@ import {
 import type { IsolatedRealmServer } from '../support/isolated-realm-server.ts';
 import { registerRealmUsers, REGISTRATION_TOKEN } from '../helpers/index.ts';
 import { smtpStart, smtpStop } from '../docker/smtp4dev.ts';
-import {
-  mockOauth2Start,
-  mockOauth2Stop,
-  MOCK_OAUTH2_ISSUER,
-} from '../docker/mock-oauth2.ts';
+import { mockOauth2Start, mockOauth2Stop } from '../docker/mock-oauth2.ts';
 import { synapseTemplateOf } from '../support/shard-spec-files.ts';
 
 export default async function setup() {
@@ -28,11 +24,9 @@ export default async function setup() {
     stdio: 'inherit',
   });
   await smtpStart();
-  // Start the mock OIDC provider before Synapse and expose its issuer, so
-  // cfgDirFromTemplate keeps the Google OIDC block (gated on MOCK_OAUTH2_ISSUER)
-  // when it generates homeserver.yaml.
+  // The mock OIDC provider stands in for Google in the realm server's Google
+  // sign-in on the secure origin.
   await mockOauth2Start();
-  process.env.MOCK_OAUTH2_ISSUER = MOCK_OAUTH2_ISSUER;
   // The run's specs were chosen for this template (see playwright.config.ts).
   const synapse = await synapseStart({
     template: synapseTemplateOf(process.env.MATRIX_SYNAPSE_TEMPLATE),
