@@ -4224,6 +4224,76 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     );
   });
 
+  test('opening a fold of messages that each ran the same tool shows every call', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    // four replies, each holding nothing but one finished call to one tool
+    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+      let requestId = `rename-${name}`;
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: '',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: requestId,
+            name: 'patchCardInstance',
+            arguments: JSON.stringify({
+              description: `Rename to ${name}`,
+              attributes: {
+                cardId: `${testRealmURL}Person/fadhlan`,
+                patch: { attributes: { firstName: name } },
+              },
+            }),
+          },
+        ],
+      });
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: requestId,
+          },
+          data: {},
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+    }
+
+    await waitFor('[data-test-message-idx="3"] [data-test-tool-run-group="4"]');
+    for (let index of [0, 1, 2]) {
+      assert
+        .dom(`[data-test-message-idx="${index}"]`)
+        .doesNotExist(`the earlier message ${index} folds into the latest`);
+    }
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-pretui-tool-group-header]')
+      .containsText('×4', 'the latest message reads as the whole run');
+
+    await click(
+      '[data-test-message-idx="3"] [data-test-pretui-tool-group-header]',
+    );
+    assert
+      .dom(
+        '[data-test-message-idx="3"] [data-test-tool-run-group] [data-test-tool-call-apply="applied"]',
+      )
+      .exists({ count: 4 }, 'opening the fold shows every call of the run');
+    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+      assert
+        .dom('[data-test-message-idx="3"] [data-test-tool-run-group]')
+        .containsText(
+          `Rename to ${name}`,
+          `the call renaming to ${name} shows`,
+        );
+    }
+  });
+
   // A tool call the bot already ran, and the result card it stored in the
   // room for it.
   function simulateToolResult(
