@@ -6,7 +6,6 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -23,6 +22,7 @@ import {
   setupTelemetrySecretsCheck,
   stringsIn,
 } from '../helpers/telemetry-secrets.ts';
+import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 
 // The key pages, against a realm server that answers the requests they make.
 // Every change to a key is made with a key write ticket the page mints with
@@ -143,28 +143,17 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
-// Chooses a key file and waits until the page has read this one. The read is
-// a browser promise `settled()` doesn't track, so the wait is for what the
-// page says of this file by name: the service account it holds, or why it
-// can't be used.
+// Chooses a key file. The module waits on file reads
+// (`setupWaitedBrowserWork`), so this returns once the page has read it.
 async function chooseKeyFile(contents: string, name = 'boxel-test.json') {
   await triggerEvent('[data-test-service-account-file]', 'change', {
     files: [new File([contents], name, { type: 'application/json' })],
   });
-  await waitUntil(
-    () =>
-      document
-        .querySelector('[data-test-service-account-email]')
-        ?.textContent?.includes(name) ||
-      document
-        .querySelector('[data-test-service-account-problem]')
-        ?.getAttribute('data-test-service-account-problem-file') === name,
-  );
-  await settled();
 }
 
 module('Integration | key pages', function (hooks) {
   setupRenderingTest(hooks);
+  setupWaitedBrowserWork(hooks);
 
   let requests: { method: string; path: string; url: URL; body: any }[];
   let routes: Record<string, Route>;
@@ -219,27 +208,29 @@ module('Integration | key pages', function (hooks) {
       'GET _user-keys': () => json(200, keyResources()),
       'GET _key-bindings': () => json(200, { data: [] }),
     };
-    window.fetch = async (
-      input: Parameters<typeof fetch>[0],
-      init: Parameters<typeof fetch>[1] = {},
-    ) => {
-      let url = new URL(String(input));
-      let method = init.method ?? 'GET';
-      let body = init.body ? JSON.parse(String(init.body)) : undefined;
-      let path = url.pathname.replace(/^\//, '');
-      requests.push({ method, path, url, body });
-      let route = routes[`${method} ${path}`];
-      let answer = route
-        ? await route({ url, method, body })
-        : refusal(404, 'Not found');
-      return new Response(
-        answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
-        {
-          status: answer.status,
-          headers: { 'Content-Type': 'application/vnd.api+json' },
-        },
-      );
-    };
+    window.fetch = waitedFetch(
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1] = {},
+      ) => {
+        let url = new URL(String(input));
+        let method = init.method ?? 'GET';
+        let body = init.body ? JSON.parse(String(init.body)) : undefined;
+        let path = url.pathname.replace(/^\//, '');
+        requests.push({ method, path, url, body });
+        let route = routes[`${method} ${path}`];
+        let answer = route
+          ? await route({ url, method, body })
+          : refusal(404, 'Not found');
+        return new Response(
+          answer.status === 204 ? null : JSON.stringify(answer.body ?? {}),
+          {
+            status: answer.status,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+          },
+        );
+      },
+    );
     navigation.assign = (url: string) =>
       navigations.push({ how: 'assign', url });
     navigation.replace = (url: string) =>
@@ -472,7 +463,6 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-key-row="Maps"] [data-test-key-replace]');
       await fillIn('[data-test-key-value]', 'new-value');
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
       assert.dom('[data-test-keys-signed-out]').doesNotExist();
       assert.strictEqual(
         requests.filter((r) => r.path === '_key-write-tickets').length,
@@ -598,8 +588,6 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-key-value]').hasAttribute('type', 'password');
       await fillIn('[data-test-key-value]', 'sk-new-value');
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-2' },
       ]);
@@ -714,8 +702,6 @@ module('Integration | key pages', function (hooks) {
 
       await click(`${team} [data-test-key-unshare]`);
       await click(`${team} [data-test-key-unshare-confirm-button]`);
-      await waitUntil(() => listings === 2);
-      await settled();
       assert.deepEqual(
         requests
           .filter((r) => r.method === 'DELETE')
@@ -909,8 +895,6 @@ module('Integration | key pages', function (hooks) {
           'Someone with direct write access to one of them can put their own key in its place.',
         );
       await click('[data-test-key-delete-confirm-button]');
-      await waitUntil(() => requests.some((r) => r.method === 'DELETE'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'delete', keyId: 'key-1' },
       ]);
@@ -930,14 +914,17 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
-      // Not awaited: the share list is held back until released.
+      // Not awaited: the share list is held back until released. It is
+      // released on every path: a stubbed request still open keeps its waiter
+      // pending, and every later test's `settled()` with it.
       click('[data-test-key-row="Maps"] [data-test-key-delete]');
-      await waitFor('[data-test-key-delete-loading]');
-      assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
-      release();
-      await waitUntil(
-        () => !document.querySelector('[data-test-key-delete-loading]'),
-      );
+      try {
+        await waitFor('[data-test-key-delete-loading]');
+        assert.dom('[data-test-key-delete-confirm-button]').isDisabled();
+      } finally {
+        release?.();
+      }
+      await settled();
       assert.dom('[data-test-key-delete-confirm-button]').isNotDisabled();
       assert
         .dom('[data-test-key-delete-confirm]')
@@ -1190,7 +1177,6 @@ module('Integration | key pages', function (hooks) {
       await fillIn('[data-test-key-name]', 'Forecasts');
       await fillIn('[data-test-key-value]', 'sk-forecast');
       await click('[data-test-enter-key-save]');
-      await waitUntil(() => navigations.length > 0);
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
     });
 
@@ -1504,8 +1490,6 @@ module('Integration | key pages', function (hooks) {
         'https://www.googleapis.com/auth/spreadsheets',
       );
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(ticketRequests(), [
         { action: 'replace', keyId: 'key-sa' },
       ]);
@@ -1603,8 +1587,6 @@ module('Integration | key pages', function (hooks) {
           'a key file for the same service account changes nothing',
         );
       await click('[data-test-key-replace-save]');
-      await waitUntil(() => requests.some((r) => r.method === 'PATCH'));
-      await settled();
       assert.deepEqual(
         requests.find((r) => r.method === 'PATCH')!.body.data.attributes,
         {
@@ -2442,14 +2424,9 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-replace-key-slot="second"] h2')
         .hasText('second', 'the remaining row keeps its heading');
-      await waitUntil(
-        () =>
-          document.activeElement ===
-          document.querySelector(
-            '[data-test-replace-key-slot="second"] [data-test-key-value]',
-          ),
-      );
-      assert.ok(true, 'focus moves to the next key’s value');
+      assert
+        .dom('[data-test-replace-key-slot="second"] [data-test-key-value]')
+        .isFocused('focus moves to the next key’s value');
       assert.deepEqual(navigations, [], 'one key is still to replace');
       await fillIn(
         '[data-test-replace-key-slot="second"] [data-test-key-value]',
@@ -2541,12 +2518,9 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell(OPENED);
       await render(ReplaceKeyPage);
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-replace-key-where]')
-          ?.textContent?.replace(/\s+/g, ' ')
-          .includes('3 workspaces use this key'),
-      );
+      assert
+        .dom('[data-test-replace-key-where]')
+        .includesText('3 workspaces use this key');
       assert
         .dom('[data-test-replace-key-where]')
         .includesText(
