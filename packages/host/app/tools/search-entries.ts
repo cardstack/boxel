@@ -17,10 +17,17 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import {
+  recordCatalogSearch,
+  type CatalogSearch,
+} from '../lib/catalog-search-telemetry';
 import HostBaseTool from '../lib/host-base-tool';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 import { hasNarrowingPositiveTypeRef } from '../utils/search/query-builder';
 
+import type ClientTelemetryService from '../services/client-telemetry';
+import type NetworkService from '../services/network';
+import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -164,7 +171,12 @@ export async function searchEntrySummaries(
     limit,
     realms,
   }: { scope: string | undefined; limit: number; realms?: string[] },
-): Promise<{ rows: EntrySummary[]; total: number; incomplete: boolean }> {
+): Promise<{
+  rows: EntrySummary[];
+  total: number;
+  incomplete: boolean;
+  realmTotals: Record<string, number> | undefined;
+}> {
   let resolvedScope = resolveSearchEntryScope(scope);
   let { query, addedRelevanceSort } = composeSearchEntriesQuery(
     requestQuery,
@@ -205,6 +217,8 @@ export async function searchEntrySummaries(
     // reported through this flag rather than a thrown error — the realms
     // that answered still return; the flag keeps their partiality visible.
     incomplete: doc.meta.incomplete === true,
+    // The match count of each realm that answered, keyed by realm URL.
+    realmTotals: doc.meta.realmTotals,
   };
 }
 
@@ -213,8 +227,14 @@ export default class SearchEntriesTool extends HostBaseTool<
   typeof BaseToolModule.SearchEntriesResult
 > {
   @service declare private store: StoreService;
+  @service declare private clientTelemetry: ClientTelemetryService;
+  @service declare private network: NetworkService;
+  @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Search';
+  // The tool service sets `roomId` to the room an assistant's call came from,
+  // which tells a search the assistant made from one a card made.
+  static bindsToInvokingRoom = true;
 
   description =
     'Search across realms for existing cards, specs, listings, themes, and files — ' +
@@ -254,11 +274,28 @@ export default class SearchEntriesTool extends HostBaseTool<
       MAX_LIMIT,
     );
 
-    let { rows, total, incomplete } = await searchEntrySummaries(
-      (wireQuery, realms) => this.store.searchEntries(wireQuery, realms),
-      requestQuery,
-      { scope: input.scope, limit, realms: input.realms },
-    );
+    // Refused here rather than in the search, so a call refused before
+    // anything is sent is not reported as a failed search.
+    resolveSearchEntryScope(input.scope);
+    let realms = this.store.searchRealmsFor(input.realms);
+    let found;
+    try {
+      found = await searchEntrySummaries(
+        (wireQuery, searchRealms) =>
+          this.store.searchEntries(wireQuery, searchRealms),
+        requestQuery,
+        { scope: input.scope, limit, realms },
+      );
+    } catch (error) {
+      this.recordSearch(input, { query: requestQuery, realms, error });
+      throw error;
+    }
+    let { rows, total, incomplete, realmTotals } = found;
+    this.recordSearch(input, {
+      query: requestQuery,
+      realms,
+      found: { total, realmTotals, rowURLs: rows.map((row) => row.url) },
+    });
 
     let commandModule = await this.loadToolModule();
     let { SearchEntriesResult, SearchEntrySummaryField } = commandModule;
@@ -268,5 +305,24 @@ export default class SearchEntriesTool extends HostBaseTool<
       incomplete,
       cardDescription: `Query: ${JSON.stringify(requestQuery.filter ?? {})}`,
     });
+  }
+
+  // Only a search the assistant made is recorded: the tool service gives its
+  // call the room it came from, and a card's call has none.
+  private recordSearch(
+    input: BaseToolModule.SearchEntriesInput,
+    search: Pick<CatalogSearch, 'query' | 'realms' | 'found' | 'error'>,
+  ): void {
+    if (!input.roomId) {
+      return;
+    }
+    recordCatalogSearch(
+      {
+        clientTelemetry: this.clientTelemetry,
+        network: this.network,
+        realmServer: this.realmServer,
+      },
+      { ...search, tool: 'search-entries', realm: null },
+    );
   }
 }

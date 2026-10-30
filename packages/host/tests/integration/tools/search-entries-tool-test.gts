@@ -1,14 +1,17 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type Query, rri } from '@cardstack/runtime-common';
+import { type Query, rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import type { TelemetryEventInput } from '@cardstack/host/services/client-telemetry';
 import SearchEntriesTool, {
   composeSearchEntriesQuery,
 } from '@cardstack/host/tools/search-entries';
 
 import {
+  resetCatalogRealmURL,
+  setCatalogRealmURL,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -600,3 +603,87 @@ module('Integration | tools | search-entries', function (hooks) {
     });
   });
 });
+
+module(
+  'Integration | tools | search-entries | catalog telemetry',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    // The test build lists no catalog, so list one. It must be listed before
+    // the user signs in.
+    hooks.beforeEach(function () {
+      setCatalogRealmURL(
+        getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
+      );
+    });
+    hooks.afterEach(function () {
+      resetCatalogRealmURL();
+    });
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'note.md': '# Note\n' },
+      });
+    });
+
+    test('a catalog search the assistant made is recorded, and one a card made is not', async function (assert) {
+      let { virtualNetwork } = getService('network');
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      // The catalog matches two entries for every search.
+      let federatedSearch = async (request: Request) => {
+        if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+          return null;
+        }
+        return new Response(
+          JSON.stringify({
+            data: [],
+            meta: { page: { total: 2 }, realmTotals: { [catalogURL]: 2 } },
+          }),
+          { headers: { 'content-type': SupportedMimeType.CardJson } },
+        );
+      };
+      virtualNetwork.mount(federatedSearch, { prepend: true });
+      let telemetry = getService('client-telemetry');
+      let recorded: TelemetryEventInput[] = [];
+      let recordEvent = telemetry.recordEvent;
+      telemetry.recordEvent = (event: TelemetryEventInput) => {
+        recorded.push(event);
+      };
+      try {
+        await getService('realm-server').ready;
+        let tool = new SearchEntriesTool(
+          getService('tool-service').toolContext,
+        );
+        let input = {
+          query: { filter: { matches: 'kanban' } },
+          realms: ['@cardstack/catalog/'],
+        };
+        // The tool service gives an assistant's call the room it came from.
+        await tool.execute({ ...input, roomId: '!room:localhost' });
+        await tool.execute(input);
+        assert.deepEqual(recorded, [
+          {
+            event_type: 'catalog-search',
+            tool: 'search-entries',
+            query_text: 'kanban',
+            query_type: '',
+            total: 2,
+            returned: 0,
+            error: '',
+            realm: null,
+          },
+        ]);
+      } finally {
+        telemetry.recordEvent = recordEvent;
+        virtualNetwork.unmount(federatedSearch);
+      }
+    });
+  },
+);
