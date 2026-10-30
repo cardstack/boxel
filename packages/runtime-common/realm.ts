@@ -1672,6 +1672,9 @@ type ModuleLoadResult =
   | { kind: 'not-found'; response: ResponseWithNodeStream }
   | { kind: 'non-module'; response: ResponseWithNodeStream }
   | { kind: 'shimmed'; response: ResponseWithNodeStream }
+  // A module answered from the in-memory module cache for a caller the policy
+  // gate admitted. The entry is already cached, so there is nothing to fill.
+  | { kind: 'cache-hit'; response: ResponseWithNodeStream }
   | {
       kind: 'not-modified';
       canonicalPath: LocalPath;
@@ -2858,12 +2861,6 @@ export class Realm {
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
   // promise's eventual settle.
-  // Compiles for callers the policy gate admitted, keyed by path and the
-  // validator of the version being compiled, so concurrent admitted callers
-  // share one and nothing outlives it (see `#moduleForGatedCaller`). Kept apart
-  // from `#inFlightTranspiles`, which a reader's request joins without the gate.
-  #inFlightGatedCompiles: Map<string, Promise<ModuleTranspileResult>> =
-    new Map();
   #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
     new Map();
   // Monotonic count of transpileJS invocations, used by the CS-11029
@@ -9190,15 +9187,13 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    // A caller whose read the policy gate decides is never answered from the
-    // module cache, which holds what was compiled for a reader, and nothing
-    // compiled for them fills it (see `#moduleForGatedCaller`).
-    let moduleCachingDisabled =
-      this.#coarseDeclined(requestContext) === 'all' ||
-      this.#disableModuleCaching ||
-      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
+    // A caller whose read the policy gate decides is answered from the module
+    // cache only once the gate has admitted them, so the lookup below, which
+    // runs before any gate, is not theirs (see `#moduleForGatedCaller`).
+    let gated = this.#coarseDeclined(requestContext) === 'all';
+    let moduleCachingDisabled = this.#moduleCachingDisabled(request);
 
-    if (!moduleCachingDisabled) {
+    if (!moduleCachingDisabled && !gated) {
       // Answered from memory: these bytes were compiled from a read that
       // already happened, so nothing here reaches a file and no `readSource`
       // is dispatched for this request. Worth knowing wherever something is
@@ -9289,12 +9284,17 @@ export class Realm {
               dependencyKeys: result.dependencyKeys,
             });
           }
+          // The cache holds the module as a reader is served it; a gated
+          // caller's copy of it is marked private on the way out.
           response = createResponse({
             body: result.body,
             init: {
               status: 200,
               headers: {
                 ...result.headers,
+                ...(gated
+                  ? { 'cache-control': GRANTED_MODULE_CACHE_CONTROL }
+                  : {}),
                 [CACHE_HEADER]: CACHE_MISS_VALUE,
               },
             },
@@ -9338,10 +9338,15 @@ export class Realm {
           break;
         }
         case 'non-module':
-        case 'shimmed': {
+        case 'shimmed':
+        case 'cache-hit': {
           response = result.response;
           break;
         }
+      }
+      if (result.kind === 'cache-hit') {
+        this.#logRequestPerformance(request, start, 'cache hit');
+        return response;
       }
     } catch (err) {
       this.#logRequestPerformance(request, start, 'cache miss');
@@ -9350,6 +9355,15 @@ export class Realm {
 
     this.#logRequestPerformance(request, start, 'cache miss');
     return response;
+  }
+
+  // Whether this realm, or this request, opts out of the in-memory module
+  // cache.
+  #moduleCachingDisabled(request: Request): boolean {
+    return (
+      this.#disableModuleCaching ||
+      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'))
+    );
   }
   private async loadModuleFromDisk(
     localPath: LocalPath,
@@ -9454,6 +9468,7 @@ export class Realm {
       return await this.#moduleForGatedCaller(
         request,
         requestContext,
+        localPath,
         fileRef,
         notThere,
       );
@@ -9514,37 +9529,51 @@ export class Realm {
   }
 
   // A module for a caller the realm ACL declined, whose read the policy gate
-  // decides. Its source is read through the gate, as the card+source read
-  // reads it, and compiled for this caller alone: no module cache answers
-  // them, and nothing compiled for them is kept, so what a reader's compile
-  // left behind reaches nobody the gate refuses and what was compiled for a
-  // granted caller reaches nobody else. Their validator is compared only once
-  // the gate has admitted the read, so a reader's `ETag` tells them nothing
-  // either, and what they are served is marked `private`.
+  // decides. The gate decides first, on a read that asks for no bytes: a
+  // refused caller is answered as a path that holds nothing, before any cache
+  // is consulted, so nothing a reader compiled reaches them and a cache hit
+  // tells them nothing. Their validator is compared only once the gate has
+  // admitted the read, so a reader's `ETag` tells them nothing either.
   //
-  // Admitted callers asking for the same version of a module at once share one
-  // compile, joined only once the gate has admitted each of them (see
-  // `#inFlightGatedCompiles`). A browser that has the module revalidates it on
-  // its next import and is answered 304 without a compile.
+  // An admitted caller is then served from the same caches a reader is: the
+  // in-memory module cache, the transpile cache row, and the compile a reader's
+  // request may already have in flight. A compile is a function of the file's
+  // text alone, so the module compiled for one caller is byte for byte the
+  // module compiled for any other, and a cached compile of the version the
+  // gate admitted holds nothing beyond the source the grant opens. A miss
+  // compiles and fills those caches for whoever reads next. The compile's read
+  // of the source is dispatched without the gate, which has already decided
+  // this request; it decides who the read is recorded against, as it does for
+  // a reader.
+  //
+  // What they are served is marked `private`. A shared cache answering in the
+  // realm's place would serve without the gate: past each grant's blocklist and
+  // rate limit, and after a grant is narrowed or removed.
   //
   // A shimmed module is served from the host's own bundle rather than the
   // realm's files, so no grant reaches it.
   async #moduleForGatedCaller(
     request: Request,
     requestContext: RequestContext,
+    localPath: LocalPath,
     fileRef: FileRef,
     notThere: () => ModuleLoadResult,
   ): Promise<ModuleLoadResult> {
     if (fileRef[Symbol.for('shimmed-module')]) {
       return notThere();
     }
-    let source: OperationSourceResult | undefined;
+    let caller = this.#callerOf(request, requestContext);
+    let admitted: OperationSourceResult | undefined;
     try {
-      source = await this.#readStoredSource(
-        this.#callerOf(request, requestContext),
-        fileRef.path,
-        { ...this.#gatedRead(requestContext), route: byteRoute('module') },
-      );
+      admitted = await this.#readStoredSource(caller, fileRef.path, {
+        ...this.#gatedRead(requestContext),
+        route: byteRoute('module'),
+        // Only the gate's decision is wanted here. The bytes are read by the
+        // compile, if one runs, and the validator is built from the file
+        // itself rather than from the realm's record of it.
+        headersOnly: true,
+        skipStoredFileMeta: true,
+      });
     } catch (e: unknown) {
       if (e instanceof CardError) {
         return {
@@ -9554,7 +9583,7 @@ export class Realm {
       }
       throw e;
     }
-    if (!source) {
+    if (!admitted) {
       return notThere();
     }
     let etag = buildEtag(
@@ -9565,7 +9594,8 @@ export class Realm {
       MODULE_ETAG_VARIANT,
     );
     // What the caller asked for is served from here on, so a caller who isn't
-    // signed in is counted against the realm's limit for it.
+    // signed in is counted against the realm's limit for it, a cache hit
+    // included.
     servedAnonymous(requestContext);
     if (etag && request.headers.get('if-none-match') === etag) {
       return {
@@ -9581,30 +9611,35 @@ export class Realm {
         },
       };
     }
-    let compileKey = `${fileRef.path}\n${etag ?? ''}`;
-    let compiling = this.#inFlightGatedCompiles.get(compileKey);
-    if (!compiling) {
-      let pending: Promise<ModuleTranspileResult>;
-      pending = fileContentToText({
-        content: source.body as FileRef['content'],
-      })
-        .then((text) => this.#compileModule(fileRef, text, etag))
-        .finally(() => {
-          if (this.#inFlightGatedCompiles.get(compileKey) === pending) {
-            this.#inFlightGatedCompiles.delete(compileKey);
-          }
-        });
-      compiling = pending;
-      this.#inFlightGatedCompiles.set(compileKey, pending);
+    // The entry has to be a compile of the file the gate judged, at the
+    // version it judged: an entry the name holds for another file, or for a
+    // version since overwritten, is compiled over like a miss.
+    let cached = this.#moduleCachingDisabled(request)
+      ? undefined
+      : this.#transpiledModuleCache.get(localPath);
+    if (
+      cached &&
+      cached.canonicalPath === fileRef.path &&
+      etag &&
+      cached.headers.etag === etag
+    ) {
+      return {
+        kind: 'cache-hit',
+        response: createResponse({
+          body: cached.body,
+          init: {
+            status: 200,
+            headers: {
+              ...cached.headers,
+              'cache-control': GRANTED_MODULE_CACHE_CONTROL,
+              [CACHE_HEADER]: CACHE_HIT_VALUE,
+            },
+          },
+          requestContext,
+        }),
+      };
     }
-    let compiled = await compiling;
-    return {
-      ...compiled,
-      headers: {
-        ...compiled.headers,
-        'cache-control': GRANTED_MODULE_CACHE_CONTROL,
-      },
-    };
+    return this.#transpileModuleDeduped(localPath, fileRef, etag, caller);
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
