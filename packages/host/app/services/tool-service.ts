@@ -315,6 +315,10 @@ export default class ToolService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private session: SessionService;
   @service declare private store: StoreService;
+  // How long a tool may run, and how long a script's question waits for the
+  // reader. Tests shorten them.
+  toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
+  scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   // The room each running call runs for, by tool call id.
   private executingToolRooms = new TrackedMap<string, string>();
@@ -361,7 +365,7 @@ export default class ToolService extends Service {
       let timer = setTimeout(() => {
         this.scriptAsks.delete(toolRequestId);
         reject(new Error('No answer came within 10 minutes'));
-      }, SCRIPT_ASK_MAX_MS);
+      }, this.scriptAskMaxMs);
       this.scriptAsks.set(toolRequestId, {
         request,
         answer: (value: string) => {
@@ -1405,7 +1409,7 @@ export default class ToolService extends Service {
                   onAsk?: (request: ScriptAsk) => Promise<ScriptAnswer>;
                 }
               ).onAsk = (request) => {
-                extendTimeout(SCRIPT_ASK_MAX_MS);
+                extendTimeout(this.scriptAskMaxMs);
                 return this.askFromScript(requestId, request);
               };
               let stoppable = toolToRun as { stop?: () => void };
@@ -1475,8 +1479,8 @@ export default class ToolService extends Service {
         // standard bound.
         let executeTimeoutMs =
           command.name === CHECK_CORRECTNESS_COMMAND_NAME
-            ? TOOL_EXECUTE_TIMEOUT_MS + 2 * ENV.cardRenderTimeout
-            : TOOL_EXECUTE_TIMEOUT_MS;
+            ? this.toolExecuteTimeoutMs + 2 * ENV.cardRenderTimeout
+            : this.toolExecuteTimeoutMs;
 
         [resultCard] = await all([
           withExtendableTimeout(
