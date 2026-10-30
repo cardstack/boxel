@@ -8,9 +8,10 @@
  * part that needs a filesystem. Both `boxel parse` and the software-factory
  * parse gate did this identically and had already started to drift (option
  * named `realmOrigin` vs `targetRealm`, a silent skip vs a logged warn), so it
- * lives here once. Only the prefix *list* stays per-caller: boxel-cli spells it
- * out as literals to keep its `lint:types` dependency-light, the factory derives
- * it from `PREFIX_REALMS` — so it is a parameter.
+ * lives here once. Where each prefix realm is served is a parameter too: the
+ * caller reads the map off the network it built from the realm server's
+ * `/_prefix-realms` (ADR 002 §1.2), and this module never derives a realm URL
+ * from a prefix's spelling.
  *
  * Degrade, don't fail. A prefix whose sources could not be fetched is written
  * as an ambient `declare module` shim rather than left to surface as a hard
@@ -61,17 +62,21 @@ export interface StageRealmSourcesOptions {
   /** The files being type-checked, whose imports seed the fetch walk. */
   files: { path: string; content: string }[];
   /**
-   * The realm prefixes this caller can resolve (with trailing slash), minus the
-   * base realm, which is already aliased to real sources locally. boxel-cli
-   * passes literals; the factory derives them from `PREFIX_REALMS`.
+   * The realm prefixes this caller treats as realm imports (with trailing
+   * slash), minus the base realm, which is already aliased to real sources
+   * locally. Names only, derived from `PREFIX_REALMS`: where each is served
+   * comes from `prefixRealmURLs`. Listed on their own so a referenced prefix
+   * can still be shimmed when no map could be read.
    */
   prefixes: string[];
   /**
-   * Origin the prefix realms are served from — the realm being parsed, or the
-   * active profile's realm server for a workspace parse. Absent means every
-   * referenced prefix is shimmed.
+   * Where each prefix realm is served, read off a network built from the realm
+   * server's prefix map (`prefixRealmURLsOf` / `PrefixRealmNetwork`). Undefined
+   * when the caller has no realm server to ask, or could not read its map:
+   * every referenced prefix is then shimmed. A prefix absent from the map is
+   * shimmed too.
    */
-  origin: string | undefined;
+  prefixRealmURLs: Record<string, string> | undefined;
   fetchFn?: typeof globalThis.fetch;
   /** See `FetchRealmSourcesOptions.cacheScope` — the identity behind `fetchFn`. */
   cacheScope?: string;
@@ -143,8 +148,15 @@ function describeDegradations(
 async function resolveRealmSources(
   options: StageRealmSourcesOptions,
 ): Promise<StageRealmSourcesResult> {
-  let { tempDir, files, prefixes, origin, fetchFn, cacheScope, onWarn } =
-    options;
+  let {
+    tempDir,
+    files,
+    prefixes,
+    prefixRealmURLs: servedPrefixRealmURLs,
+    fetchFn,
+    cacheScope,
+    onWarn,
+  } = options;
   let warn = (message: string) => onWarn?.(message);
 
   let referenced = prefixes.filter((prefix) =>
@@ -153,9 +165,9 @@ async function resolveRealmSources(
   if (referenced.length === 0) {
     return { realmPaths: {}, shimmedPrefixes: [], failures: [], warnings: [] };
   }
-  if (!origin) {
+  if (!servedPrefixRealmURLs) {
     warn(
-      `Realm-prefixed imports (${referenced.join(', ')}) but no realm to resolve them against — falling back to the ambient shim.`,
+      `Realm-prefixed imports (${referenced.join(', ')}) but no realm server prefix map to resolve them against — falling back to the ambient shim.`,
     );
     return {
       realmPaths: {},
@@ -165,17 +177,17 @@ async function resolveRealmSources(
     };
   }
 
-  // Hand the full prefix set to the fetch, not just the prefixes the entry
-  // files name: a fetched module may import a *different* resolvable prefix
-  // transitively, and fetching is demand-driven, so an unused entry in the map
-  // costs nothing while a missing one would leave that transitive import
-  // unresolved. Every prefix realm is served on the origin under its own name —
-  // the same assumption `deriveCatalogRealmUrl` makes.
+  // Hand every prefix this caller handles to the fetch, not just the prefixes
+  // the entry files name: a fetched module may import a *different* resolvable
+  // prefix transitively, and fetching is demand-driven, so an unused entry in
+  // the map costs nothing while a missing one would leave that transitive
+  // import unresolved. The served map may also carry prefixes the caller
+  // aliases locally (the base realm); those are left out so their modules are
+  // never fetched.
   let prefixRealmURLs = Object.fromEntries(
-    prefixes.map((prefix) => [
-      prefix,
-      new URL(`/${cacheDirForPrefix(prefix)}/`, origin).href,
-    ]),
+    prefixes
+      .filter((prefix) => servedPrefixRealmURLs[prefix] !== undefined)
+      .map((prefix) => [prefix, servedPrefixRealmURLs[prefix]]),
   );
 
   let result: Awaited<ReturnType<typeof fetchRealmSources>>;

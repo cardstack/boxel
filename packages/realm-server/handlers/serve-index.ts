@@ -43,6 +43,10 @@ import {
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import {
+  prefixRealmURLsOf,
+  type PrefixRealmSource,
+} from '@cardstack/runtime-common/prefix-realm-network';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -82,6 +86,12 @@ export type ServeIndexDeps = {
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
   getIndexHTML: () => Promise<string>;
+  /**
+   * The server's own network, whose realm mappings say where each prefix
+   * realm is served. The served index HTML carries that map to the host, and
+   * `/_prefix-realms` carries the same map to every other client.
+   */
+  virtualNetwork: PrefixRealmSource;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
   audioSizeLimitBytes: number;
@@ -207,6 +217,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     dbAdapter,
     matrixClient,
     getIndexHTML,
+    virtualNetwork,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -281,14 +292,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
               process.env.REALM_SENTRY_ENVIRONMENT ||
               config.hostedEnvironment ||
               'local',
-            // Both views of every prefix realm, rewritten from the one
-            // declaration: the realm-list property each realm is named by, and
-            // the served-at map the host registers its prefixes from. Hand
-            // listing these is how a realm gets added to the declaration and
-            // missed here — which ships worse than an absent prefix, because
-            // the host keeps the build-time URL while the realm-server serves
-            // that realm somewhere else. `merge` ignores undefined sources, so
-            // a realm absent from the served config stays absent.
+            // The realm-list property each prefix realm is named by, rewritten
+            // from the one declaration. Hand listing these is how a realm gets
+            // added to the declaration and missed here — which ships worse
+            // than an absent prefix, because the host keeps the build-time URL
+            // while the realm-server serves that realm somewhere else. `merge`
+            // ignores undefined sources, so a realm absent from the served
+            // config stays absent.
             ...Object.fromEntries(
               PREFIX_REALMS.map(({ hostConfigKey }) => [
                 hostConfigKey,
@@ -297,14 +307,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
                 ),
               ]),
             ),
-            prefixRealmURLs: Object.fromEntries(
-              Object.entries(
-                (config.prefixRealmURLs ?? {}) as Record<string, string>,
-              ).map(([prefix, servedAt]) => [
-                prefix,
-                rewriteRealmURL(servedAt),
-              ]),
-            ),
+            // The served-at map the host registers its prefixes from, read off
+            // this server's own network so it is the same map `/_prefix-realms`
+            // serves every other client: where this server was told to serve
+            // each prefix realm, not where the host's build guessed it would be.
+            prefixRealmURLs: prefixRealmURLsOf(virtualNetwork),
             cardSizeLimitBytes,
             fileSizeLimitBytes,
             audioSizeLimitBytes,

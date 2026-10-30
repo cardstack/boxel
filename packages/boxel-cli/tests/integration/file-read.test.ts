@@ -30,6 +30,11 @@ let home: string;
 let cleanupProfile: () => void;
 let realmUrl: string;
 
+// The prefix the fixture server registers for the test realm, so the realm is
+// in the prefix map the server serves and the CLI can resolve it the way it
+// resolves `@cardstack/skills/` against a deployed server.
+const TEST_REALM_PREFIX = '@cli-test/test/';
+
 const SOURCE_GTS = `import {
   CardDef,
   field,
@@ -61,14 +66,14 @@ const SOURCE_JSON = JSON.stringify(
 );
 
 beforeAll(async () => {
+  realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
   await startTestRealmServer({
     fileSystem: {
       'file-read-check.gts': SOURCE_GTS,
       'test-card.json': SOURCE_JSON,
     },
+    realmPrefixes: { [TEST_REALM_PREFIX]: realmUrl },
   });
-
-  realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
 
   let testHome = createTestHome();
   home = testHome.home;
@@ -111,16 +116,16 @@ describe('file read (integration)', () => {
     expect(result.content!.length).toBeGreaterThan(0);
   });
 
-  it('reads a file via a non-URL @cardstack/ realm identifier', async () => {
-    // `@cardstack/<realm>/` resolves against the active profile's
-    // realm-server URL, so `@cardstack/test/` names the test realm.
+  it('reads a file via a prefix-form realm identifier the server serves', async () => {
+    // The prefix resolves through the map the active profile's realm server
+    // serves at `/_prefix-realms`, where the fixture registered it.
     let res = await runBoxel(
       [
         'file',
         'read',
         'test-card.json',
         '--realm',
-        '@cardstack/test/',
+        TEST_REALM_PREFIX,
         '--json',
       ],
       { home },
@@ -133,7 +138,9 @@ describe('file read (integration)', () => {
     expect(parsed).toHaveProperty('data');
   });
 
-  it('returns a not-ok result for an unsupported realm identifier scope', async () => {
+  it('returns a not-ok result for a prefix the realm server does not serve', async () => {
+    // No URL is derived from the prefix's spelling: a prefix absent from the
+    // served map is refused, and the error names the prefixes that are served.
     let res = await runBoxel(
       [
         'file',
@@ -148,7 +155,8 @@ describe('file read (integration)', () => {
     expect(res.exitCode).toBe(1);
     let result = res.json<ReadJson>();
     expect(result.ok).toBe(false);
-    expect(result.error).toContain('only @cardstack/<realm>/');
+    expect(result.error).toContain('no registered realm prefix matches');
+    expect(result.error).toContain(TEST_REALM_PREFIX);
   });
 
   it('returns a not-ok result with 404 status for a nonexistent file', async () => {

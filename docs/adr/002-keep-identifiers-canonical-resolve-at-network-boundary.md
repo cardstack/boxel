@@ -156,8 +156,7 @@ every spelling of a resource onto one key [8].
   for a key that never leaves the store [7].
 - **Absolute URLs for ids shown to the model**, so that it can follow relative
   links [7, 9].
-- **Resolve prefixes by naming convention without a VirtualNetwork**, as
-  boxel-cli does [1, 7].
+- **Resolve prefixes by naming convention without a VirtualNetwork** [1, 7].
 
 ## 4. Consequences
 

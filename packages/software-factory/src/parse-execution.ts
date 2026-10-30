@@ -364,12 +364,13 @@ async function parseRealmFilesUncached(
     });
   let runGlintCheckFn =
     options.runGlintCheckFn ??
-    ((files) =>
+    (async (files) =>
       runGlintCheck(files, {
-        targetRealm: options.targetRealm,
         // Realm I/O goes through BoxelCLIClient — the boundary AGENTS.md
-        // states — which also lets the staging walk read non-public prefix
-        // realms instead of degrading them to the shim.
+        // states. The prefix map says where each prefix realm is served, and
+        // the authed fetch lets the staging walk read non-public prefix realms
+        // instead of degrading them to the shim.
+        prefixRealmURLs: await prefixRealmURLsFor(options.client),
         fetchFn: (input, init) => options.client.authedFetch(input, init),
         cacheScope: options.client.getActiveProfile()?.matrixId,
       }));
@@ -642,10 +643,11 @@ export async function runParseInMemory(
  */
 export interface RunGlintCheckOptions {
   /**
-   * The realm the files belong to. Its origin is where realm-prefixed imports
-   * are fetched from. Without it, those imports fall back to the shim.
+   * Where each prefix realm is served, as the realm server's prefix map has it
+   * (`BoxelCLIClient.prefixRealmURLs`). Without it, realm-prefixed imports fall
+   * back to the shim.
    */
-  targetRealm?: string;
+  prefixRealmURLs?: Record<string, string>;
   fetchFn?: typeof globalThis.fetch;
   /** Identity behind `fetchFn`, partitioning the realm-source memo. */
   cacheScope?: string;
@@ -655,6 +657,25 @@ export interface GlintCheckResult {
   errors: ParseErrorData[];
   /** See {@link ParseRealmFilesOutput.warnings}. */
   warnings: string[];
+}
+
+/**
+ * The realm server's prefix map through the client, or undefined when it
+ * cannot be read — the staging then shims every referenced prefix, and the
+ * cause is logged here because the staging cannot tell an unconfigured server
+ * from an unreachable one.
+ */
+async function prefixRealmURLsFor(
+  client: BoxelCLIClient,
+): Promise<Record<string, string> | undefined> {
+  try {
+    return await client.prefixRealmURLs();
+  } catch (error: unknown) {
+    log.warn(
+      `${error instanceof Error ? error.message : String(error)} — realm-prefixed imports fall back to the ambient shim.`,
+    );
+    return undefined;
+  }
 }
 
 export async function runGlintCheck(
@@ -681,7 +702,7 @@ export async function runGlintCheck(
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
-      origin: options.targetRealm,
+      prefixRealmURLs: options.prefixRealmURLs,
       fetchFn: options.fetchFn,
       cacheScope: options.cacheScope,
       onWarn: (message) => log.warn(message),

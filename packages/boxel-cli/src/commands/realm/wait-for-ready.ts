@@ -60,7 +60,9 @@ export async function waitForReady(
     };
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return { ready: false, error: resolvedRealm.error };
   }
