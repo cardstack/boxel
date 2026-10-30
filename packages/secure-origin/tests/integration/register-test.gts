@@ -4,7 +4,6 @@ import {
   render,
   triggerEvent,
   waitFor,
-  waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -290,9 +289,6 @@ module('Integration | register', function (hooks) {
     ] as const) {
       await fillIn('[data-test-username-field] input', value);
       await triggerEvent('[data-test-username-field] input', 'blur');
-      await waitUntil(() =>
-        document.querySelector(error('username'))?.textContent?.trim(),
-      );
       assert.dom(error('username')).hasText(message, value || 'empty');
       // An error the availability check shows on its own is announced, and
       // read with its field.
@@ -493,7 +489,6 @@ module('Integration | register', function (hooks) {
     await waitFor('[data-test-token-field]');
     await fillIn('[data-test-token-field]', INVITE_CODE);
     await click('[data-test-next-btn]');
-    await waitUntil(() => submitted.length > 0, { timeout: 5000 });
 
     let [form] = submitted;
     assert.strictEqual(form!.method, 'post');

@@ -5,7 +5,6 @@ import {
   settled,
   triggerEvent,
   triggerKeyEvent,
-  waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -19,6 +18,7 @@ import {
   whenStyled,
 } from '../../src/credentials/style.ts';
 import { CredentialFrame, FORMS } from '../../src/security/credentials.js';
+import { nextResize } from '../helpers/waiters.ts';
 
 const APP_ORIGIN = 'https://app.example.test';
 
@@ -270,12 +270,13 @@ module('Integration | credential fields', function (hooks) {
       receive({ type: 'style', properties: {} });
       // The frame measures itself once the styles are drawn, so the report
       // arrives after this message is handled.
-      await waitUntil(() => sizes().length > 0);
+      await settled();
       let first = sizes().at(-1);
       assert.strictEqual(first.height, formHeight(), 'the height of the form');
       await fillIn('[data-test-new-password-field]', 'short');
       await blur('[data-test-new-password-field]');
-      await waitUntil(() => sizes().at(-1).height > first.height);
+      await nextResize(document.getElementById('credential-fields')!);
+      assert.true(sizes().at(-1).height > first.height, 'reports a new height');
       assert.strictEqual(
         sizes().at(-1).height,
         formHeight(),

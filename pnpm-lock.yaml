@@ -4366,6 +4366,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@ember/test-waiters':
+        specifier: 'catalog:'
+        version: 4.1.2(supports-color@8.1.1)
       '@embroider/core':
         specifier: ^4.6.3
         version: 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
