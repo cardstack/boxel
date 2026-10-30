@@ -998,7 +998,7 @@ test.describe('Room messages', () => {
     });
   });
 
-  test('ai panel stays open when last card is closed and workspace chooser is opened', async ({
+  test('ai panel stays open when last card is closed and the dashboard is opened', async ({
     page,
   }) => {
     const { username } = await createSubscribedUserAndLogin(
@@ -1009,7 +1009,7 @@ test.describe('Room messages', () => {
     await page
       .locator('[data-test-stack-card] [data-test-close-button]')
       .click();
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
 
     page
       .locator('[data-test-message-field]')

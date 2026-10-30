@@ -30,9 +30,7 @@ test.describe('Login', () => {
     await setupPermissions(credentials.userId, `${appURL}/`);
   });
 
-  test('it can login on the realm server home page and see the workspace chooser', async ({
-    page,
-  }) => {
+  test('it can login on the realm server home page', async ({ page }) => {
     await page.goto(appURL);
 
     await signInOnSecureOrigin(page, username, password);
@@ -40,6 +38,7 @@ test.describe('Login', () => {
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(0);
 
     await logout(page);
     await assertLoggedOut(page);
@@ -134,8 +133,6 @@ test.describe('Login', () => {
 
     await signInOnSecureOrigin(page, username, password);
 
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(0);
-
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1);
@@ -143,6 +140,8 @@ test.describe('Login', () => {
     await expect(
       page.locator(`[data-test-stack-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
+    // after the card renders, so it can't pass before the app has
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(0);
   });
 
   test('it can login', async ({ page }) => {
@@ -224,7 +223,7 @@ test.describe('Login', () => {
     }
   });
 
-  test('it can login to workspace chooser page', async ({ page }) => {
+  test('it can login to the dashboard', async ({ page }) => {
     await openRoot(page, new URL(appURL).origin);
 
     await assertLoggedOut(page);
@@ -234,6 +233,7 @@ test.describe('Login', () => {
       displayName: username,
       userId: credentials.userId,
     });
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     // The two workspaces the user was given, and the personal workspace the
     // first sign-in on the secure origin makes.
     await expect(page.locator('[data-test-workspace-visibility]')).toHaveCount(
@@ -325,7 +325,7 @@ test.describe('Login', () => {
     await logout(page);
     await signInOnSecureOrigin(page, username, password);
 
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
     await assertLoggedIn(page, {
       displayName: username,
       userId: credentials.userId,
