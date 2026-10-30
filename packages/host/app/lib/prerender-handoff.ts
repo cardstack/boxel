@@ -19,6 +19,7 @@ const POLL_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const MEDIA_TIMEOUT_MS = 1_500;
 const FADE_MS = 180;
+const FRAME_TIMEOUT_MS = 100;
 
 const PINNED_STYLE: Partial<Record<keyof CSSStyleDeclaration, string>> = {
   position: 'fixed',
@@ -60,11 +61,16 @@ function prerenderScrollTop(nodes: ChildNode[]) {
   return scrollTop;
 }
 
-// The handoff waits for real paints, not the runloop. It only runs when the
-// server sent prerendered markup, which tests don't.
+// The handoff waits for a paint where the page is painting. A background or
+// occluded tab pauses animation frames, and there the timeout lets the
+// handoff go ahead, since nobody is looking. It only runs when the server
+// sent prerendered markup, which tests don't.
 function nextFrame() {
-  // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waits for a paint before revealing the live page
-  return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  return withTimeout(
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waits for a paint before revealing the live page
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    FRAME_TIMEOUT_MS,
+  );
 }
 
 function withTimeout(promise: Promise<unknown>, ms: number) {
@@ -154,12 +160,14 @@ export function startPrerenderHandoff(live: HTMLElement): () => void {
     ).matches;
     if (!reduceMotion && typeof live.animate === 'function') {
       live.style.opacity = '1';
-      await live
-        .animate([{ opacity: 0 }, { opacity: 1 }], {
+      // A paused page never finishes the animation, so it gets a deadline.
+      await withTimeout(
+        live.animate([{ opacity: 0 }, { opacity: 1 }], {
           duration: FADE_MS,
           easing: 'ease-out',
-        })
-        .finished.catch(() => undefined);
+        }).finished,
+        FADE_MS + FRAME_TIMEOUT_MS,
+      );
     }
     if (cancelled) {
       return;
