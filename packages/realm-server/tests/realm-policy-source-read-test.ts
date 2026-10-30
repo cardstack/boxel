@@ -1714,12 +1714,14 @@ module(basename(import.meta.filename), function (hooks) {
           /^private\b/.test(granted.get('cache-control') ?? ''),
           'served privately',
         );
-        // Out of memory, the module is still in the transpile cache.
-        education.__testOnlyClearCaches();
-        let fromRow = await get(MODULE_SOURCE, '*/*', AS.teacher());
+        // Past the in-memory cache, the module is in the transpile cache.
+        compiles = education.__testOnlyGetTranspileCallCount();
+        let fromRow = await get(MODULE_SOURCE, '*/*', AS.teacher(), {
+          'X-Boxel-Disable-Module-Cache': 'true',
+        });
         assert.strictEqual(fromRow.status, 200, 'read again');
         assert.strictEqual(
-          education.__testOnlyGetTranspileCallCount(),
+          education.__testOnlyGetTranspileCallCount() - compiles,
           0,
           'from the transpile cache, without a compile',
         );

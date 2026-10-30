@@ -9541,10 +9541,10 @@ export class Realm {
   // text alone, so the module compiled for one caller is byte for byte the
   // module compiled for any other, and a cached compile of the version the
   // gate admitted holds nothing beyond the source the grant opens. A miss
-  // compiles and fills those caches for whoever reads next. The compile's read
-  // of the source is dispatched without the gate, which has already decided
-  // this request; it decides who the read is recorded against, as it does for
-  // a reader.
+  // compiles and fills those caches for whoever reads next. The compile reads
+  // the source for this caller without the gate, which has already decided
+  // this request, so the caller decides only who the read is recorded against,
+  // as a reader's does.
   //
   // What they are served is marked `private`. A shared cache answering in the
   // realm's place would serve without the gate: past each grant's blocklist and
