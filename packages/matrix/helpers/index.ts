@@ -607,7 +607,7 @@ export async function logout(page: Page) {
     .waitFor({ state: 'attached', timeout: 5000 })
     .catch(() => undefined);
   await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+    page.locator('[data-test-ai-assistant-message-pending]'),
   ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
@@ -771,9 +771,29 @@ export async function sendMessage(
     messageCountBeforeSend + 1,
   );
   await expect(
-    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+    page.locator('[data-test-ai-assistant-message-pending]'),
   ).toHaveCount(0);
   await page.waitForSelector(`[data-test-room-settled]`);
+}
+
+// The transcript as rendered: each message's index, author, delivery state and
+// text, for an assertion's failure message.
+export async function describeMessages(page: Page) {
+  let rows = await page.locator('[data-test-message-idx]').evaluateAll((els) =>
+    els.map((el) => ({
+      idx: el.getAttribute('data-test-message-idx'),
+      from: el.getAttribute('data-test-boxel-message-from'),
+      pending: el.hasAttribute('data-test-ai-assistant-message-pending'),
+      delivery:
+        el
+          .querySelector('[data-test-pretui-user-bubble]')
+          ?.getAttribute('data-test-pretui-user-bubble') ?? null,
+      text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 80),
+    })),
+  );
+  return `messages at ${new Date().toISOString()}:\n${rows
+    .map((row) => JSON.stringify(row))
+    .join('\n')}`;
 }
 
 export async function assertMessages(

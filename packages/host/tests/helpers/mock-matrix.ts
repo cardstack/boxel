@@ -32,7 +32,12 @@ export interface Config {
   directRooms?: string[];
   systemCardAccountData?: { id?: string };
   uploadContentInterceptor?: () => Promise<void>;
-  sendEventInterceptor?: () => Promise<void>;
+  // Called after a sent event's local echo, before the event reaches the
+  // server; the send waits for the returned promise.
+  sendEventInterceptor?: (event: {
+    type: string;
+    content: Record<string, any>;
+  }) => Promise<void>;
   workspaceFavorites?: string[];
   // Public realms the user added to their dashboard's Catalogs section.
   catalogRealms?: string[];
