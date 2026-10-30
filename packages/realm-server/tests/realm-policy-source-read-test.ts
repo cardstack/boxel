@@ -1951,18 +1951,39 @@ module(basename(import.meta.filename), function (hooks) {
         }
       });
 
-      test('a write drops the compile in flight under the import name of the file written', async function (assert) {
+      test("a file's invalidation drops the compile in flight under its import name", async function (assert) {
         await twins();
         let { read, release } = await parkReadersCompile();
         try {
-          await education.delete('twin.ts');
+          // The `.ts` is deleted where the realm hears of it only by path, as
+          // it hears of a change another server made.
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          education.invalidateCache('twin.ts');
           let joins = education.__testOnlyGetTranspileJoinCount();
-          let after = await get(`${EDUCATION}twin`, '*/*', AS.reader());
+          let settled = false;
+          let pending = get(`${EDUCATION}twin`, '*/*', AS.reader()).then(
+            (r) => {
+              settled = true;
+              return r;
+            },
+          );
+          // Answered while the old compile is still parked, or parked behind
+          // it after joining it: one or the other, whichever comes first.
+          let waitedFor = Date.now();
+          while (
+            !settled &&
+            education.__testOnlyGetTranspileJoinCount() === joins &&
+            Date.now() - waitedFor < 10_000
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
           assert.strictEqual(
             education.__testOnlyGetTranspileJoinCount() - joins,
             0,
-            'a reader asking for the name after the delete starts a compile of its own',
+            'a reader asking for the name after the invalidation starts a compile of its own',
           );
+          release();
+          let after = await pending;
           assert.true(
             textOf(after).includes('from-gts'),
             'of the module the name resolves to now',
