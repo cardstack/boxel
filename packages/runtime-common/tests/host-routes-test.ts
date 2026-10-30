@@ -1,5 +1,7 @@
 import {
   projectHostRoutes,
+  routedPathForCard,
+  routeSnapshot,
   type HostRouteRow,
   type RouteCard,
 } from '../host-routes.ts';
@@ -257,6 +259,67 @@ const tests: SharedTests<unknown> = Object.freeze({
         problems.join('\n'),
       );
     },
+
+  'routedPathForCard: a card is found at its page, never at an alias': async (
+    assert,
+  ) => {
+    let rows: HostRouteRow[] = [
+      {
+        path: '/p/sku-1',
+        kind: 'alias',
+        cardURL: `${REALM}Product/driver`,
+        targetPath: '/shop/driver',
+        claimedAt: 1,
+      },
+      {
+        path: '/shop/driver',
+        kind: 'page',
+        cardURL: `${REALM}Product/driver`,
+        claimedAt: 1,
+      },
+    ];
+    assert.strictEqual(
+      routedPathForCard(rows, `${REALM}Product/driver.json`),
+      '/shop/driver',
+    );
+    assert.strictEqual(
+      routedPathForCard(rows, `${REALM}Product/putter`),
+      undefined,
+    );
+  },
+
+  'routeSnapshot: rows by kind, and incomplete past the cap': async (
+    assert,
+  ) => {
+    let rows: HostRouteRow[] = [
+      { path: '/shop', kind: 'listing', claimedAt: 1 },
+      {
+        path: '/shop/driver',
+        kind: 'page',
+        cardURL: `${REALM}Product/driver`,
+        claimedAt: 1,
+      },
+      {
+        path: '/p/sku-1',
+        kind: 'alias',
+        cardURL: `${REALM}Product/driver`,
+        targetPath: '/shop/driver',
+        claimedAt: 1,
+      },
+      { path: '/shop/old', kind: 'gone', claimedAt: 1 },
+    ];
+    let snapshot = routeSnapshot(rows, REALM, '/owner/store/');
+    assert.deepEqual(snapshot, {
+      realm: REALM,
+      mount: '/owner/store/',
+      pages: [['/shop/driver', `${REALM}Product/driver`]],
+      aliases: [['/p/sku-1', '/shop/driver']],
+      gone: ['/shop/old'],
+      listings: ['/shop'],
+      complete: true,
+    });
+    assert.false(routeSnapshot(rows, REALM, '/owner/store/', 2).complete);
+  },
 });
 
 export default tests;

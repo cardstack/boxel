@@ -40,4 +40,12 @@ module(basename(import.meta.filename), function () {
   test('projectHostRoutes: a card without the field its href reads gets no path', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
+
+  test('routedPathForCard: a card is found at its page, never at an alias', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('routeSnapshot: rows by kind, and incomplete past the cap', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
 });

@@ -1,4 +1,9 @@
-import type { CardContext, FieldFormats, CardCrudFunctions } from './card-api';
+import type {
+  CardContext,
+  FieldFormats,
+  CardCrudFunctions,
+  OpenCardFn,
+} from './card-api';
 import {
   type Box,
   type Field,
@@ -23,6 +28,8 @@ import {
   type CodeRef,
   type Permissions,
   CardCrudFunctionsContextName,
+  CurrentCardContextName,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -83,7 +90,6 @@ const DEFAULT_CARD_CONTEXT = {
   cardComponentModifier: class NoOpModifier extends Modifier<any> {
     modify() {}
   },
-  actions: undefined,
   toolContext: undefined,
   getCard: () => {},
   getCards: () => {},
@@ -92,10 +98,27 @@ const DEFAULT_CARD_CONTEXT = {
 
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {
   @consume(CardContextName) declare dynamicCardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: Partial<CardCrudFunctions> | undefined;
+
+  // `openCard` goes through whichever `viewCard` the environment provides
+  // where this card renders, so it opens a card the way that environment
+  // does.
+  private openCard: OpenCardFn = (cardOrURL, opts) => {
+    this.cardCrudFunctions?.viewCard?.(
+      cardOrURL as CardDef | URL | RealmResourceIdentifier,
+      opts?.format ?? 'isolated',
+      {
+        openCardInRightMostStack: opts?.stack === 'rightmost',
+        overlay: opts?.overlay,
+      },
+    );
+  };
 
   get context(): CardContext {
     return {
       ...DEFAULT_CARD_CONTEXT,
+      actions: { openCard: this.openCard },
       ...this.dynamicCardContext,
     };
   }
@@ -135,6 +158,18 @@ export class DefaultFormatsProvider extends Component<DefaultFormatsProviderSign
   @provide(DefaultFormatsContextName)
   get defaultFormats() {
     return this.args.value;
+  }
+}
+
+interface CurrentCardProviderSignature {
+  Args: { card: CardDef };
+  Blocks: { default: [] };
+}
+
+export class CurrentCardProvider extends Component<CurrentCardProviderSignature> {
+  @provide(CurrentCardContextName)
+  get currentCard() {
+    return this.args.card;
   }
 }
 
@@ -407,26 +442,28 @@ export function getBoxComponent(
                           data-test-field-component-card
                           ...attributes
                         >
-                          <c.CardOrFieldFormatComponent
-                            @cardOrField={{cardOrField}}
-                            @model={{card}}
-                            @fields={{c.fields}}
-                            @format={{effectiveFormats.cardDef}}
-                            @set={{model.set}}
-                            @fieldName={{model.name}}
-                            @context={{context}}
-                            @configuration={{this.resolvedConfiguration}}
-                            @createCard={{cardCrudFunctions.createCard}}
-                            @viewCard={{cardCrudFunctions.viewCard}}
-                            @saveCard={{cardCrudFunctions.saveCard}}
-                            @editCard={{cardCrudFunctions.editCard}}
-                            @canEdit={{and
-                              (not field.computeVia)
-                              (not field.queryDefinition)
-                              permissions.canWrite
-                            }}
-                            @typeConstraint={{@typeConstraint}}
-                          />
+                          <CurrentCardProvider @card={{card}}>
+                            <c.CardOrFieldFormatComponent
+                              @cardOrField={{cardOrField}}
+                              @model={{card}}
+                              @fields={{c.fields}}
+                              @format={{effectiveFormats.cardDef}}
+                              @set={{model.set}}
+                              @fieldName={{model.name}}
+                              @context={{context}}
+                              @configuration={{this.resolvedConfiguration}}
+                              @createCard={{cardCrudFunctions.createCard}}
+                              @viewCard={{cardCrudFunctions.viewCard}}
+                              @saveCard={{cardCrudFunctions.saveCard}}
+                              @editCard={{cardCrudFunctions.editCard}}
+                              @canEdit={{and
+                                (not field.computeVia)
+                                (not field.queryDefinition)
+                                permissions.canWrite
+                              }}
+                              @typeConstraint={{@typeConstraint}}
+                            />
+                          </CurrentCardProvider>
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}

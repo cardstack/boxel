@@ -41,6 +41,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type HostNavigationService from '@cardstack/host/services/host-navigation';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
@@ -67,6 +68,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
+  @service declare private hostNavigation: HostNavigationService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
@@ -158,15 +160,21 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     return this.card?.cardTitle ?? '';
   }
 
-  private viewCard: ViewCardFn = (cardOrURL) => {
+  // A card opened from a published site is a page navigation to its address,
+  // unless it asks to open over the page.
+  private viewCard: ViewCardFn = (cardOrURL, format, opts) => {
     let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
 
-    let normalizedId = cardId.replace(/\.json$/, '');
-    this.hostModeStateService.pushCard(normalizedId);
+    this.hostNavigation.navigateTo(
+      { card: cardId },
+      { format, overlay: opts?.overlay },
+    );
   };
+
+  private installHostNavigation = modifier(() => this.hostNavigation.install());
 
   @action
   removeCardFromStack(cardId: string) {
@@ -302,7 +310,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         @stackItemCardIds={{this.hostModeStateService.stackItems}}
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
+        @hrefFor={{this.hostNavigation.hrefFor}}
+        @navigateTo={{this.hostNavigation.navigateTo}}
         {{this.removeIsolatedMarkup}}
+        {{this.installHostNavigation}}
       />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}

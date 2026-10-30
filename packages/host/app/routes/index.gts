@@ -24,6 +24,7 @@ import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type HostNavigationService from '@cardstack/host/services/host-navigation';
 import { AccountSwitchError } from '@cardstack/host/services/matrix-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -63,6 +64,7 @@ export default class Card extends Route {
   @service declare private cardService: CardService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
+  @service declare private hostNavigation: HostNavigationService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
@@ -139,6 +141,15 @@ export default class Card extends Route {
         return;
       }
       let cardUrl = routed?.id;
+      if (!cardUrl) {
+        // The site's route table, as the served page's snapshot holds it.
+        let known = this.hostNavigation.resolveAddress(`/${normalizedPath}`);
+        if (known && 'redirectTo' in known) {
+          this.hostNavigation.visit(known.redirectTo, { replace: true });
+          return;
+        }
+        cardUrl = known?.card;
+      }
       if (!cardUrl) {
         // The site's route table and `:name` rules, which only the realm
         // server can resolve. A path neither routes is a card URL, as before.

@@ -53,7 +53,12 @@ import {
   siteHomeCard,
 } from '../lib/host-routes.ts';
 import { siteRewriter } from '../lib/site-rewrite.ts';
-import type { HostRouteShare } from '@cardstack/runtime-common';
+import {
+  routedPathForCard,
+  routeSnapshot,
+  type HostRouteRow,
+  type HostRouteShare,
+} from '@cardstack/runtime-common';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -780,6 +785,27 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         );
         if (id) {
           cardURL = new URL(id);
+        } else {
+          // A routed card visited at its own card path moves to the address
+          // the site serves it at, so a page has one address.
+          let realmPathname = new URL(routedRealm.url).pathname;
+          let routed = routedPathForCard(
+            await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url),
+            new URL(
+              requestURL.pathname.slice(realmPathname.length),
+              routedRealm.url,
+            ),
+          );
+          if (routed) {
+            ctxt.redirect(
+              new URL(
+                realmPathname.replace(/\/$/, '') + routed + requestURL.search,
+                requestURL,
+              ).href,
+            );
+            ctxt.status = 301;
+            return;
+          }
         }
       }
     }
@@ -852,17 +878,19 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // A site's pages are rewritten on the way out to the address they are
     // served at: links to routed cards, the canonical URL and og:url.
     let canonicalHead: string | undefined;
+    let siteRows: HostRouteRow[] | undefined;
     if (routedRealm) {
       let settings = await routedRealm.getSiteSettings();
       if (settings.pageTypes.length || settings.hostURLs.length) {
         let realmPathname = new URL(routedRealm.url).pathname;
+        siteRows = await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url);
         let rewriter = siteRewriter({
           requestMount: new URL(realmPathname, requestURL),
           canonicalMount: settings.hostURLs[0]
             ? new URL(settings.hostURLs[0].url)
             : undefined,
           requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
-          rows: await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url),
+          rows: siteRows,
           share: servedShare,
           document: doc,
         });
@@ -941,6 +969,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
+    // Per-request additions to the host's config: the exact routing map, and
+    // the site's route table as a snapshot.
+    let configPatch: Record<string, unknown> = {};
     if (routingMap.length > 0 && routedRealm) {
       // Rules are stored realm-relative ('/whitepaper'). The client sees URL
       // paths that include the realm's mount segment ('/routing/whitepaper'
@@ -971,11 +1002,20 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // routing data on the same typed channel the host already reads
       // for hostsOwnAssets / realmServerURL / matrixURL etc., rather
       // than via a separate `window.__hostRoutingMap` global.
+      configPatch.hostRoutingMap = hostScopedMap;
+    }
+    if (siteRows?.length && routedRealm) {
+      configPatch.hostRouteSnapshot = routeSnapshot(
+        siteRows,
+        routedRealm.url,
+        new URL(routedRealm.url).pathname,
+      );
+    }
+    if (Object.keys(configPatch).length > 0) {
       responseHTML = responseHTML.replace(
         /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
         (_match, g1, g2, g3) => {
-          let cfg = JSON.parse(decodeURIComponent(g2));
-          cfg.hostRoutingMap = hostScopedMap;
+          let cfg = { ...JSON.parse(decodeURIComponent(g2)), ...configPatch };
           return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
         },
       );

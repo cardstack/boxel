@@ -377,3 +377,70 @@ export function projectHostRoutes(
     problems,
   };
 }
+
+function cardKey(url: string): string {
+  let key = new URL(url);
+  key.hash = '';
+  key.search = '';
+  return key.href.replace(/\.json$/, '');
+}
+
+// The path a site serves a card at, from its route table: the card's page,
+// never an alias. Undefined when the site routes no page to it.
+export function routedPathForCard(
+  rows: HostRouteRow[],
+  cardURL: URL | string,
+): string | undefined {
+  let key = cardKey(String(cardURL));
+  return rows.find(
+    (row) => row.kind === 'page' && row.cardURL && cardKey(row.cardURL) === key,
+  )?.path;
+}
+
+// What the served page tells the host app about a site's routes, so a link's
+// address and a path's card are known without asking the server. Paths are
+// realm-relative; `mount` is where the routing realm sits on the host the
+// page was served from.
+export interface HostRouteSnapshot {
+  // The routing realm's URL.
+  realm: string;
+  // Its pathname on this host, with a trailing slash: '/sites/owner/shop/'.
+  mount: string;
+  // [path, card URL] for each page.
+  pages: [string, string][];
+  // [path, target path] for each alias.
+  aliases: [string, string][];
+  // Paths the site no longer serves.
+  gone: string[];
+  // Listing paths, which serve the site's home card.
+  listings: string[];
+  // False when the table had more rows than the snapshot carries; the host
+  // asks the server about any path the snapshot doesn't hold.
+  complete: boolean;
+}
+
+export const MAX_ROUTE_SNAPSHOT_ROWS = 2000;
+
+export function routeSnapshot(
+  rows: HostRouteRow[],
+  realm: string,
+  mount: string,
+  max = MAX_ROUTE_SNAPSHOT_ROWS,
+): HostRouteSnapshot {
+  let kept = rows.slice(0, max);
+  return {
+    realm,
+    mount,
+    pages: kept
+      .filter((row) => row.kind === 'page' && row.cardURL)
+      .map((row) => [row.path, row.cardURL!]),
+    aliases: kept
+      .filter((row) => row.kind === 'alias' && row.targetPath)
+      .map((row) => [row.path, row.targetPath!]),
+    gone: kept.filter((row) => row.kind === 'gone').map((row) => row.path),
+    listings: kept
+      .filter((row) => row.kind === 'listing')
+      .map((row) => row.path),
+    complete: rows.length <= max,
+  };
+}

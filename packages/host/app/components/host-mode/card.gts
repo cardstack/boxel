@@ -125,6 +125,7 @@ export default class HostModeCard extends Component<Signature> {
       {{this.restoreScroll this.card}}
       class={{cn 'host-mode-card' is-primary=@isPrimary}}
       @displayBoundaries={{@displayBoundaries}}
+      data-host-mode-primary={{if @isPrimary true}}
       data-test-host-mode-card-loaded={{bool this.card}}
       ...attributes
     >

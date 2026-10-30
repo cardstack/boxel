@@ -389,6 +389,7 @@ interface RelationshipOptions extends Options {
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
+  actions?: { openCard: OpenCardFn };
   toolContext?: ToolContext;
   // Pre-rename spelling of `toolContext`. Realm content reads
   // `@context.commandContext`; populated with the same value until no
@@ -2996,6 +2997,8 @@ export type ViewCardFn = (
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
     useBaseTemplate?: boolean;
+    // Host mode: open the card over the page instead of navigating to it.
+    overlay?: boolean;
   },
 ) => void;
 
@@ -3014,7 +3017,33 @@ export interface CardCrudFunctions {
   editCard: EditCardFn;
   viewCard: ViewCardFn;
   deleteCard: DeleteCardFn;
+  // Where a link points in this environment: a card's routed address on a
+  // published site, or a site path under the site's mount. Undefined means
+  // the card's own URL, or the path as written.
+  hrefFor?: (target: CardLinkTarget) => string | undefined;
+  // Navigates to a card or a site path, where the environment navigates by
+  // address (a published site). Absent elsewhere, where `viewCard` opens
+  // cards.
+  navigateTo?: (
+    target: CardLinkTarget,
+    opts?: { format?: Format; overlay?: boolean },
+  ) => void;
 }
+
+export type CardLinkTarget = { card: string } | { path: string };
+
+// Opens a card the way the environment opens cards: a page navigation on a
+// published site, a stack push in interact mode, the preview in code mode.
+// Always present on a card's context; a no-op where nothing can open cards
+// (the prerender, tests).
+export type OpenCardFn = (
+  cardOrURL: CardDef | URL | string,
+  opts?: {
+    format?: Format;
+    stack?: 'push' | 'rightmost';
+    overlay?: boolean;
+  },
+) => void;
 
 export type BaseDefComponent = ComponentLike<{
   Blocks: {};
