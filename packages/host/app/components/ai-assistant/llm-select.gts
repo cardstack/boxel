@@ -54,7 +54,7 @@ export default class LLMSelect extends Component<Signature> {
           </span>
         </div>
       </:headerDetail>
-      <:content>
+      <:content as |collapseMenu|>
         <ul class='llm-list'>
           {{#each @options key='id' as |option|}}
             <li
@@ -69,7 +69,10 @@ export default class LLMSelect extends Component<Signature> {
               <button
                 type='button'
                 class='llm-button'
-                {{on 'click' (fn this.handleOptionClick option.id)}}
+                {{on
+                  'click'
+                  (fn this.handleOptionClick option.id collapseMenu)
+                }}
               >
                 <span class='llm-name'>{{option.name}}</span>
                 <span class='llm-meta'>
@@ -224,7 +227,8 @@ export default class LLMSelect extends Component<Signature> {
   }
 
   @action
-  private handleOptionClick(option: string) {
+  private handleOptionClick(option: string, collapseMenu: () => void) {
     this.args.onChange(option);
+    collapseMenu();
   }
 }

@@ -52,9 +52,13 @@ import {
   ServiceAccountTokenError,
 } from './google-service-account-keys.ts';
 import {
+  claimKeyProbe,
   claimProbe,
+  clearKeyRejected,
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
+  emitKeyGrantEvent,
+  markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
 
@@ -1003,128 +1007,302 @@ function slotBindingConditions({
   ];
 }
 
-// The binding for each of the request's slots, checked: approved in this
-// realm, for this operation (and this card, when it is approved per
-// instance), by the caller for a `userKey` slot; its share, if it has one, not
-// suspended; its fingerprint the one the request has now; and approved for
-// how the invocation arrived; and its grant not rejected by the vendor, unless
-// this call is the grant's probe. A binding whose request has changed goes to
-// `needs-reapproval` here, and its owner gets one notice. Throws the refusal
-// for the first slot that fails.
+// What names the bindings that could fill an operation's slots: the realm,
+// the type the operation was resolved on, the operation, the card (for an
+// operation approved per instance), the caller whose own `{{userKey}}`
+// bindings count, and how the invocation arrived.
+export type BindingLookup = Omit<CallApiSlotLookup, 'instance'> & {
+  instance: string | null;
+};
+
+// The card a binding names for this invocation: null for an operation
+// approved on its type, and `undefined` for a per-instance operation invoked
+// on the type, which no approval names.
+export function bindingInstance(
+  request: OperationCallApi,
+  instance: string | undefined,
+): string | null | undefined {
+  if (!request.perInstance) {
+    return null;
+  }
+  return instance ? instance.replace(/\.json$/, '') : undefined;
+}
+
+// A binding as a slot is checked against it, with its share and its grant.
+// `grant_id` is the grant only while it is still there for the binding's key
+// (or its share's key): a grant that is gone or belongs to another key fills
+// nothing, so it reads as none. `bound_grant_id` is the grant the binding
+// names, whatever became of it. `key_state` is the state of the key that
+// grant belongs to.
+export interface CheckedSlotBinding {
+  id: string;
+  slot: string;
+  key_id: string | null;
+  share_id: string | null;
+  grant_id: string | null;
+  bound_grant_id: string | null;
+  approved_by: string;
+  interactive: boolean;
+  fingerprint: string;
+  approval_id: string;
+  state: KeyBindingState;
+  share_state: string | null;
+  share_key_id: string | null;
+  share_owner: string | null;
+  grant_state: string | null;
+  grant_destination: string | null;
+  probe_due: boolean;
+  grant_key_id: string | null;
+  key_kind: string | null;
+  key_state: string | null;
+  key_probe_due: boolean;
+}
+
+// What checking a slot found: the refusal a call would get for it, or that it
+// would be filled (`probe`: under a grant the vendor rejected, as its probe;
+// `keyProbe`: with a service-account key Google refused, as the key's probe).
+// `key-rejected` is a service-account key Google refused whose probe isn't
+// due.
+export type SlotCheck =
+  | {
+      slot: CallApiSlot;
+      binding: CheckedSlotBinding;
+      refused?: undefined;
+      probe: boolean;
+      keyProbe: boolean;
+    }
+  | {
+      slot: CallApiSlot;
+      binding: CheckedSlotBinding | undefined;
+      refused: 'binding-not-approved';
+    }
+  | {
+      slot: CallApiSlot;
+      binding: CheckedSlotBinding;
+      refused:
+        | 'share-suspended'
+        | 'binding-needs-reapproval'
+        | 'interactive-use-not-approved'
+        | 'credential-rejected'
+        | 'key-rejected';
+    };
+
+// Every slot of the request checked against the binding that would fill it:
+// approved in this realm, for this operation (and this card, when it is
+// approved per instance), by the caller for a `{{userKey}}` slot; its share,
+// if it has one, not suspended; its fingerprint the one the request has now;
+// approved for how the invocation arrived; its grant still there for its key;
+// that grant not rejected by the vendor, unless its probe is due; and the
+// grant's key not a service-account key Google refused, unless the key's
+// probe is due. The first check a slot fails is its answer.
 //
-// A call claims a rejected grant's probe when one is due (`claimProbe: true`);
-// an admission only asks whether one is due, so a run that would probe is
-// admitted and one that would be refused is not.
+// This is the one place a call (`fillSlots`), a pipeline's admission
+// (`pipelineAdmission`) and readiness (`keyReadiness`) learn what a call
+// would do, so a check added for one is a check for all three. It writes
+// nothing: what a refusal changes (moving a binding to `needs-reapproval`,
+// claiming a probe) is the call's to do.
+export async function checkSlots(
+  dbAdapter: DBAdapter,
+  lookup: BindingLookup,
+  { probeIntervalMs }: { probeIntervalMs: number },
+): Promise<SlotCheck[]> {
+  let { request } = lookup;
+  let checks: SlotCheck[] = [];
+  for (let slot of request.slots) {
+    let [binding] = (await query(dbAdapter, [
+      `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
+              s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
+              g.state AS grant_state, g.destination AS grant_destination,
+              k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
+              `,
+      ...probeDue('g.last_probe_at', probeIntervalMs),
+      ` AS probe_due, `,
+      ...probeDue('k.last_probe_at', probeIntervalMs),
+      ` AS key_probe_due
+         FROM key_bindings b
+         LEFT JOIN key_shares s ON s.id = b.share_id
+         LEFT JOIN user_key_grants g ON g.id = b.grant_id AND g.key_id = COALESCE(b.key_id, s.key_id)
+         LEFT JOIN user_keys k ON k.id = g.key_id
+        WHERE `,
+      ...slotBindingConditions({ ...lookup, slot }),
+    ])) as unknown as (CheckedSlotBinding | undefined)[];
+    checks.push(checkSlot(lookup, slot, binding));
+  }
+  return checks;
+}
+
+// The first check `slot` fails against the binding that would fill it, or
+// that it would be filled.
+function checkSlot(
+  lookup: BindingLookup,
+  slot: CallApiSlot,
+  binding: CheckedSlotBinding | undefined,
+): SlotCheck {
+  if (!binding) {
+    return { slot, binding, refused: 'binding-not-approved' };
+  }
+  if (
+    binding.share_id &&
+    (binding.share_state !== 'active' || binding.state === 'suspended')
+  ) {
+    return { slot, binding, refused: 'share-suspended' };
+  }
+  if (
+    binding.state === 'needs-reapproval' ||
+    binding.fingerprint !== fingerprintOf(bindingSnapshot(lookup.request, slot))
+  ) {
+    return { slot, binding, refused: 'binding-needs-reapproval' };
+  }
+  if (lookup.mode === 'interactive' && !binding.interactive) {
+    return { slot, binding, refused: 'interactive-use-not-approved' };
+  }
+  if (!binding.grant_id) {
+    return { slot, binding, refused: 'binding-not-approved' };
+  }
+  let probe = binding.grant_state === 'rejected';
+  if (probe && !binding.probe_due) {
+    return { slot, binding, refused: 'credential-rejected' };
+  }
+  let keyProbe =
+    binding.key_kind === 'google-service-account' &&
+    binding.key_state === 'rejected';
+  if (keyProbe && !binding.key_probe_due) {
+    return { slot, binding, refused: 'key-rejected' };
+  }
+  return { slot, binding, probe, keyProbe };
+}
+
+// The binding for each of the request's slots, checked (`checkSlots`). A
+// binding whose request has changed goes to `needs-reapproval` here, and its
+// owner gets one notice. Throws the refusal for the first slot that fails.
+//
+// A call claims a rejected grant's or key's probe when one is due
+// (`claimProbe: true`); an admission only asks whether one is due, so a run
+// that would probe is admitted and one that would be refused is not.
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
   rejection: { probeIntervalMs: number; claimProbe: boolean },
-): Promise<
-  { slot: CallApiSlot; row: Record<string, unknown>; probe: boolean }[]
-> {
+): Promise<CheckedBinding[]> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
       notApproved(lookup.operation, request, lookup.realmURL),
     );
-  let instance: string | null = null;
-  if (request.perInstance) {
-    if (!lookup.instance) {
-      throw refuseNotApproved();
-    }
-    instance = lookup.instance.replace(/\.json$/, '');
+  let instance = bindingInstance(request, lookup.instance);
+  if (instance === undefined) {
+    throw refuseNotApproved();
   }
-  let checked: {
-    slot: CallApiSlot;
-    row: Record<string, unknown>;
-    probe: boolean;
-  }[] = [];
-  // The rejected grants this call would probe, claimed only once every slot
-  // has passed its other checks, so a call refused for another reason uses up
-  // no grant's probe.
+  let checked: CheckedBinding[] = [];
+  // The rejected grants and keys this call would probe, claimed only once
+  // every slot has passed its other checks, so a call refused for another
+  // reason uses up no probe.
   let rejected = new Map<string, { slot: CallApiSlot; destination: string }>();
-  for (let slot of request.slots) {
-    let [row] = await query(dbAdapter, [
-      `SELECT b.id, b.key_id, b.share_id, b.grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state, s.state AS share_state, s.key_id AS share_key_id,
-              g.state AS grant_state, g.destination AS grant_destination,
-              `,
-      ...probeDue('g.last_probe_at', rejection.probeIntervalMs),
-      ` AS probe_due
-         FROM key_bindings b LEFT JOIN key_shares s ON s.id = b.share_id
-         LEFT JOIN user_key_grants g ON g.id = b.grant_id
-        WHERE `,
-      ...slotBindingConditions({
-        realmURL: lookup.realmURL,
-        type: lookup.type,
-        operation: lookup.operation,
-        instance,
-        caller: lookup.caller,
-        slot,
-      }),
-    ]);
-    if (!row) {
-      throw refuseNotApproved();
+  let rejectedKeys = new Map<
+    string,
+    { slot: CallApiSlot; destination: string }
+  >();
+  for (let check of await checkSlots(
+    dbAdapter,
+    { ...lookup, instance },
+    rejection,
+  )) {
+    let { slot } = check;
+    switch (check.refused) {
+      case undefined:
+        break;
+      case 'binding-not-approved':
+        if (check.binding?.bound_grant_id) {
+          log.warn(
+            `binding ${check.binding.id} can't fill slot "${slot.name}": its grant ${check.binding.bound_grant_id} is gone or belongs to another key than the binding's`,
+          );
+        }
+        throw refuseNotApproved();
+      case 'share-suspended':
+        throw refusal(
+          409,
+          'share-suspended',
+          'Share suspended',
+          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
+          slot,
+        );
+      case 'binding-needs-reapproval':
+        await markNeedsReapproval(
+          dbAdapter,
+          check.binding.id,
+          check.binding.approval_id,
+        );
+        throw refusal(
+          409,
+          'binding-needs-reapproval',
+          'Binding needs re-approval',
+          `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
+          slot,
+        );
+      case 'interactive-use-not-approved':
+        throw refusal(
+          403,
+          'interactive-use-not-approved',
+          'Interactive use not approved',
+          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
+          slot,
+        );
+      case 'credential-rejected':
+        throw credentialRejected(
+          lookup.operation,
+          slot,
+          check.binding.grant_destination!,
+        );
+      case 'key-rejected':
+        throw serviceAccountRejected(
+          lookup.operation,
+          slot,
+          check.binding.grant_destination!,
+        );
     }
-    if (
-      row.share_id &&
-      (row.share_state !== 'active' || row.state === 'suspended')
-    ) {
-      throw refusal(
-        409,
-        'share-suspended',
-        'Share suspended',
-        `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
-        slot,
-      );
-    }
-    let fingerprint = fingerprintOf(bindingSnapshot(request, slot));
-    if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
-      await markNeedsReapproval(
-        dbAdapter,
-        row.id as string,
-        row.approval_id as string,
-      );
-      throw refusal(
-        409,
-        'binding-needs-reapproval',
-        'Binding needs re-approval',
-        `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
-        slot,
-      );
-    }
-    if (lookup.mode === 'interactive' && !row.interactive) {
-      throw refusal(
-        403,
-        'interactive-use-not-approved',
-        'Interactive use not approved',
-        `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
-        slot,
-      );
-    }
-    if (!row.grant_id) {
-      throw refuseNotApproved();
-    }
-    let probe = row.grant_state === 'rejected';
+    let { probe, keyProbe } = check;
     if (probe) {
-      let destination = row.grant_destination as string;
-      if (!row.probe_due) {
-        throw credentialRejected(lookup.operation, slot, destination);
-      }
-      rejected.set(row.grant_id as string, { slot, destination });
+      rejected.set(check.binding.grant_id!, {
+        slot,
+        destination: check.binding.grant_destination!,
+      });
     }
-    checked.push({ slot, row, probe });
+    if (keyProbe) {
+      rejectedKeys.set(check.binding.grant_key_id!, {
+        slot,
+        destination: check.binding.grant_destination!,
+      });
+    }
+    checked.push({ slot, binding: check.binding, probe, keyProbe });
   }
-  if (rejection.claimProbe) {
-    // Two slots can send under one grant; one claim covers both. The claim
-    // is the check again, in one statement, so of calls arriving together
-    // only one probes.
-    for (let [grantId, { slot, destination }] of rejected) {
-      if (!(await claimProbe(dbAdapter, grantId, rejection.probeIntervalMs))) {
-        throw credentialRejected(lookup.operation, slot, destination);
+  if (rejection.claimProbe && (rejected.size > 0 || rejectedKeys.size > 0)) {
+    // Two slots can send under one grant, and two grants of one key share
+    // the key's one probe; one claim covers each. A claim is the check again,
+    // in one statement, so of calls arriving together only one probes. The
+    // claims are one transaction: a call refused at any of them claims none.
+    await dbAdapter.withTransaction(async (txQuery) => {
+      for (let [grantId, { slot, destination }] of rejected) {
+        if (!(await claimProbe(txQuery, grantId, rejection.probeIntervalMs))) {
+          throw credentialRejected(lookup.operation, slot, destination);
+        }
       }
-    }
+      for (let [keyId, { slot, destination }] of rejectedKeys) {
+        if (!(await claimKeyProbe(txQuery, keyId, rejection.probeIntervalMs))) {
+          throw serviceAccountRejected(lookup.operation, slot, destination);
+        }
+      }
+    });
   }
   return checked;
+}
+
+// A binding that passed every check, with whether the call is the probe of
+// its rejected grant (`probe`) or of its rejected key (`keyProbe`).
+interface CheckedBinding {
+  slot: CallApiSlot;
+  binding: CheckedSlotBinding;
+  probe: boolean;
+  keyProbe: boolean;
 }
 
 // What fills one of an operation's slots for `caller`, read from the binding a
@@ -1265,16 +1443,20 @@ export async function fillSlots(
   }: { probeIntervalMs?: number } = {},
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let { slot, row, probe } of await checkedBindings(dbAdapter, lookup, {
-    probeIntervalMs,
-    claimProbe: true,
-  })) {
+  for (let { slot, binding, probe, keyProbe } of await checkedBindings(
+    dbAdapter,
+    lookup,
+    {
+      probeIntervalMs,
+      claimProbe: true,
+    },
+  )) {
     let opened: Awaited<ReturnType<typeof openGrantForSending>>;
     let ring = keyring();
     try {
       opened = await openGrantForSending(dbAdapter, ring, {
-        owner: row.approved_by as string,
-        grantId: row.grant_id as string,
+        owner: binding.approved_by,
+        grantId: binding.grant_id!,
       });
     } catch (error) {
       // A grant that is gone, or whose copy doesn't open, fills nothing: the
@@ -1284,7 +1466,7 @@ export async function fillSlots(
         (error instanceof UserKeyError && error.status === 404) ||
         error instanceof SecretDecryptionError;
       log.warn(
-        `binding ${row.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
+        `binding ${binding.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
       );
       if (!unusable) {
         throw error;
@@ -1293,7 +1475,7 @@ export async function fillSlots(
         notApproved(lookup.operation, lookup.request, lookup.realmURL),
       );
     }
-    let bindingKey = (row.key_id ?? row.share_key_id) as string | null;
+    let bindingKey = binding.key_id ?? binding.share_key_id;
     if (opened.keyId !== bindingKey) {
       throw new OperationFailure(
         notApproved(lookup.operation, lookup.request, lookup.realmURL),
@@ -1303,7 +1485,13 @@ export async function fillSlots(
     // grant's marker has only proved the grant real.
     let mints = MINTING_KINDS.has(opened.kind);
     let secret = mints
-      ? await mintedToken(dbAdapter, ring, opened, slot, lookup.operation)
+      ? await mintedToken(dbAdapter, ring, opened, slot, {
+          operation: lookup.operation,
+          grantId: binding.grant_id!,
+          realmURL: lookup.realmURL,
+          shareId: binding.share_id ?? undefined,
+          keyProbe,
+        })
       : opened.value;
     let value =
       slot.transform === 'basic'
@@ -1321,11 +1509,11 @@ export async function fillSlots(
         ? {}
         : {
             grant: {
-              id: row.grant_id as string,
+              id: binding.grant_id!,
               destination: opened.destination,
               slot: { name: slot.name, key: slot.key },
               realmURL: lookup.realmURL,
-              ...(row.share_id ? { shareId: row.share_id as string } : {}),
+              ...(binding.share_id ? { shareId: binding.share_id } : {}),
               copy: opened.copy,
               probe,
             },
@@ -1344,21 +1532,66 @@ const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {
 };
 
 const SERVICE_ACCOUNT_REJECTED =
-  'Google no longer accepts its service account key, so its owner replaces the key';
+  'Google no longer accepts its service account key, so nothing is sent with it until its owner replaces the key or a periodic retry mints a token';
+
+// The refusal for a slot whose service-account key Google refused. Nothing
+// was sent, not even to Google, unless the call was the key's probe.
+function serviceAccountRejected(
+  operation: string,
+  slot: Pick<CallApiSlot, 'name' | 'key'>,
+  destination: string,
+): OperationFailure {
+  return new OperationFailure({
+    status: 424,
+    code: 'credential-rejected',
+    title: 'Credential rejected',
+    detail: `operation "${operation}" can't fill the credential slot "${slot.name}": ${SERVICE_ACCOUNT_REJECTED}`,
+    meta: {
+      slot: { name: slot.name, key: slot.key },
+      destination,
+      reason: 'rejected',
+    },
+  });
+}
 
 // The access token a minting key sends now, or the refusal for why it has
-// none: `credential-rejected`, with the reason.
+// none: `credential-rejected`, with the reason. A service-account key Google
+// refuses becomes `rejected` (see `key-grant-rejection.ts`); the key's probe
+// that mints returns it to `active`.
 async function mintedToken(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
   opened: { keyId: string; kind: string; destination: string },
   slot: CallApiSlot,
-  operation: string,
+  call: {
+    operation: string;
+    grantId: string;
+    realmURL: string;
+    shareId?: string;
+    keyProbe: boolean;
+  },
 ): Promise<string> {
+  let { operation } = call;
   try {
-    return opened.kind === 'google-service-account'
-      ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId)
-      : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    let token =
+      opened.kind === 'google-service-account'
+        ? await serviceAccountAccessToken(dbAdapter, keyring, opened.keyId, {
+            fresh: call.keyProbe,
+          })
+        : await oauthAccessToken(dbAdapter, keyring, opened.keyId);
+    if (call.keyProbe) {
+      emitKeyGrantEvent({
+        event: 'key-probe',
+        key: opened.keyId,
+        minted: true,
+      });
+      await clearKeyRejected(
+        (expression) => query(dbAdapter, expression),
+        opened.keyId,
+        'probe',
+      );
+    }
+    return token;
   } catch (error) {
     if (
       !(error instanceof OAuthTokenError) &&
@@ -1366,10 +1599,31 @@ async function mintedToken(
     ) {
       throw error;
     }
-    let why =
-      error instanceof ServiceAccountTokenError && error.reason === 'rejected'
-        ? SERVICE_ACCOUNT_REJECTED
-        : MINTING_REFUSALS[error.reason];
+    if (call.keyProbe) {
+      emitKeyGrantEvent({
+        event: 'key-probe',
+        key: opened.keyId,
+        minted: false,
+      });
+    }
+    if (
+      error instanceof ServiceAccountTokenError &&
+      error.reason === 'rejected'
+    ) {
+      // Only a refusal of the key itself is held against it; any other refuses
+      // this call alone.
+      if (error.copy && error.keyRefused) {
+        await markKeyRejected(dbAdapter, {
+          keyId: opened.keyId,
+          grantId: call.grantId,
+          realmURL: call.realmURL,
+          shareId: call.shareId,
+          copy: error.copy,
+        });
+      }
+      throw serviceAccountRejected(operation, slot, opened.destination);
+    }
+    let why = MINTING_REFUSALS[error.reason];
     throw new OperationFailure({
       status: 424,
       code: 'credential-rejected',

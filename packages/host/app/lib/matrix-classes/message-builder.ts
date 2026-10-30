@@ -227,10 +227,16 @@ export default class MessageBuilder {
     if (!message.lastEventAt || at > message.lastEventAt.getTime()) {
       message.lastEventAt = new Date(at);
     }
-    if (isProvisionalTime(message) && isServerCopy(this.event)) {
+    if (isProvisionalTime(message)) {
       // the message keeps its local id, so this runs on every pass: only a
-      // new time is written, or every pass would dirty what reads it
-      if (message.created.getTime() !== this.event.origin_server_ts) {
+      // new time is written, or every pass would dirty what reads it. A local
+      // echo's time is this client's clock, which can be earlier than a
+      // confirmed message's, so only the server's copy replaces the
+      // provisional time.
+      if (
+        isServerCopy(this.event) &&
+        message.created.getTime() !== this.event.origin_server_ts
+      ) {
         message.created = new Date(this.event.origin_server_ts);
       }
     } else if (message.created.getTime() > this.event.origin_server_ts) {

@@ -5,6 +5,10 @@ import { pageURL, withFragment } from './secure-sign-in';
 // secure origin, never in the app page, where card code could read it. Its
 // connect mode signs the user in to a service through an OAuth app, from that
 // same window, so no token the service issues passes through the app page.
+// Its approve mode approves a card's operations, every one on the card's
+// definition that needs the user's approval in one confirmation, and its
+// review-changes mode the same for the ones whose request changed since they
+// were approved; the caller names only the one operation it is blocked on.
 //
 // The app tells the window which page to show and what it is for, and nothing
 // else. Everything it says names something (a realm, a card or a card type,
@@ -20,6 +24,8 @@ export const SECURE_WINDOW_MODES = [
   'share-key',
   'swap-key',
   'connect',
+  'approve',
+  'review-changes',
 ] as const;
 export type SecureWindowMode = (typeof SECURE_WINDOW_MODES)[number];
 
@@ -57,6 +63,11 @@ export type SecureWindowRequest =
       mode: 'connect';
       target?: SecureWindowTarget;
       realm?: string;
+      reason?: string;
+    }
+  | {
+      mode: 'approve' | 'review-changes';
+      target: SecureWindowTarget;
       reason?: string;
     };
 

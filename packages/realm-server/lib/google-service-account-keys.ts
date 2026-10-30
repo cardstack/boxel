@@ -18,10 +18,22 @@ export type ServiceAccountTokenFailure = 'rejected' | 'unavailable';
 // carries the key, a token or Google's own description.
 export class ServiceAccountTokenError extends Error {
   readonly reason: ServiceAccountTokenFailure;
-  constructor(reason: ServiceAccountTokenFailure, message: string) {
+  // The sealed value the failed exchange was signed with (its nonce, base64),
+  // when one was opened.
+  readonly copy: string | undefined;
+  // Whether Google refused the key itself, not only this exchange (see
+  // `GoogleServiceAccountRejectedError`).
+  readonly keyRefused: boolean;
+  constructor(
+    reason: ServiceAccountTokenFailure,
+    message: string,
+    { copy, keyRefused = false }: { copy?: string; keyRefused?: boolean } = {},
+  ) {
     super(message);
     this.name = 'ServiceAccountTokenError';
     this.reason = reason;
+    this.copy = copy;
+    this.keyRefused = keyRefused;
   }
 }
 
@@ -32,6 +44,7 @@ export async function serviceAccountAccessToken(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
   keyId: string,
+  options: { fresh?: boolean } = {},
 ): Promise<string> {
   let [key] = await query(dbAdapter, [
     `SELECT owner, kind, ${sealedColumnsSelect('value')} FROM user_keys WHERE id = `,
@@ -50,14 +63,20 @@ export async function serviceAccountAccessToken(
   let credential = deserializeGoogleServiceAccount(
     keyring.open(sealed, userKeyBinding(key.owner as string, keyId)),
   );
+  let copy = sealed.nonce.toString('base64');
   try {
-    return await googleAccessToken(keyId, credential);
+    return await googleAccessToken(keyId, credential, options);
   } catch (error) {
     if (error instanceof GoogleServiceAccountRejectedError) {
-      throw new ServiceAccountTokenError('rejected', error.message);
+      throw new ServiceAccountTokenError('rejected', error.message, {
+        copy,
+        keyRefused: error.keyRefused,
+      });
     }
     if (error instanceof GoogleTokenEndpointUnavailableError) {
-      throw new ServiceAccountTokenError('unavailable', error.message);
+      throw new ServiceAccountTokenError('unavailable', error.message, {
+        copy,
+      });
     }
     throw error;
   }

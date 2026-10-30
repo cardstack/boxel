@@ -340,7 +340,10 @@ evaluation that lists cards in `expectedChangedCards` passes only when every
 one of them differs from its seed data (a write that only reformats the file
 does not count) and one of them is shown in the stack or the preview panel,
 after the index has caught up with the change; a card that only renders
-embedded inside another card does not count. Only the top card of a stack
+embedded inside another card does not count. A bulk evaluation, whose prompt
+changes dozens of cards, lists a sample of them chosen at the edges of the set
+(the open card, the first and last, one past the first search page) and
+leaves the rest to the judge. Only the top card of a stack
 goes into the message context, so an evaluation that opens several cards
 names the one each prompt is about in `promptCards`, by position, and the
 runner brings it to the top before that prompt. Its
