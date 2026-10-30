@@ -85,7 +85,6 @@ export default class AddWorkspace extends Component<Signature> {
   <template>
     <ItemContainer
       class={{cn 'add-workspace' is-selected=this.showSelectionRing}}
-      title='Create a New Workspace'
       data-nav-index={{@navIndex}}
       {{on 'click' (fn this.setIsModalOpen true)}}
       {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}

@@ -166,7 +166,25 @@ export function realmURLDisplayText(
   } catch {
     return real;
   }
-  return url.host + url.pathname.replace(/\/$/, '');
+  return urlDisplayText(url);
+}
+
+/**
+ * A URL as shown to a person: host and path, without the scheme or trailing
+ * slash, which take room and tell addresses apart no better. A string that
+ * isn't a URL comes back as it is.
+ *
+ * @example
+ * urlDisplayText('https://my-site.boxel.site/') // 'my-site.boxel.site'
+ */
+export function urlDisplayText(url: URL | string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return String(url);
+  }
+  return parsed.host + parsed.pathname.replace(/\/$/, '');
 }
 
 /**
