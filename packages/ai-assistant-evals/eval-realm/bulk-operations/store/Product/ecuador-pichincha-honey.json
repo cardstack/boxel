@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ecuador Pichincha Honey",
+      "category": "coffee",
+      "origin": "Pichincha, Ecuador",
+      "variants": [
+        {
+          "sku": "CF-034-250",
+          "size": "250 g",
+          "price": 17.0
+        },
+        {
+          "sku": "CF-034-500",
+          "size": "500 g",
+          "price": 32.99
+        },
+        {
+          "sku": "CF-034-1KG",
+          "size": "1 kg",
+          "price": 59.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "subject": "Custom domain certificate not renewing",
+      "requester": "Lukas Weber",
+      "status": "open",
+      "openedOn": "2026-10-26"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../Agent/sam-rivera"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}

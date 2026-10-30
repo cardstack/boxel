@@ -4,9 +4,10 @@
 // plain values, so the realm server reads the same list. The policy test
 // loads every page here and checks it draws its own page.
 //
-// The key page is also at the shell's own address. A key's share page names
-// the key in its path, `keys/<key id>/share`; everything else a page is told
-// rides in its query string or its fragment.
+// The key page is also at the shell's own address. A key's share page and its
+// page for using it with a card name the key in their path,
+// `keys/<key id>/share` and `keys/<key id>/use`; everything else a page is
+// told rides in its query string or its fragment.
 
 export const PAGE_PATHS = Object.freeze([
   'sign-in',
@@ -26,6 +27,8 @@ export const PAGE_PATHS = Object.freeze([
   'replace-key',
   'connect',
   'connected',
+  'approve',
+  'review-changes',
 ]);
 
 // The values of the `mode` query parameter that address a page. Earlier CLI
@@ -49,6 +52,7 @@ export const LEGACY_MODES = Object.freeze([
 // A key id as it appears in a path: the realm server's ids are UUIDs.
 const KEY_ID = '[A-Za-z0-9-]{1,64}';
 const KEY_SHARE_PATH = new RegExp(`^keys/(${KEY_ID})/share$`);
+const KEY_USE_PATH = new RegExp(`^keys/(${KEY_ID})/use$`);
 
 // The path of the share page for one of the user's keys.
 export function keySharePath(keyId) {
@@ -60,10 +64,25 @@ export function keyOfSharePath(path) {
   return KEY_SHARE_PATH.exec(path)?.[1];
 }
 
+// The path of the page for setting one of the user's keys up for a card.
+export function keyUsePath(keyId) {
+  return `keys/${encodeURIComponent(keyId)}/use`;
+}
+
+// The key a `keys/<key id>/use` path names, or undefined for any other path.
+export function keyOfUsePath(path) {
+  return KEY_USE_PATH.exec(path)?.[1];
+}
+
 // Whether `path`, beneath the shell's address and without a leading slash, is
 // one of the shell's pages. The empty path is the shell's own address.
 export function isPagePath(path) {
-  return path === '' || PAGE_PATHS.includes(path) || KEY_SHARE_PATH.test(path);
+  return (
+    path === '' ||
+    PAGE_PATHS.includes(path) ||
+    KEY_SHARE_PATH.test(path) ||
+    KEY_USE_PATH.test(path)
+  );
 }
 
 // The shell's address and the page beneath it, from a path the shell is
@@ -78,11 +97,14 @@ export function splitPagePath(pathname) {
       };
     }
   }
-  let share = /\/(keys\/[^/]+\/share)$/.exec(pathname);
-  if (share && KEY_SHARE_PATH.test(share[1])) {
+  let keyPage = /\/(keys\/[^/]+\/(?:share|use))$/.exec(pathname);
+  if (
+    keyPage &&
+    (KEY_SHARE_PATH.test(keyPage[1]) || KEY_USE_PATH.test(keyPage[1]))
+  ) {
     return {
-      shell: pathname.slice(0, pathname.length - share[1].length),
-      page: share[1],
+      shell: pathname.slice(0, pathname.length - keyPage[1].length),
+      page: keyPage[1],
     };
   }
   return {

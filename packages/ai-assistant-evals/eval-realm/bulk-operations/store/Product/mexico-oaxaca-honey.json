@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Mexico Oaxaca Honey",
+      "category": "coffee",
+      "origin": "Oaxaca, Mexico",
+      "variants": [
+        {
+          "sku": "CF-082-250",
+          "size": "250 g",
+          "price": 16.29
+        },
+        {
+          "sku": "CF-082-500",
+          "size": "500 g",
+          "price": 31.29
+        },
+        {
+          "sku": "CF-082-1KG",
+          "size": "1 kg",
+          "price": 54.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@ import {
   click,
   fillIn,
   triggerEvent,
+  rerender,
 } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -653,6 +654,122 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-message]')
       .exists({ count: 1 }, 'a single bubble renders for the cgi');
+  });
+
+  // Sends `body` from the composer and holds that message's send after its
+  // local echo, so the transcript can be checked while it is still sending.
+  // Returns the function that releases the send.
+  async function sendAndHold(roomId: string, body: string) {
+    let gate = new Deferred<void>();
+    mockMatrixUtils.setSendEventInterceptor(async ({ content }) => {
+      if (content.body === body) {
+        await gate.promise;
+      }
+    });
+    await fillIn('[data-test-message-field]', body);
+    click('[data-test-send-message-btn]');
+    let release = () => {
+      mockMatrixUtils.setSendEventInterceptor(undefined);
+      gate.fulfill();
+    };
+    try {
+      // the SDK's local echo of this message has replaced the optimistic event
+      let matrixService = getService('matrix-service');
+      await waitUntil(() =>
+        matrixService
+          .getRoomData(roomId)
+          ?.events.some(
+            (e) =>
+              e.event_id?.startsWith('~') &&
+              (e.content as { body?: string } | undefined)?.body === body,
+          ),
+      );
+      // not settled(): it would wait on the held send
+      await rerender();
+    } catch (e) {
+      release();
+      throw e;
+    }
+    return release;
+  }
+
+  test('a message still sending sorts after a confirmed message whose server time is ahead of the client clock', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    // A day ahead of the mock clock: the local echo of the next send is
+    // stamped with this client's clock, which is earlier.
+    mockMatrixUtils.simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Earlier reply',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      { origin_server_ts: new Date(2024, 8, 20).getTime() },
+    );
+    await waitFor('[data-test-message-idx="0"]');
+
+    let release = await sendAndHold(roomId, 'Sent while the reply exists');
+    try {
+      assert
+        .dom(
+          '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
+        )
+        .exists('the message still sending is last');
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText('Earlier reply', 'the confirmed message stays first');
+    } finally {
+      release();
+    }
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await settled();
+  });
+
+  test('a message still sending sorts after a confirmed message that arrives during the send', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    let release = await sendAndHold(roomId, 'Sent before the reply arrives');
+    try {
+      // its server time is later than the sending message's provisional time
+      mockMatrixUtils.simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Reply that arrives during the send',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      await waitFor('[data-test-message-idx="1"]');
+
+      assert
+        .dom(
+          '[data-test-message-idx="1"][data-test-ai-assistant-message-pending]',
+        )
+        .exists('the message still sending is last');
+      assert
+        .dom('[data-test-message-idx="0"]')
+        .containsText(
+          'Reply that arrives during the send',
+          'the confirmed message is first',
+        );
+    } finally {
+      release();
+    }
+    await waitFor('[data-test-user-message]:not(.is-pending)');
+    await settled();
   });
 
   test('inverse delivery race — bubble stays sending when sendEvent succeeded', async function (assert) {

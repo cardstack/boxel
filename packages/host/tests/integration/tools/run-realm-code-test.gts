@@ -1812,6 +1812,58 @@ return 'done';`,
     );
   });
 
+  test('reads files and cards named by the prefix of the realm it runs in', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let prefix = '@test/path-prefix/';
+    virtualNetwork.addRealmMapping(prefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let byPrefix = await realm.cards.get('${prefix}people/hassan');
+let byURL = await realm.cards.get(${JSON.stringify(`${testRealmURL}people/hassan`)});
+let listByPrefix = await realm.fs.list('${prefix}people/');
+let listByURL = await realm.fs.list(${JSON.stringify(`${testRealmURL}people/`)});
+let rootByPrefix = await realm.fs.list('${prefix}');
+let rootByURL = await realm.fs.list('');
+return { byPrefix, byURL, listByPrefix, listByURL, rootByPrefix, rootByURL };`,
+      });
+      let {
+        byPrefix,
+        byURL,
+        listByPrefix,
+        listByURL,
+        rootByPrefix,
+        rootByURL,
+      } = JSON.parse(result.scriptResult!);
+      assert.deepEqual(byPrefix, byURL, 'a card reads the same by prefix');
+      assert.deepEqual(
+        listByPrefix,
+        listByURL,
+        'a folder lists the same by prefix',
+      );
+      assert.deepEqual(
+        rootByPrefix,
+        rootByURL,
+        'the realm root lists the same by prefix',
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.cards.get('@test/unregistered/people/hassan');`,
+        }),
+        /Path is outside this realm/,
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
+  });
+
   test('refuses a folder of a realm named by a prefix, and names the root by that prefix', async function (assert) {
     let { virtualNetwork } = getService('network');
     let prefix = '@test/folder-input/';

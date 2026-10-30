@@ -152,6 +152,7 @@ import {
   handleApproveKeyBindings,
   handleListKeyBindings,
   handlePreviewKeyBindings,
+  handleKeyBindingBatch,
   handleRevokeKeyBinding,
 } from './handlers/handle-key-bindings.ts';
 import {
@@ -166,6 +167,7 @@ import {
 import {
   handleSecureWindowContext,
   handleSecureWindowRealms,
+  handleSecureWindowCards,
 } from './handlers/handle-secure-window.ts';
 import {
   handleAddPlatformClient,
@@ -435,6 +437,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleApproveKeyBindings(args),
   );
+  router.post(
+    `${KEY_BINDINGS_PATH}/batch`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleKeyBindingBatch(args),
+  );
   router.delete(
     `${KEY_BINDINGS_PATH}/:bindingId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -502,6 +509,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${SECURE_WINDOW_PATH}/realms`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowRealms(args),
+  );
+  router.post(
+    `${SECURE_WINDOW_PATH}/cards`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowCards(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

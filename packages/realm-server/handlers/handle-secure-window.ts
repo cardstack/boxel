@@ -4,6 +4,8 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { findRealm } from '../lib/realm-routing.ts';
 import { isSecureSession } from '../lib/secure-session.ts';
 import {
+  readableRealms,
+  realmCardsWithRequests,
   secureWindowContext,
   validateContextRequest,
   writableRealms,
@@ -78,8 +80,9 @@ export function handleSecureWindowContext(args: CreateRoutesArgs): Handler {
 }
 
 // `GET /_secure-window/realms`: the realms the user is a direct writer of, by
-// name, which the window offers to share a key into. Asked with the window's
-// own session.
+// name, which the window offers to share a key into; with `?access=read`, the
+// realms they can read by a permission of their own, which it offers to
+// approve a card's requests in. Asked with the window's own session.
 export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
   let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
@@ -95,15 +98,67 @@ export function handleSecureWindowRealms(args: CreateRoutesArgs): Handler {
         'the secure window asks this with its own session',
       );
     }
-    let found = await writableRealms(
-      { dbAdapter, findRealm: realmFinder(args) },
-      user,
-    );
+    let found = await (
+      ctxt.query.access === 'read' ? readableRealms : writableRealms
+    )({ dbAdapter, findRealm: realmFinder(args) }, user);
     await sendJSON(ctxt, 200, {
       data: found.map(({ url, name }) => ({
         type: 'secure-window-realm',
         id: url,
         attributes: { name },
+      })),
+    });
+  });
+}
+
+// `POST /_secure-window/cards`: the card definitions a realm's cards adopt
+// from that send the user's own key in a request, which the window offers to
+// approve one of the user's keys for. `attributes.{realm}`. Asked with the
+// window's own session.
+export function handleSecureWindowCards(args: CreateRoutesArgs): Handler {
+  let { dbAdapter, definitionLookup, virtualNetwork } = args;
+  return keysHandler(async (ctxt) => {
+    let user = ownerOf(ctxt);
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new UserKeyError(
+        403,
+        'the secure window asks this with its own session',
+      );
+    }
+    let body = await readJSON(ctxt);
+    let data = body.data as
+      | { type?: unknown; attributes?: Record<string, unknown> }
+      | undefined;
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      data.type !== 'secure-window-cards'
+    ) {
+      throw new UserKeyError(400, `the resource type is 'secure-window-cards'`);
+    }
+    let { realm } = validateContextRequest({
+      realm: (data.attributes ?? {}).realm,
+    });
+    let cards = await realmCardsWithRequests(
+      {
+        dbAdapter,
+        findRealm: realmFinder(args),
+        definitionLookup,
+        virtualNetwork,
+      },
+      user,
+      realm!,
+    );
+    await sendJSON(ctxt, 200, {
+      data: cards.map((card) => ({
+        type: 'secure-window-card',
+        id: `${card.module}#${card.name}`,
+        attributes: card,
       })),
     });
   });

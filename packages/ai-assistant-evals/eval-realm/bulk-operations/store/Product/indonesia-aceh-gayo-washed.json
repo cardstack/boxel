@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Indonesia Aceh Gayo Washed",
+      "category": "coffee",
+      "origin": "Aceh Gayo, Indonesia",
+      "variants": [
+        {
+          "sku": "CF-066-250",
+          "size": "250 g",
+          "price": 20.49
+        },
+        {
+          "sku": "CF-066-500",
+          "size": "500 g",
+          "price": 37.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

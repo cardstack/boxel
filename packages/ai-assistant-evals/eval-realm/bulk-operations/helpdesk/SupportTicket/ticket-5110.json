@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "subject": "Two-factor codes arrive late",
+      "requester": "Lukas Weber",
+      "status": "open",
+      "openedOn": "2026-10-06"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../Agent/priya-shah"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../support-ticket",
+        "name": "SupportTicket"
+      }
+    }
+  }
+}

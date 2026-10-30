@@ -322,6 +322,10 @@ export default class MatrixService extends Service {
   private aiRoomIds: Set<string> = new Set();
   private restoredDraftRooms = new Set<string>();
   private hydratedPendingSendRooms = new Set<string>();
+  // The client ids of the messages this tab sent. Another tab or device of
+  // the same user sends as the same author, so the author alone can't tell
+  // a message the reader just sent here from one sent elsewhere.
+  private sentClientGeneratedIds = new Set<string>();
   @tracked private _isLoadingMoreAIRooms = false;
   private initialSyncCompleted = false;
   private initialSyncCompletedDeferred = new Deferred<void>();
@@ -2106,6 +2110,9 @@ export default class MatrixService extends Service {
       | ToolResultWithNoOutputContent
       | ToolResultWithOutputContent,
   ) {
+    if ('clientGeneratedId' in content && content.clientGeneratedId) {
+      this.sentClientGeneratedIds.add(content.clientGeneratedId);
+    }
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
       if ('data' in content) {
@@ -2118,6 +2125,12 @@ export default class MatrixService extends Service {
         return await this.client.sendEvent(roomId, eventType, content);
       }
     });
+  }
+
+  wasSentFromThisTab(clientGeneratedId: string | null | undefined): boolean {
+    return Boolean(
+      clientGeneratedId && this.sentClientGeneratedIds.has(clientGeneratedId),
+    );
   }
 
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
@@ -2437,6 +2450,7 @@ export default class MatrixService extends Service {
     // the common case), and `MessageBuilder.updateMessage` early-returns when
     // the cached message's `created` is later than an incoming event — which
     // would silently drop the status transition from 'sending' to 'sent'.
+    this.sentClientGeneratedIds.add(content.clientGeneratedId);
     let originServerTs = this.resolveOptimisticTimestamp(roomId);
     let event: TempEvent = {
       event_id: `local-${content.clientGeneratedId}`,
@@ -2819,6 +2833,7 @@ export default class MatrixService extends Service {
     this.currentUserEventReadReceipts.clear();
     this.restoredDraftRooms = new Set();
     this.hydratedPendingSendRooms = new Set();
+    this.sentClientGeneratedIds.clear();
     this.aiRoomIds.clear();
     this.initialSyncCompleted = false;
     this.initialSyncCompletedDeferred = new Deferred<void>();

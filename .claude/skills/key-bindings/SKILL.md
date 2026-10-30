@@ -108,6 +108,24 @@ order:
 3. The binding is written or moved to this approval, `active`, and an
    `approved` / `re-approved` row is appended to `key_binding_approvals`.
 
+The window builds what it approves from `POST /_key-bindings/batch`
+(`lib/key-binding-batch.ts`, the window's own session only), whose
+`attributes.target` names a card or a card type in its realm as the window's
+context does, with `review` for review-changes. It answers every `callApi`
+operation on that card definition, in that realm, that needs the caller's
+approval: a slot the caller approves (their own key for `userKey`, a share of
+theirs in the realm for `apiKey`; a share slot someone else approved is
+theirs) with no binding, a binding whose grant is gone, or one whose
+fingerprint no longer matches (`changed`, carrying the last approval's
+snapshot for a field-by-field diff). Approved, unchanged slots are left out,
+and so is an operation with nothing left; a per-instance operation is in the
+batch only when the target is a card. Operations come grouped by normalized
+destination, with the caller's keys a slot can take and their shares in the
+realm, each with the batch's destinations its grants already cover. A batch
+never spans card definitions or realms: approving one card's batch says
+nothing about another card calling the same host, which gets its own batch
+and reuses the grant.
+
 The answer carries each binding with `meta.request` (the snapshot below) and
 `meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own;
 `DELETE /_key-bindings/:id` revokes one (secure session again) and leaves its
@@ -155,6 +173,7 @@ the request. `fillSlots` checks, per slot, in this order:
 | Interactive invocation needs `interactive`                                           | `interactive-use-not-approved` | 403    |
 | A grant is set, opens, and belongs to the binding's key (or the share's current key) | `binding-not-approved`         | 409    |
 | The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
+| Its service-account key isn't `rejected`, unless this call claims the key's probe    | `credential-rejected`          | 424    |
 
 The value is the grant's copy (`openGrantForSending`), never the key's master
 copy — or, for a key that mints its access tokens (an OAuth connection, a
@@ -275,6 +294,12 @@ the application role.
   deletion, share suspension and swap, per-instance bindings, keyless
   operations untouched, and the fingerprint pinned to a fixed value. It indexes a card using `perInstance`, so it needs a
   host dist built from your tree (see the `call-api` skill).
+- `packages/realm-server/tests/key-binding-batch-test.ts` — the batch: six
+  operations approved as one with one grant, an unticked one left
+  unapproved, an edited one alone in the review batch with its approved
+  snapshot, a second card reusing the grant in a batch of its own, removing
+  the grant returning them, share slots only in their key owner's batch, and
+  the listings the key page's Use with a card reads.
 - `packages/realm-server/tests/card-operations-dispatch-test.ts` — the
   executor's use of `fill` and the grant-destination check, with a fake
   sender.
