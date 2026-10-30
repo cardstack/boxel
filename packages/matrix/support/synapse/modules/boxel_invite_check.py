@@ -9,19 +9,27 @@ the homeserver has to refuse any other invite between them (§1.6): a client
 can call the invite API directly, so the host app's own behavior can't keep
 the rule.
 
-Only the realm server knows the grants, so this module implements
-`user_may_invite` by asking it:
+A room may hold one end user and any number of service users (the realm
+server's account, the AI bot and the other bots, a realm's own account), so
+an invite from or to a service user is allowed here, without asking anyone:
+a user's session room and AI assistant rooms need no grant, and they are
+created before any realm server of a test stack is reachable. A service
+user is an account on this homeserver named by the convention `isBotAccount`
+applies in packages/runtime-common/db-queries/realm-permission-queries.ts;
+test_service_account_vectors.json runs against both, so they can't diverge
+unnoticed.
+
+Only the realm server knows the grants, so for an invite between two end
+users this module asks it:
 
     GET <realm_server_url>/_invite-check?inviter=<id>&invitee=<id>
     Authorization: Bearer <shared_secret>
 
-and allows the invite only on a `200` whose body is `{"allowed": true}`. The
-realm server answers `true` when either user is a service user (its own
-account, the AI bot and the other bots), so a user's session room and AI
-assistant rooms need no grant. Anything else, including an unreachable realm
-server, a non-200 response and a body of another shape, denies the invite:
-the module fails closed and logs a warning, since a homeserver that can't
-check the rule must not admit an invite the rule would refuse.
+and allows the invite only on a `200` whose body is `{"allowed": true}`.
+Anything else, including an unreachable realm server, a non-200 response and
+a body of another shape, denies the invite: the module fails closed and logs
+a warning, since a homeserver that can't check the rule must not admit an
+invite the rule would refuse.
 
 Configuration, under `modules:` in homeserver.yaml:
 
@@ -36,7 +44,7 @@ References:
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Literal, Tuple, Union
+from typing import Any, Literal, Optional, Tuple, Union
 
 from synapse.module_api import NOT_SPAM, ModuleApi
 from synapse.module_api.errors import Codes, ConfigError
@@ -46,6 +54,42 @@ logger = logging.getLogger(__name__)
 # The type Synapse accepts from a `user_may_invite` callback: `NOT_SPAM` to
 # allow, or an error code to refuse with.
 InviteDecision = Union[Literal["NOT_SPAM"], Codes, Tuple[Codes, dict]]
+
+# The platform's service accounts, by localpart: the AI bot, the submission
+# bot and the account a deployed realm server signs in as.
+_SERVICE_LOCALPARTS = frozenset({"aibot", "submissionbot", "realm_server"})
+# A published realm's account is `@realm/<directory>_<id>`.
+_SERVICE_LOCALPART_PREFIXES = ("realm/",)
+# A bootstrap realm's account is `@<name>_realm`, the shared account that syncs
+# content into one is `@<name>_writer`, and a test stack's realm server is
+# `@<name>_realm-server`.
+_SERVICE_LOCALPART_SUFFIXES = ("_realm", "_writer", "_realm-server")
+
+
+def _localpart_on(user_id: str, server_name: str) -> Optional[str]:
+    """The localpart of `user_id` when it is the full Matrix id of an account
+    on `server_name`; None for an account elsewhere and for text that is no
+    Matrix id. A localpart never contains `:`, so the first colon ends it, and
+    a server name may carry a port."""
+    colon = user_id.find(":")
+    if not user_id.startswith("@") or colon < 2 or colon == len(user_id) - 1:
+        return None
+    if user_id[colon + 1 :] != server_name:
+        return None
+    return user_id[1:colon]
+
+
+def is_service_user(user_id: str, server_name: str) -> bool:
+    """Whether `user_id` is one of Boxel's service accounts on the homeserver
+    `server_name`, rather than a person's account."""
+    localpart = _localpart_on(user_id, server_name)
+    if localpart is None:
+        return False
+    return (
+        localpart in _SERVICE_LOCALPARTS
+        or localpart.startswith(_SERVICE_LOCALPART_PREFIXES)
+        or localpart.endswith(_SERVICE_LOCALPART_SUFFIXES)
+    )
 
 
 @dataclass(frozen=True)
@@ -82,6 +126,11 @@ class BoxelInviteCheck:
     async def user_may_invite(
         self, inviter: str, invitee: str, room_id: str
     ) -> InviteDecision:
+        server_name = self._api.server_name
+        if is_service_user(inviter, server_name) or is_service_user(
+            invitee, server_name
+        ):
+            return NOT_SPAM
         try:
             body = await self._api.http_client.get_json(
                 f"{self._config.realm_server_url}/_invite-check",

@@ -8,10 +8,16 @@ image (see scripts/test-synapse-modules.sh).
 """
 
 import inspect
+import json
+import os
 import unittest
 from unittest.mock import AsyncMock, Mock
 
-from boxel_invite_check import BoxelInviteCheck, InviteCheckConfig
+from boxel_invite_check import (
+    BoxelInviteCheck,
+    InviteCheckConfig,
+    is_service_user,
+)
 from synapse.module_api import NOT_SPAM
 from synapse.module_api.errors import Codes, ConfigError
 
@@ -28,6 +34,7 @@ def make_module(answer=None, error=None):
     """Build a module whose realm server answers `answer`, or fails with
     `error`."""
     module_api = Mock()
+    module_api.server_name = "localhost"
     if error is not None:
         module_api.http_client.get_json = AsyncMock(side_effect=error)
     else:
@@ -71,11 +78,55 @@ class UserMayInviteTests(unittest.IsolatedAsyncioTestCase):
                     decision = await module.user_may_invite(INVITER, INVITEE, ROOM)
                 self.assertEqual(decision, Codes.FORBIDDEN)
 
+    async def test_allows_an_invite_from_or_to_a_service_user_without_asking(self):
+        # Session rooms and AI assistant rooms are made before any realm
+        # server a test stack runs is reachable, and need no grant anyway.
+        module, module_api = make_module(error=ConnectionError("unreachable"))
+        for inviter, invitee in (
+            ("@realm_server:localhost", INVITEE),
+            (INVITER, "@aibot:localhost"),
+            ("@node-test_realm-server:localhost", INVITEE),
+            (INVITER, "@realm/example-user_example-realm:localhost"),
+        ):
+            with self.subTest(inviter=inviter, invitee=invitee):
+                self.assertIs(
+                    await module.user_may_invite(inviter, invitee, ROOM), NOT_SPAM
+                )
+        module_api.http_client.get_json.assert_not_awaited()
+
+    async def test_a_service_account_name_on_another_server_is_an_end_user(self):
+        module, module_api = make_module(answer={"allowed": False})
+        decision = await module.user_may_invite(
+            "@realm_server:elsewhere.example", INVITEE, ROOM
+        )
+        self.assertEqual(decision, Codes.FORBIDDEN)
+        module_api.http_client.get_json.assert_awaited_once()
+
     async def test_registers_user_may_invite_with_synapse(self):
         module, module_api = make_module(answer={"allowed": True})
         module_api.register_spam_checker_callbacks.assert_called_once_with(
             user_may_invite=module.user_may_invite
         )
+
+
+# The vectors isBotAccount in the realm server runs too, so the two apply one
+# naming convention.
+VECTORS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "test_service_account_vectors.json"
+)
+
+
+class ServiceUserTests(unittest.TestCase):
+    def test_shared_vectors(self):
+        with open(VECTORS_PATH, encoding="utf-8") as f:
+            vectors = json.load(f)["vectors"]
+        self.assertTrue(vectors)
+        for vector in vectors:
+            with self.subTest(user_id=vector["userId"]):
+                self.assertIs(
+                    is_service_user(vector["userId"], vector["serverName"]),
+                    vector["serviceAccount"],
+                )
 
 
 class InterfaceShapeTests(unittest.TestCase):

@@ -3,7 +3,8 @@ const { module, test } = QUnit;
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
-import { basename } from 'path';
+import { readFileSync } from 'fs';
+import { basename, join } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   insertPermissions,
@@ -11,7 +12,20 @@ import {
   shareARealmGrant,
 } from '@cardstack/runtime-common';
 import handleInviteCheck from '../handlers/handle-invite-check.ts';
-import { setupDB, testRealmServerMatrixUsername } from './helpers/index.ts';
+import { setupDB } from './helpers/index.ts';
+
+// The vectors the homeserver's invite module (boxel_invite_check) runs too,
+// so it and `isBotAccount` apply one naming convention for service accounts.
+const VECTORS_PATH = join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'matrix',
+  'support',
+  'synapse',
+  'modules',
+  'test_service_account_vectors.json',
+);
 
 const secret = 'test-invite-check-secret';
 const realmURL = new URL('http://127.0.0.1:4444/shared/');
@@ -82,37 +96,22 @@ module(basename(import.meta.filename), function () {
   });
 
   module('service accounts', function () {
-    test('the realm server, the bots and realm users are service accounts', function (assert) {
-      for (let userId of [
-        '@realm_server:localhost',
-        `@${testRealmServerMatrixUsername}:localhost`,
-        '@aibot:localhost',
-        '@submissionbot:localhost',
-        '@realm/example-user/example-realm:localhost',
-        '@skills_realm:localhost',
-        '@skills_writer:localhost',
-      ]) {
-        assert.true(
-          isBotAccount(userId, 'localhost'),
-          `${userId} is a service account`,
+    test('isBotAccount agrees with the shared vectors', function (assert) {
+      let { vectors } = JSON.parse(readFileSync(VECTORS_PATH, 'utf8')) as {
+        vectors: {
+          userId: string;
+          serverName: string;
+          serviceAccount: boolean;
+        }[];
+      };
+      assert.ok(vectors.length > 0, 'there are vectors');
+      for (let { userId, serverName, serviceAccount } of vectors) {
+        assert.strictEqual(
+          isBotAccount(userId, serverName),
+          serviceAccount,
+          `${userId} on ${serverName}`,
         );
       }
-    });
-
-    test('a person is not a service account', function (assert) {
-      for (let userId of [owner, '@server_admin:localhost']) {
-        assert.false(
-          isBotAccount(userId, 'localhost'),
-          `${userId} is a person`,
-        );
-      }
-    });
-
-    test('an account on another homeserver is not a service account', function (assert) {
-      assert.false(
-        isBotAccount('@realm_server:elsewhere.example', 'localhost'),
-      );
-      assert.false(isBotAccount('@aibot:elsewhere.example', 'localhost'));
     });
   });
 
