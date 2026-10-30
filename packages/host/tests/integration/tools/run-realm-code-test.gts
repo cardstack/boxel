@@ -4039,8 +4039,12 @@ module(
         name: 'catalog-reuse',
       });
       let { virtualNetwork } = getService('network');
-      // Answers every entry search: the catalog matches two entries for
-      // "kanban", none for anything else, and fails for "boom".
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      // Answers every entry search with a count per realm. The catalog
+      // matches two entries for "kanban" and one for "huge", whose readMe is
+      // too large to return; the workspace matches one for "kanban" and three
+      // for "notes". The search fails for "boom", and the catalog does not
+      // answer for "silent".
       let federatedSearch = async (request: Request) => {
         if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
           return null;
@@ -4049,10 +4053,58 @@ module(
         if (body.includes('boom')) {
           return new Response('the catalog is down', { status: 500 });
         }
+        let { realms } = JSON.parse(body) as { realms: string[] };
+        let realmTotals: Record<string, number> = {};
+        let data: unknown[] = [];
+        let included: unknown[] = [];
+        let found = (id: string, readMe = '') => {
+          data.push({
+            type: 'entry',
+            id,
+            relationships: { item: { data: { type: 'card', id } } },
+          });
+          included.push({ type: 'card', id, attributes: { readMe } });
+        };
+        for (let realm of realms) {
+          let url = virtualNetwork.toURL(realm).href;
+          if (url === catalogURL) {
+            if (body.includes('silent')) {
+              continue;
+            }
+            let huge = body.includes('huge');
+            realmTotals[url] = body.includes('kanban') ? 2 : huge ? 1 : 0;
+            if (realmTotals[url] > 0) {
+              found(
+                `${catalogURL}Spec/board`,
+                huge ? 'x'.repeat(1_100_000) : '',
+              );
+            }
+          } else if (url === testRealmURL) {
+            realmTotals[url] = body.includes('kanban')
+              ? 1
+              : body.includes('notes')
+                ? 3
+                : 0;
+            if (realmTotals[url] > 0) {
+              found(`${testRealmURL}note`);
+            }
+          } else {
+            realmTotals[url] = 0;
+          }
+        }
         return new Response(
           JSON.stringify({
-            data: [],
-            meta: { page: { total: body.includes('kanban') ? 2 : 0 } },
+            data,
+            included,
+            meta: {
+              page: {
+                total: Object.values(realmTotals).reduce((a, b) => a + b, 0),
+              },
+              realmTotals,
+              ...(Object.keys(realmTotals).length < realms.length
+                ? { incomplete: true }
+                : {}),
+            },
           }),
           { headers: { 'content-type': SupportedMimeType.CardJson } },
         );
@@ -4106,11 +4158,17 @@ module(
             ),
         );
         await search('kanban board', `['@cardstack/catalog/']`);
-        await search('unicorn', '[]');
+        await search('kanban', `['@cardstack/catalog/', realm.current.url]`);
+        await search('notes', '[]');
         await search('kanban', '[realm.current.url]');
         await assert.rejects(
           search('boom', `['@cardstack/catalog/']`),
           /the catalog is down/,
+        );
+        await search('silent', `['@cardstack/catalog/', realm.current.url]`);
+        await assert.rejects(
+          search('huge', `['@cardstack/catalog/']`),
+          /too large to return/,
         );
         let run = (code: string) =>
           command.execute({ realm: testRealmURL, roomId, code });
@@ -4126,11 +4184,12 @@ module(
           ),
           /Unknown realm identifier "@nope\/realm\/"/,
         );
+        // An emoji, two UTF-16 units, sits where the text is cut.
         await run(`await realm.entries.search(
   {
     filter: {
       every: [
-        { matches: ${JSON.stringify('x'.repeat(400))} },
+        { matches: ${JSON.stringify(`${'x'.repeat(298)}😀${'y'.repeat(100)}`)} },
         { not: { type: { module: '@cardstack/base/spec', name: 'Spec' } } },
       ],
     },
@@ -4138,51 +4197,54 @@ module(
   { realms: ['@cardstack/catalog/'] },
 );`);
 
-        let spec = '@cardstack/base/spec#Spec';
-        let [named, byDefault, failed, excluding, ...rest] = recorded;
-        assert.deepEqual(
-          named,
-          {
-            event_type: 'catalog-search',
-            query_text: 'kanban board',
-            query_type: spec,
-            total: 2,
-            returned: 0,
-            incomplete: false,
-            error: '',
-            realm: testRealmURL,
-          },
-          'a search that names the catalog is recorded with what it found',
-        );
-        assert.deepEqual(
-          byDefault,
-          {
-            event_type: 'catalog-search',
-            query_text: 'unicorn',
-            query_type: spec,
-            total: 0,
-            returned: 0,
-            incomplete: false,
-            error: '',
-            realm: testRealmURL,
-          },
-          'a search of every realm reaches the catalog, and is recorded',
-        );
-        let { error, ...failedRest } = failed as Extract<
+        type CatalogSearchInput = Extract<
           TelemetryEventInput,
           { event_type: 'catalog-search' }
         >;
+        let spec = '@cardstack/base/spec#Spec';
+        let event = (
+          fields: Pick<
+            CatalogSearchInput,
+            'query_text' | 'total' | 'returned'
+          > &
+            Partial<CatalogSearchInput>,
+        ): CatalogSearchInput => ({
+          event_type: 'catalog-search',
+          tool: 'run-realm-code',
+          query_type: spec,
+          error: '',
+          realm: testRealmURL,
+          ...fields,
+        });
+        let [
+          named,
+          beside,
+          everyRealm,
+          failed,
+          unanswered,
+          tooLarge,
+          excluding,
+          ...rest
+        ] = recorded;
         assert.deepEqual(
-          failedRest,
-          {
-            event_type: 'catalog-search',
-            query_text: 'boom',
-            query_type: spec,
-            total: null,
-            returned: null,
-            incomplete: null,
-            realm: testRealmURL,
-          },
+          named,
+          event({ query_text: 'kanban board', total: 2, returned: 1 }),
+          'a search that names the catalog is recorded with what it found',
+        );
+        assert.deepEqual(
+          beside,
+          event({ query_text: 'kanban', total: 2, returned: 1 }),
+          'only what the catalog matched is counted, not the realm searched beside it',
+        );
+        assert.deepEqual(
+          everyRealm,
+          event({ query_text: 'notes', total: 0, returned: 0 }),
+          'a search of every realm that matched only workspace cards found nothing in the catalog',
+        );
+        let { error, ...failedRest } = failed as CatalogSearchInput;
+        assert.deepEqual(
+          { ...failedRest, error: '' },
+          event({ query_text: 'boom', total: null, returned: null }),
           'a search that threw is recorded without counts',
         );
         assert.true(
@@ -4190,18 +4252,34 @@ module(
           `the error is recorded: ${error}`,
         );
         assert.deepEqual(
+          unanswered,
+          event({
+            query_text: 'silent',
+            total: null,
+            returned: null,
+            error: 'a catalog realm did not answer',
+          }),
+          'a catalog that did not answer is recorded as a failure, not as finding nothing',
+        );
+        assert.deepEqual(
+          tooLarge,
+          event({
+            query_text: 'huge',
+            total: 1,
+            returned: 1,
+            error: `The entry ${catalogURL}Spec/board is too large to return from a search`,
+          }),
+          'an answer too large to return keeps its counts and records why the script got nothing',
+        );
+        assert.deepEqual(
           excluding,
-          {
-            event_type: 'catalog-search',
-            query_text: `${'x'.repeat(299)}…`,
+          event({
+            query_text: `${'x'.repeat(298)}😀…`,
             query_type: '',
             total: 0,
             returned: 0,
-            incomplete: false,
-            error: '',
-            realm: testRealmURL,
-          },
-          'a type the query excludes is not the type it searched for, and long text is cut',
+          }),
+          'a type the query excludes is not the type it searched for, and long text is cut without splitting a character',
         );
         assert.deepEqual(
           rest,

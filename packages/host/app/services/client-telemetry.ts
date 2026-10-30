@@ -213,28 +213,32 @@ export interface ClientErrorEvent extends BaseEvent {
   realm: TelemetryRealm;
 }
 
-// One `realm.entries.search` call in an AI assistant's run-realm-code script
-// that searched the catalog: the realms it reached, after the room's feature
-// gate, include the catalog. A search the gate kept out of the catalog is not
-// one.
+// One entry search the AI assistant made that was sent to a catalog realm:
+// `realm.entries.search` in a run-realm-code script, or a search-entries tool
+// call. A search the room's feature gate kept out of the catalog is not one.
 export interface CatalogSearchEvent extends BaseEvent {
   event_type: 'catalog-search';
+  // The tool that searched: 'run-realm-code' or 'search-entries'.
+  tool: string;
   // The query's full-text `matches` terms, space-separated. Empty for a
   // search by type alone.
   query_text: string;
   // The card type the query's filter names with `on` or `type`, as
   // `module#name`. Empty when it names none.
   query_type: string;
-  // How many entries matched across the searched realms, and how many rows
-  // the script got back. Null when the search threw.
+  // How many entries matched in the catalog realms searched, and how many of
+  // the rows returned came from them. Realms searched beside the catalog are
+  // not counted. Null when the search threw or a catalog realm did not
+  // answer, and `total` is null when the answer gave no count per realm and a
+  // realm other than a catalog was searched.
   total: number | null;
   returned: number | null;
-  // Whether a searched realm failed to answer, so `total` undercounts. Null
-  // when the search threw.
-  incomplete: boolean | null;
-  // The message of the error the search threw. Empty when it answered.
+  // Why the search failed: the message of the error it threw, that a catalog
+  // realm did not answer, or that its answer was too large to return to the
+  // script (which keeps the counts). Empty when it answered.
   error: string;
-  // The workspace the script ran in.
+  // The workspace a run-realm-code script ran in. Null for a search-entries
+  // call, which runs in none.
   realm: TelemetryRealm;
 }
 
