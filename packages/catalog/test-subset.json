@@ -56,7 +56,8 @@
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
-      "server-endpoints/policy-scoped-search-test"
+      "server-endpoints/policy-scoped-search-test",
+      "site-cross-realm-policy-test"
     ]
   }
 }
