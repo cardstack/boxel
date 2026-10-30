@@ -31,8 +31,9 @@ import type { CreateRoutesArgs } from '../routes.ts';
 //   GET /_host-route?url=<a page's URL>
 //     → { kind: 'page', card } | { kind: 'redirect', to, status }
 //       | { kind: 'gone' } | { kind: 'listing' } | { kind: 'none' }
-//   GET /_host-route?realm=<routing realm URL>&card=<card URL>[&card=…]
-//     → { paths: { <card URL>: <realm-relative path> } }
+//   GET /_host-route?[realm=<routing realm URL>&]card=<card URL>[&card=…]
+//     → { realm: <routing realm URL>, paths: { <card URL>: <realm-relative path> } }
+//     Without `realm`, the realm holding the first card is the routing realm.
 
 async function json(ctxt: Koa.Context, body: unknown) {
   await setContextResponse(
@@ -141,7 +142,7 @@ async function pathsForCards(
       paths[card] = row.path;
     }
   }
-  return json(ctxt, { paths });
+  return json(ctxt, { realm: realm.url, paths });
 }
 
 export default function handleHostRoute({
@@ -158,11 +159,12 @@ export default function handleHostRoute({
       if (url) {
         return await resolvePath(ctxt, new URL(url), deps);
       }
-      if (realm) {
+      let cards = params.getAll('card');
+      if (realm || cards.length) {
         return await pathsForCards(
           ctxt,
-          new URL(realm),
-          params.getAll('card'),
+          new URL(realm ?? cards[0]),
+          cards,
           deps,
         );
       }

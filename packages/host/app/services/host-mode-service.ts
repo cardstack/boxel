@@ -225,17 +225,15 @@ export default class HostModeService extends Service {
     return undefined;
   }
 
-  // The site path a card is served at, when the realm at `realmURL` routes
-  // it. Used to show a routed card at its routed address.
+  // Where the realm holding a card serves it, when it routes it: the
+  // realm's URL (whose path is the site's mount) and the card's path there.
   async sitePathForCard(
-    realmURL: string,
     cardURL: string,
-  ): Promise<string | undefined> {
+  ): Promise<{ realm: string; path: string } | undefined> {
     if (!config.realmServerURL) {
       return undefined;
     }
     let endpoint = new URL('_host-route', config.realmServerURL);
-    endpoint.searchParams.set('realm', realmURL);
     endpoint.searchParams.append('card', cardURL);
     try {
       let response = await fetch(endpoint, {
@@ -245,9 +243,11 @@ export default class HostModeService extends Service {
         return undefined;
       }
       let answer = (await response.json()) as {
+        realm?: string;
         paths?: Record<string, string>;
       };
-      return answer.paths?.[cardURL];
+      let path = answer.paths?.[cardURL];
+      return answer.realm && path ? { realm: answer.realm, path } : undefined;
     } catch (e) {
       console.warn(`could not find the site path of ${cardURL}`, e);
       return undefined;

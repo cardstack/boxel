@@ -11,7 +11,6 @@ import stringify from 'safe-stable-stringify';
 import {
   HOST_APP_QUERY_PARAMS,
   isRedirectRoutingRule,
-  rri,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
@@ -79,25 +78,18 @@ export default class Card extends Route {
   // its routed address. The address bar changes without a transition, since
   // the same card is already on screen.
   private async showAtSitePath(cardURL: string) {
-    let realm = this.realm.realmOf(rri(cardURL));
-    if (!realm) {
+    let site = await this.hostModeService.sitePathForCard(cardURL);
+    if (!site) {
       return;
     }
-    let realmURL = this.network.virtualNetwork.toURL(realm);
-    let path = await this.hostModeService.sitePathForCard(
-      realmURL.href,
-      cardURL,
-    );
-    if (!path) {
-      return;
-    }
-    let mount = realmURL.pathname.replace(/\/$/, '');
-    let routed = new URL(mount + path, window.location.href);
-    if (routed.pathname !== window.location.pathname) {
+    // The routing realm's path is where the site is mounted on this host.
+    let mount = new URL(site.realm).pathname.replace(/\/$/, '');
+    let routed = mount + site.path;
+    if (routed !== window.location.pathname) {
       window.history.replaceState(
         window.history.state,
         '',
-        routed.pathname + window.location.search + window.location.hash,
+        routed + window.location.search + window.location.hash,
       );
     }
   }
