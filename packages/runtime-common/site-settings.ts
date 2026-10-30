@@ -59,6 +59,9 @@ export interface SiteSettings {
   notFound?: string;
   listed: boolean;
   crawlers: { userAgent: string; allow: boolean }[];
+  // realm.json's `serveSourcePrerender`, which lets a route serve a card
+  // another realm holds (ADR 016). Set by Realm.getSiteSettings.
+  serveSourcePrerender?: boolean;
   problems: string[];
 }
 

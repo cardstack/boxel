@@ -46,6 +46,7 @@ import {
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { matchHostTableRoute } from '../lib/host-routes.ts';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -89,11 +90,21 @@ async function routesCrossRealm(
   routingDeps: RealmRoutingDeps,
 ): Promise<boolean> {
   let matched = await matchHostRoutingRule(requestURL, routingDeps);
+  if (matched) {
+    return Boolean(
+      !isRedirectRoutingRule(matched.rule) &&
+      'crossRealm' in matched.rule &&
+      matched.rule.crossRealm,
+    );
+  }
+  // A route table page can also be another realm's card.
+  let tableRoute = await matchHostTableRoute(requestURL, routingDeps);
   return Boolean(
-    matched &&
-    !isRedirectRoutingRule(matched.rule) &&
-    'crossRealm' in matched.rule &&
-    matched.rule.crossRealm,
+    tableRoute?.row.kind === 'page' &&
+    tableRoute.row.cardURL &&
+    !new RealmPaths(new URL(tableRoute.realm.url)).inRealm(
+      new URL(tableRoute.row.cardURL),
+    ),
   );
 }
 
@@ -496,10 +507,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // route falls through to the generic 200 shell, a non-route 404s).
           // Requiring public read makes routed and non-routed bare paths
           // behave identically (both next() → 404) on a non-public realm.
-          let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
+          // A path the realm's route table holds counts as routed too.
+          let matchedRealm =
+            (await matchHostRoutingRule(requestURL, routingDeps))?.realm ??
+            (await matchHostTableRoute(requestURL, routingDeps))?.realm;
           if (
-            !matchedRule ||
-            !(await hasPublicPermissions(matchedRule.realm, routingDeps))
+            !matchedRealm ||
+            !(await hasPublicPermissions(matchedRealm, routingDeps))
           ) {
             return next();
           }
@@ -622,10 +636,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let routingMap: HostRoutingRule[] = routedRealm
       ? await routedRealm.getHostRoutingMap()
       : [];
+    let exactlyRouted = false;
     if (routingMap.length > 0) {
       // The match and its canonical form live once, in matchHostRoutingRule.
       let matched = await matchHostRoutingRule(requestURL, routingDeps);
       if (matched) {
+        exactlyRouted = true;
         if (isRedirectRoutingRule(matched.rule)) {
           // A declared redirect rule. Redirect straight to the
           // declared target from either trailing-slash form of the
@@ -689,6 +705,60 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           log.warn(
             `not serving ${target.href} at ${requestURL.pathname}: a visitor who isn't signed in may not read it`,
           );
+        }
+      }
+    }
+
+    // Paths the realm's site settings route (its route table), tried after
+    // the exact routing rules.
+    if (!exactlyRouted && routedRealm) {
+      let tableRoute = await matchHostTableRoute(requestURL, routingDeps);
+      if (tableRoute) {
+        let { realm, row } = tableRoute;
+        let mount = new URL(realm.url).pathname.replace(/\/$/, '');
+        if (row.kind === 'alias' && row.targetPath) {
+          let target = new URL(mount + row.targetPath, requestURL);
+          let forwarded = foreignQueryParams(requestURL.search);
+          if (forwarded) {
+            target.search = forwarded;
+          }
+          ctxt.redirect(target.href);
+          ctxt.status = 301;
+          return;
+        }
+        let canonical = mount + row.path;
+        if (
+          (row.kind === 'page' || row.kind === 'listing') &&
+          row.path !== '/' &&
+          requestURL.pathname !== canonical
+        ) {
+          ctxt.redirect(
+            new URL(canonical + requestURL.search, requestURL).href,
+          );
+          ctxt.status = 308;
+          return;
+        }
+        if (row.kind === 'gone') {
+          ctxt.status = 410;
+          let notFound = (await realm.getSiteSettings()).notFound;
+          if (notFound) {
+            cardURL = new URL(notFound);
+          }
+        } else if (row.kind === 'page' && row.cardURL) {
+          let target = new URL(row.cardURL);
+          let holds = new RealmPaths(new URL(realm.url)).inRealm(target);
+          if (holds) {
+            cardURL = target;
+          } else if (
+            (await realm.getSiteSettings()).serveSourcePrerender &&
+            (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
+          ) {
+            cardURL = target;
+          } else {
+            log.warn(
+              `not serving ${target.href} at ${requestURL.pathname}: it is in another realm, and either realm.json doesn't opt in or a visitor who isn't signed in may not read it`,
+            );
+          }
         }
       }
     }

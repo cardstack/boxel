@@ -2037,6 +2037,7 @@ export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
 export * from './site-settings.ts';
+export * from './host-routes.ts';
 
 export type {
   CardDocument,

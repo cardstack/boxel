@@ -17131,11 +17131,10 @@ export class Realm {
     try {
       let indexEntry =
         await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
-      let site =
-        indexEntry?.type === 'instance'
-          ? (indexEntry.searchDoc ?? {}).site
-          : undefined;
-      let settings = readSiteSettings(site, this.url);
+      let searchDoc =
+        indexEntry?.type === 'instance' ? (indexEntry.searchDoc ?? {}) : {};
+      let settings = readSiteSettings(searchDoc.site, this.url);
+      settings.serveSourcePrerender = searchDoc.serveSourcePrerender === true;
       for (let problem of settings.problems) {
         this.#log.warn(`site settings of ${this.url}: ${problem}`);
       }
