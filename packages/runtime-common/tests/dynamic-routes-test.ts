@@ -7,6 +7,7 @@ import type { SharedTests } from '../helpers/index.ts';
 
 const POST =
   '{module: "https://realm.example/blog/blog-post", name: "BlogPost"}';
+const REALM = 'https://realm.example/blog/';
 const SPEC_EXAMPLE = {
   path: '/posts/:slug',
   query: `{filter: {on: ${POST}, eq: {slug: (.route.slug | ascii_downcase)}}, sort: [{by: "publishedAt", on: ${POST}, direction: "desc"}]}`,
@@ -71,7 +72,7 @@ const tests: SharedTests<unknown> = Object.freeze({
           ),
         },
       ]).routes;
-      let query = dynamicRouteQuery(route, { slug: 'Hello-World' });
+      let query = dynamicRouteQuery(route, { slug: 'Hello-World' }, REALM);
       assert.deepEqual(query, {
         filter: {
           on: {
@@ -94,6 +95,26 @@ const tests: SharedTests<unknown> = Object.freeze({
       } as any);
     },
 
+  'dynamicRouteQuery: a relative module resolves against the realm the rule is in':
+    async (assert) => {
+      let [route] = readDynamicRoutes([
+        {
+          path: '/pages/:title',
+          query:
+            '{filter: {on: {module: "./long-page", name: "LongPage"}, eq: {title: .route.title}}}',
+        },
+      ]).routes;
+      let query = dynamicRouteQuery(
+        route,
+        { title: 'Home' },
+        'https://realm.example/sites/owner/demo/',
+      ) as any;
+      assert.strictEqual(
+        query.filter.on.module,
+        'https://realm.example/sites/owner/demo/long-page',
+      );
+    },
+
   'dynamicRouteQuery: output that is not a query is no match': async (
     assert,
   ) => {
@@ -101,8 +122,14 @@ const tests: SharedTests<unknown> = Object.freeze({
       { path: '/a/:x', query: '.route.x' },
       { path: '/b/:x', query: '{filter: "nope"}' },
     ]);
-    assert.strictEqual(dynamicRouteQuery(routes[0], { x: 'y' }), undefined);
-    assert.strictEqual(dynamicRouteQuery(routes[1], { x: 'y' }), undefined);
+    assert.strictEqual(
+      dynamicRouteQuery(routes[0], { x: 'y' }, REALM),
+      undefined,
+    );
+    assert.strictEqual(
+      dynamicRouteQuery(routes[1], { x: 'y' }, REALM),
+      undefined,
+    );
   },
 });
 

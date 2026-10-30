@@ -3,6 +3,7 @@ import { parseBxlAst, prepareBxl, type PreparedBxl } from '@cardstack/bxl';
 import { normalizeRoutingPath } from './host-routing-validation.ts';
 import type { Query } from './query.ts';
 import { redirectSegmentNames } from './site-settings.ts';
+import { resolveRRIReference } from './url.ts';
 
 // Routing rules whose path has `:name` segments (the Host Mode Dynamic Routes
 // spec, kept as the fallback for paths the route table doesn't hold). A
@@ -136,12 +137,37 @@ export function matchDynamicRoute(
   return params;
 }
 
+// Code refs in a query (`on`, a sort's `on`) may name their module relative to
+// the realm the rule lives in, so a rule keeps working in a published copy of
+// the realm, whose cards adopt from the copy's modules (ADR 002).
+function resolveModules(value: unknown, realmURL: URL): unknown {
+  if (Array.isArray(value)) {
+    return value.map((v) => resolveModules(v, realmURL));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  let out: Record<string, unknown> = {};
+  for (let [key, v] of Object.entries(value)) {
+    out[key] = resolveModules(v, realmURL);
+  }
+  if (
+    typeof out.module === 'string' &&
+    typeof out.name === 'string' &&
+    (out.module.startsWith('./') || out.module.startsWith('../'))
+  ) {
+    out.module = resolveRRIReference(out.module, realmURL);
+  }
+  return out;
+}
+
 // The query a rule makes for a match, narrowed so it can only search the
 // rule's own realm and only for one card (spec D4). Undefined when the
 // expression fails or produces something that isn't a query.
 export function dynamicRouteQuery(
   route: Pick<DynamicRoute, 'query'>,
   params: Record<string, string>,
+  realmURL: string,
 ): Query | undefined {
   let value: unknown;
   try {
@@ -152,7 +178,10 @@ export function dynamicRouteQuery(
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
-  let query = { ...(value as Record<string, unknown>) };
+  let query = resolveModules(value, new URL(realmURL)) as Record<
+    string,
+    unknown
+  >;
   delete query.realm;
   delete query.realms;
   delete query.asData;

@@ -367,7 +367,7 @@ export async function resolveDynamicRoute(
     if (!params) {
       continue;
     }
-    let query = dynamicRouteQuery(route, params);
+    let query = dynamicRouteQuery(route, params, realm.url);
     if (!query) {
       log.warn(
         `dynamic route ${route.path} of ${realm.url}: the query is not a Boxel query for ${path}`,

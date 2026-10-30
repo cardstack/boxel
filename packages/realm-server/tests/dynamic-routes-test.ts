@@ -21,6 +21,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(dynamicRoutesTests, assert, {});
   });
 
+  test('dynamicRouteQuery: a relative module resolves against the realm the rule is in', async function (assert) {
+    await runSharedTest(dynamicRoutesTests, assert, {});
+  });
+
   test('dynamicRouteQuery: output that is not a query is no match', async function (assert) {
     await runSharedTest(dynamicRoutesTests, assert, {});
   });
