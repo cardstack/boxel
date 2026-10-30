@@ -61,6 +61,9 @@ export interface SiteSettings {
   pageTypes: SitePageType[];
   redirects: SiteRedirect[];
   notFound?: string;
+  // The card every page is shown inside: the site's header, navigation and
+  // footer. Its template places the page with <SitePage />.
+  frame?: string;
   listed: boolean;
   crawlers: { userAgent: string; allow: boolean }[];
   // realm.json's `serveSourcePrerender`, which lets a route serve a card
@@ -357,6 +360,17 @@ export function readSiteSettings(
     }
   }
 
+  let frameId = str(record(s.frame)?.id);
+  let frame: string | undefined;
+  if (frameId) {
+    let url = httpURL(frameId);
+    if (url) {
+      frame = url.href;
+    } else {
+      problems.push(`the frame card "${frameId}" is not a card id`);
+    }
+  }
+
   let crawlers = capped(s.crawlers, MAX_SITE_CRAWLERS, 'crawlers', problems)
     .map((value) => {
       let c = record(value);
@@ -377,6 +391,7 @@ export function readSiteSettings(
     pageTypes,
     redirects,
     notFound,
+    frame,
     listed: s.listed !== false,
     crawlers,
     problems,

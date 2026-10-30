@@ -206,6 +206,19 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.strictEqual(settings.problems.length, 1);
   },
 
+  'readSiteSettings: reads the frame card, and reports one that is not a card id':
+    async (assert) => {
+      let settings = readSiteSettings(
+        { frame: { id: `${REALM}/StoreFrame/main` } },
+        REALM,
+      );
+      assert.strictEqual(settings.frame, `${REALM}/StoreFrame/main`);
+      assert.strictEqual(settings.problems.length, 0);
+      let bad = readSiteSettings({ frame: { id: 'not a url' } }, REALM);
+      assert.strictEqual(bad.frame, undefined);
+      assert.strictEqual(bad.problems.length, 1);
+    },
+
   'redirectSegmentNames: names whole segments only, once each': async (
     assert,
   ) => {

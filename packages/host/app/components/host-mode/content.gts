@@ -37,6 +37,7 @@ interface Signature {
     viewCard: ViewCardFn;
     hrefFor?: CardCrudFunctions['hrefFor'];
     navigateTo?: CardCrudFunctions['navigateTo'];
+    prefetch?: CardCrudFunctions['prefetch'];
   };
 }
 
@@ -134,6 +135,7 @@ export default class HostModeContent extends Component<Signature> {
       viewCard: this.args.viewCard,
       hrefFor: this.args.hrefFor,
       navigateTo: this.args.navigateTo,
+      prefetch: this.args.prefetch,
     };
   }
 

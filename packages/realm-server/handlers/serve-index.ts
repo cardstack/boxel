@@ -53,6 +53,7 @@ import {
   siteHomeCard,
 } from '../lib/host-routes.ts';
 import { siteRewriter } from '../lib/site-rewrite.ts';
+import { framePage } from '../lib/site-frame.ts';
 import {
   routedPathForCard,
   routeSnapshot,
@@ -77,9 +78,21 @@ async function anonymousMayRead(
   routingDeps: RealmRoutingDeps,
   requestHeaders: Record<string, string | string[] | undefined>,
 ): Promise<boolean> {
+  return (
+    (await anonymousCardDoc(cardURL, routingDeps, requestHeaders)) !== undefined
+  );
+}
+
+// The card's JSON as a visitor who isn't signed in reads it, or undefined
+// when they may not.
+async function anonymousCardDoc(
+  cardURL: URL,
+  routingDeps: RealmRoutingDeps,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Promise<string | undefined> {
   let realm = await findOrMountRealm(cardURL, routingDeps);
   if (!realm) {
-    return false;
+    return undefined;
   }
   let url = new URL(cardURL);
   url.protocol = new URL(realm.url).protocol;
@@ -91,12 +104,45 @@ async function anonymousMayRead(
     }
   }
   let response = await realm.handle(new Request(url.href, { headers }));
-  return response?.status === 200;
+  return response?.status === 200 ? await response.text() : undefined;
 }
 
 // Whether the request's path is routed into another realm. Such a page can
 // change, or stop being served, without the routing realm changing, so its
 // response carries no ETag a cache could revalidate against.
+// The frame card a site shows its pages inside, as prerendered: its isolated
+// HTML and scoped CSS. None when the page being served is the frame itself,
+// when the frame has no prerendered HTML yet, or when it is another realm's
+// card and the site doesn't opt in to serving those (ADR 016).
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+async function siteFrameMarkup(
+  frameURL: URL,
+  pageURL: URL,
+  routedRealm: Realm,
+  serveSourcePrerender: boolean,
+  dbAdapter: DBAdapter,
+): Promise<{ url: URL; html: string; scopedCSS: string | null } | undefined> {
+  let key = (url: URL) => url.href.replace(/\.json$/, '');
+  if (key(frameURL) === key(pageURL)) {
+    return undefined;
+  }
+  let holds = new RealmPaths(new URL(routedRealm.url)).inRealm(frameURL);
+  if (!holds && !serveSourcePrerender) {
+    return undefined;
+  }
+  let [markup, scopedCSS] = await Promise.all([
+    retrieveIsolatedHTML({ cardURL: frameURL, dbAdapter, log: isolatedLog }),
+    retrieveScopedCSS({ cardURL: frameURL, dbAdapter, log: scopedCSSLog }),
+  ]);
+  if (markup.html == null) {
+    return undefined;
+  }
+  return { url: frameURL, html: markup.html, scopedCSS };
+}
+
 async function routesCrossRealm(
   requestURL: URL,
   routingDeps: RealmRoutingDeps,
@@ -875,12 +921,32 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
     }
 
+    // A site with a frame shows every page inside it: the frame card's
+    // prerendered HTML, with the page's in the place its <SitePage /> marks.
+    let siteSettings = routedRealm
+      ? await routedRealm.getSiteSettings()
+      : undefined;
+    let frame = siteSettings?.frame
+      ? await siteFrameMarkup(
+          new URL(siteSettings.frame),
+          cardURL,
+          routedRealm!,
+          siteSettings.serveSourcePrerender === true,
+          dbAdapter,
+        )
+      : undefined;
+    if (frame?.scopedCSS) {
+      scopedCSS = scopedCSS
+        ? `${frame.scopedCSS}\n${scopedCSS}`
+        : frame.scopedCSS;
+    }
+
     // A site's pages are rewritten on the way out to the address they are
     // served at: links to routed cards, the canonical URL and og:url.
     let canonicalHead: string | undefined;
     let siteRows: HostRouteRow[] | undefined;
-    if (routedRealm) {
-      let settings = await routedRealm.getSiteSettings();
+    if (routedRealm && siteSettings) {
+      let settings = siteSettings;
       if (settings.pageTypes.length || settings.hostURLs.length) {
         let realmPathname = new URL(routedRealm.url).pathname;
         siteRows = await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url);
@@ -897,12 +963,18 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         if (isolatedHTML != null) {
           isolatedHTML = rewriter.body(isolatedHTML, cardURL);
         }
+        if (frame) {
+          frame.html = rewriter.body(frame.html, frame.url);
+        }
         if (headHTML != null) {
           headHTML = rewriter.head(headHTML);
         } else {
           canonicalHead = rewriter.head('');
         }
       }
+    }
+    if (frame) {
+      isolatedHTML = framePage(frame.html, isolatedHTML ?? '', doc);
     }
 
     if (headHTML != null) {
@@ -1009,7 +1081,18 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         siteRows,
         routedRealm.url,
         new URL(routedRealm.url).pathname,
+        { canonical: siteSettings?.hostURLs[0]?.url },
       );
+    }
+    if (
+      routedRealm &&
+      siteSettings?.frame &&
+      (siteSettings.serveSourcePrerender ||
+        new RealmPaths(new URL(routedRealm.url)).inRealm(
+          new URL(siteSettings.frame),
+        ))
+    ) {
+      configPatch.hostSiteFrame = siteSettings.frame;
     }
     if (Object.keys(configPatch).length > 0) {
       responseHTML = responseHTML.replace(
@@ -1019,6 +1102,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
         },
       );
+    }
+
+    // A site's page carries its card's data, so the app shows the card it was
+    // served without fetching it again.
+    if (siteSettings && isolatedHTML != null) {
+      let pageDoc = await anonymousCardDoc(
+        cardURL,
+        routingDeps,
+        ctxt.req.headers,
+      );
+      if (pageDoc) {
+        responseHTML = injectHeadHTML(
+          responseHTML,
+          `<script type="application/json" data-boxel-page-doc data-card-url="${escapeAttribute(
+            cardURL.href.replace(/\.json$/, ''),
+          )}">${pageDoc.replace(/</g, '\\u003c')}</script>`,
+        );
+      }
     }
 
     if (isolatedHTML != null) {

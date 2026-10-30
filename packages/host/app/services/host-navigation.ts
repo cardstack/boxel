@@ -4,6 +4,7 @@ import Service, { service } from '@ember/service';
 
 import {
   normalizeRoutingPath,
+  type HostRouteShare,
   type HostRouteSnapshot,
 } from '@cardstack/runtime-common';
 
@@ -11,6 +12,8 @@ import config from '@cardstack/host/config/environment';
 
 import type HostModeService from './host-mode-service';
 import type HostModeStateService from './host-mode-state-service';
+import type NetworkService from './network';
+import type StoreService from './store';
 import type { CardLinkTarget, Format } from '@cardstack/base/card-api';
 
 // Navigation on a published site. A page has one address, its routed path
@@ -20,19 +23,66 @@ import type { CardLinkTarget, Format } from '@cardstack/base/card-api';
 // does for a document load and an SPA doesn't: catching link clicks,
 // restoring scroll per history entry, and moving focus to the new page.
 
+const INTENT_DELAY_MS = 80;
+const MAX_PREFETCHES = 4;
+
 export default class HostNavigationService extends Service {
   @service declare private router: RouterService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
+  @service declare private store: StoreService;
+  @service declare private network: NetworkService;
 
   private scrollPositions = new Map<string, number>();
   private pendingNavigation: 'push' | 'traverse' | undefined;
   private pendingHash: string | undefined;
+  private prefetched = new Set<string>();
+  private prefetching = 0;
 
   get snapshot(): HostRouteSnapshot | undefined {
     let snapshot = (config as { hostRouteSnapshot?: HostRouteSnapshot })
       .hostRouteSnapshot;
     return snapshot && Array.isArray(snapshot.pages) ? snapshot : undefined;
+  }
+
+  // The served page carries its card's JSON. The app's first request for
+  // that card is answered from it, once, so the card it was served doesn't
+  // cost a second round trip.
+  private servedDocAdopted = false;
+  adoptServedDoc() {
+    if (this.servedDocAdopted) {
+      return;
+    }
+    this.servedDocAdopted = true;
+    let script = document.querySelector('script[data-boxel-page-doc]');
+    let cardURL = script?.getAttribute('data-card-url');
+    let body = script?.textContent;
+    script?.remove();
+    if (!cardURL || !body) {
+      return;
+    }
+    let handler = async (request: Request) => {
+      let url = request.url.split('?')[0].replace(/\.json$/, '');
+      if (
+        request.method !== 'GET' ||
+        url !== cardURL ||
+        !request.headers.get('Accept')?.includes('card+json')
+      ) {
+        return null;
+      }
+      this.network.virtualNetwork.unmount(handler);
+      return new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'application/vnd.card+json' },
+      });
+    };
+    this.network.virtualNetwork.mount(handler, { prepend: true });
+  }
+
+  // The card every page of the site is shown inside, when the site has one.
+  get frame(): string | undefined {
+    let frame = (config as { hostSiteFrame?: unknown }).hostSiteFrame;
+    return typeof frame === 'string' ? frame.replace(/\.json$/, '') : undefined;
   }
 
   // The site's mount on this host, with a trailing slash.
@@ -159,6 +209,41 @@ export default class HostNavigationService extends Service {
     this.visit(address);
   };
 
+  // Loads the card a link leads to before it is clicked, so the page is ready
+  // when it is. Only what the snapshot can resolve without asking the server,
+  // at most four at a time, and nothing on a connection that asks to save
+  // data.
+  prefetch = (target: CardLinkTarget) => {
+    let connection = (navigator as { connection?: { saveData?: boolean } })
+      .connection;
+    if (connection?.saveData || this.prefetching >= MAX_PREFETCHES) {
+      return;
+    }
+    let card: string | undefined;
+    if ('card' in target) {
+      card = cardKey(target.card);
+    } else {
+      let known = this.resolveAddress(this.addressOf(target.path));
+      card = known && 'card' in known ? known.card : undefined;
+    }
+    if (!card || this.prefetched.has(card)) {
+      return;
+    }
+    this.prefetched.add(card);
+    this.prefetching++;
+    this.store
+      .get(card)
+      .catch(() => this.prefetched.delete(card!))
+      .finally(() => this.prefetching--);
+  };
+
+  private prefetchAddress(url: URL) {
+    let known = this.resolveAddress(url.pathname);
+    if (known && 'card' in known) {
+      this.prefetch({ card: known.card });
+    }
+  }
+
   // An in-app transition to an address on this site.
   visit(address: string, { replace = false }: { replace?: boolean } = {}) {
     this.saveScroll();
@@ -253,11 +338,32 @@ export default class HostNavigationService extends Service {
         this.scrollPositions.set(this.entryKey(), target.scrollTop);
       }
     };
+    // Intent: a pointer resting on a site link, or focus reaching one.
+    let intentTimer: ReturnType<typeof setTimeout> | undefined;
+    let onIntent = (event: Event) => {
+      let anchor = (event.target as Element | null)?.closest?.('a[href]');
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+      let url = new URL(anchor.href, window.location.href);
+      if (!this.isSiteAddress(url)) {
+        return;
+      }
+      clearTimeout(intentTimer);
+      intentTimer = setTimeout(
+        () => this.prefetchAddress(url),
+        event.type === 'focusin' ? 0 : INTENT_DELAY_MS,
+      );
+    };
+    let onIntentEnd = () => clearTimeout(intentTimer);
     let onPopState = () => {
       this.pendingNavigation = 'traverse';
     };
     let onRouteChange = () => this.pageShown();
     root.addEventListener('click', onClick as EventListener);
+    root.addEventListener('pointerover', onIntent);
+    root.addEventListener('pointerout', onIntentEnd);
+    root.addEventListener('focusin', onIntent);
     document.addEventListener('scroll', onScroll, {
       capture: true,
       passive: true,
@@ -273,6 +379,10 @@ export default class HostNavigationService extends Service {
     }
     return () => {
       root.removeEventListener('click', onClick as EventListener);
+      root.removeEventListener('pointerover', onIntent);
+      root.removeEventListener('pointerout', onIntentEnd);
+      root.removeEventListener('focusin', onIntent);
+      clearTimeout(intentTimer);
       document.removeEventListener('scroll', onScroll, { capture: true });
       window.removeEventListener('popstate', onPopState);
       this.router.off('routeDidChange', onRouteChange);
@@ -312,16 +422,51 @@ export default class HostNavigationService extends Service {
       } else if (scroller) {
         scroller.scrollTop = 0;
       }
+      this.updateHead();
       if (kind === 'push') {
         this.focusPage();
       }
     });
   }
 
+  // The tags a shared link and a search engine read, for the page now
+  // showing: the server writes them into the page a visitor first loads, and
+  // they follow the visitor from there. The title is the page card's own.
+  private updateHead() {
+    let snapshot = this.snapshot;
+    let path = this.sitePath?.split('?')[0];
+    if (!snapshot || !path) {
+      return;
+    }
+    let page = snapshot.pages.find(([p]) => p === path);
+    let share: HostRouteShare = (page?.[2] as HostRouteShare | undefined) ?? {};
+    let mount =
+      snapshot.canonical ??
+      new URL(snapshot.mount, window.location.origin).href;
+    let address = new URL(path.replace(/^\//, ''), mount).href;
+    setHeadTag('link', 'rel', 'canonical', 'href', address);
+    setHeadTag('meta', 'property', 'og:url', 'content', address);
+    let tags: [string, string, string | undefined][] = [
+      ['property', 'og:title', share.title],
+      ['property', 'og:description', share.description],
+      ['property', 'og:image', share.image],
+      ['name', 'twitter:title', share.title],
+      ['name', 'twitter:description', share.description],
+      ['name', 'twitter:image', share.image],
+    ];
+    for (let [attribute, name, value] of tags) {
+      if (value) {
+        setHeadTag('meta', attribute, name, 'content', value);
+      }
+    }
+  }
+
   // The page's main heading takes focus, so assistive tech announces the
   // new page the way a document load would.
   private focusPage() {
-    let page = document.querySelector('[data-host-mode-primary]');
+    let page =
+      document.querySelector('[data-host-mode-page]') ??
+      document.querySelector('[data-host-mode-primary]');
     let heading = page?.querySelector('h1') ?? page;
     if (heading instanceof HTMLElement) {
       if (!heading.hasAttribute('tabindex')) {
@@ -384,6 +529,22 @@ export default class HostNavigationService extends Service {
       this.scrollPositions.set(this.entryKey(), scroller.scrollTop);
     }
   }
+}
+
+function setHeadTag(
+  tag: 'link' | 'meta',
+  keyAttribute: string,
+  key: string,
+  valueAttribute: string,
+  value: string,
+) {
+  let element = document.head.querySelector(`${tag}[${keyAttribute}="${key}"]`);
+  if (!element) {
+    element = document.createElement(tag);
+    element.setAttribute(keyAttribute, key);
+    document.head.append(element);
+  }
+  element.setAttribute(valueAttribute, value);
 }
 
 function scrolls(element: HTMLElement): boolean {

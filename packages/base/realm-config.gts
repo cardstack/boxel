@@ -523,6 +523,10 @@ export class SiteSettingsField extends FieldDef {
   @field notFound = linksTo(CardDef, {
     description: 'The card served, with status 404, at a path nothing claims',
   });
+  @field frame = linksTo(CardDef, {
+    description:
+      "The card every page is shown inside: the site's header, navigation and footer",
+  });
   @field listed = contains(BooleanField, {
     description: 'Whether search engines may index the site. Default: true',
   });

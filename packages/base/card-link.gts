@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import {
@@ -37,6 +38,10 @@ interface Signature {
     stack?: 'push' | 'rightmost';
     // Open the card over the page on a published site.
     overlay?: boolean;
+    // When to load the target ahead of a click, where the environment can.
+    // A hovered or focused link always is; 'visible' also loads it once the
+    // link scrolls into view, for primary navigation.
+    prefetch?: 'intent' | 'visible' | 'none';
     // Cover the nearest positioned ancestor: a whole tile that opens the card.
     // The block's content becomes the link's accessible name.
     cover?: boolean;
@@ -138,9 +143,35 @@ export class CardLink extends Component<Signature> {
     // Otherwise the browser follows the link.
   };
 
+  private prefetchWhenVisible = modifier((element: HTMLElement) => {
+    let prefetch = this.cardCrudFunctions?.prefetch;
+    if (
+      this.args.prefetch !== 'visible' ||
+      !prefetch ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return;
+    }
+    let observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        let card = this.targetCard;
+        let path = this.args.path;
+        if (card) {
+          prefetch({ card });
+        } else if (path) {
+          prefetch({ path });
+        }
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
+
   <template>
     <a
       href={{this.href}}
+      {{this.prefetchWhenVisible}}
       class={{if @cover 'card-link card-link-cover' 'card-link'}}
       data-boxel-card-link={{if this.targetCard this.targetCard @path}}
       {{on 'click' this.activate}}

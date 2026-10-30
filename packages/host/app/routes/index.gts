@@ -122,6 +122,7 @@ export default class Card extends Route {
     transition: Transition,
   ) {
     if (this.hostModeService.isActive) {
+      this.hostNavigation.adoptServedDoc();
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
       // to a target card. When the path matches a serve rule, use the

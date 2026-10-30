@@ -28,6 +28,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+import SitePageOutlet from '@cardstack/host/components/host-mode/site-page-outlet';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
 import SecureWindowFallback from '@cardstack/host/components/secure-window-fallback';
@@ -201,6 +202,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       sitePath: this.hostModeService.isActive
         ? this.hostNavigation.sitePath
         : undefined,
+      sitePage:
+        this.hostModeService.isActive && this.hostNavigation.frame
+          ? SitePageOutlet
+          : undefined,
     };
   }
 
@@ -309,12 +314,17 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       {{/unless}}
 
       <HostModeContent
-        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @primaryCardId={{if
+          this.hostNavigation.frame
+          this.hostNavigation.frame
+          this.hostModeStateService.primaryCard
+        }}
         @stackItemCardIds={{this.hostModeStateService.stackItems}}
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
         @hrefFor={{this.hostNavigation.hrefFor}}
         @navigateTo={{this.hostNavigation.navigateTo}}
+        @prefetch={{this.hostNavigation.prefetch}}
         {{this.removeIsolatedMarkup}}
         {{this.installHostNavigation}}
       />

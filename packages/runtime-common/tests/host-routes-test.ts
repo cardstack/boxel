@@ -318,7 +318,9 @@ const tests: SharedTests<unknown> = Object.freeze({
       listings: ['/shop'],
       complete: true,
     });
-    assert.false(routeSnapshot(rows, REALM, '/owner/store/', 2).complete);
+    assert.false(
+      routeSnapshot(rows, REALM, '/owner/store/', { max: 2 }).complete,
+    );
   },
 });
 

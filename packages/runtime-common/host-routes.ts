@@ -406,8 +406,11 @@ export interface HostRouteSnapshot {
   realm: string;
   // Its pathname on this host, with a trailing slash: '/sites/owner/shop/'.
   mount: string;
-  // [path, card URL] for each page.
-  pages: [string, string][];
+  // [path, card URL] for each page, with how it looks when shared when its
+  // page type says.
+  pages: ([string, string] | [string, string, HostRouteShare])[];
+  // The site's canonical mount, its first host URL, when it lists one.
+  canonical?: string;
   // [path, target path] for each alias.
   aliases: [string, string][];
   // Paths the site no longer serves.
@@ -425,15 +428,23 @@ export function routeSnapshot(
   rows: HostRouteRow[],
   realm: string,
   mount: string,
-  max = MAX_ROUTE_SNAPSHOT_ROWS,
+  {
+    max = MAX_ROUTE_SNAPSHOT_ROWS,
+    canonical,
+  }: { max?: number; canonical?: string } = {},
 ): HostRouteSnapshot {
   let kept = rows.slice(0, max);
   return {
     realm,
     mount,
+    ...(canonical ? { canonical } : {}),
     pages: kept
       .filter((row) => row.kind === 'page' && row.cardURL)
-      .map((row) => [row.path, row.cardURL!]),
+      .map((row) =>
+        row.share
+          ? [row.path, row.cardURL!, row.share]
+          : [row.path, row.cardURL!],
+      ),
     aliases: kept
       .filter((row) => row.kind === 'alias' && row.targetPath)
       .map((row) => [row.path, row.targetPath!]),

@@ -395,6 +395,12 @@ export interface CardContext<T extends CardDef = CardDef> {
   // that serves several of the site's paths (a listing) reads which one is
   // showing. Undefined anywhere else.
   sitePath?: string;
+  // On a published site with a frame: in the frame card's context, the page
+  // being shown, which <SitePage /> renders. Undefined anywhere else.
+  sitePage?: ComponentLike<{ Element: HTMLElement }>;
+  // True for the page shown inside a site's frame, so a card that draws its
+  // own header when it stands alone can leave that to the frame.
+  siteFramed?: boolean;
   toolContext?: ToolContext;
   // Pre-rename spelling of `toolContext`. Realm content reads
   // `@context.commandContext`; populated with the same value until no
@@ -3033,6 +3039,8 @@ export interface CardCrudFunctions {
     target: CardLinkTarget,
     opts?: { format?: Format; overlay?: boolean },
   ) => void;
+  // Loads a link's target before it is followed, where the environment can.
+  prefetch?: (target: CardLinkTarget) => void;
 }
 
 export type CardLinkTarget = { card: string } | { path: string };
