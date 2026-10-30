@@ -52,7 +52,8 @@ allow_profile_lookup_over_federation: false
 
 # Rejects an invite between two end users who share no realm (ADR 011 §1.5,
 # §1.6) by asking the realm server, which holds the grants. The realm server
-# reads the same secret from MATRIX_INVITE_CHECK_SECRET.
+# reads the same secret from MATRIX_INVITE_CHECK_SECRET. An invite from or to
+# a service user is allowed without asking.
 modules:
   - module: boxel_invite_check.BoxelInviteCheck
     config:

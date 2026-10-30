@@ -20,14 +20,15 @@ const log = logger('realm-server');
 // a room? ADR 011 §1.5 lets two end users share a room only when §1.2 lets
 // each see the other's Matrix id, which is when each holds a permission row
 // naming them in the same realm. Only the realm server knows those rows, so
-// the module asks here on every invite, and treats anything but a 200 as a
-// denial.
+// the module asks here for an invite between two end users, and treats
+// anything but a 200 as a denial.
 //
 // A service user (`isBotAccount` on the paired homeserver, which includes
 // this server's own account) may invite anyone and be invited by anyone: a
-// room may hold one end user and any number of service users. The realm server inviting a user to their
-// session room, or the host inviting the AI bot into a chat, is answered
-// without reading the database.
+// room may hold one end user and any number of service users. The module
+// allows those invites itself, from the same naming convention, so they need
+// no round trip here; this endpoint allows them the same way, so its answer
+// never depends on which side asked.
 //
 // The answer is read fresh from the database on each call, like every
 // permission check, so a removed grant stops counting at once.
