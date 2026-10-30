@@ -55,6 +55,11 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardError?.status === 404;
   }
 
+  // What the prerender handoff waits for on the primary card.
+  get state() {
+    return this.cardError ? 'error' : this.card ? 'ready' : 'loading';
+  }
+
   get isLoading() {
     return Boolean(this.args.cardId) && !this.card && !this.cardError;
   }
@@ -126,6 +131,7 @@ export default class HostModeCard extends Component<Signature> {
       class={{cn 'host-mode-card' is-primary=@isPrimary}}
       @displayBoundaries={{@displayBoundaries}}
       data-test-host-mode-card-loaded={{bool this.card}}
+      data-host-mode-card-state={{this.state}}
       ...attributes
     >
       {{#if this.cardError}}
