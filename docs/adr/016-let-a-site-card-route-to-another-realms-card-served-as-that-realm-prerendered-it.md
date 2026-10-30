@@ -51,7 +51,11 @@ whether a request with no credentials may read it, by handling such a request
 for the card. Only on success MUST it serve the page with that card's
 prerendered HTML, as the holding realm rendered it. On any other answer it
 MUST serve the path as if the rule did not match, so a card a visitor may not
-read never reaches a public path.
+read never reaches a public path. The check MUST carry the visitor's address,
+so a policy that admits visitors by where they call from can answer it. The
+page MUST NOT carry a cache validator derived from the routing realm alone,
+since the holding realm can change the card, or stop admitting visitors,
+without the routing realm changing.
 
 ## 2. Rationale
 

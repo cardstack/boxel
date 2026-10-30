@@ -2195,6 +2195,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           response.text.includes('Prerendered by the test realm'),
           'the page carries the isolated HTML the other realm prerendered',
         );
+        assert.strictEqual(
+          response.headers['etag'],
+          undefined,
+          'the page carries no ETag, since the other realm can change it without a republish',
+        );
       });
     },
   );
