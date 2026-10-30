@@ -1,7 +1,6 @@
 /* eslint-env browser */
 // The protocol of the credential fields the app frames: the inputs of its
-// sign-in, registration, password-reset, change-password and
-// confirm-your-password forms. Card code runs in the app page, so a password
+// change-password and confirm-your-password forms. Card code runs in the app page, so a password
 // typed into that page could be read by any card on it. Typed here, on the
 // secure origin, it can't.
 //
@@ -52,115 +51,6 @@ const MIN_REDACTED_LENGTH = 4;
 // `stateful` shows each field's validation state, as a BoxelInput given
 // `@state` does.
 export const FORMS = {
-  login: {
-    layout: 'auth',
-    operations: ['login'],
-    fields: [
-      {
-        name: 'username',
-        label: 'Email Address or Username',
-        type: 'text',
-        id: 'boxel-login-username',
-        inputName: 'username',
-        autocomplete: 'username',
-        placeholder: 'Your email address',
-        testId: 'username-field',
-      },
-      {
-        name: 'password',
-        label: 'Password',
-        type: 'password',
-        id: 'boxel-login-password',
-        inputName: 'password',
-        autocomplete: 'current-password',
-        placeholder: 'Your password',
-        testId: 'password-field',
-      },
-    ],
-  },
-  'cli-login': {
-    layout: 'auth',
-    operations: ['cli-login'],
-    fields: [
-      {
-        name: 'username',
-        label: 'Email Address or Username',
-        type: 'text',
-        id: 'boxel-cli-auth-username',
-        inputName: 'username',
-        autocomplete: 'username',
-        testId: 'cli-auth-username',
-      },
-      {
-        name: 'password',
-        label: 'Password',
-        type: 'password',
-        id: 'boxel-cli-auth-password',
-        inputName: 'password',
-        autocomplete: 'current-password',
-        testId: 'cli-auth-password',
-      },
-    ],
-  },
-  register: {
-    layout: 'auth',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
-    operations: ['register'],
-    hiddenUsername: true,
-    fields: [
-      {
-        name: 'password',
-        label: 'Password',
-        type: 'password',
-        id: 'boxel-register-password',
-        inputName: 'password',
-        autocomplete: 'new-password',
-        placeholder: 'Your password',
-        testId: 'password-field',
-        validate: 'new',
-        validHint: { text: 'password is valid', testId: 'password-valid' },
-      },
-      {
-        name: 'confirm',
-        label: 'Confirm Password',
-        type: 'password',
-        id: 'boxel-register-confirm-password',
-        inputName: 'confirm-password',
-        autocomplete: 'new-password',
-        placeholder: 'Re-enter your password',
-        testId: 'confirm-password-field',
-        validate: 'confirm',
-        validHint: { text: 'passwords match', testId: 'passwords-match' },
-      },
-    ],
-  },
-  reset: {
-    layout: 'auth',
-    // Its fields show a validation state, as a BoxelInput given `@state` does.
-    stateful: true,
-    operations: ['set-password'],
-    fields: [
-      {
-        name: 'password',
-        label: 'Enter New Password',
-        type: 'password',
-        inputName: 'password',
-        autocomplete: 'new-password',
-        testId: 'password-field',
-        validate: 'new',
-      },
-      {
-        name: 'confirm',
-        label: 'Re-Enter New Password',
-        type: 'password',
-        inputName: 'confirm-password',
-        autocomplete: 'new-password',
-        testId: 'confirm-password-field',
-        validate: 'confirm',
-      },
-    ],
-  },
   'change-password': {
     layout: 'settings',
     // Its fields show a validation state, as a BoxelInput given `@state` does.
@@ -347,18 +237,6 @@ export class CredentialFrame {
     return this.fields.get(name)?.error;
   }
 
-  // Whether a field shows the hint that what is in it is valid: a new
-  // password long enough, or a confirmation that matches it.
-  showsHint(name) {
-    let entry = this.fields.get(name);
-    if (!entry?.field.validHint || !entry.value || entry.error) {
-      return false;
-    }
-    return entry.field.validate === 'new'
-      ? entry.value.length >= MIN_PASSWORD_LENGTH
-      : name === 'confirm' && entry.value === this.value('password');
-  }
-
   isComplete() {
     for (let entry of this.fields.values()) {
       if (!entry.value || entry.error) {
@@ -472,13 +350,6 @@ export class CredentialFrame {
         if (this.form.hiddenUsername) {
           this.hiddenUsername = username;
         }
-        // A username the page already knows fills the username field in,
-        // and stays editable.
-        let usernameField = this.fields.get('username');
-        if (usernameField && !usernameField.value && username) {
-          usernameField.value = username;
-          this.sendState();
-        }
         this.onChange();
         break;
       }
@@ -545,36 +416,6 @@ export class CredentialFrame {
     this.send({ type: 'result', id, ...this.redact(result) });
   }
 
-  // Signs in with the username field as a Matrix username, then, if that
-  // fails, as an email address. When neither signs in, the username
-  // attempt's response is returned.
-  async passwordLogin() {
-    let password = this.value('password');
-    let username = this.value('username');
-    let byUsername = await this.matrixRequest('login', {
-      body: {
-        identifier: { type: 'm.id.user', user: username },
-        password,
-        type: 'm.login.password',
-      },
-    });
-    if (byUsername.ok) {
-      return byUsername;
-    }
-    let byEmail = await this.matrixRequest('login', {
-      body: {
-        identifier: {
-          type: 'm.id.thirdparty',
-          medium: 'email',
-          address: username,
-        },
-        password,
-        type: 'm.login.password',
-      },
-    });
-    return byEmail.ok ? byEmail : byUsername;
-  }
-
   // An interactive-auth dict for the password stage carries the account's
   // current password, which is in a field here, never in the app's dict.
   withPassword(auth) {
@@ -627,24 +468,6 @@ export class CredentialFrame {
 // that aren't secret taken from the app. Each is called on the form's
 // `CredentialFrame`.
 const OPERATIONS = {
-  async login() {
-    return await this.passwordLogin();
-  },
-
-  async 'cli-login'() {
-    return await this.passwordLogin();
-  },
-
-  async register({ username, auth }) {
-    return await this.matrixRequest('register', {
-      body: {
-        username: String(username ?? ''),
-        password: this.value('password'),
-        auth: plainObject(auth),
-      },
-    });
-  },
-
   // Made by the realm server, which sets the password on the Matrix server and
   // then ends the account's secure sessions: a session signed in with the old
   // password, perhaps stolen, must not outlive the change. The Matrix server
@@ -652,35 +475,21 @@ const OPERATIONS = {
   // turn off.
   //
   // What the typed password authorizes is decided by the form, never by what
-  // the app sends. The change form, the one with a current password, makes a
-  // change with the app's `accessToken`: the realm server ends the sessions of
-  // the token's account, once the Matrix server has checked the current
-  // password from the field here. The reset form makes a reset with the email
-  // validation session in `auth`, and ends the sessions of the account the
-  // app names in `account`, the email address the reset was sent to, once the
-  // new password, which the app never sees, checks out for it.
-  async 'set-password'({ auth, accessToken, account }) {
-    let newPassword = this.value('password');
-    if (this.fields.has('current')) {
-      if (typeof accessToken !== 'string' || !accessToken) {
-        return {
-          ok: false,
-          status: 0,
-          body: { error: 'A password change needs the app’s access token.' },
-        };
-      }
-      return await this.changePassword({
-        newPassword,
-        accessToken,
-        currentPassword: this.value('current'),
-      });
+  // the app sends: a change with the app's `accessToken`, and the realm server
+  // ends the sessions of the token's account once the Matrix server has
+  // checked the current password from the field here.
+  async 'set-password'({ accessToken }) {
+    if (typeof accessToken !== 'string' || !accessToken) {
+      return {
+        ok: false,
+        status: 0,
+        body: { error: 'A password change needs the app’s access token.' },
+      };
     }
-    let creds = plainObject(plainObject(auth).threepid_creds);
     return await this.changePassword({
-      newPassword,
-      sid: String(creds.sid ?? ''),
-      clientSecret: String(creds.client_secret ?? ''),
-      ...(typeof account === 'string' && account ? { email: account } : {}),
+      newPassword: this.value('password'),
+      accessToken,
+      currentPassword: this.value('current'),
     });
   },
 

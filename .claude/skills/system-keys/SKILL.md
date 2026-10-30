@@ -33,7 +33,12 @@ boxel realm-server keys replace --realm-server <url> (--destination <url> | --id
 boxel realm-server keys delete  --realm-server <url> (--destination <url> | --id <id>) [--note <text>]
 ```
 
-Every command takes `--json`. `boxel realm-server` is left out of the CLI's
+Every command takes `--json`. With `--kind oauth-client` the same commands
+manage the platform's OAuth clients instead, named by `--name`; the
+`oauth-connections` skill covers them, the Boxel (read-only) GitHub App among
+them. Their changes take an operator note by the same rules, are recorded in
+`platform_oauth_client_history` the way system keys' are in
+`proxy_endpoint_history`, and are logged on the `system-keys` channel too. `boxel realm-server` is left out of the CLI's
 general help (and out of boxel-skills); `boxel realm-server keys --help` shows
 the commands.
 

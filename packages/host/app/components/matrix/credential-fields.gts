@@ -160,21 +160,10 @@ export default class CredentialFieldsFrame extends Component<Signature> {
         --_control: calc(
           var(--boxel-outline-width) * 2 + var(--boxel-form-control-height)
         );
-        --_label: calc(var(--boxel-body-font-size) * 1.1);
-        --_auth-field: calc(
-          var(--boxel-sp) + var(--_label) + var(--boxel-sp-4xs) +
-            var(--_control)
-        );
         position: relative;
         display: block;
         width: 100%;
         height: var(--credential-fields-height, var(--_reserved, 0));
-      }
-      .credential-fields--login,
-      .credential-fields--cli-login,
-      .credential-fields--register,
-      .credential-fields--reset {
-        --_reserved: calc(var(--_auth-field) * 2);
       }
       .credential-fields--change-password {
         --_reserved: calc(

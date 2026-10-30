@@ -62,7 +62,9 @@ import KeyGrants from './key-grants.gts';
 import KeyTile from './key-tile.gts';
 import ServiceAccountDetails from './service-account-details.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
-import ServiceAccountFields from './service-account-fields.gts';
+import ServiceAccountFields, {
+  type ServiceAccountReplacing,
+} from './service-account-fields.gts';
 import KeyUse from './key-use.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -177,45 +179,10 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                             {{/if}}
                           </p>
                           {{#if (this.isServiceAccount key)}}
-                            {{#if key.serviceAccount}}
-                              <p
-                                class='confirm'
-                                data-test-service-account-replace-note
-                              >Choose the new key file.
-                                <strong>Act as</strong>
-                                and
-                                <strong>Scopes</strong>
-                                start as the key has them now: the replacement
-                                keeps them as you leave them here.</p>
-                            {{else}}
-                              <p
-                                class='confirm'
-                                data-test-service-account-replace-note
-                              >A replacement sets the key file, the scopes and
-                                who it acts as all anew. Enter the scopes again,
-                                and leave
-                                <strong>Act as</strong>
-                                empty only if it should act as the service
-                                account itself.</p>
-                            {{/if}}
                             <ServiceAccountFields
                               @entry={{this.serviceAccount}}
+                              @replacing={{this.serviceAccountReplacing}}
                             />
-                            {{#if this.accountChange}}
-                              <p
-                                class='confirm'
-                                role='status'
-                                data-test-service-account-changed
-                              >This key file is for
-                                <strong>{{this.accountChange.to}}</strong>, not
-                                <strong>{{this.accountChange.from}}</strong>.
-                                Delegation and scopes are granted per service
-                                account, so check
-                                <strong>Act as</strong>
-                                and
-                                <strong>Scopes</strong>
-                                for the new one.</p>
-                            {{/if}}
                           {{else}}
                             <KeyFields
                               @value={{this.form.value}}
@@ -538,17 +505,15 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       : undefined;
   }
 
-  // The service account a chosen key file is for, when it isn't the one the
-  // key is now: the prefilled Act as and Scopes were granted to the old one,
-  // so the panel says so.
-  private get accountChange(): { from: string; to: string } | undefined {
+  // A service account being replaced, as its fields describe it: the listing
+  // carries its details, and the form starts from them whenever it does.
+  private get serviceAccountReplacing(): ServiceAccountReplacing | undefined {
     let action = this.state.action;
-    let from =
-      action.name === 'replacing'
-        ? action.key.serviceAccount?.email
-        : undefined;
-    let to = this.serviceAccount.clientEmail;
-    return from && to && from !== to ? { from, to } : undefined;
+    if (action.name !== 'replacing') {
+      return undefined;
+    }
+    let current = action.key.serviceAccount;
+    return { current, prefilled: Boolean(current) };
   }
 
   private get replaceDisabled() {
@@ -622,10 +587,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // now; its key file is always chosen anew.
   private startReplace = async (key: UserKey) => {
     this.form.value = '';
+    this.serviceAccount.clear();
     if (key.serviceAccount) {
       this.serviceAccount.prefill(key.serviceAccount);
-    } else {
-      this.serviceAccount.clear();
     }
     this.state.action = { name: 'replacing', key, shares: undefined };
     let shares: KeyShare[] | undefined;
