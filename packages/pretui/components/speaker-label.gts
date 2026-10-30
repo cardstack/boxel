@@ -64,9 +64,10 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           {{@via}}</span>{{/if}}
       {{#if @time}}
         {{#if @fullTime}}
+          <span class='pretui-speaker-dot' aria-hidden='true'>·</span>
           <Tooltip @content={{@fullTime}} @side='right'>
             <time
-              class='pretui-speaker-time'
+              class='pretui-speaker-tiptime'
               datetime={{@datetime}}
               tabindex='0'
               data-test-pretui-speaker-time
@@ -123,7 +124,8 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
           text-overflow: ellipsis;
         }
         .pretui-speaker-via,
-        .pretui-speaker-time {
+        .pretui-speaker-time,
+        .pretui-speaker-dot {
           white-space: nowrap;
         }
         /* the assistant's name is one short word and always reads; what
@@ -145,7 +147,13 @@ export class SpeakerLabel extends Component<SpeakerLabelSignature> {
         .pretui-speaker-time {
           font-variant-numeric: tabular-nums;
         }
-        .pretui-speaker-time:focus-visible {
+        /* a time with its full date in a tooltip is a keyboard stop; its
+           dot stands outside it, so the focus ring holds the time alone */
+        .pretui-speaker-tiptime {
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-speaker-tiptime:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
           border-radius: var(--boxel-border-radius-xs);
