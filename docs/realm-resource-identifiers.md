@@ -338,8 +338,9 @@ Two lint rules keep the URL form from creeping back into source:
 - `@cardstack/boxel/no-url-form-base-imports` flags (and auto-fixes)
   `https://cardstack.com/base/…` in static imports, dynamic `import()`,
   `loader.import()` and `importResource()`, including a template literal that
-  starts with it. Elsewhere it flags the alias, without a fix, except where it
-  is defined or recognized: `baseRealm`, `equivalentURLForms`, `internalKeyFor`,
+  starts with it. Elsewhere it flags the alias, without a fix, whether spelled
+  out or built by appending a path to `baseRealm.url`, except where it is
+  defined or recognized: `baseRealm`, `equivalentURLForms`, `internalKeyFor`,
   `registeredRealmURL`, and tests of alias tolerance, canonicalization or
   migration that a package's ESLint config names.
 - `@cardstack/boxel/no-literal-realm-urls` flags environment-specific realm

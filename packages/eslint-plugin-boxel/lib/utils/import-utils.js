@@ -1,19 +1,18 @@
 /** @type {import('eslint').Rule.RuleModule} */
 
-// URL-form alias for each registered RRI prefix. Lets the rule treat
-// `https://cardstack.com/base/X` and `@cardstack/base/X` as the same
-// module so a missing import configured in one form merges into an
-// existing import that uses the other form. Add new realms here as the
-// runtime registers their aliases.
+const { PREFIX_REALM_ALIASES } = require('./prefix-realms');
+
+// URL-form alias for each registered RRI prefix that has one, read from the
+// plugin's restatement of `PREFIX_REALMS`. Lets the rule treat
+// `https://cardstack.com/base/X` and `@cardstack/base/X` as the same module,
+// so a missing import configured in one form merges into an existing import
+// that uses the other form.
 //
-// Transition shim: this map only exists because base-realm modules can
-// still be imported in either form. Once the virtual-alias URL form
-// (`https://cardstack.com/base/...`) is fully retired and all source
-// uses the RRI prefix form, this map and the two helpers below collapse
-// to identity and can be removed — callers compare specifiers directly.
-const REALM_PREFIX_ALIASES = {
-  '@cardstack/base/': 'https://cardstack.com/base/',
-};
+// Transition shim: this map only matters while base-realm modules can be
+// imported in either form. Once the alias is retired and all source uses the
+// RRI prefix form, the map is empty and the two helpers below are the
+// identity, so callers compare specifiers directly.
+const REALM_PREFIX_ALIASES = PREFIX_REALM_ALIASES;
 
 function canonicalizeModuleSpecifier(specifier) {
   if (typeof specifier !== 'string') {

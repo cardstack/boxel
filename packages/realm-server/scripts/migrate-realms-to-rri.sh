@@ -4,11 +4,12 @@
 # on-disk virtual-alias realm references to RRI prefix form across the given
 # directories.
 #
-# Only the base realm is addressed by a virtual alias
-# (https://cardstack.com/base/); catalog, skills, and openrouter are authored
-# directly in scoped @cardstack/<realm>/ form on disk, so they need no
-# conversion. If a realm regains a virtual alias, add a mapping to MAPPINGS
-# below and it is picked up automatically.
+# The <alias>|<prefix> pairs to convert come from PREFIX_REALMS in
+# packages/runtime-common/realm-prefixes.ts, read with the node that runs the
+# realm server: every prefix realm with an `alias` there is converted, and a
+# realm without one is authored in @cardstack/<realm>/ form on disk already and
+# needs no conversion. Only the base realm has an alias
+# (https://cardstack.com/base/).
 #
 # Pass-through flags (--dry-run, --json-only, --modules-only, --exclude <dir>)
 # are forwarded to each underlying run; each run writes its own rollback .patch.
@@ -44,10 +45,30 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATE="$SCRIPT_DIR/migrate-realm-references.sh"
 
-# <find>|<replace> pairs, one per virtual-alias realm.
-MAPPINGS=(
-  "https://cardstack.com/base/|@cardstack/base/"
+# <find>|<replace> pairs, one per prefix realm with an alias, from PREFIX_REALMS.
+# Node strips the declaration's types as it loads it, so this needs no build and
+# no node_modules.
+PREFIX_REALMS_MODULE="$SCRIPT_DIR/../../runtime-common/realm-prefixes.ts"
+MAPPINGS=()
+while IFS= read -r mapping; do
+  MAPPINGS+=("$mapping")
+done < <(
+  # The template literal inside the quotes is JavaScript's to expand.
+  # shellcheck disable=SC2016
+  NODE_NO_WARNINGS=1 node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    let { PREFIX_REALMS } = await import(pathToFileURL(process.argv[1]).href);
+    for (let realm of PREFIX_REALMS) {
+      if (realm.alias) {
+        console.log(`${realm.alias}|${realm.prefix}`);
+      }
+    }
+  ' -- "$PREFIX_REALMS_MODULE"
 )
+if [ ${#MAPPINGS[@]} -lt 1 ]; then
+  echo "Could not read any alias from $PREFIX_REALMS_MODULE" >&2
+  exit 1
+fi
 
 # Realm directory names the server mounts — mirrors the --path / --realmsRootPath
 # entries in start-staging.sh / start-production.sh. KEEP IN SYNC with those.
