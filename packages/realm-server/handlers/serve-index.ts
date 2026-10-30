@@ -47,9 +47,11 @@ import {
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
+  loadHostRoutes,
   matchHostTableRoute,
   resolveDynamicRoute,
 } from '../lib/host-routes.ts';
+import { siteRewriter } from '../lib/site-rewrite.ts';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -841,6 +843,33 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
     }
 
+    // A site's pages are rewritten on the way out to the address they are
+    // served at: links to routed cards, the canonical URL and og:url.
+    let canonicalHead: string | undefined;
+    if (routedRealm) {
+      let settings = await routedRealm.getSiteSettings();
+      if (settings.pageTypes.length || settings.hostURLs.length) {
+        let realmPathname = new URL(routedRealm.url).pathname;
+        let rewriter = siteRewriter({
+          requestMount: new URL(realmPathname, requestURL),
+          canonicalMount: settings.hostURLs[0]
+            ? new URL(settings.hostURLs[0].url)
+            : undefined,
+          requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
+          rows: await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url),
+          document: doc,
+        });
+        if (isolatedHTML != null) {
+          isolatedHTML = rewriter.body(isolatedHTML, cardURL);
+        }
+        if (headHTML != null) {
+          headHTML = rewriter.head(headHTML);
+        } else {
+          canonicalHead = rewriter.head('');
+        }
+      }
+    }
+
     if (headHTML != null) {
       headLog.debug(
         `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${truncateLogLines(
@@ -870,6 +899,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       headFragments.push(ensureSingleTitle(headHTML));
     } else {
       headFragments.push('<title>Boxel</title>');
+      if (canonicalHead) {
+        headFragments.push(canonicalHead);
+      }
     }
 
     if (scopedCSS != null) {
