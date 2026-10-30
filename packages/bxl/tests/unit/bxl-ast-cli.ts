@@ -604,3 +604,41 @@ strictEqual(
 );
 
 console.log('BXL semantic AST/profile/storage projection: all checks passed');
+
+// The route profile (ADR 015 §1.4): what a page type's href may say.
+for (const [href, readableSyntax] of [
+  ['"/shop/" & .handle', true],
+  ['"/collections/" & LOWER(.season) & "-" & .year', true],
+  ['"/shop/\\(.handle)"', false],
+  ['"/journal/\\(.publishedOn[0:4])/\\(.slug)"', false],
+  ['"/c/\\(.slug | ascii_downcase | ltrimstr("-"))"', false],
+  ['"/tags/\\(.tags | split(",") | join("-"))"', false],
+] as const) {
+  deepStrictEqual(
+    parseBxlAst(href, { profile: 'route', readableSyntax }).profileIssues,
+    [],
+    `route profile allows the href ${href}`,
+  );
+}
+for (const [href, code] of [
+  ['"/a/\\(.slug | test("x"))"', 'route-call-banned'],
+  ['"/a/\\(.slug | sub("x"; "y"))"', 'route-call-banned'],
+  ['"/a/\\(.slug | split("[,;]"; null) | join("-"))"', 'route-call-banned'],
+  ['"/a/\\(now)"', 'route-call-banned'],
+  ['"/a/\\($ENV.HOME)"', 'route-variable-banned'],
+  ['. as $c | "/a/\\($c.slug)"', 'route-binding-banned'],
+  ['def f: .slug; "/a/\\(f)"', 'route-def-banned'],
+] as const) {
+  ok(
+    parseBxlAst(href, {
+      profile: 'route',
+      readableSyntax: false,
+    }).profileIssues.some((issue) => issue.code === code),
+    `route profile refuses ${href} with ${code}`,
+  );
+}
+strictEqual(
+  classifyBxlProfileFunction('route', 'gsub').safety,
+  'deny',
+  'route profile is an allowlist: an unlisted function is refused',
+);

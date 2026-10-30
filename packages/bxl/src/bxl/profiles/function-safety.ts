@@ -330,6 +330,42 @@ export const BXL_PREDICATE_LOWERABLE_CALLS = names([
 ]);
 
 /**
+ * Everything a `route` expression may call: string and number shaping, and
+ * choosing between values. It is an allowlist, so a function added to the
+ * engine is refused here until someone adds it. Nothing on it compiles an
+ * authored pattern to a regular expression or reads anything but its input
+ * (ADR 015 §1.4); `split` is checked for its one-argument form by the
+ * validator, since the two-argument form takes a regular expression.
+ */
+export const BXL_ROUTE_CALLS = names([
+  'tostring',
+  'tonumber',
+  'ascii_downcase',
+  'ascii_upcase',
+  'ltrimstr',
+  'rtrimstr',
+  'startswith',
+  'endswith',
+  'length',
+  'join',
+  'split',
+  'LOWER',
+  'UPPER',
+  'TRIM',
+  'LEFT',
+  'RIGHT',
+  'MID',
+  'LEN',
+  'CONCAT',
+  'SUBSTITUTE',
+  'TEXT',
+  'ROUND',
+  'INT',
+  'IF',
+  'IFS',
+]);
+
+/**
  * The determinism bans the two write-time profiles share: nothing volatile,
  * nothing with a side effect, nothing reading runtime metadata.
  */
@@ -488,6 +524,9 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
         'runtime metadata calls are not stable mutation-plan expressions',
       volatile: 'volatile calls are not repeatable mutation-plan expressions',
     },
+  },
+  route: {
+    allowedCalls: BXL_ROUTE_CALLS,
   },
   transform: {
     deniedCalls: BXL_TRANSFORM_DENIED_CALLS,
