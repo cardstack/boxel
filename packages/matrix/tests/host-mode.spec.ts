@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures.ts';
 import {
-  credentialFields,
+  signInOnSecureOrigin,
   createRealm,
   createSubscribedUserAndLogin,
   logout,
@@ -444,13 +444,7 @@ test.describe('Host mode', () => {
     let connectIframe = page.frameLocator('iframe');
     await connectIframe.locator('[data-test-connect]').click();
 
-    await credentialFields(page)
-      .locator('[data-test-username-field]')
-      .fill(realm.username);
-    await credentialFields(page)
-      .locator('[data-test-password-field]')
-      .fill(realm.password);
-    await page.locator('[data-test-login-btn]').click();
+    await signInOnSecureOrigin(page, realm.username, realm.password);
 
     await expect(page).toHaveURL(realm.publishedCardURL);
 

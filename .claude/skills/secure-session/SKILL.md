@@ -125,8 +125,8 @@ another machine.
 Every page that sets a password sets it through `POST
 /_secure-sessions/password-change` (a `password-change` resource), in place of
 the Matrix request: the secure origin's `reset-password` page, and the
-credential fields' `set-password`, which the app's own reset and its
-change-password use. The realm server makes the Matrix `account/password`
+credential fields' `set-password`, which the profile modal's change password
+uses. The realm server makes the Matrix `account/password`
 request itself (`changePassword` in `lib/secure-session.ts`), with
 `logout_devices: true`, and answers with the Matrix server's status and body,
 which the page reads as it would the Matrix server's own. Once the Matrix
@@ -200,10 +200,8 @@ write ticket refuses an ended session. An ended session is forgotten. A
 sign-in page then shows "Sign in to Boxel" with no error. A key page never
 signs in, as it never signs out: it says to sign in to Boxel from the page
 that opened it, and shows nothing else (ADR 005 §1.6). The window's session
-for its key pages is the one Boxel's own sign-in on this origin leaves here,
-which happens only where `SIGN_IN_ON_SECURE_ORIGIN` is on (§1.7). With it
-off, Boxel signs in in the app page and leaves no session here, so a
-deployment opens the key pages only with it on. When the check gets no answer
+for its key pages is the one Boxel's own sign-in on this origin leaves here
+(§1.7). When the check gets no answer
 within ten seconds, or the server can't be reached, the window keeps its
 session.
 
@@ -265,10 +263,12 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    secret, against its own redirect URI, and checks the ID token's issuer,
    audience, expiry and nonce (the token comes straight from Google over TLS,
    so its claims are checked, not its signature).
-4. It resolves the Google identity to an account exactly as Synapse's sign-in
-   for the app does with Boxel's OIDC mapping provider
-   (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`):
-   - **Linked by `sub`**: the account Synapse linked to the Google subject,
+4. It resolves the Google identity to an account. The Google link is a
+   Synapse external id under the `oidc-google` provider, the id Synapse's
+   single sign-on records its links under, so an account linked that way
+   resolves here too. Synapse has no OIDC provider configured: its admin API
+   reads and writes external ids whatever its configuration says.
+   - **Linked by `sub`**: the account linked to the Google subject,
      `GET /_synapse/admin/v1/auth_providers/oidc-google/users/<sub>`. A
      deactivated or locked account is refused.
    - **Not linked**: the email must be verified. The account holding it
@@ -276,8 +276,8 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      as Google spells it) gets the Google link added to its `external_ids`
      (`PUT /_synapse/admin/v2/users/<user>`, keeping its other links), and
      signs in. More than one account holding it is refused.
-   - **No account**: a new one is made through the admin API, with the
-     mapping provider's localpart (the email's local part, sanitized, then
+   - **No account**: a new one is made through the admin API, with a
+     localpart from the email (the email's local part, sanitized, then
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
@@ -287,10 +287,9 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      counts the localpart as taken and the next one is tried. A sign-in that fails after making the
      account unlinks and deactivates it, so the next one resolves again.
 
-   The rules live in `lib/google-account.ts`; the two implementations share
-   `test_google_sign_in_vectors.json`, which both
-   `test_boxel_oidc_mapping_provider.py` and `tests/google-account-test.ts`
-   run. Change both together.
+   The rules live in `lib/google-account.ts`, and
+   `tests/google-sign-in-vectors.json` holds the cases
+   `tests/google-account-test.ts` runs.
 
 5. An account with no session room gets the app's first-sign-in setup before
    the session is minted, as a password sign-in's does: the realm-server user and its first credit grant, a
@@ -310,7 +309,8 @@ port and state wait in session storage):
   `expires_at`, `state`).
 - `boxel profile add` opens `<secure origin>/cli-auth?port=…&state=…&session=secure`
   when `GET /_secure-origin` says `cliAuth: true`, and the host app's
-  `/cli-auth` otherwise or under `--host-url`. Once signed in, the window
+  `/cli-auth` otherwise or under `--host-url`, which forwards to this page
+  with the same port and state. Once signed in, the window
   mints a Matrix login token with the session (`POST
 /_secure-session/login-token`) and posts it as `login_token` beside the
   session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
@@ -318,7 +318,7 @@ port and state wait in session storage):
   serves realm commands and `boxel keys` alike. A `cli-auth` link without
   `session=secure` is one for a CLI that can't hold a secure session (one
   from before secure sessions opens the host app's `/cli-auth`, which
-  forwards to this page when the app signs in on the secure origin). For
+  forwards to this page). For
   it, the window ends the session it signed in and navigates to the listener
   with `?state=…&loginToken=…`, the form every released CLI accepts.
 
@@ -334,14 +334,11 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 
 ## Handing a sign-in to the app
 
-With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
-the app draws no sign-in form. The realm server writes the setting into the
-host's config as `signInOnSecureOrigin` when it builds the app's page, so a
-deployment turns it on or off without a rebuild. Outside development the
-realm server builds that page once and keeps it for as long as the process
-runs, so a changed setting takes effect when the realm server next starts,
-as on the next deploy. Unset, the host keeps what its build set, which is
-off.
+The app draws no sign-in, registration or password-reset form: users do all
+three on the secure origin's pages (ADR 005 §1.7). The Matrix server offers
+no single sign-on, so Google sign-in happens only on the secure origin too.
+Its password login stays, for the CLI's terminal sign-ins and the realm
+server's password check.
 
 1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
    with `<secure origin>/sign-in#return=<the app page, path and query>`.
@@ -366,7 +363,7 @@ off.
    origin that isn't listed is dropped, and the window just says it is
    signed in.
 3. The app redeems the token (from the fragment, or the query, where
-   `boxel browse` and Synapse's SSO put it) with an `m.login.token` login,
+   `boxel browse` puts it) with an `m.login.token` login,
    as the fragment's `deviceId` when it names one, before it loads any card, takes it out of the address, and boots as after any sign-in:
    realm-server session, realm tokens, service-worker sync.
    A token for another account than the one stored in the browser switches
@@ -419,7 +416,7 @@ same port and state.
 | 503 `unavailable`         | No Synapse admin credentials, Synapse didn't answer with a challenge, or a Google sign-in couldn't make or link an account (its `realm:secure-session` log line counts the lost races and the localparts taken or refused) |
 | 503 `google-unavailable`  | This server has no Google client                                                                                                                                                                                           |
 
-A Google refusal's message is the app's own copy: the mapping provider's
+A Google refusal's message is the app's own copy: `lib/google-account.ts`'s
 words for an unverified or shared email, and the app's sign-in error for a
 deactivated or locked account. Logged on `realm:secure-session` by error name and message only. The routes
 are key routes in `request-telemetry.ts`, so request logs and Sentry keep only

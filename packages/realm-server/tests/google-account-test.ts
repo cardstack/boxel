@@ -7,19 +7,7 @@ import {
   resolveGoogleAccount,
 } from '../lib/google-account.ts';
 
-// The vectors Boxel's OIDC mapping provider runs too
-// (`test_boxel_oidc_mapping_provider.py`), so the app's Google sign-in and the
-// secure origin's resolve a Google identity to the same account.
-const VECTORS_PATH = join(
-  import.meta.dirname,
-  '..',
-  '..',
-  'matrix',
-  'support',
-  'synapse',
-  'modules',
-  'test_google_sign_in_vectors.json',
-);
+const VECTORS_PATH = join(import.meta.dirname, 'google-sign-in-vectors.json');
 
 interface Vector {
   name: string;

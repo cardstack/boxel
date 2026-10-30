@@ -259,11 +259,10 @@ re-mint, while a legitimate device recovers without the user noticing.
   revocation and refuses a delegated session — `handle-download-realm` is the
   precedent. Calling `retrieveTokenClaim` alone accepts a delegated session as
   the user in full.
-- Match the sync/async shape of any interface you implement exactly. Synapse's
-  `OidcMappingProvider.get_remote_user_id` is **sync** while its siblings are
-  async; declaring it `async def` made the stored external id a coroutine repr
-  containing a reused heap address, which cross-linked Google identities into
-  each other's accounts. Mocked unit tests cannot catch an interface-shape
-  mismatch — assert the shape, or drive the real handler.
+- Match the sync/async shape of any interface you implement exactly. A sync
+  method declared async returns a coroutine, and storing its repr as an
+  identifier (which embeds a reused heap address) can cross-link one user's
+  external identity into another's account. Mocked unit tests cannot catch an
+  interface-shape mismatch — assert the shape, or drive the real handler.
 - Reads of the `users` row treat a missing row as _not_ revoked. That is safe
   only because `revokeUserSessions` upserts; preserve that pairing.

@@ -134,23 +134,19 @@ export type ExtendedClient = Pick<
   | 'getJoinedRooms'
   | 'getProfileInfo'
   | 'getRoom'
-  | 'getSsoLoginUrl'
   | 'getStateEvent'
   | 'getThreePids'
   | 'getUserId'
   | 'invite'
   | 'isLoggedIn'
-  | 'isUsernameAvailable'
   | 'joinRoom'
   | 'leave'
   | 'login'
-  | 'loginFlows'
   | 'loginWithToken'
   | 'logout'
   | 'getOpenIdToken'
   | 'off'
   | 'on'
-  | 'requestPasswordEmailToken'
   | 'roomState'
   | 'scrollback'
   | 'sendEvent'
@@ -173,7 +169,6 @@ export type ExtendedClient = Pick<
 > &
   FileDefManager & {
     requestEmailToken(
-      type: 'registration' | 'threepid',
       email: string,
       clientSecret: string,
       sendAttempt: number,
@@ -203,15 +198,11 @@ async function createRealmSession(
 async function requestEmailToken(
   this: ExtendedClient,
   fetch: typeof globalThis.fetch,
-  type: 'registration' | 'threepid',
   email: string,
   clientSecret: string,
   sendAttempt: number,
 ) {
-  let url =
-    type === 'registration'
-      ? `${this.baseUrl}/_matrix/client/v3/register/email/requestToken`
-      : `${this.baseUrl}/_matrix/client/v3/account/3pid/email/requestToken`;
+  let url = `${this.baseUrl}/_matrix/client/v3/account/3pid/email/requestToken`;
 
   let response = await fetch(url, {
     method: 'POST',

@@ -604,13 +604,12 @@ async function addProfileViaBrowser(
     );
   }
 
-  // The browser can hand back a brand-new account: a Google sign-in whose
-  // verified email matches nothing gets one minted by Synapse itself, with no
-  // Boxel code involved — so nothing has given it the personal realm the web
-  // signup flow would have. Give it one here. For every other account this is
-  // a no-op (accounts that went through a signup flow already have a realm),
-  // and a failure only warns: the profile works without it, and signing in to
-  // the web app offers workspace creation.
+  // The browser can hand back an account with no personal realm: one made on
+  // the Matrix server directly, or one whose realm went missing from its
+  // account data. Give it one here. For every other account this is a no-op
+  // (a first sign-in on the secure origin already made one), and a failure
+  // only warns: the profile works without it, and signing in to the web app
+  // offers workspace creation.
   try {
     const result = await ctx.ensurePersonalRealm(matrixAuth, realmServerUrl);
     if (result.outcome === 'created') {
