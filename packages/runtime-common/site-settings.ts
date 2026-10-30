@@ -173,9 +173,20 @@ function readPageType(
     sourceRealm = withSlash(url.href);
   }
 
-  let ref = record(t.cardType);
-  let module = str(ref?.module);
-  let refName = str(ref?.name);
+  // The index's search doc holds a code ref as `<module>/<name>`; realm.json
+  // itself holds `{ module, name }`.
+  let module: string | undefined;
+  let refName: string | undefined;
+  let refString = str(t.cardType);
+  if (refString) {
+    let slash = refString.lastIndexOf('/');
+    module = slash > 0 ? refString.slice(0, slash) : undefined;
+    refName = str(refString.slice(slash + 1));
+  } else {
+    let ref = record(t.cardType);
+    module = str(ref?.module);
+    refName = str(ref?.name);
+  }
   if (!module || !refName) {
     problems.push(`${label}: no card type`);
     return undefined;

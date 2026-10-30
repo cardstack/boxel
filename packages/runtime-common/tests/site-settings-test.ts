@@ -49,6 +49,25 @@ const tests: SharedTests<unknown> = Object.freeze({
       );
     },
 
+  'readSiteSettings: a card type reads from the search doc string form too':
+    async (assert) => {
+      let { pageTypes, problems } = readSiteSettings(
+        {
+          pageTypes: [
+            pageType({
+              cardType: 'https://realm.example/owner/store/product/Product',
+            }),
+          ],
+        },
+        REALM,
+      );
+      assert.deepEqual(problems, []);
+      assert.deepEqual(pageTypes[0].cardType, {
+        module: 'https://realm.example/owner/store/product',
+        name: 'Product',
+      });
+    },
+
   'readSiteSettings: an invalid page type is dropped and reported, the rest kept':
     async (assert) => {
       let { pageTypes, problems } = readSiteSettings(

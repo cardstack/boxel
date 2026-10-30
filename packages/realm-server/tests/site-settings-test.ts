@@ -13,6 +13,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
+  test('readSiteSettings: a card type reads from the search doc string form too', async function (assert) {
+    await runSharedTest(siteSettingsTests, assert, {});
+  });
+
   test('readSiteSettings: an invalid page type is dropped and reported, the rest kept', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
