@@ -53,14 +53,21 @@ export const RISE = 6;
  * Host tests run with motion off: the regions render plain markup, and the
  * DOM they leave must be the same as with motion on (ADR 007 §1.1).
  */
-// Off in tests, and off on demand for measuring what motion costs:
-// localStorage 'boxel-assistant-motion' = 'off' (read when a region mounts)
-export const motionEnabled = () => {
+// Off in tests, and off on demand for measuring what motion costs (read when
+// a region mounts): localStorage 'boxel-motion' = 'off' turns off every host
+// region, and a region's own key ('boxel-assistant-motion' for the
+// assistant's, 'boxel-stack-motion' for the operator-mode stacks) that
+// region alone.
+export const motionEnabled = (regionKey = 'boxel-assistant-motion') => {
   if (isTesting()) {
     return false;
   }
   try {
-    return globalThis.localStorage?.getItem('boxel-assistant-motion') !== 'off';
+    let storage = globalThis.localStorage;
+    return (
+      storage?.getItem('boxel-motion') !== 'off' &&
+      storage?.getItem(regionKey) !== 'off'
+    );
   } catch {
     return true;
   }
