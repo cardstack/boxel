@@ -1378,9 +1378,9 @@ export class PublishRealmInput extends CardDef {
   @field force = contains(BooleanField);
 }
 
-// Per-target outcome. The command resolves once the publish request is
-// accepted (the realm-server reindex then runs in the background), so 'status'
-// is 'published' (request accepted) or 'error'.
+// Per-target outcome. 'status' is 'published' (the site is live),
+// 'published-pending' (accepted, and its HTML is still rendering after the
+// readiness wait ran out; it goes live without another publish) or 'error'.
 export class PublishTargetResult extends FieldDef {
   @field publishedRealmURL = contains(StringField);
   @field status = contains(StringField);

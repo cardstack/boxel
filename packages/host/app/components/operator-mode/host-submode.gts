@@ -109,7 +109,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     const errors = new Map<string, string>();
     for (let target of result.results) {
-      if (target.status === 'error') {
+      if (target.status === 'error' || target.status === 'published-pending') {
         errors.set(
           target.publishedRealmURL,
           target.error || 'Failed to publish to this domain',

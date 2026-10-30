@@ -3,6 +3,11 @@
 // (optional, for domain-wide delegation) and the scopes its tokens ask for.
 // Once a file is chosen the row names the service account it holds, so the
 // user can see it is the one they meant; nothing else from the file is shown.
+//
+// On a replace the fields say what the replacement changes: that Act as and
+// Scopes start as the key has them now, or else that all three are set anew,
+// and when the chosen file is for another service account than the key's,
+// that delegation and scopes were granted to the old one.
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
@@ -12,17 +17,44 @@ import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 
+import type { ServiceAccountDetails } from './context.ts';
 import type { ServiceAccountEntry } from './service-account-entry.ts';
+
+// What a replace knows about the key it replaces: its details, when known,
+// and whether the fields started from them.
+export interface ServiceAccountReplacing {
+  current?: ServiceAccountDetails;
+  prefilled: boolean;
+}
 
 interface Signature {
   Args: {
     entry: ServiceAccountEntry;
     onChange?: () => void;
+    // Given on a replace, once the page knows what the key is now.
+    replacing?: ServiceAccountReplacing;
   };
 }
 
 export default class ServiceAccountFields extends Component<Signature> {
   <template>
+    {{#if @replacing}}
+      {{#if @replacing.prefilled}}
+        <p class='replace-note' data-test-service-account-replace-note>Choose
+          the new key file.
+          <strong>Act as</strong>
+          and
+          <strong>Scopes</strong>
+          start as the key has them now: the replacement keeps them as you leave
+          them here.</p>
+      {{else}}
+        <p class='replace-note' data-test-service-account-replace-note>A
+          replacement sets the key file, the scopes and who it acts as all anew.
+          Enter the scopes again, and leave
+          <strong>Act as</strong>
+          empty only if it should act as the service account itself.</p>
+      {{/if}}
+    {{/if}}
     <FieldContainer
       @tag='div'
       @label='Key file'
@@ -105,8 +137,28 @@ export default class ServiceAccountFields extends Component<Signature> {
         <p class='hint'>What its tokens may do, separated by spaces.</p>
       </div>
     </FieldContainer>
+    {{#if this.accountChange}}
+      <p
+        class='replace-note'
+        role='status'
+        data-test-service-account-changed
+      >This key file is for
+        <strong>{{this.accountChange.to}}</strong>, not
+        <strong>{{this.accountChange.from}}</strong>. Delegation and scopes are
+        granted per service account, so check
+        <strong>Act as</strong>
+        and
+        <strong>Scopes</strong>
+        for the new one.</p>
+    {{/if}}
 
     <style scoped>
+      .replace-note {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        overflow-wrap: anywhere;
+      }
       .file,
       .with-hint {
         display: grid;
@@ -162,6 +214,14 @@ export default class ServiceAccountFields extends Component<Signature> {
       }
     </style>
   </template>
+
+  // The service account a chosen key file is for, when it isn't the one the
+  // key is now.
+  private get accountChange(): { from: string; to: string } | undefined {
+    let from = this.args.replacing?.current?.email;
+    let to = this.args.entry.clientEmail;
+    return from && to && from !== to ? { from, to } : undefined;
+  }
 
   private chooseFile = async (event: Event) => {
     let input = event.target as HTMLInputElement;
