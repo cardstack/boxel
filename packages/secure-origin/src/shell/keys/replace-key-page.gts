@@ -15,6 +15,11 @@
 // be replaced by them: the page says so, and names who shared it to the
 // workspace's direct writers, who see its shares already. A slot nothing is
 // bound to says that. A replaced key's row stays, saying it is replaced.
+//
+// A Google service account's form starts from the user it acts as and the
+// scopes it asks for now, as the key page's Replace does, once the key's own
+// details (`GET /_user-keys/:id`, the listing's source) say what they are;
+// its key file is always chosen anew.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
@@ -37,7 +42,12 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
-import type { KeyValue, SlotBound, WindowContext } from './context.ts';
+import type {
+  KeyValue,
+  ServiceAccountDetails,
+  SlotBound,
+  WindowContext,
+} from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
@@ -46,7 +56,9 @@ import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { contextRequest, openedFor } from './opened-for.ts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
-import ServiceAccountFields from './service-account-fields.gts';
+import ServiceAccountFields, {
+  type ServiceAccountReplacing,
+} from './service-account-fields.gts';
 import { addressOf } from './workspace-dropdown.gts';
 
 // What the page does for one slot.
@@ -204,12 +216,10 @@ class SlotPanel extends Component<{
           data-test-replace-key-form
         >
           {{#if this.replacing.serviceAccount}}
-            <p class='note' data-test-service-account-replace-note>A replacement
-              sets the key file, the scopes and who it acts as all anew. Enter
-              the scopes again, and leave
-              <strong>Act as</strong>
-              empty only if it should act as the service account itself.</p>
-            <ServiceAccountFields @entry={{this.serviceAccount}} />
+            <ServiceAccountFields
+              @entry={{this.serviceAccount}}
+              @replacing={{this.serviceAccountReplacing}}
+            />
           {{else}}
             <KeyFields @value={{this.form.value}} @onValue={{this.setValue}} />
           {{/if}}
@@ -365,15 +375,26 @@ class SlotPanel extends Component<{
   });
   // How many workspaces the key is shared with, once the server has said.
   private use = trackedObject({ known: false, workspaces: 0 });
+  // A service account's details as the key has them now, once the server has
+  // said, and whether the form started from them. `read` is set once the key
+  // read settles, either way.
+  private current = trackedObject({
+    read: false,
+    serviceAccount: undefined as ServiceAccountDetails | undefined,
+    prefilled: false,
+  });
 
   constructor(owner: Owner, args: SlotPanel['args']) {
     super(owner, args);
-    this.loadUse();
+    this.loadKey();
   }
 
-  // If the key's shares can't be listed, the row says so in general terms
-  // instead, and the replace is still offered.
-  private async loadUse() {
+  // If the key can't be read, the row says how many workspaces use it in
+  // general terms instead, a service account's form starts empty, and the
+  // replace is still offered. Act as and Scopes start from the key's details
+  // only while neither has been typed in, so what the owner types first is
+  // never overwritten; a key file already chosen stays.
+  private async loadKey() {
     let view = this.replacing;
     if (!view) {
       return;
@@ -382,11 +403,34 @@ class SlotPanel extends Component<{
       let key = await getKey(this.args.api.config, view.key.id);
       this.use.workspaces = key.sharedInto.length;
       this.use.known = true;
+      if (view.serviceAccount && key.serviceAccount) {
+        this.current.serviceAccount = key.serviceAccount;
+        let entry = this.serviceAccount;
+        if (!entry.subject && !entry.scopes) {
+          entry.prefill(key.serviceAccount);
+          this.current.prefilled = true;
+        }
+      }
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       }
+    } finally {
+      this.current.read = true;
     }
+  }
+
+  // What the service account's fields say about the replace. Nothing until
+  // the key read settles, so the note doesn't change under the owner from
+  // "all anew" to "as the key has them now".
+  private get serviceAccountReplacing(): ServiceAccountReplacing | undefined {
+    if (!this.current.read) {
+      return undefined;
+    }
+    return {
+      current: this.current.serviceAccount,
+      prefilled: this.current.prefilled,
+    };
   }
 
   private get accepted() {

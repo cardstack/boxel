@@ -6,12 +6,20 @@ import { join } from 'path';
 import jwt from 'jsonwebtoken';
 
 import {
+  addPlatformClient,
   addSystemKey,
+  confirmPlatformClientDelete,
+  deletePlatformClient,
   deleteSystemKey,
+  listPlatformClients,
   listSystemKeys,
+  replacePlatformClientSecret,
   readKeyValue,
+  refuseClientOptions,
+  refuseSystemOptions,
   replaceSystemKey,
   resolveSystemKeyId,
+  showPlatformClient,
   type SystemKey,
 } from '../../src/commands/realm-server/keys.js';
 import { buildBoxelProgram } from '../../src/build-program.js';
@@ -243,6 +251,186 @@ describe('boxel realm-server keys', () => {
     ).rejects.toThrow(
       /HTTP 409: a system key for https:\/\/vendor.test\/ already exists/,
     );
+  });
+
+  describe('platform clients (--kind oauth-client)', () => {
+    const GITHUB = {
+      name: 'github',
+      label: 'Boxel (read-only)',
+      secret: 'github-client-secret-0123456789',
+      note: 'registering the GitHub App',
+      oauth: {
+        clientId: 'Iv23.boxel',
+        authorizeUrl: 'https://github.com/login/oauth/authorize',
+        tokenUrl: 'https://github.com/login/oauth/access_token',
+        apiHosts: ['https://api.github.com/'],
+      },
+    };
+    const client = {
+      id: '0a4b5c6d-7e8f-4a0b-9c1d-2e3f4a5b6c7d',
+      name: 'github',
+      label: 'Boxel (read-only)',
+      clientId: 'Iv23.boxel',
+      grantType: 'authorization_code',
+      authorizeURL: 'https://github.com/login/oauth/authorize',
+      tokenURL: 'https://github.com/login/oauth/access_token',
+      scopes: '',
+      tokenAuth: 'client_secret_post',
+      apiHosts: ['https://api.github.com/'],
+      state: 'active',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('lists, shows, adds, replaces the secret of and deletes a platform client with a system-keys operator token, each change with its note, the secret only in a body', async () => {
+      let history = [
+        {
+          action: 'add',
+          name: 'github',
+          clientId: 'Iv23.boxel',
+          note: 'registering the GitHub App',
+          keyId: 'kms-0123456789abcdef',
+          changedAt: '2026-01-01T00:00:00.000Z',
+          clientAddress: '203.0.113.7',
+          tokenIssuedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+      let { fetch, requests } = fakeServer([
+        { body: { clients: [client] } },
+        { body: { client, history } },
+        { status: 201, body: { client } },
+        { body: { client } },
+        { body: { deleted: 'github' } },
+      ]);
+      expect(await listPlatformClients(options(fetch))).toEqual([client]);
+      expect(await showPlatformClient(options(fetch), 'github')).toEqual({
+        client,
+        history,
+      });
+      expect(await addPlatformClient(options(fetch), GITHUB)).toEqual(client);
+      await replacePlatformClientSecret(options(fetch), 'github', {
+        secret: 'github-client-secret-rotated',
+        note: 'rotating it',
+      });
+      await deletePlatformClient(options(fetch), 'github', {
+        note: 'retiring it',
+      });
+
+      expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+        'GET https://realms.example.test/_platform-oauth-clients',
+        'GET https://realms.example.test/_platform-oauth-clients/github',
+        'POST https://realms.example.test/_platform-oauth-clients',
+        'PATCH https://realms.example.test/_platform-oauth-clients/github',
+        'DELETE https://realms.example.test/_platform-oauth-clients/github',
+      ]);
+      expect(JSON.parse(requests[2].body!)).toEqual(GITHUB);
+      expect(JSON.parse(requests[3].body!)).toEqual({
+        secret: 'github-client-secret-rotated',
+        note: 'rotating it',
+      });
+      expect(JSON.parse(requests[4].body!)).toEqual({ note: 'retiring it' });
+      for (let { url, authorization, redirect } of requests) {
+        expect(url).not.toContain('secret');
+        expect(redirect).toBe('error');
+        let claims = jwt.verify(
+          authorization.replace(/^Bearer /, ''),
+          SEED,
+        ) as Record<string, unknown>;
+        expect(claims.operator).toBe('system-keys');
+      }
+    });
+
+    it("refuses a system key's settings for a platform client, and a platform client's for a system key", () => {
+      let base = { realmServer: 'https://realms.example.test' };
+      expect(() =>
+        refuseSystemOptions({
+          ...base,
+          destination: 'https://api.github.com/',
+          creditStrategy: 'none',
+        }),
+      ).toThrow(
+        /--destination, --credit-strategy are for a system key, not a platform client/,
+      );
+      expect(() =>
+        refuseClientOptions({ ...base, clientId: 'Iv23.x', apiHost: ['a'] }),
+      ).toThrow(/--client-id, --api-host are for a platform client/);
+      expect(() => refuseSystemOptions(base)).not.toThrow();
+      expect(() => refuseClientOptions(base)).not.toThrow();
+    });
+
+    it('shows the client and asks before deleting it, unless --yes is given', async () => {
+      let shown = { body: { client, history: [] } };
+      let { fetch, requests } = fakeServer([shown]);
+      let questions: string[] = [];
+      await confirmPlatformClientDelete(options(fetch), 'github', {
+        isTTY: true,
+        confirm: async (question) => (questions.push(question), true),
+      });
+      expect(questions).toEqual(['Delete the platform client github? [y/N] ']);
+      expect(requests[0].method).toBe('GET');
+      expect(requests[0].url).toMatch(/\/_platform-oauth-clients\/github$/);
+
+      let declining = fakeServer([shown]);
+      await expect(
+        confirmPlatformClientDelete(options(declining.fetch), 'github', {
+          isTTY: true,
+          confirm: async () => false,
+        }),
+      ).rejects.toThrow(/Not deleted/);
+
+      let unknown = fakeServer([
+        { status: 404, body: { errors: [{ detail: 'not found' }] } },
+      ]);
+      await expect(
+        confirmPlatformClientDelete(options(unknown.fetch), 'gitlab', {
+          isTTY: true,
+          confirm: async () => true,
+        }),
+      ).rejects.toThrow(/No platform client is named gitlab/);
+
+      for (let unattended of [{ isTTY: false }, { isTTY: true, json: true }]) {
+        await expect(
+          confirmPlatformClientDelete(options(fetch), 'github', unattended),
+        ).rejects.toThrow(/Pass --yes/);
+      }
+      await confirmPlatformClientDelete(options(fetch), 'github', {
+        yes: true,
+        isTTY: false,
+      });
+      expect(requests).toHaveLength(1);
+    });
+
+    it('refuses --yes for a system key, whose delete asks for a note', () => {
+      expect(() =>
+        refuseClientOptions({ realmServer: 'https://x.test', yes: true }),
+      ).toThrow(/--yes/);
+    });
+
+    it('exposes --kind, --name and the client settings as flags', async () => {
+      let keys = buildBoxelProgram('0.0.0')
+        .commands.find((command) => command.name() === 'realm-server')!
+        .commands.find((command) => command.name() === 'keys')!;
+      let add = keys.commands.find((command) => command.name() === 'add')!;
+      expect(add.options.map((option) => option.long)).toEqual(
+        expect.arrayContaining([
+          '--kind',
+          '--name',
+          '--label',
+          '--client-id',
+          '--authorize-url',
+          '--token-url',
+          '--scopes',
+          '--token-auth',
+          '--api-host',
+        ]),
+      );
+      for (let name of ['show', 'replace', 'delete']) {
+        let command = keys.commands.find((c) => c.name() === name)!;
+        expect(command.options.map((option) => option.long)).toEqual(
+          expect.arrayContaining(['--kind', '--name']),
+        );
+      }
+    });
   });
 
   describe('reading the value', () => {

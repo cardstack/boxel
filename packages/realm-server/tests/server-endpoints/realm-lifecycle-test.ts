@@ -862,6 +862,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             }),
           );
         assert.strictEqual(response.status, 202, 'HTTP 202 status');
+        let createdRealmURL = response.body.data.id;
         {
           let response = await context.request
             .post('/_create-realm')
@@ -890,6 +891,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           assert.ok(
             error.match(/already exists on this server/),
             'error message is correct',
+          );
+          // boxel-cli's ensurePersonalRealm re-links a personal realm that went
+          // missing from the account data by reading this message: the phrase
+          // "already exists" and the realm's URL in single quotes.
+          assert.strictEqual(
+            error.match(/'(https?:\/\/[^']+)'/)?.[1],
+            createdRealmURL,
+            'the message names the existing realm in single quotes',
           );
         }
       });
