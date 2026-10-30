@@ -31,7 +31,8 @@ const SOURCE_REFRESH_MS = 60_000;
 
 // A page type's filter is written as a Boxel query filter without `on`
 // (`{"eq": {"status": "active"}}`). The search wire format anchors the type
-// on `item.on` and addresses fields through `item.`.
+// on `item.on`, in the same object as each operator it scopes (as `on` did),
+// and addresses fields through `item.`.
 export function pageTypeWireFilter(
   pageType: Pick<SitePageType, 'cardType' | 'filter'>,
 ): Record<string, unknown> {
@@ -39,21 +40,29 @@ export function pageTypeWireFilter(
   if (!pageType.filter) {
     return anchor;
   }
-  return { every: [anchor, toWire(JSON.parse(pageType.filter))] };
+  return toWire(JSON.parse(pageType.filter), pageType.cardType) as Record<
+    string,
+    unknown
+  >;
 }
 
 const FIELD_KEYED = new Set(['eq', 'contains', 'in', 'range']);
+const CONNECTIVES = new Set(['every', 'any', 'not']);
 
-function toWire(filter: unknown): unknown {
+function toWire(filter: unknown, cardType: SitePageType['cardType']): unknown {
   if (Array.isArray(filter)) {
-    return filter.map(toWire);
+    return filter.map((f) => toWire(f, cardType));
   }
   if (!filter || typeof filter !== 'object') {
     return filter;
   }
   let out: Record<string, unknown> = {};
+  let isLeaf = true;
   for (let [key, value] of Object.entries(filter)) {
-    if (FIELD_KEYED.has(key) && value && typeof value === 'object') {
+    if (CONNECTIVES.has(key)) {
+      isLeaf = false;
+      out[key] = toWire(value, cardType);
+    } else if (FIELD_KEYED.has(key) && value && typeof value === 'object') {
       out[key] = Object.fromEntries(
         Object.entries(value).map(([field, v]) => [
           field.startsWith('item.') ? field : `item.${field}`,
@@ -61,8 +70,11 @@ function toWire(filter: unknown): unknown {
         ]),
       );
     } else {
-      out[key] = toWire(value);
+      out[key] = value;
     }
+  }
+  if (isLeaf && !('item.on' in out)) {
+    out['item.on'] = cardType;
   }
   return out;
 }
