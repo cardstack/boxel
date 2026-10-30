@@ -164,10 +164,11 @@ export function registerKeysCommand(program: Command): void {
       keys
         .command('replace')
         .description(
-          "Replace a key's value. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account takes a new JSON key file with its --scope and optional --subject",
+          "Replace a key's value. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account takes a new JSON key file, and keeps its scopes and the user it acts as unless --scope, --subject or --no-subject is given",
         )
         .argument('<name>', 'The key'),
     ),
+    { replace: true },
   ).action((name: string, options: ValueCommandOptions) =>
     runKeysCommand(options.json, () => keysReplace(name, options)),
   );
@@ -239,7 +240,7 @@ interface ValueCommandOptions {
   keyFile?: string;
   json?: boolean;
   kind?: string;
-  subject?: string;
+  subject?: string | false;
   scope?: string[];
 }
 
@@ -247,17 +248,33 @@ function collect(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
-function serviceAccountOptions(command: Command): Command {
-  return command
+// A replace keeps a service account's scopes and subject unless they are
+// given, so only it takes --no-subject, to act as the service account itself.
+function serviceAccountOptions(
+  command: Command,
+  { replace = false }: { replace?: boolean } = {},
+): Command {
+  command
     .option(
       '--subject <email>',
-      'A Google service account: the user to act as, with domain-wide delegation. A replace sets it anew: leave it out only to act as the service account itself',
+      replace
+        ? 'A Google service account: the user to act as, with domain-wide delegation (default: the one it acts as now)'
+        : 'A Google service account: the user to act as, with domain-wide delegation',
     )
     .option(
       '--scope <scope>',
-      'A Google service account: a scope its tokens ask for (repeat for more). A replace sets them anew',
+      replace
+        ? 'A Google service account: a scope its tokens ask for (repeat for more). Given, it replaces all of the current scopes (default: keep them)'
+        : 'A Google service account: a scope its tokens ask for (repeat for more)',
       collect,
     );
+  if (replace) {
+    command.option(
+      '--no-subject',
+      'A Google service account: act as the service account itself',
+    );
+  }
+  return command;
 }
 
 function valueOptions(command: Command): Command {

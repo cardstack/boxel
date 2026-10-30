@@ -186,7 +186,8 @@ boxel realm-server keys add     --realm-server <url> --kind oauth-client --name 
                                 [--stdin | --key-file <path>] [--note <text>]
 boxel realm-server keys replace --realm-server <url> --kind oauth-client --name <name> \
                                 [--stdin | --key-file <path>] [--note <text>]
-boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name> [--note <text>]
+boxel realm-server keys delete  --realm-server <url> --kind oauth-client --name <name> \
+                                [--note <text>] [--yes]
 ```
 
 The command calls these routes:
@@ -235,6 +236,10 @@ Each change is also logged on the `system-keys` channel, with no secret:
 ```
 platform OAuth client replace: github (id …, client id Iv23…, data key kms-…) from 203.0.113.7, token signed 2026-01-01T00:00:00.000Z. Note: "rotating the secret after the incident — <your name>"
 ```
+
+A platform client's delete shows the client and asks to confirm, since the
+connections it leaves behind can't be restored; `--yes` skips that, and is
+needed without a terminal. The confirmation comes before the note prompt.
 
 A platform client is always `authorization_code`. Its `apiHosts` decide where
 connect mode offers it (`https://api.github.com/` for the GitHub App). A
