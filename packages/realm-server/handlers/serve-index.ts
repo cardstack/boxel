@@ -50,6 +50,7 @@ import {
   loadHostRoutes,
   matchHostTableRoute,
   resolveDynamicRoute,
+  siteHomeCard,
 } from '../lib/host-routes.ts';
 import { siteRewriter } from '../lib/site-rewrite.ts';
 
@@ -743,7 +744,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           ctxt.status = 308;
           return;
         }
-        if (row.kind === 'gone') {
+        if (row.kind === 'listing') {
+          cardURL = new URL(await siteHomeCard(realm));
+        } else if (row.kind === 'gone') {
           ctxt.status = 410;
           let notFound = (await realm.getSiteSettings()).notFound;
           if (notFound) {

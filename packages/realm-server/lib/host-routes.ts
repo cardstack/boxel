@@ -6,6 +6,7 @@ import {
   RealmPaths,
   searchEntryWireQueryFromQuery,
   INFRA_CLIENT_CLASS,
+  isRedirectRoutingRule,
   logger,
   normalizeRoutingPath,
   param,
@@ -394,4 +395,19 @@ export async function resolveDynamicRoute(
     }
   }
   return undefined;
+}
+
+// The card a site serves at `/`: the exact routing rule for it, else the
+// realm's index card. A listing path serves it too, since a listing has no
+// card of its own: the site's home card draws the listing for its path.
+export async function siteHomeCard(realm: Realm): Promise<string> {
+  for (let rule of await realm.getHostRoutingMap()) {
+    if (
+      !isRedirectRoutingRule(rule) &&
+      normalizeRoutingPath(rule.path) === '/'
+    ) {
+      return rule.id;
+    }
+  }
+  return new URL('index', realm.url).href;
 }

@@ -9,6 +9,7 @@ import {
   loadHostRoutes,
   matchHostTableRoute,
   resolveDynamicRoute,
+  siteHomeCard,
 } from '../lib/host-routes.ts';
 import {
   findOrMountRealm,
@@ -92,6 +93,9 @@ async function resolvePath(
         return json(ctxt, { kind: 'page', card: row.cardURL });
       }
       return json(ctxt, { kind: 'none' });
+    }
+    if (row.kind === 'listing') {
+      return json(ctxt, { kind: 'page', card: await siteHomeCard(realm) });
     }
     return json(ctxt, { kind: row.kind });
   }
