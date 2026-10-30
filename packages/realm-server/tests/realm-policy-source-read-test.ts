@@ -1880,9 +1880,9 @@ module(basename(import.meta.filename), function (hooks) {
 
       // Two modules one import name resolves to, the `.ts` ahead of the
       // `.gts`, and a grant that opens only the `.gts`.
-      async function twins() {
+      async function twins(tsSource = "export const twin = 'from-ts';\n") {
         await policy('gtsCode');
-        await education.write('twin.ts', "export const twin = 'from-ts';\n");
+        await education.write('twin.ts', tsSource);
         await education.write('twin.gts', "export const twin = 'from-gts';\n");
         await education.indexing();
         education.__testOnlyClearCaches();
@@ -1945,6 +1945,46 @@ module(basename(import.meta.filename), function (hooks) {
             "and not the compile of the `.ts` they joined, which their grant doesn't open",
           );
           await read;
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('a granted caller who joins a failed compile of another file under the same name is served the file the gate judged', async function (assert) {
+        await twins("export const twin = 'from-ts' +;\n");
+        let { read, release } = await parkReadersCompile();
+        try {
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let granted = get(`${EDUCATION}twin`, '*/*', AS.teacher()).then(
+            (r) => r,
+          );
+          let waitedFor = Date.now();
+          while (education.__testOnlyGetTranspileJoinCount() === joins) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error(
+                "the granted caller never joined the reader's compile",
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          release();
+          assert.notStrictEqual(
+            (await read).status,
+            200,
+            "the reader's compile of the `.ts` fails",
+          );
+          let response = await granted;
+          assert.strictEqual(
+            response.status,
+            200,
+            'the granted caller is not answered with its failure',
+          );
+          assert.true(
+            textOf(response).includes('from-gts'),
+            'but with the module the gate judged',
+          );
         } finally {
           release();
           education.__testOnlyDelayTranspile(undefined);

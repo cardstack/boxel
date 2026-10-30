@@ -9653,14 +9653,26 @@ export class Realm {
     // name resolved to, or of an earlier version of this one, so what it
     // produced is served only when it is a compile of what the gate judged.
     // Anything else is compiled over, by the canonical path, which is what
-    // the transpile cache row is keyed and validated on.
-    let compiled = await this.#transpileModuleDeduped(
-      localPath,
-      fileRef,
-      etag,
-      caller,
-    );
+    // the transpile cache row is keyed and validated on. That includes a
+    // joined compile that failed: its error describes the file it was
+    // compiling, which may be one the gate never opened to this caller. A
+    // compile this request started itself fails with its own error.
+    let joined = this.#inFlightTranspiles.has(localPath);
+    let compiled: ModuleTranspileResult | undefined;
+    try {
+      compiled = await this.#transpileModuleDeduped(
+        localPath,
+        fileRef,
+        etag,
+        caller,
+      );
+    } catch (e: unknown) {
+      if (!joined) {
+        throw e;
+      }
+    }
     if (
+      compiled &&
       compiled.canonicalPath === fileRef.path &&
       compiled.headers.etag === etag
     ) {
