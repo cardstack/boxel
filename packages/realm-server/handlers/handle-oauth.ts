@@ -7,6 +7,7 @@ import { setContextResponse } from '../middleware/index.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import {
   addPlatformClient,
+  cliHandoffFor,
   completeConnect,
   deletePlatformClient,
   listConnectableClients,
@@ -14,6 +15,7 @@ import {
   replacePlatformClientSecret,
   startConnect,
   validateClientRef,
+  validateCliHandoff,
 } from '../lib/oauth.ts';
 import { normalizeGrantDestination } from '../lib/user-key-grants.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
@@ -94,12 +96,14 @@ export function handleListConnectableClients(args: CreateRoutesArgs): Handler {
 // `POST /_oauth/connections`: starts a sign-in through a client, from the
 // secure window or the CLI with a secure-origin session. The body names the
 // client and either the new connection's name, with a ticket to `add`, or the
-// connection to reconnect, with a ticket to `replace` it. Answers with the
+// connection to reconnect, with a ticket to `replace` it. The CLI also names
+// its loopback listener (`cli: {port, state}`), which the `connected` page
+// hands the code to; only a CLI's session may name one. Answers with the
 // vendor's authorization URL to send the user to.
 export function handleStartConnect(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    await secureClientOf(ctxt, args, 'connections are made');
+    let secureClient = await secureClientOf(ctxt, args, 'connections are made');
     let body = await readJSON(ctxt);
     let data = body.data as
       | { type?: unknown; attributes?: Record<string, unknown> }
@@ -109,9 +113,15 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
     }
     let attributes = data.attributes ?? {};
     for (let name of Object.keys(attributes)) {
-      if (!['name', 'reconnect', 'client'].includes(name)) {
+      if (!['name', 'reconnect', 'client', 'cli'].includes(name)) {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
+    }
+    if (attributes.cli !== undefined && secureClient !== 'cli') {
+      throw new UserKeyError(
+        400,
+        `only the CLI's session names a listener to hand the sign-in to`,
+      );
     }
     let started = await startConnect(args.dbAdapter, secretsKeyring(), {
       owner,
@@ -123,6 +133,9 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
       serverURL: args.serverURL,
       serverSecret: args.realmSecretSeed,
       mayUseShare: (realmURL) => readsRealm(args, owner, realmURL),
+      ...(attributes.cli !== undefined
+        ? { cli: validateCliHandoff(attributes.cli) }
+        : {}),
     });
     await sendJSON(ctxt, 201, {
       data: {
@@ -144,6 +157,11 @@ export function handleStartConnect(args: CreateRoutesArgs): Handler {
 // window signed in as the person who started it. Nothing the vendor issued
 // beyond the one-use code reaches a browser; the code is useless without
 // the PKCE verifier and client secret, which only the realm server holds.
+//
+// A sign-in the CLI started also names the CLI's loopback listener
+// (`cli_port`, `cli_state`), read from the sign-in in progress: the page
+// then hands the code, or why there is none, to the CLI, which finishes the
+// sign-in with its own secure session, so the browser needs none.
 export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
   return async (ctxt) => {
     let { code, state, error } = ctxt.query;
@@ -153,6 +171,14 @@ export function handleOAuthCallback(args: CreateRoutesArgs): Handler {
       typeof state !== 'string'
         ? { error: 'denied' }
         : { code, state };
+    let cli =
+      typeof state === 'string' && state.length > 0
+        ? await cliHandoffFor(args.dbAdapter, state)
+        : undefined;
+    if (cli) {
+      fragment.cli_port = String(cli.port);
+      fragment.cli_state = cli.state;
+    }
     let page = args.secureOriginURL
       ? `${args.secureOriginURL.href.replace(/\/*$/, '/')}connected`
       : new URL('/', args.serverURL).href;

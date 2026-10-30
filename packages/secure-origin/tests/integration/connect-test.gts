@@ -580,6 +580,70 @@ module('Integration | connecting an account', function (hooks) {
       assert.strictEqual(window.location.hash, '', 'the code is gone');
     });
 
+    test('a sign-in the CLI started is handed back to it once the user confirms, with no session of the window’s', async function (assert) {
+      serve({ 'GET _secure-session': () => ({ status: 401 }) });
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        visitShell(
+          `connected#code=one-use-code&state=sign-in-state&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await waitFor('[data-test-connected-cli-continue]');
+        assert.strictEqual(window.location.hash, '', 'the code is gone');
+        assert.deepEqual(submitted, [], 'nothing leaves before the user says');
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['oauth_code', 'one-use-code'],
+              ['oauth_state', 'sign-in-state'],
+            ],
+          },
+        ]);
+        assert.notOk(
+          requests.some((r) => r.path === '_oauth/connections/complete'),
+          'the window finishes nothing itself',
+        );
+        assert
+          .dom('[data-test-secure-title]')
+          .hasText('Returning to your terminal…');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('a sign-in the CLI started that the service declined tells the CLI why', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        visitShell(
+          `connected#error=denied&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(ConnectedPage);
+        await click('[data-test-connected-cli-continue]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['oauth_error', 'denied'],
+          ],
+        ]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('a sign-in the realm server won’t finish for this user says it expired', async function (assert) {
       serve({
         'POST _oauth/connections/complete': () =>
