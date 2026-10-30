@@ -302,6 +302,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </section>
             {{/each}}
 
+            {{#if this.choosing.batch.remaining}}
+              <p class='more' data-test-approve-remaining>
+                {{this.choosing.batch.remaining}}
+                more
+                {{if (eq this.choosing.batch.remaining 1) 'request' 'requests'}}
+                on this card need approving. They’re shown once these are
+                approved: open this window from the card again.
+              </p>
+            {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -541,6 +550,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .confirm :deep(button) {
         flex-shrink: 0;
+      }
+      .more {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        color: var(--muted-foreground);
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));

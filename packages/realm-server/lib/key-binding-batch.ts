@@ -18,6 +18,7 @@ import {
   bindingSnapshot,
   canonicalInstance,
   fingerprintOf,
+  MAX_BATCH_SLOTS,
   slotToken,
   type BindingSnapshot,
   type KeyBinding,
@@ -43,6 +44,10 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // was approved. Approvals are for pipelines only, so a binding approved for
 // them is approved. A slot approved and unchanged is left out, and so
 // is an operation with nothing left. Review asks only for the changed ones.
+//
+// One confirmation approves at most `MAX_BATCH_SLOTS` slots, so a batch
+// holds the operations that fit, in the order the window shows them, and says
+// how many more remain for the next one.
 //
 // A batch never spans card definitions or realms: it is one type's
 // operations, approved in the realm the window was opened for. An operation
@@ -119,6 +124,9 @@ export interface ApprovalBatch {
   instance: string | null;
   review: boolean;
   groups: BatchGroup[];
+  // How many more operations need approving than one confirmation can take:
+  // they are asked for again once these are approved.
+  remaining: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }
@@ -278,7 +286,7 @@ export async function approvalBatch(
     });
   }
 
-  let sorted = [...groups.values()].sort((a, b) =>
+  let sorted: BatchGroup[] = [...groups.values()].sort((a, b) =>
     a.destination.href.localeCompare(b.destination.href),
   );
   for (let group of sorted) {
@@ -286,6 +294,8 @@ export async function approvalBatch(
       (a, b) => a.label.localeCompare(b.label) || a.name.localeCompare(b.name),
     );
   }
+  let { kept, remaining } = withinSlotLimit(sorted, MAX_BATCH_SLOTS);
+  sorted = kept;
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
     destinations.filter((d) => grants.some((g) => destinationCovers(g, d)));
@@ -306,6 +316,7 @@ export async function approvalBatch(
     instance,
     review,
     groups: sorted,
+    remaining,
     keys: needsUserKey
       ? (await slotKeys(dbAdapter, user)).map(({ grants, ...key }) => ({
           ...key,
@@ -319,6 +330,32 @@ export async function approvalBatch(
         }))
       : [],
   };
+}
+
+// The operations one confirmation can approve, at most `max` slots in all, in
+// the order the window shows them; an operation is never split. Answers how
+// many operations were left out, for the window to say they come next.
+export function withinSlotLimit(
+  groups: BatchGroup[],
+  max: number,
+): { kept: BatchGroup[]; remaining: number } {
+  let slots = 0;
+  let remaining = 0;
+  let kept: BatchGroup[] = [];
+  for (let group of groups) {
+    let operations = group.operations.filter((operation) => {
+      if (remaining === 0 && slots + operation.slots.length <= max) {
+        slots += operation.slots.length;
+        return true;
+      }
+      remaining++;
+      return false;
+    });
+    if (operations.length > 0) {
+      kept.push({ ...group, operations });
+    }
+  }
+  return { kept, remaining };
 }
 
 // What the key page names each of the owner's bindings by, as the approval
