@@ -214,7 +214,7 @@ module(basename(import.meta.filename), function () {
           realm,
           url: cardURL,
           auth: renderCalls[0]?.args.auth,
-          renderOptions: { cardRender: true },
+          renderOptions: { cardRender: true, loaderEpoch: '0' },
         },
         'forwards request to prerenderer with derived realm and url',
       );
