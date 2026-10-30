@@ -16,6 +16,7 @@ import {
 import type { RealmEventContent } from './matrix-event';
 import BooleanField from './boolean';
 import NumberField from './number';
+import CodeRefField from './code-ref';
 import StringField from './string';
 import { JsonField } from './json-field';
 import {
@@ -411,6 +412,106 @@ export class RoutingRuleField extends FieldDef {
 
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;
+}
+
+// A site's settings, held in realm.json so the server reads them with the
+// routing rules (ADR 015 §1.2). These are the contract host mode reads. A
+// site realm gives them a richer editor by subclassing these fields in a
+// RealmConfig subclass that its realm.json adopts; host mode reads only the
+// fields declared here, and validates them on every read
+// (`readSiteSettings` in runtime-common).
+
+// One kind of page: every card of a type, from one realm, gets a path.
+export class SitePageTypeField extends FieldDef {
+  static displayName = 'Site Page Type';
+
+  @field name = contains(StringField);
+  @field sourceRealm = contains(StringField, {
+    description:
+      'The realm whose cards this page type serves. Default: this realm',
+  });
+  @field cardType = contains(CodeRefField);
+  @field filter = contains(StringField, {
+    description:
+      'Boxel query filter JSON narrowing which cards get a page. Default: every card of the type',
+  });
+  @field where = contains(StringField, {
+    description:
+      'A BXL predicate over the card, for what a filter cannot say. Default: none',
+  });
+  @field href = contains(StringField, {
+    description:
+      'The path for a card, as BXL over the card: "/shop/\\(.handle)" or "/shop/" & .handle',
+  });
+  @field aliases = containsMany(StringField, {
+    description:
+      "More paths, as BXL like href, that answer 301 to the card's path",
+  });
+  @field listingPath = contains(StringField, {
+    description:
+      'A path that lists every card of this page type. Default: none',
+  });
+  @field listingTitle = contains(StringField);
+  @field listingSort = contains(StringField, {
+    description: 'Boxel query sort JSON for the listing',
+  });
+}
+
+// A redirect. `from` may name segments (`/old/:slug`) that `to` reuses.
+export class SiteRedirectField extends FieldDef {
+  static displayName = 'Site Redirect';
+
+  @field from = contains(StringField);
+  @field to = contains(StringField);
+  @field statusCode = contains(NumberField, {
+    description: '301 (permanent, the default) or 302 (temporary)',
+  });
+}
+
+// An address the site answers at. The first one is canonical.
+export class SiteHostURLField extends FieldDef {
+  static displayName = 'Site Host URL';
+
+  @field url = contains(StringField);
+  @field forward = contains(BooleanField, {
+    description:
+      'Answer with a 301 to the canonical address instead of serving',
+  });
+}
+
+// Whether one crawler, by user agent, may read the site.
+export class SiteCrawlerField extends FieldDef {
+  static displayName = 'Site Crawler';
+
+  @field userAgent = contains(StringField);
+  @field allow = contains(BooleanField);
+}
+
+export class SiteSettingsField extends FieldDef {
+  static displayName = 'Site Settings';
+
+  @field tagline = contains(StringField);
+  @field language = contains(StringField, {
+    description: "The site's language, as a BCP 47 tag. Default: en",
+  });
+  @field themeColor = contains(StringField);
+  @field hostURLs = containsMany(SiteHostURLField);
+  @field pageTypes = containsMany(SitePageTypeField, {
+    description:
+      'Kinds of page, in precedence order: an earlier page type wins a path',
+  });
+  @field redirects = containsMany(SiteRedirectField, {
+    description: 'Redirects, tried in order after pages',
+  });
+  @field notFound = linksTo(CardDef, {
+    description: 'The card served, with status 404, at a path nothing claims',
+  });
+  @field listed = contains(BooleanField, {
+    description: 'Whether search engines may index the site. Default: true',
+  });
+  @field crawlers = containsMany(SiteCrawlerField, {
+    description: 'Per-crawler overrides for robots.txt',
+  });
 }
 
 // The JSON spelling of one setting's value, which is what the table shows and
@@ -2117,6 +2218,9 @@ export class RealmConfig extends CardDef {
   // Whether a host routing rule may serve a card another realm holds, as
   // that realm prerendered it. Host mode serves such a card only when a
   // visitor who isn't signed in may read it (ADR 016).
+  // The realm's published site, as host mode reads it (see SiteSettingsField).
+  @field site = contains(SiteSettingsField);
+
   @field serveSourcePrerender = contains(BooleanField, {
     description:
       "Lets a host routing rule serve a card another realm holds, as that realm prerendered it, when a visitor who isn't signed in may read it. Off by default: rules into other realms are dropped",

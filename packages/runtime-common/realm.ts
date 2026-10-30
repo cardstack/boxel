@@ -161,6 +161,7 @@ import {
   validateRedirectTarget,
   type HostRoutingRule,
 } from './host-routing-validation.ts';
+import { readSiteSettings, type SiteSettings } from './site-settings.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -2982,6 +2983,7 @@ export class Realm {
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
+  #cachedSiteSettings: SiteSettings | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -4611,6 +4613,7 @@ export class Realm {
       );
     });
     this.#cachedHostRoutingMap = null;
+    this.#cachedSiteSettings = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -17112,6 +17115,37 @@ export class Realm {
       // Don't cache a transient read failure — leave `null` so the next
       // call retries the index query.
       return [];
+    }
+  }
+
+  // The realm's site settings (`RealmConfig.site`), validated as host mode
+  // reads them. Cached until the next index, like the routing map; each
+  // problem the read found is logged once per read.
+  async getSiteSettings(): Promise<SiteSettings> {
+    if (this.#cachedSiteSettings) {
+      return this.#cachedSiteSettings;
+    }
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+      let site =
+        indexEntry?.type === 'instance'
+          ? (indexEntry.searchDoc ?? {}).site
+          : undefined;
+      let settings = readSiteSettings(site, this.url);
+      for (let problem of settings.problems) {
+        this.#log.warn(`site settings of ${this.url}: ${problem}`);
+      }
+      return (this.#cachedSiteSettings = settings);
+    } catch (e) {
+      this.#log.warn(
+        `failed to read site settings from RealmConfig card: ${e}`,
+      );
+      // A transient read failure isn't cached, so the next call retries.
+      return readSiteSettings(undefined, this.url);
     }
   }
 
