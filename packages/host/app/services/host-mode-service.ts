@@ -186,6 +186,74 @@ export default class HostModeService extends Service {
   // pick the origin this navigates to. The two are the same value in
   // host mode anyway; only the simulation affordance separates them,
   // and a simulated session should stay on the page it is running from.
+  // What the site serves at a path the exact routing map doesn't hold: the
+  // route table and the `:name` rules, which only the realm server can
+  // resolve. Undefined when the site routes nothing there, so the caller
+  // treats the path as a card URL, as before.
+  async resolveSitePath(
+    path: string,
+  ): Promise<{ card: string } | { redirectTo: string } | undefined> {
+    if (!config.realmServerURL || !this.hostModeOrigin) {
+      return undefined;
+    }
+    let endpoint = new URL('_host-route', config.realmServerURL);
+    endpoint.searchParams.set(
+      'url',
+      `${this.hostModeOrigin}/${path.replace(/^\//, '')}`,
+    );
+    try {
+      let response = await fetch(endpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      let answer = (await response.json()) as {
+        kind?: string;
+        card?: string;
+        to?: string;
+      };
+      if (answer.kind === 'page' && answer.card) {
+        return { card: answer.card };
+      }
+      if (answer.kind === 'redirect' && answer.to) {
+        return { redirectTo: answer.to };
+      }
+    } catch (e) {
+      console.warn(`could not resolve the site path ${path}`, e);
+    }
+    return undefined;
+  }
+
+  // The site path a card is served at, when the realm at `realmURL` routes
+  // it. Used to show a routed card at its routed address.
+  async sitePathForCard(
+    realmURL: string,
+    cardURL: string,
+  ): Promise<string | undefined> {
+    if (!config.realmServerURL) {
+      return undefined;
+    }
+    let endpoint = new URL('_host-route', config.realmServerURL);
+    endpoint.searchParams.set('realm', realmURL);
+    endpoint.searchParams.append('card', cardURL);
+    try {
+      let response = await fetch(endpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      let answer = (await response.json()) as {
+        paths?: Record<string, string>;
+      };
+      return answer.paths?.[cardURL];
+    } catch (e) {
+      console.warn(`could not find the site path of ${cardURL}`, e);
+      return undefined;
+    }
+  }
+
   redirectTo(target: string, queryParams?: Record<string, unknown>) {
     let url = isExternalRedirectTarget(target)
       ? new URL(target)

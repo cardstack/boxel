@@ -11,6 +11,7 @@ import stringify from 'safe-stable-stringify';
 import {
   HOST_APP_QUERY_PARAMS,
   isRedirectRoutingRule,
+  rri,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
@@ -74,6 +75,33 @@ export default class Card extends Route {
   didMatrixServiceStart = false;
   initialLoading = true;
 
+  // A card reached by its card URL that the site routes elsewhere is shown at
+  // its routed address. The address bar changes without a transition, since
+  // the same card is already on screen.
+  private async showAtSitePath(cardURL: string) {
+    let realm = this.realm.realmOf(rri(cardURL));
+    if (!realm) {
+      return;
+    }
+    let realmURL = this.network.virtualNetwork.toURL(realm);
+    let path = await this.hostModeService.sitePathForCard(
+      realmURL.href,
+      cardURL,
+    );
+    if (!path) {
+      return;
+    }
+    let mount = realmURL.pathname.replace(/\/$/, '');
+    let routed = new URL(mount + path, window.location.href);
+    if (routed.pathname !== window.location.pathname) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        routed.pathname + window.location.search + window.location.hash,
+      );
+    }
+  }
+
   @action
   loading(transition: Transition) {
     transition.finally(() => {
@@ -118,9 +146,27 @@ export default class Card extends Route {
         );
         return;
       }
-      let cardUrl =
-        routed?.id ??
-        `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+      let cardUrl = routed?.id;
+      if (!cardUrl) {
+        // The site's route table and `:name` rules, which only the realm
+        // server can resolve. A path neither routes is a card URL, as before.
+        let site = await this.hostModeService.resolveSitePath(
+          normalizedPath || '/',
+        );
+        if (site && 'redirectTo' in site) {
+          this.hostModeService.redirectTo(
+            site.redirectTo,
+            this.forwardableQueryParams(transition),
+          );
+          return;
+        }
+        cardUrl =
+          site?.card ??
+          `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+        if (!site) {
+          void this.showAtSitePath(cardUrl);
+        }
+      }
 
       return this.store.get(cardUrl);
     }
