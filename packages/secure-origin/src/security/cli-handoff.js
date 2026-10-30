@@ -12,6 +12,11 @@
 //   own. It gets a single-use Matrix login token, which it redeems for one. A
 //   CLI that says so (`session=secure`) also gets a secure session in the
 //   same hand-off, so a new profile can manage keys without signing in again.
+//
+// `boxel keys connect` also waits here, for the end of a sign-in at a service
+// through OAuth: the `connected` page hands it the service's one-use code and
+// the sign-in's `state`, or why there is none, and the CLI finishes the
+// sign-in with its own secure session. No session leaves this window for it.
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const STATE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -67,19 +72,30 @@ export function cliCallback(
 }
 
 /**
- * What a hand-off carries: a secure session, a login token, or both.
- * @typedef {{ session?: import('./session.js').Session, loginToken?: string }} Handoff
+ * What a hand-off carries: a secure session, a login token, or both; or the
+ * end of an OAuth sign-in the CLI started.
+ * @typedef {{ code: string, state: string } | { error: string }} OAuthOutcome
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome }} Handoff
  */
 
 // What the CLI's listener is sent: the state it expects back, the login
-// token for a profile sign-in, and the secure session when the CLI takes one.
+// token for a profile sign-in, the secure session when the CLI takes one, and
+// for an OAuth sign-in its code and state or the reason it ended without one.
 /**
  * @param {CliCallback} callback
  * @param {Handoff} handoff
  */
-export function handoffFields(callback, { session, loginToken }) {
+export function handoffFields(callback, { session, loginToken, oauth }) {
   return [
     ['state', callback.state],
+    ...(oauth
+      ? 'error' in oauth
+        ? [['oauth_error', oauth.error]]
+        : [
+            ['oauth_code', oauth.code],
+            ['oauth_state', oauth.state],
+          ]
+      : []),
     ...(loginToken ? [['login_token', loginToken]] : []),
     ...(session
       ? [

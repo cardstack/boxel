@@ -134,6 +134,23 @@ describe('handToCli', () => {
     );
   });
 
+  test('sends an OAuth sign-in the CLI started its code and state, or why it has none, and no session', () => {
+    assert.deepEqual(
+      handoffFields(callback, {
+        oauth: { code: 'one-use-code', state: 'sign-in-state' },
+      }),
+      [
+        ['state', STATE],
+        ['oauth_code', 'one-use-code'],
+        ['oauth_state', 'sign-in-state'],
+      ],
+    );
+    assert.deepEqual(handoffFields(callback, { oauth: { error: 'denied' } }), [
+      ['state', STATE],
+      ['oauth_error', 'denied'],
+    ]);
+  });
+
   test('sends a login token alone the way every CLI accepts it: in the query of a navigation to the listener', () => {
     let navigated: string[] = [];
     let doc = {

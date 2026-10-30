@@ -20,6 +20,61 @@ export interface UserKeyGrant {
   approvedVia: string;
 }
 
+// An OAuth client's settings, as the owner enters them. None is secret: the
+// client secret is the key's value.
+export interface OAuthClientSettings {
+  clientId: string;
+  grantType?: 'authorization_code' | 'client_credentials';
+  authorizeUrl?: string;
+  tokenUrl: string;
+  scopes?: string;
+  tokenAuth?: 'client_secret_post' | 'client_secret_basic';
+  apiHosts?: string[];
+}
+
+// How the realm server names a client to connect through.
+export type OAuthClientRef =
+  | { kind: 'own'; keyId: string }
+  | { kind: 'share'; shareId: string }
+  | { kind: 'platform'; clientId: string };
+
+// What the key listing says about an OAuth key: for a client, its settings
+// and state; for a connection, the client it signs in through, the scopes
+// granted, and whether it needs reconnecting or an administrator.
+export interface OAuthKeyDescription {
+  client?: {
+    clientId: string;
+    grantType: string;
+    authorizeURL: string | null;
+    tokenURL: string;
+    scopes: string;
+    tokenAuth: string;
+    apiHosts: string[];
+    state: string;
+  };
+  connection?: {
+    client: { kind: string; label: string | null; ref: OAuthClientRef | null };
+    scopes: string;
+    status: 'active' | 'rejected' | 'needs-admin';
+  };
+}
+
+// A client the user may connect through: the platform's, one shared into the
+// realm asked about, or one of their own.
+export interface ConnectableClient {
+  ref: OAuthClientRef;
+  kind: 'own' | 'share' | 'platform';
+  // A share's label, the name of the user's own client key, or a platform
+  // client's label for people.
+  label: string;
+  // A platform client's handle, such as `github`.
+  name?: string;
+  clientId: string;
+  scopes: string;
+  apiHosts: string[];
+  authorizeHost: string;
+}
+
 // What a Google service account acts as: its email, the user it acts as
 // (null for the service account itself) and the scopes its tokens ask for.
 // Never its key file.
@@ -36,6 +91,8 @@ export interface UserKeyMetadata {
   state: string;
   // Present when the realm server records grants.
   grants?: UserKeyGrant[];
+  // Present for an OAuth client or connection.
+  oauth?: OAuthKeyDescription;
   // Only a google-service-account key has one.
   serviceAccount?: ServiceAccountDetails;
   createdAt: string;
@@ -143,18 +200,21 @@ export async function findUserKey(
 
 // A key's value as entered. A Google service account's value is its JSON key
 // file, with the user to act as (optional) and the scopes its tokens ask for;
-// any other key's is the value alone.
+// an OAuth client's is its client secret, with its settings beside it; any
+// other key's is the value alone.
 export interface EnteredValue {
   value: string;
   subject?: string;
   scopes?: string[];
+  oauth?: OAuthClientSettings;
 }
 
-function valueAttributes({ value, subject, scopes }: EnteredValue) {
+function valueAttributes({ value, subject, scopes, oauth }: EnteredValue) {
   return {
     value,
     ...(subject ? { subject } : {}),
     ...(scopes ? { scopes } : {}),
+    ...(oauth ? { oauth } : {}),
   };
 }
 
@@ -387,4 +447,97 @@ export async function swapKeyIntoShare(
     },
   );
   return fromResource<KeyShare>(json.data);
+}
+
+// The clients the user may connect through: the platform's, their own, and,
+// given a realm they can read, those shared into it.
+export async function listConnectableClients(
+  realmServerUrl: string,
+  token: string,
+  { realm }: { realm?: string } = {},
+  fetchFn: FetchFn = fetch,
+): Promise<ConnectableClient[]> {
+  let path = realm
+    ? `_oauth/clients?realm=${encodeURIComponent(canonicalRealmUrl(realm))}`
+    : '_oauth/clients';
+  let json = await realmServerRequest(realmServerUrl, path, {
+    token,
+    fetchFn,
+  });
+  return json.data.map(
+    (resource: { attributes: ConnectableClient }) => resource.attributes,
+  );
+}
+
+// Starts a sign-in through a client that stores a connection named `name`.
+// With no ticket given, mints one for the add with `token`, which must be a
+// secure session. `cli` names the loopback listener the secure window's
+// `connected` page hands the service's code to once the user has signed in
+// at the service. Answers with the service's page to send the user to, and
+// when the sign-in lapses.
+export async function startOAuthConnect(
+  realmServerUrl: string,
+  token: string,
+  {
+    name,
+    client,
+    cli,
+    ticket,
+  }: {
+    name: string;
+    client: OAuthClientRef;
+    cli: { port: number; state: string };
+    ticket?: string;
+  },
+  fetchFn: FetchFn = fetch,
+): Promise<{ authorizeUrl: string; expiresAt: string }> {
+  ticket ??= await mintKeyWriteTicket(
+    realmServerUrl,
+    token,
+    { action: 'add' },
+    fetchFn,
+  );
+  let json = await realmServerRequest(realmServerUrl, '_oauth/connections', {
+    method: 'POST',
+    token,
+    fetchFn,
+    body: {
+      data: { type: 'oauth-connect', attributes: { name, client, cli } },
+      meta: { ticket },
+    },
+  });
+  return json.data.attributes;
+}
+
+// How a sign-in ended: the connection made, or why none was. `expired`: no
+// such sign-in in progress for this user (unknown, used, or too old).
+// `denied`: the user or the service declined. `failed`: the code couldn't be
+// exchanged. `name-taken`: a key of the connection's name was added
+// meanwhile.
+export type OAuthConnectOutcome =
+  | { connected: string; reconnected: boolean }
+  | { error: string };
+
+// Finishes a sign-in with the code and state the service sent back, under
+// the secure session that started it; the realm server finishes it only for
+// that user. No token the service issues is in the answer.
+export async function completeOAuthConnect(
+  realmServerUrl: string,
+  token: string,
+  { code, state }: { code: string; state: string },
+  fetchFn: FetchFn = fetch,
+): Promise<OAuthConnectOutcome> {
+  let json = await realmServerRequest(
+    realmServerUrl,
+    '_oauth/connections/complete',
+    {
+      method: 'POST',
+      token,
+      fetchFn,
+      body: {
+        data: { type: 'oauth-callback', attributes: { code, state } },
+      },
+    },
+  );
+  return json.data.attributes;
 }

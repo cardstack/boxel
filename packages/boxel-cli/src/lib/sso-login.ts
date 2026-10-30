@@ -105,9 +105,9 @@ ${bodyHtml}
 </html>`;
 }
 
-function successPage(): string {
+function successPage(title = 'You’re signed in'): string {
   return page(
-    'You’re signed in',
+    title,
     `<p>Return to your terminal to continue. You can close this tab.</p>`,
   );
 }
@@ -147,6 +147,10 @@ export interface PostedSecureSession {
 // - the `/cli-auth` page of a server with no secure origin POSTing a Matrix
 //   session it already signed in with a password.
 // - the secure origin POSTing a secure session alone (`boxel keys sign-in`).
+// - the secure window's `connected` page POSTing the end of an OAuth sign-in
+//   `boxel keys connect` started: the service's one-use code and the
+//   sign-in's state, which the CLI finishes with its own secure session, or
+//   why the sign-in ended without them.
 export type LoopbackResult =
   | {
       kind: 'loginToken';
@@ -154,7 +158,11 @@ export type LoopbackResult =
       secureSession?: PostedSecureSession;
     }
   | { kind: 'session'; session: PostedSession }
-  | { kind: 'secureSession'; session: PostedSecureSession };
+  | { kind: 'secureSession'; session: PostedSecureSession }
+  | {
+      kind: 'oauth';
+      outcome: { code: string; state: string } | { error: string };
+    };
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -218,9 +226,13 @@ export async function startLoopbackCallback(opts?: {
     res.end(errorPage(shown), () => rejectResult(new Error(thrown)));
   };
 
-  const succeed = (res: ServerResponse, result: LoopbackResult) => {
+  const succeed = (
+    res: ServerResponse,
+    result: LoopbackResult,
+    title?: string,
+  ) => {
     res.writeHead(200, HTML_RESPONSE_HEADERS);
-    res.end(successPage(), () => resolveResult(result));
+    res.end(successPage(title), () => resolveResult(result));
   };
 
   const server = createServer((req, res) => {
@@ -253,6 +265,36 @@ export async function startLoopbackCallback(opts?: {
           res,
           'This sign-in request was not recognized.',
           'callback did not carry the expected state value',
+        );
+        return;
+      }
+
+      if (posted?.has('oauth_error')) {
+        succeed(
+          res,
+          {
+            kind: 'oauth',
+            outcome: { error: posted.get('oauth_error') || 'failed' },
+          },
+          'Back to your terminal',
+        );
+        return;
+      }
+      if (posted?.has('oauth_code')) {
+        const code = posted.get('oauth_code');
+        const oauthState = posted.get('oauth_state');
+        if (!code || !oauthState) {
+          fail(
+            res,
+            'That sign-in did not include its code.',
+            'callback POST was missing oauth_code or oauth_state',
+          );
+          return;
+        }
+        succeed(
+          res,
+          { kind: 'oauth', outcome: { code, state: oauthState } },
+          'Back to your terminal',
         );
         return;
       }

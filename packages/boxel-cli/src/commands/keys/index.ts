@@ -8,6 +8,8 @@ import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { secureSignOut } from '../../lib/secure-session.ts';
 import {
   keysAdd,
+  keysClients,
+  keysConnect,
   keysDelete,
   keysList,
   keysReplace,
@@ -143,17 +145,19 @@ export function registerKeysCommand(program: Command): void {
       runKeysCommand(options.json, () => keysShow(name, options)),
     );
 
-  serviceAccountOptions(
-    valueOptions(
-      keys
-        .command('add')
-        .description(
-          'Add a key. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account (--kind google-service-account) is its JSON key file, read with --key-file or --stdin, with its --scope and optional --subject',
-        )
-        .argument('<name>', 'A name for the key, unique among your keys'),
-    ).option(
-      '--kind <kind>',
-      'static (the default): the value is sent as it is; google-service-account: a JSON key file Boxel mints access tokens from',
+  oauthClientOptions(
+    serviceAccountOptions(
+      valueOptions(
+        keys
+          .command('add')
+          .description(
+            'Add a key. The value is typed at a masked prompt, or read with --stdin or --key-file. A Google service account (--kind google-service-account) is its JSON key file, read with --key-file or --stdin, with its --scope and optional --subject. An OAuth client (--kind oauth-client) is its client secret, with its --client-id, --authorize-url, --token-url and --scopes',
+          )
+          .argument('<name>', 'A name for the key, unique among your keys'),
+      ).option(
+        '--kind <kind>',
+        'static (the default): the value is sent as it is; google-service-account: a JSON key file Boxel mints access tokens from; oauth-client: an app registered with a vendor, which people connect their accounts through',
+      ),
     ),
   ).action((name: string, options: ValueCommandOptions) =>
     runKeysCommand(options.json, () => keysAdd(name, options)),
@@ -233,6 +237,45 @@ export function registerKeysCommand(program: Command): void {
     .action((options: { realm: string; json?: boolean }) =>
       runKeysCommand(options.json, () => keysShares(options)),
     );
+
+  keys
+    .command('clients')
+    .description(
+      "List the OAuth clients you can connect your accounts through: Boxel's own, yours, and with --realm those shared into the realm",
+    )
+    .option('--realm <url>', 'Also list the clients shared into this realm')
+    .option('--json', 'Output JSON')
+    .action((options: { realm?: string; json?: boolean }) =>
+      runKeysCommand(options.json, () => keysClients(options)),
+    );
+
+  keys
+    .command('connect')
+    .description(
+      'Connect your account with a service by signing in to it through an OAuth client, in the browser. No token is shown: the connection is kept as one of your keys',
+    )
+    .argument('<name>', 'A name for the connection, unique among your keys')
+    .requiredOption(
+      '--client <client>',
+      "platform:<name> for one of Boxel's own (such as platform:github), the label of a client shared into the --realm, or the name of your own client",
+    )
+    .option('--realm <url>', 'The realm the client is shared into')
+    .option(
+      '--timeout <seconds>',
+      'How long to wait for the browser (at most the 10 minutes a sign-in lasts)',
+    )
+    .option('--json', 'Output JSON')
+    .action(
+      (
+        name: string,
+        options: {
+          client: string;
+          realm?: string;
+          timeout?: string;
+          json?: boolean;
+        },
+      ) => runKeysCommand(options.json, () => keysConnect(name, options)),
+    );
 }
 
 interface ValueCommandOptions {
@@ -242,6 +285,13 @@ interface ValueCommandOptions {
   kind?: string;
   subject?: string | false;
   scope?: string[];
+  clientId?: string;
+  authorizeUrl?: string;
+  tokenUrl?: string;
+  scopes?: string[];
+  grantType?: string;
+  tokenAuth?: string;
+  apiHost?: string[];
 }
 
 function collect(value: string, previous: string[] = []): string[] {
@@ -275,6 +325,33 @@ function serviceAccountOptions(
     );
   }
   return command;
+}
+
+function oauthClientOptions(command: Command): Command {
+  return command
+    .option('--client-id <id>', 'An OAuth client: its client id')
+    .option(
+      '--authorize-url <url>',
+      'An OAuth client: the page people sign in on',
+    )
+    .option('--token-url <url>', 'An OAuth client: its token endpoint')
+    .option(
+      '--scopes <scopes...>',
+      'An OAuth client: the scopes or permissions it asks for',
+    )
+    .option(
+      '--grant-type <grant>',
+      'An OAuth client: authorization_code (the default), which people sign in through, or client_credentials, which mints tokens with no person',
+    )
+    .option(
+      '--token-auth <method>',
+      'An OAuth client: how it authenticates at its token endpoint, client_secret_post (the default) or client_secret_basic',
+    )
+    .option(
+      '--api-host <url>',
+      'An OAuth client: an API address it serves, so the secure window offers it for operations sent there (repeat for more)',
+      collect,
+    );
 }
 
 function valueOptions(command: Command): Command {
