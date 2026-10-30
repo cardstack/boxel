@@ -485,6 +485,24 @@ module('Integration | approve pages', function (hooks) {
       .isChecked('the key it was last approved with starts chosen');
   });
 
+  test('a batch larger than one confirmation says how many requests come next', async function (assert) {
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({ remaining: 3 }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-remaining]')
+      .includesText('3 more requests on this card need approving');
+  });
+
   test('a batch with nothing in it says so', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>

@@ -25,6 +25,7 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import { pipelineAdmission } from '../lib/key-bindings.ts';
+import { withinSlotLimit, type BatchGroup } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
 // ============================================================================
@@ -689,6 +690,53 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'a window opened for the type has no card to approve it for',
     );
+  });
+
+  test('a batch holds what one confirmation can approve, and says how many operations remain', function (assert) {
+    let operation = (name: string, slots: number) => ({
+      name,
+      label: name,
+      method: 'GET',
+      path: '/',
+      instance: null,
+      status: 'new' as const,
+      slots: Array.from({ length: slots }, (_, i) => ({
+        slot: `apiKey:s${i}`,
+        key: 'apiKey' as const,
+        status: 'new' as const,
+        snapshot:
+          {} as BatchGroup['operations'][number]['slots'][number]['snapshot'],
+        fingerprint: `${name}-${i}`,
+      })),
+    });
+    let destination = (host: string) => ({
+      href: `https://${host}/`,
+      host,
+      path: '/',
+      registrableDomain: host,
+    });
+    let groups: BatchGroup[] = [
+      {
+        destination: destination('a.example'),
+        operations: [operation('one', 2), operation('two', 2)],
+      },
+      {
+        destination: destination('b.example'),
+        operations: [operation('three', 2), operation('four', 1)],
+      },
+    ];
+    let { kept, remaining } = withinSlotLimit(groups, 5);
+    assert.deepEqual(
+      kept.map((g) => g.operations.map((o) => o.name)),
+      [['one', 'two']],
+      'operations are kept whole, in order, until the next would pass the limit',
+    );
+    assert.strictEqual(
+      remaining,
+      2,
+      'the rest are counted for the next confirmation',
+    );
+    assert.deepEqual(withinSlotLimit(groups, 100).remaining, 0);
   });
 
   test('the batch is asked with the secure window’s own session, about what the user can read', async function (assert) {

@@ -591,6 +591,9 @@ export interface ApprovalBatch {
   instance: string | null;
   review: boolean;
   groups: { destination: DestinationDisplay; operations: BatchOperation[] }[];
+  // Operations left for after this confirmation, which takes at most so many
+  // slots.
+  remaining: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }
