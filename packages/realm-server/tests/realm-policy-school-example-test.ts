@@ -1,13 +1,16 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import sinon from 'sinon';
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { readdirSync, readFileSync } from 'fs';
 import { basename, join, relative } from 'path';
 import { dirSync } from 'tmp';
-import { SupportedMimeType } from '@cardstack/runtime-common';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  getOrCreateUser,
+  param,
+  query,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   PolicyExplanation,
   QueuePublisher,
@@ -629,47 +632,47 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('the definitions every staff member renders with are in the Code realm, which every signed-in user of the paired homeserver reads', async function (assert) {
-      // The `users` row admits a caller of the paired homeserver that it has a
-      // profile for (ADR 004 §1.4). The lookup answers as a homeserver that
-      // knows the caller would.
+      // The `users` row admits a caller of the paired homeserver who holds a
+      // Boxel account: a row in the realm server's `users` table, which a
+      // person gets on their first sign-in (ADR 004 §1.4). The staff here
+      // never signed in, so the substitute is given one; so is Alice, whose
+      // homeserver is not the paired one.
       const SUBSTITUTE = '@substitute:localhost';
-      let profile = sinon
-        .stub(MatrixClient.prototype, 'getProfile')
-        .resolves({ displayname: 'Sam Okafor' });
-      try {
-        let response = await request
-          .get(path(`${CODE}classroom.gts`))
-          .set('Accept', SupportedMimeType.CardSource)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
-          );
-        assert.strictEqual(response.status, 200);
-        let elsewhere = await request
-          .get(path(`${CODE}classroom.gts`))
-          .set('Accept', SupportedMimeType.CardSource)
-          .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
-        assert.notStrictEqual(
-          elsewhere.status,
-          200,
-          'a user of another homeserver is not admitted by the users row, however well the homeserver knows them',
+      await getOrCreateUser(db, SUBSTITUTE);
+      await getOrCreateUser(db, ALICE);
+      let response = await request
+        .get(path(`${CODE}classroom.gts`))
+        .set('Accept', SupportedMimeType.CardSource)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
         );
-        profile.resolves(undefined);
-        let unknown = await request
-          .get(path(`${CODE}classroom.gts`))
-          .set('Accept', SupportedMimeType.CardSource)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
-          );
-        assert.notStrictEqual(
-          unknown.status,
-          200,
-          'and a caller the homeserver does not know is refused',
+      assert.strictEqual(response.status, 200);
+      let elsewhere = await request
+        .get(path(`${CODE}classroom.gts`))
+        .set('Accept', SupportedMimeType.CardSource)
+        .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
+      assert.notStrictEqual(
+        elsewhere.status,
+        200,
+        'a user of another homeserver is not admitted by the users row, account or not',
+      );
+      await query(db, [
+        'DELETE FROM users WHERE matrix_user_id =',
+        param(SUBSTITUTE),
+      ]);
+      let unknown = await request
+        .get(path(`${CODE}classroom.gts`))
+        .set('Accept', SupportedMimeType.CardSource)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
         );
-      } finally {
-        profile.restore();
-      }
+      assert.notStrictEqual(
+        unknown.status,
+        200,
+        'and a caller with no Boxel account is refused',
+      );
     });
   });
 

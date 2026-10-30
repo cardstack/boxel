@@ -46,7 +46,6 @@ export type PrepareRunCommandResult =
  */
 export async function prepareRunCommand({
   dbAdapter,
-  matrixURL,
   matrixServerName,
   createPrerenderAuth,
   realmURL,
@@ -55,7 +54,6 @@ export async function prepareRunCommand({
   commandInput,
 }: {
   dbAdapter: DBAdapter;
-  matrixURL: string;
   // The paired homeserver's server name, which a bare `runAs` localpart is on.
   matrixServerName: string;
   createPrerenderAuth: (
@@ -79,7 +77,6 @@ export async function prepareRunCommand({
     dbAdapter,
     new URL(normalizedRealmURL),
     runAsUserId,
-    matrixURL,
     matrixServerName,
   );
   if (userPermissions.length === 0) {

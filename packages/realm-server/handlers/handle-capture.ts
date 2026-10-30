@@ -340,7 +340,8 @@ export default function handleCapture({
         );
         let mayRead = await new RealmPermissionChecker(
           permissions,
-          matrixClient,
+          dbAdapter,
+          matrixClient.serverName,
         ).can(userId, 'read');
         if (mayRead) {
           // A capture persists only under the source its spelling names —
