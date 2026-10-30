@@ -4,9 +4,9 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import DateTimeField from '@cardstack/base/datetime';
+import StringField from '@cardstack/base/string';
 
 import { PersonField } from './person';
 import { PostField } from './post';

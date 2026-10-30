@@ -1,14 +1,14 @@
-import BooleanField from 'https://cardstack.com/base/boolean';
+import BooleanField from '@cardstack/base/boolean';
 import {
   contains,
   containsMany,
   field,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 
 export class TypeExamples extends CardDef {
   static displayName = 'Type Examples';

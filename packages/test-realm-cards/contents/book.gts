@@ -1,7 +1,7 @@
-import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, CardDef } from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 
 import { PersonField } from './person';
 

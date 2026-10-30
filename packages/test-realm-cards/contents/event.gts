@@ -1,6 +1,6 @@
-import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, CardDef } from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import StringField from '@cardstack/base/string';
 
 export class Event extends CardDef {
   @field cardTitle = contains(StringField);
