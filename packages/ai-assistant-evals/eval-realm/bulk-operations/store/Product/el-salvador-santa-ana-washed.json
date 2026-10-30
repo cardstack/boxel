@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "El Salvador Santa Ana Washed",
+      "category": "coffee",
+      "origin": "Santa Ana, El Salvador",
+      "variants": [
+        {
+          "sku": "CF-038-250",
+          "size": "250 g",
+          "price": 17.99
+        },
+        {
+          "sku": "CF-038-500",
+          "size": "500 g",
+          "price": 33.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

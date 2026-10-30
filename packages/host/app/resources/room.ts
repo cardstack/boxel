@@ -96,6 +96,36 @@ const IN_FLIGHT_EVENT_STATUSES: ReadonlySet<string> = new Set([
   'sent',
 ]);
 
+// Statuses of a message the transcript shows as still sending. 'sent' is not
+// one: the server has the message, and the UI shows it as delivered.
+const PENDING_MESSAGE_STATUSES: ReadonlySet<string> = new Set([
+  'queued',
+  'sending',
+]);
+
+export function isPendingMessage(message: Pick<Message, 'status'>): boolean {
+  return message.status != null && PENDING_MESSAGE_STATUSES.has(message.status);
+}
+
+// Sorts items still being sent after every confirmed item, in the order they
+// were sent, and confirmed items by time.
+function inFlightLast<T>(
+  isInFlight: (item: T) => boolean,
+  time: (item: T) => number,
+): (a: T, b: T) => number {
+  return (a, b) => {
+    let aInFlight = isInFlight(a);
+    let bInFlight = isInFlight(b);
+    if (aInFlight !== bInFlight) {
+      return aInFlight ? 1 : -1;
+    }
+    if (aInFlight) {
+      return 0;
+    }
+    return time(a) - time(b);
+  };
+}
+
 interface CompactionEvent {
   type: typeof APP_BOXEL_COMPACTION_EVENT_TYPE;
   sender: string;
@@ -317,10 +347,15 @@ export class RoomResource extends Resource<Args> {
     if (this.roomId == undefined) {
       return [];
     }
+    // A message this client is still sending comes after every message the
+    // server has confirmed, as in `events`: until its server copy arrives its
+    // time is provisional, and a confirmed message can arrive with a later one.
     return [...this._messageCache.values()]
       .filter((m) => m.roomId === this.roomId)
       .filter((m) => !m.continuationOf)
-      .sort((a, b) => a.created.getTime() - b.created.getTime());
+      .sort(
+        inFlightLast<Message>(isPendingMessage, (m) => m.created.getTime()),
+      );
   }
 
   /**
@@ -435,20 +470,13 @@ export class RoomResource extends Resource<Args> {
   // says. A copy, so the room's own list keeps its order.
   @cached
   get events(): DiscreteMatrixEvent[] {
-    let inFlight = (event: DiscreteMatrixEvent) =>
-      event.status != null && IN_FLIGHT_EVENT_STATUSES.has(event.status);
-    return [...this.rawEvents].sort((a, b) => {
-      let aInFlight = inFlight(a);
-      let bInFlight = inFlight(b);
-      if (aInFlight !== bInFlight) {
-        return aInFlight ? 1 : -1;
-      }
-      // Events still being sent keep the order they were sent in.
-      if (aInFlight) {
-        return 0;
-      }
-      return a.origin_server_ts - b.origin_server_ts;
-    });
+    return [...this.rawEvents].sort(
+      inFlightLast(
+        (event) =>
+          event.status != null && IN_FLIGHT_EVENT_STATUSES.has(event.status),
+        (event) => event.origin_server_ts,
+      ),
+    );
   }
 
   async waitForNextEvent() {

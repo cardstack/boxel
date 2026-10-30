@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Guatemala Huehuetenango Decaf",
+      "category": "coffee",
+      "origin": "Huehuetenango, Guatemala",
+      "variants": [
+        {
+          "sku": "CF-055-250",
+          "size": "250 g",
+          "price": 15.49
+        },
+        {
+          "sku": "CF-055-500",
+          "size": "500 g",
+          "price": 28.4
+        },
+        {
+          "sku": "CF-055-1KG",
+          "size": "1 kg",
+          "price": 54.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

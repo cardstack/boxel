@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Tanzania Kilimanjaro Washed",
+      "category": "coffee",
+      "origin": "Kilimanjaro, Tanzania",
+      "variants": [
+        {
+          "sku": "CF-103-250",
+          "size": "250 g",
+          "price": 15.79
+        },
+        {
+          "sku": "CF-103-500",
+          "size": "500 g",
+          "price": 28.0
+        },
+        {
+          "sku": "CF-103-1KG",
+          "size": "1 kg",
+          "price": 52.9
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
