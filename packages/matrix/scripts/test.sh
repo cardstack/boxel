@@ -17,7 +17,15 @@ BASE_REALM_READY="$BASE_REALM$READY_PATH"
 # START_SERVER_AND_TEST_INSECURE=1: wait-on against https-get://localhost:4201
 # needs the strictSSL escape hatch because start-server-and-test pins
 # strictSSL:true on the in-process axios used for the readiness probe.
+# CI HACK (do not merge): repeat only the sign-out/sign-in profile tests.
+if [ -n "${MATRIX_SYNAPSE_TEMPLATE:-}" ]; then
+  echo "CI HACK: skipping the ${MATRIX_SYNAPSE_TEMPLATE} template run"
+  exit 0
+fi
+MATRIX_TEST_SHARD=""
+export MATRIX_TEST_SHARD
+
 WAIT_ON_TIMEOUT=600000 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY" \
-  'pnpm playwright test'
+  'pnpm playwright test tests/profile.spec.ts --grep "HACK|change password in settings|new password does not meet|current password is invalid" --repeat-each=16 --retries=0'

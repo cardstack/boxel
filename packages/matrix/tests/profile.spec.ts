@@ -113,6 +113,83 @@ test.describe('Profile', () => {
     await page.locator('[data-test-login-btn]').click();
   }
 
+  // CI HACK (do not merge): Synapse's answer to the sign-out is held until the
+  // user has signed back in, then released partway through the signed-in
+  // checks: even repeats with the profile popover open, odd repeats before it.
+  test('HACK sign-out answered after signing back in', async ({
+    page,
+  }, testInfo) => {
+    await page.locator('[data-test-confirm-cancel-button]').click();
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/_matrix/client/v3/logout', async (route) => {
+      await held;
+      await route.continue();
+    });
+    let start = Date.now();
+    let events: string[] = [];
+    let note = (event: string) =>
+      events.push(`+${Date.now() - start}ms ${event}`);
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) {
+        note(`navigated to ${frame.url()}`);
+      }
+    });
+    page.on('request', (request) => {
+      if (
+        request.method() === 'GET' &&
+        request.url().endsWith('/_matrix/client/v3/login')
+      ) {
+        note('login form built');
+      }
+    });
+    page.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        note(`console ${message.type()}: ${message.text().slice(0, 300)}`);
+      }
+    });
+    page.on('pageerror', (error) => note(`pageerror: ${error.message}`));
+
+    await signOutAndBackIn(page, user.username, user.password);
+    await expect(page.locator('[data-test-profile-icon-button]')).toBeVisible();
+    note('signed back in');
+
+    let releaseIt = async () => {
+      let answered = page.waitForResponse('**/_matrix/client/v3/logout');
+      release();
+      let response = await answered;
+      note(`logout answered ${response.status()}`);
+    };
+    page.setDefaultTimeout(30_000);
+    try {
+      if (testInfo.repeatEachIndex % 2 === 0) {
+        await page.locator('[data-test-profile-icon-button]').click();
+        await releaseIt();
+        await page.locator('[data-test-settings-button]').click();
+        await expect(page.locator('[data-test-current-email]')).toContainText(
+          userEmail,
+          { timeout: 30_000 },
+        );
+        await page.locator('[data-test-confirm-cancel-button]').click();
+      } else {
+        await releaseIt();
+      }
+      note('checking signed-in state');
+      await assertLoggedIn(page, {
+        userId: user.credentials.userId,
+        displayName: user.username,
+        email: userEmail,
+      });
+      note(`url ${page.url()}`);
+    } catch (e) {
+      if (e instanceof Error) {
+        note(`url ${page.url()}`);
+        e.message += `\n\nEvents:\n${events.join('\n')}`;
+      }
+      throw e;
+    }
+  });
+
   test('it can change display name in settings', async ({ page }) => {
     await expect(
       page.locator('[data-test-profile-display-name]'),
