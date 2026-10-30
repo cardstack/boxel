@@ -1336,11 +1336,18 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * participant standing in the same layout box it compiled in (a REFLOW
    * always replays — it is what a Move is FOR). Anything else takes the
    * full pipeline.
+   *
+   * A run that is nothing but ambient loops counts as in flight after its
+   * clock ends, for as long as the loops go round. A loop lends its run no
+   * length, so a loop-only run ends as soon as it starts, and without this
+   * every later app render would replace the run and restart every loop. A score with
+   * anything besides loops in it has a timeline to re-fire (§3.1), so once
+   * it ends, a pass takes the full pipeline.
    */
   private fastKeep(root: HTMLElement): boolean {
     if (
       !this.run ||
-      this.run.isDone() ||
+      (this.run.isDone() && !this.run.isLooping()) ||
       this.claimed.size ||
       this.arrived.size
     ) {
