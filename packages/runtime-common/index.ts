@@ -1959,7 +1959,6 @@ export { Loader };
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
-  loaderForModule,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
 export {
@@ -2082,8 +2081,7 @@ export { sanitizeHtml } from './dompurify-runtime.ts';
 
 export { getPlural } from './pluralize-runtime.ts';
 
-import type { CardDef, FieldDef, BaseDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 import type { RealmInfo } from './realm.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 
@@ -2540,40 +2538,6 @@ export function codeRefFromInternalKey(
     module: internalKey.slice(0, lastSlash) as RealmResourceIdentifier,
     name: internalKey.slice(lastSlash + 1),
   };
-}
-
-export function loaderFor(cardOrField: CardDef | FieldDef) {
-  let clazz = Reflect.getPrototypeOf(cardOrField)!.constructor;
-  let loader = Loader.getLoaderFor(clazz);
-  if (!loader) {
-    throw new Error(`bug: could not determine loader for card or field`);
-  }
-  return loader;
-}
-
-export async function apiFor(
-  cardOrFieldType: typeof CardDef | typeof FieldDef | typeof BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrField: CardDef | FieldDef | BaseDef,
-): Promise<typeof CardAPI>;
-export async function apiFor(
-  cardOrFieldOrClass:
-    | CardDef
-    | FieldDef
-    | BaseDef
-    | typeof CardDef
-    | typeof FieldDef
-    | typeof BaseDef,
-) {
-  let loader =
-    Loader.getLoaderFor(cardOrFieldOrClass) ??
-    loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
-  let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
-  if (!api) {
-    throw new Error(`could not load card API`);
-  }
-  return api;
 }
 
 export function splitStringIntoChunks(str: string, maxSizeKB: number) {

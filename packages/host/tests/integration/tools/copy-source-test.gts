@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -72,9 +74,15 @@ module('Integration | tools | copy-source', function (hooks) {
       originSourceIdentifier,
       destinationSourceIdentifier,
     });
-    let personResponse = await fetch(new URL(originSourceIdentifier));
+    // Compared as source: compiled output names the module it was compiled
+    // from, so a faithful copy compiles differently.
+    let personResponse = await fetch(new URL(originSourceIdentifier), {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
     let personContent = await personResponse.text();
-    let personCopyResponse = await fetch(new URL(destinationSourceIdentifier));
+    let personCopyResponse = await fetch(new URL(destinationSourceIdentifier), {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
     let personCopyContent = await personCopyResponse.text();
 
     assert.strictEqual(personCopyContent, personContent);

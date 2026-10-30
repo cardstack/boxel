@@ -676,7 +676,14 @@ export default class InteractSubmode extends Component {
         let ref = identifyCard(card.constructor);
         let name = cardTypeDisplayName(card);
         if (isResolvedCodeRef(ref)) {
-          if (items.find((item) => item.ref === ref && item.name === name)) {
+          if (
+            items.find(
+              (item) =>
+                item.ref.module === ref.module &&
+                item.ref.name === ref.name &&
+                item.name === name,
+            )
+          ) {
             // do not add duplicate of the same card type
             return;
           }

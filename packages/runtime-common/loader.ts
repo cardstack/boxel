@@ -237,65 +237,15 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 let nonce = 0;
-// A bundled base module publishes the classes it declares under its own name as
-// it is evaluated, which the `bundled-base-scoped-css` vite plugin appends to
-// its compiled source. This is the only account of those classes the loader can
-// have: it names the exports of every module it is asked for, and it is never
-// asked for a module reachable only from inside another module's chunk — the
-// bundler resolved that import where the loader could not see it.
-//
-// Read before the loader's own record, and it wins. Only a module that
-// *declares* a class publishes it, so this answers with the declarer or not at
-// all — it can correct an attribution but never invent one. The loader's own
-// record cannot make that promise: it credits the first module it is asked for
-// that exposes a name, so a bundled module re-exporting a class it did not
-// declare takes the credit whenever it happens to be served first, and the
-// answer then depends on which card imported what.
-//
-// The index is built from what has been published so far and extended on later
-// lookups, so a module evaluated after the first one is still found. Nothing
-// here resolves or fetches: the values are the very class objects the chunk is
-// using, published as a side effect of an evaluation that happens regardless.
-const bundledIdentities = new WeakMap<
-  Function,
-  { module: string; name: string }
->();
-const indexedBundledModules = new Set<string>();
 
-function bundledIdentityFor(
-  value: Function,
-): { module: string; name: string } | undefined {
-  let registry = (
-    globalThis as {
-      __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
-    }
-  ).__boxelBundledBaseIdentities;
-  if (!registry) {
-    return undefined;
+declare global {
+  // The Loader that evaluated the module (ADR 010 §1.4.1). A base module
+  // compiled into the host bundle reads the host's current Loader here: the
+  // host's build compiles the read to the global its loader service keeps it
+  // in (bundled-module-loader.ts).
+  interface ImportMeta {
+    loader: Loader;
   }
-  let known = bundledIdentities.get(value);
-  if (known) {
-    return known;
-  }
-  for (let moduleName of Object.keys(registry)) {
-    if (indexedBundledModules.has(moduleName)) {
-      continue;
-    }
-    indexedBundledModules.add(moduleName);
-    let exports = registry[moduleName];
-    for (let exportName of Object.keys(exports)) {
-      let exported = exports[exportName];
-      // First registration wins. A class is declared by one module; a module
-      // that merely re-exports it publishes nothing, so there is no contest.
-      if (typeof exported === 'function' && !bundledIdentities.has(exported)) {
-        bundledIdentities.set(exported, {
-          module: `@cardstack/base/${moduleName}`,
-          name: exportName,
-        });
-      }
-    }
-  }
-  return bundledIdentities.get(value);
 }
 
 export class Loader {
@@ -312,11 +262,6 @@ export class Loader {
   private knownDepsCache = new Map<string, Set<string>>();
   // Module identifier → the key it is tracked under (see trackingKey).
   private trackingKeyCache = new Map<string, string>();
-  private identities = new WeakMap<
-    Function,
-    { module: string; name: string }
-  >();
-  private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
@@ -456,7 +401,6 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
@@ -572,58 +516,6 @@ export class Loader {
     );
   }
 
-  static identify(
-    value: unknown,
-  ): { module: string; name: string } | undefined {
-    if (typeof value !== 'function') {
-      return undefined;
-    }
-    return (
-      bundledIdentityFor(value) ?? Loader.loaders.get(value)?.identify(value)
-    );
-  }
-
-  identify(value: unknown): { module: string; name: string } | undefined {
-    if (typeof value === 'function') {
-      return this.identities.get(value);
-    } else {
-      return undefined;
-    }
-  }
-
-  static getLoaderFor(value: unknown): Loader | undefined {
-    if (typeof value === 'function') {
-      return Loader.loaders.get(value);
-    }
-    return undefined;
-  }
-
-  // A module a Loader evaluates discovers its loader through
-  // `import.meta.loader`, which the Loader injects at eval time. A module
-  // compiled into the host bundle is evaluated by the platform instead, so it
-  // has no such injection; the host publishes its active loader here for those
-  // modules to fall back to. Read only when `import.meta.loader` is absent.
-  static #forBundledModules: Loader | undefined;
-
-  static setForBundledModules(loader: Loader) {
-    Loader.#forBundledModules = loader;
-  }
-
-  // Withdraw a published loader as it is disposed, so a bundled module is told
-  // no loader is available rather than handed a disposed one — and with it,
-  // the module graph that loader holds. A loader that has already been
-  // superseded withdraws nothing: the publisher that replaced it is the live
-  // one.
-  static clearForBundledModules(loader: Loader) {
-    if (Loader.#forBundledModules === loader) {
-      Loader.#forBundledModules = undefined;
-    }
-  }
-
-  static forBundledModules(): Loader | undefined {
-    return Loader.#forBundledModules;
-  }
-
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -733,7 +625,7 @@ export class Loader {
   }
 
   // Canonical form for module identifiers that flow out of the loader
-  // (dependency lists, identities): the registered realm-prefix (RRI)
+  // (dependency lists): the registered realm-prefix (RRI)
   // spelling when the virtual network has a matching mapping, otherwise the
   // identifier unchanged. Resolving back to a fetchable URL is the virtual
   // network's job at the network boundary.
@@ -1386,31 +1278,6 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
-  private captureIdentitiesOfModuleExports(
-    module: any,
-    moduleIdentifier: string,
-  ) {
-    // Identities are recorded in canonical identifier form so that
-    // `identify()` output matches the form persisted in code refs.
-    let moduleId = this.canonicalIdentifier(
-      trimModuleIdentifier(moduleIdentifier),
-    );
-    for (let propName of Object.keys(module)) {
-      let exportedEntity = module[propName];
-      if (
-        typeof exportedEntity === 'function' &&
-        typeof propName === 'string' &&
-        !this.identities.has(exportedEntity)
-      ) {
-        this.identities.set(exportedEntity, {
-          module: moduleId,
-          name: propName,
-        });
-        Loader.loaders.set(exportedEntity, this);
-      }
-    }
-  }
-
   private readOnlyProxy(module: any) {
     return new Proxy(module, {
       set(_target, prop) {
@@ -1494,8 +1361,6 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
-
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
@@ -1672,7 +1537,6 @@ export class Loader {
         );
         this.#currentlyEvaluatingModule = previouslyEvaluating;
       }
-      this.captureIdentitiesOfModuleExports(moduleProxy, moduleIdentifier);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: moduleProxy,
@@ -1849,24 +1713,4 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
-}
-
-// The Loader a module runs under, for code that has to reach one from inside a
-// module rather than being handed one.
-//
-// A Loader that evaluates a module injects `import.meta.loader` into it. A
-// module compiled into a host bundle is evaluated by the platform instead and
-// carries no injection, so it falls back to the loader the host publishes for
-// bundled modules.
-//
-// The caller passes its own `import.meta` because the injection is per-module:
-// were this to read one of its own, a bundled copy of this module would hand
-// every caller the published loader, including callers that were fetched and
-// have a loader of their own.
-export function loaderForModule(meta: { loader?: Loader }): Loader {
-  let loader = meta.loader ?? Loader.forBundledModules();
-  if (!loader) {
-    throw new Error('no Loader is available to this module');
-  }
-  return loader;
 }

@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   FieldDef,
@@ -13,14 +14,14 @@ import DateTimeField from '@cardstack/base/datetime';
 import enumField from '@cardstack/base/enum';
 import { Project, Issue } from './darkfactory';
 
-export const ParseResultStatusField = enumField(StringField, {
+export const ParseResultStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'running', label: 'Running' },
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
   ],
-});
+}));
 
 export class ParseError extends FieldDef {
   static displayName = 'Parse Error';

@@ -2,7 +2,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
+import { identify } from '@cardstack/runtime-common';
 
 import {
   BUNDLED_BASE_MODULES,
@@ -121,7 +121,7 @@ module('Integration | bundled base modules', function (hooks) {
     let served = await loader.import<Record<string, unknown>>(
       '@cardstack/base/file-api',
     );
-    assert.deepEqual(Loader.identify(served.FileDef), {
+    assert.deepEqual(identify(served.FileDef), {
       module: '@cardstack/base/card-api',
       name: 'FileDef',
     });

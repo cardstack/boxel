@@ -1,9 +1,9 @@
 import 'ember-source/types';
 import * as ContentTag from 'content-tag';
 
-import { TemplateFactory } from 'htmlbars-inline-precompile';
+import type { TemplateFactory } from 'htmlbars-inline-precompile';
 import '@glint/ember-tsc/types';
-import { ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 import type { HelperLike, ModifierLike } from '@glint/template';
 import type { ConcatHelper as GlintConcatHelper } from '@glint/ember-tsc/-private/intrinsics/concat';
 import type { FnHelper as GlintFnHelper } from '@glint/ember-tsc/-private/intrinsics/fn';
@@ -13,7 +13,10 @@ import type {
   EventForName,
   OnModifierArgs,
 } from '@glint/ember-tsc/-private/intrinsics/on';
-import { Invoke, InvokeDirect } from '@glint/template/-private/integration';
+import type {
+  Invoke,
+  InvokeDirect,
+} from '@glint/template/-private/integration';
 import './eslint-js';
 
 // Augment Glint's HTML element attributes with missing properties

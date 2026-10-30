@@ -20,7 +20,6 @@ import {
   PermissionsConsumer,
 } from './field-component';
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import {
   getPlural,
   fields,
@@ -249,7 +248,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       primitive in this.args.field.card ? null : new this.args.field.card();
     if (this.args.typeConstraint) {
       let subclassField = await loadCardDef(this.args.typeConstraint, {
-        loader: myLoader(),
+        // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+        loader: import.meta.loader,
       });
       newValue = new subclassField();
     }
@@ -460,11 +460,4 @@ export function getContainsManyComponent({
 
   componentCache.set(arrayField, stable);
   return stable.component;
-}
-
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
 }

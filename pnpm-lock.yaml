@@ -3018,6 +3018,9 @@ importers:
       '@embroider/macros':
         specifier: ^1.20.5
         version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/reverse-exports':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@embroider/vite':
         specifier: ^1.1.1
         version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@8.0.16(@types/node@26.1.2)(terser@5.49.0)(yaml@2.9.0))

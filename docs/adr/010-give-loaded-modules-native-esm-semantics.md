@@ -10,6 +10,14 @@ scope:
   - packages/runtime-common/package-shim-handler.ts
   - packages/runtime-common/code-ref.ts
   - packages/runtime-common/index.ts
+  - packages/runtime-common/export-identity-plugin.ts
+  - packages/runtime-common/transpile.ts
+  - packages/runtime-common/realm.ts
+  - packages/realm-server/main.ts
+  - packages/base/mark-definition.ts
+  - packages/host/babel.config.cjs
+  - packages/host/lib/import-meta-loader-plugin.cjs
+  - packages/runtime-common/bundled-module-loader.ts
   - packages/host/app/services/loader-service.ts
   - packages/host/app/services/network.ts
   - packages/host/app/services/operations.ts
@@ -135,19 +143,38 @@ This is the closed list of ways the Loader departs from native ESM.
    imports. The Loader resolves them through `resolveImport` (§1.2), with the
    shim's URL as referrer, and records them as dependencies without loading
    them. These properties are the only way into the module map. A bundled
-   module that a shim serves has no `import.meta`, and MAY reach its Loader
-   through `Loader.forBundledModules`.
-3. **Observation APIs.** `identify`, `getLoaderFor`, the module-map queries
+   module that a shim serves is evaluated by the platform, not a Loader, so
+   the host's build compiles its `import.meta.loader` (§1.4.1) to a global
+   that holds the host's current Loader
+   (`packages/runtime-common/bundled-module-loader.ts`).
+3. **Observation APIs.** The module-map queries
    (`isModuleLoaded`, `moduleKey`, `loadedModuleKeys`, `canonicalURLFor`),
    `getConsumedModules`, `getKnownConsumedModules`, runtime dependency
    tracking, and evaluation timing read the module graph. They MUST NOT change
    what any module observes, and MUST NOT load or evaluate a module. They
    report each module by the URL `resolveImport` gave it. A caller that needs
-   the RRI form (ADR 002) converts the URL itself. We intend to phase out
-   `identify` and `getLoaderFor`. New code SHOULD NOT add callers of either.
+   the RRI form (ADR 002) converts the URL itself. A Loader MUST NOT record
+   which Loader a value came from: code that needs a Loader reads
+   `import.meta.loader`.
 4. **Discarding modules.** The host MAY replace a Loader to pick up changed
    modules, or tell a Loader to clear its module map, for example when a realm
    mapping changes. No other path removes a module from a Loader.
+5. **Identity tags.** A class a module exports carries a static member keyed
+   by `Symbol.for('ident')`, whose value is the module's canonical identifier
+   (ADR 002) and the name the class is exported under. The compiler that
+   produces the module writes it, in
+   `packages/runtime-common/export-identity-plugin.ts`:
+   - A realm MUST be given its canonical name when it is mounted: its
+     registered prefix, or its own URL when it has none. It compiles that
+     name into its modules' tags, so a tag never depends on the URL a client
+     reaches the realm by, and no reader converts it.
+   - A definition a module gets from a call, rather than a class it writes,
+     is tagged only when the module wraps the call in `markDefinition`,
+     imported from `@cardstack/base/mark-definition` by that exact
+     specifier. The compiler MUST NOT recognize such definitions any other
+     way, and MUST refuse a `markDefinition` it cannot tag.
+   - The Loader MUST NOT write, read or rewrite identity tags. `identify` in
+     `code-ref.ts` reads them.
 
 ### 1.5. ESM features the Loader must gain
 
@@ -198,6 +225,14 @@ iframe with its own loader.
   spellings are one module.
 - **Let a failed fetch retry on the next import.** This differs from ESM.
   Retrying a transient failure is `fetch`'s job (§1.3).
+- **Tag modules by URL and canonicalize the tag where it is read.** Every
+  reader then needs a `VirtualNetwork` (§1.3 forbids the Loader one), and a
+  class's identity varies with the reader's mappings. A realm's canonical name
+  is constant, so it is compiled in (§1.4.5).
+- **Recognize the results of a fixed list of class factories.** The list lives
+  in the platform, so a realm's own factory needs a platform change, and the
+  compiler has to resolve where each call's callee was imported from.
+  `markDefinition` says so at the call (§1.4.5).
 
 ## 4. Remediation
 
@@ -234,8 +269,6 @@ than prose, and it is deleted when the ADR is accepted.
 - `canonicalIdentifier`, `trackingKey`, `moduleKey`, `loadedModuleKeys` and
   `getConsumedModules` break §1.4.3: they report RRIs, converted through the
   `VirtualNetwork`, instead of URLs.
-- Static `identify` (`bundledIdentityFor`) breaks §1.4.3: it reports bundled
-  modules as `@cardstack/base/` RRIs.
 - `getConsumedModules` breaks §1.4.3: it imports, and so evaluates, a module
   that is not loaded yet.
 - `shimModule`, `moduleShims`, `cloneLoader` break §1.4.2: they put modules
@@ -283,10 +316,6 @@ Elsewhere:
   `packages/host/app/tools/capture.ts` and
   `packages/host/app/lib/visual-capture.ts` break §1.3: they reach the
   `VirtualNetwork` through `getVirtualNetwork`.
-- `packages/runtime-common/index.ts`, `packages/base/card-api.gts`,
-  `packages/host/app/services/operations.ts` and
-  `packages/host/app/tools/patch-fields.ts` call `Loader.getLoaderFor`. They
-  must move off it before §1.4.3's phase-out can remove it.
 - `packages/experiments-realm/poster-board/poster-board.test.gts`,
   `packages/host/tests/live-test.js`, `packages/host/tests/helpers/adapter.ts`,
   and the host tests listed in `scope` break §1.4.2: they call

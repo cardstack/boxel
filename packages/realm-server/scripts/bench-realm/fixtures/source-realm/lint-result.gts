@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   FieldDef,
@@ -13,21 +14,21 @@ import DateTimeField from '@cardstack/base/datetime';
 import enumField from '@cardstack/base/enum';
 import { Project, Issue } from './darkfactory';
 
-export const LintResultStatusField = enumField(StringField, {
+export const LintResultStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'running', label: 'Running' },
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
   ],
-});
+}));
 
-export const LintViolationSeverityField = enumField(StringField, {
+export const LintViolationSeverityField = markDefinition(enumField(StringField, {
   options: [
     { value: 'error', label: 'Error' },
     { value: 'warning', label: 'Warning' },
   ],
-});
+}));
 
 export class LintViolation extends FieldDef {
   static displayName = 'Lint Violation';

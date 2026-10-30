@@ -15,6 +15,7 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 
+import { bundledModuleLoaderGlobal } from '@cardstack/runtime-common/bundled-module-loader';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
@@ -64,7 +65,13 @@ export default class LoaderService extends Service {
     registerDestructor(this, () => {
       this.resetState();
       if (this.loader) {
-        Loader.clearForBundledModules(this.loader);
+        // Withdrawn as it is disposed, so a bundled module is told no loader
+        // is available rather than handed a disposed one and the module graph
+        // it holds. A loader already superseded withdraws nothing.
+        let published = globalThis as Record<string, unknown>;
+        if (published[bundledModuleLoaderGlobal] === this.loader) {
+          delete published[bundledModuleLoaderGlobal];
+        }
         this.loader.dispose();
       }
     });
@@ -204,18 +211,18 @@ export default class LoaderService extends Service {
     return this.publish(loader);
   }
 
-  // Base modules compiled into the host bundle cannot read
-  // `import.meta.loader` — the platform evaluated them, not a Loader — so every
-  // loader that becomes this service's active one is also published as the one
-  // those modules fall back to.
+  // Base modules compiled into the host bundle are evaluated by the platform,
+  // not a Loader, so their `import.meta.loader` is compiled to a global
+  // (bundled-module-loader.ts), and every loader that becomes this service's
+  // active one is put there.
   //
   // One module instance can read one loader, so the application's loader is
   // the one it reads: a loader built for a narrower purpose — the one a test
   // filesystem runs its cards through, say — does not publish itself, because
-  // taking the fallback over would redirect every bundled module in the
+  // taking the global over would redirect every bundled module in the
   // application for as long as it lived.
   private publish(loader: Loader): Loader {
-    Loader.setForBundledModules(loader);
+    (globalThis as Record<string, unknown>)[bundledModuleLoaderGlobal] = loader;
     return loader;
   }
 

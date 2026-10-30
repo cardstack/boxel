@@ -476,12 +476,17 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       setActiveRealms([testRealmURL, realm2URL]);
 
+      // The second realm's module declares a class of its own, as any two
+      // modules do: one class object can only have been declared by one of
+      // them.
+      class SecondRealmPerson extends Person {}
+
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         realmURL: realm2URL,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'person.gts': { Person },
+          'person.gts': { Person: SecondRealmPerson },
           'Person/1.json': {
             data: {
               attributes: {

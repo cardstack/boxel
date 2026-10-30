@@ -5,7 +5,6 @@ import {
   generateJsonSchemaForCardType,
   basicMappings,
 } from '@cardstack/runtime-common/helpers/ai';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
@@ -211,23 +210,13 @@ export default class PatchFieldsTool extends HostBaseTool<
   async getInputJsonSchema(): Promise<any> {
     // If we have a cardType configured, generate a detailed schema based on that card type
     let configuredCardType = this.configuration?.cardType;
-    let loaderForSchema =
-      (configuredCardType && Loader.getLoaderFor(configuredCardType)) ??
-      this.loaderService.loader;
+    let loader = this.loaderService.loader;
 
     if (configuredCardType) {
-      const cardApi = await loaderForSchema.import<
+      const cardApi = await loader.import<
         typeof import('@cardstack/base/card-api')
       >('@cardstack/base/card-api');
-      const cardFields = cardApi.getFields(configuredCardType, {
-        usedLinksToFieldsOnly: false,
-      });
-      let loaderFromFirstField = Object.values(cardFields)
-        .map((field) => Loader.getLoaderFor(field.card))
-        .find(Boolean);
-      const mappings = await basicMappings(
-        loaderFromFirstField ?? loaderForSchema,
-      );
+      const mappings = await basicMappings(loader);
       const cardTypeSchema = generateJsonSchemaForCardType(
         configuredCardType,
         cardApi,

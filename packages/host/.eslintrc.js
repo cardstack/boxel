@@ -150,6 +150,7 @@ module.exports = {
         './blueprints/*/index.js',
         './config/**/*.js',
         './lib/**/*.js',
+        './lib/**/*.cjs',
         './server/**/*.js',
         './babel.config.cjs',
         './scripts/**/*.js',

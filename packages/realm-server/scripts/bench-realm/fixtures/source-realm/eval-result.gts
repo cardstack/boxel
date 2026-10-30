@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   FieldDef,
@@ -13,14 +14,14 @@ import DateTimeField from '@cardstack/base/datetime';
 import enumField from '@cardstack/base/enum';
 import { Project, Issue } from './darkfactory';
 
-export const EvalResultStatusField = enumField(StringField, {
+export const EvalResultStatusField = markDefinition(enumField(StringField, {
   options: [
     { value: 'running', label: 'Running' },
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
   ],
-});
+}));
 
 export class EvalModuleResult extends FieldDef {
   static displayName = 'Eval Module Result';
