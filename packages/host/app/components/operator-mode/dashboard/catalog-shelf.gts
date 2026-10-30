@@ -256,7 +256,7 @@ export default class CatalogShelf extends Component<Signature> {
                       class='story-open'
                       {{on 'click' (fn this.open story.id)}}
                       data-test-catalog-story-open
-                    >{{story.name}}</button>
+                    ><span class='headline-text'>{{story.name}}</span></button>
                   </h3>
                   <div class='art' {{fitPage ART_PAGE_WIDTH_PX}}>
                     {{#if artEntry}}
@@ -352,6 +352,8 @@ export default class CatalogShelf extends Component<Signature> {
         --_catalog-shelf-story-min-width: 13rem;
         --_catalog-shelf-art-height: 9.5rem;
         --_catalog-shelf-action-height: 1.875rem;
+        --_catalog-shelf-headline-lines: 2;
+        --_catalog-shelf-headline-leading: 1.2em;
         --_catalog-shelf-copy-lines: 3;
         --_catalog-shelf-copy-leading: 1.45em;
         display: flex;
@@ -450,21 +452,25 @@ export default class CatalogShelf extends Component<Signature> {
         text-transform: uppercase;
         color: var(--_story-accent);
       }
+      /* Always two lines tall, so the art lines up across a row and the
+         stand-ins match. */
       .headline {
         min-width: 0;
+        min-height: calc(
+          var(--_catalog-shelf-headline-lines) *
+            var(--_catalog-shelf-headline-leading)
+        );
         margin: 0;
         font-size: var(--boxel-font-size);
         font-weight: 700;
-        line-height: 1.2;
+        line-height: var(--_catalog-shelf-headline-leading);
         letter-spacing: -0.015em;
       }
-      /* A button ignores line-clamp, so the name truncates on one line. Its
-         hit area covers the story; the actions sit above it. */
+      /* Its hit area covers the story; the actions sit above it. */
       .story-open {
         display: block;
         max-width: 100%;
         padding: 0;
-        overflow: hidden;
         border: 0;
         background-color: transparent;
         color: inherit;
@@ -474,8 +480,14 @@ export default class CatalogShelf extends Component<Signature> {
         line-height: inherit;
         letter-spacing: inherit;
         text-align: start;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      }
+      /* A button ignores line-clamp, so its inner text clamps instead. */
+      .headline-text {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--_catalog-shelf-headline-lines);
+        overflow-wrap: break-word;
       }
       .story-open::after {
         content: '';
