@@ -665,6 +665,52 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(vendor.requests.length, 0);
   });
 
+  test("a binding whose grant belongs to another key is refused binding-not-approved, and that grant's probe is left unclaimed", async function (assert) {
+    let key = await addKey();
+    let other = await addKey(OWNER, 'another-secret', 'other vendor key');
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let otherApproved = await approve(OWNER, [
+      approval('note', { userKey: { keyId: other.id } }),
+    ]);
+    assert.strictEqual(
+      otherApproved.status,
+      201,
+      JSON.stringify(otherApproved.body),
+    );
+    let otherGrant = otherApproved.body.data[0].meta.grant.id;
+    // A hand-written binding row naming a grant of a key it doesn't hold,
+    // rejected by the vendor with its probe due.
+    await dbAdapter.execute(
+      `UPDATE key_bindings SET grant_id = $1 WHERE id = $2`,
+      { bind: [otherGrant, approved.body.data[0].id] },
+    );
+    await dbAdapter.execute(
+      `UPDATE user_key_grants SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() - interval '1 day' WHERE id = $1`,
+      { bind: [otherGrant] },
+    );
+    let [before] = await dbAdapter.execute(
+      `SELECT last_probe_at FROM user_key_grants WHERE id = $1`,
+      { bind: [otherGrant] },
+    );
+
+    let response = await invokeList();
+    assert.strictEqual(response.status, 409, JSON.stringify(response.body));
+    assert.strictEqual(response.body.errors[0].code, 'binding-not-approved');
+    assert.strictEqual(vendor.requests.length, 0, 'nothing is sent');
+    let [after] = await dbAdapter.execute(
+      `SELECT last_probe_at FROM user_key_grants WHERE id = $1`,
+      { bind: [otherGrant] },
+    );
+    assert.strictEqual(
+      String(after.last_probe_at),
+      String(before.last_probe_at),
+      "the other key's grant keeps its probe",
+    );
+  });
+
   test('revoking a binding leaves its grant; deleting the key revokes its bindings', async function (assert) {
     let key = await addKey();
     let approved = await approve(OWNER, [

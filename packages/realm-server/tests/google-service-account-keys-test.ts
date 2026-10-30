@@ -368,7 +368,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(sentTo('/echo/ping').length, 1, 'the request was sent');
   });
 
-  test('a key Google refuses surfaces credential-rejected, and an endpoint that keeps failing does too', async function (assert) {
+  test('a key Google refuses surfaces credential-rejected', async function (assert) {
     let key = await addServiceAccount();
     await approve(key.id, ['values']);
 
@@ -386,25 +386,6 @@ module(basename(import.meta.filename), function (hooks) {
       "Google's own description stays on the server",
     );
     assert.deepEqual(sentTo('/echo/'), [], 'the API was never called');
-
-    vendor.googleTokenAnswers.push(
-      { status: 503, body: {} },
-      { status: 503, body: {} },
-      { status: 503, body: {} },
-    );
-    let unavailable = await invoke('values');
-    assert.strictEqual(unavailable.status, 424, unavailable.text);
-    assert.strictEqual(
-      JSON.parse(unavailable.text).errors[0].meta.reason,
-      'unavailable',
-    );
-
-    let recovered = await invoke('values');
-    assert.strictEqual(
-      recovered.status,
-      200,
-      'a failure is not cached: the next call mints again',
-    );
   });
   test("an API's 401 to a minted token is its answer and leaves the grant open", async function (assert) {
     let key = await addServiceAccount();

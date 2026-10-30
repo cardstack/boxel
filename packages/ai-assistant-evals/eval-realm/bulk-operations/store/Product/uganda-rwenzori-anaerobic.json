@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Uganda Rwenzori Anaerobic",
+      "category": "coffee",
+      "origin": "Rwenzori, Uganda",
+      "variants": [
+        {
+          "sku": "CF-106-250",
+          "size": "250 g",
+          "price": 18.5
+        },
+        {
+          "sku": "CF-106-500",
+          "size": "500 g",
+          "price": 33.99
+        },
+        {
+          "sku": "CF-106-1KG",
+          "size": "1 kg",
+          "price": 62.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

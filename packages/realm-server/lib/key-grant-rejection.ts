@@ -34,6 +34,15 @@ import type { Expression } from '@cardstack/runtime-common/expression';
 // destination: the key's owner, and when the call came through a share, the
 // direct writers of the share's realm too. Only the transition notifies, so a
 // probe the vendor refuses again sends nothing.
+//
+// A key that mints its access tokens can be refused before any call is made:
+// Google's token endpoint refuses a service-account key that is revoked or
+// deleted, whose account is disabled, or that can't act as its subject. That
+// refusal is about the key, not about any one destination, so it is recorded
+// on the key: the key becomes `rejected` and every grant of it is refused
+// `credential-rejected` without contacting Google, except one probe per key
+// per interval. A probe that mints returns the key to `active`, and replacing
+// the key does too. Entering the state notifies the same recipients, once.
 
 const log = logger('realm:key-grants');
 
@@ -76,6 +85,14 @@ export type KeyGrantEvent =
       reason: 'probe' | 'key-replaced';
     }
   | { event: 'probe'; grant: string; host: string; status: number | null }
+  | {
+      event: 'key-rejected';
+      key: string;
+      realm: string;
+      share: string | null;
+    }
+  | { event: 'key-cleared'; key: string; reason: 'probe' | 'key-replaced' }
+  | { event: 'key-probe'; key: string; minted: boolean }
   | { event: 'vendor-outcome'; host: string; status: number };
 
 let sink: ((event: KeyGrantEvent) => void) | undefined;
@@ -165,28 +182,17 @@ export async function markGrantRejected(
     if (!row) {
       return undefined;
     }
-    let recipients = new Set<string>([row.owner as string, ...writers]);
-    for (let recipient of recipients) {
-      await txQuery([
-        `INSERT INTO user_key_grant_notices (grant_id, key_id, key_name, destination, recipient, owner, realm_url, share_id, reason) VALUES (`,
-        param(grantId),
-        `, `,
-        param(row.key_id as string),
-        `, `,
-        param(row.key_name as string),
-        `, `,
-        param(row.destination as string),
-        `, `,
-        param(recipient),
-        `, `,
-        param(row.owner as string),
-        `, `,
-        param(shareId ? realmURL : null),
-        `, `,
-        param(shareId ?? null),
-        `, 'credential-rejected')`,
-      ]);
-    }
+    await recordRejectionNotices(txQuery, {
+      grantId,
+      keyId: row.key_id as string,
+      keyName: row.key_name as string,
+      destination: row.destination as string,
+      owner: row.owner as string,
+      writers,
+      realmURL,
+      shareId,
+      reason: 'credential-rejected',
+    });
     return row;
   });
   if (!moved) {
@@ -200,6 +206,60 @@ export async function markGrantRejected(
     share: shareId ?? null,
   });
   return true;
+}
+
+// One notice per recipient, naming the key and the destination the refused
+// call was sent to: the key's owner and, for a call through a share, the
+// direct writers of the share's realm. `reason` says what was refused: the key
+// at that destination (`credential-rejected`), or the key itself, everywhere
+// (`key-rejected`).
+async function recordRejectionNotices(
+  txQuery: Querier,
+  {
+    grantId,
+    keyId,
+    keyName,
+    destination,
+    owner,
+    writers,
+    realmURL,
+    shareId,
+    reason,
+  }: {
+    grantId: string;
+    keyId: string;
+    keyName: string;
+    destination: string;
+    owner: string;
+    writers: string[];
+    realmURL: string;
+    shareId?: string;
+    reason: 'credential-rejected' | 'key-rejected';
+  },
+): Promise<void> {
+  for (let recipient of new Set<string>([owner, ...writers])) {
+    await txQuery([
+      `INSERT INTO user_key_grant_notices (grant_id, key_id, key_name, destination, recipient, owner, realm_url, share_id, reason) VALUES (`,
+      param(grantId),
+      `, `,
+      param(keyId),
+      `, `,
+      param(keyName),
+      `, `,
+      param(destination),
+      `, `,
+      param(recipient),
+      `, `,
+      param(owner),
+      `, `,
+      param(shareId ? realmURL : null),
+      `, `,
+      param(shareId ?? null),
+      `, `,
+      param(reason),
+      `)`,
+    ]);
+  }
 }
 
 // Returns a rejected grant to `active` after a probe the vendor accepted.
@@ -264,11 +324,11 @@ export async function recordVendorForbidden(
 // it, however many arrive at once, because the claim and the check are one
 // statement.
 export async function claimProbe(
-  dbAdapter: DBAdapter,
+  db: DBAdapter | Querier,
   grantId: string,
   intervalMs: number,
 ): Promise<boolean> {
-  let [row] = await query(dbAdapter, [
+  let [row] = await querierOf(db)([
     `UPDATE user_key_grants SET last_probe_at = NOW() WHERE id = `,
     param(grantId),
     ` AND state = 'rejected' AND `,
@@ -278,6 +338,11 @@ export async function claimProbe(
   return !!row;
 }
 
+// Runs on a transaction's querier when given one, otherwise on the adapter.
+function querierOf(db: DBAdapter | Querier): Querier {
+  return typeof db === 'function' ? db : (expression) => query(db, expression);
+}
+
 // The SQL condition that a rejected grant's next probe is due.
 export function probeDue(column: string, intervalMs: number): Expression {
   return [
@@ -285,4 +350,106 @@ export function probeDue(column: string, intervalMs: number): Expression {
     param(intervalMs / 1000),
     `))`,
   ];
+}
+
+// Moves a key whose token endpoint refused it to `rejected` and records its
+// notices, only when this is the move: a key already rejected was announced
+// already. `grantId` is the grant the refused call came through, which the
+// notices name with its destination. `copy` names the sealed value the refused
+// exchange was signed with, so a refusal of a value since replaced changes
+// nothing. Answers whether this call made the move.
+export async function markKeyRejected(
+  dbAdapter: DBAdapter,
+  {
+    keyId,
+    grantId,
+    realmURL,
+    shareId,
+    copy,
+  }: {
+    keyId: string;
+    grantId: string;
+    realmURL: string;
+    shareId?: string;
+    copy: string;
+  },
+): Promise<boolean> {
+  let writers = shareId
+    ? await fetchDirectWriters(dbAdapter, new URL(realmURL))
+    : [];
+  let moved = await dbAdapter.withTransaction(async (txQuery) => {
+    let [row] = await txQuery([
+      `UPDATE user_keys SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() WHERE id = `,
+      param(keyId),
+      ` AND state = 'active' AND encode(value_nonce, 'base64') = `,
+      param(copy),
+      ` RETURNING owner, name`,
+    ]);
+    if (!row) {
+      return false;
+    }
+    let [grant] = await txQuery([
+      `SELECT destination FROM user_key_grants WHERE id = `,
+      param(grantId),
+    ]);
+    if (grant) {
+      await recordRejectionNotices(txQuery, {
+        grantId,
+        keyId,
+        keyName: row.name as string,
+        destination: grant.destination as string,
+        owner: row.owner as string,
+        writers,
+        realmURL,
+        shareId,
+        reason: 'key-rejected',
+      });
+    }
+    return true;
+  });
+  if (moved) {
+    emitKeyGrantEvent({
+      event: 'key-rejected',
+      key: keyId,
+      realm: realmURL,
+      share: shareId ?? null,
+    });
+  }
+  return moved;
+}
+
+// Claims the probe of a rejected key: at most one call per interval gets it,
+// whichever of the key's grants it comes through.
+export async function claimKeyProbe(
+  db: DBAdapter | Querier,
+  keyId: string,
+  intervalMs: number,
+): Promise<boolean> {
+  let [row] = await querierOf(db)([
+    `UPDATE user_keys SET last_probe_at = NOW() WHERE id = `,
+    param(keyId),
+    ` AND state = 'rejected' AND `,
+    ...probeDue('last_probe_at', intervalMs),
+    ` RETURNING id`,
+  ]);
+  return !!row;
+}
+
+// Returns a rejected key to `active`: after a probe that minted, or inside the
+// transaction that replaces its value, which hasn't been refused.
+export async function clearKeyRejected(
+  querier: Querier,
+  keyId: string,
+  reason: 'probe' | 'key-replaced',
+): Promise<boolean> {
+  let [row] = await querier([
+    `UPDATE user_keys SET state = 'active', rejected_at = NULL, last_probe_at = NULL WHERE id = `,
+    param(keyId),
+    ` AND state = 'rejected' RETURNING id`,
+  ]);
+  if (!row) {
+    return false;
+  }
+  emitKeyGrantEvent({ event: 'key-cleared', key: keyId, reason });
+  return true;
 }

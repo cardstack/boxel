@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Oolong Tieguanyin",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-009-050",
+          "size": "50 g",
+          "price": 14.0
+        },
+        {
+          "sku": "TE-009-100",
+          "size": "100 g",
+          "price": 26.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
