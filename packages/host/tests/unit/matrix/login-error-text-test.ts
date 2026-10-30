@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { extractMatrixErrorMessage } from '@cardstack/host/components/matrix/login';
+import { extractMatrixErrorMessage } from '@cardstack/host/lib/matrix-utils';
 
 module('Unit | matrix | extractMatrixErrorMessage', function () {
   test('it describes a 429', function (assert) {

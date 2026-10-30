@@ -272,16 +272,9 @@ module('Acceptance | realm config | API Keys', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let originalFlag: boolean;
   let api: ReturnType<typeof stubSharesAPI> | undefined;
 
-  hooks.beforeEach(function () {
-    originalFlag = ENV.signInOnSecureOrigin;
-    ENV.signInOnSecureOrigin = true;
-  });
-
   hooks.afterEach(function () {
-    ENV.signInOnSecureOrigin = originalFlag;
     api?.restore();
     api = undefined;
   });

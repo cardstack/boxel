@@ -5,31 +5,28 @@ import {
   dockerRm,
 } from '../support/docker.ts';
 
-// navikt/mock-oauth2-server stands in for Google's OIDC provider in the
-// Playwright SSO suite. Two containers are involved:
+// navikt/mock-oauth2-server stands in for Google's OIDC provider for the
+// realm server's Google sign-in in the Playwright suite. Two containers are
+// involved:
 //
 //   boxel-mock-oauth-upstream — the actual mock OIDC server (boxel network only)
-//   boxel-mock-oauth          — a Caddy reverse proxy in front of it
+//   boxel-mock-oauth          — a Caddy reverse proxy in front of it, published
+//                               on the host at MOCK_OAUTH2_HOST_PORT
 //
-// The proxy exists because the mock (OkHttp MockWebServer) returns responses
-// with `Connection: close` and no `Content-Length`. Synapse's Twisted HTTP
-// client rejects that framing with `PartialDownloadError`, so OIDC discovery
-// fails and Synapse won't boot. Caddy buffers and re-frames the response with
-// chunked transfer encoding, which Twisted accepts. Caddy preserves the inbound
-// Host header, so the mock still derives its `issuer` from `boxel-mock-oauth`.
-//
-// Synapse (on the `boxel` network) reaches the proxy by container name; the
-// Playwright browser reaches the same `boxel-mock-oauth` host via a
-// `--host-resolver-rules` MAP in playwright.config.ts. Using the identical
-// `boxel-mock-oauth:8080` URL on both sides keeps the issuer / `iss` claim
-// consistent, which is what lets Synapse's discovery and token validation
-// line up.
+// The mock (OkHttp MockWebServer) answers with `Connection: close` and no
+// `Content-Length`; Caddy re-frames responses with chunked transfer encoding
+// and preserves the inbound Host header, so the mock derives its `issuer` from
+// whichever host the caller used. The realm server and the browser both reach
+// it at `localhost:${MOCK_OAUTH2_HOST_PORT}` (see `GOOGLE_OAUTH_ISSUER` in
+// support/isolated-realm-server.ts), so the issuer / `iss` claim agrees on both
+// sides.
 export const MOCK_OAUTH2_UPSTREAM_CONTAINER = 'boxel-mock-oauth-upstream';
 export const MOCK_OAUTH2_CONTAINER = 'boxel-mock-oauth';
 export const MOCK_OAUTH2_INTERNAL_PORT = 8080;
 export const MOCK_OAUTH2_HOST_PORT = 8083;
 // `default` is mock-oauth2-server's default issuerId — the first path segment
-// of every endpoint. Synapse's `oidc_providers[].issuer` must equal this.
+// of every endpoint. This is the issuer as seen from inside the `boxel`
+// network, by container name.
 export const MOCK_OAUTH2_ISSUER = `http://${MOCK_OAUTH2_CONTAINER}:${MOCK_OAUTH2_INTERNAL_PORT}/default`;
 
 export async function mockOauth2Start() {

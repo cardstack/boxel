@@ -69,7 +69,7 @@ Work through the diff as if inheriting the code, not skimming it.
 - **Decisions hold, or are superseded on purpose.** Load the `adr` skill when any of the following applies:
   - A change breaks an ADR from Phase 1. Severity follows the key word (ADR 001 §1.9):
     - Breaking a MUST or MUST NOT of an `accepted` ADR, with no superseding ADR in the diff, is blocking. Ask the author to conform or to add the superseding ADR.
-    - Breaking a MUST or MUST NOT of a `proposed` ADR in new code is blocking in the same way, including in the PR that adds the ADR. Ask the author to conform or to edit the ADR's Decision (§1.6). Code listed under its Remediation section is a known gap and not a finding, unless the diff copies it into new code (§1.9).
+    - Breaking a MUST or MUST NOT of a `proposed` ADR in new code is blocking in the same way, including in the PR that adds the ADR. Ask the author to conform or to edit the ADR's Decision (§1.6). Code listed in its remediation file is a known gap and not a finding — `scripts/adr-for.mts` prints the entries for the paths it is given, unless the diff copies it into new code (§1.9).
     - A diff that closes a listed gap and leaves its entry is blocking. An existing gap that isn't listed is non-blocking: ask for an entry (§1.9).
     - Departing from a SHOULD with no stated reason is non-blocking. Ask for the reason.
     - Cite the requirement by number ("ADR 004 §1.2") rather than restating it.
@@ -78,7 +78,7 @@ Work through the diff as if inheriting the code, not skimming it.
     - it is not self-marked `accepted` (§1.6);
     - its `scope` globs match the code it governs, and the index row is added (§1.2);
     - its structure and length follow §1.3 and §1.5;
-    - if it is `proposed`, it ends with a Remediation section that lists, by file, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing section, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
+    - if it is `proposed`, it ends with a Remediation section that links `docs/adr/remediation/<number>.md`, and that file lists, by file path, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing file, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
     - in a retroactive ADR, every reason cites a source or sits under Open questions (§1.7). An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding

@@ -139,12 +139,13 @@ export interface PostedSecureSession {
 // The ways a browser can finish the flow:
 //
 // - a single-use Matrix login token, for this process to redeem for a device
-//   of its own. The secure origin's `cli-auth` page sends it, and Synapse's
-//   single sign-on returns one to the app's `/cli-auth` page. A `?loginToken=`
-//   navigation is the form every version of the CLI accepts; the secure
-//   origin POSTs it instead when it also hands over a secure session.
-// - the app's `/cli-auth` page POSTing a Matrix session it already signed in
-//   (its password branch).
+//   of its own. The secure origin's `cli-auth` page sends it, and so does a
+//   Google sign-in on the `/cli-auth` page of a server with no secure origin,
+//   through its Matrix server's single sign-on. A `?loginToken=` navigation is
+//   the form every version of the CLI accepts; the secure origin POSTs it
+//   instead when it also hands over a secure session.
+// - the `/cli-auth` page of a server with no secure origin POSTing a Matrix
+//   session it already signed in with a password.
 // - the secure origin POSTing a secure session alone (`boxel keys sign-in`).
 // - the secure window's `connected` page POSTing the end of an OAuth sign-in
 //   `boxel keys connect` started: the service's one-use code and the
@@ -242,8 +243,8 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
-      // The password branch POSTs a session it already obtained; the SSO branch
-      // arrives as Synapse's redirect. Both carry the nonce.
+      // A POST carries a session or login token the page already obtained; a
+      // navigation carries a login token. Both carry the nonce.
       let posted: URLSearchParams | undefined;
       if (req.method === 'POST') {
         try {
@@ -592,9 +593,10 @@ export function watchForCopyKey(
 
 export const CLI_AUTH_PATH = 'cli-auth';
 
-// The host app's authorization page, which offers the same sign-in choices as
-// the web login: a password form and a Google button. The CLI opens it when
-// the realm server's secure origin can't sign a profile in (see
+// The host app's authorization page. On a server with a secure origin it
+// forwards to the secure origin's `cli-auth` page with the same port and
+// state; on one without, it is that host app's own sign-in. The CLI opens it
+// when the realm server's secure origin can't sign a profile in (see
 // `buildSecureCliAuthUrl`), or when `--host-url` names it.
 //
 // The listener is identified by port rather than by handing over its URL. A URL
