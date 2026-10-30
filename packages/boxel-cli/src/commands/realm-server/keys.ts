@@ -276,13 +276,17 @@ export async function confirmPlatformClientDelete(
       'Pass --yes to delete a platform client without a terminal to confirm in',
     );
   }
-  let client = (await listPlatformClients(options)).find(
-    (candidate) => candidate.name === name,
-  );
-  if (!client) {
-    throw new Error(`No platform client is named ${name}`);
+  let shown;
+  try {
+    shown = await showPlatformClient(options, name);
+  } catch (e: any) {
+    if (/answered HTTP 404/.test(e?.message ?? '')) {
+      throw new Error(`No platform client is named ${name}`);
+    }
+    throw e;
   }
-  printClient(client);
+  printClient(shown.client);
+  printHistory(shown.history);
   console.log(
     'Every connection made through it will need an administrator, and adding the client again does not restore them.',
   );

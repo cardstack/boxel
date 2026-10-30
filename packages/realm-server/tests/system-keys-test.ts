@@ -844,6 +844,14 @@ module(basename(import.meta.filename), function () {
           .send(body);
         assert.strictEqual(response.status, 400, JSON.stringify(body));
       }
+      let bodiless = await request
+        .delete('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(bodiless.status, 400, 'a delete with no body');
+      assert.true(
+        bodiless.text.includes('an operator note is required'),
+        'a delete with no body is refused for its missing note',
+      );
       assert.deepEqual(
         (await platformClientHistory()).map(({ action }) => action),
         ['add'],

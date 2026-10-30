@@ -359,15 +359,18 @@ describe('boxel realm-server keys', () => {
     });
 
     it('shows the client and asks before deleting it, unless --yes is given', async () => {
-      let { fetch, requests } = fakeServer([{ body: { clients: [client] } }]);
+      let shown = { body: { client, history: [] } };
+      let { fetch, requests } = fakeServer([shown]);
       let questions: string[] = [];
       await confirmPlatformClientDelete(options(fetch), 'github', {
         isTTY: true,
         confirm: async (question) => (questions.push(question), true),
       });
       expect(questions).toEqual(['Delete the platform client github? [y/N] ']);
+      expect(requests[0].method).toBe('GET');
+      expect(requests[0].url).toMatch(/\/_platform-oauth-clients\/github$/);
 
-      let declining = fakeServer([{ body: { clients: [client] } }]);
+      let declining = fakeServer([shown]);
       await expect(
         confirmPlatformClientDelete(options(declining.fetch), 'github', {
           isTTY: true,
@@ -375,7 +378,9 @@ describe('boxel realm-server keys', () => {
         }),
       ).rejects.toThrow(/Not deleted/);
 
-      let unknown = fakeServer([{ body: { clients: [client] } }]);
+      let unknown = fakeServer([
+        { status: 404, body: { errors: [{ detail: 'not found' }] } },
+      ]);
       await expect(
         confirmPlatformClientDelete(options(unknown.fetch), 'gitlab', {
           isTTY: true,
@@ -395,7 +400,7 @@ describe('boxel realm-server keys', () => {
       expect(requests).toHaveLength(1);
     });
 
-    it('refuses --yes for a system key, whose delete asks for a note instead', () => {
+    it('refuses --yes for a system key, whose delete asks for a note', () => {
       expect(() =>
         refuseClientOptions({ realmServer: 'https://x.test', yes: true }),
       ).toThrow(/--yes/);

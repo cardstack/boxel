@@ -300,10 +300,10 @@ export function handleReplacePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   });
 }
 
-// Body: `note`.
+// Body: `note`. A DELETE sent with no body gets the missing-note refusal.
 export function handleDeletePlatformClient({ dbAdapter }: CreateRoutesArgs) {
   return keysHandler(async (ctxt) => {
-    let body = await readJSON(ctxt);
+    let body = await readJSON(ctxt, { emptyIsObject: true });
     await deletePlatformClient(dbAdapter, secretsKeyring(), {
       name: ctxt.params.name,
       note: body.note,
