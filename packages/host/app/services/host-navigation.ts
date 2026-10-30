@@ -1,5 +1,5 @@
 import type RouterService from '@ember/routing/router-service';
-import { next, scheduleOnce } from '@ember/runloop';
+import { later, next, scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
 import {
@@ -233,9 +233,16 @@ export default class HostNavigationService extends Service {
     };
     // Back and Forward change the entry before anything here runs, so the
     // position is kept as it changes rather than read on the way out.
-    let onScroll = () => {
-      if (!this.pendingNavigation) {
-        this.saveScroll();
+    let onScroll = (event: Event) => {
+      if (this.pendingNavigation) {
+        return;
+      }
+      let target =
+        event.target instanceof HTMLElement
+          ? event.target
+          : document.scrollingElement;
+      if (target instanceof HTMLElement && target === this.scroller()) {
+        this.scrollPositions.set(this.entryKey(), target.scrollTop);
       }
     };
     let onPopState = () => {
@@ -292,11 +299,10 @@ export default class HostNavigationService extends Service {
         : null;
       if (anchor) {
         anchor.scrollIntoView();
+      } else if (kind === 'traverse') {
+        this.restoreScroll(this.scrollPositions.get(this.entryKey()) ?? 0);
       } else if (scroller) {
-        scroller.scrollTop =
-          kind === 'traverse'
-            ? (this.scrollPositions.get(this.entryKey()) ?? 0)
-            : 0;
+        scroller.scrollTop = 0;
       }
       if (kind === 'push') {
         this.focusPage();
@@ -317,6 +323,24 @@ export default class HostNavigationService extends Service {
     }
   }
 
+  // A page card's content may arrive a little after the transition: wait,
+  // up to two seconds, until the page is tall enough to reach the position.
+  private restoreScroll(top: number, frames = 40) {
+    let scroller = this.scroller();
+    if (scroller && scroller.scrollHeight - scroller.clientHeight >= top) {
+      scroller.scrollTop = top;
+      return;
+    }
+    if (frames > 0) {
+      later(() => this.restoreScroll(top, frames - 1), 50);
+    } else if (scroller) {
+      scroller.scrollTop = top;
+    }
+  }
+
+  // What scrolls the page: the host's scroll container, or, for a card that
+  // lays itself out to the viewport and scrolls inside, the first element in
+  // it that scrolls.
   private scroller(): HTMLElement | undefined {
     let page = document.querySelector('[data-host-mode-primary]');
     let candidates = [
@@ -325,11 +349,17 @@ export default class HostNavigationService extends Service {
       document.scrollingElement,
     ];
     for (let candidate of candidates) {
-      if (
-        candidate instanceof HTMLElement &&
-        candidate.scrollHeight > candidate.clientHeight
-      ) {
+      if (candidate instanceof HTMLElement && scrolls(candidate)) {
         return candidate;
+      }
+    }
+    if (!page) {
+      return undefined;
+    }
+    let walker = document.createTreeWalker(page, NodeFilter.SHOW_ELEMENT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node instanceof HTMLElement && scrolls(node)) {
+        return node;
       }
     }
     return undefined;
@@ -346,6 +376,17 @@ export default class HostNavigationService extends Service {
       this.scrollPositions.set(this.entryKey(), scroller.scrollTop);
     }
   }
+}
+
+function scrolls(element: HTMLElement): boolean {
+  if (element.scrollHeight <= element.clientHeight) {
+    return false;
+  }
+  if (element === document.scrollingElement) {
+    return true;
+  }
+  let overflow = getComputedStyle(element).overflowY;
+  return overflow === 'auto' || overflow === 'scroll';
 }
 
 function cardKey(url: string): string {
