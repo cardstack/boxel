@@ -45,7 +45,7 @@ APG **Dialog**, non-modal by default.
 
 ## Theming
 
-`--pretui-tour-ring` (default `--primary`), `--pretui-overlay-scrim` (the `@modal` scrim), `--pretui-z-overlay` (the card and ring), `--popover`, `--popover-foreground`, `--pretui-shadow-overlay`, `--radius-surface`, `--radius-control`, `--border`, `--hover`, `--ring`, `--muted-foreground`, `--foreground`, `--font-sans`, `--font-serif` (the title), `--text-heading`, `--weight-heading`, `--text-ui-md`, `--text-ui-xs`, `--track-eyebrow`, `--leading-body`, `--space-2`, `--space-4`, and `--pretui-dur-snap` / `--pretui-ease-snap` (the ring moving between steps).
+`--pretui-tour-ring` (default `--primary`), `--pretui-overlay-scrim` (the `@modal` scrim), `--pretui-z-overlay` (the card and ring), `--popover`, `--popover-foreground`, `--pretui-shadow-overlay`, `--radius-surface`, `--radius-control`, `--border`, `--hover`, `--ring`, `--muted-foreground`, `--foreground`, `--font-sans`, `--font-serif` (the title), `--text-heading`, `--weight-heading`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--track-eyebrow`, `--boxel-body-line-height`, `--space-2`, `--space-4`, and `--pretui-dur-snap` / `--pretui-ease-snap` (the ring moving between steps).
 
 The card is 20rem wide at most. The ring's move is dropped under reduced motion.
 

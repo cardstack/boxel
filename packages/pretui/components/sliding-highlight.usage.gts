@@ -156,7 +156,7 @@ class SlidingHighlightUsage extends Component {
         background: none;
         border-radius: var(--radius);
         font-family: inherit;
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         color: var(--muted-foreground);
         cursor: pointer;
@@ -172,7 +172,7 @@ class SlidingHighlightUsage extends Component {
       }
       .sh-note {
         margin: 0;
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

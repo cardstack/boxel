@@ -748,21 +748,21 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
         .pretui-tm {
           container-type: inline-size;
           display: block;
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           --pretui-tm-tone: var(--primary);
           --pretui-tm-on: var(--primary-foreground);
         }
         .pretui-tm[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-tm[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-tm[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-tm[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-tm[data-tone='neutral'] {
           --pretui-tm-tone: var(--foreground);
@@ -785,7 +785,7 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
           --pretui-tm-on: var(--destructive-foreground);
         }
         .pretui-tm[data-tone='attention'] {
-          --pretui-tm-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tm-tone: var(--attention);
           --pretui-tm-on: var(--pretui-on-attention, var(--background));
         }
         .pretui-tm[data-disabled='true'] {
@@ -958,7 +958,7 @@ export class ToggleMatrix extends Component<ToggleMatrixSignature> {
         }
         .pretui-tm-none {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-style: italic;
           color: var(--muted-foreground);
         }

@@ -158,7 +158,7 @@ export class BottomNav extends Component<BottomNavSignature> {
           background: transparent;
           color: var(--muted-foreground);
           font: inherit;
-          font-size: var(--text-ui-xs, 0.66rem);
+          font-size: var(--boxel-font-size-2xs);
           text-decoration: none;
           cursor: pointer;
         }

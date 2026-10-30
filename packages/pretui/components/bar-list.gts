@@ -196,7 +196,7 @@ export class BarList extends Component<BarListSignature> {
           min-block-size: var(--pretui-barlist-row-height, 28px);
           padding: 3px var(--space-3, 8px);
           border-radius: var(--radius-control, 7px);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-barlist-bar {
           position: absolute;
@@ -242,7 +242,7 @@ export class BarList extends Component<BarListSignature> {
         .pretui-barlist-more {
           margin: var(--space-3, 8px) 0 0;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-barlist-bar {

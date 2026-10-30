@@ -54,7 +54,7 @@ export const Divider: TemplateOnlyComponent<DividerSignature> = <template>
       }
       .pretui-divider-label {
         padding: 0 8px;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-ui, 0.01em);
         color: var(--muted-foreground);
         white-space: nowrap;

@@ -230,7 +230,7 @@ export class Onboarding extends Component<OnboardingSignature> {
             0 0 0 1px var(--border),
             0 1px 2px rgb(0 0 0 / 0.08)
           );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           container-type: inline-size;
         }
         .pretui-onb-scene {

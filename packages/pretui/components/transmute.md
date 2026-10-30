@@ -42,7 +42,7 @@ No pattern governs it, and this is where the design's cleverness costs something
 
 `--font-mono` and `--muted-foreground` (the verb voice, at a fixed 10px / 600 / 0.06em), plus the tail inks and the morph's easing and duration.
 
-The verb's 10px size and letterspacing are hard-coded rather than tokenized, which is an inconsistency with the rest of the kit's eyebrow voice (**Label**, **Panel**, **DataGrid** all read `--text-ui-xs` and `--track-eyebrow`). A theme retuning the eyebrow scale will move those three and not this one.
+The verb's 10px size and letterspacing are hard-coded rather than tokenized, which is an inconsistency with the rest of the kit's eyebrow voice (**Label**, **Panel**, **DataGrid** all read `--boxel-font-size-2xs` and `--track-eyebrow`). A theme retuning the eyebrow scale will move those three and not this one.
 
 The tail inks should recede relative to the verb — the tier hierarchy is carried by ink weight as much as by width, so a theme that flattens the ink ramp loses the sense that T2 is _more detail_ rather than _more text_.
 

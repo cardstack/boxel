@@ -65,7 +65,7 @@ The caller's failures to avoid: a row whose only action is a click handler on th
 
 ## Theming
 
-Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--primary`, `--primary-foreground`, `--ring`, `--radius-surface`, `--hover`, `--input`, `--field`, `--text-ui-md`, `--text-ui-sm`, `--track-ui`, `--space-3`, `--space-4`, `--pretui-shadow-hairline`, `--pretui-control-rest`, `--pretui-control-border`, `--pretui-edge-highlight`, `--pretui-selected`.
+Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--primary`, `--primary-foreground`, `--ring`, `--radius-surface`, `--hover`, `--input`, `--field`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--track-ui`, `--space-3`, `--space-4`, `--pretui-shadow-hairline`, `--pretui-control-rest`, `--pretui-control-border`, `--pretui-edge-highlight`, `--pretui-selected`.
 
 The selection control is drawn by the same declarations **DataTable** uses (15px, 5px radius, `--primary` fill with a `--primary-foreground` check), so a theme that retunes `--pretui-control-rest` and `--pretui-control-border` retunes both listings' checkboxes together. Density is one axis through `@size` on the root `font-size`. Coarse pointers get a 44px row floor and 20px controls without changing the fine-pointer rhythm.
 

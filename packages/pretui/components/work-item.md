@@ -51,7 +51,7 @@ Gaps, and the first is the big one:
 
 ## Theming
 
-Tone hues: the four semantic tokens plus the reserved attention hue (`--pretui-attention`), each driving ink and glyph. Surface and structure: `--card`, `--border`, `--muted-foreground`, `--foreground`, `--font-mono` (the verb voice), `--text-ui-*`. Progress: **ProgressBar**'s `--primary`/`--inset`.
+Tone hues: the four semantic tokens plus the reserved attention hue (`--attention`), each driving ink and glyph. Surface and structure: `--card`, `--border`, `--muted-foreground`, `--foreground`, `--font-mono` (the verb voice), `--boxel-font-size-*`. Progress: **ProgressBar**'s `--primary`/`--inset`.
 
 **The attention hue is the one token a theme must not reuse.** Its meaning in this territory is "a human must act now", and a theme that also uses it for a decorative accent destroys the signal. Everything else in the territory is deliberately quiet so that one color can be loud.
 

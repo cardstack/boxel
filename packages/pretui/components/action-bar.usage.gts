@@ -179,7 +179,7 @@ class ActionBarUsage extends Component {
           0 0 0 1px var(--border)
         );
         font: inherit;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--foreground);
         cursor: pointer;
       }
@@ -201,7 +201,7 @@ class ActionBarUsage extends Component {
       }
       .pretui-ab-demo-note {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

@@ -205,7 +205,7 @@ export class MorphingPopover extends Component<MorphingPopoverSignature> {
             0 1px 2px rgb(0 0 0 / 0.3)
           );
           font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           cursor: pointer;
         }
         @media (any-pointer: coarse) {
@@ -230,7 +230,7 @@ export class MorphingPopover extends Component<MorphingPopoverSignature> {
             0 8px 28px rgb(0 0 0 / 0.34)
           );
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           /* Transform origin follows the anchor edge so the morph reads as
              growth out of the trigger rather than a slide from nowhere. */
           transform-origin: top left;

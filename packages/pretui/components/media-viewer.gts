@@ -120,9 +120,9 @@ export class MediaViewer extends Component<MediaViewerSignature> {
           min-width: 0;
         }
         .pretui-mviewer-link {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
           text-underline-offset: 3px;
         }
         .pretui-mviewer-link:focus-visible {

@@ -45,7 +45,7 @@ No single APG pattern. It is a list, buttons, progress bars and a status line.
 
 ## Theming
 
-`--card` and `--border` (the rows), `--pretui-upload-tone` (the stripe, set from the status: `--pretui-info`, `--success`, `--destructive` or `--border`), `--muted-foreground` (size and status), `--foreground` and `--destructive` (the failed status and error text), `--primary` (Retry), `--hover`, `--ring`, `--radius-control`, `--font-sans`, `--text-ui-md`, `--text-ui-sm`, `--space-2` and `--space-3`. The drop target and the bars read **Dropzone**'s and **ProgressBar**'s own tokens.
+`--card` and `--border` (the rows), `--pretui-upload-tone` (the stripe, set from the status: `--pretui-info`, `--success`, `--destructive` or `--border`), `--muted-foreground` (size and status), `--foreground` and `--destructive` (the failed status and error text), `--primary` (Retry), `--hover`, `--ring`, `--radius-control`, `--font-sans`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--space-2` and `--space-3`. The drop target and the bars read **Dropzone**'s and **ProgressBar**'s own tokens.
 
 The 3px stripe is fixed.
 

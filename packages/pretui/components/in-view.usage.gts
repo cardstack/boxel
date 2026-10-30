@@ -221,7 +221,7 @@ class InViewUsage extends Component {
       }
       .inview-hint {
         margin: 0 0 200px;
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       /* the documented way to give the observed container a layout role —
@@ -240,7 +240,7 @@ class InViewUsage extends Component {
         background: var(--muted);
       }
       .inview-tea {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--foreground);
       }
@@ -248,11 +248,11 @@ class InViewUsage extends Component {
         grid-row: span 2;
         align-self: center;
         font-variant-numeric: tabular-nums;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--foreground);
       }
       .inview-meta {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

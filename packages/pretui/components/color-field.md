@@ -40,7 +40,7 @@ Where it is thinner: no eyedropper on the trigger itself, no recent-colours memo
 
 ## Theming
 
-`--pretui-swatch-size` and `--pretui-swatch-color` for the trigger and presets, `--pretui-palette-columns` for the preset grid, `--pretui-checker` behind anything with alpha, `--pretui-destructive-ink` for the invalid state, `--pretui-z-raised` for the popover layer.
+`--pretui-swatch-size` and `--pretui-swatch-color` for the trigger and presets, `--pretui-palette-columns` for the preset grid, `--pretui-checker` behind anything with alpha, `--destructive-ink` for the invalid state, `--pretui-z-raised` for the popover layer.
 
 `--pretui-palette-columns` as a token rather than an arg is deliberate: preset grids should have the same rhythm everywhere in a product, and a per-field column count is how a palette ends up looking different on two screens.
 

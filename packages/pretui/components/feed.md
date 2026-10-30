@@ -47,7 +47,7 @@ Gaps:
 
 ## Theming
 
-The Feed itself paints very little — it is structure plus focus management. Consumed: `--border` or `--card` for row separation, `--text-ui-md`, and the layout spacing tokens. The loading tail is **Skeleton**'s tokens (`--inset`, `--hover`); the empty state is **EmptyState**'s (`--canvas`, `--primary`, `--font-serif`).
+The Feed itself paints very little — it is structure plus focus management. Consumed: `--border` or `--card` for row separation, `--boxel-font-size-xs`, and the layout spacing tokens. The loading tail is **Skeleton**'s tokens (`--inset`, `--hover`); the empty state is **EmptyState**'s (`--canvas`, `--primary`, `--font-serif`).
 
 Almost all visual weight belongs to what you yield into `<:item>`, which is the intent: a feed of comments and a feed of build results should look nothing alike, and the component's job is the semantics they share.
 

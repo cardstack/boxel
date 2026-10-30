@@ -44,7 +44,7 @@ What that means here:
 
 ## Theming
 
-Consumed directly: `--foreground`, `--text-ui-md`, `--track-ui`.
+Consumed directly: `--foreground`, `--boxel-font-size-xs`, `--track-ui`.
 
 Remapped into the boxel-ui channel: `--ring` ← `--primary` (the trigger's focus outline — note the engine _does_ paint a focus ring, unlike several hand-rolled Pretui controls), `--radius` ← `--radius-surface`, `--boxel-accordion-border` and `--boxel-accordion-item-border` ← `--border`, `--boxel-accordion-item-min-height` ← `--control-h`, `--boxel-accordion-title-font-weight` (600), `--boxel-accordion-trigger-padding-block` ← `--space-3`, `--boxel-accordion-transition` ← `--pretui-dur-snap` / `--pretui-ease-snap`.
 

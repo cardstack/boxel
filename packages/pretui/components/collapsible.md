@@ -46,7 +46,7 @@ Governing pattern: APG **Disclosure**. The pattern requires a button with `aria-
 
 ## Theming
 
-Consumed directly: `--foreground`, `--muted-foreground` (the caret), `--hover` (trigger hover fill), `--ring` (focus outline), `--radius-chip` (trigger corners), `--track-ui`, and the size scale `--pretui-size-xs` … `--pretui-size-xl` with `--text-ui-xs` … `--text-ui-xl` as the fallbacks.
+Consumed directly: `--foreground`, `--muted-foreground` (the caret), `--hover` (trigger hover fill), `--ring` (focus outline), `--radius-chip` (trigger corners), `--track-ui`, and the size scale `--pretui-size-xs` … `--pretui-size-xl` with `--boxel-font-size-2xs` … `--boxel-font-size` as the fallbacks.
 
 The component's own knobs: `--pretui-collapsible-h` (minimum trigger height, 2.24em) and `--pretui-collapsible-px` (trigger inline padding, 0.5em — also the negative margin that keeps the label flush with the content edge).
 

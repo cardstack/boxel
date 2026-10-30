@@ -48,7 +48,7 @@ export const Label: TemplateOnlyComponent<LabelSignature> = <template>
         display: inline-block;
         padding: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         line-height: 16px;
         letter-spacing: var(--track-eyebrow, 0.08em);

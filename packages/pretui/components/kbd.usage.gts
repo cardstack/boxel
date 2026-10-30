@@ -55,13 +55,13 @@ class KbdUsage extends GlimmerComponent {
     <style scoped>
       .kbd-table {
         border-collapse: collapse;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
       .kbd-table th {
         text-align: start;
         padding-block: 4px;
         padding-inline: 0 20px;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: var(--track-eyebrow, 0.06em);
         text-transform: uppercase;
@@ -75,11 +75,11 @@ class KbdUsage extends GlimmerComponent {
       }
       .kbd-table code {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .kbd-spoken {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

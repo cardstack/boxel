@@ -323,7 +323,7 @@ export class Slider extends Component<SliderSignature> {
           font-family: var(--font-mono);
           font-size: 10px;
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
       }
     </style>

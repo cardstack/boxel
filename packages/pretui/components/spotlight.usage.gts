@@ -179,12 +179,12 @@ class SpotlightUsage extends Component {
         gap: 10px;
       }
       .spot-tea {
-        font-size: var(--text-ui-lg, 13.5px);
+        font-size: var(--boxel-font-size-sm);
         color: var(--card-foreground);
       }
       .spot-meta {
         flex: 1;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
       }

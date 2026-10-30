@@ -205,14 +205,14 @@ class MasonryUsage extends Component {
       }
       .note-n {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         color: var(--muted-foreground);
         font-variant-numeric: tabular-nums;
       }
       .note-tea {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--foreground);
         min-width: 0;
@@ -225,7 +225,7 @@ class MasonryUsage extends Component {
       }
       .note-body {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.5;
         color: var(--muted-foreground);
       }

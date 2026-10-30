@@ -190,7 +190,7 @@ export class PanelSection extends Component<PanelSectionSignature> {
           border-radius: var(--radius-sm, 5px);
         }
         .pretui-section-title {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
@@ -223,8 +223,8 @@ export class PanelSection extends Component<PanelSectionSignature> {
         .pretui-section-summary {
           flex: none;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-section-actions {
@@ -272,7 +272,7 @@ export class PanelSection extends Component<PanelSectionSignature> {
           padding-inline: 0;
         }
         .pretui-section:not([data-depth='0']) .pretui-section-title {
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           letter-spacing: var(--track-ui, 0.01em);
           text-transform: none;

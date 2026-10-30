@@ -543,7 +543,7 @@ export class GradientEditor extends Component<GradientEditorSignature> {
           flex-direction: column;
           gap: var(--space-3, 8px);
           container-type: inline-size;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-gradient[data-disabled='true'] {
@@ -648,14 +648,14 @@ export class GradientEditor extends Component<GradientEditorSignature> {
         }
         .pretui-gradient-eyebrow {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
         .pretui-gradient-note {
           margin: 0;
-          font-size: var(--text-ui-sm, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           line-height: 1.4;
         }

@@ -25,13 +25,13 @@ const ScaffoldMasthead: TemplateOnlyComponent = <template>
       gap: var(--space-4, 11px);
     }
     .ps-demo-brand {
-      font-size: var(--text-ui-lg, 14px);
+      font-size: var(--boxel-font-size-sm);
       font-weight: 650;
       letter-spacing: var(--track-heading, -0.01em);
       color: var(--foreground);
     }
     .ps-demo-account {
-      font-size: var(--text-ui-sm, 11.5px);
+      font-size: var(--boxel-font-size-2xs);
       color: var(--muted-foreground);
     }
   </style>
@@ -50,7 +50,7 @@ const ScaffoldSubhead: TemplateOnlyComponent = <template>
       display: flex;
       align-items: center;
       gap: var(--space-2, 5px);
-      font-size: var(--text-ui-sm, 11.5px);
+      font-size: var(--boxel-font-size-2xs);
       color: var(--muted-foreground);
     }
   </style>
@@ -71,7 +71,7 @@ class ScaffoldNav extends Component {
         margin: 0;
         padding: 0;
         list-style: none;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .ps-demo-nav li {
@@ -98,7 +98,7 @@ const ScaffoldMain: TemplateOnlyComponent = <template>
   <style scoped>
     .ps-demo-h {
       margin: 0 0 var(--space-3, 8px);
-      font-size: var(--text-ui-lg, 14px);
+      font-size: var(--boxel-font-size-sm);
       letter-spacing: var(--track-heading, -0.01em);
       color: var(--foreground);
     }
@@ -128,7 +128,7 @@ class ScaffoldAside extends Component {
         grid-template-columns: auto 1fr;
         gap: var(--space-2, 5px) var(--space-3, 8px);
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
       .ps-demo-meta dt {
         color: var(--muted-foreground);
@@ -146,7 +146,7 @@ const ScaffoldFooter: TemplateOnlyComponent = <template>
   <style scoped>
     .ps-demo-foot {
       margin: 0;
-      font-size: var(--text-ui-xs, 11px);
+      font-size: var(--boxel-font-size-2xs);
       color: var(--muted-foreground);
     }
   </style>
@@ -380,7 +380,7 @@ class PageScaffoldUsage extends Component {
       .ps-demo-host {
         container-type: inline-size;
         padding: var(--space-4, 11px);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

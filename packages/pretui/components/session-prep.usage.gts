@@ -105,7 +105,7 @@ class SessionPrepUsage extends GlimmerComponent {
     <style scoped>
       .demo-log {
         margin: 0 0 var(--space-4, 11px);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .demo-row {

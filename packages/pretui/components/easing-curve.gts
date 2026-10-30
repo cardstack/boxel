@@ -605,7 +605,7 @@ export class EasingCurve extends Component<EasingCurveSignature> {
         .pretui-curve-css {
           margin: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           overflow-x: auto;
           white-space: nowrap;

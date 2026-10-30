@@ -26,17 +26,17 @@ A named landmark (`<section role='region' aria-label='Notifications' tabindex='-
 
 ## Theming
 
-`--popover` and `--popover-foreground`, `--pretui-shadow-raised`, `--border`, `--radius-surface`, `--font-sans`, `--text-ui-md` and `--text-ui-sm`, `--muted-foreground`, `--foreground`, `--hover`, `--ring`, `--radius-control`, `--space-3` / `--space-4`. The tone stripe and life bar share `--pretui-toast-tone` per severity (`--pretui-info`, `--success`, `--warning`, `--destructive`, `--muted-foreground` for neutral). Host knobs: `--pretui-z-toast`, `--pretui-toaster-width`; entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
+`--popover` and `--popover-foreground`, `--pretui-shadow-raised`, `--border`, `--radius-surface`, `--font-sans`, `--boxel-font-size-xs` and `--boxel-font-size-2xs`, `--muted-foreground`, `--foreground`, `--hover`, `--ring`, `--radius-control`, `--space-3` / `--space-4`. The tone stripe and life bar share `--pretui-toast-tone` per severity (`--pretui-info`, `--success`, `--warning`, `--destructive`, `--muted-foreground` for neutral). Host knobs: `--pretui-z-toast`, `--pretui-toaster-width`; entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 ## React ecosystem
 
-| Sonner | Pretui Sonner |
-| --- | --- |
+| Sonner                                | Pretui Sonner                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
 | `<Toaster position='bottom-right' />` | `<Sonner @store={{this.toasts}} @position='bottom-right' />` — mapped to `bottom-end` |
-| `toast('Saved')` | `this.toasts.show({ title: 'Saved' })` |
-| `toast.success(…)` / `.error(…)` | `show({ …, tone: 'success' })` / `tone: 'danger'` |
-| `toast.promise(p, {…})` | `show` returns an id; `show({ id, … })` again replaces in place |
-| `duration: 4000` | `duration: 4` — seconds |
-| `visibleToasts` | `@limit` — the rest queue unstarted |
-| `closeButton` | on by default; `dismissible: false` per toast |
-| `pauseWhenPageIsHidden` | `@pauseWhenHidden` |
+| `toast('Saved')`                      | `this.toasts.show({ title: 'Saved' })`                                                |
+| `toast.success(…)` / `.error(…)`      | `show({ …, tone: 'success' })` / `tone: 'danger'`                                     |
+| `toast.promise(p, {…})`               | `show` returns an id; `show({ id, … })` again replaces in place                       |
+| `duration: 4000`                      | `duration: 4` — seconds                                                               |
+| `visibleToasts`                       | `@limit` — the rest queue unstarted                                                   |
+| `closeButton`                         | on by default; `dismissible: false` per toast                                         |
+| `pauseWhenPageIsHidden`               | `@pauseWhenHidden`                                                                    |

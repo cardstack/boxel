@@ -303,7 +303,7 @@ export class Waveform extends Component<WaveformSignature> {
           margin: 0;
           padding: 0 12px;
           text-align: center;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           background: color-mix(
             in oklch,
@@ -313,7 +313,7 @@ export class Waveform extends Component<WaveformSignature> {
           border-radius: var(--radius);
         }
         .pretui-wave-veil--bad {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-wave-bar {
           display: flex;
@@ -329,7 +329,7 @@ export class Waveform extends Component<WaveformSignature> {
           border: 0;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--primary-foreground);
           background: var(--primary);
@@ -351,17 +351,17 @@ export class Waveform extends Component<WaveformSignature> {
         }
         /* State carries a word, not only a hue. */
         .pretui-wave-status {
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
         .pretui-wave-status[data-phase='error'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-wave-status[data-phase='ready'] {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
         }
         .dark .pretui-wave-box {
           background: color-mix(

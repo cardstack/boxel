@@ -42,18 +42,18 @@ class SpinnerUsage extends GlimmerComponent {
     </FreestyleUsage>
     <style scoped>
       .tint-primary {
-        color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+        color: var(--primary-ink);
         display: inline-flex;
       }
       .tint-danger {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
+        color: var(--destructive-ink);
         display: inline-flex;
       }
       .note {
         flex-basis: 100%;
         text-align: center;
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

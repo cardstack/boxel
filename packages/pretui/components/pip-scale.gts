@@ -564,10 +564,10 @@ export class PipScale extends Component<PipScaleSignature> {
           block-size: var(--pretui-pip-height, 1em);
           margin-inline: var(--pretui-pip-inset, 7px);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           line-height: 1;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /*
           A pickable scale reserves real height whether or not it carries

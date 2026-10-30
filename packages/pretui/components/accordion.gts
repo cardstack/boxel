@@ -40,7 +40,7 @@ export const Accordion: TemplateOnlyComponent<AccordionSignature> = <template>
          both are mapped to the Pretui equivalents here. Title voice: body
          size, 600 weight — the Panel header voice, not boxel's 700. */
       .pretui-accordion {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         letter-spacing: var(--track-ui, 0.01em);
         color: var(--foreground);
         --ring: var(--primary);

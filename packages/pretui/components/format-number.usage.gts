@@ -218,7 +218,7 @@ class FormatNumberUsage extends Component {
       }
       .fmt-line {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.6;
         color: var(--foreground);
       }
@@ -228,7 +228,7 @@ class FormatNumberUsage extends Component {
       }
       .fmt-cap {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: var(--track-eyebrow, 0.06em);
         text-transform: uppercase;
@@ -249,7 +249,7 @@ class FormatNumberUsage extends Component {
           --pretui-shadow-hairline,
           0 0 0 1px var(--border)
         );
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--foreground);
       }
     </style>

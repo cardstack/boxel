@@ -195,7 +195,7 @@ class BackdropUsage extends Component {
       .bd-line {
         margin: 0;
         max-width: 52ch;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       /* above the scrim, so the demo is never a dead end */
@@ -211,7 +211,7 @@ class BackdropUsage extends Component {
         border-radius: var(--radius-chip, 6px);
         background: var(--card);
         box-shadow: 0 0 0 1px var(--border);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

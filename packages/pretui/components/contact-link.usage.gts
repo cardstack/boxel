@@ -218,13 +218,13 @@ class ContactLinkUsage extends Component {
         margin: 0;
         min-height: 1.4em;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
         overflow-wrap: anywhere;
       }
       .pretui-contactdemo-cap {
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted-foreground);
@@ -247,7 +247,7 @@ class ContactLinkUsage extends Component {
         gap: var(--space-2, 6px);
         align-items: baseline;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
       .pretui-contactdemo-hostile {
         min-width: 0;

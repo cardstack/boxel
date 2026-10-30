@@ -82,8 +82,8 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
       .pretui-optioncard {
         --oc-pad: var(--space-4, 0.6875rem);
         --oc-gap: var(--space-3, 0.5rem);
-        --oc-text: var(--text-ui-md, 0.78rem);
-        --oc-small: var(--text-ui-sm, 0.72rem);
+        --oc-text: var(--boxel-font-size-xs);
+        --oc-small: var(--boxel-font-size-2xs);
         --oc-strong: var(--weight-strong, 600);
         --oc-radius: var(--radius-surface, 0.625rem);
         --oc-snap: var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);

@@ -137,7 +137,7 @@ export class Notification extends Component<NotificationSignature> {
           border-radius: var(--radius-surface, 10px);
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         /* The stripe is the only place a tone paints, as in Toaster, so a
            neutral notification is genuinely neutral. */
@@ -180,7 +180,7 @@ export class Notification extends Component<NotificationSignature> {
         }
         .pretui-notification-msg {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
         }
         .pretui-notification-action {

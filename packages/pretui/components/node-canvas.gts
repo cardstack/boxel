@@ -921,7 +921,7 @@ export class NodeCanvas extends Component<NodeCanvasSignature> {
           border-radius: var(--pretui-canvas-chrome-radius, 8px);
           background: var(--pretui-canvas-panel-bg, var(--card));
           color: var(--card-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           box-shadow: var(
             --pretui-canvas-chrome-shadow,
             0 0 0 1px var(--border),
@@ -941,7 +941,7 @@ export class NodeCanvas extends Component<NodeCanvasSignature> {
 
         .pnv-empty-line {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
 

@@ -48,7 +48,7 @@ APG **Disclosure Navigation Menu**.
 
 ## Theming
 
-`--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface` (the panel), `--pretui-z-dropdown`, `--foreground`, `--muted-foreground` (descriptions), `--primary` (current), `--hover`, `--ring`, `--radius-control`, `--pretui-control-h`, `--pretui-dur-snap` / `--pretui-ease-snap` (the caret), `--font-sans`, `--text-ui-md`, `--text-ui-sm` and `--space-1` to `--space-4`.
+`--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface` (the panel), `--pretui-z-dropdown`, `--foreground`, `--muted-foreground` (descriptions), `--primary` (current), `--hover`, `--ring`, `--radius-control`, `--pretui-control-h`, `--pretui-dur-snap` / `--pretui-ease-snap` (the caret), `--font-sans`, `--boxel-font-size-xs`, `--boxel-font-size-2xs` and `--space-1` to `--space-4`.
 
 The panel spans the navigation's width. The link grid's 12rem minimum column is fixed.
 

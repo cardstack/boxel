@@ -209,14 +209,14 @@ export class Descriptions extends Component<DescriptionsSignature> {
           container-type: inline-size;
           min-width: 0;
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
         }
         .pretui-desc[data-size='xs'] {
           font-size: 10.5px;
         }
         .pretui-desc[data-size='s'] {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-desc[data-size='l'] {
           font-size: 14px;

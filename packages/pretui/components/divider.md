@@ -40,7 +40,7 @@ Where it is thinner, and these are real: **there is no `decorative` escape hatch
 
 ## Theming
 
-`--pretui-divider-spacing` (the margin on the divider's axis, defaulting to `--space-4`, 11px), `--border` (the hairline, in both orientations), `--muted-foreground` (the label ink), `--text-ui-sm` (11.5px), `--track-ui` (the label's letter-spacing).
+`--pretui-divider-spacing` (the margin on the divider's axis, defaulting to `--space-4`, 11px), `--border` (the hairline, in both orientations), `--muted-foreground` (the label ink), `--boxel-font-size-2xs` (11.5px), `--track-ui` (the label's letter-spacing).
 
 The 1px thickness, the 8px padding either side of the label and the vertical rule's `1lh` minimum height are fixed.
 

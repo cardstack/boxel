@@ -90,12 +90,12 @@ export default class AttachButton extends Component<Signature> {
         + :deep(
           .ember-basic-dropdown-content-wormhole-origin .attach-button__dropdown
         ) {
-        border-radius: var(--round-row, 8px);
-        width: 256px;
+        border-radius: var(--boxel-border-radius-sm);
+        width: 16rem;
         padding: 0;
         position: absolute;
         z-index: var(--boxel-layer-modal-urgent);
-        min-width: 140px;
+        min-width: 8.75rem;
         box-shadow: 0 10px 15px 0 rgba(0, 0, 0, 0.25);
         border: 1px solid rgba(0, 0, 0, 0.25);
       }
@@ -105,17 +105,17 @@ export default class AttachButton extends Component<Signature> {
             .attach-button__dropdown
             .ember-power-select-option
         ) {
-        padding: 7.5px 5.5px;
-        border-radius: var(--round-chip, 4px);
+        padding: 0.46875rem 0.34375rem;
+        border-radius: var(--boxel-border-radius-xs);
       }
       .menu-option {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 0.625rem;
         text-wrap: nowrap;
         font-family: var(--boxel-font-family);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 400;
       }
     </style>

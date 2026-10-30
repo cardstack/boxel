@@ -160,7 +160,7 @@ export class ScrollAreaUsage extends Component {
         padding: 0 var(--space-3, 8px);
         border-radius: var(--radius-chip, 6px);
         background: var(--inset, var(--boxel-100));
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
       .sa-badge {
         font-variant-numeric: tabular-nums;

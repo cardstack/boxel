@@ -554,7 +554,7 @@ export class ScrubInput extends Component<ScrubInputSignature> {
           background: var(--field, var(--boxel-light));
           box-shadow: 0 0 0 1px var(--input);
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           font-variant-numeric: tabular-nums;
           overflow: hidden;
@@ -604,9 +604,9 @@ export class ScrubInput extends Component<ScrubInputSignature> {
           outline: none;
         }
         .pretui-scrub-input::placeholder {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
         }
         /* The grip: a permanently visible ew-resize affordance. This is the
            discoverability figui3 leaves to a hidden Alt chord. */
@@ -618,7 +618,7 @@ export class ScrubInput extends Component<ScrubInputSignature> {
           min-width: 22px;
           padding-inline: 5px;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           user-select: none;
           touch-action: none;

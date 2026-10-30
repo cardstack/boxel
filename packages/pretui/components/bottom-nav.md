@@ -47,7 +47,7 @@ No APG widget pattern. It is a navigation landmark with links or buttons.
 
 ## Theming
 
-`--pretui-bottomnav-bg` (default `--card`), `--pretui-bottomnav-current` (default `--primary`), `--border` (the top hairline), `--muted-foreground` and `--foreground` (items), `--destructive` (the badge), `--ring`, `--pretui-z-sticky`, `--font-sans`, `--text-ui-xs`, `--space-1` and `--space-2`.
+`--pretui-bottomnav-bg` (default `--card`), `--pretui-bottomnav-current` (default `--primary`), `--border` (the top hairline), `--muted-foreground` and `--foreground` (items), `--destructive` (the badge), `--ring`, `--pretui-z-sticky`, `--font-sans`, `--boxel-font-size-2xs`, `--space-1` and `--space-2`.
 
 The current indicator (a 2px bar at the top of the item) and the 3.5rem height are fixed.
 

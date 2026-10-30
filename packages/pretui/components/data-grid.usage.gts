@@ -41,7 +41,7 @@ class DataGridUsage extends Component {
         <Args.Yield @name='cell' @description='Receives row and column.' />
       </:api>
     </FreestyleUsage>
-    <style scoped>.foundation-readout { margin: 8px 0 0; font: var(--text-ui-xs) var(--font-mono); color: var(--muted-foreground); }</style>
+    <style scoped>.foundation-readout { margin: 8px 0 0; font: var(--boxel-font-size-2xs) var(--font-mono); color: var(--muted-foreground); }</style>
   </template>
 }
 

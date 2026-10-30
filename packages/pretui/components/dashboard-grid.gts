@@ -889,7 +889,7 @@ export class DashboardGrid<T = unknown>
           position: relative;
           width: 100%;
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
@@ -930,7 +930,7 @@ export class DashboardGrid<T = unknown>
           clip-path: none;
           white-space: normal;
           margin: 0 0 var(--space-2, 5px);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
       }

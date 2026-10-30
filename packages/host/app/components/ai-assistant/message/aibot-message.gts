@@ -413,16 +413,16 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       /* the work under way: one quiet line that moves on with it */
       .reasoning-tail {
         margin: 0;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         color: transparent;
         background: linear-gradient(
             90deg,
-            var(--ink-3) 0%,
-            var(--ink-3) 40%,
+            var(--subtle-foreground) 0%,
+            var(--subtle-foreground) 40%,
             var(--foreground) 50%,
-            var(--ink-3) 60%,
-            var(--ink-3) 100%
+            var(--subtle-foreground) 60%,
+            var(--subtle-foreground) 100%
           )
           0 0 / 200% 100%;
         background-clip: text;
@@ -443,25 +443,25 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       @media (prefers-reduced-motion: reduce) {
         .reasoning-tail {
           animation: none;
-          color: var(--ink-3);
+          color: var(--subtle-foreground);
         }
       }
       /* the turn's thinking, opened from its header: quiet text on a rule,
          where it happened */
       .reasoning-shown {
-        padding-inline-start: var(--step-12, 12px);
-        box-shadow: inset 2px 0 0 var(--border, #3a3446);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
-        color: var(--ink-3);
+        padding-inline-start: var(--boxel-sp-sm);
+        box-shadow: inset 2px 0 0 var(--border);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--subtle-foreground);
       }
       .reasoning-shown :deep(p) {
-        margin: 0 0 var(--step-4, 4px);
+        margin: 0 0 var(--boxel-sp-4xs);
       }
       .reasoning-body {
-        color: var(--ink-2, var(--boxel-300));
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
       }
       .bfm-reply {
         line-height: inherit;
@@ -487,7 +487,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       .ai-bot-message :deep(p[data-chips]) {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--step-8, 8px);
+        gap: var(--boxel-sp-xs);
         font-size: 0;
       }
       /* the reading measure is in ch, which font-size 0 makes nothing: a
@@ -508,13 +508,13 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         text-overflow: ellipsis;
         overflow-wrap: normal;
         word-break: normal;
-        padding: var(--step-4, 4px) var(--step-8, 8px);
-        border-radius: var(--round-chip, 4px);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
         background-color: var(--inset);
         box-shadow: none;
         font-family: inherit;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         color: var(--foreground);
@@ -524,15 +524,15 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       .ai-bot-message :deep(p[data-chips] > [data-chip]) {
         display: inline-flex;
         align-items: baseline;
-        gap: var(--step-4, 4px);
+        gap: var(--boxel-sp-4xs);
         flex: 0 1 auto;
         max-inline-size: 100%;
         min-width: 0;
-        padding: var(--step-4, 4px) var(--step-8, 8px);
-        border-radius: var(--round-chip, 4px);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
         background-color: var(--inset);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         white-space: nowrap;
       }
       .ai-bot-message :deep(p[data-chips] > [data-chip] > code) {
@@ -551,17 +551,17 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
-        color: var(--ink-2, #c9c4d6);
+        color: var(--muted-foreground);
       }
       .ai-bot-message :deep(a[data-ref]) {
         display: inline-block;
-        padding: 0 var(--step-4, 4px);
-        border-radius: var(--round-chip, 4px);
+        padding: 0 var(--boxel-sp-4xs);
+        border-radius: var(--boxel-border-radius-xs);
         background-color: var(--inset);
         font-family: inherit;
-        font-size: var(--type-caption, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
-        line-height: var(--leading-caption, 16px);
+        line-height: var(--boxel-line-height-xs);
         font-variant-numeric: tabular-nums;
         text-decoration: none;
       }
@@ -569,23 +569,23 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;
-        gap: var(--step-8, 8px);
-        font-size: var(--type-caption, 11px);
-        line-height: var(--leading-caption, 16px);
-        color: var(--ink-3);
+        gap: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-2xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--subtle-foreground);
       }
       .ai-bot-message :deep(p[data-sources] a) {
-        padding: 2px var(--step-8, 8px);
-        border-radius: var(--round-row, 8px);
-        box-shadow: inset 0 0 0 1px var(--border, #3a3446);
+        padding: 2px var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        box-shadow: inset 0 0 0 1px var(--border);
         text-decoration: none;
         white-space: nowrap;
       }
       .ai-bot-message :deep(p[data-sources] a[data-host]::after) {
         content: attr(data-host);
-        margin-inline-start: var(--step-4, 4px);
+        margin-inline-start: var(--boxel-sp-4xs);
         font-family: var(--boxel-font-family, inherit);
-        color: var(--ink-2, #c9c4d6);
+        color: var(--muted-foreground);
       }
       .ai-bot-message :deep(p[data-sources] span[data-sep]) {
         display: none;
@@ -595,9 +595,9 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 1;
         overflow: hidden;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
-        color: var(--ink-2, #c9c4d6);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--muted-foreground);
       }
       .ai-bot-message :deep(p[data-method][data-open='true']) {
         display: block;
@@ -612,15 +612,15 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       }
       .ai-bot-message :deep(p[data-method] > button > strong) {
         font-weight: 600;
-        color: var(--ink-3);
+        color: var(--subtle-foreground);
       }
       /* the disclosure mark leads, as every other fold in the thread does:
          "› Method: …", turning when open */
       .ai-bot-message :deep(p[data-method] > button > strong::before) {
         content: '›';
         display: inline-block;
-        width: 10px;
-        margin-inline-end: 4px;
+        width: 0.625rem;
+        margin-inline-end: 0.25rem;
         text-align: center;
         transition: transform 160ms cubic-bezier(0.22, 0.61, 0.25, 1);
       }
@@ -640,7 +640,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
          reading line's 22px, and no margin at its edges, so the reply sits
          on the transcript's 12px like every other block */
       .bfm-reply :deep(.markdown-content > *) {
-        margin-block: 0 var(--step-12, 12px);
+        margin-block: 0 var(--boxel-sp-sm);
       }
       .bfm-reply :deep(.markdown-content > :last-child) {
         margin-block-end: 0;
@@ -685,7 +685,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       .bfm-reply :deep(.markdown-bfm-card-slot--inline-embed) {
         display: block;
         margin-block: 0;
-        border-radius: var(--round-surface, 12px);
+        border-radius: var(--boxel-border-radius-lg);
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
         overflow: hidden;
@@ -717,15 +717,15 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         display: inline-flex;
         align-items: center;
         max-width: 100%;
-        height: 18px;
-        padding: 0 var(--step-8, 8px);
+        height: 1.125rem;
+        padding: 0 var(--boxel-sp-xs);
         vertical-align: 1px;
-        border-radius: var(--round-row, 8px);
+        border-radius: var(--boxel-border-radius-sm);
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
-        font-size: var(--type-ui, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-        line-height: 18px;
+        line-height: 1.125rem;
         overflow: hidden;
         cursor: pointer;
       }
@@ -734,9 +734,9 @@ export default class FormattedAiBotMessage extends Component<Signature> {
          the line moved when the card replaced it */
       .bfm-reply :deep(.markdown-content .markdown-bfm-loading--inline) {
         width: auto;
-        height: 18px;
+        height: 1.125rem;
         vertical-align: 1px;
-        border-radius: var(--round-row, 8px);
+        border-radius: var(--boxel-border-radius-sm);
         background-color: var(--boxel-light);
         white-space: nowrap;
       }
@@ -763,22 +763,22 @@ export default class FormattedAiBotMessage extends Component<Signature> {
          the text edge, in sans: it is status, not a string to paste */
       .generation-cancelled,
       .ai-bot-message :deep(.generation-cancelled) {
-        margin: var(--step-12, 12px) 0 0;
-        font-size: var(--type-caption, 11px);
-        line-height: var(--leading-caption, 16px);
-        color: var(--ink-3);
+        margin: var(--boxel-sp-sm) 0 0;
+        font-size: var(--boxel-font-size-2xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--subtle-foreground);
       }
       :deep(span.streaming-text:after) {
         content: '';
-        width: 8px;
-        height: 8px;
+        width: 0.5rem;
+        height: 0.5rem;
         background-color: currentColor;
         border-radius: 50%;
         display: inline-block;
         font-family: system-ui, sans-serif;
         line-height: normal;
         vertical-align: baseline;
-        margin-left: 5px;
+        margin-left: 0.3125rem;
       }
     </style>
   </template>

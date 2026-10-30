@@ -283,7 +283,7 @@ class SheetUsage extends Component {
 
     <style scoped>
       .sg-foot {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
         white-space: nowrap;
       }
@@ -294,7 +294,7 @@ class SheetUsage extends Component {
       }
       .sg-readout {
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .sg-readout[data-tone='warn'] {

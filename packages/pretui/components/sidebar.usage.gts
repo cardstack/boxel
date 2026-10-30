@@ -327,8 +327,8 @@ export class SidebarUsage extends Component {
       }
       .shell-foot {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--subtle-foreground);
       }
       .shell-page {
         block-size: 100%;
@@ -341,15 +341,15 @@ export class SidebarUsage extends Component {
       .shell-copy {
         margin: 0;
         max-inline-size: 52ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.55;
         color: var(--muted-foreground);
       }
       .shell-count {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--subtle-foreground);
       }
     </style>
   </template>

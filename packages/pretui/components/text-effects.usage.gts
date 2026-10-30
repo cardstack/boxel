@@ -179,7 +179,7 @@ class TextEffectsUsage extends Component {
       .pretui-fx-demo-line {
         margin: 0;
         max-width: 44ch;
-        font-size: var(--text-ui-lg, 15px);
+        font-size: var(--boxel-font-size-sm);
         line-height: 1.5;
         color: var(--foreground);
       }

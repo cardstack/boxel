@@ -45,11 +45,11 @@ Governing pattern: the HTML `<fieldset>` / `<legend>` pairing, which is what APG
 
 From the host theme, bare: `--foreground` (the legend), `--muted-foreground` (the description, and the legend while disabled).
 
-Kit tokens, each named once on the root: `--space-3` (the gap between legend, description and body, and between the controls), `--text-ui-md`, `--text-ui-sm` (the description), `--weight-strong` (the legend).
+Kit tokens, each named once on the root: `--space-3` (the gap between legend, description and body, and between the controls), `--boxel-font-size-xs`, `--boxel-font-size-2xs` (the description), `--weight-strong` (the legend).
 
 Fixed: the legend is body-size at the strong weight — the **Panel** header voice — with no uppercase treatment, so a stack of fieldsets reads as sections rather than eyebrows. The fieldset itself has no border, padding or background; the surface it sits on supplies those.
 
-A theme retunes the legend voice through `--weight-strong` and `--text-ui-md`, and the rhythm through `--space-3`, in step with **FormSection**.
+A theme retunes the legend voice through `--weight-strong` and `--boxel-font-size-xs`, and the rhythm through `--space-3`, in step with **FormSection**.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

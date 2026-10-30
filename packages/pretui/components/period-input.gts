@@ -984,7 +984,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           display: flex;
           align-items: center;
           pointer-events: none;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           opacity: 0.55;
         }
@@ -995,7 +995,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           background: none;
           padding: 0;
           font: inherit;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           font-variant-numeric: tabular-nums;
           color: var(--foreground);
         }
@@ -1022,7 +1022,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           );
           background: transparent;
           font: inherit;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           cursor: pointer;
           transition:
@@ -1058,17 +1058,17 @@ export class PeriodInput extends Component<PeriodInputSignature> {
         .pretui-period-readout {
           margin: 0;
           min-height: 1.4em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
         .pretui-period[data-invalid='true'] .pretui-period-readout {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: var(--weight-medium, 500);
         }
         .pretui-period-forms {
           margin: 0;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-family: var(--font-mono);
           color: color-mix(
             in oklch,

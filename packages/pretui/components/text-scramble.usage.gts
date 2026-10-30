@@ -65,7 +65,7 @@ class TextScrambleUsage extends Component {
     <style scoped>
       .pretui-scramble-demo-line {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-lg, 15px);
+        font-size: var(--boxel-font-size-sm);
         color: var(--foreground);
       }
       .pretui-demo-replay {

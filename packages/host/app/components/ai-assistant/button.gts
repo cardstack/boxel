@@ -27,7 +27,7 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
         url('./ai-assist-icon@2x.webp') 2x,
         url('./ai-assist-icon@3x.webp')
       );
-      background-size: 26px 26px;
+      background-size: 1.625rem 1.625rem;
       background-position: center;
       background-repeat: no-repeat;
     }

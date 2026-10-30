@@ -49,7 +49,7 @@ Where it is thinner: no calendar fallback for a reader who would rather browse, 
 
 ## Theming
 
-`--pretui-knowndate-day-width`, `--pretui-knowndate-month-width` and `--pretui-knowndate-year-width` size the three boxes independently, and `--pretui-destructive-ink` carries the invalid state.
+`--pretui-knowndate-day-width`, `--pretui-knowndate-month-width` and `--pretui-knowndate-year-width` size the three boxes independently, and `--destructive-ink` carries the invalid state.
 
 Three separate width tokens rather than one is the point: a month box wide enough for "September" and a day box wide enough for "31" are very different, and a theme that sets them together produces either a cramped month or three boxes of wasted space.
 

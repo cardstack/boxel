@@ -103,7 +103,7 @@ export const PLOT_STYLE = [
   // A token, not a literal: `font-size:11px` pinned every tick and axis label
   // in the plot to 11 CSS px, so the one part of the chart that is pure text
   // was the one part that ignored the reader's type scale and the theme's.
-  'font-size:var(--text-ui-xs,11px)',
+  'font-size:var(--boxel-font-size-2xs)',
   'overflow:visible',
 ].join(';');
 

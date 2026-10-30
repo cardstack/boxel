@@ -39,7 +39,7 @@ const CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature
     </div>
     <style scoped>
       .code-block-actions {
-        height: 45px;
+        height: 2.8125rem;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         display: flex;
         justify-content: flex-end;

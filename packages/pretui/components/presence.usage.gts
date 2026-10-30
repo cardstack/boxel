@@ -185,14 +185,14 @@ class PresenceUsage extends Component {
       }
       .presence-title {
         margin: 0;
-        font-size: var(--text-ui-lg, 15px);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         letter-spacing: var(--track-heading, -0.02em);
         color: var(--foreground);
       }
       .presence-meta {
         margin: 4px 0 0;
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

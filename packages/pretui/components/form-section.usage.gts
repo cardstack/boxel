@@ -381,13 +381,13 @@ class FormSectionUsage extends Component {
       .demo-forms-state {
         margin-right: auto;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .demo-forms-readout {
         margin: 10px 0 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

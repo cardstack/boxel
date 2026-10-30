@@ -545,16 +545,16 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
         }
         .pretui-model-gateGlyph {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
         }
         .pretui-model-gateNote {
           max-width: 32ch;
           text-align: center;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-model-veil {
@@ -568,16 +568,16 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
           margin: 0;
           padding: 0 16px;
           text-align: center;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           background: color-mix(in oklch, var(--card) 84%, transparent);
         }
         .pretui-model-veil--bad {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-model-link {
           font-weight: 600;
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
           text-underline-offset: 3px;
         }
         .pretui-model-link:focus-visible {
@@ -596,7 +596,7 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
           border: 0;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--foreground);
           background: color-mix(
@@ -618,17 +618,17 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
           margin-inline-start: auto;
         }
         .pretui-model-status {
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
         .pretui-model-status[data-phase='error'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-model-status[data-phase='ready'] {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
         }
         .dark .pretui-model-gate {
           color: var(--foreground);

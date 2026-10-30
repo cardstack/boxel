@@ -194,7 +194,7 @@ export class MenuPanel extends Component<MenuPanelSignature> {
             0 8px 28px rgb(0 0 0 / 0.16)
           );
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           opacity: 1;
           transform: none;
           transition:
@@ -222,7 +222,7 @@ export class MenuPanel extends Component<MenuPanelSignature> {
           display: block;
           padding-block: 3px;
           padding-inline: 8px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
@@ -250,7 +250,7 @@ export class MenuPanel extends Component<MenuPanelSignature> {
           font-weight: 600;
         }
         .pretui-menuitem[data-destructive='true'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-menuitem[aria-disabled='true'] {
           /* dimmed, still focusable, still announced — HIG's "dim, don't
@@ -284,7 +284,7 @@ export class MenuPanel extends Component<MenuPanelSignature> {
         }
         .pretui-menukbd {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
           white-space: nowrap;

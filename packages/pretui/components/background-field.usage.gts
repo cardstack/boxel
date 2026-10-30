@@ -257,18 +257,18 @@ class BackgroundFieldUsage extends Component {
       }
       .bf-sub {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.5;
         color: var(--muted-foreground);
       }
       .bf-meta {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .bf-cat-head {
         margin: 0 0 var(--space-3, 8px);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-ui, 0.01em);
         text-transform: uppercase;
         color: var(--muted-foreground);
@@ -310,7 +310,7 @@ class BackgroundFieldUsage extends Component {
           transparent 58%
         );
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--foreground);
         cursor: pointer;
         text-align: left;

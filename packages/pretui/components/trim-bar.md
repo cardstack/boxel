@@ -41,7 +41,7 @@ Where it is thinner: one region only — no multi-region editing, no named regio
 
 ## Theming
 
-`--pretui-trim-in` and `--pretui-trim-out` (the two handles), `--pretui-wave-height` (shared with **Waveform**, so a trimmer and a player are the same height in any theme), `--pretui-primary-ink`, `--pretui-destructive-ink` for the error state, `--pretui-shadow-hairline`.
+`--pretui-trim-in` and `--pretui-trim-out` (the two handles), `--pretui-wave-height` (shared with **Waveform**, so a trimmer and a player are the same height in any theme), `--primary-ink`, `--destructive-ink` for the error state, `--pretui-shadow-hairline`.
 
 Giving the two handles separate tokens is deliberate: in and out are different things, and a theme that wants them to read as a pair sets both to the same value, while one that wants direction to be visible does not. Sharing `--pretui-wave-height` with Waveform is the other half — a trimmer under a player should line up with it without either component knowing about the other.
 

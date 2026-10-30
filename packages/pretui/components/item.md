@@ -44,7 +44,7 @@ The caller's failures to avoid, and they are most of the story: a row whose only
 
 ## Theming
 
-Consumed directly: `--foreground`, `--muted-foreground`, `--ring`, `--text-ui-md`, `--text-ui-sm`, `--track-ui`, `--space-2`, `--space-3`, `--space-4`.
+Consumed directly: `--foreground`, `--muted-foreground`, `--ring`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--track-ui`, `--space-2`, `--space-3`, `--space-4`.
 
 Its own knob: `--pretui-item-gap` (default `--space-4`) is the gap between the slots. Density is `@size` on the root `font-size`; everything inside is `em`. The title is weight 500; the description and trailing meta are 0.94em in `--muted-foreground`; the trailing column has `font-variant-numeric: tabular-nums` so a column of prices in a **List** lines up.
 
@@ -54,13 +54,13 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| `ItemMedia` / `ListItemAvatar` / `Meta.avatar` | `<:leading>` |
-| `ItemTitle` / `ListItemText.primary` / `Meta.title` | `@title` or `<:title>` |
+| React                                                             | Pretui                             |
+| ----------------------------------------------------------------- | ---------------------------------- |
+| `ItemMedia` / `ListItemAvatar` / `Meta.avatar`                    | `<:leading>`                       |
+| `ItemTitle` / `ListItemText.primary` / `Meta.title`               | `@title` or `<:title>`             |
 | `ItemDescription` / `ListItemText.secondary` / `Meta.description` | `@description` or `<:description>` |
-| `ItemActions` / `ListItemSecondaryAction` / Ant `actions` | `<:actions>` |
-| Ant `extra` | `<:trailing>` |
-| `asChild` + `href` | `@href` (the title is the link) |
-| `dense` | `@size='s'` |
-| `alignItems='flex-start'` | `@alignStart` |
+| `ItemActions` / `ListItemSecondaryAction` / Ant `actions`         | `<:actions>`                       |
+| Ant `extra`                                                       | `<:trailing>`                      |
+| `asChild` + `href`                                                | `@href` (the title is the link)    |
+| `dense`                                                           | `@size='s'`                        |
+| `alignItems='flex-start'`                                         | `@alignStart`                      |

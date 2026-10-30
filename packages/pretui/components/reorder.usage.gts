@@ -148,18 +148,18 @@ class ReorderDemo extends Component {
       }
       .pretui-reorder-demo-rank {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
       }
       .pretui-reorder-demo-name {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--foreground);
       }
       .pretui-reorder-demo-note,
       .pretui-reorder-demo-order {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

@@ -50,7 +50,7 @@ No APG pattern. A Result is a section with a heading, and it is only as good as 
 
 ## Theming
 
-`--pretui-result-hue` (set from the status: `--success`, `--pretui-info`, `--warning` or `--destructive`), `--pretui-result-code-size` (the numerals, default 4.5rem), `--pretui-chip-mix` (the disc tint, shared with **Chip**), `--font-serif` (title and numerals), `--text-heading`, `--text-ui-md`, `--foreground`, `--muted-foreground`, `--card`, `--border`, and `--space-2` / `--space-3` / `--space-6` / `--space-9` for rhythm.
+`--pretui-result-hue` (set from the status: `--success`, `--pretui-info`, `--warning` or `--destructive`), `--pretui-result-code-size` (the numerals, default 4.5rem), `--pretui-chip-mix` (the disc tint, shared with **Chip**), `--font-serif` (title and numerals), `--text-heading`, `--boxel-font-size-xs`, `--foreground`, `--muted-foreground`, `--card`, `--border`, and `--space-2` / `--space-3` / `--space-6` / `--space-9` for rhythm.
 
 A theme changes every Result through the four status hues and the chip mix, the same knobs that retune Chip. The centered layout, the 3.5rem disc and the description's 44ch measure are fixed.
 

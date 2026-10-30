@@ -106,7 +106,7 @@ export class Swatch extends Component<SwatchSignature> {
           padding: 2px;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           cursor: pointer;
         }

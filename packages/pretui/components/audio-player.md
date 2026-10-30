@@ -44,7 +44,7 @@ Where it is thinner: no playlist, no queue, no chapter list, no waveform. **Wave
 
 ## Theming
 
-`--pretui-media-ink`, `--pretui-media-radius`, `--pretui-media-scrim`, `--pretui-destructive-ink`, `--pretui-shadow-card`, `--pretui-shadow-hairline` — all from **MediaPlayer**, which is the point: an audio player and a video player in the same theme are visibly the same family.
+`--pretui-media-ink`, `--pretui-media-radius`, `--pretui-media-scrim`, `--destructive-ink`, `--pretui-shadow-card`, `--pretui-shadow-hairline` — all from **MediaPlayer**, which is the point: an audio player and a video player in the same theme are visibly the same family.
 
 The audio layout adds no tokens of its own. The cover size and the metadata stack's spacing are fixed, so a row of audio players aligns without per-instance tuning.
 

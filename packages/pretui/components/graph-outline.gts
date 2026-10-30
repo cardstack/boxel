@@ -430,7 +430,7 @@ export class GraphOutline extends Component<GraphOutlineSignature> {
           );
           box-shadow: 0 -1px 0 0 var(--border);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--card-foreground);
         }
 
@@ -445,7 +445,7 @@ export class GraphOutline extends Component<GraphOutlineSignature> {
         .pgo-headline {
           margin: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
           color: var(--muted-foreground);
@@ -518,7 +518,7 @@ export class GraphOutline extends Component<GraphOutlineSignature> {
 
         .pgo-status-word {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
 
@@ -535,7 +535,7 @@ export class GraphOutline extends Component<GraphOutlineSignature> {
           background: var(--muted);
           color: var(--muted-foreground);
           font: inherit;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           cursor: pointer;
         }
 

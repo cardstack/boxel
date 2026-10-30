@@ -114,7 +114,7 @@ class OnboardingUsage extends GlimmerComponent {
     <style scoped>
       .demo-log {
         margin: 0 0 var(--space-4, 11px);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .demo-media {
@@ -141,7 +141,7 @@ class OnboardingUsage extends GlimmerComponent {
         font-variant-numeric: tabular-nums;
       }
       .demo-media-cap {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted-foreground);

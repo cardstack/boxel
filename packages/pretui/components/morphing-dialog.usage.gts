@@ -137,18 +137,18 @@ export class MorphingDialogUsage extends Component {
       .md-id {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-eyebrow, 0.08em);
         color: var(--muted-foreground);
       }
       .md-tea {
         margin: 0;
-        font-size: var(--text-ui-lg, 14px);
+        font-size: var(--boxel-font-size-sm);
         font-weight: var(--weight-strong, 600);
       }
       .md-meta {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .md-body {
@@ -156,7 +156,7 @@ export class MorphingDialogUsage extends Component {
         max-inline-size: 62ch;
       }
       .md-hint {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

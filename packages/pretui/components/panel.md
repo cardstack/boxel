@@ -45,7 +45,7 @@ Gaps, and the heading one matters:
 
 ## Theming
 
-`--card` (surface), `--radius-surface`, `--pretui-shadow-card` (the hairline edge), `--border` (the footer rule), `--foreground` (title), `--muted-foreground` (eyebrow and status ink), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (eyebrow voice), `--text-body`, `--text-ui`, `--track-heading`, `--space-3/4/5`.
+`--card` (surface), `--radius-surface`, `--pretui-shadow-card` (the hairline edge), `--border` (the footer rule), `--foreground` (title), `--muted-foreground` (eyebrow and status ink), `--font-mono` + `--boxel-font-size-2xs` + `--track-eyebrow` (eyebrow voice), `--text-body`, `--boxel-font-size-xs`, `--track-heading`, `--space-3/4/5`.
 
 A theme retuning `--radius-surface` moves Panel, **Dialog** and **Drawer** together, which is intended — those three are the kit's surface vocabulary. `--pretui-shadow-card` is where a theme expresses whether panels are outlined or elevated; it defaults to a 1px ring and a theme can swap it for a real shadow without touching the component.
 

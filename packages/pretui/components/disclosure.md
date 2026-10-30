@@ -30,16 +30,16 @@ Collapsible's, exactly, and it is the APG **Disclosure** pattern Aria's componen
 
 ## Theming
 
-Collapsible's tokens: `--foreground`, `--muted-foreground`, `--hover`, `--ring`, `--radius-chip`, the `--pretui-size-*` and `--text-ui-*` scales, the component's own `--pretui-collapsible-h` and `--pretui-collapsible-px`, and the kit motion pairs `--pretui-dur-morph` / `--pretui-ease-morph` (fold) and `--pretui-dur-snap` / `--pretui-ease-snap` (caret). Nothing is themed under a Disclosure name.
+Collapsible's tokens: `--foreground`, `--muted-foreground`, `--hover`, `--ring`, `--radius-chip`, the `--pretui-size-*` and `--boxel-font-size-*` scales, the component's own `--pretui-collapsible-h` and `--pretui-collapsible-px`, and the kit motion pairs `--pretui-dur-morph` / `--pretui-ease-morph` (fold) and `--pretui-dur-snap` / `--pretui-ease-snap` (caret). Nothing is themed under a Disclosure name.
 
 ## React ecosystem
 
-| React Aria | Pretui |
-| --- | --- |
+| React Aria                       | Pretui                   |
+| -------------------------------- | ------------------------ |
 | `isExpanded` / `defaultExpanded` | `@open` / `@defaultOpen` |
-| `onExpandedChange` | `@onOpenChange` |
-| `isDisabled` | `@disabled` |
-| `<DisclosureButton>` | `@label` or `<:trigger>` |
-| `<DisclosurePanel>` | `<:default>` |
-| `<DisclosureGroup>` | **Accordion** |
-| `hidden="until-found"` | not offered |
+| `onExpandedChange`               | `@onOpenChange`          |
+| `isDisabled`                     | `@disabled`              |
+| `<DisclosureButton>`             | `@label` or `<:trigger>` |
+| `<DisclosurePanel>`              | `<:default>`             |
+| `<DisclosureGroup>`              | **Accordion**            |
+| `hidden="until-found"`           | not offered              |

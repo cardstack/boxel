@@ -366,7 +366,7 @@ class CompoundFieldUsage extends Component {
       .cf-log {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

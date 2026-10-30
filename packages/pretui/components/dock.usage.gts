@@ -102,7 +102,7 @@ class DockUsage extends Component {
       }
       .dock-note {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

@@ -231,7 +231,7 @@ export class HeroSplit extends Component<HeroSplitSignature> {
         .pretui-hero-eyebrow {
           margin: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;

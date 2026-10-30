@@ -186,7 +186,7 @@ export class FilterSet extends Component<FilterSetSignature> {
           container-type: inline-size;
           display: block;
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-sr {
           position: absolute;
@@ -204,7 +204,7 @@ export class FilterSet extends Component<FilterSetSignature> {
         }
         .fs-title {
           margin: 0;
-          font-size: var(--text-ui-lg, 13.5px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: 600;
         }
         .fs-icon {
@@ -218,7 +218,7 @@ export class FilterSet extends Component<FilterSetSignature> {
         }
         .fs-always {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .fs-list {
@@ -256,14 +256,14 @@ export class FilterSet extends Component<FilterSetSignature> {
           padding: 0 4px;
           border-radius: 4px;
           background: var(--card);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 700;
           letter-spacing: var(--track-eyebrow, 0.06em);
           color: var(--muted-foreground);
         }
         .fs-num {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }

@@ -120,7 +120,7 @@ export const SelectedValue: TemplateOnlyComponent<SelectedValueSignature> = <tem
   <style scoped>
     @layer PretComponent {
       .pretui-cbx-pilltext {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         white-space: nowrap;
       }

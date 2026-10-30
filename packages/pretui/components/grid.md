@@ -45,7 +45,7 @@ So the accessibility of a Grid is entirely the accessibility of what you yield i
 
 ## Theming
 
-Consumed: `--foreground`, `--text-ui-md`, `--track-ui`.
+Consumed: `--foreground`, `--boxel-font-size-xs`, `--track-ui`.
 
 Remapped into the boxel-ui channel: `--boxel-sp` ← `--space-4` (the cell gap).
 

@@ -183,7 +183,7 @@ export class Result extends Component<ResultSignature> {
         }
         .pretui-result-desc {
           margin: 0;
-          font-size: var(--text-ui-md, 0.8125rem);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           max-inline-size: 44ch;
         }

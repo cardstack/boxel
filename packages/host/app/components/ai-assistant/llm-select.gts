@@ -118,8 +118,8 @@ export default class LLMSelect extends Component<Signature> {
         min-width: 0;
         color: var(--boxel-dark);
         font-family: var(--boxel-font-family);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 600;
       }
 
@@ -129,8 +129,8 @@ export default class LLMSelect extends Component<Signature> {
         flex-shrink: 0;
         color: var(--boxel-450);
         font-family: var(--boxel-font-family);
-        font-size: var(--type-caption, 11px);
-        line-height: var(--leading-caption, 16px);
+        font-size: var(--boxel-font-size-2xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
       }
@@ -140,12 +140,12 @@ export default class LLMSelect extends Component<Signature> {
         padding: 0;
         margin: 0;
         display: grid;
-        gap: var(--step-4, 4px);
+        gap: var(--boxel-sp-4xs);
       }
 
       .llm-option {
         background-color: var(--boxel-light);
-        border-radius: var(--round-row, 8px);
+        border-radius: var(--boxel-border-radius-sm);
         border: 1px solid var(--boxel-400);
       }
 
@@ -170,8 +170,8 @@ export default class LLMSelect extends Component<Signature> {
         border: none;
         color: var(--boxel-dark);
         font-family: var(--boxel-font-family);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 400;
         cursor: pointer;
 

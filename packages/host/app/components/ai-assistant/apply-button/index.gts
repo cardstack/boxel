@@ -78,7 +78,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .apply-button {
       --boxel-button-font: 600 var(--boxel-font-xs);
-      padding: 3px 10px;
+      padding: 0.1875rem 0.625rem;
       min-width: inherit;
       min-height: inherit;
       height: 1.5rem;
@@ -110,7 +110,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     }
     .state-indicator.applying {
       --icon-stroke-width: 5;
-      width: 58px;
+      width: 3.625rem;
       border-radius: 100px;
     }
     .state-indicator.compact.applying,
@@ -129,7 +129,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       full-size layout; compact mode renders a spinner instead, so keep all
       pill styling scoped to non-compact. */
     .state-indicator.preparing:not(.compact) {
-      width: 78px;
+      width: 4.875rem;
       padding: 1px;
       border-radius: 100px;
     }
@@ -145,7 +145,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       --boxel-button-disabled-foreground: var(--boxel-200);
       --boxel-button-disabled-border: 0;
       border: 0;
-      min-width: 74px;
+      min-width: 4.625rem;
     }
     .state-indicator.preparing .apply-button:disabled {
       opacity: 1;
@@ -157,10 +157,10 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     .state-indicator.preparing:not(.compact)::before {
       content: '';
       position: absolute;
-      top: -105px;
-      left: -55px;
-      width: 250px;
-      height: 250px;
+      top: -6.5625rem;
+      left: -3.4375rem;
+      width: 15.625rem;
+      height: 15.625rem;
       background: conic-gradient(
         #ffcc8f 0deg,
         #ff3966 45deg,
@@ -219,8 +219,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       pointer-events: none;
     }
     .state-indicator.compact svg {
-      width: 10px;
-      height: 10px;
+      width: 0.625rem;
+      height: 0.625rem;
     }
     .state-indicator.compact.applied-with-error svg {
       margin-top: -1px;

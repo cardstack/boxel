@@ -127,7 +127,7 @@ export class ZoomableFrameUsage extends Component {
         place-items: center;
         border-radius: var(--radius-control, 7px);
         background: color-mix(in oklch, var(--chart-2) 12%, transparent);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: var(--weight-strong, 600);
         color: var(--foreground);
       }
@@ -146,14 +146,14 @@ export class ZoomableFrameUsage extends Component {
           var(--muted-foreground) 14%,
           transparent
         );
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .frame-note {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .frame-note kbd {

@@ -53,7 +53,7 @@ No APG pattern. The rules are about names.
 
 ## Theming
 
-Image reads **AspectRatio**'s tokens for the frame: `--pretui-aspect-ratio`, `--pretui-aspect-radius` (from `@radius`), `--pretui-aspect-bg` (the loading and failure ground) and `--pretui-shadow-hairline` for `@bordered`. It adds `--card` for the shimmer highlight, `--muted-foreground` and `--text-ui-sm` for the failure face, `--ring` for the preview button's focus ring, `--space-2` / `--space-4`, and `--pretui-dur-enter` / `--pretui-ease-enter` for the fade-in.
+Image reads **AspectRatio**'s tokens for the frame: `--pretui-aspect-ratio`, `--pretui-aspect-radius` (from `@radius`), `--pretui-aspect-bg` (the loading and failure ground) and `--pretui-shadow-hairline` for `@bordered`. It adds `--card` for the shimmer highlight, `--muted-foreground` and `--boxel-font-size-2xs` for the failure face, `--ring` for the preview button's focus ring, `--space-2` / `--space-4`, and `--pretui-dur-enter` / `--pretui-ease-enter` for the fade-in.
 
 The shimmer and the fade are dropped under `prefers-reduced-motion`. `object-fit` follows `@fit`. The preview's 75vh height cap is fixed.
 

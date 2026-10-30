@@ -43,7 +43,7 @@ Pretui-level note: `@boardLabel` is the only accessibility affordance this wrapp
 
 ## Theming
 
-Consumed: `--foreground`, `--text-ui-md`, `--track-ui`.
+Consumed: `--foreground`, `--boxel-font-size-xs`, `--track-ui`.
 
 Remapped into the `--boxel-kanban-*` channel, each with an explicit light fallback so the board holds the Pretui light uniform even unthemed: `--boxel-kanban-fg` ← `--foreground`, `-card-bg` ← `--card`, `-card-fg` ← `--card-foreground`, `-col-bg` ← `--inset`, `-col-fg` ← `--foreground`, `-ring` and `-primary` ← `--primary`, `-primary-fg` ← `--primary-foreground`, `-destructive` ← `--destructive`, `-destructive-fg` ← `--destructive-foreground`, `-muted-fg` ← `--muted-foreground`, `-radius` ← `--radius`, `-border` ← `--border`, `-bg` → `transparent`.
 

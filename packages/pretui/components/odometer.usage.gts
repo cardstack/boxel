@@ -208,13 +208,13 @@ class OdometerUsage extends Component {
       }
       .odo-suffix {
         margin-left: var(--space-2, 6px);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         color: var(--muted-foreground);
       }
       .odo-note {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .odo-note em {
@@ -237,7 +237,7 @@ class OdometerUsage extends Component {
           0 0 0 1px var(--border)
         );
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         color: var(--foreground);
         cursor: pointer;

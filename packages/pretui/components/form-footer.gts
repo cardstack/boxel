@@ -204,7 +204,7 @@ export class FormFooter extends Component<FormFooterSignature> {
           align-items: center;
           gap: 6px;
           min-width: 0;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-formfooter[data-state='dirty'] .pretui-formfooter-status {
@@ -216,7 +216,7 @@ export class FormFooter extends Component<FormFooterSignature> {
           font-weight: 500;
         }
         .pretui-formfooter[data-state='error'] .pretui-formfooter-status {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: 500;
         }
         .pretui-formfooter-icon {

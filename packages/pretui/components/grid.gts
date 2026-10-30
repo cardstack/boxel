@@ -57,7 +57,7 @@ export class Grid<T = unknown> extends Component<GridSignature<T>> {
            spacing scale so grid rhythm follows the theme. */
         .pretui-grid {
           width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           --boxel-sp: var(--space-4, 11px);

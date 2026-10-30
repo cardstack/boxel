@@ -386,7 +386,7 @@ export class Lookup extends Component<LookupSignature> {
           0 0 0 1px var(--border)
         );
         color: var(--foreground);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         max-width: 100%;
       }
       .pretui-lookup :deep(.ember-power-select-multiple-remove-btn) {
@@ -396,7 +396,7 @@ export class Lookup extends Component<LookupSignature> {
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--subtle-foreground);
         cursor: pointer;
         opacity: 1;
         font-size: 12px;
@@ -492,9 +492,9 @@ export class Lookup extends Component<LookupSignature> {
         display: flex;
         align-items: center;
         padding: 0 8px;
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--subtle-foreground);
         font-style: normal;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         text-align: left;
       }
     </style>

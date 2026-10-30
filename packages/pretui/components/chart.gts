@@ -834,11 +834,11 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           min-width: 0;
           color: var(--foreground);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-chart-title {
-          font-size: var(--text-ui-lg, 14px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: var(--weight-strong, 600);
           letter-spacing: var(--track-heading, -0.01em);
         }
@@ -865,7 +865,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           color: var(--destructive-foreground);
           background: color-mix(in oklch, var(--destructive) 8%, var(--card));
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-chart-legend {
           display: flex;
@@ -883,7 +883,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           background: transparent;
           color: var(--muted-foreground);
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           cursor: pointer;
           /* Coarse pointers get a real hit target without changing the
              layout on a mouse. */
@@ -918,13 +918,13 @@ export class Chart<T> extends Component<ChartSignature<T>> {
         }
         .pretui-chart-caption {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           max-inline-size: 68ch;
         }
         .pretui-chart-allmuted {
           margin: 0;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-chart-data {
           border-radius: var(--radius-surface, 10px);
@@ -938,7 +938,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           gap: var(--space-2, 6px);
           cursor: pointer;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
         }
@@ -957,7 +957,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
         .pretui-chart-spoken {
           margin: var(--space-3, 8px) 0 0;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           max-inline-size: 74ch;
         }
         .pretui-chart-scroll {
@@ -968,7 +968,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
         .pretui-chart-table {
           inline-size: 100%;
           border-collapse: collapse;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-chart-table th,
@@ -993,7 +993,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
         .pretui-chart-note {
           margin: var(--space-2, 6px) 0 0;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
         }
         /* Unnamed container query only — a named one silently deletes every
            rule that follows it in the transpiled stylesheet. */

@@ -194,7 +194,7 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
             180deg,
             color-mix(
               in oklch,
-              var(--pretui-attention, var(--boxel-fuschia)) 7%,
+              var(--attention) 7%,
               var(--card)
             ),
             var(--card) 55%
@@ -203,16 +203,16 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
             0 0 0 1px
               color-mix(
                 in oklch,
-                var(--pretui-attention, var(--boxel-fuschia)) 55%,
+                var(--attention) 55%,
                 var(--border)
               ),
             0 2px 10px
               color-mix(
                 in oklch,
-                var(--pretui-attention, var(--boxel-fuschia)) 12%,
+                var(--attention) 12%,
                 transparent
               );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         /* settled: the attention hue is reserved for "a human must act now",
            so an answered block gives it back */
@@ -234,7 +234,7 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
           font-size: 10px;
           font-weight: 600;
           letter-spacing: 0.06em;
-          color: var(--pretui-attention-ink, var(--pretui-attention, var(--boxel-fuschia)));
+          color: var(--attention-ink);
           flex: none;
         }
         .pretui-iinput[data-answered] .pretui-iinput-verb {
@@ -246,13 +246,13 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
         }
         .pretui-iinput-settled {
           margin-left: auto;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-iinput-detail {
           margin: 0;
           max-width: 62ch;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.6;
           color: var(--muted-foreground);
         }
@@ -277,7 +277,7 @@ export class InteractiveInput extends Component<InteractiveInputSignature> {
             --pretui-shadow-hairline,
             0 0 0 1px var(--border)
           );
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           cursor: pointer;
         }
         .pretui-iinput-set:disabled .pretui-iinput-opt {

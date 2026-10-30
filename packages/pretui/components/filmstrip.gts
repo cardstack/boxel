@@ -430,7 +430,7 @@ export class Filmstrip extends Component<FilmstripSignature> implements Filmstri
           display: flex;
           align-items: center;
           gap: 3px;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
@@ -439,7 +439,7 @@ export class Filmstrip extends Component<FilmstripSignature> implements Filmstri
           font-weight: 600;
         }
         .pretui-strip-here {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
         }
         .pretui-strip-readout {
           margin: 0;

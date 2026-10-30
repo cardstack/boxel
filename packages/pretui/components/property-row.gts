@@ -169,7 +169,7 @@ export class PropertyRow extends Component<PropertyRowSignature> {
           row-gap: 2px;
           min-height: var(--control-h, 28px);
           padding-block: 1px;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
@@ -233,13 +233,13 @@ export class PropertyRow extends Component<PropertyRowSignature> {
         .pretui-property-hint {
           grid-area: hint;
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
         }
         .pretui-property-mixed {
           flex: none;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.04em);
           color: var(--muted-foreground);
           background: var(--field, var(--boxel-light));

@@ -577,7 +577,7 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
           border: 0;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--foreground);
           background: color-mix(
@@ -611,7 +611,7 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
           grid-template-columns: 46px minmax(0, 1fr) 40px;
           align-items: center;
           gap: 8px;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-crop-field input {
@@ -642,7 +642,7 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
           border: 0;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--primary-foreground);
           background: var(--primary);
@@ -656,8 +656,8 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
           display: flex;
           gap: 6px;
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--destructive-ink);
         }
         .pretui-crop-out {
           margin: 0;
@@ -673,7 +673,7 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
           box-shadow: 0 0 0 1px var(--border);
         }
         .pretui-crop-out figcaption {
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .dark .pretui-crop-num {

@@ -42,11 +42,11 @@ Gaps:
 
 ## Theming
 
-`--font-mono`, `--text-ui-xs` (11px), `--track-eyebrow` (0.08em), `--muted-foreground`. Weight 500 and `line-height: 16px` are fixed.
+`--font-mono`, `--boxel-font-size-2xs` (11px), `--track-eyebrow` (0.08em), `--muted-foreground`. Weight 500 and `line-height: 16px` are fixed.
 
-Four tokens, and they are the same four that define the eyebrow voice in **Panel**, **Toolbar**, **DataGrid** and **FormField** — so a theme retuning `--track-eyebrow` or `--text-ui-xs` moves all of them together, which is the intent. That coupling is the reason this exists as a component rather than as a utility class: there is one definition of what a label sounds like.
+Four tokens, and they are the same four that define the eyebrow voice in **Panel**, **Toolbar**, **DataGrid** and **FormField** — so a theme retuning `--track-eyebrow` or `--boxel-font-size-2xs` moves all of them together, which is the intent. That coupling is the reason this exists as a component rather than as a utility class: there is one definition of what a label sounds like.
 
-The `line-height: 16px` is a fixed pixel value rather than a ratio, so a theme that scales `--text-ui-xs` up will get labels that clip or crowd. Worth changing to a unitless ratio.
+The `line-height: 16px` is a fixed pixel value rather than a ratio, so a theme that scales `--boxel-font-size-2xs` up will get labels that clip or crowd. Worth changing to a unitless ratio.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

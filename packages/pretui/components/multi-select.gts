@@ -296,7 +296,7 @@ export class MultiSelect extends Component<MultiSelectSignature> {
           padding: 0 3px 0 calc(4px * var(--pretui-capsule-base, 1.35) + 10px * var(--pretui-radius-encroach, 0.35));
           background: var(--card);
           box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--foreground);
           flex: none;
@@ -310,7 +310,7 @@ export class MultiSelect extends Component<MultiSelectSignature> {
           border-radius: 50%;
           display: inline-grid;
           place-content: center;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           cursor: pointer;
           flex: none;
         }
@@ -359,7 +359,7 @@ export class MultiSelect extends Component<MultiSelectSignature> {
           height: 28px;
           padding: 0 8px;
           border-radius: 6px;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           cursor: pointer;
           color: var(--foreground);
         }

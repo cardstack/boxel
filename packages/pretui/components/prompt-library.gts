@@ -241,7 +241,7 @@ export class PromptLibrary extends Component<PromptLibrarySignature> {
             0 0 0 1px var(--border),
             0 1px 2px rgb(0 0 0 / 0.08)
           );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           container-type: inline-size;
         }
         .pretui-plib-head {
@@ -259,8 +259,8 @@ export class PromptLibrary extends Component<PromptLibrarySignature> {
         }
         .pretui-plib-count {
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-plib-filters {
@@ -321,18 +321,18 @@ export class PromptLibrary extends Component<PromptLibrarySignature> {
           width: 14px;
           height: 14px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-plib-card-title {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           min-width: 0;
         }
         .pretui-plib-card-body {
           margin: 0;
           flex: 1;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.55;
           color: var(--muted-foreground);
           display: -webkit-box;

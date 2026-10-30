@@ -26,13 +26,13 @@ export class BrokenLink extends Component<BrokenLinkSignature> {
           padding: 2px 8px;
           border-radius: 6px;
           background: var(--inset, var(--boxel-100));
-          color: var(--ink-3, var(--boxel-400));
-          font-size: var(--text-ui-sm, 11.5px);
+          color: var(--subtle-foreground);
+          font-size: var(--boxel-font-size-2xs);
           font-family: var(--font-mono);
           outline: 1px dashed var(--line-strong, var(--boxel-400));
           outline-offset: -1px;
           text-decoration: line-through;
-          text-decoration-color: color-mix(in oklch, var(--ink-3, var(--boxel-400)) 50%, transparent);
+          text-decoration-color: color-mix(in oklch, var(--subtle-foreground) 50%, transparent);
         }
         .pretui-broken svg {
           flex: none;

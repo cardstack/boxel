@@ -39,7 +39,7 @@ No APG pattern. It is a list, a sentinel, a button and a status line.
 
 ## Theming
 
-`--space-4` (the foot's padding), `--muted-foreground` and `--text-ui-sm` (the end message). The button and spinner read **Button**'s and **Spinner**'s own tokens.
+`--space-4` (the foot's padding), `--muted-foreground` and `--boxel-font-size-2xs` (the end message). The button and spinner read **Button**'s and **Spinner**'s own tokens.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

@@ -536,7 +536,7 @@ class NodeCanvasUsage extends Component {
       }
       .canvas-empty {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

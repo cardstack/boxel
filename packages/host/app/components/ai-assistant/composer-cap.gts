@@ -225,9 +225,9 @@ export default class AiAssistantComposerCap extends Component<Signature> {
       .composer-cap {
         position: relative;
         z-index: 1;
-        padding-bottom: var(--step-12, 12px);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        padding-bottom: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         --pretui-cap-surface: var(--ai-composer-cap-surface);
         --pretui-cap-edge: var(--ai-composer-cap-edge);
         /* the cap spans the composer's full width, its top edge continued */

@@ -24,7 +24,7 @@ Identical to SplitPanes. A handle is an interactive `separator` with `aria-value
 
 ## Theming
 
-Identical to SplitPanes: `--foreground`, `--muted-foreground`, `--primary` (the active handle), `--text-ui-md` and `--track-ui`, plus boxel-ui's `--boxel-panel-resize-handle-*` properties on the handle.
+Identical to SplitPanes: `--foreground`, `--muted-foreground`, `--primary` (the active handle), `--boxel-font-size-xs` and `--track-ui`, plus boxel-ui's `--boxel-panel-resize-handle-*` properties on the handle.
 
 ## React ecosystem
 

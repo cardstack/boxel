@@ -41,7 +41,7 @@ Gaps, and the last one is serious:
 
 ## Theming
 
-`--foreground` (pixels, and the shimmer's bright stop), `--ink-3` (the shimmer's dim stops and the elapsed readout), `--font-mono` (elapsed), `--text-ui-md` (label).
+`--foreground` (pixels, and the shimmer's bright stop), `--subtle-foreground` (the shimmer's dim stops and the elapsed readout), `--font-mono` (elapsed), `--boxel-font-size-xs` (label).
 
 The 4px pixels, 1.5px grid gap, 650/950ms cycles, 1.4s shimmer and 10px inter-element gap are all fixed. The pixel grid uses `--foreground` directly rather than `currentColor`, so unlike **Spinner** it does _not_ adapt to the ink of a coloured container — a LoadingState inside an accent surface will show dark pixels. Worth knowing before placing one on a tinted panel.
 

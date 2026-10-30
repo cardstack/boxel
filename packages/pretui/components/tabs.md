@@ -40,7 +40,7 @@ Practically: it is clickable and Tab-reachable, and it is not a conformant tab l
 
 ## Theming
 
-`--muted-foreground` (rest ink), `--foreground` (hover and active ink), `--border` (the 1px rail), `--text-ui-md`, `--pretui-ease-snap`, `--space-4` (panel top padding), plus whatever **SlidingHighlight** consumes for the 2px accent bar. Tab height (34px) and the 22px gap are fixed.
+`--muted-foreground` (rest ink), `--foreground` (hover and active ink), `--border` (the 1px rail), `--boxel-font-size-xs`, `--pretui-ease-snap`, `--space-4` (panel top padding), plus whatever **SlidingHighlight** consumes for the 2px accent bar. Tab height (34px) and the 22px gap are fixed.
 
 A theme must keep `--muted-foreground` and `--foreground` separable, since inactive-versus-active is carried entirely by ink weight plus the underline — there is no background change to fall back on.
 

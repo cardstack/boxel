@@ -40,7 +40,7 @@ export class SkipLink extends Component<SkipLinkSignature> {
           background: var(--primary);
           color: var(--primary-foreground);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           text-decoration: none;
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));

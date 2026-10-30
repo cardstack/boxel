@@ -156,23 +156,23 @@ export class ScrollerUsage extends Component {
       .scroller-id {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-eyebrow, 0.08em);
         color: var(--muted-foreground);
       }
       .scroller-tea {
         margin: 2px 0 0;
-        font-size: var(--text-ui-lg, 14px);
+        font-size: var(--boxel-font-size-sm);
         font-weight: var(--weight-strong, 600);
       }
       .scroller-meta {
         margin: 2px 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .scroller-note {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

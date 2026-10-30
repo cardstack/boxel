@@ -139,7 +139,7 @@ class SheetToolbarUsage extends Component {
     <style scoped>
       .sg-readout {
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

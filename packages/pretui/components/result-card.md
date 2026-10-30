@@ -38,7 +38,7 @@ Gaps, and the menu button is the clearest:
 
 ## Theming
 
-`--card` (the surface), `--border` and `--pretui-shadow-card` (its edge), `--foreground` (title), `--muted-foreground` (eyebrow and lines), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (the eyebrow voice), `--hover` (the menu button's hover), `--text-ui-md`.
+`--card` (the surface), `--border` and `--pretui-shadow-card` (its edge), `--foreground` (title), `--muted-foreground` (eyebrow and lines), `--font-mono` + `--boxel-font-size-2xs` + `--track-eyebrow` (the eyebrow voice), `--hover` (the menu button's hover), `--boxel-font-size-xs`.
 
 Because the surface is `--card` and it sits inside a transcript that is usually also on `--card`, a theme must keep `--pretui-shadow-card` doing real work — the hairline is the only thing separating a result from the rows around it. A theme that reduces it to nothing leaves the card indistinguishable from the transcript, which is exactly the distinction this component exists to draw.
 

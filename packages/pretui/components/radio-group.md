@@ -39,7 +39,7 @@ Gaps:
 
 ## Theming
 
-`--pretui-control-rest` (→ `--field`), `--pretui-control-border` (→ `--input`), `--primary` (checked fill), `--card` (the dot), `--border` (mixed into the checked hairline), `--pretui-edge-highlight`, `--text-ui-md`.
+`--pretui-control-rest` (→ `--field`), `--pretui-control-border` (→ `--input`), `--primary` (checked fill), `--card` (the dot), `--border` (mixed into the checked hairline), `--pretui-edge-highlight`, `--boxel-font-size-xs`.
 
 The 15px circle, 6px dot and 7px row gap are fixed. A theme that sets `--card` close to `--primary` erases the dot; define them as a contrasting pair, exactly as with Checkbox's `--primary` / `--primary-foreground`.
 

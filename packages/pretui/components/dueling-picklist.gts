@@ -173,7 +173,7 @@ class PicklistColumn extends Component<PicklistColumnSignature> {
           flex: 1 1 0;
         }
         .pretui-dlcol-label {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--muted-foreground);
@@ -250,13 +250,13 @@ class PicklistColumn extends Component<PicklistColumnSignature> {
           margin-left: auto;
           flex: none;
           display: inline-flex;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-dlcol-empty {
           margin: 0;
           padding: var(--space-4, 11px) 7px;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-dlopt {
@@ -935,13 +935,13 @@ export class DuelingPicklist extends Component<DuelingPicklistSignature> {
           min-width: 0;
         }
         .pretui-dueling-legend {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
         .pretui-dueling-req {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           text-decoration: none;
           margin-left: 2px;
         }
@@ -957,7 +957,7 @@ export class DuelingPicklist extends Component<DuelingPicklistSignature> {
           gap: 4px;
           flex: none;
           /* drop past the column heading so the buttons sit beside the boxes */
-          padding-top: calc(var(--text-ui-sm, 11.5px) + var(--space-2, 5px) + 6px);
+          padding-top: calc(var(--boxel-font-size-2xs) + var(--space-2, 5px) + 6px);
         }
         /* screen-reader-only: instructions + the move announcements. Never
            display:none — a hidden live region never speaks. */

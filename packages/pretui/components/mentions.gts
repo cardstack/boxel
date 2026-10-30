@@ -302,8 +302,8 @@ export class Mentions extends Component<MentionsSignature> {
           box-shadow: 0 0 0 1px var(--input, var(--border));
           color: var(--foreground);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
-          line-height: var(--leading-body, 1.5);
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-body-line-height);
           resize: vertical;
         }
         .pretui-mentions-input:focus {
@@ -324,7 +324,7 @@ export class Mentions extends Component<MentionsSignature> {
           background: var(--popover);
           color: var(--popover-foreground);
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-mentions-option {
           padding: 0.375rem var(--space-3, 0.5rem);

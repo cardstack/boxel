@@ -466,7 +466,7 @@ export class ZoomableFrame extends Component<ZoomableFrameSignature> {
           background: transparent;
           color: inherit;
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           cursor: pointer;
         }
         @media (any-pointer: coarse) {
@@ -518,7 +518,7 @@ export class ZoomableFrame extends Component<ZoomableFrameSignature> {
           min-inline-size: 44px;
           text-align: center;
           font-variant-numeric: tabular-nums;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-sr {

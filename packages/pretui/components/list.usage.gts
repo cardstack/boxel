@@ -172,7 +172,7 @@ class ListUsage extends Component {
         flex-wrap: wrap;
         gap: var(--space-4, 11px);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .ls-readout strong {
@@ -182,7 +182,7 @@ class ListUsage extends Component {
       .ls-detail,
       .ls-detail-meta {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.5;
       }
       .ls-detail-meta {
@@ -191,7 +191,7 @@ class ListUsage extends Component {
       }
       .ls-hint {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

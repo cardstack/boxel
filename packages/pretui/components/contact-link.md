@@ -44,7 +44,7 @@ Where it is thinner: the validators are conservative rather than RFC-complete, a
 
 ## Theming
 
-`--pretui-contact-hue` (the per-instance hue, defaulting to `--primary`), `--card` (the mix base), `--foreground` (mixed into the ink), `--muted-foreground` (the unresolved hue and the note), `--radius`, `--space-2` / `--space-3`, `--text-ui-sm` (11.5px), `--text-ui-md` (13px in the row variant), `--text-ui-xs` (the note), `--weight-medium`, `--ring`, `--pretui-capsule-base` (the horizontal padding multiplier, shared with the other capsules), `--pretui-ease-snap`.
+`--pretui-contact-hue` (the per-instance hue, defaulting to `--primary`), `--card` (the mix base), `--foreground` (mixed into the ink), `--muted-foreground` (the unresolved hue and the note), `--radius`, `--space-2` / `--space-3`, `--boxel-font-size-2xs` (11.5px), `--boxel-font-size-xs` (13px in the row variant), `--boxel-font-size-2xs` (the note), `--weight-medium`, `--ring`, `--pretui-capsule-base` (the horizontal padding multiplier, shared with the other capsules), `--pretui-ease-snap`.
 
 The caller hue reaches CSS through the kit's `cssStyle` guard, so a rejected value drops the declaration and the default stands rather than half a declaration landing in the attribute.
 

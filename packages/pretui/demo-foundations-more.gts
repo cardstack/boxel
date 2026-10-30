@@ -6,5 +6,5 @@ export const DemoStack: TemplateOnlyComponent<LayoutSignature> = <template><div 
 export const DemoRow: TemplateOnlyComponent<LayoutSignature> = <template><div class='demo-row'>{{yield}}</div><style scoped>.demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6, 19px); }</style></template>;
 
 interface ReceiptSignature { Blocks: { default: [] } }
-export const DemoReceipt: TemplateOnlyComponent<ReceiptSignature> = <template><span class='demo-receipt'>{{yield}}</span><style scoped>.demo-receipt { color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--text-ui-xs); }</style></template>;
+export const DemoReceipt: TemplateOnlyComponent<ReceiptSignature> = <template><span class='demo-receipt'>{{yield}}</span><style scoped>.demo-receipt { color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--boxel-font-size-2xs); }</style></template>;
 

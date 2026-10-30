@@ -209,7 +209,7 @@ class EmojiPickerUsage extends Component {
         grid-template-columns: max-content;
         gap: 2px 0;
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
 
       .emoji-readout dt {

@@ -116,7 +116,7 @@ class AccordionUsage extends Component {
     <style scoped>
       .accordion-copy {
         margin: 0 0 6px;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
         max-width: 52ch;
       }

@@ -20,11 +20,11 @@ const LoaderUsage: TemplateOnlyComponent = <template>
   </FreestyleUsage>
   <style scoped>
     .tint-primary {
-      color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+      color: var(--primary-ink);
       display: inline-flex;
     }
     .tint-danger {
-      color: var(--pretui-destructive-ink, var(--boxel-danger));
+      color: var(--destructive-ink);
       display: inline-flex;
     }
   </style>

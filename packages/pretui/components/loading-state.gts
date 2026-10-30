@@ -91,9 +91,9 @@ export class LoadingState extends Component<LoadingStateSignature> {
           border-radius: 50%;
         }
         .pretui-shimmer-label {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
-          background-image: linear-gradient(90deg, var(--ink-3, var(--boxel-400)) 35%, var(--foreground) 50%, var(--ink-3, var(--boxel-400)) 65%);
+          background-image: linear-gradient(90deg, var(--subtle-foreground) 35%, var(--foreground) 50%, var(--subtle-foreground) 65%);
           background-size: 200% 100%;
           -webkit-background-clip: text;
           background-clip: text;
@@ -104,7 +104,7 @@ export class LoadingState extends Component<LoadingStateSignature> {
         .pretui-elapsed {
           font-family: var(--font-mono);
           font-size: 12px;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         @media (prefers-reduced-motion: reduce) {

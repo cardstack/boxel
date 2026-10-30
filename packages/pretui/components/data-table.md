@@ -78,11 +78,11 @@ The caller's failures to avoid: a `<:cell>` that puts an interactive control in 
 
 ## Theming
 
-Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--primary`, `--primary-foreground`, `--ring`, `--radius`, `--radius-surface`, `--inset`, `--hover`, `--stripe`, `--line-strong`, `--input`, `--field`, `--font-mono`, `--font-sans`, `--text-ui-md`, `--text-ui-sm`, `--track-ui`, `--track-eyebrow`, `--space-2` … `--space-5`, `--pretui-shadow-hairline`, `--pretui-control-rest`, `--pretui-control-border`, `--pretui-edge-highlight`, `--pretui-selected`, `--pretui-dur-snap`, `--pretui-ease-snap`, `--pretui-z-sticky`, `--pretui-z-sticky-header`.
+Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--primary`, `--primary-foreground`, `--ring`, `--radius`, `--radius-surface`, `--inset`, `--hover`, `--stripe`, `--line-strong`, `--input`, `--field`, `--font-mono`, `--font-sans`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--track-ui`, `--track-eyebrow`, `--space-2` … `--space-5`, `--pretui-shadow-hairline`, `--pretui-control-rest`, `--pretui-control-border`, `--pretui-edge-highlight`, `--pretui-selected`, `--pretui-dur-snap`, `--pretui-ease-snap`, `--pretui-z-sticky`, `--pretui-z-sticky-header`.
 
 Its own knobs: `--pretui-dt-pick-w` (2.6em), `--pretui-dt-exp-w` (2.2em) and `--pretui-dt-act-w` (3em) are the widths of the selection, expander and actions columns. The template stamps `data-pick`, `data-detail` and `data-actions` on the root and the stylesheet resolves `--pretui-dt-lead` and `--pretui-dt-tail` from them, which is how a pin offset computed in JS can add the control columns without knowing whether they exist. `--pretui-dt-min-w` is set from `@minWidth`.
 
-Density is one axis: `@size` sets the root `font-size` and every internal dimension is in `em`, so a theme retunes the whole table by retuning `--text-ui-md`. Header cells are the eyebrow voice (mono, uppercase, `--track-eyebrow`) on `--inset`. Coarse pointers get 44px rows and 20px checkboxes; `prefers-reduced-motion` removes the chevron transition.
+Density is one axis: `@size` sets the root `font-size` and every internal dimension is in `em`, so a theme retunes the whole table by retuning `--boxel-font-size-xs`. Header cells are the eyebrow voice (mono, uppercase, `--track-eyebrow`) on `--inset`. Coarse pointers get 44px rows and 20px checkboxes; `prefers-reduced-motion` removes the chevron transition.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

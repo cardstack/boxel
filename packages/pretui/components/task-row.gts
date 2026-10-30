@@ -145,7 +145,7 @@ class TaskFace extends Component<TaskFaceSignature> {
           inset: 0;
           width: 24px;
           height: 24px;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .ring-arc {
           color: var(--muted-foreground);
@@ -202,7 +202,7 @@ class TaskFace extends Component<TaskFaceSignature> {
           min-height: 22px;
           padding: 0 9px;
           border-radius: 11px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           background: var(--inset, var(--boxel-100));
           color: var(--muted-foreground);
@@ -352,7 +352,7 @@ export class TaskRow extends Component<TaskRowSignature> {
       @layer PretComponent {
         .pretui-taskrow {
           background: var(--card);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           border-radius: 22px;
           box-shadow: var(
             --pretui-shadow-card,
@@ -389,7 +389,7 @@ export class TaskRow extends Component<TaskRowSignature> {
           border: 0;
           background: none;
           font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           text-align: left;
           cursor: pointer;
@@ -408,7 +408,7 @@ export class TaskRow extends Component<TaskRowSignature> {
           width: 15px;
           height: 15px;
           flex: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           transition: transform 300ms
             var(--pretui-ease-enter, cubic-bezier(0.22, 0.61, 0.25, 1));
         }
@@ -442,15 +442,15 @@ export class TaskRow extends Component<TaskRowSignature> {
         }
         .pretui-taskrow-detail dt {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           min-width: 0;
         }
         .pretui-taskrow-detail dd {
           margin: 0;
           flex: none;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-taskrow-body[data-open] .pretui-taskrow-detail {

@@ -49,7 +49,7 @@ APG **Combobox** (the listbox half), on a native textarea.
 
 ## Theming
 
-`--input-background` (default `--card`), `--input` (default `--border`), `--ring`, `--radius-control`, `--foreground`, `--font-sans`, `--text-ui-md`, `--leading-body`, `--space-3`, and for the list `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--hover` and `--pretui-z-dropdown`.
+`--input-background` (default `--card`), `--input` (default `--border`), `--ring`, `--radius-control`, `--foreground`, `--font-sans`, `--boxel-font-size-xs`, `--boxel-body-line-height`, `--space-3`, and for the list `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--hover` and `--pretui-z-dropdown`.
 
 The list's 14rem maximum height is fixed.
 

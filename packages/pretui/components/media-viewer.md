@@ -40,7 +40,7 @@ Beyond that: there is no loading or error state at the shell level (each adapter
 
 ## Theming
 
-The shell has almost no surface of its own: `--text-ui-sm` and `--pretui-primary-ink` for the fallback link, and `--pretui-shadow-hairline` shared with the adapters in this module.
+The shell has almost no surface of its own: `--boxel-font-size-2xs` and `--primary-ink` for the fallback link, and `--pretui-shadow-hairline` shared with the adapters in this module.
 
 That is deliberate. Everything visible comes from the adapter that ran, so a theme retunes **MediaPlayer**, **ImageFrame** and the rest, and the shell inherits whatever they became. A viewer that themed independently of its adapters would be a viewer that looks different depending on what you put in it.
 

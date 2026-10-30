@@ -131,7 +131,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       }
       /* closed, the count stays the button's accessible name, unseen */
       .skills-count {
-        font-size: var(--type-ui, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         color: var(--boxel-dark);
@@ -152,7 +152,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       }
       .skill-list {
         display: grid;
-        gap: var(--step-4, 4px);
+        gap: var(--boxel-sp-4xs);
         list-style-type: none;
         padding: 0;
         margin: 0;
@@ -161,13 +161,13 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       .skill-list :deep(.card-content) {
         max-width: initial;
         font-family: var(--boxel-font-family);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 600;
       }
       .attach-button {
-        --boxel-button-font: 600 var(--type-ui, 12.5px) /
-          var(--leading-ui, 18px) var(--boxel-font-family);
+        --boxel-button-font: 600 var(--boxel-font-size-xs) /
+          var(--boxel-line-height-xs) var(--boxel-font-family);
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
         --boxel-button-disabled-background: none;
         --boxel-button-disabled-opacity: 1;

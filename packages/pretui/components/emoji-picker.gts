@@ -1034,7 +1034,7 @@ export class EmojiPicker extends Component<EmojiPickerSignature> {
             0 2px 6px rgb(0 0 0 / 0.2)
           );
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
         }
 
@@ -1315,7 +1315,7 @@ export class EmojiPicker extends Component<EmojiPickerSignature> {
            so it is set in mono rather than quoted or emphasised. */
         .epx-stateterm {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--foreground);
         }
 
@@ -1324,8 +1324,8 @@ export class EmojiPicker extends Component<EmojiPickerSignature> {
           border: 0;
           background: none;
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--pretui-primary-ink, var(--primary));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--primary-ink);
           text-decoration: underline;
           text-underline-offset: 2px;
           cursor: pointer;

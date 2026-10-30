@@ -170,7 +170,7 @@ export class FilterChips extends Component<FilterChipsSignature> {
           padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
           border: 0;
           font: inherit;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           letter-spacing: inherit;
           color: var(--muted-foreground);
@@ -219,7 +219,7 @@ export class FilterChips extends Component<FilterChipsSignature> {
           text-align: center;
           font-size: 10.5px;
           font-variant-numeric: tabular-nums;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-filterchip[data-state='active'] .pretui-filterchip-count {
           background: var(--inset, var(--boxel-100));

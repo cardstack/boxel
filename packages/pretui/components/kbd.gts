@@ -49,7 +49,7 @@ export class Kbd extends Component<KbdSignature> {
           );
           color: var(--pretui-kbd-foreground, var(--muted-foreground));
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           line-height: 1.5;
           white-space: nowrap;

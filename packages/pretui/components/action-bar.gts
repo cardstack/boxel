@@ -372,7 +372,7 @@ export class ActionBar extends Component<ActionBarSignature> {
         }
         .pretui-actionbar-count {
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: var(--weight-medium, 500);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);

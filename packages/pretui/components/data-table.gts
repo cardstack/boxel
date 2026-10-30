@@ -1226,7 +1226,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           display: grid;
           gap: var(--space-3, 8px);
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           /* The control columns' effective widths. A pin offset computed in
@@ -1256,7 +1256,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           font-size: 10.5px;
         }
         .pretui-dt[data-size='s'] {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-dt[data-size='l'] {
           font-size: 14px;

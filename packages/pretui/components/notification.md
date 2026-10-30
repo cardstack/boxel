@@ -52,7 +52,7 @@ No APG pattern. A notification is text, one or two buttons and an optional live 
 
 ## Theming
 
-`--pretui-notification-tone` (set from the tone: `--pretui-info`, `--success`, `--warning`, `--destructive` or `--muted-foreground`), `--pretui-notification-width` (the maximum width, default 26rem), `--popover`, `--popover-foreground`, `--muted-foreground`, `--foreground`, `--primary` (a neutral item's action), `--radius-surface`, `--radius-control`, `--pretui-shadow-raised`, `--ring`, `--hover`, `--font-sans`, `--text-ui-md`, `--text-ui-sm`, `--space-3` and `--space-4`.
+`--pretui-notification-tone` (set from the tone: `--pretui-info`, `--success`, `--warning`, `--destructive` or `--muted-foreground`), `--pretui-notification-width` (the maximum width, default 26rem), `--popover`, `--popover-foreground`, `--muted-foreground`, `--foreground`, `--primary` (a neutral item's action), `--radius-surface`, `--radius-control`, `--pretui-shadow-raised`, `--ring`, `--hover`, `--font-sans`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--space-3` and `--space-4`.
 
 These are the tokens a **Toaster** item reads, so a theme that retunes toasts retunes notifications the same way. The 3px stripe and the 1.25rem dismiss button are fixed.
 

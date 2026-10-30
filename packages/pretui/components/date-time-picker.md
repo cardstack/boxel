@@ -43,7 +43,7 @@ A disclosure trigger opening a dialog-like popover, composed from **Calendar** a
 
 ## Theming
 
-The trigger reads `--input-background`, `--input`, `--ring`, `--radius-control`, `--pretui-control-h`, `--foreground`, `--muted-foreground`, `--font-sans` and `--text-ui-md`. The panel reads **Popover**'s tokens (the width is set with `--pretui-popover-width`), **Calendar**'s and **TimeInput**'s own, `--border` for the rule above the time, and `--space-2` / `--space-3`.
+The trigger reads `--input-background`, `--input`, `--ring`, `--radius-control`, `--pretui-control-h`, `--foreground`, `--muted-foreground`, `--font-sans` and `--boxel-font-size-xs`. The panel reads **Popover**'s tokens (the width is set with `--pretui-popover-width`), **Calendar**'s and **TimeInput**'s own, `--border` for the rule above the time, and `--space-2` / `--space-3`.
 
 The panel's one-month width is fixed.
 

@@ -285,7 +285,7 @@ export class HoverVideoPlayer extends Component<HoverVideoPlayerSignature> {
           outline-offset: 2px;
         }
         .pretui-hvp-caption {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-sr {

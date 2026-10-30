@@ -41,14 +41,14 @@ export const Toolbar: TemplateOnlyComponent<ToolbarSignature> = <template>
       }
       .pretui-eyebrow {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .pretui-toolbar-meta {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pretui-toolbar-actions {

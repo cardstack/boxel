@@ -439,7 +439,7 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
           min-width: 15px;
           padding: 0 4px;
           border-radius: 999px;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 15px;
           text-align: center;
           color: var(--pretui-on-neutral, var(--boxel-light));
@@ -447,7 +447,7 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
         }
         .pretui-lb-note {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         @media (prefers-reduced-motion: reduce) {

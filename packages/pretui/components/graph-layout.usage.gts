@@ -319,7 +319,7 @@ class GraphLayoutUsage extends Component {
         grid-template-columns: auto minmax(0, 1fr);
         gap: 2px var(--space-4, 11px);
         margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
 
       .layout-report dt {

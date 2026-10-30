@@ -24,7 +24,7 @@ Identical to Divider. It is `role="separator"` with `aria-orientation`. `@label`
 
 ## Theming
 
-Identical to Divider: `--border` (the rule), `--muted-foreground` and `--text-ui-sm` / `--track-ui` (the label), and `--pretui-divider-spacing` (the margin around it, default `--space-4`).
+Identical to Divider: `--border` (the rule), `--muted-foreground` and `--boxel-font-size-2xs` / `--track-ui` (the label), and `--pretui-divider-spacing` (the margin around it, default `--space-4`).
 
 ## React ecosystem
 

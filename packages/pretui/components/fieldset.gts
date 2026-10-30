@@ -67,8 +67,8 @@ export class Fieldset extends Component<FieldsetSignature> {
       @layer PretComponent {
         .pretui-fieldset {
           --fs-gap: var(--space-3, 0.5rem);
-          --fs-text: var(--text-ui-md, 0.78rem);
-          --fs-small: var(--text-ui-sm, 0.72rem);
+          --fs-text: var(--boxel-font-size-xs);
+          --fs-small: var(--boxel-font-size-2xs);
           --fs-strong: var(--weight-strong, 600);
           margin: 0;
           padding: 0;

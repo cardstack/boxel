@@ -90,7 +90,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
         opacity: 0;
         height: 0;
-        max-width: 250px;
+        max-width: 15.625rem;
         transition:
           transform 0.5s ease-in-out,
           opacity 0.5s ease-in-out;
@@ -123,10 +123,10 @@ export default class AiAssistantToast extends Component<Signature> {
         padding: 1px;
         border-radius: var(--boxel-border-radius-xs);
         transition: background-color 0.2s ease;
-        width: 16px;
-        height: 16px;
-        min-width: 16px;
-        min-height: 16px;
+        width: 1rem;
+        height: 1rem;
+        min-width: 1rem;
+        min-height: 1rem;
       }
       .toast-close-button:hover {
         --icon-color: var(--boxel-light);

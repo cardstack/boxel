@@ -177,7 +177,7 @@ export class PageScaffold extends Component<PageScaffoldSignature> {
           min-width: 0;
           color: var(--foreground);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
 
           /* boxel-layout's own knobs, repointed at Pretui tokens. Upstream
              defaults are literal light hexes; these follow the theme. */
@@ -212,7 +212,7 @@ export class PageScaffold extends Component<PageScaffoldSignature> {
           border-radius: var(--radius-chip, 6px);
           background: var(--card);
           color: var(--card-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           text-decoration: none;
           box-shadow: var(

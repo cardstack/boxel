@@ -199,20 +199,20 @@ class HoverActionsUsage extends Component {
       }
       .ha-demo-title {
         margin: 0 0 6px;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--foreground);
       }
       .ha-demo-body {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.5;
         color: var(--muted-foreground);
       }
       .pretui-demo-readout {
         margin: 12px 0 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

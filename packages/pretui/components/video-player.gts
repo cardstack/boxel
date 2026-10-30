@@ -70,7 +70,7 @@ export const VideoPlayer: TemplateOnlyComponent<VideoPlayerSignature> =
           min-width: 0;
         }
         .pretui-video-caption {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.55;
           color: var(--muted-foreground);
           text-wrap: pretty;

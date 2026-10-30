@@ -127,7 +127,7 @@ export class StackingCards extends Component<StackingCardsSignature> {
       @layer PretComponent {
         .pretui-stacking-cards {
           display: block;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }

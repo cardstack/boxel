@@ -112,7 +112,7 @@ export class FieldError extends Component<FieldErrorSignature> {
           display: flex;
           align-items: flex-start;
           gap: var(--pretui-issue-gap, 5px);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 16px;
           font-weight: 500;
           color: var(--_issue-ink);

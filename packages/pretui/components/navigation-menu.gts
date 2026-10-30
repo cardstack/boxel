@@ -237,7 +237,7 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
         .pretui-navmenu {
           position: relative;
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-navmenu-list {
           display: flex;
@@ -337,7 +337,7 @@ export class NavigationMenu extends Component<NavigationMenuSignature> {
         }
         .pretui-navmenu-link-desc {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.4;
         }
         @media (prefers-reduced-motion: reduce) {

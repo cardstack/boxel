@@ -301,7 +301,7 @@ export class FloatButton extends Component<FloatButtonSignature> {
           color: var(--popover-foreground);
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 4px 14px rgb(16 24 40 / 0.12));
           font: inherit;
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
           cursor: pointer;
         }
         .pretui-float-dial-btn:hover {

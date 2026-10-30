@@ -15,7 +15,7 @@ Two details that look cosmetic and are not:
 
 **The hairline exists so light colours read against the card.** A white or pale-yellow swatch with no border is invisible on a white surface, and this is the failure every hand-rolled swatch grid ships.
 
-**The selected ring sits *off* the chip, on a card-coloured gap.** A ring drawn directly on the chip's edge is unreadable against a similar-hued colour; inserting a gap of `--card` between the chip and the ring means the selection indicator works for every possible swatch colour, including one that matches the ring. That is the kind of detail that only shows up after you try it with a hundred colours.
+**The selected ring sits _off_ the chip, on a card-coloured gap.** A ring drawn directly on the chip's edge is unreadable against a similar-hued colour; inserting a gap of `--card` between the chip and the ring means the selection indicator works for every possible swatch colour, including one that matches the ring. That is the kind of detail that only shows up after you try it with a hundred colours.
 
 ## Prior art
 
@@ -43,7 +43,7 @@ Gaps:
 
 ## Theming
 
-`--card` (the ring gap and the surface the hairline is designed to work against), `--border` (the hairline), `--primary` or `--pretui-selected` (the selection ring), `--muted-foreground` (the label), `--text-ui-sm`.
+`--card` (the ring gap and the surface the hairline is designed to work against), `--border` (the hairline), `--primary` or `--pretui-selected` (the selection ring), `--muted-foreground` (the label), `--boxel-font-size-2xs`.
 
 The chip diameter, hairline width and ring gap are fixed. Because the ring gap is `--card`, a Swatch placed on `--canvas` or `--inset` — inside an **EmptyState**, a table band, a striped row — will show a ring gap in the wrong colour, the same placement trap **AvatarGroup** has. The component assumes it sits on a card surface.
 

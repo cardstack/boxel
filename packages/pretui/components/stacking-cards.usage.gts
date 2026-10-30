@@ -97,7 +97,7 @@ class StackingCardsUsage extends Component {
       }
       .stack-eyebrow {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;
@@ -105,13 +105,13 @@ class StackingCardsUsage extends Component {
       }
       .stack-title {
         margin: 0;
-        font-size: var(--text-ui-lg, 14px);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         color: var(--card-foreground);
       }
       .stack-copy {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
         max-width: 46ch;
       }

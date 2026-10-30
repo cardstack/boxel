@@ -102,7 +102,7 @@ export class EntityDisplay extends Component<EntityDisplaySignature> {
           min-width: 0;
         }
         .pretui-entity-title {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           color: var(--foreground);
           overflow: hidden;
@@ -114,7 +114,7 @@ export class EntityDisplay extends Component<EntityDisplaySignature> {
           text-underline-offset: 2px;
         }
         .pretui-entity-meta {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           overflow: hidden;
           text-overflow: ellipsis;

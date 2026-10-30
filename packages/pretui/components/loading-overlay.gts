@@ -93,7 +93,7 @@ export class LoadingOverlay extends Component<LoadingOverlaySignature> {
           backdrop-filter: blur(var(--pretui-loading-overlay-blur, 3px));
         }
         .pretui-lo-label {
-          font-size: var(--text-ui-sm, 0.8125rem);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-lo-sr {

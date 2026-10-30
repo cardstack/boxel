@@ -79,7 +79,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       --vscode-editorGutter-background: var(--boxel-dark);
     }
     :deep(.monaco-editor span[title='Double click to unfold']) {
-      margin-left: 5px;
+      margin-left: 0.3125rem;
     }
   </style>
 </template>;

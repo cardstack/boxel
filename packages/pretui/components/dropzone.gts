@@ -275,19 +275,19 @@ export class Dropzone extends Component<DropzoneSignature> {
         }
         .pretui-dropzone-label {
           margin: 0;
-          font-size: var(--text-ui-lg, 15px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: var(--weight-medium, 500);
           color: var(--foreground);
         }
         .pretui-dropzone-hint {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-dropzone-status {
           margin: 0;
           min-height: 1em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
           text-align: center;
           color: var(--muted-foreground);

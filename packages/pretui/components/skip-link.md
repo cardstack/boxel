@@ -34,7 +34,7 @@ No APG pattern. WCAG 2.4.1 and the conventions around it.
 
 ## Theming
 
-`--primary` and `--primary-foreground` (the revealed pill), `--radius-control`, `--pretui-shadow-raised`, `--ring` (focus ring), `--font-sans`, `--text-ui-md`, `--space-2`, `--space-3` and `--space-4`, and `--pretui-z-toast`, so it sits above page chrome while it is visible.
+`--primary` and `--primary-foreground` (the revealed pill), `--radius-control`, `--pretui-shadow-raised`, `--ring` (focus ring), `--font-sans`, `--boxel-font-size-xs`, `--space-2`, `--space-3` and `--space-4`, and `--pretui-z-toast`, so it sits above page chrome while it is visible.
 
 The corner position and the clip-until-focus behaviour are fixed.
 

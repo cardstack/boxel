@@ -77,7 +77,7 @@ export class Title extends Component<TitleSignature> {
           font-family: var(--font-serif);
           font-weight: var(--weight-heading, 500);
           letter-spacing: var(--track-heading, -0.01em);
-          line-height: var(--leading-heading, 1.2);
+          line-height: var(--boxel-heading-line-height);
           color: var(--foreground);
           text-wrap: balance;
         }
@@ -89,7 +89,7 @@ export class Title extends Component<TitleSignature> {
         }
         .pretui-title[data-size='subheading'] {
           font-family: var(--font-sans);
-          font-size: var(--text-ui-lg, 0.9375rem);
+          font-size: var(--boxel-font-size-sm);
           font-weight: var(--weight-strong, 600);
           letter-spacing: 0;
         }
@@ -155,16 +155,16 @@ export class Text extends Component<TextSignature> {
           color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
         }
         .pretui-text[data-size='xs'] {
-          font-size: var(--text-ui-xs, 0.66rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-text[data-size='sm'] {
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-text[data-size='md'] {
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-text[data-size='lg'] {
-          font-size: var(--text-ui-lg, 0.9375rem);
+          font-size: var(--boxel-font-size-sm);
         }
         .pretui-text mark {
           padding-inline: 0.125em;
@@ -204,7 +204,7 @@ export class Paragraph extends Component<ParagraphSignature> {
           margin: 0;
           max-inline-size: var(--pretui-paragraph-measure, 68ch);
           font-size: var(--text-body, 0.875rem);
-          line-height: var(--leading-body, 1.55);
+          line-height: var(--boxel-body-line-height);
           color: var(--foreground);
           text-wrap: pretty;
         }
@@ -221,16 +221,16 @@ export class Paragraph extends Component<ParagraphSignature> {
           color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
         }
         .pretui-paragraph[data-size='xs'] {
-          font-size: var(--text-ui-xs, 0.66rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-paragraph[data-size='sm'] {
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-paragraph[data-size='md'] {
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-paragraph[data-size='lg'] {
-          font-size: var(--text-ui-lg, 0.9375rem);
+          font-size: var(--boxel-font-size-sm);
         }
       }
     </style>
@@ -293,12 +293,12 @@ export const Blockquote: TemplateOnlyComponent<BlockquoteSignature> = <template>
         margin: 0;
         font-family: var(--font-serif);
         font-size: var(--text-body, 0.875rem);
-        line-height: var(--leading-body, 1.55);
+        line-height: var(--boxel-body-line-height);
         color: var(--foreground);
       }
       .pretui-quote-by {
         margin-block-start: var(--space-2, 0.375rem);
-        font-size: var(--text-ui-sm, 0.72rem);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     }

@@ -268,7 +268,7 @@ export class Form extends Component<FormSignature> implements FormHost {
           gap: var(--pretui-form-gap, var(--space-5, 14px));
           align-content: start;
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }

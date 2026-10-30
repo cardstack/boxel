@@ -306,7 +306,7 @@ export default class PastSessionItem extends Component<Signature> {
 
       .icon-recency-indicator {
         display: inline-block;
-        margin-right: 4px;
+        margin-right: 0.25rem;
       }
       .icon-streaming {
         --icon-color: var(--color-streaming);

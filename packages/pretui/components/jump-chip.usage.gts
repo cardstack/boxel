@@ -131,14 +131,14 @@ class JumpChipUsage extends GlimmerComponent {
       .demo-line {
         margin: 0 0 10px;
         max-width: 62ch;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }
       .demo-hint {
         margin: var(--space-4, 11px) 0 var(--space-3, 7px);
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

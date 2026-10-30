@@ -515,7 +515,7 @@ export class AssetGrid extends Component<AssetGridSignature> {
           padding-inline: 1px;
         }
         .pretui-assets-name {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--foreground);
           overflow: hidden;
@@ -523,7 +523,7 @@ export class AssetGrid extends Component<AssetGridSignature> {
           white-space: nowrap;
         }
         .pretui-assets-sub {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
         }

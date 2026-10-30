@@ -52,7 +52,7 @@ The caller's part: put a real focusable control in the trigger block, or none of
 
 ## Theming
 
-Read directly: `--popover` and `--popover-foreground`, `--radius-surface`, `--space-4`, `--font-sans`, `--text-ui-md`, `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
+Read directly: `--popover` and `--popover-foreground`, `--radius-surface`, `--space-4`, `--font-sans`, `--boxel-font-size-xs`, `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 One knob of its own: `--pretui-hovercard-width` (default 260px), capped at the viewport minus 16px. Entry motion is `@starting-style` (opacity plus a 4px rise and 0.98 scale, 180ms) with a `prefers-reduced-motion` opt-out. Position and flip come from the shared `Popup`, so a theme that retunes overlay placement retunes this with it.
 

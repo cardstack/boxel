@@ -236,12 +236,12 @@ class PeriodInputUsage extends Component {
         margin: 0;
         min-height: 1.4em;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pretui-perioddemo-cap {
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted-foreground);
@@ -259,7 +259,7 @@ class PeriodInputUsage extends Component {
         align-items: baseline;
         gap: var(--space-2, 6px);
         padding: 3px 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
       }
       .pretui-perioddemo-typed {

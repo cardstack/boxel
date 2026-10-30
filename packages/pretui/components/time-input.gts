@@ -506,7 +506,7 @@ export class TimeInput extends Component<TimeInputSignature> {
           border-radius: var(--radius);
           background: var(--field, var(--boxel-light));
           box-shadow: 0 0 0 1px var(--input);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           font-variant-numeric: tabular-nums;
           color: var(--foreground);
@@ -521,7 +521,7 @@ export class TimeInput extends Component<TimeInputSignature> {
           user-select: none;
         }
         .pretui-time-seg[data-empty] {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /* segments take the native date/time-field treatment — the focused
            segment is HIGHLIGHTED rather than ringed, because a ring inside a
@@ -536,11 +536,11 @@ export class TimeInput extends Component<TimeInputSignature> {
         }
         .pretui-time-seg[data-segment='dayPeriod'] {
           margin-left: 4px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
         }
         .pretui-time-literal {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-time-native {
           display: none;

@@ -55,7 +55,7 @@ export class IndicatorUsage extends Component {
         align-items: center;
         gap: var(--space-3, 0.5rem);
         padding: var(--space-4, 0.6875rem);
-        font-size: var(--text-ui-md, 0.78rem);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

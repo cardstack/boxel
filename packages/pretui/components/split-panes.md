@@ -40,7 +40,7 @@ Governing pattern: **ARIA `separator` with `aria-valuenow`** — a focusable sep
 
 ## Theming
 
-Consumed: `--text-ui-md`, `--track-ui`, and the layout tokens.
+Consumed: `--boxel-font-size-xs`, `--track-ui`, and the layout tokens.
 
 Remapped for the subtree: `--boxel-450` and `--boxel-highlight` → the Pretui handle colors (rest and active). Because the handle's own custom properties are _derived_ from those two, this is the only place a theme can reach the handle — repointing `--boxel-panel-resize-handle-*` directly has no effect.
 

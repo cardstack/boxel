@@ -52,10 +52,10 @@ export class ApprovalFooter extends Component<ApprovalFooterSignature> {
           padding: 8px 11px;
           border-radius: 0 0 10px 10px;
           box-shadow: 0 -1px 0 var(--border);
-          background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 7%, var(--card));
+          background: color-mix(in oklch, var(--attention) 7%, var(--card));
         }
         .pretui-approval-msg {
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           font-weight: 500;
         }

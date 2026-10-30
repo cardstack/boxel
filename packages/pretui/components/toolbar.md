@@ -43,7 +43,7 @@ Gaps:
 
 ## Theming
 
-`--muted-foreground` (eyebrow and meta ink), `--foreground` (title, inherited), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (eyebrow voice), `--text-heading` + `--weight-heading` + `--track-heading` (title), `--text-ui-sm` (meta), `--space-3` (action gap), `--space-4` (column gap).
+`--muted-foreground` (eyebrow and meta ink), `--foreground` (title, inherited), `--font-mono` + `--boxel-font-size-2xs` + `--track-eyebrow` (eyebrow voice), `--text-heading` + `--weight-heading` + `--track-heading` (title), `--boxel-font-size-2xs` (meta), `--space-3` (action gap), `--space-4` (column gap).
 
 The component paints no background and casts no shadow — it inherits whatever it sits on. That is why it composes above a **Panel** without a seam, and it also means a theme cannot give headers their own band without wrapping them. The 44px minimum height is fixed and is the one metric a dense theme would want to retune.
 

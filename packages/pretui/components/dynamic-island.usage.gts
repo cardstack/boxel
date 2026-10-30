@@ -161,7 +161,7 @@ export class DynamicIslandUsage extends Component {
       }
       .island-sub {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         opacity: 0.72;
       }
       .island-bar {
@@ -180,7 +180,7 @@ export class DynamicIslandUsage extends Component {
       }
       .island-note {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .island-note code {

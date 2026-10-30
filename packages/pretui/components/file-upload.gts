@@ -241,7 +241,7 @@ export class FileUpload extends Component<FileUploadSignature> {
           gap: var(--space-3, 0.5rem);
           min-inline-size: 0;
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-upload-list {
           display: grid;
@@ -301,7 +301,7 @@ export class FileUpload extends Component<FileUploadSignature> {
         .pretui-upload-status {
           flex: none;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
         }
         .pretui-upload-row[data-status='error'] .pretui-upload-status {
@@ -336,7 +336,7 @@ export class FileUpload extends Component<FileUploadSignature> {
         }
         .pretui-upload-error {
           margin: 0;
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
           color: color-mix(in oklch, var(--foreground) 25%, var(--destructive));
         }
         .pretui-upload-summary {

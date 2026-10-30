@@ -50,7 +50,7 @@ export class QueuedMessage extends Component<QueuedMessageSignature> {
           border-radius: 8px;
           background: var(--field, var(--boxel-light));
           box-shadow: 0 0 0 1px var(--border);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-queued-mode {
           font-family: var(--font-mono);
@@ -58,7 +58,7 @@ export class QueuedMessage extends Component<QueuedMessageSignature> {
           font-weight: 600;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: var(--pretui-primary-ink, var(--primary));
+          color: var(--primary-ink);
           flex: none;
         }
         .pretui-queued-text {
@@ -69,8 +69,8 @@ export class QueuedMessage extends Component<QueuedMessageSignature> {
           white-space: nowrap;
         }
         .pretui-queued-note {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           flex: none;
         }
         :deep(.pretui-queued-btn) {

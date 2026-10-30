@@ -192,7 +192,7 @@ class JsonEditorUsage extends Component {
       .jd-readout {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .jd-issue {
@@ -202,7 +202,7 @@ class JsonEditorUsage extends Component {
         margin: 0;
         padding: var(--space-2, 6px) var(--space-3, 8px);
         border-radius: var(--radius-chip, 6px);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         background: color-mix(in oklch, var(--destructive) 10%, transparent);
         box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
       }
@@ -216,7 +216,7 @@ class JsonEditorUsage extends Component {
         background: var(--inset, var(--boxel-100));
         box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         max-height: 140px;
         overflow: auto;
         white-space: pre;

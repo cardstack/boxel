@@ -61,7 +61,7 @@ class TextRotateUsage extends Component {
     <style scoped>
       .pretui-rotate-demo-line {
         margin: 0;
-        font-size: var(--text-ui-lg, 15px);
+        font-size: var(--boxel-font-size-sm);
         color: var(--foreground);
       }
     </style>

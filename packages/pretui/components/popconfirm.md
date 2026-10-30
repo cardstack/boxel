@@ -55,7 +55,7 @@ The caller's part: put a real control in the trigger block. The contract is appl
 
 ## Theming
 
-Read directly: `--popover` and `--popover-foreground` (the bubble), `--radius-surface`, `--space-2`, `--space-3`, `--space-4`, `--font-sans`, `--text-ui-md` and `--text-ui-sm`, `--muted-foreground` (the description line), `--warning` and `--pretui-on-warning` (the mark), `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
+Read directly: `--popover` and `--popover-foreground` (the bubble), `--radius-surface`, `--space-2`, `--space-3`, `--space-4`, `--font-sans`, `--boxel-font-size-xs` and `--boxel-font-size-2xs`, `--muted-foreground` (the description line), `--warning` and `--pretui-on-warning` (the mark), `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 One knob of its own: `--pretui-popconfirm-max-width` (default `min(280px, 100vw - 16px)`). The buttons are the kit's **Button** at size `s`, so they take the theme's control tokens through it; the confirm's color is whatever `@tone` resolves to in the theme.
 

@@ -580,7 +580,7 @@ export class Sidebar extends Component<SidebarSignature> {
           block-size: 100%;
           position: relative;
           container-type: inline-size;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           transition: grid-template-columns var(--pretui-dur-morph, 300ms)
@@ -803,20 +803,20 @@ export class SidebarTrigger extends Component<SidebarTriggerSignature> {
           border-radius: var(--radius-chip, 6px);
           background: none;
           color: var(--muted-foreground);
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           cursor: pointer;
         }
         .pretui-sidebar-trigger[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-sidebar-trigger[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-sidebar-trigger[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-sidebar-trigger[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-sidebar-trigger:hover {
           background: var(--hover, var(--boxel-100));
@@ -904,7 +904,7 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
         }
         .pretui-sbgroup-label {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -1114,7 +1114,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         }
         .pretui-sbitem[data-active='true'] {
           background: var(--pretui-selected, var(--boxel-100));
-          color: var(--pretui-primary-ink, var(--primary));
+          color: var(--primary-ink);
           font-weight: 600;
         }
         .pretui-sbitem[aria-disabled='true'] {
@@ -1142,7 +1142,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           flex: none;
           font-variant-numeric: tabular-nums;
           font-size: 0.9em;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /* A coarse pointer gets the 44px row the guideline asks for; a fine
            pointer keeps the kit's 28px rhythm. */

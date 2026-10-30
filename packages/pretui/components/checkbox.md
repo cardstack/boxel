@@ -43,7 +43,7 @@ Honest gaps:
 
 ## Theming
 
-`--pretui-control-rest` (falling back to `--field`), `--pretui-control-border` (falling back to `--input`), `--pretui-control-hover` (falling back to `--hover`), `--primary` (checked fill), `--primary-foreground` (the tick), `--border` (mixed into the checked hairline), `--pretui-edge-highlight` (the inset top highlight that gives the checked box its pressed-metal read), `--pretui-dur-snap` / `--pretui-ease-snap`, `--text-ui-md`.
+`--pretui-control-rest` (falling back to `--field`), `--pretui-control-border` (falling back to `--input`), `--pretui-control-hover` (falling back to `--hover`), `--primary` (checked fill), `--primary-foreground` (the tick), `--border` (mixed into the checked hairline), `--pretui-edge-highlight` (the inset top highlight that gives the checked box its pressed-metal read), `--pretui-dur-snap` / `--pretui-ease-snap`, `--boxel-font-size-xs`.
 
 The 15px box, 5px radius and 9px tick are fixed; a theme cannot scale the control. If a theme sets `--primary` very light, the tick (painted `--primary-foreground`, usually white) disappears — define both together, as with Button's tone/on-tone pairs.
 

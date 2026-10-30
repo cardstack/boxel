@@ -154,15 +154,15 @@ class CollapsibleUsage extends Component {
       }
       .fold-p {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.55;
         color: var(--muted-foreground);
       }
       .fold-count {
         margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--subtle-foreground);
       }
     </style>
   </template>

@@ -280,7 +280,7 @@ class BoardUsage extends Component {
       }
       .board-meta {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .board-frame {
@@ -300,7 +300,7 @@ class BoardUsage extends Component {
       }
       .board-card-kind {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;
@@ -308,7 +308,7 @@ class BoardUsage extends Component {
       }
       .board-card-title {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
         color: var(--card-foreground);
       }

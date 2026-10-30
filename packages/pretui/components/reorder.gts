@@ -569,7 +569,7 @@ export class Reorder<T = unknown> extends Component<ReorderSignature<T>> {
           outline-offset: 1px;
         }
         .pretui-reorder-handle[aria-pressed='true'] {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
           cursor: grabbing;
         }
         .pretui-reorder-handle[aria-disabled='true'] {

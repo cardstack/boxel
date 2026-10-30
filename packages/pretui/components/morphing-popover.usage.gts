@@ -139,7 +139,7 @@ export class MorphingPopoverUsage extends Component {
         padding-inline-start: 1.1em;
         display: grid;
         gap: 3px;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .mp-done {
@@ -151,7 +151,7 @@ export class MorphingPopoverUsage extends Component {
         background: var(--primary);
         color: var(--primary-foreground);
         font: inherit;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         cursor: pointer;
       }
       .mp-done:focus-visible {
@@ -161,7 +161,7 @@ export class MorphingPopoverUsage extends Component {
       .mp-note {
         margin: 0;
         max-inline-size: 58ch;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .mp-note code {

@@ -134,7 +134,7 @@ class PopconfirmUsage extends GlimmerComponent {
         padding: 5px 9px;
         border-radius: var(--radius-control, 6px);
         background: var(--inset, var(--boxel-100));
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
       .oc-row {
         display: flex;
@@ -143,7 +143,7 @@ class PopconfirmUsage extends GlimmerComponent {
         flex-wrap: wrap;
       }
       .oc-log {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .oc-log strong {
@@ -153,7 +153,7 @@ class PopconfirmUsage extends GlimmerComponent {
       .oc-hint {
         margin: var(--space-4, 11px) 0 0;
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

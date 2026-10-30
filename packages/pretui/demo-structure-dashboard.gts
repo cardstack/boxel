@@ -191,13 +191,13 @@ class DashboardReadOnlyDemo extends Component {
       }
       .ro-span {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .ro-code {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
         white-space: pre;

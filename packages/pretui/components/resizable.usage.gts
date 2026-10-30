@@ -42,7 +42,7 @@ const ResizableUsage: TemplateOnlyComponent = <template>
       display: grid;
       place-items: center;
       block-size: 100%;
-      font-size: var(--text-ui-md, 0.78rem);
+      font-size: var(--boxel-font-size-xs);
       color: var(--muted-foreground);
     }
   </style>

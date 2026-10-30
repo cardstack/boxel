@@ -133,7 +133,7 @@ export class Dialog extends Component<DialogSignature> {
         }
         .pretui-dialog-body {
           color: var(--muted-foreground);
-          line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+          line-height: calc(var(--boxel-body-line-height) / var(--text-body, 15px));
         }
         .pretui-dialog-footer {
           display: flex;

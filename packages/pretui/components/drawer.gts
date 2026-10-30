@@ -145,7 +145,7 @@ export class Drawer extends Component<DrawerSignature> {
         .pretui-drawer-body {
           overflow-y: auto;
           color: var(--muted-foreground);
-          line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+          line-height: calc(var(--boxel-body-line-height) / var(--text-body, 15px));
         }
         .pretui-drawer-footer {
           display: flex;

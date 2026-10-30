@@ -514,14 +514,14 @@ class RecordDetailUsage extends Component {
         min-width: 0;
       }
       .rd-link {
-        color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+        color: var(--primary-ink);
         text-decoration: underline;
         text-underline-offset: 2px;
       }
       .rd-log {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

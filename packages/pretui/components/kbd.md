@@ -41,7 +41,7 @@ The glyph run is the problem this component exists to manage: `⇧⌘K` is four 
 
 ## Theming
 
-`--pretui-kbd-background` (falling back to `--inset`, then `--boxel-100`), `--pretui-kbd-foreground` (falling back to `--muted-foreground`), `--pretui-shadow-hairline` (falling back to a 1px ring in `--border`), `--radius-chip` (4px), `--font-mono`, `--text-ui-xs` (11px).
+`--pretui-kbd-background` (falling back to `--inset`, then `--boxel-100`), `--pretui-kbd-foreground` (falling back to `--muted-foreground`), `--pretui-shadow-hairline` (falling back to a 1px ring in `--border`), `--radius-chip` (4px), `--font-mono`, `--boxel-font-size-2xs` (11px).
 
 The 1.5em minimum width, the 1px/5px padding, `tabular-nums` and `white-space: nowrap` are fixed. The minimum width and tabular figures exist together so a column of shortcuts in a menu aligns instead of ragging.
 

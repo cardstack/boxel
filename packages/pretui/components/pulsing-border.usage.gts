@@ -229,19 +229,19 @@ class PulsingBorderUsage extends Component {
       .pb-line {
         margin: 0;
         max-width: 52ch;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.5;
         color: var(--muted-foreground);
       }
       .pb-meta {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pb-note {
         margin: 0;
         max-width: 68ch;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

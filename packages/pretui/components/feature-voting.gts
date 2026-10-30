@@ -193,7 +193,7 @@ export class FeatureVoting extends Component<FeatureVotingSignature> {
             0 0 0 1px var(--border),
             0 1px 2px rgb(0 0 0 / 0.08)
           );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           container-type: inline-size;
         }
         .pretui-vote-head {
@@ -211,14 +211,14 @@ export class FeatureVoting extends Component<FeatureVotingSignature> {
         }
         .pretui-vote-tally {
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-vote-desc {
           margin: 0;
           max-width: 62ch;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.6;
           color: var(--muted-foreground);
         }
@@ -312,7 +312,7 @@ export class FeatureVoting extends Component<FeatureVotingSignature> {
           min-width: 0;
         }
         .pretui-vote-detail {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
           color: var(--muted-foreground);
         }
@@ -343,8 +343,8 @@ export class FeatureVoting extends Component<FeatureVotingSignature> {
         .pretui-vote-count {
           flex: none;
           align-self: center;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         /* unnamed container query — resolves against .pretui-vote */

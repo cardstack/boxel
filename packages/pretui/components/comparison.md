@@ -39,7 +39,7 @@ Where it is thinner: **no vertical seam** — the split is horizontal only, wher
 
 ## Theming
 
-`--pretui-comparison-seam-w` (the seam's width) and `--pretui-comparison-handle-size` (the grip), plus `--pretui-primary-ink` for both, `--pretui-shadow-card` for the grip's elevation, and `--pretui-dur-snap` / `--pretui-ease-snap` for the glide as the seam moves.
+`--pretui-comparison-seam-w` (the seam's width) and `--pretui-comparison-handle-size` (the grip), plus `--primary-ink` for both, `--pretui-shadow-card` for the grip's elevation, and `--pretui-dur-snap` / `--pretui-ease-snap` for the glide as the seam moves.
 
 Riding the shared snap duration and easing is what makes the seam feel like the rest of the kit rather than like a bespoke drag surface — a theme that changes how things snap changes this with it.
 

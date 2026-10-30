@@ -38,6 +38,6 @@ Where it is thinner: no exchange rates or conversion, no minor-unit entry mode (
 
 ## Theming
 
-Inherited entirely from **AmountInput** — `--pretui-amount-align`, `--pretui-amount-mark-width`, `--pretui-amount-select-width`, `--pretui-destructive-ink`, `--pretui-shadow-control`.
+Inherited entirely from **AmountInput** — `--pretui-amount-align`, `--pretui-amount-mark-width`, `--pretui-amount-select-width`, `--destructive-ink`, `--pretui-shadow-control`.
 
 There are deliberately no money-specific tokens. A currency field and a weight field on the same form should be the same control wearing a different unit, and giving money its own surface would break that.

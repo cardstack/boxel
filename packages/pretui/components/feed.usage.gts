@@ -219,7 +219,7 @@ class FeedUsage extends Component {
       }
       .feed-line {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.45;
         color: var(--muted-foreground);
       }
@@ -238,7 +238,7 @@ class FeedUsage extends Component {
         min-width: 0;
       }
       .feed-when {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

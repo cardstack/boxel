@@ -105,8 +105,12 @@ export default class AiAssistantComposerCapUsage extends Component {
         background-color: var(--boxel-ai-purple);
         color: var(--boxel-light);
         padding: var(--boxel-sp);
-        --foreground: #f7f8fa;
-        --muted-foreground: #a8a2ba;
+        --foreground: var(--boxel-100);
+        --muted-foreground: color-mix(
+          in oklch,
+          var(--boxel-100) 64%,
+          var(--boxel-ai-purple)
+        );
         --primary: var(--boxel-highlight);
         --primary-foreground: var(--boxel-dark);
         --ai-composer-cap-surface: color-mix(
@@ -119,7 +123,11 @@ export default class AiAssistantComposerCapUsage extends Component {
           var(--boxel-light) 16%,
           var(--boxel-ai-purple)
         );
-        --ai-composer-attention: #f0b44c;
+        --ai-composer-attention: color-mix(
+          in oklch,
+          var(--boxel-yellow) 61%,
+          var(--boxel-amber)
+        );
       }
       .example-box {
         padding: var(--boxel-sp-sm);

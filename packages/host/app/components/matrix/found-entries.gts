@@ -186,24 +186,24 @@ export default class FoundEntries extends Component<Signature> {
         flex-direction: column;
         border-top: 1px solid
           color-mix(in oklch, var(--foreground) 8%, transparent);
-        margin-top: var(--step-4, 4px);
+        margin-top: var(--boxel-sp-4xs);
       }
       .found-head {
         display: flex;
         justify-content: space-between;
-        padding: var(--step-8, 8px) 0 var(--step-4, 4px);
-        font-size: var(--type-caption, 11px);
-        line-height: var(--leading-caption, 16px);
-        color: var(--ink-3);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size-2xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--subtle-foreground);
       }
       .found-row {
         display: grid;
         grid-template-columns: 1.625rem minmax(0, 1fr) auto;
-        column-gap: var(--step-8, 8px);
+        column-gap: var(--boxel-sp-xs);
         align-items: start;
-        padding: var(--step-8, 8px) var(--step-8, 8px);
-        margin-inline: calc(-1 * var(--step-8, 8px));
-        border-radius: var(--round-chip, 4px);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs);
+        margin-inline: calc(-1 * var(--boxel-sp-xs));
+        border-radius: var(--boxel-border-radius-xs);
       }
       .found-row.is-best {
         background-color: color-mix(in oklch, var(--primary) 7%, transparent);
@@ -211,7 +211,7 @@ export default class FoundEntries extends Component<Signature> {
       .found-icon {
         width: 1.625rem;
         height: 1.625rem;
-        border-radius: var(--round-chip, 4px);
+        border-radius: var(--boxel-border-radius-xs);
         background-color: color-mix(
           in oklch,
           var(--foreground) 9%,
@@ -235,7 +235,7 @@ export default class FoundEntries extends Component<Signature> {
       .found-title-line {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 0.375rem;
         min-width: 0;
       }
       .found-title {
@@ -249,25 +249,25 @@ export default class FoundEntries extends Component<Signature> {
         font-family: var(--font-mono, monospace);
         font-size: 0.625rem;
         line-height: 1rem;
-        padding: 0 6px;
+        padding: 0 0.375rem;
         border-radius: 4px;
         background-color: color-mix(
           in oklch,
           var(--foreground) 12%,
           transparent
         );
-        color: var(--ink-2, var(--foreground));
+        color: var(--muted-foreground);
       }
       .found-description {
-        font-size: var(--type-caption, 11px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.125rem;
-        color: var(--ink-2, var(--muted-foreground));
+        color: var(--muted-foreground);
       }
       .found-path {
         font-family: var(--font-mono, monospace);
         font-size: 0.6875rem;
         line-height: 1rem;
-        color: var(--ink-3);
+        color: var(--subtle-foreground);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -275,11 +275,11 @@ export default class FoundEntries extends Component<Signature> {
       .found-fit {
         display: flex;
         gap: 2px;
-        padding-top: 6px;
+        padding-top: 0.375rem;
       }
       .tick {
-        width: 4px;
-        height: 12px;
+        width: 0.25rem;
+        height: 0.75rem;
         border-radius: 2px;
         background-color: color-mix(
           in oklch,
@@ -288,15 +288,15 @@ export default class FoundEntries extends Component<Signature> {
         );
       }
       .tick.is-on {
-        background-color: var(--ink-2, var(--foreground));
+        background-color: var(--muted-foreground);
       }
       .is-best .tick.is-on {
         background-color: var(--primary);
       }
       .found-more {
         align-self: flex-start;
-        font-size: var(--type-caption, 11px);
-        color: var(--ink-2, var(--foreground));
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--muted-foreground);
       }
     </style>
   </template>

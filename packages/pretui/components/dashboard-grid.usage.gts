@@ -280,19 +280,19 @@ class DashboardGridUsage extends Component {
       }
       .dash-ledger-title {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         color: var(--foreground);
       }
       .dash-ledger-note {
         margin: var(--space-1, 3px) 0 var(--space-2, 5px);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .dash-ledger-code {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
         white-space: pre;

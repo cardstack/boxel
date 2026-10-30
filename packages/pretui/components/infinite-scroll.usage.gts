@@ -62,7 +62,7 @@ export class InfiniteScrollUsage extends Component {
       .is-demo-row {
         padding: var(--space-3, 0.5rem) var(--space-4, 0.6875rem);
         border-block-end: 1px solid var(--border);
-        font-size: var(--text-ui-md, 0.78rem);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

@@ -54,7 +54,7 @@ export class Fold extends Component<FoldSignature> {
           background: var(--inset, var(--boxel-100));
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           cursor: pointer;
           font-variant-numeric: tabular-nums;

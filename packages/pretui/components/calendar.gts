@@ -343,7 +343,7 @@ export class Calendar extends Component<CalendarSignature> {
         }
         .pretui-cal-month {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -394,7 +394,7 @@ export class Calendar extends Component<CalendarSignature> {
           padding: 0;
           border-radius: 7px;
           background: transparent;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-variant-numeric: tabular-nums;
           color: var(--foreground);
           cursor: pointer;
@@ -403,12 +403,12 @@ export class Calendar extends Component<CalendarSignature> {
           background: var(--hover, var(--boxel-100));
         }
         .pretui-cal-day:disabled {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           opacity: 0.55;
           cursor: default;
         }
         .pretui-cal-day[data-outside] {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /* side-by-side months: outside days would duplicate their neighbor's
            in-month days, so they hide (still occupying their grid slot) */

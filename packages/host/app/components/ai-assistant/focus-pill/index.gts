@@ -39,10 +39,10 @@ let FocusPill: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .ai-focus-pill {
       --boxel-pill-border: none;
-      --boxel-pill-border-radius: var(--round-row, 8px);
-      font-size: var(--type-ui, 12.5px);
-      line-height: var(--leading-ui, 18px);
-      height: 30px;
+      --boxel-pill-border-radius: var(--boxel-border-radius-sm);
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
+      height: 1.875rem;
       padding: var(--boxel-sp-4xs) var(--boxel-sp-xxs);
       gap: var(--boxel-sp-xxs);
     }
@@ -52,12 +52,12 @@ let FocusPill: TemplateOnlyComponent<Signature> = <template>
 
     .meta-pill {
       flex-shrink: 0;
-      height: 22px;
+      height: 1.375rem;
       padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
-      font-size: var(--type-caption, 11px);
-      line-height: var(--leading-caption, 16px);
+      font-size: var(--boxel-font-size-2xs);
+      line-height: var(--boxel-line-height-xs);
       font-variant-numeric: tabular-nums;
-      border-radius: var(--round-chip, 4px);
+      border-radius: var(--boxel-border-radius-xs);
     }
   </style>
 </template>;

@@ -332,7 +332,7 @@ export class Defer extends Component<DeferSignature> {
           background: transparent;
           color: var(--muted-foreground);
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-ui, 0.01em);
           cursor: pointer;
           transition: background var(--pretui-dur-snap, 180ms)

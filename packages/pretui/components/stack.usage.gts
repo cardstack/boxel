@@ -196,7 +196,7 @@ export class StackUsage extends Component {
       }
       .layout-note {
         margin: var(--space-5, 14px) 0 var(--space-3, 8px);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .layout-cell {
@@ -205,18 +205,18 @@ export class StackUsage extends Component {
       .layout-id {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: var(--track-eyebrow, 0.08em);
         color: var(--muted-foreground);
       }
       .layout-tea {
         margin: 2px 0 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
       .layout-meta {
         margin: 1px 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

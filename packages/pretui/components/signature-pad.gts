@@ -696,7 +696,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
           flex-wrap: wrap;
         }
         .pretui-sigpad-label {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
@@ -716,7 +716,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
           min-height: 28px;
           padding: 2px 6px;
           border-radius: var(--radius-sm, 5px);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           cursor: pointer;
         }
@@ -779,7 +779,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
         }
         .pretui-sigpad-typed::placeholder {
           font-family: var(--font-sans);
-          font-size: var(--text-ui, 13px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-sigpad-hint {
@@ -787,7 +787,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
           inset-inline: 0;
           bottom: 26px;
           text-align: center;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--muted-foreground);
           pointer-events: none;
@@ -811,7 +811,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
           margin: 0;
           flex: 1;
           min-width: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-sigpad-actions {

@@ -426,7 +426,7 @@ export class Tree extends Component<TreeSignature> {
           padding: var(--pretui-tree-pad, 4px);
           display: grid;
           gap: 1px;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-tree-item {
@@ -447,14 +447,14 @@ export class Tree extends Component<TreeSignature> {
         }
         .pretui-tree-host[data-density='compact'] .pretui-tree-item {
           min-height: var(--pretui-tree-row-height, 22px);
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-tree-item:hover {
           background: var(--hover, var(--boxel-100));
         }
         .pretui-tree-item[data-selected='true'] {
           background: var(--pretui-selected, var(--boxel-100));
-          color: var(--pretui-primary-ink, var(--primary));
+          color: var(--primary-ink);
           font-weight: 500;
         }
         /* Law 8 — the selection is legible in a still frame: tint plus a rail */
@@ -466,7 +466,7 @@ export class Tree extends Component<TreeSignature> {
           bottom: 3px;
           width: 2px;
           border-radius: 1px;
-          background: var(--pretui-primary-ink, var(--primary));
+          background: var(--primary-ink);
         }
         .pretui-tree-item[aria-disabled='true'] {
           opacity: 0.45;
@@ -482,7 +482,7 @@ export class Tree extends Component<TreeSignature> {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           transition: transform 140ms var(--pretui-ease-snap, ease);
         }
         /* the twisty is drawn, not typed — no glyph, no font dependency, and
@@ -516,7 +516,7 @@ export class Tree extends Component<TreeSignature> {
         .pretui-tree-meta {
           margin-left: auto;
           padding-left: 8px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
           white-space: nowrap;

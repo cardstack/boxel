@@ -24,7 +24,7 @@ class PaginationUsage extends Component {
         <Args.Action @name='onPageChange' />
       </:api>
     </FreestyleUsage>
-    <style scoped>.foundation-readout { margin: 8px 0 0; font-family: var(--font-mono); font-size: var(--text-ui-xs); color: var(--muted-foreground); }</style>
+    <style scoped>.foundation-readout { margin: 8px 0 0; font-family: var(--font-mono); font-size: var(--boxel-font-size-2xs); color: var(--muted-foreground); }</style>
   </template>
 }
 

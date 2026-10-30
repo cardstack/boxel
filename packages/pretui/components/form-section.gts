@@ -328,7 +328,7 @@ export class FormSection
           padding: 0 0 var(--space-3, 8px);
           box-shadow: 0 1px 0 var(--border);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -385,7 +385,7 @@ export class FormSection
           flex: none;
           padding: 0 6px;
           border-radius: 4px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.08em);
           background: color-mix(
             in oklch,
@@ -414,7 +414,7 @@ export class FormSection
         .pretui-formsection-description {
           margin: 0;
           font-family: var(--font-sans);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 16px;
           color: var(--muted-foreground);
         }

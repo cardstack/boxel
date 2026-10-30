@@ -53,7 +53,7 @@ Remaining gaps, small but real:
 
 ## Theming
 
-`--pretui-tree-indent` (per-level indent, settable as a token or via `@indent`), the density presets (22/26px, fixed), plus `--foreground`, `--muted-foreground`, `--hover`, `--pretui-selected`, `--border`, `--text-ui-md`, and **StatusChip**/**Token** tokens if a node carries a badge or meta.
+`--pretui-tree-indent` (per-level indent, settable as a token or via `@indent`), the density presets (22/26px, fixed), plus `--foreground`, `--muted-foreground`, `--hover`, `--pretui-selected`, `--border`, `--boxel-font-size-xs`, and **StatusChip**/**Token** tokens if a node carries a badge or meta.
 
 `aria-disabled` is styled directly (`.pretui-tree-item[aria-disabled='true']`), which is a nice detail — the visual disabled state and the announced one cannot drift, because they are the same attribute.
 

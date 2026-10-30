@@ -154,7 +154,7 @@ export class AspectRatioUsage extends Component {
       }
       .ar-note {
         margin: var(--space-4, 11px) 0 var(--space-3, 8px);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .ar-slot {
@@ -162,7 +162,7 @@ export class AspectRatioUsage extends Component {
         place-items: center;
         block-size: 100%;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-lg, 14px);
+        font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
       }
     </style>

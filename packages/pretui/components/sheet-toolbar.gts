@@ -103,7 +103,7 @@ export class SheetToolbar extends Component<SheetToolbarSignature> {
           min-width: 0;
         }
         .pretui-sheet-toolbar-title {
-          font-size: var(--text-ui-lg, 13.5px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: 600;
           letter-spacing: var(--track-heading, -0.01em);
           margin-right: 3px;
@@ -113,7 +113,7 @@ export class SheetToolbar extends Component<SheetToolbarSignature> {
         }
         .pretui-sheet-toolbar-unit {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
           color: var(--muted-foreground);

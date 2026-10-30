@@ -293,7 +293,7 @@ export class Image extends Component<ImageSignature> {
           text-align: center;
         }
         .pretui-image-alt {
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
           max-inline-size: 28ch;
           overflow-wrap: anywhere;
         }

@@ -100,7 +100,7 @@ class MarqueeUsage extends Component {
         background: var(--inset, var(--boxel-100));
         box-shadow: 0 0 0 1px var(--border);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;

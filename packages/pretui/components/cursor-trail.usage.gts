@@ -188,7 +188,7 @@ class CursorTrailUsage extends Component {
       }
       .trail-lede {
         margin: 0 0 12px;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--muted-foreground);
@@ -206,7 +206,7 @@ class CursorTrailUsage extends Component {
         gap: 10px;
       }
       .trail-meta {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

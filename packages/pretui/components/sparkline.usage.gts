@@ -58,7 +58,7 @@ export class SparklineUsage extends Component {
         align-items: center;
         gap: var(--space-3, 0.5rem);
         margin: 0;
-        font-size: var(--text-ui-md, 0.78rem);
+        font-size: var(--boxel-font-size-xs);
       }
       .sp-demo-num {
         font-family: var(--font-serif);

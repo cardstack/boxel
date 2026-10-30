@@ -14,7 +14,7 @@ Two args and no actions. It is a marker, not an affordance — there is nothing 
 
 **`@refId` is optional and shown at 70% opacity after the label.** That is the whole recovery story: a developer or an author who sees the id can go find out what happened; an end user sees a quiet grey chip and moves on. Showing the id by default would be noise; hiding it entirely would make the failure undebuggable.
 
-The visual vocabulary is chosen to read as _absence_ rather than _error_: `--ink-3` mono type, a dashed outline drawn with `outline` + `outline-offset: -1px` (so it does not affect layout the way a border would), a strike-through at 50% alpha, and an `--inset` fill. It deliberately does **not** use `--destructive` — a missing reference is a fact about the data, not something the user did wrong, and painting it red trains people to panic about a normal state.
+The visual vocabulary is chosen to read as _absence_ rather than _error_: `--subtle-foreground` mono type, a dashed outline drawn with `outline` + `outline-offset: -1px` (so it does not affect layout the way a border would), a strike-through at 50% alpha, and an `--inset` fill. It deliberately does **not** use `--destructive` — a missing reference is a fact about the data, not something the user did wrong, and painting it red trains people to panic about a normal state.
 
 ## Prior art
 
@@ -37,14 +37,14 @@ Gaps:
 - **`title='This reference is gone'` is the only explanation**, and `title` is unreliable: it is not shown on touch, not reachable by keyboard, and announced inconsistently. Worse, on a non-interactive `<span>` many screen readers ignore it entirely — so for most assistive-tech users the element announces as "missing card" with no indication of what that means. Making that sentence visible text, or wiring it via `aria-describedby`, would fix it.
 - **Strike-through is decorative styling, not semantic.** `text-decoration: line-through` on a `<span>` conveys nothing to assistive tech. If the strike is meant to say "this used to be a link", `<del>` or `<s>` would carry it — though `<s>` is a stretch here.
 - **The state is conveyed visually by colour, dash pattern and strike**, none of which reach assistive tech. The word "missing" in the default label is doing all the semantic work, which is why overriding `@label` with something that omits the word ("Q3 Report") silently removes the only accessible signal that anything is wrong. Prefer labels that keep it.
-- **`--ink-3` on `--inset` is the kit's quietest ink on its quietest surface**, and at 11.5px mono it is close to the WCAG **1.4.3** floor. Verify per theme; this is the component most likely to fail contrast in light mode.
-- `@refId` at `opacity: 0.7` on top of `--ink-3` compounds that — it is decorative-grade contrast carrying debugging information.
+- **`--subtle-foreground` on `--inset` is the kit's quietest ink on its quietest surface**, and at 11.5px mono it is close to the WCAG **1.4.3** floor. Verify per theme; this is the component most likely to fail contrast in light mode.
+- `@refId` at `opacity: 0.7` on top of `--subtle-foreground` compounds that — it is decorative-grade contrast carrying debugging information.
 - Nothing is focusable, which is correct: there is nothing to do.
 
 ## Theming
 
-`--inset` (fill), `--ink-3` (ink and the 50%-alpha strike), `--line-strong` (the dashed outline), `--font-mono`, `--text-ui-sm`. The 6px radius, 2px/8px padding and 11px glyph are fixed.
+`--inset` (fill), `--subtle-foreground` (ink and the 50%-alpha strike), `--line-strong` (the dashed outline), `--font-mono`, `--boxel-font-size-2xs`. The 6px radius, 2px/8px padding and 11px glyph are fixed.
 
-Note this component uses **no semantic tone token at all** — no `--destructive`, no `--warning`. That is deliberate (see above) and a theme should resist re-pointing it at an error color. The one thing a theme must get right is `--ink-3` against `--inset`: everything here is drawn at the quiet end of the palette, so a theme that compresses its grays will render broken links effectively invisible.
+Note this component uses **no semantic tone token at all** — no `--destructive`, no `--warning`. That is deliberate (see above) and a theme should resist re-pointing it at an error color. The one thing a theme must get right is `--subtle-foreground` against `--inset`: everything here is drawn at the quiet end of the palette, so a theme that compresses its grays will render broken links effectively invisible.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

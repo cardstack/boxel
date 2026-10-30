@@ -44,7 +44,7 @@ No single APG pattern. It is a trigger button plus a row of listboxes.
 
 ## Theming
 
-`--input-background`, `--input`, `--ring`, `--radius-control`, `--pretui-control-h`, `--foreground`, `--muted-foreground`, `--primary` (the active option), `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--border` (the rule between columns), `--hover`, `--pretui-z-dropdown`, `--font-sans`, `--text-ui-md`, `--space-2` and `--space-3`.
+`--input-background`, `--input`, `--ring`, `--radius-control`, `--pretui-control-h`, `--foreground`, `--muted-foreground`, `--primary` (the active option), `--popover`, `--popover-foreground`, `--pretui-shadow-raised`, `--radius-surface`, `--border` (the rule between columns), `--hover`, `--pretui-z-dropdown`, `--font-sans`, `--boxel-font-size-xs`, `--space-2` and `--space-3`.
 
 Each column is at least 10rem wide and at most 16rem tall. The popup scrolls sideways when the path is deeper than the space available.
 

@@ -113,7 +113,7 @@ export class NotificationUsage extends Component {
       }
       .nt-demo-count {
         margin: var(--space-2, 0.375rem) 0 0;
-        font-size: var(--text-ui-sm, 0.72rem);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

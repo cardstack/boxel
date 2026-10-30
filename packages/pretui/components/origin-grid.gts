@@ -375,7 +375,7 @@ export class OriginGrid extends Component<OriginGridSignature> {
         }
         .pretui-origin-status {
           margin: 0;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
         }
@@ -452,7 +452,7 @@ class OriginCellButton extends Component<OriginCellSignature> {
           height: 4px;
           translate: -50% -50%;
           border-radius: 50%;
-          background: var(--ink-3, var(--boxel-400));
+          background: var(--subtle-foreground);
           transition: scale var(--pretui-dur-snap, 140ms)
             var(--pretui-ease-snap, ease);
         }

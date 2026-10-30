@@ -49,7 +49,7 @@ Where it is thinner: no regions or markers exposed as a contract (the plugin is 
 
 ## Theming
 
-`--pretui-wave-height` (the reserved drawing height), `--pretui-primary-ink` (the played portion and the transport), `--pretui-destructive-ink` (the error state), `--pretui-shadow-hairline`.
+`--pretui-wave-height` (the reserved drawing height), `--primary-ink` (the played portion and the transport), `--destructive-ink` (the error state), `--pretui-shadow-hairline`.
 
 The bar geometry is args rather than tokens, deliberately: `@barWidth` and `@barGap` change what the waveform _is_ at a given zoom rather than how the theme dresses it, and two waveforms in one product may legitimately want different densities. The colors are tokens, so a theme recolors every wave at once and a played/unplayed split always matches the product's primary.
 

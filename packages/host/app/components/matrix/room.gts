@@ -488,7 +488,7 @@ export default class Room extends Component<Signature> {
         position: relative;
 
         /* the message box is a surface: the surface radius */
-        --chat-input-area-border-radius: var(--round-surface, 12px);
+        --chat-input-area-border-radius: var(--boxel-border-radius-lg);
       }
       .room-actions {
         position: relative;
@@ -529,7 +529,7 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr;
         /* the box rises over the cap's tuck; the tuck closes with the slot,
            so the box never sits over the transcript */
-        margin-bottom: calc(-1 * var(--step-12, 12px));
+        margin-bottom: calc(-1 * var(--boxel-sp-sm));
         transition:
           grid-template-rows var(--pretui-dur-move, 260ms)
             cubic-bezier(0.3, 0.1, 0.3, 1),
@@ -564,9 +564,9 @@ export default class Room extends Component<Signature> {
         --boxel-pill-menu-header-padding: 0;
         --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
         --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: 2px 6px;
+        --boxel-pill-menu-button-padding: 2px 0.375rem;
 
-        --chat-input-area-bottom-padding: var(--step-12, 12px);
+        --chat-input-area-bottom-padding: var(--boxel-sp-sm);
         /* the panel's teal ring cannot be seen on this light surface */
         --ring: var(--boxel-dark);
 
@@ -598,11 +598,11 @@ export default class Room extends Component<Signature> {
         pointer-events: none;
         color: var(--boxel-light-100);
         font-family: var(--boxel-font-family);
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         font-weight: 600;
         background-color: var(--boxel-darker-hover);
-        border-radius: var(--round-row, 8px);
+        border-radius: var(--boxel-border-radius-sm);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -622,7 +622,7 @@ export default class Room extends Component<Signature> {
       }
 
       .chat-input-area__bottom-actions:not(:has(.menu-content)) {
-        height: 40px;
+        height: 2.5rem;
       }
 
       .chat-input-area__bottom-actions:has(.menu-content) {
@@ -654,7 +654,7 @@ export default class Room extends Component<Signature> {
       }
       .unread-jump {
         position: static;
-        transform: translateY(calc(-100% - var(--step-8, 8px)));
+        transform: translateY(calc(-100% - var(--boxel-sp-xs)));
       }
       .session-prep {
         margin: var(--boxel-sp) 0;
@@ -665,7 +665,7 @@ export default class Room extends Component<Signature> {
         justify-content: center;
         align-items: center;
         height: 100%;
-        gap: 4px;
+        gap: 0.25rem;
       }
 
       /* the bottom row answers its own width, so the context ring can step
@@ -704,8 +704,8 @@ export default class Room extends Component<Signature> {
       }
 
       .llm-select-footer-action {
-        --boxel-button-font: 600 var(--type-ui, 12.5px) /
-          var(--leading-ui, 18px) var(--boxel-font-family);
+        --boxel-button-font: 600 var(--boxel-font-size-xs) /
+          var(--boxel-line-height-xs) var(--boxel-font-family);
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
         --boxel-button-disabled-background: none;
         --boxel-button-disabled-opacity: 1;

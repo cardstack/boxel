@@ -98,7 +98,7 @@ export class RecordPill extends Component<RecordPillSignature> {
           border-radius: 50%;
           display: inline-grid;
           place-content: center;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           cursor: pointer;
           flex: none;
         }

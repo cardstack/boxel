@@ -88,7 +88,7 @@ export const Panel: TemplateOnlyComponent<PanelSignature> = <template>
       }
       .pretui-eyebrow {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 500;
         letter-spacing: var(--track-eyebrow, 0.08em);
         text-transform: uppercase;
@@ -106,7 +106,7 @@ export const Panel: TemplateOnlyComponent<PanelSignature> = <template>
         box-shadow: 0 -1px 0 var(--border);
       }
       .pretui-panel-status {
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
         display: flex;
         align-items: center;
@@ -129,7 +129,7 @@ export const Panel: TemplateOnlyComponent<PanelSignature> = <template>
         box-shadow: 0 1px 0 var(--border);
       }
       .pretui-panel[data-variant='inspector'] .pretui-panel-header h2 {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
       /* Flush, so PanelSection hairlines run edge to edge. */
       .pretui-panel[data-variant='inspector'] .pretui-panel-body {

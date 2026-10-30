@@ -207,8 +207,8 @@ export class Stat extends Component<StatSignature> {
           gap: 6px;
         }
         .pretui-stat-hint {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
         }
       }
     </style>

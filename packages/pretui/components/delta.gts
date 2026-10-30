@@ -26,7 +26,7 @@ export class Delta extends Component<DeltaSignature> {
       @layer PretComponent {
         .pretui-delta {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           font-weight: 500;
         }
@@ -34,7 +34,7 @@ export class Delta extends Component<DeltaSignature> {
           color: var(--success-ink);
         }
         .pretui-delta[data-sign='down'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-delta[data-sign='flat'] {
           color: var(--muted-foreground);

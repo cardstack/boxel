@@ -117,10 +117,10 @@ class HoverCardUsage extends GlimmerComponent {
         margin: 0;
         max-width: 54ch;
         font-size: var(--text-body, 15px);
-        line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+        line-height: calc(var(--boxel-body-line-height) / var(--text-body, 15px));
       }
       .oc-mention {
-        color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+        color: var(--primary-ink);
         text-decoration: underline;
         text-underline-offset: 2px;
         text-decoration-style: dotted;
@@ -139,24 +139,24 @@ class HoverCardUsage extends GlimmerComponent {
       }
       .oc-card-role {
         color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
       }
       .oc-card-note {
         margin: var(--space-2, 6px) 0 0;
         color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.5;
       }
       .oc-card-link {
         margin-top: var(--space-3, 8px);
-        color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
-        font-size: var(--text-ui-sm, 11.5px);
+        color: var(--primary-ink);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
       }
       .oc-hint {
         margin: var(--space-4, 11px) 0 0;
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

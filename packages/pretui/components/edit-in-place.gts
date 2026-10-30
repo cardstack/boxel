@@ -468,7 +468,7 @@ export class EditInPlace extends Component<EditInPlaceSignature> {
           white-space: nowrap;
         }
         .pretui-eip-placeholder {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-style: italic;
         }
         .pretui-eip-trigger {
@@ -533,9 +533,9 @@ export class EditInPlace extends Component<EditInPlaceSignature> {
         .pretui-eip-error {
           margin: 0;
           min-height: 1.25em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-eip-trigger {

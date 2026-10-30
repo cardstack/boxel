@@ -98,7 +98,7 @@ export default class NewSessionSettings extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         box-shadow: 0 10px 15px 0 rgba(0, 0, 0, 0.25);
         border: 1px solid var(--ai-assistant-menu-border);
-        padding: 6.5px 11px 11px 11px;
+        padding: 0.40625rem 0.6875rem 0.6875rem 0.6875rem;
         min-width: 13.75rem;
         color: var(--ai-assistant-menu-foreground);
       }
@@ -106,7 +106,7 @@ export default class NewSessionSettings extends Component<Signature> {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 6.5px;
+        margin-bottom: 0.40625rem;
       }
       .new-session-settings-title {
         font: 700 var(--boxel-font-sm);
@@ -125,9 +125,9 @@ export default class NewSessionSettings extends Component<Signature> {
       .new-session-settings-option {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 0.5rem;
         cursor: pointer;
-        padding: 7px 4px;
+        padding: 0.4375rem 0.25rem;
         border-radius: 5px;
         transition: background-color var(--boxel-transition);
       }
@@ -138,8 +138,8 @@ export default class NewSessionSettings extends Component<Signature> {
         background-color: var(--boxel-650);
       }
       .new-session-settings-option input[type='checkbox'] {
-        width: 18px;
-        height: 18px;
+        width: 1.125rem;
+        height: 1.125rem;
         border-radius: 3px;
         border: solid 1px var(--boxel-400);
         cursor: pointer;
@@ -157,10 +157,10 @@ export default class NewSessionSettings extends Component<Signature> {
       .new-session-settings-option input[type='checkbox']:checked::after {
         content: '';
         position: absolute;
-        left: 5px;
+        left: 0.3125rem;
         top: 2px;
-        width: 4px;
-        height: 8px;
+        width: 0.25rem;
+        height: 0.5rem;
         border: solid #333;
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);

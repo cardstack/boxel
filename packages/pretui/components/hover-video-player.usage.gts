@@ -129,7 +129,7 @@ class HoverVideoPlayerUsage extends GlimmerComponent {
       }
       .demo-log {
         margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .demo-log strong {
@@ -139,7 +139,7 @@ class HoverVideoPlayerUsage extends GlimmerComponent {
       .demo-hint {
         margin: var(--space-3, 7px) 0 0;
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

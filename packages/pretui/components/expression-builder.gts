@@ -946,7 +946,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           container-type: inline-size;
           display: block;
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           --pretui-xb-gap: var(--space-3, 8px);
           --pretui-xb-num-w: 20px;
@@ -969,7 +969,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
         }
         .xb-title {
           margin: 0;
-          font-size: var(--text-ui-lg, 13.5px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: 600;
           letter-spacing: var(--track-heading, -0.01em);
         }
@@ -992,7 +992,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           flex-wrap: wrap;
         }
         .xb-label {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--muted-foreground);
         }
@@ -1011,7 +1011,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           gap: var(--pretui-xb-gap);
           margin-top: var(--space-4, 11px);
           padding-inline: 2px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: var(--track-eyebrow, 0.06em);
@@ -1052,7 +1052,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           height: var(--boxel-form-control-height-sm);
           font-variant-numeric: tabular-nums;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .xb-grid {
@@ -1088,7 +1088,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           display: inline-flex;
           align-items: center;
           height: var(--boxel-form-control-height-sm);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         /* ── The severity notation ───────────────────────────────────────────
@@ -1123,7 +1123,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           column-gap: var(--space-2, 6px);
           row-gap: 2px;
           align-items: baseline;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--foreground);
         }
         .xb-msg {
@@ -1132,7 +1132,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
         }
         .xb-note-mark {
           justify-self: end;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;

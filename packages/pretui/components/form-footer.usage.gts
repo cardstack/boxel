@@ -196,7 +196,7 @@ class FormFooterUsage extends Component {
         padding: var(--space-5, 14px);
         display: grid;
         gap: var(--space-4, 11px);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .ff-filler p {
@@ -205,7 +205,7 @@ class FormFooterUsage extends Component {
       .ff-log {
         margin: var(--space-3, 8px) 0 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

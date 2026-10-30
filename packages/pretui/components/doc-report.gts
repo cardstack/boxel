@@ -196,7 +196,7 @@ export class DocReport extends Component<DocReportSignature> {
           font-weight: 600;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-doc-title {
           margin: 2px 0 0;
@@ -228,7 +228,7 @@ export class DocReport extends Component<DocReportSignature> {
         /* the cap: content beyond it is clipped and faded out, so the reader
            can see that there IS more rather than guessing */
         .pretui-doc-clip {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           max-height: var(--pretui-doc-cap, 16rem);
           overflow: hidden;
           mask-image: linear-gradient(
@@ -272,7 +272,7 @@ export class DocReport extends Component<DocReportSignature> {
             0 0 0 1px var(--border)
           );
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           cursor: pointer;
         }

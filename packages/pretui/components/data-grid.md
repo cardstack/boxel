@@ -51,7 +51,7 @@ Gaps, in rough order of severity:
 
 ## Theming
 
-`--card` (table surface), `--inset` (header band), `--line-strong` (header underline), `--border` (row rules), `--stripe` (zebra), `--hover` (row hover), `--muted-foreground` and `--foreground` (header ink, resting and sorted), `--font-mono` and `--track-eyebrow` (the mono eyebrow header voice), `--text-ui-md`.
+`--card` (table surface), `--inset` (header band), `--line-strong` (header underline), `--border` (row rules), `--stripe` (zebra), `--hover` (row hover), `--muted-foreground` and `--foreground` (header ink, resting and sorted), `--font-mono` and `--track-eyebrow` (the mono eyebrow header voice), `--boxel-font-size-xs`.
 
 Header type is a hard-coded 10px uppercase mono — the kit's eyebrow voice — and is not tokenized, so a theme cannot resize it. A theme **must** define `--stripe` distinctly from both `--card` and `--hover`, or zebra striping and hover become indistinguishable and the row you are pointing at stops being obvious.
 

@@ -78,7 +78,7 @@ class DividerUsage extends Component {
       .pretui-divider-demo-row {
         display: flex;
         align-items: stretch;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .pretui-divider-demo-row > span {
@@ -86,7 +86,7 @@ class DividerUsage extends Component {
       }
       .pretui-divider-demo-col {
         display: block;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

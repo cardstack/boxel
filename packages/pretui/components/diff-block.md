@@ -44,7 +44,7 @@ Gaps, and the first is the classic diff failure:
 
 ## Theming
 
-Mono voice (`--font-mono`, `--text-ui-sm`), added and removed row tints derived from `--success` and `--destructive` mixed against `--card`, context rows in `--muted-foreground`, `--inset` for the block surface, `--border` for its edge, and the receipt in the quieter ink.
+Mono voice (`--font-mono`, `--boxel-font-size-2xs`), added and removed row tints derived from `--success` and `--destructive` mixed against `--card`, context rows in `--muted-foreground`, `--inset` for the block surface, `--border` for its edge, and the receipt in the quieter ink.
 
 The added/removed tints are the tokens to check per theme. They must be distinguishable from each other **and** legible as backgrounds behind mono text at 11.5px — a theme that tunes `--success` and `--destructive` for **Delta**'s foreground ink will usually find them far too strong as fills here. Because the tints are `color-mix` derivations rather than fixed hexes, adjusting the mix ratio is the lever; adjusting the hue is not.
 

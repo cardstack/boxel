@@ -343,7 +343,7 @@ export class Card extends Component<CardSignature> {
           box-sizing: border-box;
           border-radius: var(--pretui-card-radius, var(--radius-surface, 10px));
           color: var(--card-foreground);
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           letter-spacing: var(--track-ui, 0.01em);
           /* Deliberately NOT `overflow: hidden`. Mantine clips its card root
              unconditionally, which kills every Popover, Menu and Tooltip
@@ -356,16 +356,16 @@ export class Card extends Component<CardSignature> {
         /* size — font-size only; every internal dimension below is em, so one
            declaration scales the whole card. */
         .pretui-card[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-card[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-card[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-card[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         /* tone — one hue token in, the appearance recipes below read it out,
            written once. */
@@ -390,7 +390,7 @@ export class Card extends Component<CardSignature> {
           --pretui-tone-on: var(--destructive-foreground);
         }
         .pretui-card[data-tone='attention'] {
-          --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tone: var(--attention);
           --pretui-tone-on: var(--pretui-on-attention, var(--background));
         }
         /* appearance — the five canonical recipes, reading the tone channel. */

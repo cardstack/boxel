@@ -757,7 +757,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           display: flex;
           flex-direction: column;
           gap: var(--space-2, 6px);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           container-type: inline-size;
         }
@@ -773,7 +773,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
         .pretui-json-seed :is(textarea) {
           min-height: calc(var(--_row-h) * 4);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-json-bar {
           display: flex;
@@ -782,7 +782,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           min-height: var(--control-h, 28px);
         }
         .pretui-json-bar-name {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
@@ -790,7 +790,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
         }
         .pretui-json-count {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-json-gap {
@@ -814,7 +814,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           padding-inline-start: calc(var(--space-3, 8px) + (var(--_level, 1) - 1) * var(--_indent));
           padding-inline-end: var(--space-3, 8px);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           outline: none;
         }
@@ -892,7 +892,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
         .pretui-json-kind {
           padding: 0 4px;
           border-radius: var(--radius-chip, 6px);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
           color: var(--muted-foreground);
           background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
@@ -920,7 +920,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
         }
         .pretui-json-n {
           flex: 0 0 auto;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
 
@@ -952,7 +952,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           padding: 1px 5px;
           border-radius: var(--radius-chip, 6px);
           font: inherit;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           background: var(--card);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
@@ -962,7 +962,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           color: var(--foreground);
         }
         .pretui-json-act-danger:hover {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-json-act:focus-visible {
           outline: 2px solid var(--ring);
@@ -975,7 +975,7 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
           font-style: italic;
         }
         .pretui-json-more-cue {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           opacity: 0.8;
         }
 

@@ -53,7 +53,7 @@ Gaps and cautions:
 
 ## Theming
 
-Severity hues: `--destructive` (error), `--warning`, `--pretui-info`, which fill the glyph. The text is the severity's ink: `--destructive-ink`, `--warning-ink`, `--info-ink`. Type: `--text-ui-sm`. Provenance: **Token**'s `--font-mono`, `--inset`, `--muted-foreground`, `--pretui-shadow-hairline`.
+Severity hues: `--destructive` (error), `--warning`, `--pretui-info`, which fill the glyph. The text is the severity's ink: `--destructive-ink`, `--warning-ink`, `--info-ink`. Type: `--boxel-font-size-2xs`. Provenance: **Token**'s `--font-mono`, `--inset`, `--muted-foreground`, `--pretui-shadow-hairline`.
 
 Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. That is why `@glyph={{false}}` drops only the error glyph: an error without a glyph still differs from a warning or info, which keep theirs.
 

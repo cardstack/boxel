@@ -1115,7 +1115,7 @@ export class Menubar extends Component<MenubarSignature> {
             0 0 0 1px var(--border)
           );
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           /* The bar is a single line of titles; when the pane is too narrow it
              scrolls rather than wrapping — a wrapped menu bar loses the one
              spatial fact readers rely on, which title sits where. */
@@ -1164,7 +1164,7 @@ export class Menubar extends Component<MenubarSignature> {
         }
         .pretui-menubar-kbd {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
           white-space: nowrap;

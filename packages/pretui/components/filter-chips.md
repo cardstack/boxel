@@ -51,7 +51,7 @@ Remaining gaps:
 
 ## Theming
 
-Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pretui-ink-mix`, mixed against `--card`, hairline against `--border`), plus `--foreground`, `--muted-foreground`, `--hover` for resting and hover states, the count's tabular-numeral dress, and `--text-ui-xs`/`--text-ui-md`.
+Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pretui-ink-mix`, mixed against `--card`, hairline against `--border`), plus `--foreground`, `--muted-foreground`, `--hover` for resting and hover states, the count's tabular-numeral dress, and `--boxel-font-size-2xs`/`--boxel-font-size-xs`.
 
 Because the selected chip and the unselected ones differ by fill strength within the same hue, a theme that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbors, not against the page.
 

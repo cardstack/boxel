@@ -100,7 +100,7 @@ class AlertDialogUsage extends GlimmerComponent {
         flex-wrap: wrap;
       }
       .oc-log {
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .oc-log strong {
@@ -110,7 +110,7 @@ class AlertDialogUsage extends GlimmerComponent {
       .oc-hint {
         margin: var(--space-4, 11px) 0 0;
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

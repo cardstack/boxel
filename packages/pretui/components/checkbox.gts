@@ -61,7 +61,7 @@ export class Checkbox extends Component<CheckboxSignature> {
           display: flex;
           align-items: center;
           gap: 8px;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           cursor: pointer;
         }
         .pretui-checkbox {

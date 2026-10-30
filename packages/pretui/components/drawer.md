@@ -43,7 +43,7 @@ Gaps, the same ones Dialog has and worth repeating rather than cross-referencing
 
 ## Theming
 
-`--card`, `--foreground`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--radius-surface`, `--pretui-drawer-size`, `--font-sans`, `--text-body`, `--text-heading`, `--weight-heading`, `--track-heading`, `--space-3/4/6`, `--border`, `--muted-foreground`, `--leading-body`. A theme that wants a wide inspector sets `--pretui-drawer-size` at the layout root rather than overriding the component. Note the drawer has no `--radius-surface` on its docked edge by construction, so a theme with a very large radius will look asymmetric by intent, not by accident.
+`--card`, `--foreground`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--radius-surface`, `--pretui-drawer-size`, `--font-sans`, `--text-body`, `--text-heading`, `--weight-heading`, `--track-heading`, `--space-3/4/6`, `--border`, `--muted-foreground`, `--boxel-body-line-height`. A theme that wants a wide inspector sets `--pretui-drawer-size` at the layout root rather than overriding the component. Note the drawer has no `--radius-surface` on its docked edge by construction, so a theme with a very large radius will look asymmetric by intent, not by accident.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

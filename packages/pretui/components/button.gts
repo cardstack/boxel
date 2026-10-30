@@ -278,7 +278,7 @@ export class Button extends Component<ButtonSignature> {
           color: var(--pretui-btn-text, inherit);
           box-shadow: var(--pretui-btn-elevation, none);
           font-family: inherit;
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           font-weight: 500;
           letter-spacing: var(--track-ui, 0.01em);
           cursor: pointer;
@@ -333,21 +333,21 @@ export class Button extends Component<ButtonSignature> {
         }
         /* size scale — font-size only; internals ride the em */
         .pretui-btn[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
           /* keeps the 24px minimum target when the theme's xs step is small */
           min-height: max(var(--pretui-button-h, 2.24em), 1.5rem);
         }
         .pretui-btn[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-btn[data-size='m'] {
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
         .pretui-btn[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-btn[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         /* tone map — each tone only sets custom properties */
         .pretui-btn[data-tone='neutral'] {

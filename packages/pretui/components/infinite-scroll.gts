@@ -146,7 +146,7 @@ export class InfiniteScroll extends Component<InfiniteScrollSignature> {
         }
         .pretui-infinite-end {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 0.72rem);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-infinite-status {
           position: absolute;

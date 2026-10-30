@@ -395,7 +395,7 @@ export class PasswordStrength extends Component<PasswordStrengthSignature> {
           display: grid;
           gap: var(--space-2, 5px);
           width: 100%;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-ui, 0.01em);
           /* Score → hue lives entirely in CSS, keyed off a clamped numeric
              attribute: no string is ever interpolated into a style. The bars
@@ -452,7 +452,7 @@ export class PasswordStrength extends Component<PasswordStrengthSignature> {
           font-weight: 500;
         }
         .pretui-pwstrength-time {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-pwstrength-warning {

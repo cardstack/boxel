@@ -34,7 +34,7 @@ Identical to TokenInput. The field is labelled by `@label`. The chips are a list
 
 ## Theming
 
-Identical to TokenInput: the chips are the kit's **Chip** treatment and the field is the kit's input, so a tag row looks like the chips used elsewhere. It reads `--input`, `--ring`, `--radius`, `--control-h`, `--foreground` and `--text-ui-md`.
+Identical to TokenInput: the chips are the kit's **Chip** treatment and the field is the kit's input, so a tag row looks like the chips used elsewhere. It reads `--input`, `--ring`, `--radius`, `--control-h`, `--foreground` and `--boxel-font-size-xs`.
 
 ## React ecosystem
 

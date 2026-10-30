@@ -54,7 +54,7 @@ Gaps:
 
 ## Theming
 
-Rail and markers: `--border` (rail), `--card` (marker fill), `--pretui-shadow-hairline` (the marker ring, removed at compact density), plus the marker glyph's ink. Content: `--foreground`, `--muted-foreground`, `--text-ui-md`, `--text-ui-sm`. Composed components bring their own — **StatusChip**'s `--chart-*` palette, **Token**'s `--pretui-token-hue`, **Avatar**'s hash palette.
+Rail and markers: `--border` (rail), `--card` (marker fill), `--pretui-shadow-hairline` (the marker ring, removed at compact density), plus the marker glyph's ink. Content: `--foreground`, `--muted-foreground`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`. Composed components bring their own — **StatusChip**'s `--chart-*` palette, **Token**'s `--pretui-token-hue`, **Avatar**'s hash palette.
 
 The 11px compact glyph, the marker sizes and the rail width are fixed; density is an arg, not a token.
 

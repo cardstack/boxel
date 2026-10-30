@@ -47,7 +47,7 @@ The implementation is a native `<input type="number">` flanked by buttons, which
 
 ## Theming
 
-`--field` (the shared face), `--input` (the shared hairline), `--foreground`, `--muted-foreground`, `--primary` (focus ring), `--hover`, `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`.
+`--field` (the shared face), `--input` (the shared hairline), `--foreground`, `--muted-foreground`, `--primary` (focus ring), `--hover`, `--control-h`, `--radius`, `--boxel-font-size-xs`, `--track-ui`.
 
 The single shared hairline is the visual signature: the buttons and the field are one box with internal rules rather than three boxes, so a theme that gives `--input` a strong color will see it as a frame with two dividers. Check that the disabled-at-bounds state remains distinguishable — `opacity`-based dimming on a small `−` glyph is easy to miss, and it is the only signal that a bound has been reached.
 

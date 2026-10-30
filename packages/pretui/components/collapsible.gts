@@ -173,21 +173,21 @@ export class Collapsible extends Component<CollapsibleSignature> {
         .pretui-collapsible {
           display: grid;
           min-inline-size: 0;
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
         .pretui-collapsible[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-collapsible[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-collapsible[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-collapsible[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-collapsible-trigger {
           display: inline-flex;

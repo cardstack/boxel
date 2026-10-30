@@ -135,7 +135,7 @@ export default class CodeBlockToolCallHeader extends Component<CodeBlockToolCall
         --boxel-button-text-color: var(--boxel-light);
         --boxel-button-border: 1px solid var(--boxel-light);
         --boxel-button-font: 600 var(--boxel-font-xs);
-        padding: 3px 10px;
+        padding: 0.1875rem 0.625rem;
         min-width: inherit;
         min-height: inherit;
         height: 1.5rem;

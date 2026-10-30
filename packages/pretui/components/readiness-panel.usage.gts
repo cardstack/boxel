@@ -356,7 +356,7 @@ class ReadinessPanelUsage extends Component {
       }
       .pretui-rp-nested-title {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
     </style>

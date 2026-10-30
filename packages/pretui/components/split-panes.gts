@@ -57,7 +57,7 @@ export class SplitPanes extends Component<SplitPanesSignature> {
         .pretui-splitpanes {
           height: 100%;
           min-height: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           --boxel-450: var(--muted-foreground);

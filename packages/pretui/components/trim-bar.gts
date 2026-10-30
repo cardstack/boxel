@@ -545,13 +545,13 @@ export class TrimBar extends Component<TrimBarSignature> {
           margin: 0;
           padding: 0 12px;
           text-align: center;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           background: color-mix(in oklch, var(--card) 82%, transparent);
           border-radius: var(--radius);
         }
         .pretui-trim-veil--bad {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-trim-bar {
           display: flex;
@@ -567,7 +567,7 @@ export class TrimBar extends Component<TrimBarSignature> {
           border: 0;
           border-radius: 999px;
           font: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           color: var(--primary-foreground);
           background: var(--primary);
@@ -585,14 +585,14 @@ export class TrimBar extends Component<TrimBarSignature> {
           margin-inline-end: auto;
         }
         .pretui-trim-status {
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
         .pretui-trim-status[data-phase='error'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .dark .pretui-trim-rail {
           background: color-mix(

@@ -194,7 +194,7 @@ export class Timeline extends Component<TimelineSignature> {
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          background: var(--pretui-primary-ink, var(--primary));
+          background: var(--primary-ink);
         }
         .pretui-timeline-body {
           display: grid;
@@ -210,19 +210,19 @@ export class Timeline extends Component<TimelineSignature> {
           min-width: 0;
         }
         .pretui-timeline-title {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           color: var(--foreground);
           min-width: 0;
         }
         .pretui-timeline-when {
           margin-left: auto;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-timeline-detail {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           line-height: 1.5;
           max-width: 62ch;
@@ -231,7 +231,7 @@ export class Timeline extends Component<TimelineSignature> {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         /* compact: one line per event, small marker, no marker chrome */
@@ -251,7 +251,7 @@ export class Timeline extends Component<TimelineSignature> {
           padding: 3px 0;
         }
         .pretui-timeline[data-density='compact'] .pretui-timeline-detail {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         /* unnamed container query — resolves against the .pretui-timeline
            ancestor container, so it may only style descendants */

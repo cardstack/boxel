@@ -37,7 +37,7 @@ export const TONE_HUES: Record<PretuiTone, string> = {
   success: 'var(--success)',
   warning: 'var(--warning)',
   danger: 'var(--destructive)',
-  attention: 'var(--pretui-attention)',
+  attention: 'var(--attention)',
 };
 
 export function resolveCornerTone(tone: PretuiToneArg | string | undefined, fallback: PretuiTone): PretuiTone {

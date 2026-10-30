@@ -199,7 +199,7 @@ export const Lab: TemplateOnlyComponent<YieldSpanSignature> = <template>
   <span class='ex-lab' ...attributes>{{yield}}</span>
   <style scoped>
     .ex-lab {
-      font-size: var(--text-ui-md, 12.5px);
+      font-size: var(--boxel-font-size-xs);
       color: var(--foreground);
     }
   </style>
@@ -211,7 +211,7 @@ export const Mono: TemplateOnlyComponent<YieldSpanSignature> = <template>
   <style scoped>
     .ex-mono {
       font-family: var(--font-mono);
-      font-size: var(--text-ui-sm, 11.5px);
+      font-size: var(--boxel-font-size-2xs);
       color: var(--muted-foreground);
       font-variant-numeric: tabular-nums;
     }

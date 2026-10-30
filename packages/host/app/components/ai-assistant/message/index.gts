@@ -699,7 +699,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
       .ai-assistant-message > * + * {
-        margin-top: var(--step-12, 12px);
+        margin-top: var(--boxel-sp-sm);
       }
       .content {
         /* clip only sideways: wide content stays in the column, and what
@@ -708,8 +708,8 @@ export default class AiAssistantMessage extends Component<Signature> {
         /* room for what hangs outside the text edge (a step row's hover
            inset and its rounded corners), given back so the text edge
            stays where it was */
-        padding-inline: 13px;
-        margin-inline: -13px;
+        padding-inline: 0.8125rem;
+        margin-inline: -0.8125rem;
         /* and a framed row's 1px ring, drawn just outside its box, at the
            bottom of the message (and at its top); the margins below give
            the 2px back, so the parts' own rhythm is what shows */
@@ -720,20 +720,20 @@ export default class AiAssistantMessage extends Component<Signature> {
         margin-top: -2px;
       }
       .ai-assistant-message > * + .content {
-        margin-top: calc(var(--step-12, 12px) - 2px);
+        margin-top: calc(var(--boxel-sp-sm) - 2px);
       }
       /* the turn's label sits 8px over what it labels, as the study's
          speaker line does */
       .ai-assistant-message > .turn-head + .content {
-        margin-top: calc(var(--step-8, 8px) - 2px);
+        margin-top: calc(var(--boxel-sp-xs) - 2px);
       }
       /* a turn's parts: 12px between blocks; calls in a run 4px apart,
          and plain step rows flush, as one list */
       .content > :deep(* + *) {
-        margin-top: var(--step-12, 12px);
+        margin-top: var(--boxel-sp-sm);
       }
       .content > :deep(.room-message-tool + .room-message-tool) {
-        margin-top: var(--step-4, 4px);
+        margin-top: var(--boxel-sp-4xs);
       }
       .content
         > :deep(
@@ -746,7 +746,7 @@ export default class AiAssistantMessage extends Component<Signature> {
          two open boxes never touch */
       .content > :deep(.room-message-tool.is-framed + .room-message-tool),
       .content > :deep(.room-message-tool + .room-message-tool.is-framed) {
-        margin-top: var(--step-8, 8px);
+        margin-top: var(--boxel-sp-xs);
       }
       /* Choreo's layers come first in a message's region and sit out of
          flow: the rhythm starts at the message's first part, not 12px
@@ -781,12 +781,12 @@ export default class AiAssistantMessage extends Component<Signature> {
       .turn-head-thinking {
         flex: none;
         white-space: nowrap;
-        margin-inline-start: var(--step-8, 8px);
+        margin-inline-start: var(--boxel-sp-xs);
         padding: 0;
         border: 0;
         background: none;
         font: inherit;
-        color: var(--ink-3);
+        color: var(--subtle-foreground);
         text-decoration: underline;
         text-decoration-color: color-mix(
           in oklch,
@@ -797,7 +797,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         cursor: pointer;
       }
       .turn-head-thinking:hover {
-        color: var(--ink-2, var(--boxel-300));
+        color: var(--muted-foreground);
       }
       .turn-head-thinking:focus-visible {
         outline: 2px solid var(--ring, var(--boxel-highlight));
@@ -809,7 +809,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       .turn-head {
         display: flex;
         align-items: center;
-        gap: var(--step-8, 8px);
+        gap: var(--boxel-sp-xs);
         min-width: 0;
         font-variant-numeric: tabular-nums;
       }
@@ -820,11 +820,11 @@ export default class AiAssistantMessage extends Component<Signature> {
       .delivery-note {
         display: flex;
         align-items: baseline;
-        gap: var(--step-8, 8px);
+        gap: var(--boxel-sp-xs);
         margin: 0;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
-        color: var(--ink-2, var(--boxel-450));
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--muted-foreground);
       }
       .delivery-note-mark {
         color: var(--success, var(--boxel-teal));
@@ -847,7 +847,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border-color: transparent;
         width: fit-content;
         margin-left: auto;
-        font-size: var(--type-ui, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
       .credits-action-row {
@@ -860,7 +860,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         margin-left: 0;
       }
       .credits-added {
-        font-size: var(--type-ui, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
       .ai-assistant-message {
@@ -1149,28 +1149,28 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
         flex-direction: column;
         /* the transcript's base is the UI type (rows, steps, status);
            answers and the reader's bubble set the reading type themselves */
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         /* the transcript's own words (rows, steps, receipts) are settled
            work: ink-2, as the study draws them. Answers and the reader's
            bubble set ink-1 themselves */
         color: var(--pretui-toolrow-settled-ink, var(--foreground));
-        --pretui-toolrow-title-size: var(--type-ui, 12.5px);
+        --pretui-toolrow-title-size: var(--boxel-font-size-xs);
         /* the spine: text edges at 16 from the transcript's edge (marks at
            16, row titles at 40) */
         /* at the end, just clear of the fade over the composer's edge: the
            last answer ends close to the box it was asked from */
-        padding: var(--step-16, 16px) var(--ai-assistant-panel-padding)
+        padding: var(--boxel-sp) var(--ai-assistant-panel-padding)
           calc(
             var(--ai-assistant-panel-bottom-gradient-height) +
-              var(--step-4, 4px)
+              var(--boxel-sp-4xs)
           )
           var(--ai-assistant-panel-padding);
       }
       /* one rhythm: 12 between blocks within a turn, 24 between turns */
       .ai-assistant-conversation-messages > :deep(* + *),
       .ai-assistant-conversation-messages > :deep(* + .meta-hidden) {
-        margin-top: var(--step-12, 12px);
+        margin-top: var(--boxel-sp-sm);
       }
       /* a change of speaker starts a turn: 24px, either way round */
       .ai-assistant-conversation-messages
@@ -1180,7 +1180,7 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
           .ai-assistant-message:not(.from-assistant)
             + .ai-assistant-message.from-assistant
         ) {
-        margin-top: var(--step-24, 24px);
+        margin-top: var(--boxel-sp-lg);
       }
       /* a headerless bot-tool indicator message stacks flush against a
          preceding message of the same kind — headered or not, since the run's
@@ -1191,7 +1191,7 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
         margin-top: 0;
       }
       .ai-assistant-conversation-messages > :deep(* + .code-patch-correctness) {
-        margin-top: var(--step-8, 8px);
+        margin-top: var(--boxel-sp-xs);
       }
       /* a turn's calls are one list across its events: a call event under
          one that ended in a call stacks 4px apart; an answer keeps the
@@ -1200,7 +1200,7 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
         > :deep(
           .from-assistant:has(.room-message-tool) + .work-part.meta-hidden
         ) {
-        margin-top: var(--step-4, 4px);
+        margin-top: var(--boxel-sp-4xs);
       }
       .ai-assistant-conversation-messages
         > :deep(
@@ -1212,7 +1212,7 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
           .from-assistant:has(.room-message-tool)
             + .work-part.meta-hidden:has(.room-message-tool.is-framed)
         ) {
-        margin-top: var(--step-8, 8px);
+        margin-top: var(--boxel-sp-xs);
       }
 
       /* a part folded away is hidden at once; its region moves what is

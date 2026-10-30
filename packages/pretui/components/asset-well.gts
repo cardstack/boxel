@@ -560,13 +560,13 @@ export class AssetWell extends Component<AssetWellSignature> {
         }
         .pretui-well-label {
           margin: 0;
-          font-size: var(--text-ui-lg, 15px);
+          font-size: var(--boxel-font-size-sm);
           font-weight: var(--weight-medium, 500);
           color: var(--foreground);
         }
         .pretui-well-hint {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
 
@@ -583,7 +583,7 @@ export class AssetWell extends Component<AssetWellSignature> {
           align-items: center;
           gap: var(--space-2, 6px);
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
 
@@ -615,7 +615,7 @@ export class AssetWell extends Component<AssetWellSignature> {
           background: var(--destructive);
         }
         .pretui-well-failText {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: color-mix(
             in oklch,
             var(--destructive) 62%,
@@ -680,7 +680,7 @@ export class AssetWell extends Component<AssetWellSignature> {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: var(--weight-medium, 500);
           color: var(--foreground);
         }
@@ -690,7 +690,7 @@ export class AssetWell extends Component<AssetWellSignature> {
           flex-wrap: wrap;
           gap: var(--space-2, 6px);
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-well-altKey {
           color: var(--muted-foreground);

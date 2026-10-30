@@ -225,12 +225,12 @@ export class ToggleUsage extends Component {
       .pretui-demo-readout {
         margin: 12px 0 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pretui-demo-note {
         margin: 16px 0 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.5;
         color: var(--muted-foreground);
       }

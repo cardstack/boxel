@@ -101,7 +101,7 @@ class PromptLibraryUsage extends GlimmerComponent {
     <style scoped>
       .demo-log {
         margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .demo-log strong {

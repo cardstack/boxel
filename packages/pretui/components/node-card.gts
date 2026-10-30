@@ -152,7 +152,7 @@ export class NodeCard extends Component<NodeBodySignature> {
 
         .pnc-title {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           line-height: 1.35;
           letter-spacing: var(--track-heading, -0.01em);
@@ -161,7 +161,7 @@ export class NodeCard extends Component<NodeBodySignature> {
 
         .pnc-meta {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.4;
           color: var(--muted-foreground);
         }

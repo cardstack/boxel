@@ -133,7 +133,7 @@ const GRID_TOKENS = htmlSafe(
     '--bg-toolbar: var(--pretui-sheet-head-bg, var(--inset, #f7f8f9))',
     '--fg: var(--card-foreground)',
     '--fg-muted: var(--muted-foreground)',
-    '--fg-faded: var(--ink-3, #9a9da3)',
+    '--fg-faded: var(--subtle-foreground)',
     '--mono: var(--font-mono)',
     // dimensional — the density knob feeds --pretui-sheet-row-h
     '--row-h: var(--pretui-sheet-row-h, 32px)',
@@ -906,7 +906,7 @@ export class Sheet extends Component<SheetSignature> {
             0 0 0 1px var(--border)
           ), var(--pretui-shadow-raise, 0 1px 2px rgb(19 20 22 / 0.05));
           overflow: hidden;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--card-foreground);
         }
         .pretui-sheet[data-density='compact'] {
@@ -957,7 +957,7 @@ export class Sheet extends Component<SheetSignature> {
           min-height: var(--pretui-sheet-head-h, 30px);
           padding: 0 10px;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -1004,7 +1004,7 @@ export class Sheet extends Component<SheetSignature> {
           font-size: 0.85em;
           letter-spacing: 0;
           text-transform: none;
-          color: var(--ink-3, #9a9da3);
+          color: var(--subtle-foreground);
         }
         /* The caret is the sort state made visible in a still frame (Law 8);
            the transition only encodes asc→desc, and reduced motion keeps the
@@ -1074,7 +1074,7 @@ export class Sheet extends Component<SheetSignature> {
         }
         .pretui-sheet-cell[data-mono='1'] {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
         }
         /* Sticky first column — honest CSS, not the engine's column pinning
@@ -1144,7 +1144,7 @@ export class Sheet extends Component<SheetSignature> {
         .pretui-sheet-status {
           margin: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--muted-foreground);
         }

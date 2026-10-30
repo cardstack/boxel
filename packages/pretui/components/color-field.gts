@@ -148,7 +148,7 @@ export class ColorField extends Component<ColorFieldSignature> {
           background: var(--field, var(--boxel-light));
           box-shadow: 0 0 0 1px var(--input);
           font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           cursor: pointer;
         }

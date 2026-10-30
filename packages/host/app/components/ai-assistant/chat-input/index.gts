@@ -73,9 +73,9 @@ export default class AiAssistantChatInput extends Component<Signature> {
         display: grid;
         grid-template-columns: auto 1fr auto;
         align-items: center;
-        min-height: 54px;
-        gap: var(--step-4, 4px);
-        padding: 0 var(--step-12, 12px);
+        min-height: 3.375rem;
+        gap: var(--boxel-sp-4xs);
+        padding: 0 var(--boxel-sp-sm);
         background-color: transparent;
         border-top-left-radius: var(--chat-input-area-border-radius);
         border-top-right-radius: var(--chat-input-area-border-radius);
@@ -115,13 +115,13 @@ export default class AiAssistantChatInput extends Component<Signature> {
         width: 100%;
         padding: var(--boxel-sp-4xs);
 
-        max-height: 150px;
+        max-height: 9.375rem;
         overflow-y: auto;
 
         /* the entry reads at the reading size, 14 on 22 */
         font-family: var(--boxel-font-family);
-        font-size: var(--type-read, 14px);
-        line-height: var(--leading-read, 22px);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
         font-weight: 400;
         letter-spacing: normal;
 
@@ -162,7 +162,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .send-button {
         width: 2rem;
         height: 2rem;
-        border-radius: var(--round-row, 8px);
+        border-radius: var(--boxel-border-radius-sm);
         margin-top: 2px;
         background-color: var(--boxel-highlight);
         color: var(--boxel-dark);

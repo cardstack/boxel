@@ -60,7 +60,7 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 //   · `key='name'` assuming names are unique → `ReadinessGate.id` is the
 //     key, falling back to name+index, so two gates called "lint" coexist.
 //   · An XL name in a row sized around a 13px dot → one type size, the
-//     kit's `--text-ui-md`.
+//     kit's `--boxel-font-size-xs`.
 //   · Three whitelisted states with everything else rendering NOTHING → an
 //     unrecognised state resolves to `unknown`, which is a real, visible,
 //     announced state. A gate can never silently disappear.
@@ -375,7 +375,7 @@ class GateList extends Component<GateListSignature> {
           flex: 1;
         }
         .pretui-gate-name {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--foreground);
           overflow: hidden;
@@ -383,7 +383,7 @@ class GateList extends Component<GateListSignature> {
           white-space: nowrap;
         }
         .pretui-gate-caption {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           overflow-wrap: break-word;
         }
@@ -756,7 +756,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
         }
         .pretui-verdict-state {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           color: color-mix(
             in oklch,
@@ -766,7 +766,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
         }
         .pretui-verdict-summary {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           max-width: 60ch;
         }
@@ -790,7 +790,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
           align-items: center;
           gap: 6px;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -816,7 +816,7 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
           list-style: disc;
         }
         .pretui-reasons-item {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           overflow-wrap: break-word;
         }

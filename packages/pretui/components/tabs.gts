@@ -83,7 +83,7 @@ export class Tabs extends Component<TabsSignature> {
           border: 0;
           background: none;
           font-family: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           letter-spacing: inherit;
           color: var(--muted-foreground);

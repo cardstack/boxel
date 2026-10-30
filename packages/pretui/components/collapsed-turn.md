@@ -41,7 +41,7 @@ Gaps:
 
 ## Theming
 
-`--muted-foreground` (the summary line — collapsed turns should recede), `--border` or `--line-strong` (any rule separating it from live content), `--hover` (the expand affordance), `--text-ui-md` or `--text-ui-sm`.
+`--muted-foreground` (the summary line — collapsed turns should recede), `--border` or `--line-strong` (any rule separating it from live content), `--hover` (the expand affordance), `--boxel-font-size-xs` or `--boxel-font-size-2xs`.
 
 The territory's rule applies here more than anywhere: **settled work recedes.** A theme must keep the collapsed summary visibly quieter than a live **WorkItem** — if a folded turn and a running one read at the same weight, the transcript stops showing where the agent actually is, which is the one thing it exists to do.
 

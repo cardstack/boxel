@@ -167,7 +167,7 @@ export class DataGrid extends Component<DataGridSignature> {
         .pretui-datagrid {
           width: 100%;
           border-collapse: collapse;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           background: var(--card);
         }
         .pretui-datagrid th {
@@ -228,7 +228,7 @@ export class DataGrid extends Component<DataGridSignature> {
         }
         .pretui-mono {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-selcol {
           width: 32px;

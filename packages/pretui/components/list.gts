@@ -469,7 +469,7 @@ export class List<T> extends Component<ListSignature<T>> {
       @layer PretComponent {
         .pretui-list {
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
@@ -477,7 +477,7 @@ export class List<T> extends Component<ListSignature<T>> {
           font-size: 10.5px;
         }
         .pretui-list[data-size='s'] {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-list[data-size='l'] {
           font-size: 14px;

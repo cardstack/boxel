@@ -644,7 +644,7 @@ export class Toaster extends Component<ToasterSignature> {
           color: var(--popover-foreground);
           border-radius: var(--radius-surface, 10px);
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.12));
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           opacity: 1;
           translate: 0 0;
           transition: opacity var(--pretui-dur-enter, 220ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
@@ -680,7 +680,7 @@ export class Toaster extends Component<ToasterSignature> {
         }
         .pretui-toast-msg {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
         }
         .pretui-toast-do {
@@ -785,7 +785,7 @@ export class Toaster extends Component<ToasterSignature> {
           background: var(--popover);
           box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border));
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-toaster-more-n {
           font-variant-numeric: tabular-nums;

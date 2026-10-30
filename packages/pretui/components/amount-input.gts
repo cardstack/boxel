@@ -524,7 +524,7 @@ export class AmountInput extends Component<AmountInputSignature> {
           flex: 0 0 auto;
           min-width: var(--pretui-amount-mark-width, 1.25ch);
           text-align: center;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
         }
@@ -540,7 +540,7 @@ export class AmountInput extends Component<AmountInputSignature> {
           display: flex;
           align-items: center;
           pointer-events: none;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
           opacity: 0.55;
@@ -552,7 +552,7 @@ export class AmountInput extends Component<AmountInputSignature> {
           background: none;
           padding: 0;
           font: inherit;
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
           /* Law 8 — every changing numeral is tabular, so a digit landing does
              not shift the ones beside it. */
           font-variant-numeric: tabular-nums;
@@ -568,7 +568,7 @@ export class AmountInput extends Component<AmountInputSignature> {
         }
         .pretui-amount-static {
           flex: 0 0 auto;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: var(--weight-medium, 500);
           color: var(--muted-foreground);
         }
@@ -578,12 +578,12 @@ export class AmountInput extends Component<AmountInputSignature> {
         .pretui-amount-readout {
           margin: 0;
           min-height: 1.4em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
         .pretui-amount[data-invalid='true'] .pretui-amount-readout {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: var(--weight-medium, 500);
         }
         /* A card knows its pane, not the viewport. Below the fold the unit

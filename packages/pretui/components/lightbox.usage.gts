@@ -165,7 +165,7 @@ class LightboxUsage extends Component {
         margin: 10px 0 0;
       }
       .dm-readoutLabel {
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: 0.04em;
         text-transform: uppercase;

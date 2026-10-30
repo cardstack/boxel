@@ -27,7 +27,7 @@ Identical to Drawer: APG **Dialog (Modal)**. A drawer is a dialog with geometry.
 
 ## Theming
 
-Identical to Drawer: `--pretui-drawer-size`, `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--leading-body`, `--space-3`, `--space-4` and `--space-6`.
+Identical to Drawer: `--pretui-drawer-size`, `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--boxel-body-line-height`, `--space-3`, `--space-4` and `--space-6`.
 
 ## React ecosystem
 

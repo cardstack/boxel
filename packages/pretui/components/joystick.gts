@@ -314,8 +314,8 @@ export class Joystick extends Component<JoystickSignature> {
         .pretui-joystick-axis {
           position: absolute;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
         }
         .pretui-joystick-axis[data-edge='left'] {
           top: 50%;
@@ -350,7 +350,7 @@ export class Joystick extends Component<JoystickSignature> {
           border-radius: var(--radius);
           background: transparent;
           color: var(--muted-foreground);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           cursor: pointer;
         }
         .pretui-joystick-reset:hover {

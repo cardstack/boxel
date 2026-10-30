@@ -778,7 +778,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
             --pretui-shadow-hairline,
             0 0 0 1px var(--border)
           );
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--muted-foreground);
           white-space: nowrap;
@@ -832,7 +832,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           display: block;
           padding-block: 6px 3px;
           padding-inline: 9px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
@@ -854,7 +854,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           background: var(--hover, var(--boxel-100));
         }
         .pal-row[data-destructive='true'] {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pal-row[aria-disabled='true'] {
           opacity: 0.42;
@@ -865,7 +865,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           min-width: 0;
         }
         .pal-label {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -876,7 +876,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
         }
         .pal-desc,
         .pal-path {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           overflow: hidden;
           text-overflow: ellipsis;
@@ -884,7 +884,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
         }
         .pal-kbd {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
           white-space: nowrap;
@@ -935,7 +935,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
         .pal-empty {
           padding-block: 34px;
           text-align: center;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pal-footer {
@@ -951,7 +951,7 @@ export class CommandPalette extends Component<CommandPaletteSignature> {
           display: inline-flex;
           align-items: center;
           gap: 4px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pal-sr {

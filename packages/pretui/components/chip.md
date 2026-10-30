@@ -40,7 +40,7 @@ That is the right answer for a static chip, and it means the accessibility quest
 
 A theme restyles every chip through `--muted` and `--foreground`, and the dot colors through the `--chart-*` tokens. Dark mode needs nothing extra: the theme's dark `--muted` / `--foreground` pair applies.
 
-`--pretui-chip-mix` and `--pretui-ink-mix` are legacy knobs that tint a neutral chip's surface and text toward `--pretui-chip-hue`, and any `--pretui-chip-mix` above 0% also draws the hue hairline those chips were designed with. `--text-ui-xs` is the legacy text-size knob, read when `--pretui-chip-font-size` is unset. All three are kept for callers that still set them; new code uses `@tone` and `--pretui-chip-font-size`.
+`--pretui-chip-mix` and `--pretui-ink-mix` are legacy knobs that tint a neutral chip's surface and text toward `--pretui-chip-hue`, and any `--pretui-chip-mix` above 0% also draws the hue hairline those chips were designed with. `--boxel-font-size-2xs` is the legacy text-size knob, read when `--pretui-chip-font-size` is unset. All three are kept for callers that still set them; new code uses `@tone` and `--pretui-chip-font-size`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

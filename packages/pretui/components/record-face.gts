@@ -118,7 +118,7 @@ export class RecordFace extends Component<RecordFaceSignature> {
           line-height: 1.25;
         }
         .pretui-rface-label {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
           overflow: hidden;
@@ -126,7 +126,7 @@ export class RecordFace extends Component<RecordFaceSignature> {
           white-space: nowrap;
         }
         .pretui-rface[data-size='sm'] .pretui-rface-label {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
         }
         /* the matched run — a tint of the accent, never a contrast flip */
@@ -141,7 +141,7 @@ export class RecordFace extends Component<RecordFaceSignature> {
           padding: 0 1px;
         }
         .pretui-rface-meta {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           overflow: hidden;
           text-overflow: ellipsis;

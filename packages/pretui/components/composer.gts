@@ -439,7 +439,7 @@ export class Composer extends Component<ComposerSignature> {
             --pretui-shadow-hairline,
             0 0 0 1px var(--border)
           );
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           max-width: 100%;
         }
@@ -449,7 +449,7 @@ export class Composer extends Component<ComposerSignature> {
           font-weight: 600;
           letter-spacing: 0.05em;
           text-transform: uppercase;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           flex: none;
         }
         .pretui-attach[data-auto] .pretui-attach-tag {
@@ -475,7 +475,7 @@ export class Composer extends Component<ComposerSignature> {
           border: 0;
           border-radius: 5px;
           background: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           cursor: pointer;
         }
         .pretui-attach-act svg {
@@ -502,7 +502,7 @@ export class Composer extends Component<ComposerSignature> {
         .pretui-composer-field {
           grid-area: 1 / 1 / 2 / 2;
           font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           line-height: 1.55;
           letter-spacing: var(--track-ui, 0.01em);
           padding: 2px 0;
@@ -525,7 +525,7 @@ export class Composer extends Component<ComposerSignature> {
           max-height: var(--pretui-composer-max, 14em);
         }
         .pretui-composer-hint {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           pointer-events: none;
           user-select: none;
           opacity: 0;
@@ -549,8 +549,8 @@ export class Composer extends Component<ComposerSignature> {
           margin-left: auto;
         }
         .pretui-composer-note {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           min-width: 0;
         }
         /* unnamed container query — resolves against .pretui-composer */

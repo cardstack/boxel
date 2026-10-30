@@ -14,9 +14,9 @@ const TextContent: TemplateOnlyComponent<Signature> = <template>
     .message {
       position: relative;
       /* reading type: answers and the reader's bubble, 14 on 22 */
-      font-size: var(--type-read, 14px);
+      font-size: var(--boxel-font-size-sm);
       font-weight: 400;
-      line-height: var(--leading-read, 22px);
+      line-height: var(--boxel-line-height-sm);
       text-wrap: pretty;
       /* its own block context, without clipping: a reply's table and a
          framed row hang their inset into the gutter */
@@ -26,7 +26,7 @@ const TextContent: TemplateOnlyComponent<Signature> = <template>
       margin-block: 0;
     }
     .message > :deep(* + *) {
-      margin-top: var(--step-12, 12px);
+      margin-top: var(--boxel-sp-sm);
     }
   </style>
 </template>;

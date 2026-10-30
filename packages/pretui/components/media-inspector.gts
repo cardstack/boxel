@@ -115,7 +115,7 @@ export class MediaInspector extends Component<MediaInspectorSignature> {
         }
         .pretui-minspector-title {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.06em;
           text-transform: uppercase;

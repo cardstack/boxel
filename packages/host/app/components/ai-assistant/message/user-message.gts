@@ -71,7 +71,7 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
       margin-block: 0;
     }
     .user-message-text > :deep(* + *) {
-      margin-top: var(--step-12, 12px);
+      margin-top: var(--boxel-sp-sm);
     }
     /* the bubble steps back on --inset (the kit's default), so its card
        and file pills are outlined tokens on that inset, in ink-1 */
@@ -82,15 +82,15 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
          `.variant-muted` further down the tree. */
       --boxel-pill-background-color: var(--inset);
       --boxel-pill-font-color: var(--foreground);
-      --boxel-pill-border-radius: var(--round-row, 8px);
+      --boxel-pill-border-radius: var(--boxel-border-radius-sm);
     }
     .is-pending {
       --boxel-pill-background-color: transparent;
-      --boxel-pill-font-color: var(--ink-3);
+      --boxel-pill-font-color: var(--subtle-foreground);
     }
     /* the profile avatar, drawn at the speaker mark's 16px */
     .user-message-bubble {
-      --profile-avatar-icon-size: 16px;
+      --profile-avatar-icon-size: 1rem;
       --profile-avatar-icon-border: 0;
     }
     .user-message-text :deep(a:hover) {

@@ -146,8 +146,8 @@ class DeferUsage extends Component {
         height: 100%;
         border-radius: var(--radius-surface, 10px);
         background: var(--inset, var(--boxel-100));
-        font-size: var(--text-ui-sm, 11.5px);
-        color: var(--ink-3, var(--boxel-400));
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--subtle-foreground);
       }
       .pretui-demo-heavy {
         display: grid;
@@ -156,12 +156,12 @@ class DeferUsage extends Component {
         padding: var(--space-5, 16px);
         border-radius: var(--radius-surface, 10px);
         background: color-mix(in oklch, var(--primary) 10%, var(--card));
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         text-align: center;
       }
       .pretui-demo-readout {
         margin: var(--space-3, 8px) 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
       }

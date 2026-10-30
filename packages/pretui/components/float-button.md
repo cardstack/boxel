@@ -51,7 +51,7 @@ APG **Disclosure** pattern for the dial. A lone FloatButton is a plain button.
 
 ## Theming
 
-`--pretui-float-size` (the button's minimum width and height, default 3rem), `--pretui-float-offset` (the distance from the corner, default `--space-6`), `--pretui-float-z` (local stacking, default 20), `--pretui-shadow-raised`, `--popover` and `--popover-foreground` (the dial actions), `--ring`, `--muted-foreground` (action icons), `--text-ui-md`, `--space-2` / `--space-3` / `--space-4` / `--space-5`, and `--pretui-dur-snap` / `--pretui-ease-snap` (the icon's quarter-turn and the dial's entrance). The main button's colour comes from **Button**'s tone tokens.
+`--pretui-float-size` (the button's minimum width and height, default 3rem), `--pretui-float-offset` (the distance from the corner, default `--space-6`), `--pretui-float-z` (local stacking, default 20), `--pretui-shadow-raised`, `--popover` and `--popover-foreground` (the dial actions), `--ring`, `--muted-foreground` (action icons), `--boxel-font-size-xs`, `--space-2` / `--space-3` / `--space-4` / `--space-5`, and `--pretui-dur-snap` / `--pretui-ease-snap` (the icon's quarter-turn and the dial's entrance). The main button's colour comes from **Button**'s tone tokens.
 
 The round shape and the plus turning to a cross when open are fixed. Both motions are dropped under `prefers-reduced-motion`.
 

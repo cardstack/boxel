@@ -57,7 +57,7 @@ export class BottomNavUsage extends Component {
       .bn-demo-body {
         margin: 0;
         padding: var(--space-4, 0.6875rem);
-        font-size: var(--text-ui-md, 0.78rem);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

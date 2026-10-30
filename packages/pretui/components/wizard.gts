@@ -577,7 +577,7 @@ export class Wizard extends Component<WizardSignature> {
           display: grid;
           gap: var(--pretui-wizard-gap, var(--space-5, 16px));
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-wizard-rail {
@@ -625,7 +625,7 @@ export class Wizard extends Component<WizardSignature> {
         .pretui-wizard-refusal {
           margin: 0;
           min-height: 1.35em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           color: var(--pretui-wizard-refusal-color, var(--destructive));
         }

@@ -85,7 +85,7 @@ export const Board: TemplateOnlyComponent<BoardSignature> = <template>
       .pretui-board {
         height: 100%;
         min-height: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         letter-spacing: var(--track-ui, 0.01em);
         color: var(--foreground);
         --boxel-kanban-fg: var(--foreground, var(--boxel-dark));

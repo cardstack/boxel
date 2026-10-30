@@ -120,7 +120,7 @@ export class Item extends Component<ItemSignature> {
           align-items: center;
           gap: var(--pretui-item-gap, var(--space-4, 11px));
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
@@ -131,7 +131,7 @@ export class Item extends Component<ItemSignature> {
           font-size: 10.5px;
         }
         .pretui-item[data-size='s'] {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-item[data-size='l'] {
           font-size: 14px;

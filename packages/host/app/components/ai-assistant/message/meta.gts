@@ -42,11 +42,11 @@ const MessageMeta: TemplateOnlyComponent<Signature> = <template>
        the time on the 40px text edge */
     .meta {
       display: grid;
-      grid-template-columns: var(--step-16, 16px) 1fr;
+      grid-template-columns: var(--boxel-sp) 1fr;
       grid-template-rows: minmax(var(--ai-assistant-message-meta-height), auto);
       align-items: center;
       justify-items: start;
-      column-gap: var(--step-8, 8px);
+      column-gap: var(--boxel-sp-xs);
     }
     .meta > .time {
       justify-self: stretch;
@@ -68,11 +68,11 @@ const MessageMeta: TemplateOnlyComponent<Signature> = <template>
     /* a time is a caption: sans, ink-3, tabular figures */
     .time {
       display: block;
-      font-size: var(--type-caption, 11px);
-      line-height: var(--leading-caption, 16px);
+      font-size: var(--boxel-font-size-2xs);
+      line-height: var(--boxel-line-height-xs);
       font-weight: 400;
       font-variant-numeric: tabular-nums;
-      color: var(--ink-3);
+      color: var(--subtle-foreground);
       white-space: nowrap;
     }
   </style>

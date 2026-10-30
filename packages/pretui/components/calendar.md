@@ -48,7 +48,7 @@ Concrete gaps against the pattern:
 
 ## Theming
 
-`--pretui-selected` / `--primary` (selected day), `--hover` (hover and in-range fill), `--foreground` / `--muted-foreground` (day ink, and the dimmed `data-outside` days), `--border`, `--card`, `--radius`, `--text-ui-md`, `--text-ui-sm`.
+`--pretui-selected` / `--primary` (selected day), `--hover` (hover and in-range fill), `--foreground` / `--muted-foreground` (day ink, and the dimmed `data-outside` days), `--border`, `--card`, `--radius`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`.
 
 Every day state is a `data-*` attribute, so a stylesheet can dress `today`, `in-range`, `range-start` and `range-end` independently — including giving the range endpoints asymmetric radii, which is what makes a range read as one continuous band.
 

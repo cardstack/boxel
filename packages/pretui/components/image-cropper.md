@@ -45,7 +45,7 @@ Where it is thinner: PNG export only — no JPEG, no quality control, no output-
 
 ## Theming
 
-`--pretui-crop-h` (the reserved surface height, from `@height`), `--pretui-destructive-ink` (the error state), `--pretui-shadow-hairline`.
+`--pretui-crop-h` (the reserved surface height, from `@height`), `--destructive-ink` (the error state), `--pretui-shadow-hairline`.
 
 The crop surface itself — the grid, the shading outside the box, the handles — comes from Cropper's own elements, which is the one part of this component a theme does not reach. The chrome around it, the ratio chips and the sliders are the kit's and follow the theme normally, so the editor reads as part of the product even though the crop surface is the library's.
 

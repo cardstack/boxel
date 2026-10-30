@@ -147,7 +147,7 @@ class TiltUsage extends Component {
       }
       .tilt-eyebrow {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--muted-foreground);
@@ -161,7 +161,7 @@ class TiltUsage extends Component {
       }
       .tilt-meta {
         margin: 0 0 6px;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
       }

@@ -193,7 +193,7 @@ class ContextMenuUsage extends GlimmerComponent {
       }
       .cm-board-title {
         font-weight: 600;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
       .cm-board-list {
         list-style: none;
@@ -201,17 +201,17 @@ class ContextMenuUsage extends GlimmerComponent {
         padding: 0;
         display: grid;
         gap: 3px;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
       }
       .cm-board-hint {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--ink-3, var(--boxel-400));
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--subtle-foreground);
       }
       .cm-log {
         margin: var(--space-4, 11px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .cm-log strong {
@@ -221,7 +221,7 @@ class ContextMenuUsage extends GlimmerComponent {
       .cm-hint {
         margin: var(--space-3, 8px) 0 0;
         max-width: 62ch;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

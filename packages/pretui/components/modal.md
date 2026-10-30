@@ -27,7 +27,7 @@ Identical to Dialog: APG **Dialog (Modal)**. `showModal()` supplies the dialog r
 
 ## Theming
 
-Identical to Dialog: `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--leading-body`, `--space-3`, `--space-4` and `--space-6`.
+Identical to Dialog: `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--boxel-body-line-height`, `--space-3`, `--space-4` and `--space-6`.
 
 ## React ecosystem
 

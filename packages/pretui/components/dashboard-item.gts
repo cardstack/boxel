@@ -202,7 +202,7 @@ export class DashboardItem extends Component<DashboardItemSignature> {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--card-foreground);

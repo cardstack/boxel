@@ -74,7 +74,7 @@ const DashboardItemUsage: TemplateOnlyComponent = <template>
       }
     .item-copy {
       margin: 0;
-      font-size: var(--text-ui-md, 12.5px);
+      font-size: var(--boxel-font-size-xs);
       line-height: 1.55;
       color: var(--muted-foreground);
       max-width: 46ch;

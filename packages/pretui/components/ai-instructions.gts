@@ -229,7 +229,7 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
             0 0 0 1px var(--border),
             0 1px 2px rgb(0 0 0 / 0.08)
           );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           container-type: inline-size;
         }
         .pretui-instr-head {
@@ -247,14 +247,14 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
         }
         .pretui-instr-count {
           flex: none;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-instr-desc {
           margin: 0;
           max-width: 62ch;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.6;
           color: var(--muted-foreground);
         }
@@ -290,11 +290,11 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
         .pretui-instr-row[data-off] .pretui-instr-text {
           color: var(--muted-foreground);
           text-decoration: line-through;
-          text-decoration-color: var(--ink-3, var(--boxel-400));
+          text-decoration-color: var(--subtle-foreground);
         }
         .pretui-instr-note {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
         }
         .pretui-instr-off {
           align-self: flex-start;
@@ -303,7 +303,7 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
           font-weight: 600;
           letter-spacing: 0.06em;
           text-transform: uppercase;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         /* a hover-revealed control must also appear on focus-within */
         .pretui-instr-remove {
@@ -316,7 +316,7 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
           border: 0;
           border-radius: 6px;
           background: none;
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           cursor: pointer;
           opacity: 0;
           transition: opacity 140ms linear;
@@ -327,7 +327,7 @@ export class AiInstructions extends Component<AiInstructionsSignature> {
         }
         .pretui-instr-remove:hover {
           background: var(--hover, var(--boxel-100));
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
         }
         .pretui-instr-remove:focus-visible {
           opacity: 1;

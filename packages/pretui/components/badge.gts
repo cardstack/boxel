@@ -145,7 +145,7 @@ export class Badge extends Component<BadgeSignature> {
           color: var(--pretui-badge-ink, var(--card));
           box-shadow: 0 0 0 2px var(--pretui-badge-ring, var(--card));
           font-family: var(--font-sans);
-          font-size: var(--text-ui-xs, 0.66rem);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           font-variant-numeric: tabular-nums;
           line-height: 1;

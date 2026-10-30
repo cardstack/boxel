@@ -206,7 +206,7 @@ export class Comparison extends Component<ComparisonSignature> {
           outline-offset: 2px;
         }
         .pretui-comparison[data-dragging='true'] .pretui-comparison-handle {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
         }
         .pretui-comparison-grip {
           width: 60%;

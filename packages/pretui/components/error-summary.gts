@@ -221,7 +221,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
             0 0 0 1px
               color-mix(in oklch, var(--pretui-issue-hue) 28%, var(--border))
           );
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-ui, 0.01em);
         }
         .pretui-error-summary:focus {
@@ -243,7 +243,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
           color: var(--pretui-issue-hue);
         }
         .pretui-error-summary-title {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 600;
           color: color-mix(
             in oklch,
@@ -253,7 +253,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
         }
         .pretui-error-summary-intro {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-error-summary-list {
@@ -264,7 +264,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
         }
         .pretui-error-summary-row {
           --pretui-issue-hue: var(--pretui-issue-error, var(--destructive));
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 17px;
           color: color-mix(
             in oklch,
@@ -306,7 +306,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
         }
         .pretui-error-summary-badge {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
           padding: 0 5px;

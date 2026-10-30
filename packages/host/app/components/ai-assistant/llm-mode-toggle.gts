@@ -51,8 +51,8 @@ export default class LLMModeToggle extends Component<Signature> {
          size, so the composer's reading size must not reach it */
       .llm-mode-toggle {
         display: flex;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         --inset: var(--ai-composer-well, var(--boxel-200));
         --card: var(--boxel-light);
         --card-foreground: var(--boxel-dark);

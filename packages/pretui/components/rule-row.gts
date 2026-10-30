@@ -368,7 +368,7 @@ export class RuleRow extends Component<RuleRowSignature> {
           background: var(--card);
           box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .rr-head {
           display: flex;
@@ -381,7 +381,7 @@ export class RuleRow extends Component<RuleRowSignature> {
           flex: 1;
         }
         .rr-detail {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .rr-icon {
@@ -400,7 +400,7 @@ export class RuleRow extends Component<RuleRowSignature> {
         .rr-label {
           display: block;
           margin-bottom: 3px;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: var(--track-eyebrow, 0.06em);
@@ -408,7 +408,7 @@ export class RuleRow extends Component<RuleRowSignature> {
         }
         .rr-nomodel {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .rr-nomodel code {

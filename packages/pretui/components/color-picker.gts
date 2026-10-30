@@ -555,7 +555,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
           width: 100%;
           max-width: var(--pretui-picker-width, 280px);
           container-type: inline-size;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-picker[data-disabled='true'] {
@@ -608,7 +608,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
           box-shadow: 0 0 0 1px var(--input);
           font: inherit;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
           /* a hex string must not reflow the field while a slider is dragged */
           font-variant-numeric: tabular-nums;
@@ -621,8 +621,8 @@ export class ColorPicker extends Component<ColorPickerSignature> {
           box-shadow: 0 0 0 1px var(--destructive);
         }
         .pretui-picker-error {
-          font-size: var(--text-ui-sm, 11px);
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--destructive-ink);
         }
         .pretui-picker-tools {
           display: flex;
@@ -646,7 +646,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
             var(--foreground) 22%,
             var(--warning, var(--boxel-warning))
           );
-          font-size: var(--text-ui-sm, 11px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.35;
         }
         .pretui-picker-gamutswatch {
@@ -674,7 +674,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
         }
         .pretui-picker-chlabel {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-eyebrow, 0.06em);
           text-transform: uppercase;
           color: var(--muted-foreground);
@@ -690,7 +690,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
         .pretui-picker-note,
         .pretui-picker-described {
           margin: 0;
-          font-size: var(--text-ui-sm, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           line-height: 1.4;
         }

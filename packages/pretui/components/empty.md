@@ -30,7 +30,7 @@ EmptyState's. No APG pattern governs it. The title is a `<div>` styled as a head
 
 ## Theming
 
-EmptyState's tokens: `--canvas` (the recess, deliberately not `--card`), `--primary` (the texture tint), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2`, `--space-3`, `--space-6`, `--space-9` (at `@size='s'` the padding is a fixed `1rem` and the title reads `--boxel-font-size`). A theme must define `--font-serif` and keep `--canvas` distinguishable from `--card`. Nothing is themed under an Empty name.
+EmptyState's tokens: `--canvas` (the recess, deliberately not `--card`), `--primary` (the texture tint), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--boxel-font-size-xs` (message), `--radius-surface`, `--space-2`, `--space-3`, `--space-6`, `--space-9` (at `@size='s'` the padding is a fixed `1rem` and the title reads `--boxel-font-size`). A theme must define `--font-serif` and keep `--canvas` distinguishable from `--card`. Nothing is themed under an Empty name.
 
 ## React ecosystem
 

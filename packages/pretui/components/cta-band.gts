@@ -146,7 +146,7 @@ export class CtaBand extends Component<CtaBandSignature> {
         .pretui-cta-eyebrow {
           margin: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -203,7 +203,7 @@ export class CtaBand extends Component<CtaBandSignature> {
           --pretui-tone-on: var(--destructive-foreground);
         }
         .pretui-cta[data-tone='attention'] {
-          --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tone: var(--attention);
           --pretui-tone-on: var(--pretui-on-attention, var(--background));
         }
 

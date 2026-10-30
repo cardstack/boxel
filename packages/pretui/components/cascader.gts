@@ -332,7 +332,7 @@ export class Cascader extends Component<CascaderSignature> {
           display: inline-block;
           min-inline-size: 12rem;
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-cascader-trigger {
           display: flex;

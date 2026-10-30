@@ -37,7 +37,7 @@ No pattern governs it. It is text.
 
 Gaps, and the first is the real one:
 
-- **Colour and a `+`/`-` character are the only signal, and the character is nearly invisible.** At `--text-ui-sm` (11.5px), a minus sign is a two-pixel dash and a plus is barely wider. For a user who cannot distinguish the green from the red, the direction of change is effectively unavailable. That is a **WCAG 1.4.1 Use of Colour** concern in practice even though a text character technically exists. An arrow glyph (▲ / ▼), or `aria-label`s like "up 12 percent", would close it — and note that **Rating**, **Alert** and **FieldError** in this kit all pair hue with a glyph for exactly this reason. Delta is the outlier.
+- **Colour and a `+`/`-` character are the only signal, and the character is nearly invisible.** At `--boxel-font-size-2xs` (11px), a minus sign is a two-pixel dash and a plus is barely wider. For a user who cannot distinguish the green from the red, the direction of change is effectively unavailable. That is a **WCAG 1.4.1 Use of Colour** concern in practice even though a text character technically exists. An arrow glyph (▲ / ▼), or `aria-label`s like "up 12 percent", would close it — and note that **Rating**, **Alert** and **FieldError** in this kit all pair hue with a glyph for exactly this reason. Delta is the outlier.
 - **`data-sign` reaches CSS but not assistive tech.** There is no `aria-label`, no visually-hidden "increase"/"decrease", nothing. The announced text is "+12" — better than nothing, and `+` is announced as "plus" by most readers, which does carry it. Verify with your target readers; this is the mitigating factor.
 - **`NaN` renders as "NaN"** with `flat` styling. A malformed value produces visible garbage rather than an empty cell.
 - **No relationship to what it measures.** A Delta beside a Stat is loose adjacent text; **Stat** composes it, which is the right way to use it.
@@ -46,7 +46,7 @@ Gaps, and the first is the real one:
 
 ## Theming
 
-`--success-ink` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--text-ui-sm`. The 500 weight and tabular figures are fixed.
+`--success-ink` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--boxel-font-size-2xs`. The 500 weight and tabular figures are fixed.
 
 Three tokens and nothing else — which makes this the cheapest component in the kit to theme, and also means a theme that wants a different sign convention (or a color-blind-safe blue/orange pair instead of green/red) can get it entirely by repointing `--success` and `--destructive` _for this component's context_, without touching the code. That is worth knowing: the sign→token mapping is fixed, but the token→color mapping is not.
 

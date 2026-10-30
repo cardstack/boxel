@@ -609,8 +609,8 @@ export class QrCode extends Component<QrCodeSignature> {
           margin: 0;
           padding: var(--space-3, 8px);
           text-align: center;
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--destructive-ink);
         }
         .pretui-qr-caption {
           display: flex;
@@ -622,13 +622,13 @@ export class QrCode extends Component<QrCodeSignature> {
         }
         .pretui-qr-value {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--foreground);
           overflow-wrap: anywhere;
           user-select: all;
         }
         a.pretui-qr-value {
-          color: var(--pretui-primary-ink, var(--boxel-highlight-hover));
+          color: var(--primary-ink);
           text-decoration: underline;
           text-underline-offset: 2px;
         }
@@ -638,12 +638,12 @@ export class QrCode extends Component<QrCodeSignature> {
           border-radius: 2px;
         }
         .pretui-qr-note {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-qr-warning {
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--destructive-ink);
         }
         .pretui-sr {
           position: absolute;

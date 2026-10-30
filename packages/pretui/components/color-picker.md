@@ -52,7 +52,7 @@ Where it is thinner: no palette or recent-colours memory, no eyedropper on brows
 
 ## Theming
 
-`--pretui-picker-width`, `--pretui-picker-preview` (the readout's current colour), `--pretui-picker-clamped` (the nearest-showable colour in the gamut warning), plus the control tokens it reaches through its parts: `--pretui-slider-track`, `--pretui-slider-thumb`, `--pretui-slider-h` for the channel sliders (defined in `channel-slider.gts`), `--pretui-area-x` / `--pretui-area-y` / `--pretui-area-thumb-size` / `--pretui-area-thumb-color` / `--pretui-area-thumb-ink` / `--pretui-area-ratio` for the gradient area (defined in `color-area.gts`), `--pretui-swatch-color` and `--pretui-checker` for the previews, and `--pretui-destructive-ink` for the invalid state.
+`--pretui-picker-width`, `--pretui-picker-preview` (the readout's current colour), `--pretui-picker-clamped` (the nearest-showable colour in the gamut warning), plus the control tokens it reaches through its parts: `--pretui-slider-track`, `--pretui-slider-thumb`, `--pretui-slider-h` for the channel sliders (defined in `channel-slider.gts`), `--pretui-area-x` / `--pretui-area-y` / `--pretui-area-thumb-size` / `--pretui-area-thumb-color` / `--pretui-area-thumb-ink` / `--pretui-area-ratio` for the gradient area (defined in `color-area.gts`), `--pretui-swatch-color` and `--pretui-checker` for the previews, and `--destructive-ink` for the invalid state.
 
 Sharing the slider and area tokens with **ChannelSlider**, **ColorArea** and **GradientEditor** is what keeps the color tools reading as one family: a theme that retunes a thumb retunes every color control at once, rather than leaving the picker and the gradient editor visibly different.
 

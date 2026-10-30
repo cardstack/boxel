@@ -2,7 +2,7 @@
 
 A named-period parser: type `Q3`, `Jan 2026`, `W12` or `Fall 2025` and get a typed, sortable range.
 
-It is the control for a field whose value is a *period* rather than a date — a reporting quarter, a fiscal year, a week number — where a calendar is the wrong shape entirely.
+It is the control for a field whose value is a _period_ rather than a date — a reporting quarter, a fiscal year, a week number — where a calendar is the wrong shape entirely.
 
 ## The contract
 
@@ -22,7 +22,7 @@ It is the control for a field whose value is a *period* rather than a date — a
 
 **Without `@reference`, a partial period is refused with a message rather than resolved against the wall clock.** `Q3` alone is not a period — it is a quarter of some year — and guessing which year from the system clock produces a value that changes meaning on New Year's Day. Realm code may not read the clock, and this is the honest consequence.
 
-**Fiscal years are configurable in both directions.** `@fiscalYearStart` says which month begins the year; `@fiscalYearLabel` says whether FY2026 is the one that *starts* in 2026 or the one that *ends* there. Both conventions are in use and neither is a default anyone can assume.
+**Fiscal years are configurable in both directions.** `@fiscalYearStart` says which month begins the year; `@fiscalYearLabel` says whether FY2026 is the one that _starts_ in 2026 or the one that _ends_ there. Both conventions are in use and neither is a default anyone can assume.
 
 **`@hemisphere` decides what the season names mean.** "Fall 2025" is a different range in Sydney than in New York.
 
@@ -47,7 +47,7 @@ Where it is thinner: no range of periods ("Q1–Q3"), no custom period definitio
 
 ## Theming
 
-`--pretui-destructive-ink` for the invalid state, over the kit's shared control tokens; the ghost text and the stepper take the standard muted and control treatments rather than component-specific values.
+`--destructive-ink` for the invalid state, over the kit's shared control tokens; the ghost text and the stepper take the standard muted and control treatments rather than component-specific values.
 
 The deliberate absence of a token surface here is the point: a period field should be indistinguishable from a text field on the same form until it is used, so nothing about it is separately themeable.
 

@@ -1729,12 +1729,12 @@ export class LayerManager
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-lm-badge {
           flex: 0 0 auto;
-          font-size: var(--text-ui-xs, 10px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: 0.04em;
           text-transform: uppercase;
           color: var(--muted-foreground);
@@ -1840,7 +1840,7 @@ export class LayerManager
 
         .pretui-lm-hint {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         /* Text for assistive technology only. Not display:none — that removes

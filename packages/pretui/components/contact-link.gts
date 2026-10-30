@@ -506,7 +506,7 @@ export class ContactLink extends Component<ContactLinkSignature> {
           border-radius: var(--radius);
           background: color-mix(in oklch, var(--hue) 12%, var(--card));
           color: color-mix(in oklch, var(--foreground) 16%, var(--hue));
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           text-decoration: none;
           transition:
             background-color 140ms
@@ -547,14 +547,14 @@ export class ContactLink extends Component<ContactLinkSignature> {
         }
         .pretui-contact-note {
           flex: 0 0 auto;
-          font-size: var(--text-ui-xs, 10.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-contact[data-variant='row'] {
           display: flex;
           width: 100%;
           padding: var(--space-2, 6px) var(--space-3, 8px);
-          font-size: var(--text-ui-md, 13px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-contact[data-variant='row'] .pretui-contact-cta {
           margin-inline-start: auto;

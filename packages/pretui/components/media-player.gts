@@ -785,7 +785,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           --pretui-media-radius: var(--radius);
 
           --media-font-family: var(--font-sans);
-          --media-font-size: var(--text-ui-sm, 11.5px);
+          --media-font-size: var(--boxel-font-size-2xs);
           --media-font-weight: 500;
           --media-primary-color: var(--pretui-media-ink, var(--boxel-light));
           --media-secondary-color: transparent;
@@ -926,7 +926,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           gap: 8px;
           margin: 0;
           min-height: 1.4em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-media-statusGlyph {
@@ -939,7 +939,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
         }
         .pretui-media[data-phase='error'] .pretui-media-statusText,
         .pretui-media[data-phase='error'] .pretui-media-statusGlyph {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: 600;
         }
         .pretui-media-statusDur {
@@ -978,7 +978,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           background: transparent;
           cursor: pointer;
           font-family: inherit;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.06em;
           text-align: start;
@@ -1063,7 +1063,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           flex: 0 0 auto;
           min-width: 4ch;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
           padding-top: 0.15em;
@@ -1073,7 +1073,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
         }
         .pretui-media-cueSpeaker {
           display: block;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.04em;
           text-transform: uppercase;

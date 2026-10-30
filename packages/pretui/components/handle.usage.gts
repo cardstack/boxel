@@ -161,7 +161,7 @@ class HandleUsage extends Component {
       .pretui-demo-readout {
         margin: 8px 0 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
         font-variant-numeric: tabular-nums;
       }

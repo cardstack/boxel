@@ -46,7 +46,7 @@ Gaps, and the first two are the ones that bite in practice:
 
 ## Theming
 
-`--pretui-fitted-mediabg` (the validated media background), `--card` (surface), `--border` and `--pretui-shadow-card` (edge), `--foreground` (title), `--muted-foreground` (eyebrow and meta), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (the eyebrow voice shared with **Panel**, **Toolbar** and **DataGrid**), plus the type scale per sub-format.
+`--pretui-fitted-mediabg` (the validated media background), `--card` (surface), `--border` and `--pretui-shadow-card` (edge), `--foreground` (title), `--muted-foreground` (eyebrow and meta), `--font-mono` + `--boxel-font-size-2xs` + `--track-eyebrow` (the eyebrow voice shared with **Panel**, **Toolbar** and **DataGrid**), plus the type scale per sub-format.
 
 The container-query breakpoints are not tokenized, so a theme cannot retune where a strip becomes a tile. The monogram's typography is the one thing worth checking per theme — it is a single large letter on a solid ground, and it is the fallback that appears most often in a realm where media is optional.
 

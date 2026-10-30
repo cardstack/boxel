@@ -356,7 +356,7 @@ export class Tour extends Component<TourSignature> {
           color: var(--popover-foreground);
           box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 12px 32px rgb(16 24 40 / 0.18));
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-tour-head {
           display: flex;
@@ -365,7 +365,7 @@ export class Tour extends Component<TourSignature> {
         }
         .pretui-tour-progress {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-xs, 0.66rem);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           letter-spacing: var(--track-eyebrow, 0.04em);
           text-transform: uppercase;
@@ -394,7 +394,7 @@ export class Tour extends Component<TourSignature> {
         .pretui-tour-body {
           margin: var(--space-2, 0.375rem) 0 0;
           color: var(--muted-foreground);
-          line-height: var(--leading-body, 1.5);
+          line-height: var(--boxel-body-line-height);
         }
         .pretui-tour-actions {
           display: flex;

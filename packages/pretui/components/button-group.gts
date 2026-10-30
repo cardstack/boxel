@@ -226,19 +226,19 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         /* ── size inheritance: font-size only, Button's own em scale rides ── */
         .pretui-btngroup[data-size='xs'] :deep(.pretui-btn[data-size]) {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-btngroup[data-size='s'] :deep(.pretui-btn[data-size]) {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-btngroup[data-size='m'] :deep(.pretui-btn[data-size]) {
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
         .pretui-btngroup[data-size='l'] :deep(.pretui-btn[data-size]) {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-btngroup[data-size='xl'] :deep(.pretui-btn[data-size]) {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
       }
     </style>

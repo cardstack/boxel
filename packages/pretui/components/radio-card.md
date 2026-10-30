@@ -55,7 +55,7 @@ The tests assert the radiogroup role, the shared name, one radio per label, the 
 
 From the host theme: `--card` and `--card-foreground` (the card surface and its ink), `--border` (the resting hairline), `--hover` (the hover fill), `--primary` (the selected ring, halo and mark fill), `--primary-foreground` (unused on a radio mark; the checkbox check), `--field` and `--input` (the resting mark), `--ring` (the focus outline), `--muted-foreground` (description and meta).
 
-Kit tokens, each named once on the card: `--space-4` (padding), `--space-3` (gap), `--text-ui-md` and `--text-ui-sm` (title and description), `--weight-strong` (title weight), `--radius-surface` (card radius), `--pretui-dur-snap` and `--pretui-ease-snap` (the ring and fill transitions), `--pretui-shadow-control` (the resting shadow), `--pretui-edge-highlight` (the inset highlight on a selected mark). The grid reads `--space-3` for its gap.
+Kit tokens, each named once on the card: `--space-4` (padding), `--space-3` (gap), `--boxel-font-size-xs` and `--boxel-font-size-2xs` (title and description), `--weight-strong` (title weight), `--radius-surface` (card radius), `--pretui-dur-snap` and `--pretui-ease-snap` (the ring and fill transitions), `--pretui-shadow-control` (the resting shadow), `--pretui-edge-highlight` (the inset highlight on a selected mark). The grid reads `--space-3` for its gap.
 
 A theme retunes the selected treatment entirely through `--primary`; the 12% halo mix, the 15px mark and the 11rem minimum card width in `horizontal` are fixed.
 

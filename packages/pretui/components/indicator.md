@@ -43,7 +43,7 @@ No APG pattern.
 
 ## Theming
 
-`--pretui-mark-hue` (set from the tone: `--success` by default, or `--primary`, `--pretui-info`, `--warning`, `--destructive`, `--pretui-attention`, `--muted-foreground`), `--pretui-indicator-size` (default 0.625rem) and `--pretui-indicator-ring` (the separating ring, default `--card`).
+`--pretui-mark-hue` (set from the tone: `--success` by default, or `--primary`, `--pretui-info`, `--warning`, `--destructive`, `--attention`, `--muted-foreground`), `--pretui-indicator-size` (default 0.625rem) and `--pretui-indicator-ring` (the separating ring, default `--card`).
 
 The ping's timing and scale are fixed.
 

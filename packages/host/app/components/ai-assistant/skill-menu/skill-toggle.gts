@@ -231,18 +231,18 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
       .skill-toggle {
         --pill-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-xs);
         --pill-gap: var(--boxel-sp-xxxs);
-        --pill-icon-size: 18px;
+        --pill-icon-size: 1.125rem;
         --boxel-realm-icon-size: var(--pill-icon-size);
         display: inline-grid;
         grid-template-columns: minmax(0, 1fr) auto;
         border: 1px solid var(--boxel-400);
-        --boxel-pill-border-radius: var(--round-row, 8px);
+        --boxel-pill-border-radius: var(--boxel-border-radius-sm);
         height: var(--pill-height, 1.875rem);
         overflow: hidden;
       }
       .skill-dropdown__trigger {
-        --boxel-icon-button-height: 26px;
-        --boxel-icon-button-width: 26px;
+        --boxel-icon-button-height: 1.625rem;
+        --boxel-icon-button-width: 1.625rem;
       }
       .skill-toggle--unavailable {
         grid-template-columns: 1fr;

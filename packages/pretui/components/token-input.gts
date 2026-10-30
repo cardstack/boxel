@@ -67,7 +67,7 @@ class TokenChip extends Component<TokenChipSignature> {
           );
           box-shadow: 0 0 0 1px
             color-mix(in oklch, var(--primary) 32%, var(--border));
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: var(--track-ui, 0.01em);
           color: var(--foreground);
         }
@@ -410,7 +410,7 @@ export class TokenInput extends Component<TokenInputSignature> {
           background: var(--field, var(--boxel-light));
           box-shadow: 0 0 0 1px var(--input);
           color: var(--foreground);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-tokens:hover {
           box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
@@ -453,15 +453,15 @@ export class TokenInput extends Component<TokenInputSignature> {
           outline: none;
         }
         .pretui-token-entry::placeholder {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
         }
         .pretui-token-count {
           flex: none;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--ink-3, var(--boxel-400));
+          font-size: var(--boxel-font-size-2xs);
+          color: var(--subtle-foreground);
           font-variant-numeric: tabular-nums;
         }
         .pretui-sr {

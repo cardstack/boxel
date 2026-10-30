@@ -97,7 +97,7 @@ class CompactionUsage extends GlimmerComponent {
       .demo-msg {
         margin: 0;
         max-width: 62ch;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

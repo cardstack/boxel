@@ -417,7 +417,7 @@ export class ToggleGroup extends Component<ToggleGroupSignature> {
         }
         .pretui-tg-none {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-style: italic;
           color: var(--muted-foreground);
         }

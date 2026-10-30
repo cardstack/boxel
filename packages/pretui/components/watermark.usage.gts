@@ -52,7 +52,7 @@ export class WatermarkUsage extends Component {
       .wm-demo-doc {
         padding: var(--space-6, 1.25rem);
         min-block-size: 12rem;
-        font-size: var(--text-ui-md, 0.78rem);
+        font-size: var(--boxel-font-size-xs);
       }
     </style>
   </template>

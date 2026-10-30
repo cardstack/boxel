@@ -46,7 +46,7 @@ Gaps, and they stack:
 
 ## Theming
 
-Trigger: **Input**'s tokens (`--field`, `--input`, `--primary` via `--ring`, `--ink-3`, `--control-h`, `--radius`, `--text-ui-md`). Surface: **Popover**'s (`--popover`, `--popover-foreground`, `--pretui-shadow-overlay`, and the `--pretui-popover-*` sizing knobs — which is where you set the calendar's width). Grid: **Calendar**'s day-state tokens.
+Trigger: **Input**'s tokens (`--field`, `--input`, `--primary` via `--ring`, `--subtle-foreground`, `--control-h`, `--radius`, `--boxel-font-size-xs`). Surface: **Popover**'s (`--popover`, `--popover-foreground`, `--pretui-shadow-overlay`, and the `--pretui-popover-*` sizing knobs — which is where you set the calendar's width). Grid: **Calendar**'s day-state tokens.
 
 Three components' token sets, no tokens of its own — which is the intended shape. The one thing a theme must do here that it does not have to do elsewhere is **set `--pretui-popover-width` or `--pretui-popover-min-width` wide enough for a month grid**, since Calendar's inline-size containment means it takes its width from the panel rather than pushing the panel open.
 

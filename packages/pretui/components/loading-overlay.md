@@ -51,7 +51,7 @@ No APG pattern. What matters is the busy state and one clear announcement.
 
 ## Theming
 
-`--pretui-loading-overlay-mix` (how opaque the scrim is: `--card` mixed with transparent, default 72%), `--pretui-loading-overlay-blur` (the `@blur` radius, default 3px), `--card`, `--foreground` (spinner ink), `--muted-foreground` (the painted label), `--text-ui-sm`, `--space-2` (the gap between spinner and label), `--pretui-dur-snap` and `--pretui-ease-snap` (the fade-in).
+`--pretui-loading-overlay-mix` (how opaque the scrim is: `--card` mixed with transparent, default 72%), `--pretui-loading-overlay-blur` (the `@blur` radius, default 3px), `--card`, `--foreground` (spinner ink), `--muted-foreground` (the painted label), `--boxel-font-size-2xs`, `--space-2` (the gap between spinner and label), `--pretui-dur-snap` and `--pretui-ease-snap` (the fade-in).
 
 The scrim mixes against `--card`, so dark mode gets a dark scrim without asking. The fade-in is skipped under `prefers-reduced-motion`. Covering the region edge to edge and inheriting its corner radius are fixed.
 

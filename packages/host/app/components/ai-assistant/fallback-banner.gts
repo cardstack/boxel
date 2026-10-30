@@ -37,7 +37,7 @@ const FallbackBanner: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .fallback-banner {
       display: grid;
-      grid-template-columns: 20px 1fr auto;
+      grid-template-columns: 1.25rem 1fr auto;
       align-items: center;
       gap: var(--boxel-sp-xs);
       padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
@@ -47,8 +47,8 @@ const FallbackBanner: TemplateOnlyComponent<Signature> = <template>
       letter-spacing: var(--boxel-lsp-sm);
     }
     .icon {
-      width: 20px;
-      height: 20px;
+      width: 1.25rem;
+      height: 1.25rem;
     }
     .banner-message {
       margin: 0;
@@ -57,8 +57,8 @@ const FallbackBanner: TemplateOnlyComponent<Signature> = <template>
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 20px;
-      height: 20px;
+      width: 1.25rem;
+      height: 1.25rem;
       padding: 0;
       border: none;
       background: transparent;

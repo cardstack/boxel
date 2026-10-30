@@ -51,7 +51,7 @@ The caller's failures to avoid: `@title` renders a styled `<div>`, not a heading
 
 ## Theming
 
-Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--inset`, `--line-strong`, `--radius-surface`, `--font-serif`, `--font-mono`, `--text-ui-md`, `--text-ui-sm`, `--track-ui`, `--track-heading`, `--space-2`, `--space-4`, `--space-5`.
+Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--inset`, `--line-strong`, `--radius-surface`, `--font-serif`, `--font-mono`, `--boxel-font-size-xs`, `--boxel-font-size-2xs`, `--track-ui`, `--track-heading`, `--space-2`, `--space-4`, `--space-5`.
 
 Its own properties: `--pretui-desc-cols-req` (set from `@columns` on the root), `--pretui-desc-cols` (resolved on the grid and overridden by the container queries), `--pretui-desc-label-w` (set from `@labelWidth`; default `max-content`).
 

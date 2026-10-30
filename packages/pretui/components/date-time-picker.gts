@@ -191,7 +191,7 @@ export class DateTimePicker extends Component<DateTimePickerSignature> {
           box-shadow: 0 0 0 1px var(--input, var(--border));
           color: var(--foreground);
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 0.78rem);
+          font-size: var(--boxel-font-size-xs);
           text-align: start;
           cursor: pointer;
         }

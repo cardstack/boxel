@@ -151,13 +151,13 @@ class AmountInputUsage extends Component {
         margin: 0;
         min-height: 1.4em;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pretui-amount-demo-spelled {
         margin: 0;
         min-height: 1.4em;
-        font-size: var(--text-ui-md, 13px);
+        font-size: var(--boxel-font-size-xs);
         font-variant-numeric: tabular-nums;
         color: var(--foreground);
       }

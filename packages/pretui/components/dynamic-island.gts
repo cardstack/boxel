@@ -183,7 +183,7 @@ export class DynamicIsland extends Component<DynamicIslandSignature> {
           block-size: 100%;
           padding-inline: var(--space-5, 14px);
           padding-block: var(--space-3, 8px);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-island-capsule[data-view='idle'] .pretui-island-body {
           padding-inline: var(--space-3, 8px);

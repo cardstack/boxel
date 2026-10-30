@@ -183,7 +183,7 @@ export class CarouselUsage extends Component {
       .carousel-index {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
         font-variant-numeric: tabular-nums;
       }
@@ -195,7 +195,7 @@ export class CarouselUsage extends Component {
       }
       .carousel-meta {
         margin: 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .carousel-chests {
@@ -205,7 +205,7 @@ export class CarouselUsage extends Component {
       }
       .carousel-note {
         margin: 0;
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .carousel-note code {

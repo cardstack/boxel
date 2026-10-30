@@ -714,13 +714,13 @@ export class KnownDate extends Component<KnownDateSignature> {
         }
         .pretui-knowndate-legend {
           padding: 0;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: var(--weight-medium, 500);
           color: var(--foreground);
         }
         .pretui-knowndate-hint {
           margin: 0;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-knowndate-row {
@@ -743,18 +743,18 @@ export class KnownDate extends Component<KnownDateSignature> {
           width: var(--pretui-knowndate-year-width, 6rem);
         }
         .pretui-knowndate-label {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         .pretui-knowndate-verdict {
           margin: 0;
           min-height: 1.4em;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
         .pretui-knowndate[data-invalid='true'] .pretui-knowndate-verdict {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           font-weight: var(--weight-medium, 500);
         }
         /* A card knows its pane, not the viewport. In a narrow pane the three

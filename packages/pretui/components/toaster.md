@@ -55,7 +55,7 @@ Governing pattern: APG **Alert** for the announcement, plus the live-region rule
 
 ## Theming
 
-Surface: `--popover` and `--popover-foreground` (the toast reads as "floating above", like **Menu** and **Popover**, not like **Panel**), `--pretui-shadow-raised`, `--border`, `--radius-surface`, `--font-sans`, `--text-ui-md` (title) and `--text-ui-sm` (message, queue pill), `--muted-foreground`, `--foreground`, `--hover`, `--ring`, `--radius-control` (the two buttons), `--space-3` / `--space-4`.
+Surface: `--popover` and `--popover-foreground` (the toast reads as "floating above", like **Menu** and **Popover**, not like **Panel**), `--pretui-shadow-raised`, `--border`, `--radius-surface`, `--font-sans`, `--boxel-font-size-xs` (title) and `--boxel-font-size-2xs` (message, queue pill), `--muted-foreground`, `--foreground`, `--hover`, `--ring`, `--radius-control` (the two buttons), `--space-3` / `--space-4`.
 
 The tone stripe and the life bar share one hue per severity through `--pretui-toast-tone`: `--pretui-info`, `--success`, `--warning`, `--destructive`, and `--muted-foreground` for neutral. The stripe is the only place a tone paints, so a neutral toast is genuinely neutral.
 

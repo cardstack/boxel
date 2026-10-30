@@ -226,7 +226,7 @@ class FormatBytesUsage extends Component {
       }
       .fmt-line {
         margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.6;
         color: var(--foreground);
       }
@@ -236,7 +236,7 @@ class FormatBytesUsage extends Component {
       }
       .fmt-cap {
         font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
         letter-spacing: var(--track-eyebrow, 0.06em);
         text-transform: uppercase;
@@ -262,7 +262,7 @@ class FormatBytesUsage extends Component {
         padding: 0;
         list-style: none;
         font-variant-numeric: tabular-nums;
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
     </style>

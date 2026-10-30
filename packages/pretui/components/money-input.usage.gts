@@ -238,13 +238,13 @@ class MoneyInputUsage extends Component {
       .pretui-money-demo-note {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
         min-height: 1.4em;
       }
       .pretui-money-demo-cap {
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted-foreground);
@@ -262,7 +262,7 @@ class MoneyInputUsage extends Component {
         align-items: baseline;
         gap: var(--space-2, 6px);
         padding: 3px 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         font-variant-numeric: tabular-nums;
       }
       .pretui-money-ladder-code {
@@ -274,7 +274,7 @@ class MoneyInputUsage extends Component {
         color: var(--foreground);
       }
       .pretui-money-ladder-side {
-        font-size: var(--text-ui-xs, 10.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .pretui-money-ladder-written {

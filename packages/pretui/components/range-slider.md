@@ -33,7 +33,7 @@ Slider's, doubled: each thumb is a native `<input type='range'>`, so `role='slid
 
 ## Theming
 
-Slider's: `--primary` (the filled span between the thumbs), `--line-strong` (rail and thumb hairline), `--card` (thumb fill), `--shadow-ink-mid` (thumb shadow), `--font-mono` and `--ink-3` (tick labels). Nothing is themed under a RangeSlider name.
+Slider's: `--primary` (the filled span between the thumbs), `--line-strong` (rail and thumb hairline), `--card` (thumb fill), `--shadow-ink-mid` (thumb shadow), `--font-mono` and `--subtle-foreground` (tick labels). Nothing is themed under a RangeSlider name.
 
 ## React ecosystem
 

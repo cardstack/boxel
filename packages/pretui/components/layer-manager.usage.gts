@@ -218,7 +218,7 @@ class LayerManagerUsage extends Component {
         flex-wrap: wrap;
         gap: var(--space-2, 6px);
         margin: var(--space-3, 8px) 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       .ddl-readoutLabel {

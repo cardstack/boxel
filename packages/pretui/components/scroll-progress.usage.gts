@@ -142,14 +142,14 @@ class ScrollProgressUsage extends Component {
       }
       .sp-title {
         margin: var(--space-4, 11px) 0 var(--space-3, 8px);
-        font-size: var(--text-ui-lg, 15px);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         letter-spacing: var(--track-heading, -0.02em);
         color: var(--foreground);
       }
       .sp-para {
         margin: 0 0 var(--space-4, 11px);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.6;
         color: var(--muted-foreground);
       }

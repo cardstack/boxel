@@ -503,7 +503,7 @@ class RecordField extends Component<RecordFieldSignature> {
           min-width: 0;
         }
         .pretui-rd-req {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
+          color: var(--destructive-ink);
           margin-inline-start: 2px;
           text-decoration: none;
         }
@@ -587,7 +587,7 @@ class RecordField extends Component<RecordFieldSignature> {
           outline-offset: 1px;
         }
         .pretui-rd-static[data-empty='true'] .pretui-rd-value {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
         .pretui-rd-value {
           flex: 1 1 auto;
@@ -674,13 +674,13 @@ class RecordField extends Component<RecordFieldSignature> {
           grid-template-columns: var(--pretui-rd-notegutter, 4.75em) minmax(0, 1fr);
           column-gap: var(--space-2, 6px);
           align-items: baseline;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 15px;
           color: var(--foreground);
         }
         .pretui-rd-mark {
           justify-self: end;
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -1118,14 +1118,14 @@ export class RecordDetail extends Component<RecordDetailSignature> {
           gap: 2px;
         }
         .pretui-record-summarylist li {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 16px;
         }
         /* Law 3 — a BXL label path is a machine value, so it is set mono and
            reads as one inside the prose of the message. */
         .pretui-record-summarypath {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           margin-inline-end: 5px;
         }
 

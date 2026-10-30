@@ -287,14 +287,14 @@ export class CopyFit extends Component<CopyFitSignature> {
         }
         .pretui-fitted-title {
           font-weight: 600;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--track-heading, -0.02em);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .pretui-fitted-meta {
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
           white-space: nowrap;
           overflow: hidden;
@@ -302,7 +302,7 @@ export class CopyFit extends Component<CopyFitSignature> {
         }
         .pretui-eyebrow {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 500;
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
@@ -317,7 +317,7 @@ export class CopyFit extends Component<CopyFitSignature> {
           justify-content: space-between;
           margin-top: auto;
           padding-top: 8px;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
         /* badge — tiny: square mark + a word */
@@ -344,7 +344,7 @@ export class CopyFit extends Component<CopyFitSignature> {
             display: none;
           }
           .pretui-fitted-title {
-            font-size: var(--text-ui-xs, 11px);
+            font-size: var(--boxel-font-size-2xs);
           }
         }
         /* strip — short & wide: square media left */

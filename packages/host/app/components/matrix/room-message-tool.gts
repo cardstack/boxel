@@ -3389,7 +3389,7 @@ export default class RoomMessageTool extends Component<Signature> {
       /* the row and what hangs off it (reactions, a system line): one
          group, the kit's tight 4px */
       .room-message-tool > * + * {
-        margin-top: var(--step-4, 4px);
+        margin-top: var(--boxel-sp-4xs);
       }
       /* a written image, small under its line; square, inside the row's
          one rounded box */
@@ -3397,7 +3397,7 @@ export default class RoomMessageTool extends Component<Signature> {
         display: block;
         max-width: 100%;
         height: 4.5rem;
-        margin-top: 4px;
+        margin-top: 0.25rem;
         object-fit: cover;
         background-color: var(--inset);
       }
@@ -3405,7 +3405,7 @@ export default class RoomMessageTool extends Component<Signature> {
         color: var(--muted-foreground, var(--boxel-450));
         text-decoration-color: color-mix(
           in srgb,
-          var(--muted-foreground, #a8a2ba) 70%,
+          var(--muted-foreground) 70%,
           transparent
         );
       }
@@ -3420,14 +3420,15 @@ export default class RoomMessageTool extends Component<Signature> {
       .tool-lines-more {
         align-self: flex-start;
         margin-inline-start: calc(
-          var(--pretui-toolrow-disc, 16px) + var(--pretui-toolrow-gap, 8px)
+          var(--pretui-toolrow-disc, var(--boxel-sp)) +
+            var(--pretui-toolrow-gap, var(--boxel-sp-xs))
         );
         padding: 0;
         border: 0;
         background: none;
         font: inherit;
-        font-size: var(--type-ui, 12.5px);
-        line-height: var(--leading-ui, 18px);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground, var(--boxel-450));
         cursor: pointer;
       }
@@ -3440,7 +3441,7 @@ export default class RoomMessageTool extends Component<Signature> {
       .tool-result-meta {
         display: flex;
         align-items: center;
-        gap: var(--step-4, 4px);
+        gap: var(--boxel-sp-4xs);
         min-width: 0;
       }
       .room-message-tool:hover .tool-result-meta,
@@ -3462,8 +3463,8 @@ export default class RoomMessageTool extends Component<Signature> {
       .room-message-tool > .tool-call-reactions {
         position: relative;
         z-index: 1;
-        margin-top: -6px;
-        padding-inline-start: var(--step-32, 32px);
+        margin-top: -0.375rem;
+        padding-inline-start: var(--boxel-sp-xl);
       }
       .tool-call-reactions {
         --pretui-reaction-surface: var(--card, var(--boxel-ai-purple));
@@ -3472,14 +3473,14 @@ export default class RoomMessageTool extends Component<Signature> {
       .check-outcome {
         display: flex;
         flex-direction: column;
-        gap: var(--step-4, 4px);
+        gap: var(--boxel-sp-4xs);
       }
       /* a finished row recedes as one: its card pills take the row's
          settled ink instead of standing out bright over a gray row */
       .tool-row {
         --pretui-toolrow-settled-pill-ink: var(
           --pretui-toolrow-settled-ink,
-          var(--ink-2)
+          var(--muted-foreground)
         );
         --pretui-toolrow-settled-pill-weight: 500;
       }

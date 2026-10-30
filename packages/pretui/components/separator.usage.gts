@@ -22,7 +22,7 @@ const SeparatorUsage: TemplateOnlyComponent = <template>
   <style scoped>
     .sep-demo-line {
       margin: 0;
-      font-size: var(--text-ui-md, 0.78rem);
+      font-size: var(--boxel-font-size-xs);
     }
   </style>
 </template>;

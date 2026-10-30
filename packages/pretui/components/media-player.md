@@ -67,7 +67,7 @@ This is the component where most of the accessibility budget went, and three dec
 
 ## Theming
 
-`--pretui-media-aspect` (the reserved stage ratio, written from `@aspectRatio`), `--pretui-media-radius`, `--pretui-media-ink` (the chrome's foreground), `--pretui-media-scrim` (the wash under the controls that keeps them legible over any frame), `--pretui-destructive-ink` (the error state), `--pretui-shadow-card`, `--pretui-shadow-hairline`.
+`--pretui-media-aspect` (the reserved stage ratio, written from `@aspectRatio`), `--pretui-media-radius`, `--pretui-media-ink` (the chrome's foreground), `--pretui-media-scrim` (the wash under the controls that keeps them legible over any frame), `--destructive-ink` (the error state), `--pretui-shadow-card`, `--pretui-shadow-hairline`.
 
 The scrim is the token to watch across themes: it is what guarantees the control bar stays readable over an arbitrary video frame, and a theme that lightens it for aesthetics on a dark test clip will fail on a bright one. The kit's shared shadow tokens mean a player sits at the same elevation as the cards around it without a per-component value.
 

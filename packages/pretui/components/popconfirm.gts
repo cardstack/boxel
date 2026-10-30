@@ -319,7 +319,7 @@ export class Popconfirm extends Component<PopconfirmSignature> {
           width: max-content;
           max-width: var(--pretui-popconfirm-max-width, min(280px, calc(100vw - 16px)));
           font-family: var(--font-sans);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           opacity: 1;
           transform: none;
           transition: opacity var(--pretui-dur-enter, 180ms) var(--pretui-ease-enter, cubic-bezier(0.23, 1, 0.32, 1)),
@@ -360,7 +360,7 @@ export class Popconfirm extends Component<PopconfirmSignature> {
         }
         .pretui-pc-desc {
           color: var(--muted-foreground);
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-2xs);
           line-height: 1.5;
         }
         .pretui-pc-acts {

@@ -39,7 +39,7 @@ Where it is thinner: everything **MediaPlayer** lacks is lacking here too — no
 
 ## Theming
 
-The figure adds `--text-ui-sm` for the caption and an 8px gap between picture and caption; everything else is **MediaPlayer**'s — `--pretui-media-aspect`, `--pretui-media-radius`, `--pretui-media-ink`, `--pretui-media-scrim`, `--pretui-destructive-ink`, `--pretui-shadow-card`, `--pretui-shadow-hairline`.
+The figure adds `--boxel-font-size-2xs` for the caption and an 8px gap between picture and caption; everything else is **MediaPlayer**'s — `--pretui-media-aspect`, `--pretui-media-radius`, `--pretui-media-ink`, `--pretui-media-scrim`, `--destructive-ink`, `--pretui-shadow-card`, `--pretui-shadow-hairline`.
 
 There is deliberately no video-specific token surface: a theme that retunes the player retunes this with it, and a video that looked different from an audio player in the same theme would be a bug.
 

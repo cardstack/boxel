@@ -227,7 +227,7 @@ class PathTextUsage extends Component {
         margin: 0;
         max-width: 44ch;
         text-align: center;
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>

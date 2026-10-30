@@ -56,7 +56,7 @@ Where it is thinner: no unit conversion — changing the unit reinterprets the n
 
 ## Theming
 
-`--pretui-amount-align` (how the number sits against its mark), `--pretui-amount-mark-width` (the unit mark's column), `--pretui-amount-select-width` (the picker), `--pretui-destructive-ink`, `--pretui-shadow-control`, `--pretui-ease-snap`.
+`--pretui-amount-align` (how the number sits against its mark), `--pretui-amount-mark-width` (the unit mark's column), `--pretui-amount-select-width` (the picker), `--destructive-ink`, `--pretui-shadow-control`, `--pretui-ease-snap`.
 
 The two width tokens are what keep a column of amounts aligned: fixing the mark and picker widths means the digits line up down a table even when the units differ in length, which is the whole reason to have them as tokens rather than letting content size them.
 
