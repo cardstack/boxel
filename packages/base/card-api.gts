@@ -390,6 +390,11 @@ interface RelationshipOptions extends Options {
 
 export interface CardContext<T extends CardDef = CardDef> {
   actions?: { openCard: OpenCardFn };
+  // On a published site, the page's path relative to the site, with its
+  // query: '/shop?sort=price'. Changes as the visitor navigates, so a card
+  // that serves several of the site's paths (a listing) reads which one is
+  // showing. Undefined anywhere else.
+  sitePath?: string;
   toolContext?: ToolContext;
   // Pre-rename spelling of `toolContext`. Realm content reads
   // `@context.commandContext`; populated with the same value until no

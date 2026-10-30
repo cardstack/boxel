@@ -198,6 +198,9 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       submode: this.hostModeService.isActive
         ? 'host'
         : this.operatorModeStateService.state?.submode,
+      sitePath: this.hostModeService.isActive
+        ? this.hostNavigation.sitePath
+        : undefined,
     };
   }
 

@@ -84,6 +84,26 @@ export default class HostNavigationService extends Service {
     return undefined;
   }
 
+  // The current page's path relative to the site, with its query. Tracked
+  // through the router, so it changes with every navigation.
+  get sitePath(): string | undefined {
+    let mount = this.mount;
+    let current = this.router.currentURL;
+    if (!mount || current == null) {
+      return undefined;
+    }
+    let [pathname, search] = current.split('?');
+    let withSlash = pathname.endsWith('/') ? pathname : `${pathname}/`;
+    if (!withSlash.startsWith(mount)) {
+      return undefined;
+    }
+    let path = normalizeRoutingPath(`/${pathname.slice(mount.length)}`);
+    let query = new URLSearchParams(search ?? '');
+    query.delete('hostModeStack');
+    let rest = query.toString();
+    return rest ? `${path}?${rest}` : path;
+  }
+
   // A realm-relative path as an address on this host.
   addressOf(path: string): string {
     let mount = this.mount ?? '/';
