@@ -35,6 +35,10 @@ export interface SitePageType {
   listingPath?: string;
   listingTitle?: string;
   listingSort?: string;
+  // BXL over the card for its page's og:title, og:description and og:image.
+  shareTitle?: string;
+  shareDescription?: string;
+  shareImage?: string;
 }
 
 export interface SiteRedirect {
@@ -242,6 +246,9 @@ function readPageType(
     listingPath,
     listingTitle: str(t.listingTitle),
     listingSort,
+    shareTitle: str(t.shareTitle),
+    shareDescription: str(t.shareDescription),
+    shareImage: str(t.shareImage),
   };
 }
 

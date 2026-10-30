@@ -1,6 +1,7 @@
 import {
   normalizeRoutingPath,
   type HostRouteRow,
+  type HostRouteShare,
 } from '@cardstack/runtime-common';
 
 // Rewrites a page on the way out to the address it is served at. A card can
@@ -35,6 +36,9 @@ export function siteRewriter(opts: {
   // The request's path, relative to the realm's mount: '/shop/driver'.
   requestPath: string;
   rows: HostRouteRow[];
+  // How this page looks when shared, from its page type: each value set
+  // replaces the card's own og tag.
+  share?: HostRouteShare;
   document: Document;
 }): SiteRewriter {
   let { requestMount, requestPath, rows, document } = opts;
@@ -91,6 +95,37 @@ export function siteRewriter(opts: {
       og.setAttribute('property', 'og:url');
       og.setAttribute('content', canonical);
       template.content.append(link, og);
+
+      let share = opts.share;
+      let setMeta = (
+        attribute: 'property' | 'name',
+        key: string,
+        value: string,
+      ) => {
+        for (let stale of template.content.querySelectorAll(
+          `meta[${attribute}="${key}"]`,
+        )) {
+          stale.remove();
+        }
+        let meta = document.createElement('meta');
+        meta.setAttribute(attribute, key);
+        meta.setAttribute('content', value);
+        template.content.append(meta);
+      };
+      if (share?.title) {
+        setMeta('property', 'og:title', share.title);
+        setMeta('name', 'twitter:title', share.title);
+      }
+      if (share?.description) {
+        setMeta('property', 'og:description', share.description);
+        setMeta('name', 'description', share.description);
+        setMeta('name', 'twitter:description', share.description);
+      }
+      if (share?.image) {
+        setMeta('property', 'og:image', share.image);
+        setMeta('name', 'twitter:image', share.image);
+        setMeta('name', 'twitter:card', 'summary_large_image');
+      }
       return template.innerHTML;
     },
   };

@@ -15,6 +15,7 @@ import {
   SupportedMimeType,
   type DBAdapter,
   type HostRouteKind,
+  type HostRouteShare,
   type HostRouteRow,
   type Realm,
   type RouteCard,
@@ -133,6 +134,10 @@ export async function searchPageTypeCards(
         id?: string;
         type?: string;
         attributes?: Record<string, unknown>;
+        relationships?: Record<
+          string,
+          { links?: { self?: string | null }; data?: { id?: string } | null }
+        >;
       }[];
     };
     // `included` also carries the cards the matches link to (a product's
@@ -151,7 +156,22 @@ export async function searchPageTypeCards(
         matched.has(resource.id),
     );
     for (let resource of found) {
-      cards.push({ id: resource.id!, attributes: resource.attributes ?? {} });
+      let links: Record<string, string> = {};
+      for (let [field, rel] of Object.entries(resource.relationships ?? {})) {
+        let target = rel?.data?.id ?? rel?.links?.self;
+        if (typeof target === 'string' && target) {
+          try {
+            links[field] = new URL(target, resource.id).href;
+          } catch {
+            // not a URL; leave the link out
+          }
+        }
+      }
+      cards.push({
+        id: resource.id!,
+        attributes: resource.attributes ?? {},
+        links,
+      });
     }
     if ((doc.data ?? []).length < SEARCH_PAGE_SIZE) {
       break;
@@ -165,12 +185,29 @@ export async function searchPageTypeCards(
   return cards.slice(0, MAX_CARDS_PER_PAGE_TYPE);
 }
 
+// Postgres hands a jsonb column back parsed; SQLite as text.
+function shareOf(
+  value: HostRouteShare | string | null,
+): HostRouteShare | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as HostRouteShare;
+    } catch {
+      return undefined;
+    }
+  }
+  return value;
+}
+
 export async function loadHostRoutes(
   dbAdapter: DBAdapter,
   realmURL: string,
 ): Promise<HostRouteRow[]> {
   let rows = (await runQuery(dbAdapter, [
-    `SELECT path, kind, card_url, target_path, page_type, claimed_at FROM host_routes WHERE realm_url =`,
+    `SELECT path, kind, card_url, target_path, page_type, claimed_at, share FROM host_routes WHERE realm_url =`,
     param(realmURL),
   ])) as {
     path: string;
@@ -179,6 +216,7 @@ export async function loadHostRoutes(
     target_path: string | null;
     page_type: number | null;
     claimed_at: string | number;
+    share: HostRouteShare | string | null;
   }[];
   return rows.map((row) => ({
     path: row.path,
@@ -187,6 +225,7 @@ export async function loadHostRoutes(
     targetPath: row.target_path ?? undefined,
     pageType: row.page_type ?? undefined,
     claimedAt: Number(row.claimed_at),
+    share: shareOf(row.share),
   }));
 }
 
@@ -202,7 +241,7 @@ async function saveHostRoutes(
   ]);
   for (let row of rows) {
     await runQuery(dbAdapter, [
-      `INSERT INTO host_routes (realm_url, path, kind, card_url, target_path, page_type, claimed_at, updated_at) VALUES (`,
+      `INSERT INTO host_routes (realm_url, path, kind, card_url, target_path, page_type, claimed_at, updated_at, share) VALUES (`,
       param(realmURL),
       `,`,
       param(row.path),
@@ -218,6 +257,8 @@ async function saveHostRoutes(
       param(row.claimedAt),
       `,`,
       param(now),
+      `,`,
+      param(row.share ? JSON.stringify(row.share) : null),
       `)`,
     ]);
   }
@@ -229,7 +270,7 @@ export async function lookupHostRoute(
   path: string,
 ): Promise<HostRouteRow | undefined> {
   let [row] = (await runQuery(dbAdapter, [
-    `SELECT path, kind, card_url, target_path, page_type, claimed_at FROM host_routes WHERE realm_url =`,
+    `SELECT path, kind, card_url, target_path, page_type, claimed_at, share FROM host_routes WHERE realm_url =`,
     param(realmURL),
     `AND path =`,
     param(path),
@@ -240,6 +281,7 @@ export async function lookupHostRoute(
     target_path: string | null;
     page_type: number | null;
     claimed_at: string | number;
+    share: HostRouteShare | string | null;
   }[];
   return row
     ? {
@@ -249,6 +291,7 @@ export async function lookupHostRoute(
         targetPath: row.target_path ?? undefined,
         pageType: row.page_type ?? undefined,
         claimedAt: Number(row.claimed_at),
+        share: shareOf(row.share),
       }
     : undefined;
 }

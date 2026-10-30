@@ -460,6 +460,18 @@ export class SitePageTypeField extends FieldDef {
   @field listingSort = contains(StringField, {
     description: 'Boxel query sort JSON for the listing',
   });
+  // How a page looks when shared: BXL over the card, like href. Each one
+  // left empty keeps what the card's own head says.
+  @field shareTitle = contains(StringField, {
+    description: 'og:title for a card\'s page, as BXL: .name & " by " & .brand',
+  });
+  @field shareDescription = contains(StringField, {
+    description: "og:description for a card's page, as BXL: .summary",
+  });
+  @field shareImage = contains(StringField, {
+    description:
+      "og:image for a card's page, as BXL giving an image URL: .photo.id",
+  });
 }
 
 // A redirect. `from` may name segments (`/old/:slug`) that `to` reuses.

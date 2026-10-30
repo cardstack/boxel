@@ -53,6 +53,7 @@ import {
   siteHomeCard,
 } from '../lib/host-routes.ts';
 import { siteRewriter } from '../lib/site-rewrite.ts';
+import type { HostRouteShare } from '@cardstack/runtime-common';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -717,10 +718,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     // Paths the realm's site settings route (its route table), tried after
     // the exact routing rules.
+    let servedShare: HostRouteShare | undefined;
     if (!exactlyRouted && routedRealm) {
       let tableRoute = await matchHostTableRoute(requestURL, routingDeps);
       if (tableRoute) {
         let { realm, row } = tableRoute;
+        servedShare = row.kind === 'page' ? row.share : undefined;
         let mount = new URL(realm.url).pathname.replace(/\/$/, '');
         if (row.kind === 'alias' && row.targetPath) {
           let target = new URL(mount + row.targetPath, requestURL);
@@ -860,6 +863,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             : undefined,
           requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
           rows: await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url),
+          share: servedShare,
           document: doc,
         });
         if (isolatedHTML != null) {

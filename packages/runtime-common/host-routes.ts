@@ -29,11 +29,30 @@ export interface HostRouteRow {
   pageType?: number;
   // When the path was first claimed, in ms. The older claim keeps a path.
   claimedAt: number;
+  // How a page looks when shared, from its page type's share expressions.
+  share?: HostRouteShare;
+}
+
+export interface HostRouteShare {
+  title?: string;
+  description?: string;
+  // An absolute http(s) URL.
+  image?: string;
 }
 
 export interface RouteCard {
   id: string;
   attributes: Record<string, unknown>;
+  // The cards and files the card links to, by field, as absolute URLs. An
+  // expression reads one as `.photo.id`, as the card's search doc has it.
+  links?: Record<string, string>;
+}
+
+function input(card: RouteCard): Record<string, unknown> {
+  let linked = Object.fromEntries(
+    Object.entries(card.links ?? {}).map(([field, id]) => [field, { id }]),
+  );
+  return { ...card.attributes, ...linked, id: card.id };
 }
 
 export interface HostRouteProjection {
@@ -99,7 +118,7 @@ function run(compiled: CompiledRouteExpression, card: RouteCard): unknown {
   if (!compiled.ok) {
     return undefined;
   }
-  return compiled.prepared.evaluate({ ...card.attributes, id: card.id }).value;
+  return compiled.prepared.evaluate(input(card)).value;
 }
 
 // The path an expression gives a card, or why it gave none.
@@ -111,7 +130,7 @@ function pathOf(
   // the path as the text "null".
   if (compiled.ok) {
     let missing = compiled.prepared.deps.filter(
-      (field) => card.attributes[field] == null,
+      (field) => card.attributes[field] == null && !card.links?.[field],
     );
     if (missing.length) {
       return { problem: `the card has no ${missing.join(', ')}` };
@@ -246,6 +265,65 @@ export function projectHostRoutes(
 
   take(listings, 'listing');
   take(pages, 'page');
+
+  // How each page looks when shared. A share expression that fails, or gives
+  // something unusable, leaves that tag to the card's own head.
+  let cardsById = new Map<string, RouteCard>();
+  for (let list of cardsByPageType.values()) {
+    for (let card of list) {
+      cardsById.set(card.id, card);
+    }
+  }
+  let shareExpressions = new Map(
+    settings.pageTypes.map((pageType) => [
+      pageType.index,
+      {
+        title: pageType.shareTitle
+          ? compileRouteExpression(pageType.shareTitle)
+          : undefined,
+        description: pageType.shareDescription
+          ? compileRouteExpression(pageType.shareDescription)
+          : undefined,
+        image: pageType.shareImage
+          ? compileRouteExpression(pageType.shareImage)
+          : undefined,
+      },
+    ]),
+  );
+  for (let row of taken.values()) {
+    let card = row.cardURL ? cardsById.get(row.cardURL) : undefined;
+    let expressions =
+      row.pageType !== undefined
+        ? shareExpressions.get(row.pageType)
+        : undefined;
+    if (row.kind !== 'page' || !card || !expressions) {
+      continue;
+    }
+    let text = (compiled: CompiledRouteExpression | undefined) => {
+      if (!compiled?.ok) {
+        return undefined;
+      }
+      try {
+        let value = run(compiled, card!);
+        return typeof value === 'string' && value.trim()
+          ? value.trim()
+          : typeof value === 'number'
+            ? String(value)
+            : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    let image = text(expressions.image);
+    let share: HostRouteShare = {
+      title: text(expressions.title),
+      description: text(expressions.description),
+      image: image && /^https?:\/\//.test(image) ? image : undefined,
+    };
+    if (share.title || share.description || share.image) {
+      row.share = share;
+    }
+  }
 
   // Aliases point at the path their card won; a page always beats an alias.
   let pathByCard = new Map<string, string>();
