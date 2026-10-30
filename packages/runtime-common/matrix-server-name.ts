@@ -109,3 +109,23 @@ export async function federationBaseURLs(
   );
   return [...new Set(urls)];
 }
+
+// The homeservers a realm server federates with, from a comma-separated list
+// of server names such as `MATRIX_FEDERATION_ALLOWLIST` holds. Blank entries
+// are ignored; an entry that is not a server name is a configuration error.
+export function parseMatrixFederationAllowlist(
+  text: string | undefined,
+): string[] {
+  let names = (text ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  for (let name of names) {
+    if (!isMatrixServerName(name)) {
+      throw new Error(
+        `${JSON.stringify(name)} in the Matrix federation allowlist is not a Matrix server name`,
+      );
+    }
+  }
+  return [...new Set(names)];
+}

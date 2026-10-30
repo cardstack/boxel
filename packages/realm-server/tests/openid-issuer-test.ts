@@ -122,7 +122,8 @@ module(basename(import.meta.filename), function () {
   // Exercises `MatrixClient#verifyOpenIdToken` against a stand-in for the
   // network: the paired homeserver and `other.example` answer the federation
   // endpoint, `other.example` publishes a well-known delegation, and the test
-  // asserts which servers were asked and whose answers are trusted.
+  // asserts which servers were asked and whose answers are trusted. The
+  // client federates with whichever servers `client()` is given.
   module('MatrixClient#verifyOpenIdToken', function (hooks) {
     const pairedURL = 'https://matrix.example.test/';
     let realFetch: typeof globalThis.fetch;
@@ -154,16 +155,17 @@ module(basename(import.meta.filename), function () {
       globalThis.fetch = realFetch;
     });
 
-    function client() {
+    function client(federationAllowlist: string[] = []) {
       return new MatrixClient({
         matrixURL: new URL(pairedURL),
         serverName: 'example.test',
+        federationAllowlist,
         username: 'realm',
         seed: 'seed',
       });
     }
 
-    test('a token for the paired server is asked of the paired homeserver', async function (assert) {
+    test('a token for the paired server is asked of the paired homeserver, with no allowlist', async function (assert) {
       userinfo[pairedURL] = {
         status: 200,
         body: { sub: '@someone:example.test' },
@@ -177,13 +179,34 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
-    test('a token for another server is asked of that server, found by discovery', async function (assert) {
+    test('a token for a server outside the federation allowlist is refused before anything is fetched', async function (assert) {
       userinfo['https://federation.other.example:443/'] = {
         status: 200,
         body: { sub: OTHER_USER },
       };
       assert.strictEqual(
         await client().verifyOpenIdToken('token', OTHER_SERVER),
+        undefined,
+        'with no allowlist, only the paired server is federated with',
+      );
+      assert.strictEqual(
+        await client(['third.example']).verifyOpenIdToken(
+          'token',
+          OTHER_SERVER,
+        ),
+        undefined,
+        'an allowlist naming other servers does not admit this one',
+      );
+      assert.deepEqual(requested, [], 'no server was looked up or asked');
+    });
+
+    test('a token for an allowlisted server is asked of that server, found by discovery', async function (assert) {
+      userinfo['https://federation.other.example:443/'] = {
+        status: 200,
+        body: { sub: OTHER_USER },
+      };
+      assert.strictEqual(
+        await client([OTHER_SERVER]).verifyOpenIdToken('token', OTHER_SERVER),
         OTHER_USER,
       );
       assert.deepEqual(requested, [
@@ -198,7 +221,7 @@ module(basename(import.meta.filename), function () {
         body: { sub: '@owner:example.test' },
       };
       assert.strictEqual(
-        await client().verifyOpenIdToken('token', OTHER_SERVER),
+        await client([OTHER_SERVER]).verifyOpenIdToken('token', OTHER_SERVER),
         undefined,
         'other.example cannot vouch for a user of the paired server',
       );
@@ -215,12 +238,13 @@ module(basename(import.meta.filename), function () {
         status: 401,
         body: { errcode: 'M_UNKNOWN_TOKEN' },
       };
+      let federated = client([OTHER_SERVER, 'unreachable.example']);
       assert.strictEqual(
-        await client().verifyOpenIdToken('token', OTHER_SERVER),
+        await federated.verifyOpenIdToken('token', OTHER_SERVER),
         undefined,
       );
       assert.strictEqual(
-        await client().verifyOpenIdToken('token', 'unreachable.example'),
+        await federated.verifyOpenIdToken('token', 'unreachable.example'),
         undefined,
       );
       assert.deepEqual(

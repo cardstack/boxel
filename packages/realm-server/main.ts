@@ -72,7 +72,10 @@ import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
-import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
+import {
+  matrixFederationAllowlistFromEnv,
+  matrixServerNameFromEnv,
+} from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -673,6 +676,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let matrixClient = new MatrixClient({
     matrixURL: new URL(MATRIX_URL),
     serverName: matrixServerNameFromEnv(),
+    federationAllowlist: matrixFederationAllowlistFromEnv(),
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });

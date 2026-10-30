@@ -111,6 +111,12 @@ export class MatrixClient {
   // delegation lets it differ from the homeserver's hostname (ADR 004 §1.2);
   // login checks that the homeserver agrees.
   readonly serverName: string;
+  // The other homeservers whose OpenID tokens this client verifies, by
+  // server name. A token naming a server outside this list is refused before
+  // that server is looked up, so an unauthenticated caller cannot make the
+  // realm server send requests to a host of their choosing. Empty by default:
+  // federation is configured, not open (ADR 004 §1.4).
+  readonly federationAllowlist: ReadonlySet<string>;
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
@@ -125,12 +131,14 @@ export class MatrixClient {
     password,
     seed,
     serverName,
+    federationAllowlist = [],
   }: {
     matrixURL: URL;
     username: string;
     password?: string;
     seed?: string;
     serverName: string;
+    federationAllowlist?: string[];
   }) {
     if (!password && !seed) {
       throw new Error(
@@ -145,6 +153,7 @@ export class MatrixClient {
     this.matrixURL = matrixURL;
     this.username = username;
     this.serverName = serverName;
+    this.federationAllowlist = new Set(federationAllowlist);
     this.password = password;
     this.seed = seed;
   }
@@ -674,10 +683,12 @@ export class MatrixClient {
   // The user an OpenID token vouches for, asked of the homeserver that issued
   // it: the one named by the token's `matrix_server_name` (ADR 004 §1.3). The
   // paired homeserver is asked at this client's URL; any other server is
-  // found by Matrix server discovery. Undefined when the token is refused,
-  // when no server so named can be reached, or when the user it vouches for
-  // is not a user of that server: the name is the caller's claim, and a
-  // server may only vouch for its own users.
+  // found by Matrix server discovery, and only when `federationAllowlist`
+  // names it. Undefined when the server is neither the paired one nor
+  // allowlisted, when the token is refused, when no server so named can be
+  // reached, or when the user it vouches for is not a user of that server:
+  // the name is the caller's claim, and a server may only vouch for its own
+  // users.
   async verifyOpenIdToken(
     openIdToken: string,
     matrixServerName: string = this.serverName,
@@ -689,6 +700,9 @@ export class MatrixClient {
       openIdToken,
     )}`;
     let paired = matrixServerName === this.serverName;
+    if (!paired && !this.federationAllowlist.has(matrixServerName)) {
+      return undefined;
+    }
     let response: Response | undefined;
     if (paired) {
       response = await this.request(path, 'GET', undefined, false);

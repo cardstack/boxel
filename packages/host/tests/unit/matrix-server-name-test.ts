@@ -9,6 +9,7 @@ import {
   isMatrixServerName,
   isUserOfMatrixServer,
   matrixServerNameOf,
+  parseMatrixFederationAllowlist,
 } from '@cardstack/runtime-common/matrix-server-name';
 
 module('Unit | matrix server name', function () {
@@ -116,6 +117,30 @@ module('Unit | matrix server name', function () {
       ]) {
         assert.false(isMatrixServerName(name), `${name} is not a server name`);
       }
+    });
+  });
+
+  module('federation allowlist', function () {
+    test('an unset or empty list names no server', function (assert) {
+      assert.deepEqual(parseMatrixFederationAllowlist(undefined), []);
+      assert.deepEqual(parseMatrixFederationAllowlist(''), []);
+      assert.deepEqual(parseMatrixFederationAllowlist(' , '), []);
+    });
+
+    test('server names are read from a comma-separated list, trimmed and deduplicated', function (assert) {
+      assert.deepEqual(
+        parseMatrixFederationAllowlist(
+          ' other.example, matrix.example.test:8448 ,other.example',
+        ),
+        ['other.example', 'matrix.example.test:8448'],
+      );
+    });
+
+    test('an entry that is not a server name is a configuration error', function (assert) {
+      assert.throws(
+        () => parseMatrixFederationAllowlist('other.example,https://x'),
+        /not a Matrix server name/,
+      );
     });
   });
 
