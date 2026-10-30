@@ -174,6 +174,14 @@ export default class HostNavigationService extends Service {
     }
   }
 
+  // An alias met while resolving a path. On the first load it replaces the
+  // entry, as the server's 301 would; during an in-app navigation the
+  // transition that met it never committed its entry, so the target takes
+  // that new entry's place instead of the page the visitor came from.
+  redirect(address: string) {
+    this.visit(address, { replace: this.pendingNavigation !== 'push' });
+  }
+
   // Whether an address is a page of this site the app can show in place.
   private isSiteAddress(url: URL): boolean {
     if (url.origin !== window.location.origin) {

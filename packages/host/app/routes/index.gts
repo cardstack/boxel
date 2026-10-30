@@ -145,7 +145,7 @@ export default class Card extends Route {
         // The site's route table, as the served page's snapshot holds it.
         let known = this.hostNavigation.resolveAddress(`/${normalizedPath}`);
         if (known && 'redirectTo' in known) {
-          this.hostNavigation.visit(known.redirectTo, { replace: true });
+          this.hostNavigation.redirect(known.redirectTo);
           return;
         }
         cardUrl = known?.card;
