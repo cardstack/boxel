@@ -12,6 +12,8 @@ tree. Edits made through a running realm land in the copy and are discarded.
 
 The `.gts` files here are type-checked by the host package's `lint:types`
 (host's `tsconfig.json` includes this package, mirroring how
-`experiments-realm` is covered). The realm config files (`package.json`,
+`experiments-realm` is covered). This package's own `lint` script runs ESLint
+for `no-url-form-base-imports` alone, so base-realm modules are imported by the
+`@cardstack/base/` prefix. The realm config files (`package.json`,
 `tsconfig.json`) live outside `contents/` so they aren't indexed as part of
 the realm.
