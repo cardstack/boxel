@@ -49,6 +49,7 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 import {
   resolveSiteRequest,
   siteHomeCard,
+  siteMounts,
   sitePathOf,
   sitePathsForCards,
 } from '../lib/host-routes.ts';
@@ -495,13 +496,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       let realm = await findOrMountRealm(requestURL, routingDeps);
       if (
         realm &&
-        requestURL.pathname === `${new URL(realm.url).pathname}${fileName}` &&
+        requestURL.pathname ===
+          `${siteMounts(realm, requestURL).mount.pathname}${fileName}` &&
         (await hasPublicPermissions(realm, routingDeps))
       ) {
         let file = await siteFile(
           fileName,
           realm,
-          new URL(new URL(realm.url).pathname, requestURL),
+          siteMounts(realm, requestURL).mount,
           requestURL.searchParams,
           routingDeps,
         );
@@ -814,7 +816,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let servedNotFound = false;
     if (!exactlyRouted && routedRealm) {
       let answer = await siteAnswer();
-      let mount = new URL(routedRealm.url).pathname.replace(/\/$/, '');
+      let mount = siteMounts(routedRealm, requestURL).mount.pathname.replace(
+        /\/$/,
+        '',
+      );
       if (answer?.kind === 'redirect') {
         let target = new URL(
           answer.to.startsWith('/') ? mount + answer.to : answer.to,
@@ -985,7 +990,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let sitePaths: Map<string, { path: string; share?: HostRouteShare }> =
       new Map();
     if (routedRealm && siteSettings?.pageTypes.length) {
-      let realmPathname = new URL(routedRealm.url).pathname;
+      let { mount, canonical } = siteMounts(routedRealm, requestURL);
       let linked = new Set<string>([cardKey(cardURL)]);
       for (let key of linkedCards(isolatedHTML ?? '', cardURL, doc)) {
         linked.add(key);
@@ -1001,8 +1006,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         routingDeps,
       );
       let rewriter = siteRewriter({
-        requestMount: new URL(realmPathname, requestURL),
-        requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
+        requestMount: mount,
+        canonicalMount: canonical,
+        requestPath: `/${requestURL.pathname.slice(mount.pathname.length)}`,
         paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
         share: servedShare,
         canonical: !servedNotFound,
@@ -1128,7 +1134,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // and navigation need no request. Anything else the host asks for.
       let snapshot: HostRouteSnapshot = {
         realm: routedRealm.url,
-        mount: new URL(routedRealm.url).pathname,
+        mount: siteMounts(routedRealm, requestURL).mount.pathname,
         pages: [...sitePaths].map(([card, { path, share }]) =>
           share ? [path, card, share] : [path, card],
         ),
@@ -1138,6 +1144,18 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         ...(siteSettings.notFound ? { notFound: siteSettings.notFound } : {}),
       };
       configPatch.hostRouteSnapshot = snapshot;
+    }
+    if (
+      routedRealm &&
+      siteSettings &&
+      (siteSettings.pageTypes.length ||
+        siteSettings.frame ||
+        siteSettings.notFound)
+    ) {
+      // The site as the visitor sees it, which the host app names on every
+      // request it makes for the visit, so the realm server answers it as the
+      // site (see site-boundary).
+      configPatch.hostSite = siteMounts(routedRealm, requestURL).mount.href;
     }
     if (
       routedRealm &&

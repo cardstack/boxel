@@ -2917,4 +2917,249 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
   });
+  // A site that draws on another realm serves it under an alias of its own,
+  // so a visitor never learns what the realm is called. The source here is
+  // the server's public `test` realm.
+  module(
+    'Published realm: a site’s source realms are aliased',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let siteURL = 'http://aliassite.localhost:4444/alias-source/';
+      let host = new URL(siteURL).host;
+      let mount = new URL(siteURL).pathname;
+      let source = 'http://127.0.0.1:4444/test/';
+      let aliasedPrefix: string;
+      let aliased = (path: string) => `${aliasedPrefix}${path}`;
+      let pathOf = (url: string) => {
+        let parsed = new URL(url);
+        return `${parsed.pathname}${parsed.search}`;
+      };
+
+      setupPublishedRealm(hooks, {
+        setup: 'site source aliases',
+        sourceRealmName: 'Alias Shop',
+        endpoint: 'alias-source',
+        publishedRealmURL: siteURL,
+        otherRealmFiles: [
+          [
+            'product.gts',
+            `
+            import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+            export class Product extends CardDef {
+              @field handle = contains(StringField);
+              static isolated = class extends Component<typeof Product> {
+                <template><p data-product={{@model.handle}}>{{@model.cardTitle}}</p></template>
+              };
+            }
+          `,
+          ],
+          [
+            'Product/driver.json',
+            {
+              data: {
+                type: 'card',
+                attributes: { handle: 'driver', cardInfo: { name: 'Driver' } },
+                meta: { adoptsFrom: { module: '../product', name: 'Product' } },
+              },
+            },
+          ],
+        ],
+        cards: () => [
+          [
+            'feature.gts',
+            `
+            import { CardDef, field, linksTo } from '@cardstack/base/card-api';
+            import { Product } from '${source}product';
+            export class Feature extends CardDef {
+              @field product = linksTo(Product);
+            }
+          `,
+          ],
+          [
+            'Feature/driver.json',
+            {
+              data: {
+                type: 'card',
+                relationships: {
+                  product: { links: { self: `${source}Product/driver` } },
+                },
+                meta: { adoptsFrom: { module: '../feature', name: 'Feature' } },
+              },
+            },
+          ],
+          [
+            'realm.json',
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: { name: 'Alias Shop' },
+                  serveSourcePrerender: true,
+                  site: {
+                    pageTypes: [
+                      {
+                        name: 'Products',
+                        sourceRealm: source,
+                        cardType: {
+                          module: `${source}product`,
+                          name: 'Product',
+                        },
+                        path: '/shop/{handle}',
+                      },
+                    ],
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/realm-config',
+                    name: 'RealmConfig',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        let page = await request
+          .get(`${mount}shop/driver`)
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        let match = page.text.match(
+          /http:\/\/aliassite\.localhost:4444\/alias-source\/_r\/[a-z2-7]{26}\//,
+        );
+        aliasedPrefix = match?.[0] ?? '';
+      });
+
+      let visit = (path: string, accept: string) =>
+        request
+          .get(path)
+          .set('Host', host)
+          .set('Accept', accept)
+          .set('X-Boxel-Site', siteURL);
+
+      test('a page names none of the realms its site draws on', async function (assert) {
+        let page = await request
+          .get(`${mount}shop/driver`)
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        assert.strictEqual(page.status, 200);
+        assert.true(
+          page.text.includes('data-product="driver"'),
+          'the page is the source realm’s card',
+        );
+        assert.false(
+          page.text.includes(source),
+          'nothing in the page or its card data names the source realm',
+        );
+        assert.false(
+          page.text.includes(encodeURIComponent(source)),
+          'nor does its config',
+        );
+        assert.notStrictEqual(aliasedPrefix, '', 'the page names it by alias');
+      });
+
+      test('a source realm’s card is served under its alias, describing the site', async function (assert) {
+        let response = await visit(
+          pathOf(aliased('Product/driver')),
+          'application/vnd.card+json',
+        );
+        assert.strictEqual(response.status, 200);
+        assert.false(response.text.includes(source), 'no URL of the realm');
+        let doc = JSON.parse(response.text);
+        assert.strictEqual(doc.data.id, aliased('Product/driver'));
+        assert.strictEqual(doc.data.attributes.handle, 'driver');
+        assert.strictEqual(doc.data.meta.realmInfo.name, 'Alias Shop');
+        assert.false('realmUserId' in doc.data.meta.realmInfo);
+      });
+
+      test('an aliased address names its site, so it needs no header', async function (assert) {
+        let response = await request
+          .get(pathOf(aliased('Product/driver')))
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          JSON.parse(response.text).data.id,
+          aliased('Product/driver'),
+        );
+      });
+
+      test('a search of an aliased realm searches the realm and answers in aliases', async function (assert) {
+        let response = await request
+          .post('/_federated-search')
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('X-Boxel-Site', siteURL)
+          .send({
+            realms: [aliasedPrefix],
+            filter: {
+              'item.on': { module: aliased('product'), name: 'Product' },
+            },
+          });
+        assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+        assert.false(response.text.includes(source), 'no URL of the realm');
+        let ids = JSON.parse(response.text).data.map(
+          (resource: { id: string }) => resource.id,
+        );
+        assert.deepEqual(ids, [aliased('Product/driver')]);
+      });
+
+      test('the site’s own cards and modules name a source realm by alias on a visit, and by its URL otherwise', async function (assert) {
+        let visited = await visit(
+          `${mount}Feature/driver`,
+          'application/vnd.card+json',
+        );
+        assert.strictEqual(visited.status, 200);
+        assert.strictEqual(
+          JSON.parse(visited.text).data.relationships.product.links.self,
+          aliased('Product/driver'),
+        );
+        let module = await visit(`${mount}feature`, '*/*');
+        assert.strictEqual(module.status, 200);
+        assert.false(
+          module.text.includes(source),
+          'the module imports by alias',
+        );
+        assert.true(module.text.includes(aliased('product')));
+
+        // The prerenderer and the indexer send no site, so what they read, and
+        // what the index holds, stays canonical.
+        let unvisited = await request
+          .get(`${mount}Feature/driver`)
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          JSON.parse(unvisited.text).data.relationships.product.links.self,
+          `${source}Product/driver`,
+        );
+      });
+
+      test('an aliased address opened as a page moves to where the site serves its card', async function (assert) {
+        let response = await request
+          .get(pathOf(aliased('Product/driver')))
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        assert.strictEqual(response.status, 301);
+        assert.strictEqual(
+          new URL(response.headers['location'], `http://${host}`).pathname,
+          `${mount}shop/driver`,
+        );
+      });
+
+      test('an alias the site doesn’t draw on reaches no realm', async function (assert) {
+        let response = await request
+          .get(`${mount}_r/${'a'.repeat(26)}/Product/driver`)
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 404);
+      });
+    },
+  );
 });

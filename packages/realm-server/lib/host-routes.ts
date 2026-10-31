@@ -302,10 +302,35 @@ export async function resolveSiteRequest(
   }
 }
 
+// Where a site is mounted on the host a request came in on, and the mount its
+// canonical links name, each with a trailing slash. Host Mode v2 maps host
+// URLs to realms (so one realm can answer at /owner/shop/ on one host and at /
+// on another), and the owner picks the canonical one. Until that mapping
+// exists, both are the realm's own path on the request's host.
+export function siteMounts(
+  realm: Realm,
+  requestURL: URL,
+): { mount: URL; canonical: URL } {
+  let mount = new URL(new URL(realm.url).pathname, requestURL);
+  return { mount, canonical: mount };
+}
+
+// The site a mount URL names: the realm mounted exactly there.
+export async function siteAt(
+  mountURL: URL,
+  deps: RealmRoutingDeps,
+): Promise<Realm | undefined> {
+  let realm = await findOrMountRealm(mountURL, deps);
+  return realm &&
+    siteMounts(realm, mountURL).mount.pathname === mountURL.pathname
+    ? realm
+    : undefined;
+}
+
 // A request URL's path relative to the realm's mount, normalized; undefined
 // when the URL is outside the realm.
 export function sitePathOf(realm: Realm, requestURL: URL): string | undefined {
-  let mount = new URL(realm.url).pathname;
+  let mount = siteMounts(realm, requestURL).mount.pathname;
   let pathname = requestURL.pathname.endsWith('/')
     ? requestURL.pathname
     : `${requestURL.pathname}/`;

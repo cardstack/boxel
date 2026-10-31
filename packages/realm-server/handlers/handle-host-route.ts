@@ -8,6 +8,7 @@ import {
 import {
   resolveSiteRequest,
   siteHomeCard,
+  siteMounts,
   sitePathOf,
   sitePathsForCards,
 } from '../lib/host-routes.ts';
@@ -78,7 +79,7 @@ async function resolvePath(
     return json(ctxt, { kind: 'page', card: exact.rule.id });
   }
   let answer = await resolveSiteRequest(realm, pageURL, deps, ctxt.req.headers);
-  let mount = new URL(realm.url).pathname.replace(/\/$/, '');
+  let mount = siteMounts(realm, pageURL).mount.pathname.replace(/\/$/, '');
   if (answer.kind === 'redirect') {
     return json(ctxt, {
       kind: 'redirect',

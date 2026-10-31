@@ -34,6 +34,9 @@ export function siteRewriter(opts: {
   // Where the routing realm is mounted on the host the request came in on:
   // 'https://shop.example/' or 'https://space.example/fairway-shop/'.
   requestMount: URL;
+  // Where the canonical link and og:url point: the owner's chosen host URL
+  // for the site. The request's mount when not given.
+  canonicalMount?: URL;
   // The request's path, relative to the realm's mount: '/shop/driver'.
   requestPath: string;
   // Where the site serves each linked card, by card key.
@@ -47,7 +50,7 @@ export function siteRewriter(opts: {
   document: Document;
 }): SiteRewriter {
   let { requestMount, requestPath, document } = opts;
-  let canonicalMount = requestMount;
+  let canonicalMount = opts.canonicalMount ?? requestMount;
   let pathByCard = opts.paths;
   let at = (mount: URL, path: string) =>
     new URL(path.replace(/^\//, ''), mount).href;
