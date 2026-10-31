@@ -294,7 +294,7 @@ export async function startLoopbackCallback(opts?: {
         succeed(
           res,
           { kind: 'window', outcome: outcome as WindowOutcome },
-          outcome === 'done' ? 'Back to your terminal' : 'Nothing was changed',
+          'Back to your terminal',
         );
         return;
       }

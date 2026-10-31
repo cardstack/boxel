@@ -385,35 +385,6 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
   });
 
-  it('ends at once, approving nothing, when the secure window is cancelled', async () => {
-    windowEnds = 'cancelled';
-    try {
-      let before = await bindingCount();
-      let started = Date.now();
-      await expect(
-        keysApprove('my key', {
-          ...deps,
-          operation: 'service#Elsewhere.other',
-          realm,
-          yes: true,
-        }),
-      ).rejects.toThrow(/^Not approved: the secure window was closed/);
-      expect(
-        Date.now() - started,
-        'it does not wait for the window to time out',
-      ).toBeLessThan(60_000);
-      expect(windows.at(-1)!.fragment.get('operations')).toBe('other');
-      expect(await bindingCount()).toBe(before);
-      let { key } = await keysShow('my key', deps);
-      expect(
-        key.grants?.map((g) => g.destination),
-        'the key is granted nothing new',
-      ).not.toContain(`${vendor.alternateUrl}/`);
-    } finally {
-      windowEnds = 'approved';
-    }
-  });
-
   it('asks the realm server for interactive use, which it refuses, even when the approval needs a new grant', async () => {
     let refused = await keysApprove('my key', {
       ...deps,
@@ -532,5 +503,34 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     expect(await bindingCount()).toBe(0);
     let { key } = await keysShow('my key', deps);
     expect(key.grants).toEqual([]);
+  });
+
+  it('ends at once, approving nothing, when the secure window is cancelled', async () => {
+    windowEnds = 'cancelled';
+    try {
+      let before = await bindingCount();
+      let started = Date.now();
+      await expect(
+        keysApprove('my key', {
+          ...deps,
+          operation: 'service#Elsewhere.other',
+          realm,
+          yes: true,
+        }),
+      ).rejects.toThrow(/^Not approved: the secure window was closed/);
+      expect(
+        Date.now() - started,
+        'it does not wait for the window to time out',
+      ).toBeLessThan(60_000);
+      expect(windows.at(-1)!.fragment.get('operations')).toBe('other');
+      expect(await bindingCount()).toBe(before);
+      let { key } = await keysShow('my key', deps);
+      expect(
+        key.grants?.map((g) => g.destination),
+        'the key is granted nothing new',
+      ).not.toContain(`${vendor.alternateUrl}/`);
+    } finally {
+      windowEnds = 'approved';
+    }
   });
 });
