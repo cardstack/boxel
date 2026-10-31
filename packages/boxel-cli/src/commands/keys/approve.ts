@@ -504,6 +504,11 @@ export async function keysApprove(
     return result;
   }
 
+  // The approvals in place before the window opens, so what it approved is
+  // told apart from what was there already.
+  let before = new Set(
+    (await listOwnBindings(ctx.realmServerUrl, token)).map((b) => b.approvalId),
+  );
   let first = planned[0]!;
   let fill = first.fills[0]!;
   let fragment: Record<string, string> = options.instance
@@ -536,6 +541,7 @@ export async function keysApprove(
       b.type.name === batch.card.exportName &&
       sameModule(b.type.module, batch.card.module) &&
       names.has(b.operation) &&
+      !before.has(b.approvalId) &&
       planned.some(
         (p) =>
           p.operation.name === b.operation &&
