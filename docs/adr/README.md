@@ -31,3 +31,6 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed |
 | [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed |
 | [016](016-let-a-realm-route-to-another-realms-card-served-as-that-realm-prerendered-it.md)      | Let a realm route to another realm's card, served as that realm prerendered it            | proposed |
+| [017](017-address-a-sites-cards-with-path-templates-resolved-against-the-index.md)              | Address a site's cards with path templates resolved against the index                     | proposed |
+| [018](018-serve-the-realms-a-site-draws-on-under-aliases-through-one-boundary.md)               | Serve the realms a site draws on under aliases, through one boundary                      | proposed |
+| [019](019-link-and-frame-a-sites-pages-through-base-contracts-not-card-code.md)                 | Link and frame a site's pages through base contracts, not card code                       | proposed |
