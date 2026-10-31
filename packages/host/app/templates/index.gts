@@ -37,6 +37,7 @@ import config from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
 
+import { startPrerenderHandoff } from '@cardstack/host/lib/prerender-handoff';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -260,7 +261,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
-  // TODO: remove in CS-9977, with rehydration
+  // Operator mode never shows the prerender; host mode hands it over instead
+  // (handOffPrerender below).
   removeIsolatedMarkup = modifier(() => {
     if (typeof document === 'undefined') {
       return;
@@ -307,6 +309,15 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     }
   });
 
+  // Host mode keeps the prerendered page up until the live card can take
+  // over without a blank frame or a scroll jump (see prerender-handoff).
+  handOffPrerender = modifier((element: HTMLElement) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    return startPrerenderHandoff(element);
+  });
+
   <template>
     {{#if this.hostModeService.isActive}}
       {{#unless this.hostModeService.headTemplateContainsTitle}}
@@ -325,7 +336,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         @hrefFor={{this.hostNavigation.hrefFor}}
         @navigateTo={{this.hostNavigation.navigateTo}}
         @prefetch={{this.hostNavigation.prefetch}}
-        {{this.removeIsolatedMarkup}}
+        {{this.handOffPrerender}}
         {{this.installHostNavigation}}
       />
     {{else}}
