@@ -63,6 +63,10 @@ import {
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
 import {
+  keyLimitDefaultsFromEnv,
+  setKeyLimitDefaults,
+} from './lib/key-limit-settings.ts';
+import {
   reportPlaintextCensus,
   reportSealedCensus,
   secretsKeyring,
@@ -217,6 +221,8 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 
 // How long a grant whose key the vendor rejected waits between probes.
 const KEY_GRANT_PROBE_INTERVAL_MS = probeIntervalFromEnv();
+// The limits a share or key gets where its owner set none.
+setKeyLimitDefaults(keyLimitDefaultsFromEnv());
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),

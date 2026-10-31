@@ -9,6 +9,11 @@ import type { Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
+import {
+  KEY_LIMIT_COLUMNS,
+  limitsOf,
+  type KeyLimits,
+} from './key-limit-settings.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 
@@ -74,6 +79,10 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // How much of the key anyone may spend through the share, its owner's
+  // settings with the platform's defaults filled in. Seen only by the share's
+  // owner and the realm's direct writers, as every share is.
+  limits: KeyLimits;
   // In a realm's listing: the operations the share is approved for there,
   // one per binding, so the realm's writers see what each share is used by.
   operations?: KeyShareOperation[];
@@ -103,7 +112,7 @@ export interface KeyShareNotice {
 // The most notices a realm's listing returns, newest first.
 export const MAX_KEY_SHARE_NOTICES = 100;
 
-const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at`;
+const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at, ${KEY_LIMIT_COLUMNS}`;
 
 function iso(value: unknown): string | null {
   return value == null ? null : new Date(value as string).toISOString();
@@ -126,6 +135,7 @@ function toShare(
     suspendedAt: iso(row.suspended_at),
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
+    limits: limitsOf(row),
   };
 }
 

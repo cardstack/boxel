@@ -87,6 +87,34 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a peek says what a take would, and takes nothing', async function (assert) {
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 3 },
+          'a key nothing has taken from is a full bucket',
+        );
+        await store.take(KEY, BUCKET, 3);
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: false,
+          retryAfterSeconds: 10,
+        });
+        nowMs += 10_000;
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: true,
+          remaining: 1,
+        });
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 1 },
+          'peeking twice leaves the bucket where it was',
+        );
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET, 2),
+          { admitted: false, retryAfterSeconds: 10 },
+          'a peek of several tokens waits for all of them',
+        );
+      });
+
       test('each key has its own bucket', async function (assert) {
         await store.take(KEY, BUCKET, 3);
         assert.false((await store.take(KEY, BUCKET)).admitted);
@@ -249,11 +277,15 @@ module(basename(import.meta.filename), function () {
     });
 
     module('when the store is unavailable', function () {
-      test('a take is refused as unavailable', async function (assert) {
+      test('a take and a peek are refused as unavailable', async function (assert) {
         await dbAdapter.execute('DROP TABLE rate_limit_buckets');
         let outcome = await store.take(KEY, BUCKET);
         assert.deepEqual(outcome, { admitted: false, unavailable: true });
         assert.true(isRateLimitUnavailable(outcome));
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: false,
+          unavailable: true,
+        });
       });
 
       test('a spend and a budget read are refused as unavailable', async function (assert) {

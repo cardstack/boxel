@@ -71,6 +71,13 @@ export interface RateLimitStore {
     limit: TokenBucketLimit,
     cost?: number,
   ): Promise<TokenBucketOutcome>;
+  // Whether a take of `cost` tokens would be admitted now, without taking
+  // any. `remaining` is the whole tokens in the bucket.
+  peek(
+    key: string,
+    limit: TokenBucketLimit,
+    cost?: number,
+  ): Promise<TokenBucketOutcome>;
   // Spends `cost` units of the key's budget for the current period, all of
   // them or none.
   spend(key: string, limit: BudgetLimit, cost?: number): Promise<BudgetOutcome>;
@@ -112,13 +119,7 @@ export class DBRateLimitStore implements RateLimitStore {
     limit: TokenBucketLimit,
     cost = 1,
   ): Promise<TokenBucketOutcome> {
-    assertWholeCount('token-bucket burst', limit.burst);
-    assertWholeCount('token-bucket take', cost);
-    if (!Number.isFinite(limit.refillPerMinute) || limit.refillPerMinute <= 0) {
-      throw new Error(
-        `a token bucket refills at a positive rate, not ${limit.refillPerMinute} per minute`,
-      );
-    }
+    assertTokenBucket(limit, cost);
     let nowMs = this.#now();
     let { burst, refillPerMinute } = limit;
     if (cost > burst) {
@@ -184,29 +185,65 @@ export class DBRateLimitStore implements RateLimitStore {
 
     // Refused. The bucket is read again only to say when the caller can come
     // back; it may have moved since, so the answer is a hint.
-    let level: number;
-    try {
-      let current = await query(this.#dbAdapter, [
-        'SELECT tokens, refilled_at FROM rate_limit_buckets WHERE bucket_key =',
-        param(key),
-      ] as Expression);
-      level =
-        current.length === 0
-          ? burst
-          : Math.min(
-              burst,
-              Number(current[0].tokens) +
-                (Math.max(0, nowMs - Number(current[0].refilled_at)) *
-                  refillPerMinute) /
-                  MS_PER_MINUTE,
-            );
-    } catch (e: unknown) {
-      return this.#unavailable('read token bucket', key, e);
+    let level = await this.#level(key, limit, nowMs);
+    if (typeof level !== 'number') {
+      return level;
     }
     return {
       admitted: false,
       retryAfterSeconds: refillSeconds(cost - level, refillPerMinute),
     };
+  }
+
+  async peek(
+    key: string,
+    limit: TokenBucketLimit,
+    cost = 1,
+  ): Promise<TokenBucketOutcome> {
+    assertTokenBucket(limit, cost);
+    let { burst, refillPerMinute } = limit;
+    if (cost > burst) {
+      return {
+        admitted: false,
+        retryAfterSeconds: refillSeconds(burst, refillPerMinute),
+      };
+    }
+    let level = await this.#level(key, limit, this.#now());
+    if (typeof level !== 'number') {
+      return level;
+    }
+    return level >= cost
+      ? { admitted: true, remaining: Math.floor(level) }
+      : {
+          admitted: false,
+          retryAfterSeconds: refillSeconds(cost - level, refillPerMinute),
+        };
+  }
+
+  // The bucket's level at `nowMs`, as `take` computes it. A key nothing has
+  // taken from is a full bucket.
+  async #level(
+    key: string,
+    { burst, refillPerMinute }: TokenBucketLimit,
+    nowMs: number,
+  ): Promise<number | RateLimitUnavailable> {
+    try {
+      let current = await query(this.#dbAdapter, [
+        'SELECT tokens, refilled_at FROM rate_limit_buckets WHERE bucket_key =',
+        param(key),
+      ] as Expression);
+      return current.length === 0
+        ? burst
+        : Math.min(
+            burst,
+            Number(current[0].tokens) +
+              (Math.max(0, nowMs - Number(current[0].refilled_at)) *
+                refillPerMinute) /
+                MS_PER_MINUTE,
+          );
+    } catch (e: unknown) {
+      return this.#unavailable('read token bucket', key, e);
+    }
   }
 
   async spend(
@@ -365,6 +402,16 @@ function budgetPeriod(
       throw new Error(`unknown budget period ${period satisfies never}`);
   }
   return { periodStart: start / 1000, resetsAt: end / 1000 };
+}
+
+function assertTokenBucket(limit: TokenBucketLimit, cost: number) {
+  assertWholeCount('token-bucket burst', limit.burst);
+  assertWholeCount('token-bucket take', cost);
+  if (!Number.isFinite(limit.refillPerMinute) || limit.refillPerMinute <= 0) {
+    throw new Error(
+      `a token bucket refills at a positive rate, not ${limit.refillPerMinute} per minute`,
+    );
+  }
 }
 
 function assertWholeCount(what: string, value: number) {

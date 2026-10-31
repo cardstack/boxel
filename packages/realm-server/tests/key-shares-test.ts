@@ -276,10 +276,16 @@ module(basename(import.meta.filename), function () {
             suspendedAt: null,
             createdAt: attributes.createdAt,
             updatedAt: attributes.updatedAt,
+            limits: {
+              rateBurst: 25,
+              rateRefillPerMinute: 15,
+              dailyBudget: 2400,
+              monthlyBudget: 72000,
+            },
             operations: [],
           },
         ],
-        `another writer sees the share's owner and state, not its key`,
+        `another writer sees the share's owner, state and limits, not its key`,
       );
     });
 

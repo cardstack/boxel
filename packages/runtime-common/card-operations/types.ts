@@ -1683,13 +1683,19 @@ export type OperationErrorCode =
   // touch the same target.
   | 'conflicting-targets'
   // A caller who isn't signed in, admitted by the realm's policy, has used up
-  // the invocations the realm allows their address in the current window.
-  // Nothing was done. Carries a 429 with `Retry-After`, and
-  // `meta.retryAfterSeconds`.
+  // the invocations the realm allows their address in the current window; or
+  // an interactive `callApi` caller has made as many calls with a share or key
+  // as its owner's per-caller limit allows for now. Nothing was done. Carries
+  // a 429 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limited'
-  // The realm couldn't count an invocation by a caller who isn't signed in, so
-  // it turned the caller away rather than let it through uncounted. Nothing
-  // was done. Carries a 503 with `Retry-After`.
+  // An interactive `callApi` whose share or key has served its owner's daily
+  // or monthly budget of calls. Nothing was sent. Carries a 429 with
+  // `Retry-After` at the period's reset, and `meta.retryAfterSeconds`.
+  | 'over-budget'
+  // The realm couldn't count an invocation by a caller who isn't signed in,
+  // or an interactive `callApi` against its key's limits, so it turned the
+  // caller away rather than let it through uncounted. Nothing was done.
+  // Carries a 503 with `Retry-After`, and `meta.retryAfterSeconds`.
   | 'rate-limit-unavailable'
   // A `callApi` whose request carries a credential slot that no binding fills:
   // none was approved for the operation in this realm (for the caller, for a
