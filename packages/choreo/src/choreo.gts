@@ -40,7 +40,12 @@ import {
   setPassScheduler,
 } from './far.ts';
 import { GESTURE, type GestureRef, trackGestures } from './gesture.ts';
-import { boundsOf as bounds, measure, type Snapshot } from './measure.ts';
+import {
+  boundsOf as bounds,
+  isRendered,
+  measure,
+  type Snapshot,
+} from './measure.ts';
 import {
   type ChoreoHost,
   type ChoreoProvider,
@@ -452,6 +457,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
   private leaving = new Set<ChoreoNode>();
   private snapshots = new Map<ChoreoNode, Snapshot>();
+  /** participants with no layout box before this pass (display: none) */
+  private unrendered = new Set<ChoreoNode>();
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
@@ -499,6 +506,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // a quiet region must not take its pause to the grave
       this.unquiet();
       this.viewObserver?.disconnect();
+      this.snapshots.clear();
+      this.unrendered.clear();
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -634,7 +643,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (this.viewObserver) {
         const near = this.nearViewBand();
         for (const node of this.participants) {
-          const r = node.element?.getBoundingClientRect();
+          const r = node.element && measure(node.element)?.el;
           if (r && r.bottom >= near.top && r.top <= near.bottom) {
             this.nearView.add(node);
           }
@@ -713,6 +722,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   private snapshot() {
     this.snapshots.clear();
+    this.unrendered.clear();
+    if (this.element && !isRendered(this.element)) {
+      // the whole region is hidden (a buried stack card): nothing in it has
+      // a box, and its pass is declined
+      return;
+    }
     this.rootSnapshot = this.element?.getBoundingClientRect();
     const wired = this.args.inView ? this.nearView : undefined;
     for (const node of this.participants) {
@@ -722,7 +737,36 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         !this.orphans.has(node) &&
         (!wired || wired.has(node) || this.flying.has(node))
       ) {
-        this.snapshots.set(node, measure(el));
+        const snap = measure(el);
+        if (snap) {
+          this.snapshots.set(node, snap);
+        } else {
+          this.unrendered.add(node);
+        }
+      }
+    }
+  }
+
+  /**
+   * A pass on a region hidden by an ancestor plays nothing: arrivals were
+   * never seen arriving, and leavers go now. A <Presence>-managed leaver
+   * belongs to its Presence, as on any pass with nothing to play.
+   */
+  private declineUnseen() {
+    this.arrived.clear();
+    this.snapshots.clear();
+    this.unrendered.clear();
+    for (const node of [...this.claimed]) {
+      this.drop(node);
+    }
+    for (const node of this.participants) {
+      if (
+        !node.isPresent &&
+        !node.presenceManaged &&
+        !this.leaving.has(node) &&
+        !this.orphans.has(node)
+      ) {
+        node.exitComplete();
       }
     }
   }
@@ -732,6 +776,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.passPending = false;
     const root = this.element;
     if (!root) {
+      return undefined;
+    }
+    if (!isRendered(root)) {
+      // hidden by an ancestor: none of this is seen, so none of it plays.
+      // What arrived or changed meanwhile lands as layout puts it when the
+      // region is shown again, as on waking (@idle).
+      this.declineUnseen();
       return undefined;
     }
     // THE FAST PATH: a volatile re-pass that cannot change the run. On a
@@ -787,6 +838,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       type,
     });
     const near = this.args.inView ? this.nearViewBand() : undefined;
+    // an arrival, or one shown again (a fold opening): it arrives where it
+    // now lives. One that arrives hidden has nowhere to land yet.
+    const arrive = (node: ChoreoNode, el: Element) => {
+      const now = measure(el);
+      if (!now) {
+        return;
+      }
+      if (near) {
+        if (now.el.bottom < near.top || now.el.top > near.bottom) {
+          // it lands out of reach of the view: layout places it
+          return;
+        }
+        // wired now: the observer reports only after the next frame
+        this.nearView.add(node);
+      }
+      inserted.push(sprite(node, 'inserted', undefined, bounds(now, after)));
+    };
     const candidates = new Set([
       ...this.participants,
       ...this.claimed,
@@ -803,18 +871,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         const prior = this.orphanBounds.get(node);
         removed.push(sprite(node, 'removed', prior));
       } else if (this.arrived.has(node)) {
-        if (near) {
-          const r = el.getBoundingClientRect();
-          if (r.bottom < near.top || r.top > near.bottom) {
-            // it lands out of reach of the view: layout places it
-            continue;
-          }
-          // wired now: the observer reports only after the next frame
-          this.nearView.add(node);
-        }
-        inserted.push(
-          sprite(node, 'inserted', undefined, bounds(measure(el), after)),
-        );
+        arrive(node, el);
       } else if (!el.isConnected || this.claimed.has(node)) {
         if (this.leaving.has(node)) {
           // its Presence has let it go — we already played its exit
@@ -826,20 +883,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           this.drop(node);
         }
       } else if (!node.isPresent) {
-        if (!this.leaving.has(node) && snap) {
+        if (!this.leaving.has(node) && (snap || this.unrendered.has(node))) {
+          // one that leaves while hidden has no box to fade from, but its
+          // exit still has to complete
           this.leaving.add(node);
-          removed.push(sprite(node, 'removed', bounds(snap, before)));
+          removed.push(sprite(node, 'removed', snap && bounds(snap, before)));
         }
+      } else if (this.unrendered.has(node)) {
+        arrive(node, el);
       } else if (snap) {
         this.leaving.delete(node);
-        kept.push(
-          sprite(
-            node,
-            'kept',
-            bounds(snap, before),
-            bounds(measure(el), after),
-          ),
-        );
+        const now = measure(el);
+        if (now) {
+          kept.push(
+            sprite(node, 'kept', bounds(snap, before), bounds(now, after)),
+          );
+        }
+        // else hidden this pass: it has no box to move to, and nothing to fade
       }
     }
     // an inserted id that matches a removed one: the new element carries the old as its counterpart
@@ -882,6 +942,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     this.arrived.clear();
     this.snapshots.clear();
+    this.unrendered.clear();
     const claimed = [...this.claimed];
     this.claimed.clear();
     // the barrier now pairs any id inserted here against the same id removed in
