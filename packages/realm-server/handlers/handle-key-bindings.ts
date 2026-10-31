@@ -238,6 +238,7 @@ export function handleListKeyBindings({
   virtualNetwork,
   realms,
   reconciler,
+  matrixClient,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
@@ -248,6 +249,7 @@ export function handleListKeyBindings({
         findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
         definitionLookup,
         virtualNetwork,
+        matrixServerName: matrixClient.serverName,
       },
       owner,
       bindings,
