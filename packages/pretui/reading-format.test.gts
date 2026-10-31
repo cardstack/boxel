@@ -70,6 +70,12 @@ module('Pretui | reading-format', function (hooks) {
     assert.strictEqual(formatClock(Number.NaN), '0:00');
   });
 
+  test('formatClock adds hours past an hour, floors fractions, and never wraps at a day', function (assert) {
+    assert.strictEqual(formatClock(3725), '1:02:05');
+    assert.strictEqual(formatClock(65.9), '1:05', 'a fraction floors');
+    assert.strictEqual(formatClock(90000), '25:00:00', 'hours run past a day');
+  });
+
   // ── formatBytes ─────────────────────────────────────────────────────────
   test('formatBytes defaults to IEC binary and never conflates it with SI', function (assert) {
     assert.strictEqual(
