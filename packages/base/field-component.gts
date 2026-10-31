@@ -126,6 +126,13 @@ function coversCard(
   );
 }
 
+// One slot of a linksToMany whose card hasn't loaded, as during a render that
+// is still loading the field's links. An empty linksTo is different: it shows
+// its type's format with no model, which the default formats draw as empty.
+function isUnloadedSlot(field: Field | undefined, value: unknown): boolean {
+  return Boolean(field && field.fieldType === 'linksToMany' && value == null);
+}
+
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {
   @consume(CardContextName) declare dynamicCardContext: CardContext;
   @consume(CardCrudFunctionsContextName)
@@ -512,6 +519,11 @@ export function getBoxComponent(
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}
+                  {{else if (isUnloadedSlot field model.value)}}
+                    {{! A linksToMany slot whose card hasn't loaded. There is no
+                        card to give its type's format, which a card's own
+                        template would read as a card, so nothing is drawn
+                        until it loads. }}
                   {{else if
                     (and
                       (isCompoundField model.value)
