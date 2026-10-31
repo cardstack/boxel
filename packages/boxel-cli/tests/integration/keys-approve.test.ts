@@ -136,14 +136,15 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
   let keyId: string;
   // The approve pages the CLI opened, and the bindings that existed when the
   // window was opened, before it approved anything.
-  // How the stand-in approve page ends: approving what the CLI named, or
-  // cancelled before approving anything.
-  let windowEnds: 'approved' | 'cancelled' = 'approved';
   let windows: {
     url: URL;
     fragment: URLSearchParams;
     bindingsBefore: number;
   }[];
+
+  // How the stand-in approve page ends: approving what the CLI named, or
+  // cancelled before approving anything.
+  let windowEnds: 'approved' | 'cancelled' = 'approved';
 
   async function signInOnSecureOrigin() {
     let response = await fetch(`${realmServerUrl}_secure-session`, {

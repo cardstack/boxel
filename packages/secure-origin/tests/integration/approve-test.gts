@@ -1,4 +1,10 @@
-import { click, render, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -525,6 +531,86 @@ module('Integration | approve pages', function (hooks) {
 
       await click('[data-test-keys-close]');
       assert.strictEqual(submitted.length, 1, 'the CLI is told once');
+    });
+
+    test('closing while the approval is being saved waits, and tells the CLI only that it was made', async function (assert) {
+      let release!: () => void;
+      let held = new Promise<void>((resolve) => (release = resolve));
+      serve({
+        'POST _key-bindings': async () => {
+          await held;
+          return json(201, { data: [], meta: { batchId: 'b' } });
+        },
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      click('[data-test-approve-save]');
+      await waitUntil(() => approvals().length === 1);
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, [], 'nothing is told while the save runs');
+      release();
+      await settled();
+      assert.deepEqual(submitted, [
+        {
+          ...CANCELLED[0]!,
+          fields: [
+            ['state', CLI_STATE],
+            ['window_outcome', 'done'],
+          ],
+        },
+      ]);
+      assert.deepEqual(navigations, [], 'the window goes to the CLI');
+    });
+
+    test('closing while an approval that then fails is being saved tells the CLI it was cancelled', async function (assert) {
+      let release!: () => void;
+      let held = new Promise<void>((resolve) => (release = resolve));
+      serve({
+        'POST _key-bindings': async () => {
+          await held;
+          return refusal(500, 'Something broke');
+        },
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      click('[data-test-approve-save]');
+      await waitUntil(() => approvals().length === 1);
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, [], 'nothing is told while the save runs');
+      release();
+      await settled();
+      assert.deepEqual(submitted, CANCELLED);
+    });
+
+    test('with nothing to approve, the CLI is told at once', async function (assert) {
+      serve({
+        'POST _key-bindings/batch': () =>
+          json(200, {
+            data: {
+              type: 'key-binding-batch',
+              attributes: batch({ groups: [] }),
+            },
+          }),
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(submitted, [
+        {
+          ...CANCELLED[0]!,
+          fields: [
+            ['state', CLI_STATE],
+            ['window_outcome', 'done'],
+          ],
+        },
+      ]);
+    });
+
+    test('the review-changes page tells the CLI too', async function (assert) {
+      visitShell(`review-changes${window.location.hash}`);
+      await render(<template><ReviewChangesPage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
     });
 
     test('closing the window tells the CLI the approval was cancelled', async function (assert) {

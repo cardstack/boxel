@@ -297,29 +297,31 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
-    try {
-      let share = await swapKey(this.args.api.config, {
-        keyId,
-        shareId: choosing.share.id,
-      });
-      this.page.state = {
-        name: 'done',
-        context: choosing.context,
-        share,
-        key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
-      };
-      if (!this.args.api.tellCliDone()) {
-        this.args.api.close();
+    await this.args.api.saving(async () => {
+      try {
+        let share = await swapKey(this.args.api.config, {
+          keyId,
+          shareId: choosing.share.id,
+        });
+        this.page.state = {
+          name: 'done',
+          context: choosing.context,
+          share,
+          key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
+        };
+        if (!this.args.api.tellCliDone()) {
+          this.args.api.close();
+        }
+      } catch (e) {
+        if (isSignedOut(e)) {
+          this.args.api.signedOut();
+          return;
+        }
+        this.form.error = failureMessage(e);
+      } finally {
+        this.form.saving = false;
       }
-    } catch (e) {
-      if (isSignedOut(e)) {
-        this.args.api.signedOut();
-        return;
-      }
-      this.form.error = failureMessage(e);
-    } finally {
-      this.form.saving = false;
-    }
+    });
   };
 }
 

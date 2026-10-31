@@ -1160,6 +1160,50 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
 
+    test('reached from an approve page the CLI opened, Close tells the CLI the approval was cancelled', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        let cli = `cli_port=51234&cli_state=${'c'.repeat(32)}`;
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&then=approve&${cli}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['window_outcome', 'cancelled'],
+          ],
+        ]);
+        assert.deepEqual(navigations, [], 'the window goes to the CLI');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('opened with a CLI listener but not from an approve page, Close only closes', async function (assert) {
+      let submitted = 0;
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = () => submitted++;
+      try {
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.strictEqual(submitted, 0);
+        assert.deepEqual(navigations, [{ how: 'close' }]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('refused access, says so and doesn’t offer to try again', async function (assert) {
       serve({
         'POST _secure-window/context': () =>

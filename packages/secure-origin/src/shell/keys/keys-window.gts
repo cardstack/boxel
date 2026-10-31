@@ -15,7 +15,10 @@
 // A window opened for the CLI (`@cli`, the listener the CLI waits on) tells
 // that listener how it ended, once: `done` when its page has made the change,
 // or `cancelled` when the user closes the window or cancels before then, from
-// whatever the window shows, so the terminal stops waiting at once. Closing
+// whatever the window shows, so the terminal stops waiting at once. A close
+// while a page's change is being saved (`api.saving`) waits for the save to
+// settle: a save that made the change has told the CLI `done` by then, and
+// only one that didn't leaves `cancelled` to tell. Closing
 // the browser's own window or tab tells it nothing: a page that is closing
 // can't start the navigation that reaches the listener, and the origin's
 // `connect-src` names no loopback address for a request to. The CLI waits
@@ -61,6 +64,8 @@ export interface KeysWindowAPI {
   // Tells the CLI the change is made, and answers whether it did: false when
   // the window wasn't opened for the CLI, or has told it already.
   tellCliDone: () => boolean;
+  // Runs a page's save, during which a close waits for it to settle.
+  saving: <T>(save: () => Promise<T>) => Promise<T>;
 }
 
 interface Signature {
@@ -234,6 +239,7 @@ export default class KeysWindow extends Component<Signature> {
       visit: this.visit,
       forCli: Boolean(this.args.cli),
       tellCliDone: () => this.tellCli('done'),
+      saving: this.saving,
     };
   }
 
@@ -297,7 +303,29 @@ export default class KeysWindow extends Component<Signature> {
     handToCli(cli, { window: outcome });
     return true;
   }
+  private saves = 0;
+  private closeAfterSave = false;
+  private saving = async <T,>(save: () => Promise<T>): Promise<T> => {
+    this.saves++;
+    try {
+      return await save();
+    } finally {
+      this.saves--;
+      if (this.saves === 0 && this.closeAfterSave) {
+        this.closeAfterSave = false;
+        // A save that made the change has sent the window to the CLI's
+        // listener already; closing now could stop that navigation.
+        if (!this.toldCli) {
+          this.close();
+        }
+      }
+    }
+  };
   private close = () => {
+    if (this.args.cli && !this.toldCli && this.saves > 0) {
+      this.closeAfterSave = true;
+      return;
+    }
     if (!this.tellCli('cancelled')) {
       navigation.close();
     }

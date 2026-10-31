@@ -84,6 +84,7 @@ type State =
   | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'choosing'; batch: ApprovalBatch; context: WindowContext }
   | { name: 'done'; count: number; card: string; realm: string };
+type ChoosingState = Extract<State, { name: 'choosing' }>;
 
 interface ApproveArgs {
   api: KeysWindowAPI;
@@ -730,6 +731,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           realm: batch.realm.name,
         };
         this.args.api.visit.loaded();
+        this.args.api.tellCliDone();
         return;
       }
       let choices = slotChoices(batch);
@@ -795,6 +797,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
+    await this.args.api.saving(() => this.approve(state));
+  };
+
+  private approve = async (state: ChoosingState) => {
     try {
       let operations = approvalOf(
         state.batch,
