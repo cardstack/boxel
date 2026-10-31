@@ -22,6 +22,11 @@ class Product extends CardDef {
   @field handle = contains(StringField);
 }
 
+class Bundle extends CardDef {
+  static displayName = 'Bundle';
+  @field handle = contains(StringField);
+}
+
 function product(handle: string, name: string) {
   return {
     data: {
@@ -50,7 +55,15 @@ module('Integration | site routes panel', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        'product.gts': { Product },
+        'product.gts': { Product, Bundle },
+        'Bundle/kit.json': {
+          data: {
+            attributes: { handle: 'driver', cardInfo: { name: 'Driver kit' } },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}product`, name: 'Bundle' },
+            },
+          },
+        },
         'Product/a.json': product('driver', 'Driver'),
         'Product/b.json': product('putter', 'Putter'),
         'Product/c.json': product('putter', 'Putter, left-handed'),
@@ -64,11 +77,11 @@ module('Integration | site routes panel', function (hooks) {
     async () => await loader.import('@cardstack/base/card-api'),
   );
 
-  function pageType(path: string) {
+  function pageType(path: string, name = 'Product') {
     return {
-      name: 'Products',
+      name: `${name}s`,
       sourceRealm: testRealmURL,
-      cardType: { module: `${testRealmURL}product`, name: 'Product' },
+      cardType: { module: `${testRealmURL}product`, name },
       path,
       sort: JSON.stringify([{ by: 'cardTitle', direction: 'asc' }]),
     };
@@ -128,5 +141,27 @@ module('Integration | site routes panel', function (hooks) {
     assert
       .dom('[data-test-site-routes-invalid-path]')
       .includesText('keeps serving these cards at their previous path');
+  });
+
+  test('an address an earlier page type serves is that one’s', async function (assert) {
+    await renderPanel({
+      pageTypes: [
+        pageType('/shop/{handle}'),
+        pageType('/shop/{handle}', 'Bundle'),
+      ],
+    });
+    await waitFor('[data-test-site-routes-taken]');
+    assert
+      .dom(
+        '[data-test-site-routes-page-type="Bundles"] [data-test-site-routes-taken]',
+      )
+      .includesText(
+        "Driver kit isn't served: /shop/driver is Driver, from Products",
+      );
+    assert
+      .dom(
+        '[data-test-site-routes-page-type="Products"] [data-test-site-routes-taken]',
+      )
+      .doesNotExist('the page type the site tries first keeps its addresses');
   });
 });
