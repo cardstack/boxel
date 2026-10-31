@@ -53,9 +53,10 @@ export class VirtualNetwork {
   // mapping is added or removed (both clear the cache).
   private toURLHrefCache = new Map<string, string>();
   // Memo for unresolveURL, the inverse of toURLHref. It runs on hot store and
-  // indexing paths and each miss pays a native `new URL()` in the virtual→real
-  // mapping chase. Same pure-function-of-mappings contract as toURLHrefCache:
-  // entries stay valid until a realm or URL mapping changes.
+  // indexing paths and each miss pays a native `new URL()` to serialize its
+  // input, and another in the virtual→real mapping chase when no target
+  // matches directly. Same pure-function-of-mappings contract as
+  // toURLHrefCache: entries stay valid until a realm or URL mapping changes.
   private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
   // Memo for toRealURLHref — the single canonical STORE KEY. It folds every id
   // spelling (RRI, virtual alias, url-mapped alias, real URL) onto the real
@@ -177,11 +178,17 @@ export class VirtualNetwork {
     }
   }
 
+  // The import map a Loader resolves specifiers through (ADR 010 §1.2). The
+  // longest registered prefix that the specifier starts with claims it, and
+  // the remainder is handed to that prefix's handler. A prefix registered
+  // through `addRealmMapping` or `addPackageMapping` maps the remainder under
+  // its target URL and refuses one that would resolve outside it, with a
+  // TypeError, which the Loader treats as a failed resolution.
   resolveImport = (moduleIdentifier: string) => {
-    for (let [prefix, handler] of this.importMap) {
-      if (moduleIdentifier.startsWith(prefix)) {
-        return handler(moduleIdentifier.slice(prefix.length));
-      }
+    let match = longestPrefixEntry(this.importMap, moduleIdentifier);
+    if (match) {
+      let [prefix, handler] = match;
+      return handler(moduleIdentifier.slice(prefix.length));
     }
     if (!isUrlLike(moduleIdentifier)) {
       moduleIdentifier = new URL(moduleIdentifier, PACKAGES_FAKE_ORIGIN).href;
@@ -342,14 +349,43 @@ export class VirtualNetwork {
 
   private addPrefixMapping(prefix: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(prefix);
-    let normalizedTarget = ensureTrailingSlash(targetURL);
+    // Stored in the URL parser's own serialization, because every lookup
+    // against it compares a serialized URL textually: a target spelled with an
+    // uppercase host or a default port would otherwise never match the URLs
+    // it serves, and the escape check in `joinUnderTarget` would refuse every
+    // remainder under it. A target that is not an absolute URL is refused here
+    // rather than at the first resolution through it.
+    let normalizedTarget = new URL(ensureTrailingSlash(targetURL)).href;
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.clearURLCaches();
-    this.addImportMap(
-      normalizedId,
-      (rest) => new URL(rest, normalizedTarget).href,
+    this.addImportMap(normalizedId, (rest) =>
+      joinUnderTarget(normalizedTarget, rest),
     );
     this.notifyMappingChange();
+  }
+
+  // The registered prefix that `identifier` starts with, and its target. When
+  // several do, the longest, since the more specific prefix holds what lies
+  // beneath it.
+  private prefixMatch(identifier: string): [string, string] | undefined {
+    return longestPrefixEntry(this.realmMappings, identifier);
+  }
+
+  // The registered target that `url` starts with, and its prefix: the inverse
+  // of `prefixMatch`, with the same longest-wins rule, so a URL under two
+  // nested realm targets belongs to the deeper realm.
+  private targetMatch(url: string): [string, string] | undefined {
+    let best: [string, string] | undefined;
+    for (let entry of this.realmMappings) {
+      let target = entry[1];
+      if (
+        url.startsWith(target) &&
+        (best === undefined || target.length > best[1].length)
+      ) {
+        best = entry;
+      }
+    }
+    return best;
   }
 
   /**
@@ -508,6 +544,10 @@ export class VirtualNetwork {
   /**
    * Convert a URL back to its registered prefix form when one matches,
    * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   * When several targets contain the URL, the deepest one's prefix is used,
+   * mirroring the longest-prefix rule `resolveImport` applies the other way.
+   * An http(s) input is matched in its parsed serialization, so its dot
+   * segments are folded before it is re-spelled.
    *
    * If the input doesn't directly match any realm-prefix target, and the
    * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
@@ -528,10 +568,9 @@ export class VirtualNetwork {
   }
 
   private computeUnresolveURL(url: string): RealmResourceIdentifier {
-    for (let [prefix, target] of this.realmMappings) {
-      if (url.startsWith(target)) {
-        return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
-      }
+    let direct = this.prefixFormOf(serializedURL(url));
+    if (direct !== undefined) {
+      return direct;
     }
     if (url.startsWith('http://') || url.startsWith('https://')) {
       let resolved: string | undefined;
@@ -541,15 +580,28 @@ export class VirtualNetwork {
         resolved = undefined;
       }
       if (resolved && resolved !== url) {
-        for (let [prefix, target] of this.realmMappings) {
-          if (resolved.startsWith(target)) {
-            return (prefix +
-              resolved.slice(target.length)) as RealmResourceIdentifier;
-          }
+        let viaMapping = this.prefixFormOf(resolved);
+        if (viaMapping !== undefined) {
+          return viaMapping;
         }
       }
     }
     return url as RealmResourceIdentifier;
+  }
+
+  // `url` re-spelled under the prefix of the deepest registered target that
+  // contains it, or undefined when none does. The textual inverse of a prefix
+  // mapping, so `url` must be in the parser's serialization, as the targets
+  // are: a dot segment left in it would be carried into the prefix form, where
+  // `toURL` refuses it. Callers pass a URL's `href`, or `serializedURL` of a
+  // string that came from elsewhere.
+  private prefixFormOf(url: string): RealmResourceIdentifier | undefined {
+    let match = this.targetMatch(url);
+    if (!match) {
+      return undefined;
+    }
+    let [prefix, target] = match;
+    return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
   }
 
   /**
@@ -631,7 +683,8 @@ export class VirtualNetwork {
    * via the registered realm mappings; if it's already a URL form, parses
    * directly. Throws if the prefix is unregistered and the value isn't a
    * parseable URL — that's intentional: bare local identifiers can't be
-   * resolved to a realm location.
+   * resolved to a realm location. Throws a TypeError, as `resolveImport` does,
+   * when the part after a registered prefix resolves outside its target.
    */
   toURL(rri: string): URL {
     let resolved = this.resolveRRIToURL(rri);
@@ -750,21 +803,22 @@ export class VirtualNetwork {
     if (reference.startsWith('$REALM/')) {
       let path = reference.slice('$REALM/'.length);
       if (isUrlRelativeTo) {
-        for (let [, target] of this.realmMappings) {
-          if (relativeTo.startsWith(target)) {
-            return new URL(path, target).href as RealmResourceIdentifier;
-          }
+        let match = this.targetMatch(relativeTo);
+        if (match) {
+          return joinUnderTarget(match[1], path) as RealmResourceIdentifier;
         }
         throw new Error(
           `Cannot resolve "$REALM/" — no realm root found for "${relativeTo}"`,
         );
       }
-      for (let [prefix] of this.realmMappings) {
-        if (relativeTo.startsWith(prefix)) {
-          return (
-            prefix.endsWith('/') ? prefix + path : prefix + '/' + path
-          ) as RealmResourceIdentifier;
-        }
+      // Resolved under the realm root in URL space and converted back, as a
+      // relative reference is below, so a path that leaves the root is refused
+      // here as it is against a URL-form base, rather than kept as a
+      // prefix-form RRI that only `toURL` would refuse.
+      let match = this.prefixMatch(relativeTo);
+      if (match) {
+        let url = joinUnderTarget(match[1], path);
+        return this.prefixFormOf(url) ?? (url as RealmResourceIdentifier);
       }
       throw new Error(
         `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
@@ -781,19 +835,17 @@ export class VirtualNetwork {
 
     // relativeTo starts with a registered prefix — resolve in prefix space
     // by round-tripping through URL space: prefix→URL, resolve, URL→prefix
-    for (let [prefix, target] of this.realmMappings) {
-      if (relativeTo.startsWith(prefix)) {
-        let baseURL = new URL(relativeTo.slice(prefix.length), target);
-        let resolved = new URL(reference, baseURL);
-        // Convert back to scoped form if the resolved URL matches a mapping
-        for (let [p, t] of this.realmMappings) {
-          if (resolved.href.startsWith(t)) {
-            return (p +
-              resolved.href.slice(t.length)) as RealmResourceIdentifier;
-          }
-        }
-        return resolved.href as RealmResourceIdentifier;
-      }
+    let match = this.prefixMatch(relativeTo);
+    if (match) {
+      let [prefix, target] = match;
+      let baseURL = new URL(
+        joinUnderTarget(target, relativeTo.slice(prefix.length)),
+      );
+      let resolved = new URL(reference, baseURL).href;
+      // Convert back to scoped form if the resolved URL matches a mapping
+      return (
+        this.prefixFormOf(resolved) ?? (resolved as RealmResourceIdentifier)
+      );
     }
 
     throw new Error(
@@ -809,35 +861,41 @@ export class VirtualNetwork {
     direction: 'virtual-to-real' | 'real-to-virtual',
   ): string | undefined {
     let absoluteURL = new URL(url);
+    // URL mappings nest the way prefix mappings do, and the deepest source
+    // that contains the URL is the one it belongs to, whatever order the
+    // mappings were registered in.
+    let best: { source: RealmPaths; to: string; length: number } | undefined;
     for (let [virtual, real] of this.urlMappings) {
-      let sourcePath = new RealmPaths(
-        new URL(direction === 'virtual-to-real' ? virtual : real),
-        this,
-      );
-      if (sourcePath.inRealm(absoluteURL)) {
-        let toPath = new RealmPaths(
-          new URL(direction === 'virtual-to-real' ? real : virtual),
-          this,
-        );
-        if (absoluteURL.href.endsWith('/')) {
-          return toPath.directoryURL(sourcePath.local(absoluteURL)).href;
-        } else {
-          let local = sourcePath.local(absoluteURL, {
-            preserveQuerystring: true,
-          });
-          let resolved = toPath.fileURL(local).href;
-
-          // A special case for root realm urls with missing trailing slash, for
-          // example http://localhost:4201/base – we want the mapped url also not to have a trailing slash
-          // (so that the realm handler knows it needs to redirect to the correct url with a trailing slash)
-          if (local === '' && !absoluteURL.pathname.endsWith('/')) {
-            resolved = resolved.replace(/\/$/, '');
-          }
-          return resolved;
-        }
+      let [from, to] =
+        direction === 'virtual-to-real' ? [virtual, real] : [real, virtual];
+      if (best && from.length <= best.length) {
+        continue;
+      }
+      let candidate = new RealmPaths(new URL(from), this);
+      if (candidate.inRealm(absoluteURL)) {
+        best = { source: candidate, to, length: from.length };
       }
     }
-    return undefined;
+    if (!best) {
+      return undefined;
+    }
+    let { source: sourcePath, to } = best;
+    let toPath = new RealmPaths(new URL(to), this);
+    if (absoluteURL.href.endsWith('/')) {
+      return toPath.directoryURL(sourcePath.local(absoluteURL)).href;
+    }
+    let local = sourcePath.local(absoluteURL, {
+      preserveQuerystring: true,
+    });
+    let resolved = toPath.fileURL(local).href;
+
+    // A special case for root realm urls with missing trailing slash, for
+    // example http://localhost:4201/base – we want the mapped url also not to have a trailing slash
+    // (so that the realm handler knows it needs to redirect to the correct url with a trailing slash)
+    if (local === '' && !absoluteURL.pathname.endsWith('/')) {
+      resolved = resolved.replace(/\/$/, '');
+    }
+    return resolved;
   }
 
   mount(handler: Handler, opts?: { prepend: boolean }) {
@@ -882,13 +940,17 @@ export class VirtualNetwork {
     return response;
   };
 
+  // The URL a prefix-form identifier maps to, or undefined when no registered
+  // prefix matches. Resolves exactly as `resolveImport` does for the same
+  // prefix: longest prefix wins, and a remainder that leaves the target is a
+  // TypeError.
   private resolveRRIToURL(rri: string): string | undefined {
-    for (let [prefix, target] of this.realmMappings) {
-      if (rri.startsWith(prefix)) {
-        return new URL(rri.slice(prefix.length), target).href;
-      }
+    let match = this.prefixMatch(rri);
+    if (!match) {
+      return undefined;
     }
-    return undefined;
+    let [prefix, target] = match;
+    return joinUnderTarget(target, rri.slice(prefix.length));
   }
 
   private async runFetch(request: Request, init?: RequestInit) {
@@ -993,6 +1055,76 @@ export function isUrlLike(moduleIdentifier: string): boolean {
     moduleIdentifier.startsWith('http://') ||
     moduleIdentifier.startsWith('https://')
   );
+}
+
+// `url` in the URL parser's serialization when it is an http(s) URL, and as
+// written otherwise. Strings reach `unresolveURL` from stored rows, card JSON
+// and concatenation as well as from parsed URLs, and the realm targets they are
+// matched against are serialized: without this, a dot segment, an uppercase
+// host or a default port would make the textual match miss or carry the
+// segment into the prefix form.
+function serializedURL(url: string): string {
+  if (!/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
+}
+
+// The entry whose key is the longest prefix of `candidate`, or undefined when
+// no key is one. Mapped prefixes can nest — `@scope/realm/` and
+// `@scope/realm/nested/`, or two realms on one origin with one below the
+// other — and, as under an import map, the most specific one holds whatever
+// lies beneath it. The order the entries were registered in plays no part.
+function longestPrefixEntry<V>(
+  entries: Iterable<[string, V]>,
+  candidate: string,
+): [string, V] | undefined {
+  let best: [string, V] | undefined;
+  for (let entry of entries) {
+    if (
+      candidate.startsWith(entry[0]) &&
+      (best === undefined || entry[0].length > best[0].length)
+    ) {
+      best = entry;
+    }
+  }
+  return best;
+}
+
+// Resolves the remainder of a matched prefix under that prefix's target the way
+// the HTML import-map algorithm does: the remainder is parsed with the target
+// as its base URL, and a result that is not inside the target is a TypeError,
+// the failure an import map reports for a specifier that backtracks above its
+// prefix. That refuses every remainder that would leave the target: `../x`,
+// whose dot segment the parser folds above it; `/x`, which parses against the
+// target's origin; `//host/x`, against its scheme; and `scheme:x`, which is an
+// absolute URL of its own. A refused remainder is an error rather than the specifier
+// returned unmapped, because the Loader treats an error from `resolveImport`
+// as a failed resolution, while an unmapped specifier would be parsed against
+// the importing module's URL and land in that module's realm instead.
+//
+// `target` must be a serialized URL ending in `/`, as `addPrefixMapping`
+// stores it, so that the parser's serialization of the result can be compared
+// against it textually.
+function joinUnderTarget(target: string, rest: string): string {
+  let href: string;
+  try {
+    href = new URL(rest, target).href;
+  } catch {
+    throw new TypeError(
+      `cannot resolve ${JSON.stringify(rest)} under ${target}: the result is not a valid URL`,
+    );
+  }
+  if (!href.startsWith(target)) {
+    throw new TypeError(
+      `cannot resolve ${JSON.stringify(rest)} under ${target}: it resolves to ${href}, outside the target of its prefix`,
+    );
+  }
+  return href;
 }
 
 // This is to handle a very mysterious situation in our CI environment where

@@ -1,5 +1,5 @@
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
-import { VirtualNetwork } from '@cardstack/runtime-common';
+import { VirtualNetwork, rri } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
@@ -209,6 +209,214 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         virtualNetwork.resolveURL('/bar', '@cardstack/skills/Skill/foo').href,
         'https://localhost:4201/bar',
+      );
+    });
+  });
+
+  // `resolveImport` is an import map (ADR 010 §1.2): the longest matching
+  // prefix wins, and a remainder cannot escape the target it was matched to.
+  module('virtual-network prefix matching', function () {
+    const OUTER = 'http://realm.example/outer/';
+    const NESTED = 'http://realm.example/outer/nested/';
+
+    // Both registration orders, so the assertions hold because of the
+    // prefixes' lengths and not because of which was registered first.
+    function eachOrder(
+      register: (vn: VirtualNetwork) => void,
+      registerOther: (vn: VirtualNetwork) => void,
+    ): [string, VirtualNetwork][] {
+      let shortFirst = new VirtualNetwork();
+      register(shortFirst);
+      registerOther(shortFirst);
+      let longFirst = new VirtualNetwork();
+      registerOther(longFirst);
+      register(longFirst);
+      return [
+        ['shorter prefix registered first', shortFirst],
+        ['longer prefix registered first', longFirst],
+      ];
+    }
+
+    test('resolveImport: the longest matching prefix wins, whatever the registration order', function (assert) {
+      for (let [order, vn] of eachOrder(
+        (vn) => vn.addRealmMapping('@scope/realm/', OUTER),
+        (vn) => vn.addRealmMapping('@scope/realm/nested/', NESTED),
+      )) {
+        assert.strictEqual(
+          vn.resolveImport('@scope/realm/nested/card'),
+          `${NESTED}card`,
+          `${order}: a specifier under the nested prefix maps to the nested target`,
+        );
+        assert.strictEqual(
+          vn.resolveImport('@scope/realm/card'),
+          `${OUTER}card`,
+          `${order}: a specifier under only the outer prefix maps to the outer target`,
+        );
+        assert.strictEqual(
+          vn.toURL('@scope/realm/nested/card').href,
+          `${NESTED}card`,
+          `${order}: toURL applies the same rule`,
+        );
+      }
+    });
+
+    test('unresolveURL: the deepest matching target wins, whatever the registration order', function (assert) {
+      for (let [order, vn] of eachOrder(
+        (vn) => vn.addRealmMapping('@scope/root/', 'http://realm.example/'),
+        (vn) =>
+          vn.addRealmMapping('@scope/base/', 'http://realm.example/base/'),
+      )) {
+        assert.strictEqual(
+          vn.unresolveURL('http://realm.example/base/card-api'),
+          '@scope/base/card-api',
+          `${order}: a URL under the nested target gets the nested prefix`,
+        );
+        assert.strictEqual(
+          vn.unresolveURL('http://realm.example/other/card'),
+          '@scope/root/other/card',
+          `${order}: a URL under only the root target gets the root prefix`,
+        );
+        assert.strictEqual(
+          vn.resolveURL('$REALM/x', 'http://realm.example/base/card-api').href,
+          'http://realm.example/base/x',
+          `${order}: $REALM/ resolves against the deepest realm holding the base`,
+        );
+      }
+    });
+
+    test('mapURL: the deepest matching URL mapping wins, whatever the registration order', function (assert) {
+      for (let [order, vn] of eachOrder(
+        (vn) =>
+          vn.addURLMapping(
+            new URL('https://alias.example/'),
+            new URL('http://real.example/root/'),
+          ),
+        (vn) =>
+          vn.addURLMapping(
+            new URL('https://alias.example/base/'),
+            new URL('http://real.example/base/'),
+          ),
+      )) {
+        assert.strictEqual(
+          vn.mapURL('https://alias.example/base/card-api', 'virtual-to-real')
+            ?.href,
+          'http://real.example/base/card-api',
+          `${order}: virtual-to-real takes the deeper mapping`,
+        );
+        assert.strictEqual(
+          vn.mapURL('https://alias.example/other/card', 'virtual-to-real')
+            ?.href,
+          'http://real.example/root/other/card',
+          `${order}: a URL under only the root mapping takes that one`,
+        );
+        assert.strictEqual(
+          vn.mapURL('http://real.example/base/card-api', 'real-to-virtual')
+            ?.href,
+          'https://alias.example/base/card-api',
+          `${order}: real-to-virtual takes the deeper mapping too`,
+        );
+      }
+    });
+
+    test('resolveImport: a plain remainder resolves under the target', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', OUTER);
+      assert.strictEqual(
+        vn.resolveImport('@scope/realm/cards/person.gts'),
+        `${OUTER}cards/person.gts`,
+      );
+      assert.strictEqual(
+        vn.resolveImport('@scope/realm/'),
+        OUTER,
+        'the prefix alone resolves to the target itself',
+      );
+      assert.strictEqual(
+        vn.resolveImport('@scope/realm/cards/./person'),
+        `${OUTER}cards/person`,
+        'a dot segment that stays inside the target is folded, not refused',
+      );
+    });
+
+    test('resolveImport: a remainder cannot escape its target', function (assert) {
+      let vn = new VirtualNetwork();
+      // Two realms on one origin: the escape must not land in the other one.
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
+      assert.throws(
+        () => vn.resolveImport('@scope/realm/../other/secret'),
+        TypeError,
+        'a ../ remainder is a TypeError, as under an import map',
+      );
+      assert.throws(
+        () => vn.toURL('@scope/realm/../other/secret'),
+        TypeError,
+        'toURL refuses the same remainder',
+      );
+      assert.throws(
+        () => vn.resolveURL('./x', '@scope/realm/../other/secret'),
+        TypeError,
+        'a base outside its realm is refused as well',
+      );
+      // A browser's import map refuses each of these as backtracking above the
+      // prefix, since the remainder is parsed with the target as its base.
+      for (let specifier of [
+        '@scope/realm//other/secret',
+        '@scope/realm///evil.example/x',
+        '@scope/realm/\\other\\secret',
+        '@scope/realm/https://evil.example/x',
+        '@scope/realm/other:secret',
+      ]) {
+        assert.throws(
+          () => vn.resolveImport(specifier),
+          TypeError,
+          `${specifier} is refused rather than mapped`,
+        );
+      }
+    });
+
+    test('resolveRRI: a $REALM/ path cannot leave the realm root, whatever form the base is in', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
+      assert.strictEqual(
+        vn.resolveRRI('$REALM/cards/./x', rri('@scope/realm/a/b')),
+        '@scope/realm/cards/x',
+        'a prefix-form base keeps the result in prefix form',
+      );
+      assert.throws(
+        () => vn.resolveRRI('$REALM/../other/x', rri('@scope/realm/a')),
+        TypeError,
+        'refused against a prefix-form base',
+      );
+      assert.throws(
+        () =>
+          vn.resolveRRI(
+            '$REALM/../other/x',
+            rri('http://realm.example/realm/a'),
+          ),
+        TypeError,
+        'refused against a URL-form base',
+      );
+    });
+
+    test('unresolveURL: a URL is matched in its serialized form', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
+      assert.strictEqual(
+        vn.unresolveURL('http://realm.example/realm/../other/x'),
+        '@scope/other/x',
+        'a dot segment is folded before the prefix is chosen',
+      );
+      assert.strictEqual(
+        vn.unresolveURL('HTTP://REALM.EXAMPLE:80/realm/x'),
+        '@scope/realm/x',
+        'an uppercase host and a default port still match the target',
+      );
+      assert.strictEqual(
+        vn.unresolveURL('http://elsewhere.example/a/../b'),
+        'http://elsewhere.example/a/../b',
+        'a URL no target holds is returned as written',
       );
     });
   });
