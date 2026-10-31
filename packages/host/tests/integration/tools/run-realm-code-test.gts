@@ -12,6 +12,7 @@ import {
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -443,6 +444,97 @@ return 'answered';`,
       /stopped|ended/i,
       'the run ends without an answer',
     );
+  });
+
+  test('a question nobody answers ends the run when its wait runs out', async function (assert) {
+    let toolService = getService('tool-service');
+    toolService.scriptAskMaxMs = 50;
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    askThroughToolService(command, 'unanswered-ask-call');
+
+    let run = command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
+return 'answered';`,
+    });
+
+    await assert.rejects(
+      run,
+      /No answer came/,
+      'the run ends without an answer',
+    );
+    assert.false(
+      toolService.scriptAsks.has('unanswered-ask-call'),
+      'the picker is withdrawn',
+    );
+  });
+
+  test("a run waiting on the reader's pick outlasts the tool deadline", async function (assert) {
+    let toolService = getService('tool-service');
+    let matrixService = getService('matrix-service');
+    toolService.toolExecuteTimeoutMs = 3000;
+    let results: { toolCallId: string; status: string }[] = [];
+    let originalSend = matrixService.sendToolResultEvent;
+    let originalUpdate = matrixService.updateSkillsAndToolsIfNeeded;
+    // The script asks at once, so the wait for the pick is what runs into
+    // the deadline, not the sandbox starting.
+    let originalExecute = RunRealmCodeTool.prototype.execute;
+    RunRealmCodeTool.prototype.execute = async function (
+      this: RunRealmCodeTool,
+    ) {
+      await this.onAsk!({
+        question: 'Which one?',
+        kind: 'options',
+        allowOther: false,
+        options: [
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b' },
+        ],
+      });
+      return undefined as never;
+    };
+    matrixService.sendToolResultEvent = (async (args: {
+      toolCallId: string;
+      status: string;
+    }) => {
+      results.push({ toolCallId: args.toolCallId, status: args.status });
+    }) as unknown as typeof matrixService.sendToolResultEvent;
+    matrixService.updateSkillsAndToolsIfNeeded = async () => undefined;
+    try {
+      let call = {
+        id: 'waiting-call',
+        name: 'runRealmCode',
+        eventId: '$bot',
+        message: { roomId: '!room:example.com' },
+        codeRef: {
+          module: '@cardstack/boxel-host/tools/run-realm-code',
+          name: 'default',
+        },
+        arguments: { attributes: { realm: testRealmURL, code: 'ignored' } },
+        isResolving: false,
+        resolve: async () => undefined,
+      } as unknown as MessageTool;
+      let running = toolService.run.perform(call, { auto: true });
+      await waitUntil(() => toolService.scriptAsks.has('waiting-call'), {
+        timeout: 10000,
+      });
+      // past the deadline the run started with
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+      assert.deepEqual(results, [], 'the run is still waiting on the pick');
+      toolService.scriptAsks.get('waiting-call')!.answer('b');
+      await running;
+
+      assert.deepEqual(
+        results,
+        [{ toolCallId: 'waiting-call', status: 'applied' }],
+        'the run finishes with its answer instead of timing out',
+      );
+    } finally {
+      RunRealmCodeTool.prototype.execute = originalExecute;
+      matrixService.sendToolResultEvent = originalSend;
+      matrixService.updateSkillsAndToolsIfNeeded = originalUpdate;
+    }
   });
 
   test('the result attaches the files the run saved, then the captures it took', async function (assert) {

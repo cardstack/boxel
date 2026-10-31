@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import {
   approvalReaction,
+  declinedByReactionReason,
   getPromptParts,
   isApprovalResult,
 } from '@cardstack/runtime-common/ai';
@@ -26,7 +27,9 @@ import {
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 import {
+  answerDeclinedToolCalls,
   ApprovalClaims,
+  claimDeclinedToolCalls,
   declinedToolCalls,
   handlesRoomEvent,
   releasedToolCalls,
@@ -778,5 +781,122 @@ module('readUrl approval', () => {
       ['held'],
     );
     assert.deepEqual(second, [], 'the second answer finds the call taken');
+  });
+  test("a 👎's handler claims the declined calls, so they are answered once", () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    // the reaction's own handler, then a later event's handler
+    let first = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    let second = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      first.map((entry) => [entry.call.id, entry.reaction.sender]),
+      [['held', OTHER]],
+    );
+    assert.deepEqual(second, [], 'the later handler finds the call taken');
+  });
+
+  test('a declined call is answered as invalid, naming who declined it', async () => {
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    (held.content as Record<string, unknown>).data = JSON.stringify({
+      context: { agentId: 'agent-1' },
+    });
+    let history = [
+      humanMessage('Find their docs'),
+      held,
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let client = new FakeMatrixClient();
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client, roomId: 'room1', agentId: 'fallback-agent' },
+      (userId) => (userId === OTHER ? 'Rupert' : undefined),
+    );
+
+    let sent = client.getSentEvents();
+    assert.strictEqual(sent.length, 1, 'one result is posted');
+    assert.strictEqual(sent[0].roomId, 'room1');
+    assert.strictEqual(sent[0].eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
+    let content = sent[0].content as Record<string, any>;
+    assert.strictEqual(content.commandRequestId, 'held');
+    assert.strictEqual(
+      content.failureReason,
+      declinedByReactionReason(READ_URL_TOOL_NAME, 'Rupert'),
+    );
+    assert.deepEqual(content['m.relates_to'], {
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+      key: 'invalid',
+      event_id: '$bot',
+    });
+    assert.strictEqual(
+      JSON.parse(content.data).context.agentId,
+      'agent-1',
+      "the result belongs to the agent of the call's message",
+    );
+  });
+
+  test("a decline by someone the room doesn't know names their user id", async () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let client = new FakeMatrixClient();
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client, roomId: 'room1', agentId: 'fallback-agent' },
+      () => undefined,
+    );
+    let content = client.getSentEvents()[0].content as Record<string, any>;
+    assert.strictEqual(
+      content.failureReason,
+      declinedByReactionReason(READ_URL_TOOL_NAME, OTHER),
+    );
+    assert.strictEqual(
+      JSON.parse(content.data).context.agentId,
+      'fallback-agent',
+      'a message that names no agent takes the run agent',
+    );
+  });
+
+  test('a declined call whose result was not posted is answered by a later run', async () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let failing = new FakeMatrixClient();
+    failing.sendEvent = async () => {
+      throw new Error('homeserver unavailable');
+    };
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client: failing, roomId: 'room1', agentId: undefined },
+      () => undefined,
+    );
+
+    let client = new FakeMatrixClient();
+    let retried = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      retried.map((entry) => entry.call.id),
+      ['held'],
+      'the claim was released',
+    );
+    await answerDeclinedToolCalls(
+      retried,
+      claims,
+      { client, roomId: 'room1', agentId: undefined },
+      () => undefined,
+    );
+    assert.strictEqual(client.getSentEvents().length, 1, 'the retry posts');
   });
 });
