@@ -3,6 +3,7 @@
 Built ES modules of two Cardstack surface packages, copied in so Pret UI's
 NodeCanvas and PageScaffold can import them by relative path. Only
 host-provided modules (`@ember/*`, `@glimmer/*`, `ember-modifier`,
+`ember-provide-consume-context`, `ember-modify-based-class-resource`,
 `@floating-ui/dom`) and two Pret UI modules stay external: the bundles take
 their template helpers from `../helpers` and their form
 alert icons from `../internal/surfaces-icons`, so Pret UI imports nothing
