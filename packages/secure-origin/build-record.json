@@ -649,7 +649,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 65601,
+      "bytes": 65926,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -693,7 +693,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/d360dfed4b.css"
+          "module": "src/components/d27b7c8d1f.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -769,7 +769,15 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/3653f035ec.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/40cf02184b.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/40de416709.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -778,10 +786,6 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/525c77723c.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/571d2e2e4f.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -797,15 +801,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/67891b550a.css"
+          "module": "src/shell/keys/8af1a8436f.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/a9020baded.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/aef3fd83ee.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -898,7 +898,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 288925,
+      "bytes": 288920,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1183,7 +1183,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/keys-window.gts",
-          "size": 4502
+          "size": 4495
         },
         {
           "package": "@cardstack/secure-origin",

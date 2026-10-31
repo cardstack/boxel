@@ -4,8 +4,9 @@
 // the name, so neither crowds the other however long the name. Nothing about
 // its value is shown. A secret pasted in is what a key is unless the tile
 // says otherwise: a Google service account, an OAuth app, or an account
-// connected through one. `@framed={{false}}` leaves its border off, for a
-// tile drawn inside a frame of its own, as a radio tile is.
+// connected through one. `@framed={{false}}` leaves its border and
+// background off, for a tile drawn inside a frame of its own, as a radio tile
+// is, whose chosen fill then shows through.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import KeyRound from '../../components/icons/key-round.gts';
@@ -83,6 +84,7 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
       box-shadow: 0 0 0 1px var(--border);
     }
     .unframed {
+      background-color: transparent;
       box-shadow: none;
     }
     .key-icon {

@@ -102,7 +102,7 @@
 
   input:focus-visible,
   textarea:focus-visible {
-    outline-color: var(--boxel-highlight);
+    outline-color: var(--ring, var(--boxel-highlight));
   }
 
   /* The app's operator-mode container, while it shows the sign-in screens. */

@@ -78,7 +78,7 @@ export default class KeysWindow extends Component<Signature> {
             class='close-label'
           >Close</span></Button>
       </header>
-      <main class='body' data-test-keys-panel>
+      <div class='body' data-test-keys-panel>
         {{#if (this.is 'checking')}}
           <BusyMessage
             class='checking'
@@ -107,7 +107,7 @@ export default class KeysWindow extends Component<Signature> {
         {{else}}
           {{yield this.api}}
         {{/if}}
-      </main>
+      </div>
     </div>
 
     <style scoped>
@@ -153,7 +153,19 @@ export default class KeysWindow extends Component<Signature> {
         width: 0.625rem;
         height: 0.625rem;
       }
+      /* On the white panel the theme's teal is 1.31:1, too faint for an
+         indicator, so focus rings, whether drawn in --ring or as the global
+         --boxel-outline, take the primary ink (4.95:1) there. A checkbox's
+         edge is the muted foreground unticked, which marks the box clearly,
+         and the primary ink ticked, around the teal fill. The bar keeps the
+         teal, which reads on the purple. */
       .body {
+        --ring: var(--primary-ink);
+        --boxel-outline-color: var(--ring);
+        --boxel-outline: var(--boxel-outline-width) var(--boxel-outline-style)
+          var(--boxel-outline-color);
+        --boxel-checkbox-border-color: var(--muted-foreground);
+        --boxel-checkbox-checked-border-color: var(--primary-ink);
         flex: 1;
         display: flex;
         flex-direction: column;
