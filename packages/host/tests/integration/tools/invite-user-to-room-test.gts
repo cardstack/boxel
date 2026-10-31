@@ -82,6 +82,72 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
     );
   });
 
+  test('refuses to invite an end user', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    let toolService = getService('tool-service');
+
+    let command = new InviteUserToRoomTool(toolService.toolContext);
+    await assert.rejects(
+      command.execute({
+        roomId,
+        userId: 'another-person',
+      }),
+      /not the AI bot or the submission bot/,
+      'refuses an invite to a person',
+    );
+
+    assert.throws(
+      () => getRoomState(roomId, 'm.room.member', '@another-person:localhost'),
+      /does not exist/,
+      'no membership event was written for the person',
+    );
+  });
+
+  test('refuses a person whose username matches the writer-account convention', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    let toolService = getService('tool-service');
+
+    let command = new InviteUserToRoomTool(toolService.toolContext);
+    await assert.rejects(
+      command.execute({
+        roomId,
+        userId: 'example_writer',
+      }),
+      /not the AI bot or the submission bot/,
+      'refuses an invite to a name a person can register',
+    );
+
+    assert.throws(
+      () => getRoomState(roomId, 'm.room.member', '@example_writer:localhost'),
+      /does not exist/,
+      'no membership event was written',
+    );
+  });
+
+  test('refuses to invite a service user on another homeserver', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    let toolService = getService('tool-service');
+
+    let command = new InviteUserToRoomTool(toolService.toolContext);
+    await assert.rejects(
+      command.execute({
+        roomId,
+        userId: '@submissionbot:other.example',
+      }),
+      /not on this homeserver/,
+      'refuses an invite across homeservers',
+    );
+  });
+
   test('rejects inviting a user twice', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
