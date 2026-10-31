@@ -1160,6 +1160,50 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
 
+    test('reached from an approve page the CLI opened, Close tells the CLI the approval was cancelled', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        let cli = `cli_port=51234&cli_state=${'c'.repeat(32)}`;
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&then=approve&${cli}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['window_outcome', 'cancelled'],
+          ],
+        ]);
+        assert.deepEqual(navigations, [], 'the window goes to the CLI');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('opened with a CLI listener but not from an approve page, Close only closes', async function (assert) {
+      let submitted = 0;
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = () => submitted++;
+      try {
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.strictEqual(submitted, 0);
+        assert.deepEqual(navigations, [{ how: 'close' }]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('refused access, says so and doesn’t offer to try again', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
@@ -2018,6 +2062,112 @@ module('Integration | key pages', function (hooks) {
         },
       );
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('opened by the CLI, tells it once the key is in, and only then', async function (assert) {
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        serve({
+          'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+          'GET _key-shares': shares(SHARE),
+          'POST _key-shares/share-4/swap': () =>
+            json(200, {
+              data: {
+                type: 'key-share',
+                id: 'share-4',
+                attributes: { ...SHARE, state: 'active', keyId: 'key-1' },
+              },
+            }),
+        });
+        visitShell(
+          `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(SwapKeyPage);
+        await waitFor('[data-test-swap-key-form]');
+        await click('[data-test-key-choice="Weather service"] input');
+        await click('[data-test-swap-key-save]');
+        await waitFor('[data-test-keys-done]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['window_outcome', 'done'],
+            ],
+          },
+        ]);
+        assert.deepEqual(
+          navigations,
+          [{ how: 'close' }],
+          'the window goes to the CLI, and Close after that only closes',
+        );
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    for (let [name, button] of [
+      ['Cancel', '[data-test-keys-cancel]'],
+      ['Close', '[data-test-keys-close]'],
+    ]) {
+      test(`opened by the CLI, ${name} tells it the swap was cancelled, and swaps nothing`, async function (assert) {
+        let submitted: { action: string; fields: [string, string][] }[] = [];
+        let submit = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+          submitted.push({
+            action: this.action,
+            fields: [...new FormData(this).entries()] as [string, string][],
+          });
+        };
+        try {
+          serve({
+            'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+            'GET _key-shares': shares(SHARE),
+          });
+          visitShell(
+            `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+          );
+          await render(SwapKeyPage);
+          await waitFor('[data-test-swap-key-form]');
+          await click('[data-test-key-choice="Weather service"] input');
+          await click(button!);
+          assert.deepEqual(submitted, [
+            {
+              action: 'http://127.0.0.1:51234/callback',
+              fields: [
+                ['state', 'c'.repeat(32)],
+                ['window_outcome', 'cancelled'],
+              ],
+            },
+          ]);
+          assert.false(
+            requests.some((r) => r.path === '_key-shares/share-4/swap'),
+            'nothing is swapped',
+          );
+          assert.deepEqual(navigations, [], 'the window goes to the CLI');
+        } finally {
+          HTMLFormElement.prototype.submit = submit;
+        }
+      });
+    }
+
+    test('opened without the CLI, offers no Cancel', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      assert.dom('[data-test-keys-cancel]').doesNotExist();
     });
 
     test('a link naming a share the workspace doesn’t have says so and doesn’t offer to try again', async function (assert) {

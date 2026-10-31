@@ -20,8 +20,10 @@
 //
 // `boxel keys approve` and `boxel keys swap` wait here too, when their change
 // grants a key a destination it has none for: that is confirmed in this
-// window, under its own session, and the page tells the CLI only that it
-// ended (`window: 'done'`). The CLI reads what changed from the realm server.
+// window, under its own session, and the page tells the CLI only how it
+// ended: `window: 'done'` once the change is made, or `window: 'cancelled'`
+// when the user cancels or closes the window first. The CLI reads what
+// changed from the realm server either way.
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const STATE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -80,7 +82,8 @@ export function cliCallback(
  * What a hand-off carries: a secure session, a login token, or both; or the
  * end of an OAuth sign-in the CLI started.
  * @typedef {{ code: string, state: string } | { error: string }} OAuthOutcome
- * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: 'done' }} Handoff
+ * @typedef {'done' | 'cancelled'} WindowOutcome
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: WindowOutcome }} Handoff
  */
 
 // What the CLI's listener is sent: the state it expects back, the login

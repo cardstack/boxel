@@ -236,6 +236,40 @@ describe('startLoopbackCallback', () => {
     await settled;
   });
 
+  for (const outcome of ['done', 'cancelled'] as const) {
+    it(`accepts a secure window ending ${outcome}`, async () => {
+      const callback = await startLoopbackCallback();
+      const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+      const pending = callback.waitForResult();
+
+      const response = await fetch(callback.redirectUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formBody({ state, window_outcome: outcome }),
+      });
+
+      expect(response.status).toBe(200);
+      await expect(pending).resolves.toEqual({ kind: 'window', outcome });
+    });
+  }
+
+  it('rejects a secure window ending it does not know', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
+      /window_outcome/,
+    );
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({ state, window_outcome: 'approved' }),
+    });
+
+    expect(response.status).toBe(400);
+    await settled;
+  });
+
   it('rejects a POSTed session whose state does not match', async () => {
     const callback = await startLoopbackCallback({ state: 'expected-state' });
     const settled = expect(callback.waitForResult()).rejects.toThrow(/state/i);

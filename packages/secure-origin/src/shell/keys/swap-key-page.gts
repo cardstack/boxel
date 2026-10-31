@@ -7,7 +7,8 @@
 //
 // Opened by `boxel keys swap` (`#cli_port=…&cli_state=…`), for a swap that
 // grants the key a destination it has none for, the page tells the CLI's
-// listener when the swap is made, and nothing else.
+// listener when the swap is made, or that it was cancelled when the user
+// cancels or closes the window first (`KeysWindow`), and nothing else.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -42,7 +43,6 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { cliOpenedFor, openedFor } from './opened-for.ts';
-import { handToCli } from '../../security/cli-handoff.js';
 
 type State =
   | { name: 'loading' }
@@ -130,6 +130,14 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
           </:default>
           <:actions>
+            {{#if @api.forCli}}
+              <Button
+                @kind='secondary'
+                @disabled={{this.form.saving}}
+                data-test-keys-cancel
+                {{on 'click' @api.close}}
+              >Cancel</Button>
+            {{/if}}
             <Button
               type='submit'
               @kind='primary'
@@ -289,39 +297,45 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
-    try {
-      let share = await swapKey(this.args.api.config, {
-        keyId,
-        shareId: choosing.share.id,
-      });
-      this.page.state = {
-        name: 'done',
-        context: choosing.context,
-        share,
-        key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
-      };
-      let { cli } = cliOpenedFor();
-      if (cli) {
-        handToCli(cli, { window: 'done' });
-      } else {
-        this.args.api.close();
+    await this.args.api.saving(async () => {
+      try {
+        let share = await swapKey(this.args.api.config, {
+          keyId,
+          shareId: choosing.share.id,
+        });
+        this.page.state = {
+          name: 'done',
+          context: choosing.context,
+          share,
+          key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
+        };
+        if (!this.args.api.tellCliDone()) {
+          this.args.api.close();
+        }
+      } catch (e) {
+        if (isSignedOut(e)) {
+          this.args.api.signedOut();
+          return;
+        }
+        this.form.error = failureMessage(e);
+      } finally {
+        this.form.saving = false;
       }
-    } catch (e) {
-      if (isSignedOut(e)) {
-        this.args.api.signedOut();
-        return;
-      }
-      this.form.error = failureMessage(e);
-    } finally {
-      this.form.saving = false;
-    }
+    });
   };
 }
 
 export default class SwapKeyPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='swap-key' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='swap-key'
+      @cli={{this.cli}}
+      as |api|
+    >
       <SwapKey @api={{api}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }
