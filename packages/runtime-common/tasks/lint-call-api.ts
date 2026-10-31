@@ -12,8 +12,9 @@ import type { CallApiClauses } from '../card-operations/call-api.ts';
 // it reports exactly what indexing would, one problem per issue.
 //
 // Two rules share the reading. `call-api` is an error: each lowering issue,
-// a `label` lowering refuses, and a destination whose path doesn't end in `/`
-// (one no grant can cover). `call-api-advice` is a warning, for what lowering
+// and a `label` lowering refuses. A destination whose path doesn't end in `/`
+// is never one to report: lowering ends every destination at a `/`.
+// `call-api-advice` is a warning, for what lowering
 // accepts: a destination that isn't `https:`, which the realm server refuses
 // to send unless its host is on a development allowlist (as local stub
 // vendors are), and an operation with no `label`, which the secure window and
@@ -215,8 +216,6 @@ function makeRule(check: Check): Rule.RuleModule {
         lowering: '{{code}}: {{message}}',
         insecureDestination:
           'This request goes to {{destination}}, which is not https: the realm server refuses to send it unless its host is on a development allowlist',
-        destinationNotAPrefix:
-          'This request goes to {{destination}}, whose path does not end in "/", so no grant of a key can cover it',
         missingLabel:
           'Give this `callApi` operation a `label`: a short phrase for people, which the secure window shows when someone approves it',
         invalidLabel: 'invalid-label: {{message}}',
@@ -295,13 +294,6 @@ function makeRule(check: Check): Rule.RuleModule {
             context.report({
               node: memberNode(declarationNode, 'url'),
               messageId: 'insecureDestination',
-              data: { destination: request.destination },
-            });
-          }
-          if (errors && !destination.pathname.endsWith('/')) {
-            context.report({
-              node: memberNode(declarationNode, 'url'),
-              messageId: 'destinationNotAPrefix',
               data: { destination: request.destination },
             });
           }
