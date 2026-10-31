@@ -10,6 +10,91 @@ versions may change syntax behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- **Request-context builtins for card operations.** A new eager
+  `request-context` library gives a program what one request carries:
+  `params("key")` reads the payload the caller sent, `actor()` returns the
+  caller's user id as a string (`"anonymous"` for a caller who isn't signed
+  in), `instance()` / `instance("key")` read the stored document,
+  `realmConfig()` / `realmConfig("key")` read the settings of the realm the
+  edit lands in, and `policy()` reads the policy card a permission is judged
+  against. They are allowed in the `mutation` and `transform` profiles and
+  denied in `derive`, `policy`, `authorization` and `predicate`. Every failure throws: a missing context, a slot the
+  host left out, or an absent key fails the program instead of yielding
+  `null`. Only own keys whose value isn't `undefined` are readable. The
+  host-supplied context is checked before a program can reach it, and a
+  non-string `actor` is refused. Exported as `BXL_REQUEST_CONTEXT_CALLS`
+  along with the `BxlMutationContext` types.
+
+- **`@cardstack/bxl/transform` sub-entry and the `transform` profile.**
+  `runBxlTransform` runs one BXL expression over one value: a card
+  operation's `input` stage, which shapes the payload, and its `output`
+  stage, which projects the result. The profile refuses assignment, helpers,
+  loops, recursive descent, `try`, `label`/`break`, format filters and every
+  side-effecting call (`BXL_TRANSFORM_DENIED_CALLS`).
+  `prepareBxlTransform(source, options)` parses and checks a program once
+  and returns a `run(input, context)` to call many times; `runBxlTransform`
+  is now a prepare followed by one run, so a one-shot call parses once
+  instead of twice.
+
+- **Read-only overlays for computed and linked-card values.** The mutation
+  planner's plan options take `overlays: { computeds, linked, unavailable }`,
+  so a program can read computed values (from `pristine_doc`) and linked
+  cards' searchable fields (from `search_doc`) through the same `.path`
+  syntax as stored fields, without instantiating cards. The stored document
+  wins and keeps its shape: an overlay answers only where the stored value is
+  absent, `null` or an empty list, never retypes a stored scalar, and is
+  never followed into a list. An `onRead` hook reports each read's tier and
+  outcome (`BxlMutationReadEvent`, `BxlMutationOverlays` and related types).
+
+- **`card(…)` markers inside a written value.** A marker now resolves at any
+  depth inside the object or array a statement writes, including through
+  `if` branches and `//` operands:
+  `append(.comments; {body: params("body"), author: card(…)})` stores the
+  value without the link and plans a separate `relate` at the Field the
+  marker fills.
+
+- **`file-def` definition kind.** `BxlBoxelSourceDefinition['type']` accepts
+  `'file-def'` alongside `'card-def'` and `'field-def'`, mirroring the
+  host's definition cache.
+
+- **Runtime limit clock.** Runtime limits take
+  `clock: 'wall' | 'cpu' | () => number` (`NativeRuntimeClock`), so a
+  `maxMillis` budget can be measured in CPU time. The default stays `'wall'`.
+
+### Changed
+
+- **jq 1.7.1 conformance.** Lookups, `has`, `getpath`, `setpath`, `del` and
+  object construction use own-property semantics: `.["toString"]` is `null`,
+  `has("toString")` is false, and `setpath(["__proto__", …])` no longer
+  writes to the prototype. A keyword glued to the dot reads as a field
+  (`.label`); `\\(` in a string is an escaped backslash followed by `(`, not
+  interpolation; `\uXXXX` (with surrogate pairs) and `\/` escapes are
+  accepted; `strftime` supports the `-` no-padding flag for
+  `%d %m %H %I %M %S %j` and reports a bad directive as a format error.
+
+- **A `card(…)` reference is recognised by identity, not shape.** An object
+  shaped like `{"kind": "card-reference", "id": …}` no longer writes a link;
+  only a `card(…)` the program wrote does. Because the marker doesn't
+  survive a recursive merge, `*` refuses a `card(…)` operand.
+
+- **The schema decides what a relationship is inside a written value.** Data
+  written at a `linksTo` / `linksToMany` Field (for example the `{"id": …}`
+  shape the snapshot projection shows for a link) is refused instead of
+  landing in attributes as a frozen copy. A partial update such as
+  `.examples[0] |= {key: .key, parts: .parts}` keeps the edges under the
+  value it rewrites instead of dropping them. A `null` at a link collection
+  reads as no links.
+
+### Fixed
+
+- An overlay marked unavailable under a path no longer refuses a read the
+  stored document can answer itself, such as a link edge under a linked
+  card's unavailable fields; an `assert` over one stays a hard check.
+- A card with no resolvable field map reads its own members by path, and
+  class methods stay out of that fallback (`.serialize` reads as `null`).
+
 ## [0.6.0] — 2026-08-18
 
 ### Added
