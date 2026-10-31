@@ -36,6 +36,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
+  getMatrixServerName,
   submissionBotUsername,
   logger,
   Deferred,
@@ -713,12 +714,12 @@ export default class MatrixService extends Service {
   }
 
   get aiBotUserId() {
-    let server = this.userId!.split(':')[1];
+    let server = getMatrixServerName(this.userId!);
     return `@${aiBotUsername}:${server}`;
   }
 
   get submissionBotUserId() {
-    let server = this.userId!.split(':')[1];
+    let server = getMatrixServerName(this.userId!);
     return `@${submissionBotUsername}:${server}`;
   }
 
@@ -726,7 +727,7 @@ export default class MatrixService extends Service {
     if (username.includes(':')) {
       return username;
     }
-    let server = this.userId?.split(':')[1];
+    let server = this.userId ? getMatrixServerName(this.userId) : undefined;
     if (!server) {
       throw new Error('Matrix server is unavailable for user id');
     }

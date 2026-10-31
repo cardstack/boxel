@@ -1,22 +1,15 @@
 import { module, test } from 'qunit';
 
-import {
-  decideRoomInvite,
-  getMatrixServerName,
-} from '@cardstack/host/lib/room-invite-policy';
+import { getMatrixServerName } from '@cardstack/runtime-common';
+
+import { decideRoomInvite } from '@cardstack/host/lib/room-invite-policy';
 
 const inviter = '@example-person:localhost';
 
 module('Unit | lib | room-invite-policy', function () {
   module('decideRoomInvite', function () {
-    test('allows the platform service accounts on the inviter homeserver', function (assert) {
-      for (let invitee of [
-        '@aibot:localhost',
-        '@submissionbot:localhost',
-        '@realm/example-realm:localhost',
-        '@example_realm:localhost',
-        '@example_writer:localhost',
-      ]) {
+    test('allows the AI bot and the submission bot on the inviter homeserver', function (assert) {
+      for (let invitee of ['@aibot:localhost', '@submissionbot:localhost']) {
         assert.deepEqual(
           decideRoomInvite(invitee, inviter),
           { allowed: true },
@@ -25,17 +18,38 @@ module('Unit | lib | room-invite-policy', function () {
       }
     });
 
+    test('allows a bot on an inviter homeserver whose name has a port', function (assert) {
+      assert.deepEqual(
+        decideRoomInvite(
+          '@submissionbot:localhost:8008',
+          '@example-person:localhost:8008',
+        ),
+        { allowed: true },
+      );
+    });
+
     test('refuses an end user on the inviter homeserver', function (assert) {
       let decision = decideRoomInvite('@another-person:localhost', inviter);
       assert.false(decision.allowed, 'refused');
       assert.ok(
-        /service users/.test(decision.allowed ? '' : decision.reason),
-        'reason names the service-user rule',
+        /not the AI bot or the submission bot/.test(
+          decision.allowed ? '' : decision.reason,
+        ),
+        'reason names the rule',
       );
     });
 
-    test('refuses the inviter themselves', function (assert) {
-      assert.false(decideRoomInvite(inviter, inviter).allowed);
+    test('refuses names that match the realm and writer account conventions, which a person can register', function (assert) {
+      for (let invitee of [
+        '@realm/example-realm:localhost',
+        '@example_realm:localhost',
+        '@example_writer:localhost',
+      ]) {
+        assert.false(
+          decideRoomInvite(invitee, inviter).allowed,
+          `${invitee} is refused`,
+        );
+      }
     });
 
     test('refuses a service account on another homeserver', function (assert) {
@@ -52,7 +66,7 @@ module('Unit | lib | room-invite-policy', function () {
       assert.false(decideRoomInvite('@aibot', inviter).allowed);
     });
 
-    test('refuses a service-looking id with an empty server', function (assert) {
+    test('refuses a bot id with an empty server', function (assert) {
       assert.false(decideRoomInvite('@aibot:', inviter).allowed);
     });
   });

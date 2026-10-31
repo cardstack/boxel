@@ -786,6 +786,17 @@ export function getMatrixUsername(userId: string) {
   return userId.replace(/^@/, '').replace(/:.*$/, '');
 }
 
+// The server name of a Matrix id: everything after the localpart's colon,
+// port included, or undefined for a bare localpart or an empty server.
+export function getMatrixServerName(userId: string): string | undefined {
+  let colon = userId.indexOf(':');
+  if (colon === -1) {
+    return undefined;
+  }
+  let server = userId.slice(colon + 1);
+  return server.length > 0 ? server : undefined;
+}
+
 export async function passwordFromSeed(username: string, seed: string) {
   let hash = new Sha256();
   let cleanUsername = getMatrixUsername(username);

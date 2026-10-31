@@ -6,10 +6,10 @@ import { decideRoomInvite } from '../lib/room-invite-policy';
 import type MatrixService from '../services/matrix-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// Invites one of Boxel's service users, such as the submission bot, to a
-// room. It refuses to invite a person: an end user's Matrix id is shown only
-// to users who share a realm with them (ADR 011 §1.5), and
-// `decideRoomInvite` says why the host can't check that for an invite.
+// Invites the AI bot or the submission bot to a room. It refuses to invite a
+// person: an end user's Matrix id is shown only to users who share a realm
+// with them (ADR 011 §1.5), and `decideRoomInvite` says why the host can't
+// check that for an invite.
 export default class InviteUserToRoomTool extends HostBaseTool<
   typeof BaseToolModule.InviteUserToRoomInput
 > {
@@ -18,7 +18,7 @@ export default class InviteUserToRoomTool extends HostBaseTool<
   static actionVerb = 'Invite';
 
   description =
-    "Invite one of Boxel's service users, such as the submission bot, to a room. It cannot invite a person.";
+    'Invite the AI bot or the submission bot to a room. It cannot invite a person.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -36,7 +36,7 @@ export default class InviteUserToRoomTool extends HostBaseTool<
     let decision = decideRoomInvite(userId, this.matrixService.userId!);
     if (!decision.allowed) {
       throw new Error(
-        `cannot invite ${userId}: ${decision.reason}. This tool invites only Boxel's service users, because a person's Matrix id is shown only to users who share a realm with them (ADR 011 §1.5).`,
+        `cannot invite ${userId}: ${decision.reason}. This tool invites only the AI bot and the submission bot, because a person's Matrix id is shown only to users who share a realm with them (ADR 011 §1.5).`,
       );
     }
     if (await this.matrixService.isUserInRoom(input.roomId, userId)) {

@@ -95,7 +95,7 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
         roomId,
         userId: 'another-person',
       }),
-      /service users/,
+      /not the AI bot or the submission bot/,
       'refuses an invite to a person',
     );
 
@@ -103,6 +103,30 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
       () => getRoomState(roomId, 'm.room.member', '@another-person:localhost'),
       /does not exist/,
       'no membership event was written for the person',
+    );
+  });
+
+  test('refuses a person whose username matches the writer-account convention', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    let toolService = getService('tool-service');
+
+    let command = new InviteUserToRoomTool(toolService.toolContext);
+    await assert.rejects(
+      command.execute({
+        roomId,
+        userId: 'example_writer',
+      }),
+      /not the AI bot or the submission bot/,
+      'refuses an invite to a name a person can register',
+    );
+
+    assert.throws(
+      () => getRoomState(roomId, 'm.room.member', '@example_writer:localhost'),
+      /does not exist/,
+      'no membership event was written',
     );
   });
 
