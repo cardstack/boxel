@@ -29,6 +29,7 @@ jobs:
       repository: "boxel-actions-collector-${{ inputs.environment || 'staging' }}"
       environment: ${{ inputs.environment || 'staging' }}
       dockerfile: "packages/observability/collectors/Dockerfile"
+      platforms: ${{ (inputs.environment || 'staging') == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
 
   deploy-actions-collector:
     needs: [build-actions-collector]
