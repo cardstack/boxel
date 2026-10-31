@@ -2,6 +2,7 @@ import { waitUntil } from '@ember/test-helpers';
 
 import {
   CardDef,
+  Component,
   FieldDef,
   contains,
   field,
@@ -31,6 +32,7 @@ import {
   testRRI,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { RelationshipState as RelationshipStateType } from '@cardstack/base/card-api';
@@ -336,6 +338,73 @@ module(
         ['Mango', 'Van Gogh'],
         'a healthy list reads cleanly with a non-optional map',
       );
+    });
+
+    // A card's own format reads its card: a template that reads
+    // `this.args.model` must never be handed a slot with no card behind it.
+    // Rendered while the slot is still loading, the slot draws nothing, then
+    // the card once it arrives.
+    test('a slot still loading draws nothing until its card arrives', async function (assert) {
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field firstName = contains(StringField);
+        static fitted = class Fitted extends Component<typeof Pet> {
+          get shout() {
+            return this.args.model.firstName!.toUpperCase();
+          }
+          <template>
+            <span data-test-pet-shout>{{this.shout}}</span>
+          </template>
+        };
+      }
+      class Person extends CardDef {
+        static displayName = 'Person';
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+        static isolated = class Isolated extends Component<typeof Person> {
+          <template>
+            <div data-test-pets><@fields.pets @format='fitted' /></div>
+          </template>
+        };
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person, Pet },
+          'Pet/mango.json': {
+            data: {
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' },
+              },
+            },
+          },
+        },
+      });
+
+      let store = getService('store');
+      let resource: LooseCardResource = {
+        attributes: { firstName: 'Hassan' },
+        relationships: {
+          'pets.0': { links: { self: MANGO_URL } },
+        },
+        meta: { adoptsFrom: { module: testRRI('test-cards'), name: 'Person' } },
+      };
+      let person = (await store.__dangerousCreateFromSerialized(
+        resource,
+        { data: resource },
+        new URL(testRealmURL),
+      )) as CardDef;
+      assert.strictEqual(
+        getRelationshipMembershipState(person, 'pets').membership?.[0]?.kind,
+        'not-loaded',
+        'the slot has not loaded when the render starts',
+      );
+
+      await renderCard(loader, person, 'isolated');
+      await waitUntil(() => document.querySelector('[data-test-pet-shout]'));
+
+      assert.dom('[data-test-pets] [data-test-pet-shout]').hasText('MANGO');
     });
   },
 );
