@@ -3153,6 +3153,93 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test('a site page carries an ETag a repeat visit revalidates against', async function (assert) {
+        let page = () =>
+          request
+
+            .get(`${mount}shop/driver`)
+
+            .set('Host', host)
+
+            .set('Accept', 'text/html');
+
+        let first = await page();
+
+        let etag = first.headers['etag'];
+
+        assert.ok(etag, 'the page has an ETag');
+
+        assert.strictEqual(
+          (await page()).headers['etag'],
+          etag,
+          'the same one twice',
+        );
+
+        let again = await page().set('If-None-Match', etag);
+
+        assert.strictEqual(again.status, 304, 'an unchanged page revalidates');
+      });
+
+      test('a change to a realm the site draws on changes its pages’ ETag', async function (assert) {
+        let page = () =>
+          request
+
+            .get(`${mount}shop/driver`)
+
+            .set('Host', host)
+
+            .set('Accept', 'text/html');
+
+        let before = (await page()).headers['etag'];
+
+        let write = await request
+
+          .post('/test/Product/driver.json')
+
+          .set('Accept', 'application/vnd.card+source')
+
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+
+                attributes: {
+                  handle: 'driver',
+                  cardInfo: { name: 'Driver, renamed' },
+                },
+
+                meta: { adoptsFrom: { module: '../product', name: 'Product' } },
+              },
+            }),
+          );
+
+        assert.strictEqual(write.status, 204);
+
+        // The edit is indexed, then rendered; the page's ETag follows both.
+
+        let after = await page().set('If-None-Match', before);
+
+        let deadline = Date.now() + 60_000;
+
+        while (
+          !after.text.includes('Driver, renamed') &&
+          Date.now() < deadline
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          after = await page().set('If-None-Match', before);
+        }
+
+        assert.strictEqual(after.status, 200, 'the old ETag no longer matches');
+
+        assert.true(
+          after.text.includes('Driver, renamed'),
+          'the page shows the edit',
+        );
+
+        assert.notStrictEqual(after.headers['etag'], before);
+      });
+
       test('an alias the site doesn’t draw on reaches no realm', async function (assert) {
         let response = await request
           .get(`${mount}_r/${'a'.repeat(26)}/Product/driver`)

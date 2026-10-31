@@ -10,7 +10,12 @@ import {
 } from '../middleware/index.ts';
 import { nodeStreamToText } from '../stream.ts';
 import { findOrMountRealm, type RealmRoutingDeps } from './realm-routing.ts';
-import { siteAt, siteMounts, sitePathsForCards } from './host-routes.ts';
+import {
+  siteAt,
+  siteMounts,
+  sitePathsForCards,
+  siteSourceRealms,
+} from './host-routes.ts';
 
 // The boundary between a published site and its visitors (Host Mode v2 R2).
 // Everything a visitor receives passes through `siteBoundary`: the page's
@@ -106,28 +111,6 @@ async function isPublished(realm: Realm, deps: RealmRoutingDeps) {
   return published;
 }
 
-// The realms a site draws on: its page types' source realms and the realms
-// holding its frame and not-found cards, other than its own.
-async function sourceRealms(
-  site: Realm,
-  deps: RealmRoutingDeps,
-): Promise<string[]> {
-  let settings = await site.getSiteSettings();
-  let sources = new Set(settings.pageTypes.map((t) => t.sourceRealm));
-  for (let card of [settings.frame, settings.notFound]) {
-    if (card) {
-      let realm = await findOrMountRealm(new URL(card), deps).catch(
-        () => undefined,
-      );
-      if (realm) {
-        sources.add(realm.url);
-      }
-    }
-  }
-  sources.delete(site.url);
-  return [...sources];
-}
-
 // The boundary of the site mounted at `mount` (as the visitor sees it), or
 // undefined when it isn't a published site that draws on another realm.
 export async function boundaryAt(
@@ -138,7 +121,7 @@ export async function boundaryAt(
   if (!site || !(await isPublished(site, deps))) {
     return undefined;
   }
-  let sources = await sourceRealms(site, deps);
+  let sources = await siteSourceRealms(site, deps);
   if (!sources.length) {
     return undefined;
   }

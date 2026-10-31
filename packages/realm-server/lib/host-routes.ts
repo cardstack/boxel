@@ -7,9 +7,14 @@ import {
   logger,
   normalizeRoutingPath,
   pageTypeMatchFilter,
+  param,
+  query,
+  separatedByCommas,
+  trimExecutableExtension,
   resolveSitePath,
   shareFor,
   SupportedMimeType,
+  type Expression,
   type HostRouteShare,
   type Realm,
   type RouteCard,
@@ -327,6 +332,46 @@ export async function siteAt(
     : undefined;
 }
 
+// The realms a site draws on: its page types' source realms and the realms
+// holding its frame and not-found cards, other than its own.
+export async function siteSourceRealms(
+  site: Realm,
+  deps: RealmRoutingDeps,
+): Promise<string[]> {
+  let settings = await site.getSiteSettings();
+  let sources = new Set(settings.pageTypes.map((t) => t.sourceRealm));
+  for (let card of [settings.frame, settings.notFound]) {
+    if (card) {
+      let realm = await findOrMountRealm(new URL(card), deps).catch(
+        () => undefined,
+      );
+      if (realm) {
+        sources.add(realm.url);
+      }
+    }
+  }
+  sources.delete(site.url);
+  return [...sources];
+}
+
+// What a site's pages show changes only with the indexes of the realms it
+// draws on and the host shell: a key for them, from each realm's current
+// index generation. Every index commit, including a change to realm.json,
+// moves a realm's generation.
+export async function siteGenerations(
+  site: Realm,
+  deps: RealmRoutingDeps,
+): Promise<string> {
+  let realms = [site.url, ...(await siteSourceRealms(site, deps))].sort();
+  let rows = (await query(deps.dbAdapter, [
+    `SELECT realm_url, current_generation FROM realm_generations WHERE realm_url IN (`,
+    ...separatedByCommas(realms.map((url) => [param(url)])),
+    `)`,
+  ] as Expression)) as { realm_url: string; current_generation: number }[];
+  let byRealm = new Map(rows.map((r) => [r.realm_url, r.current_generation]));
+  return realms.map((url) => `${url}=${byRealm.get(url) ?? 0}`).join(' ');
+}
+
 // A request URL's path relative to the realm's mount, normalized; undefined
 // when the URL is outside the realm.
 export function sitePathOf(realm: Realm, requestURL: URL): string | undefined {
@@ -375,14 +420,19 @@ export async function sitePathsForCards(
     }
   }
   let settings = await realm.getSiteSettings();
-  for (let pageType of settings.pageTypes) {
-    if (!pageType.template) {
-      continue;
-    }
-    let remaining = [...wanted].filter((key) => !paths.has(key));
-    if (!remaining.length) {
-      break;
-    }
+  let pageTypes = settings.pageTypes.filter((t) => t.template);
+  // The types each linked card is, from one read of the index, so each page
+  // type is searched only for the cards it can match. A card the index
+  // doesn't hold has no address, since every search reads the same index.
+  let types = await indexedTypes(
+    [...wanted].filter((key) => !paths.has(key)),
+    deps,
+  );
+  for (let pageType of pageTypes) {
+    let typeKey = pageTypeKey(pageType);
+    let remaining = [...wanted].filter(
+      (key) => !paths.has(key) && types.get(key)?.includes(typeKey),
+    );
     for (let i = 0; i < remaining.length; i += ID_BATCH) {
       let ids = remaining.slice(i, i + ID_BATCH);
       let cards: RouteCard[];
@@ -410,6 +460,44 @@ export async function sitePathsForCards(
     }
   }
   return paths;
+}
+
+// A page type's card type as the index lists it among a card's types (and
+// the search's `on` matches it): `<module>/<name>`, without the module's
+// extension. A card's types include every class it descends from.
+function pageTypeKey(pageType: SitePageType): string {
+  return `${trimExecutableExtension(pageType.cardType.module)}/${pageType.cardType.name}`;
+}
+
+// The types of each card the index holds an instance for, by card key.
+async function indexedTypes(
+  keys: string[],
+  deps: RealmRoutingDeps,
+): Promise<Map<string, string[]>> {
+  let types = new Map<string, string[]>();
+  for (let i = 0; i < keys.length; i += ID_BATCH) {
+    let batch = keys.slice(i, i + ID_BATCH);
+    let rows = (await query(deps.dbAdapter, [
+      `SELECT file_alias, types FROM boxel_index
+       WHERE type = 'instance' AND is_deleted IS NOT TRUE AND file_alias IN (`,
+      ...separatedByCommas(batch.map((key) => [param(key)])),
+      `)`,
+    ] as Expression)) as {
+      file_alias: string;
+      types: string[] | string | null;
+    }[];
+    for (let row of rows) {
+      let list =
+        typeof row.types === 'string' ? JSON.parse(row.types) : row.types;
+      if (Array.isArray(list)) {
+        types.set(row.file_alias, [
+          ...(types.get(row.file_alias) ?? []),
+          ...list,
+        ]);
+      }
+    }
+  }
+  return types;
 }
 
 // Every address a site serves, for its sitemap: the fixed pages and listing

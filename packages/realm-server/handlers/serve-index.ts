@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
@@ -49,6 +50,7 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 import {
   resolveSiteRequest,
   siteHomeCard,
+  siteGenerations,
   siteMounts,
   sitePathOf,
   sitePathsForCards,
@@ -108,9 +110,6 @@ async function anonymousCardDoc(
   return response?.status === 200 ? await response.text() : undefined;
 }
 
-// Whether the request's path is routed into another realm. Such a page can
-// change, or stop being served, without the routing realm changing, so its
-// response carries no ETag a cache could revalidate against.
 // The frame card a site shows its pages inside, as prerendered: its isolated
 // HTML and scoped CSS. None when the page being served is the frame itself,
 // when the frame has no prerendered HTML yet, or when it is another realm's
@@ -144,6 +143,9 @@ async function siteFrameMarkup(
   return { url: frameURL, html: markup.html, scopedCSS };
 }
 
+// Whether the request's path is routed by an exact rule into another realm.
+// Such a page can change, or stop being served, without the routing realm
+// changing, so its response carries no ETag a cache could revalidate against.
 async function routesCrossRealm(
   requestURL: URL,
   routingDeps: RealmRoutingDeps,
@@ -156,10 +158,7 @@ async function routesCrossRealm(
       matched.rule.crossRealm,
     );
   }
-  // A site's pages also show where the cards they link to are served,
-  // which changes with those cards and not with this realm's publish time.
-  let realm = await findOrMountRealm(requestURL, routingDeps);
-  return Boolean(realm && (await realm.getSiteSettings()).pageTypes.length);
+  return false;
 }
 
 async function unshareableFormatsForPage(
@@ -449,7 +448,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // Recompute the hash in dev mode (where index.html is not cached) so
       // that changes to the shell are reflected in the ETag.
       if (!indexHTMLHash || isDev) {
-        let { createHash } = await import('crypto');
         indexHTMLHash = createHash('md5')
           .update(indexHTML)
           .digest('hex')
@@ -685,30 +683,43 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
-    let etag =
+    // A site's pages are revalidated further down, once the markup they are
+    // built from has been read (see siteETag). Another page routed into
+    // another realm can change without this realm knowing, so it gets none.
+    let isSitePage = Boolean(
+      routedRealm && (await routedRealm.getSiteSettings()).pageTypes.length,
+    );
+    let etag: string | null = null;
+    if (
       lastPublishedAt &&
       indexHTMLHash &&
+      !isSitePage &&
       !(await routesCrossRealm(requestURL, routingDeps))
-        ? `"${lastPublishedAt}-${indexHTMLHash}"`
-        : null;
-
-    if (etag) {
+    ) {
+      etag = `"${lastPublishedAt}-${indexHTMLHash}"`;
+    }
+    let notModified = (tag: string) => {
       let ifNoneMatch = ctxt.get('If-None-Match');
       if (
-        ifNoneMatch === '*' ||
-        ifNoneMatch
+        ifNoneMatch !== '*' &&
+        !ifNoneMatch
           .split(',')
-          .some((t) => t.trim().replace(/^W\//, '') === etag)
+          .some((t) => t.trim().replace(/^W\//, '') === tag)
       ) {
-        ctxt.status = 304;
-        ctxt.set('ETag', etag);
-        ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
-        ctxt.vary('Accept');
-        // The shell is withheld from document embeds (see
-        // isDocumentEmbedRequest), so a cached copy must not satisfy them.
-        ctxt.vary('Sec-Fetch-Dest');
-        return;
+        return false;
       }
+      ctxt.status = 304;
+      ctxt.set('ETag', tag);
+      ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+      ctxt.vary('Accept');
+      // The shell is withheld from document embeds (see
+      // isDocumentEmbedRequest), so a cached copy must not satisfy them.
+      ctxt.vary('Sec-Fetch-Dest');
+      return true;
+    };
+
+    if (etag && notModified(etag)) {
+      return;
     }
     let publicPermissions = await hasPublicPermissions(
       routedRealm,
@@ -981,6 +992,41 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       scopedCSS = scopedCSS
         ? `${frame.scopedCSS}\n${scopedCSS}`
         : frame.scopedCSS;
+    }
+
+    // A site page's ETag names everything it is built from: the publish, the
+    // host shell, the index generation of every realm the site draws on
+    // (which covers where its links go), and the page's and frame's
+    // prerendered markup, which a render can replace after the index has
+    // committed. A revalidation is answered here, before the work of placing
+    // the page's links. A page whose card hasn't been prerendered yet, or a
+    // missing one, isn't given one.
+    if (
+      isSitePage &&
+      lastPublishedAt &&
+      indexHTMLHash &&
+      isolatedHTML != null &&
+      !servedNotFound
+    ) {
+      let generations = await siteGenerations(routedRealm!, routingDeps);
+      etag = `"site-${createHash('sha256')
+        .update(
+          [
+            lastPublishedAt,
+            indexHTMLHash,
+            generations,
+            cardURL.href,
+            headHTML ?? '',
+            isolatedHTML,
+            scopedCSS ?? '',
+            frame?.html ?? '',
+          ].join('\n'),
+        )
+        .digest('hex')
+        .slice(0, 32)}"`;
+      if (notModified(etag)) {
+        return;
+      }
     }
 
     // A site's pages are rewritten on the way out to the address they are
