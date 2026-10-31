@@ -716,9 +716,6 @@ export class PretUISpec extends Spec {
           overflow-wrap: break-word;
         }
         .wb-title-frame {
-          --icon-color: currentColor;
-          --icon-bg: none;
-
           display: grid;
           place-items: center;
           width: var(--_wb-title-frame-size);
@@ -993,9 +990,6 @@ export class PretUISpec extends Spec {
           box-sizing: border-box;
         }
         .mono {
-          --icon-color: currentColor;
-          --icon-bg: none;
-
           flex: none;
           width: var(--fit-mono-size);
           height: var(--fit-mono-size);

@@ -28,7 +28,7 @@ export interface DocCard {
   label: string;
   /** one line shown in the preview */
   summary?: string;
-  /** boxel-ui icon export name, resolved through icon-registry */
+  /** an icon-registry key, resolved to its boxel-icons icon */
   icon?: string;
 }
 
