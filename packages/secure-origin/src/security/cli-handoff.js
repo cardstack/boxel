@@ -80,7 +80,7 @@ export function cliCallback(
  * What a hand-off carries: a secure session, a login token, or both; or the
  * end of an OAuth sign-in the CLI started.
  * @typedef {{ code: string, state: string } | { error: string }} OAuthOutcome
- * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: 'done' | 'cancelled' }} Handoff
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: 'done' }} Handoff
  */
 
 // What the CLI's listener is sent: the state it expects back, the login

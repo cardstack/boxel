@@ -782,7 +782,9 @@ export async function keysSwap(
   let listed = (
     await listRealmShares(ctx.realmServerUrl, token, options.realm)
   ).find((s) => s.label === label);
-  let grants = (key.grants ?? []).filter((g) => g.state !== 'rejected');
+  // Every grant counts, a rejected one too: the realm server reuses a grant
+  // that covers the destination whatever its state, as an approval does.
+  let grants = key.grants ?? [];
   let uncovered = [
     ...new Set(
       (listed?.operations ?? [])

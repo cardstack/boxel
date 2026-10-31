@@ -169,8 +169,9 @@ export type LoopbackResult =
     }
   | { kind: 'window'; outcome: WindowOutcome };
 
-// How a page of the secure window the CLI opened ended.
-export type WindowOutcome = 'done' | 'cancelled';
+// How a page of the secure window the CLI opened ended: the change it was
+// opened for was made.
+export type WindowOutcome = 'done';
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -279,7 +280,7 @@ export async function startLoopbackCallback(opts?: {
 
       if (posted?.has('window_outcome')) {
         const outcome = posted.get('window_outcome');
-        if (outcome !== 'done' && outcome !== 'cancelled') {
+        if (outcome !== 'done') {
           fail(
             res,
             'That response from the secure window was not recognized.',

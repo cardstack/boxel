@@ -10,7 +10,6 @@ import { delimiter, extname, resolve } from 'node:path';
 import type { LintMessage, LintResult } from './lint.ts';
 
 import { resolvePrettierConfig } from '../prettier-config.ts';
-import { callApiLintPlugin } from './lint-call-api.ts';
 
 // ---------------------------------------------------------------------------
 // Host config — single source of truth shared with `pnpm run lint`
@@ -68,6 +67,15 @@ async function initESLint(): Promise<any> {
   );
   const importMappings = (importMappingConfig.default ?? importMappingConfig)
     .importMappings;
+  // The `callApi` rules run lowering's own code, which reaches all of
+  // runtime-common and BXL. The specifier is computed so that a package
+  // type-checking this engine from outside (postgres, with an older `lib`)
+  // doesn't type-check that whole graph too; runtime-common checks
+  // `lint-call-api.ts` itself.
+  const { callApiLintPlugin } = (await import(
+    /* webpackIgnore: true */ new URL('./lint-call-api.ts', import.meta.url)
+      .href
+  )) as { callApiLintPlugin: { rules: Record<string, unknown> } };
 
   return new ESLint({
     cwd: HOST_PKG,

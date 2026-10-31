@@ -288,7 +288,7 @@ export function registerKeysCommand(program: Command): void {
   keys
     .command('pending')
     .description(
-      'List your approvals that need approving again: a request that changed since you approved it, or one whose grant was removed',
+      'List your approvals that need approving again: a request that changed since you approved it, or an operation that can no longer be read',
     )
     .option('--json', 'Output JSON')
     .action((options: { json?: boolean }) =>

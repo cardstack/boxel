@@ -89,7 +89,7 @@ function evaluate(
     case 'TSSatisfiesExpression':
     case 'TSNonNullExpression':
     case 'TSTypeAssertion':
-      return evaluate(node.expression, scope, depth + 1);
+      return evaluate(withoutTypeWrappers(node), scope, depth + 1);
     case 'TemplateLiteral': {
       let text = '';
       for (let [i, quasi] of node.quasis.entries()) {
@@ -179,6 +179,20 @@ function findVariable(scope: any, name: string): any {
   return undefined;
 }
 
+const TYPE_WRAPPERS = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+]);
+
+function withoutTypeWrappers(node: Node): Node {
+  while (node && TYPE_WRAPPERS.has(node.type)) {
+    node = node.expression;
+  }
+  return node;
+}
+
 function isOperationDecorator(decorator: Node): boolean {
   let expression = decorator.expression;
   return (
@@ -225,14 +239,16 @@ function makeRule(check: Check): Rule.RuleModule {
       let sourceCode = context.sourceCode ?? context.getSourceCode();
       return {
         PropertyDefinition(node: Node) {
+          // `satisfies OperationDeclaration` and `as const` are erased before
+          // lowering sees the value, so they are looked through here too.
+          let declarationNode = withoutTypeWrappers(node.value);
           if (
             !node.static ||
             !node.decorators?.some(isOperationDecorator) ||
-            node.value?.type !== 'ObjectExpression'
+            declarationNode?.type !== 'ObjectExpression'
           ) {
             return;
           }
-          let declarationNode = node.value;
           let value = evaluate(declarationNode, sourceCode);
           if (!value || typeof value !== 'object' || isUnknown(value)) {
             return;

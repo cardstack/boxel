@@ -71,7 +71,10 @@ function stdinWith(text: string): NodeJS.ReadStream {
   return stdin as unknown as NodeJS.ReadStream;
 }
 
-function serviceSource(vendorURL: string, { edited = false } = {}) {
+function serviceSource(
+  vendorURL: string,
+  { edited = false, elsewhereURL }: { edited?: boolean; elsewhereURL: string },
+) {
   return `
     import { contains, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
@@ -109,6 +112,16 @@ function serviceSource(vendorURL: string, { edited = false } = {}) {
         base: 'callApi',
         label: 'Ping',
         url: '${vendorURL}/echo',
+      };
+    }
+
+    // Sends to another host, which no test grants the key.
+    export class Elsewhere extends CardDef {
+      @operation static other = {
+        base: 'callApi',
+        label: 'Read from the other host',
+        url: '${elsewhereURL}/echo',
+        headers: { authorization: 'Bearer {{userKey}}' },
       };
     }
   `;
@@ -274,7 +287,9 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       secureOriginURL,
       prerenderer: await getTestPrerenderer(),
       fileSystem: {
-        'service.gts': serviceSource(vendor.url),
+        'service.gts': serviceSource(vendor.url, {
+          elsewhereURL: vendor.alternateUrl,
+        }),
         'the-service.json': {
           data: {
             type: 'card',
@@ -350,16 +365,30 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
   });
 
-  it('refuses interactive use, which the realm server does not offer yet', async () => {
+  it('asks the realm server for interactive use, which it refuses, even when the approval needs a new grant', async () => {
     let refused = await keysApprove('my key', {
       ...deps,
-      operation: 'service#Service.create',
+      operation: 'service#Elsewhere.other',
       realm,
       interactive: true,
       yes: true,
     }).catch((e) => e);
     expect(refused).toBeInstanceOf(SecureSessionRequestError);
     expect(refused.status).toBe(403);
+    expect(windows, 'no window is opened for it').toHaveLength(1);
+    expect(await bindingCount()).toBe(1);
+  });
+
+  it('refuses a --slot approval that needs a new grant, since the window approves every slot', async () => {
+    let refused = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      slot: 'userKey',
+      yes: true,
+    }).catch((e) => e);
+    expect(String(refused?.message)).toContain('approves every slot');
+    expect(windows).toHaveLength(1);
     expect(await bindingCount()).toBe(1);
   });
 
@@ -391,7 +420,10 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     expect(await keysPending(deps)).toEqual([]);
     await testRealm.write(
       'service.gts',
-      serviceSource(vendor.url, { edited: true }),
+      serviceSource(vendor.url, {
+        edited: true,
+        elsewhereURL: vendor.alternateUrl,
+      }),
     );
     let pending = await keysPending(deps);
     expect(
@@ -402,7 +434,9 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
   it('revokes an approval, leaving its grant', async () => {
     let revoked = await keysRevoke('my key', {
       ...deps,
-      operation: 'service#Service.remove',
+      // A full URL, extension and all: the realm server resolves it as it
+      // keys bindings.
+      operation: `${realm}service.gts#Service.remove`,
       realm,
       yes: true,
     });

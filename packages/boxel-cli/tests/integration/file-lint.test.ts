@@ -309,7 +309,7 @@ export class Vendor extends CardDef {
     label: 'Placed twice',
     url: 'https://api.example.com/v1/x',
     headers: { a: '{{userKey}}', b: '{{userKey}}' },
-  };
+  } as const;
 
   @operation static badSlot = {
     base: 'callApi',

@@ -679,13 +679,27 @@ export class ProfileManager implements RealmAuthenticator {
   }
 
   // The realm, among those the active profile holds a token for, that serves
-  // `url`: the longest whose URL `url` starts with.
+  // `url`: the longest whose URL `url` starts with, as it is served. A
+  // bootstrap realm's token is keyed by its `https://cardstack.com/<name>/`
+  // id and served at `<realm server>/<name>/`, which is what this answers.
   async realmUrlFor(url: string): Promise<string | undefined> {
-    let find = () =>
-      Object.entries(this.getActiveProfile()?.profile.realmTokens ?? {})
-        .filter(([realmUrl, token]) => token && url.startsWith(realmUrl))
-        .map(([realmUrl]) => realmUrl)
-        .sort((a, b) => b.length - a.length)[0];
+    let find = () => {
+      let active = this.getActiveProfile();
+      if (!active) {
+        return undefined;
+      }
+      let serverUrl = active.profile.realmServerUrl.replace(/\/+$/, '') + '/';
+      return Object.entries(active.profile.realmTokens ?? {})
+        .filter(([, token]) => token)
+        .flatMap(([realmUrl]) => {
+          let aliasedName = aliasedRealmName(realmUrl);
+          let served = aliasedName ? `${serverUrl}${aliasedName}/` : realmUrl;
+          return [realmUrl, served]
+            .filter((prefix) => url.startsWith(prefix))
+            .map((prefix) => ({ prefix, served }));
+        })
+        .sort((a, b) => b.prefix.length - a.prefix.length)[0]?.served;
+    };
     let found = find();
     if (found) {
       return found;

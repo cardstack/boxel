@@ -1,6 +1,17 @@
 import { realmServerRequest } from './secure-session.ts';
 import { canonicalRealmUrl } from './user-keys.ts';
 
+// A realm as the CLI names it to the realm server: a prefix-form id
+// (`@cardstack/catalog/`) as written, which the server resolves, or a URL in
+// the form the server stores.
+export function realmArgument(realm: string): string {
+  return realm.startsWith('@')
+    ? realm.endsWith('/')
+      ? realm
+      : `${realm}/`
+    : canonicalRealmUrl(realm);
+}
+
 // The realm server's bindings routes, as `boxel keys approve`, `revoke`,
 // `pending` and `ungrant` use them. A binding is a key owner's approval of
 // one `callApi` operation, in one realm, to send a chosen key (or share) in
@@ -108,7 +119,7 @@ export async function approvalBatch(
         attributes: {
           target:
             target.kind === 'type'
-              ? { ...target, realm: canonicalRealmUrl(target.realm) }
+              ? { ...target, realm: realmArgument(target.realm) }
               : target,
           review,
         },
@@ -190,7 +201,7 @@ export async function approveOperations(
       data: {
         type: 'key-binding-approval',
         attributes: {
-          realm: canonicalRealmUrl(realm),
+          realm: realmArgument(realm),
           operations,
           ...(interactive ? { interactive: true } : {}),
           ...(anonymous ? { anonymous: true } : {}),
@@ -214,15 +225,33 @@ export async function approveOperations(
   };
 }
 
+// Which bindings to list. The realm server resolves each, in prefix form or
+// as a URL, as it keys bindings, so the CLI never compares its own spelling
+// of a realm or module with the server's.
+export interface BindingFilter {
+  realm?: string;
+  module?: string;
+  name?: string;
+  operation?: string;
+  instance?: string;
+}
+
 export async function listOwnBindings(
   realmServerUrl: string,
   token: string,
+  filter: BindingFilter = {},
   fetchFn: FetchFn = fetch,
 ): Promise<KeyBinding[]> {
-  let json = await realmServerRequest(realmServerUrl, '_key-bindings', {
-    token,
-    fetchFn,
-  });
+  let query = new URLSearchParams(
+    Object.entries(filter).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  ).toString();
+  let json = await realmServerRequest(
+    realmServerUrl,
+    query ? `_key-bindings?${query}` : '_key-bindings',
+    { token, fetchFn },
+  );
   return json.data.map(fromResource<KeyBinding>);
 }
 

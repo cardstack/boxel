@@ -14,6 +14,7 @@ import {
   type BindingSnapshot,
   type KeyBinding,
   type OperationApproval,
+  realmArgument,
 } from '../../lib/key-bindings.ts';
 import { openBrowser } from '../../lib/open-browser.ts';
 import { fetchSecureOriginUrl } from '../../lib/secure-session.ts';
@@ -23,7 +24,6 @@ import {
   startLoopbackCallback,
 } from '../../lib/sso-login.ts';
 import {
-  canonicalRealmUrl,
   findUserKey,
   listOwnShares,
   type UserKeyGrant,
@@ -92,23 +92,18 @@ export function parseOperationArgument(
       `--operation is <module>#<Class> or <module>#<Class>.<operation>, not ${value}`,
     );
   }
-  let module = def.startsWith('@')
-    ? def
-    : new URL(def, canonicalRealmUrl(realm)).href;
+  let base = realmArgument(realm);
+  let module =
+    def.startsWith('@') || /^[a-z][a-z0-9+.-]*:/i.test(def)
+      ? def
+      : base.startsWith('@')
+        ? `${base}${def.replace(/^\.?\//, '')}`
+        : new URL(def, base).href;
   return {
     module: module.replace(EXECUTABLE_EXTENSION, ''),
     name,
     ...(operation ? { operation } : {}),
   };
-}
-
-// Whether two names of a module name the same one: the realm server answers
-// with a module in RRI form, which may be a prefix-form id or a URL, with its
-// executable extension trimmed.
-function sameModule(a: string, b: string): boolean {
-  return (
-    a.replace(EXECUTABLE_EXTENSION, '') === b.replace(EXECUTABLE_EXTENSION, '')
-  );
 }
 
 interface ApproveOptions {
@@ -399,7 +394,10 @@ export async function finishInSecureWindow(
         `Open this URL in your browser to confirm ${what}:\n  ${url.href}`,
       );
     }
-    say(ctx, 'Waiting for the secure window...');
+    say(
+      ctx,
+      'Waiting for the secure window... Closing the window without finishing leaves this waiting; press Ctrl-C to stop.',
+    );
     let result;
     try {
       result = await listener.waitForResult();
@@ -413,9 +411,6 @@ export async function finishInSecureWindow(
     }
     if (result.kind !== 'window') {
       throw new Error('The browser returned something other than the window.');
-    }
-    if (result.outcome !== 'done') {
-      throw new Error(`${what} was cancelled in the secure window`);
     }
   } finally {
     listener.close();
@@ -448,12 +443,26 @@ export async function keysApprove(
         realm: options.realm,
       };
   let batch = await approvalBatch(ctx.realmServerUrl, token, { target });
-  // A card is named by its own URL, so the class --operation names is checked
-  // against the one the card adopts from.
-  if (options.instance && batch.card.exportName !== parsed.name) {
-    throw new Error(
-      `${options.instance} is a ${batch.card.exportName}, not the ${parsed.name} --operation names`,
-    );
+  // A card is named by its own URL, so the type --operation names is checked
+  // against the one the card adopts from. Both are asked of the realm server,
+  // which names each the same way, so the two answers compare as written.
+  if (options.instance) {
+    let named = await approvalBatch(ctx.realmServerUrl, token, {
+      target: {
+        kind: 'type',
+        module: parsed.module,
+        name: parsed.name,
+        realm: options.realm,
+      },
+    });
+    if (
+      named.card.module !== batch.card.module ||
+      named.card.exportName !== batch.card.exportName
+    ) {
+      throw new Error(
+        `${options.instance} is a ${batch.card.exportName} from ${batch.card.module}, not the ${parsed.name} from ${named.card.module} that --operation names`,
+      );
+    }
   }
   let planned = plan(batch, name, {
     operation: parsed.operation,
@@ -473,6 +482,21 @@ export async function keysApprove(
     );
   }
   let interactive = Boolean(options.interactive);
+  // The window approves every slot of each operation it is given, so an
+  // approval narrowed to one slot can't be confirmed there.
+  if (
+    newGrants(planned).length > 0 &&
+    !interactive &&
+    options.slot !== undefined
+  ) {
+    throw new Error(
+      `Sending ${newGrants(planned)
+        .map((g) => `${g.name} to ${g.host}`)
+        .join(
+          ', ',
+        )} is confirmed in the secure window, which approves every slot of an operation. Approve without --slot, or once the key has been approved for ${[...new Set(newGrants(planned).map((g) => g.host))].join(', ')}`,
+    );
+  }
   printBatch(ctx, batch, planned, { interactive });
   if (!options.yes) {
     if (!(await confirm(ctx, 'Approve? [y/N] '))) {
@@ -506,8 +530,16 @@ export async function keysApprove(
 
   // The approvals in place before the window opens, so what it approved is
   // told apart from what was there already.
+  let ofThisCard = {
+    realm: batch.realm.url,
+    module: batch.card.module,
+    name: batch.card.exportName,
+    ...(options.instance ? { instance: options.instance } : {}),
+  };
   let before = new Set(
-    (await listOwnBindings(ctx.realmServerUrl, token)).map((b) => b.approvalId),
+    (await listOwnBindings(ctx.realmServerUrl, token, ofThisCard)).map(
+      (b) => b.approvalId,
+    ),
   );
   let first = planned[0]!;
   let fill = first.fills[0]!;
@@ -531,15 +563,16 @@ export async function keysApprove(
     timeoutMs,
   });
   // What the window approved, read back from the realm server: the bindings
-  // of the card's operations in this realm.
+  // of the card's operations in this realm approved since it opened.
   let names = new Set(planned.map((p) => p.operation.name));
   let approved = (
-    await listOwnBindings(ctx.realmServerUrl, await ordinaryToken(ctx))
+    await listOwnBindings(
+      ctx.realmServerUrl,
+      await ordinaryToken(ctx),
+      ofThisCard,
+    )
   ).filter(
     (b) =>
-      canonicalRealmUrl(b.realm) === canonicalRealmUrl(batch.realm.url) &&
-      b.type.name === batch.card.exportName &&
-      sameModule(b.type.module, batch.card.module) &&
       names.has(b.operation) &&
       !before.has(b.approvalId) &&
       planned.some(
@@ -584,24 +617,29 @@ export async function keysRevoke(
   let parsed = parseOperationArgument(options.operation, options.realm);
   requireConfirmation(ctx, options.yes, 'revoke');
   let token = await secureToken(ctx);
-  let realm = canonicalRealmUrl(options.realm);
+  let realm = realmArgument(options.realm);
   let keyId = await findUserKey(ctx.realmServerUrl, token, name).then(
     (key) => key.id,
     () => undefined,
   );
+  // The user's shares labelled `name`, in any realm: the listing below is
+  // already narrowed to this one.
   let shareIds = new Set(
     (await listOwnShares(ctx.realmServerUrl, token))
-      .filter((s) => canonicalRealmUrl(s.realm) === realm && s.label === name)
+      .filter((s) => s.label === name)
       .map((s) => s.id),
   );
-  let bindings = (await listOwnBindings(ctx.realmServerUrl, token)).filter(
+  let bindings = (
+    await listOwnBindings(ctx.realmServerUrl, token, {
+      realm,
+      module: parsed.module,
+      name: parsed.name,
+      operation: parsed.operation,
+      instance: options.instance,
+    })
+  ).filter(
     (b) =>
-      canonicalRealmUrl(b.realm) === realm &&
-      b.type.name === parsed.name &&
-      sameModule(b.type.module, parsed.module) &&
-      (parsed.operation === undefined || b.operation === parsed.operation) &&
       (options.slot === undefined || b.slot === options.slot) &&
-      (options.instance === undefined || b.instance === options.instance) &&
       ((keyId !== undefined && b.keyId === keyId) ||
         (b.shareId !== null && shareIds.has(b.shareId))),
   );
@@ -633,7 +671,7 @@ export async function keysRevoke(
   return bindings;
 }
 
-export type PendingReason = 'changed' | 'grant-removed' | 'unreadable';
+export type PendingReason = 'changed' | 'unreadable';
 
 export interface PendingBinding {
   binding: KeyBinding;
@@ -643,14 +681,15 @@ export interface PendingBinding {
 
 const PENDING_REASONS: Record<PendingReason, string> = {
   changed: 'its request changed since you approved it',
-  'grant-removed': 'the grant it sent under was removed',
   unreadable: "its operation can't be read now",
 };
 
-// The user's approvals that don't send as approved: one whose request has changed
-// since it was approved (whether or not a call has found it yet), one whose
-// grant was removed, and one whose operation can't be read now. Read with the
-// profile's ordinary session.
+// The user's approvals that don't send as approved: one whose request has
+// changed since it was approved (whether or not a call has found it yet), and
+// one whose operation can't be read now. Removing a grant revokes its
+// approvals rather than leaving them waiting, and a share's approvals whose
+// key went with its grants are suspended with the share, which its writers
+// resume, so neither is listed. Read with the profile's ordinary session.
 export async function keysPending(
   options: { json?: boolean } & KeysCommandDeps = {},
 ): Promise<PendingBinding[]> {
@@ -666,10 +705,6 @@ export async function keysPending(
     }
     if (binding.state === 'needs-reapproval') {
       pending.push({ binding, reason: 'changed' });
-      continue;
-    }
-    if (binding.grantId === null) {
-      pending.push({ binding, reason: 'grant-removed' });
       continue;
     }
     let id = JSON.stringify([
