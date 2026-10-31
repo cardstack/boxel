@@ -87,6 +87,49 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a peek says what a take would, and takes nothing', async function (assert) {
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 3 },
+          'a key nothing has taken from is a full bucket',
+        );
+        await store.take(KEY, BUCKET, 3);
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: false,
+          retryAfterSeconds: 10,
+        });
+        nowMs += 10_000;
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: true,
+          remaining: 1,
+        });
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 1 },
+          'peeking twice leaves the bucket where it was',
+        );
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET, 2),
+          { admitted: false, retryAfterSeconds: 10 },
+          'a peek of several tokens waits for all of them',
+        );
+      });
+
+      test('a refund puts back what a take took, never past a full bucket', async function (assert) {
+        await store.take(KEY, BUCKET, 3);
+        assert.true(await store.refund(KEY, BUCKET, 2));
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: true,
+          remaining: 2,
+        });
+        assert.true(await store.refund(KEY, BUCKET, 3));
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 3 },
+          'a refund stops at the burst',
+        );
+      });
+
       test('each key has its own bucket', async function (assert) {
         await store.take(KEY, BUCKET, 3);
         assert.false((await store.take(KEY, BUCKET)).admitted);
@@ -213,6 +256,34 @@ module(basename(import.meta.filename), function () {
         });
       });
 
+      test('an unspend takes back units in the period they were spent in', async function (assert) {
+        let spent = await store.spend(KEY, DAILY, 2);
+        assert.true(spent.admitted);
+        let { resetsAt } = spent as { resetsAt: number };
+        assert.true(await store.unspend(KEY, { period: 'day', resetsAt }));
+        assert.deepEqual(await store.budget(KEY, DAILY), {
+          admitted: true,
+          used: 1,
+          resetsAt,
+        });
+        assert.true(await store.unspend(KEY, { period: 'day', resetsAt }, 5));
+        assert.strictEqual(
+          ((await store.budget(KEY, DAILY)) as { used: number }).used,
+          0,
+          'never below zero',
+        );
+
+        await store.spend(KEY, DAILY);
+        nowMs = NEXT_DAY_S * 1000;
+        await store.spend(KEY, DAILY);
+        await store.unspend(KEY, { period: 'day', resetsAt });
+        assert.strictEqual(
+          ((await store.budget(KEY, DAILY)) as { used: number }).used,
+          1,
+          "an unspend for a period that has turned leaves the new period's count alone",
+        );
+      });
+
       test('day and month budgets of one key are counted apart', async function (assert) {
         await store.spend(KEY, DAILY, 3);
         assert.false((await store.spend(KEY, DAILY)).admitted);
@@ -249,11 +320,15 @@ module(basename(import.meta.filename), function () {
     });
 
     module('when the store is unavailable', function () {
-      test('a take is refused as unavailable', async function (assert) {
+      test('a take and a peek are refused as unavailable', async function (assert) {
         await dbAdapter.execute('DROP TABLE rate_limit_buckets');
         let outcome = await store.take(KEY, BUCKET);
         assert.deepEqual(outcome, { admitted: false, unavailable: true });
         assert.true(isRateLimitUnavailable(outcome));
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: false,
+          unavailable: true,
+        });
       });
 
       test('a spend and a budget read are refused as unavailable', async function (assert) {

@@ -4,7 +4,13 @@ import {
   type CallApiReadinessLookup,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
-import { bindingInstance, checkSlots, type SlotCheck } from './key-bindings.ts';
+import {
+  bindingInstance,
+  checkSlots,
+  limitSubjectOf,
+  type SlotCheck,
+} from './key-bindings.ts';
+import { limitReadiness } from './key-limits.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -24,6 +30,10 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // would treat it: sent, as that probe. A rejected key, such as a
 // service-account key Google refused, reads as `credential-rejected` whether
 // or not its probe is due: what brings it back is its owner replacing it.
+//
+// Slots that would be filled are then asked about the limits of the share or
+// key filling them, without counting anything: `over-budget` when a budget is
+// used up, `rate-limited` when the caller's bucket is empty.
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
@@ -93,6 +103,17 @@ export async function keyReadiness(
       check.slot.key === 'userKey'
         ? await userKeyReadiness(check, callerCovers)
         : shareReadiness(check, caller),
+    );
+  }
+  let filled = checks.filter(
+    (check) => check.refused === undefined && !keyRejected(check),
+  );
+  if (filled.length > 0) {
+    answers.push(
+      await limitReadiness(dbAdapter, {
+        caller,
+        subjects: filled.map((check) => limitSubjectOf(check.binding!)),
+      }),
     );
   }
   return answers.reduce<KeyReadiness>(
