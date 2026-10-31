@@ -809,6 +809,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // the page types' path templates. A path it doesn't answer is a card's
     // own address, or nothing.
     let servedShare: HostRouteShare | undefined;
+    // Set when the site answers the path with its not-found card. Koa's own
+    // status reads 404 until a body is set, so it can't say this.
+    let servedNotFound = false;
     if (!exactlyRouted && routedRealm) {
       let answer = await siteAnswer();
       let mount = new URL(routedRealm.url).pathname.replace(/\/$/, '');
@@ -882,6 +885,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           !(await isIndexedCardInstance(cardURL, routingDeps))
         ) {
           ctxt.status = 404;
+          servedNotFound = true;
           if (settings.notFound) {
             cardURL = new URL(settings.notFound);
           }
@@ -1001,7 +1005,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
         paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
         share: servedShare,
-        canonical: ctxt.status !== 404,
+        canonical: !servedNotFound,
         document: doc,
       });
       if (isolatedHTML != null) {
