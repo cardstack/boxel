@@ -1734,6 +1734,41 @@ module('Acceptance | host mode tests', function (hooks) {
         'a found page has one again',
       );
     });
+
+    test('an in-app visit keeps a query the router does not declare', async function (assert) {
+      let hostNavigation = getService('host-navigation');
+      await visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+
+      hostNavigation.visit('/?tag=chalkup');
+      await waitFor('[data-test-site-home]');
+      await settled();
+      assert.strictEqual(currentURL(), '/?tag=chalkup', 'the address keeps it');
+      assert.strictEqual(
+        hostNavigation.sitePath,
+        '/?tag=chalkup',
+        'the page card reads it',
+      );
+
+      hostNavigation.visit('/?tag=bouldering');
+      await settled();
+      assert.strictEqual(
+        currentURL(),
+        '/?tag=bouldering',
+        'a visit that changes only that query moves the address',
+      );
+      assert.strictEqual(hostNavigation.sitePath, '/?tag=bouldering');
+
+      hostNavigation.visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      await settled();
+      assert.strictEqual(
+        currentURL(),
+        '/pets/mango',
+        'a page without one drops it',
+      );
+      assert.strictEqual(hostNavigation.sitePath, '/pets/mango');
+    });
   });
 });
 

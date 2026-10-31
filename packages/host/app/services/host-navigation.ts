@@ -1,10 +1,12 @@
 import type RouterService from '@ember/routing/router-service';
 import { later, next, scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  HOST_APP_QUERY_PARAMS,
   normalizeRoutingPath,
   type HostRouteShare,
   type HostRouteSnapshot,
@@ -39,6 +41,11 @@ export default class HostNavigationService extends Service {
   private pendingNavigation: 'push' | 'traverse' | undefined;
   private pendingHash: string | undefined;
   private prefetched = new Set<string>();
+  // The query of the page now showing that the router doesn't declare
+  // (`?tag=chalkup`). The router keeps only the params it declares in the
+  // URLs it writes, so an in-app visit carries the rest here and puts them
+  // back on the entry. Back and Forward read it from the entry.
+  @tracked private foreignSearch = '';
   private prefetching = 0;
 
   get snapshot(): HostRouteSnapshot | undefined {
@@ -240,6 +247,9 @@ export default class HostNavigationService extends Service {
     }
     let path = normalizeRoutingPath(`/${pathname.slice(mount.length)}`);
     let query = new URLSearchParams(search ?? '');
+    for (let [key, value] of new URLSearchParams(this.foreignSearch)) {
+      query.set(key, value);
+    }
     query.delete('hostModeStack');
     let rest = query.toString();
     return rest ? `${path}?${rest}` : path;
@@ -333,15 +343,65 @@ export default class HostNavigationService extends Service {
   visit(address: string, { replace = false }: { replace?: boolean } = {}) {
     this.saveScroll();
     this.pendingNavigation = 'push';
-    // The router takes a path and query; the hash is applied once the page
-    // has rendered.
+    // The router takes a path and the query it declares; the rest of the
+    // query goes back on the entry once the transition lands, and the hash
+    // is applied once the page has rendered.
     let [url, hash] = address.split('#');
     this.pendingHash = hash;
-    if (replace) {
-      this.router.replaceWith(url);
-    } else {
-      this.router.transitionTo(url);
+    let [pathname, search] = url.split('?');
+    let declared = new URLSearchParams();
+    let foreign = new URLSearchParams();
+    for (let [key, value] of new URLSearchParams(search ?? '')) {
+      (HOST_APP_QUERY_PARAMS.includes(key) ? declared : foreign).append(
+        key,
+        value,
+      );
     }
+    let routed = declared.size ? `${pathname}?${declared}` : pathname;
+    let location = this.location();
+    let before = location?.getURL();
+    let transition = replace
+      ? this.router.replaceWith(routed)
+      : this.router.transitionTo(routed);
+    transition.then(
+      () => {
+        this.foreignSearch = foreign.size ? `?${foreign}` : '';
+        if (!location || !foreign.size) {
+          return;
+        }
+        let landed = location.getURL();
+        let [landedPath, landedSearch] = landed.split('?');
+        let query = new URLSearchParams(landedSearch ?? '');
+        for (let [key, value] of foreign) {
+          query.set(key, value);
+        }
+        let full = `${landedPath}?${query}`;
+        if (landed === before && !replace) {
+          // Only the undeclared query changed, so the router made no entry
+          // and showed no new page: make both here.
+          location.setURL(full);
+          this.pageShown();
+        } else {
+          location.replaceURL(full);
+        }
+      },
+      () => {
+        // An aborted or redirected transition: whatever replaced it decides.
+      },
+    );
+  }
+
+  private location():
+    | {
+        getURL(): string;
+        setURL(url: string): void;
+        replaceURL(url: string): void;
+      }
+    | undefined {
+    let location = (this.router as unknown as { location?: unknown }).location;
+    return location && typeof location === 'object'
+      ? (location as ReturnType<HostNavigationService['location']>)
+      : undefined;
   }
 
   // An alias met while resolving a path. On the first load it replaces the
@@ -443,6 +503,13 @@ export default class HostNavigationService extends Service {
     let onIntentEnd = () => clearTimeout(intentTimer);
     let onPopState = () => {
       this.pendingNavigation = 'traverse';
+      // The entry's own query: the router may make no transition when only
+      // an undeclared param differs, and then keeps its earlier URL.
+      let foreign = new URLSearchParams(window.location.search);
+      for (let key of HOST_APP_QUERY_PARAMS) {
+        foreign.delete(key);
+      }
+      this.foreignSearch = foreign.size ? `?${foreign}` : '';
     };
     let onRouteChange = () => this.pageShown();
     root.addEventListener('click', onClick as EventListener);

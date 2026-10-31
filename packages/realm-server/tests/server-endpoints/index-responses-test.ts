@@ -2878,9 +2878,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('a listing path is served', async function (assert) {
+    test('a listing path is served, shared under its own title', async function (assert) {
       let response = await get('/articles');
       assert.strictEqual(response.status, 200);
+      let headHTML = head(response.text);
+      assert.true(
+        headHTML.includes('<meta property="og:title" content="All articles">'),
+        "the listing title, not the home card's",
+      );
+      assert.true(
+        headHTML.includes('<title>All articles</title>'),
+        'the page title follows it',
+      );
+      assert.true(
+        headHTML.includes(
+          '<meta name="description" content="Notes from the test site.">',
+        ),
+        'the tagline describes it',
+      );
+      assert.strictEqual(
+        (response.text.match(/<meta name="description"/g) ?? []).length,
+        1,
+        "the shell's empty description gives way",
+      );
     });
 
     test('a path that names no card is the not-found card, with a 404 and no canonical link', async function (assert) {

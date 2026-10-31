@@ -130,6 +130,12 @@ export function siteRewriter(opts: {
         template.content.append(meta);
       };
       if (share?.title) {
+        let title = template.content.querySelector('title');
+        if (!title) {
+          title = document.createElement('title');
+          template.content.prepend(title);
+        }
+        title.textContent = share.title;
         setMeta('property', 'og:title', share.title);
         setMeta('name', 'twitter:title', share.title);
       }

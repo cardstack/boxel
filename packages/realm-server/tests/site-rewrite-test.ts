@@ -105,4 +105,20 @@ module(basename(import.meta.filename), function () {
     );
     assert.deepEqual(cards, [`${STORE}Brand/cordell`]);
   });
+
+  test('a share title becomes the page title too', function (assert) {
+    let head = siteRewriter({
+      requestMount: new URL('https://view.example/sites/owner/shop/'),
+      canonicalMount: new URL('https://view.example/sites/owner/shop/'),
+      requestPath: '/tags/drivers',
+      paths: new Map(),
+      share: { title: '#drivers on Shop' },
+      document: new JSDOM().window.document,
+    }).head('<title>Shop</title>');
+    let template = new JSDOM().window.document.createElement('template');
+    template.innerHTML = head;
+    let titles = template.content.querySelectorAll('title');
+    assert.strictEqual(titles.length, 1, 'one title');
+    assert.strictEqual(titles[0].textContent, '#drivers on Shop');
+  });
 });

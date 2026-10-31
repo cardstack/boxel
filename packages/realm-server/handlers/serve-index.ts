@@ -737,6 +737,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
       if (answer?.kind === 'listing') {
         cardURL = new URL(await siteHomeCard(routedRealm));
+        // The home card's own head names the site, not the listing.
+        let { listingTitle, name } = answer.pageType;
+        servedShare = {
+          title: listingTitle || name,
+          description: (await routedRealm.getSiteSettings()).tagline,
+        };
       } else if (answer?.kind === 'fixed') {
         // A fixed page in another realm (realm.json opted in) is served as
         // that realm prerendered it, and only when a visitor who isn't
@@ -1046,6 +1052,18 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     if (!hasAppleTouchIcon) {
       headFragments.push(
         `<link href="${webclipURL}" rel="apple-touch-icon" />`,
+      );
+    }
+
+    // The shell's empty description gives way to the page's own.
+    if (
+      /<meta[^>]+name="description"[^>]+content="[^"]/.test(
+        headFragments.join(''),
+      )
+    ) {
+      responseHTML = responseHTML.replace(
+        /<meta name="description" content=""\s*\/?>\s*/,
+        '',
       );
     }
 
