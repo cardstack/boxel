@@ -8,10 +8,7 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
-import {
-  HOST_APP_QUERY_PARAMS,
-  isRedirectRoutingRule,
-} from '@cardstack/runtime-common';
+import { HOST_APP_QUERY_PARAMS } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -125,30 +122,17 @@ export default class Card extends Route {
       this.hostNavigation.adoptServedDoc();
       this.hostNavigation.showingNotFound = false;
       let normalizedPath = params.path ?? '';
-      // CS-10055: a routing rule in the realm config can map a bare path
-      // to a target card. When the path matches a serve rule, use the
-      // rule's target id directly; otherwise resolve the path as a card
-      // URL under the host-mode origin. A redirect rule is never
-      // rendered — navigate to its target instead, mirroring the 3xx
-      // the server answers for a full-page request to this path, query
-      // string included (`params` holds only the pathname).
-      let routed = this.hostModeService.resolveRoutedPath(
-        normalizedPath || '/',
-      );
-      if (routed && isRedirectRoutingRule(routed)) {
-        this.hostModeService.redirectTo(
-          routed.redirectTo,
-          this.forwardableQueryParams(transition),
-        );
+      // What the site serves here: from the served page's snapshot when it
+      // holds the path (fixed pages, the page's links and literal
+      // redirects), else from the realm server, which runs the same
+      // resolver. A redirect is followed rather than rendered, as the
+      // server answers a document load with a 3xx.
+      let known = this.hostNavigation.resolveAddress(`/${normalizedPath}`);
+      if (known && 'redirectTo' in known) {
+        this.followRedirect(known.redirectTo, transition);
         return;
       }
-      let cardUrl = routed?.id;
-      if (!cardUrl) {
-        // The site's route table, as the served page's snapshot holds it.
-        cardUrl = this.hostNavigation.resolveAddress(
-          `/${normalizedPath}`,
-        )?.card;
-      }
+      let cardUrl = known?.card;
       if (!cardUrl) {
         // The site's route table and `:name` rules, which only the realm
         // server can resolve. A path neither routes is a card URL, as before.
@@ -156,16 +140,7 @@ export default class Card extends Route {
           normalizedPath || '/',
         );
         if (site && 'redirectTo' in site) {
-          if (site.redirectTo.startsWith('/')) {
-            // Within the site: the entry is added or replaced as the
-            // navigation that met it calls for.
-            this.hostNavigation.redirect(site.redirectTo);
-          } else {
-            this.hostModeService.redirectTo(
-              site.redirectTo,
-              this.forwardableQueryParams(transition),
-            );
-          }
+          this.followRedirect(site.redirectTo, transition);
           return;
         }
         if (site && 'notFound' in site) {
@@ -441,6 +416,32 @@ export default class Card extends Route {
   // not it was in the URL, so forwarding them blind would append values
   // that were never there (`debug=false` on every redirect). Foreign
   // params (`utm_source` and friends) pass through untouched.
+  // A redirect within the site is an in-app transition, adding or replacing
+  // the entry as the navigation that met it calls for; one to anywhere else,
+  // or with a query, leaves the app. Either way the visitor's query rides along unless the
+  // target has its own, and a site-relative target resolves against the
+  // document's origin, never `hostModeOrigin`, which a visitor can set.
+  private followRedirect(target: string, transition: Transition) {
+    let url = this.hostModeService.redirectURL(
+      target,
+      this.forwardableQueryParams(transition),
+    );
+    // The router drops a query it doesn't declare, so a target that carries
+    // one is a full navigation, which keeps it as the server would.
+    if (
+      target.startsWith('/') &&
+      url.origin === window.location.origin &&
+      !url.search
+    ) {
+      this.hostNavigation.redirect(`${url.pathname}${url.search}${url.hash}`);
+    } else {
+      this.hostModeService.redirectTo(
+        target,
+        this.forwardableQueryParams(transition),
+      );
+    }
+  }
+
   private forwardableQueryParams(
     transition: Transition,
   ): Record<string, unknown> {

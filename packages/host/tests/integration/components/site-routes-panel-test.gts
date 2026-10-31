@@ -87,13 +87,17 @@ module('Integration | site routes panel', function (hooks) {
     };
   }
 
-  async function renderPanel(site: Record<string, unknown>) {
+  async function renderPanel(
+    site: Record<string, unknown>,
+    routingRules: Record<string, unknown>[] = [],
+  ) {
     let store = getService('store');
     let context = { getCards: store.getSearchResource.bind(store) };
     await render(
       <template>
         <SiteRoutesPanel
           @site={{site}}
+          @routingRules={{routingRules}}
           @realmURL={{testRealmURL}}
           @context={{context}}
         />
@@ -163,5 +167,27 @@ module('Integration | site routes panel', function (hooks) {
         '[data-test-site-routes-page-type="Products"] [data-test-site-routes-taken]',
       )
       .doesNotExist('the page type the site tries first keeps its addresses');
+  });
+
+  test('realm.json’s fixed pages are listed, and come before page types', async function (assert) {
+    await renderPanel({ pageTypes: [pageType('/shop/{handle}')] }, [
+      {
+        path: '/shop/driver/',
+        instance: {
+          id: `${testRealmURL}Landing/1`,
+          cardTitle: 'Driver launch',
+        },
+      },
+    ]);
+    await waitFor('[data-test-site-routes-taken]');
+    assert
+      .dom('[data-test-site-routes-fixed]')
+      .includesText('Driver launch')
+      .includesText('/shop/driver');
+    assert
+      .dom('[data-test-site-routes-taken]')
+      .includesText(
+        "Driver isn't served: /shop/driver is Driver launch, from the fixed pages",
+      );
   });
 });

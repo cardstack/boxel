@@ -1,6 +1,5 @@
 import type Koa from 'koa';
 import {
-  isRedirectRoutingRule,
   RealmPaths,
   SupportedMimeType,
   type HostRouteShare,
@@ -16,7 +15,7 @@ import {
   findOrMountRealm,
   hasPublicPermissions,
   isIndexedCardInstance,
-  matchHostRoutingRule,
+  anonymousMayRead,
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import {
@@ -67,17 +66,6 @@ async function resolvePath(
   if (!realm || !(await hasPublicPermissions(realm, deps))) {
     return json(ctxt, { kind: 'none' });
   }
-  let exact = await matchHostRoutingRule(pageURL, deps);
-  if (exact) {
-    if (isRedirectRoutingRule(exact.rule)) {
-      return json(ctxt, {
-        kind: 'redirect',
-        to: exact.rule.redirectTo,
-        status: exact.rule.statusCode,
-      });
-    }
-    return json(ctxt, { kind: 'page', card: exact.rule.id });
-  }
   let answer = await resolveSiteRequest(realm, pageURL, deps, ctxt.req.headers);
   let mount = siteMounts(realm, pageURL).mount.pathname.replace(/\/$/, '');
   if (answer.kind === 'redirect') {
@@ -86,6 +74,17 @@ async function resolvePath(
       to: answer.to.startsWith('/') ? mount + answer.to : answer.to,
       status: answer.status,
     });
+  }
+  if (answer.kind === 'fixed') {
+    // A fixed page in another realm is served only when a visitor who isn't
+    // signed in may read it, as serve-index serves it.
+    if (
+      !answer.crossRealm ||
+      (await anonymousMayRead(new URL(answer.card), deps, ctxt.req.headers))
+    ) {
+      return json(ctxt, { kind: 'page', card: answer.card });
+    }
+    return json(ctxt, { kind: 'none' });
   }
   if (answer.kind === 'listing') {
     return json(ctxt, { kind: 'page', card: await siteHomeCard(realm) });

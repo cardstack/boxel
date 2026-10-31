@@ -189,8 +189,12 @@ export default class HostNavigationService extends Service {
   }
 
   // What an address on this host serves, when this visit knows it without
-  // asking the server. Undefined when it doesn't, or the site sent nothing.
-  resolveAddress(pathname: string): { card: string } | undefined {
+  // asking the server: a literal redirect, then a page, as the server checks
+  // them. A site-relative redirect target comes back on this host's path.
+  // Undefined when it doesn't know, or the site sent nothing.
+  resolveAddress(
+    pathname: string,
+  ): { card: string } | { redirectTo: string } | undefined {
     let mount = this.mount;
     if (!mount) {
       return undefined;
@@ -199,7 +203,15 @@ export default class HostNavigationService extends Service {
     if (!withSlash.startsWith(mount)) {
       return undefined;
     }
-    let card = this.cardForPath(`/${pathname.slice(mount.length)}`);
+    let path = normalizeRoutingPath(`/${pathname.slice(mount.length)}`);
+    for (let [from, to] of this.snapshot?.redirects ?? []) {
+      if (from === path) {
+        return {
+          redirectTo: to.startsWith('/') ? mount + to.replace(/^\//, '') : to,
+        };
+      }
+    }
+    let card = this.cardForPath(path);
     return card ? { card } : undefined;
   }
 
@@ -250,12 +262,6 @@ export default class HostNavigationService extends Service {
     let routed = this.routedPathOf(card);
     if (routed) {
       return this.addressOf(routed);
-    }
-    let exact = this.hostModeService.hostRoutingMap.find(
-      (rule) => 'id' in rule && rule.id && cardKey(rule.id) === card,
-    );
-    if (exact) {
-      return exact.path;
     }
     let realm = this.snapshot?.realm;
     if (realm && card.startsWith(realm)) {

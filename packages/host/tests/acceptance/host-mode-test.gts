@@ -16,11 +16,7 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import {
-  Deferred,
-  type HostRouteSnapshot,
-  type HostRoutingRule,
-} from '@cardstack/runtime-common';
+import { Deferred, type HostRouteSnapshot } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -65,36 +61,11 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
   }
 }
 
-// The routing map normally arrives on the config meta tag the realm
-// server rewrites per request, which no test server emits — so stub the
-// getter that reads it. Paths and realm-relative targets are stored the
-// way the server injects them: prefixed with the realm's mount pathname,
-// which is `/test/` as this app sees it (`hostModeOrigin` absorbs the
-// `/user` segment above).
-class StubRoutingHostModeService extends StubHostModeService {
-  get hostRoutingMap(): HostRoutingRule[] {
-    return [
-      { path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` },
-      { path: '/test/tos', redirectTo: '/test/terms', statusCode: 302 },
-      {
-        path: '/test/docs',
-        redirectTo: '/test/terms?section=intro',
-        statusCode: 302,
-      },
-      {
-        path: '/test/blog',
-        redirectTo: 'https://boxel.example/posts',
-        statusCode: 301,
-      },
-    ];
-  }
-}
-
 // `hostModeOrigin` is visitor-controllable — it hands back the
 // `?hostModeOrigin=` query param verbatim whenever one is present — so a
 // redirect must never resolve a realm-relative target against it. This
 // stub returns an origin no redirect may land on.
-class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
+class StubHijackedOriginHostModeService extends StubHostModeService {
   get hostModeOrigin() {
     return 'https://attacker.example';
   }
@@ -1443,21 +1414,30 @@ module('Acceptance | host mode tests', function (hooks) {
     // A full-page request to a redirect-ruled path never reaches the SPA
     // — serve-index answers the 3xx first. These cover the other leg: an
     // in-app transition, where the route has to perform the redirect
-    // itself. `window` is ember-window-mock, whose `location.replace`
-    // records the URL instead of navigating.
-    //
-    // A realm-relative target resolves against the document's own
-    // origin, the way a browser resolves a `Location: /path` header.
-    // Read inside each test — the window mock is installed per-test, so
-    // capturing it out here would read the real page's origin instead.
+    // itself. A target within the site is another in-app transition; one
+    // elsewhere, or with a query, leaves the app, through ember-window-mock's
+    // `location.replace`, which records the URL instead of navigating.
 
-    hooks.beforeEach(function (this) {
-      let owner = getOwner(this)!;
-      let ownerWithUnregister = owner as {
-        unregister?: (fullName: string) => void;
+    // realm.json's routing rules reach the app in the served page's route
+    // snapshot, which no test server emits, so it is set here: paths are
+    // realm-relative, and a realm-relative redirect target too. The realm
+    // is mounted at `/test/` as this app sees it.
+    let config = ENV as { hostRouteSnapshot?: HostRouteSnapshot };
+    hooks.beforeEach(function () {
+      config.hostRouteSnapshot = {
+        realm: testHostModeRealmURL,
+        mount: '/test/',
+        pages: [['/terms', `${testHostModeRealmURL}Pet/mango`]],
+        listings: [],
+        redirects: [
+          ['/tos', '/terms', 302],
+          ['/docs', '/terms?section=intro', 302],
+          ['/blog', 'https://boxel.example/posts', 301],
+        ],
       };
-      ownerWithUnregister.unregister?.('service:host-mode-service');
-      owner.register('service:host-mode-service', StubRoutingHostModeService);
+    });
+    hooks.afterEach(function () {
+      delete config.hostRouteSnapshot;
     });
 
     test('a serve rule still renders its target card', async function (assert) {
@@ -1472,10 +1452,13 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/test/tos');
 
       assert.strictEqual(
-        window.location.href,
-        `${window.location.origin}/test/terms`,
-        'the realm-relative target is resolved against the host-mode origin',
+        currentURL(),
+        '/test/terms',
+        'the realm-relative target is a page of the site, reached in place',
       );
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists('the target page renders');
     });
 
     test('a redirect rule may target an external URL', async function (assert) {
@@ -1530,8 +1513,8 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/test/tos');
 
       assert.strictEqual(
-        window.location.href,
-        `${window.location.origin}/test/terms`,
+        currentURL(),
+        '/test/terms',
         'the redirect stays on the document origin',
       );
       assert.notOk(

@@ -2515,19 +2515,24 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('redirect rules are injected into the host config routing map', async function (assert) {
+      test('redirect rules reach the host in the route snapshot', async function (assert) {
         let response = await request
           .get(`${publishedRealmPath}pricing`)
           .set('Host', publishedRealmHost)
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200);
-        // The routing map rides the URL-encoded config meta tag; letters
-        // are not percent-encoded, so the discriminant field name is
-        // directly visible in the served HTML.
+        // The snapshot rides the URL-encoded config meta tag, so an in-app
+        // transition follows a redirect rule without asking the server.
+        let content = response.text.match(
+          /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+        )?.[1];
+        let config = JSON.parse(decodeURIComponent(content ?? '{}'));
+        let redirects: [string, string, number][] =
+          config.hostRouteSnapshot?.redirects ?? [];
         assert.true(
-          response.text.includes('redirectTo'),
-          'the injected hostRoutingMap carries the redirect rules',
+          redirects.length > 0,
+          `the snapshot carries the redirect rules: ${JSON.stringify(redirects)}`,
         );
       });
 

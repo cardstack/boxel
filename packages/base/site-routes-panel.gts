@@ -3,6 +3,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import {
   expandPathTemplate,
+  isLiteralRedirect,
+  normalizeRoutingPath,
   readSiteSettings,
   type Query,
   type SitePageType,
@@ -90,6 +92,9 @@ function readVariable(card: CardDef, variable: string): unknown {
 interface Signature {
   Args: {
     site: SiteValue;
+    // realm.json's routing rules, which the site serves as fixed pages and
+    // redirects ahead of its page types.
+    routingRules?: Record<string, any>[];
     realmURL: string | undefined;
     context?: CardContext;
   };
@@ -160,6 +165,54 @@ export default class SiteRoutesPanel extends GlimmerComponent<Signature> {
     return this.settings?.problems ?? [];
   }
 
+  // The routing rules that serve a card at a fixed path.
+  get fixedPages(): { path: string; title: string }[] {
+    return (this.args.routingRules ?? []).flatMap((rule) =>
+      rule?.path && !rule.redirectTo?.trim() && rule.instance
+        ? [
+            {
+              path: normalizeRoutingPath(rule.path),
+              title: rule.instance.cardTitle ?? rule.instance.id,
+            },
+          ]
+        : [],
+    );
+  }
+
+  // Addresses the site answers before any page type: its literal
+  // redirects, the routing rules' first, then its fixed pages.
+  private get claimedFirst() {
+    let claimed = new Map<string, { title: string; pageType: string }>();
+    for (let rule of this.args.routingRules ?? []) {
+      if (rule?.path && rule.redirectTo?.trim()) {
+        claimed.set(normalizeRoutingPath(rule.path), {
+          title: `a redirect to ${rule.redirectTo.trim()}`,
+          pageType: 'the redirects',
+        });
+      }
+    }
+    for (let redirect of this.settings?.redirects ?? []) {
+      if (isLiteralRedirect(redirect)) {
+        let path = normalizeRoutingPath(redirect.from);
+        if (!claimed.has(path)) {
+          claimed.set(path, {
+            title: `a redirect to ${redirect.to}`,
+            pageType: 'the redirects',
+          });
+        }
+      }
+    }
+    for (let page of this.fixedPages) {
+      if (!claimed.has(page.path)) {
+        claimed.set(page.path, {
+          title: page.title,
+          pageType: 'the fixed pages',
+        });
+      }
+    }
+    return claimed;
+  }
+
   // One search per page type, kept while the page type keeps its place and
   // name, so editing its path or filter re-runs it rather than starting over.
   private searches = new Map<string, Search | undefined>();
@@ -185,7 +238,7 @@ export default class SiteRoutesPanel extends GlimmerComponent<Signature> {
   // Each page type's cards and their addresses, in the order the site tries
   // them: an address an earlier page type serves is that one's.
   get reports(): PageTypeReport[] {
-    let claimed = new Map<string, { title: string; pageType: string }>();
+    let claimed = this.claimedFirst;
     return this.pageTypes.map((pageType, index) => {
       let search = this.searchFor(index);
       let template = pageType.template;
@@ -242,6 +295,19 @@ export default class SiteRoutesPanel extends GlimmerComponent<Signature> {
             {{/each}}
           </ul>
         {{/if}}
+        {{#if this.fixedPages.length}}
+          <div class='fixed' data-test-site-routes-fixed>
+            <strong>Fixed pages</strong>
+            <ul class='fixed-list'>
+              {{#each this.fixedPages as |page|}}
+                <li>
+                  <span>{{page.title}}</span>
+                  <code>{{page.path}}</code>
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
         {{#each this.reports as |report|}}
           <PageTypeRoutes @report={{report}} />
         {{else}}
@@ -282,6 +348,29 @@ export default class SiteRoutesPanel extends GlimmerComponent<Signature> {
       }
       .empty {
         font-size: var(--boxel-font-size-sm);
+      }
+      .fixed {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        min-width: 0;
+      }
+      .fixed-list {
+        display: grid;
+        gap: var(--boxel-sp-xxxs);
+        padding: 0;
+        list-style: none;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .fixed-list li {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+      }
+      .fixed-list code {
+        font-family: var(--font-mono);
+        overflow-wrap: break-word;
+        min-width: 0;
       }
     </style>
   </template>

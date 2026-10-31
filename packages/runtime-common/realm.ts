@@ -161,7 +161,11 @@ import {
   validateRedirectTarget,
   type HostRoutingRule,
 } from './host-routing-validation.ts';
-import { readSiteSettings, type SiteSettings } from './site-settings.ts';
+import {
+  readSiteSettings,
+  withRoutingRules,
+  type SiteSettings,
+} from './site-settings.ts';
 import type { PathTemplate } from './site-paths.ts';
 import type { LocalPath } from './paths.ts';
 import {
@@ -17137,7 +17141,10 @@ export class Realm {
         await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       let searchDoc =
         indexEntry?.type === 'instance' ? (indexEntry.searchDoc ?? {}) : {};
-      let settings = readSiteSettings(searchDoc.site, this.url);
+      let settings = withRoutingRules(
+        readSiteSettings(searchDoc.site, this.url),
+        await this.getHostRoutingMap(),
+      );
       settings.serveSourcePrerender = searchDoc.serveSourcePrerender === true;
       for (let pageType of settings.pageTypes) {
         if (pageType.template) {

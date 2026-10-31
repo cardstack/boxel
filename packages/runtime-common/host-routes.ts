@@ -142,6 +142,9 @@ export interface HostRouteSnapshot {
   pages: ([string, string] | [string, string, HostRouteShare])[];
   // Listing paths, which serve the site's home card.
   listings: string[];
+  // [path, target, status] for each redirect whose path is literal, in the
+  // order the site checks them. A target starting with '/' is site-relative.
+  redirects?: [string, string, number][];
   // The card shown, with status 404, at a path that serves nothing.
   notFound?: string;
   // The card shown in place of a page whose card fails to render.

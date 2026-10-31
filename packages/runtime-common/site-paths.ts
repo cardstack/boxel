@@ -255,6 +255,7 @@ export function isLiteralRedirect(redirect: SiteRedirect): boolean {
 // redirect, a listing, or nothing.
 export type SiteAnswer =
   | { kind: 'page'; card: RouteCard; pageType: SitePageType }
+  | { kind: 'fixed'; card: string; crossRealm?: boolean }
   | { kind: 'redirect'; to: string; status: 301 | 302 }
   | { kind: 'listing'; pageType: SitePageType }
   | { kind: 'none' };
@@ -322,8 +323,10 @@ async function canonicalPathFor(
 // What a site serves at a realm-relative path, in precedence order:
 //
 //   1. files and endpoints (left to the caller);
-//   2. redirects whose `from` is literal, in declared order;
-//   3. literal pages: listing paths and page types with no variables;
+//   2. redirects whose `from` is literal, in declared order (realm.json's
+//      routing rules first);
+//   3. literal pages: fixed pages (realm.json's routing rules), listing
+//      paths, and page types with no variables;
 //   4. page type templates, in declared order, falling through when the
 //      search finds no card;
 //   5. a found card's other addresses (an alias, or a page type after its
@@ -332,7 +335,8 @@ async function canonicalPathFor(
 //   7. a card's own address, and
 //   8. not found (both left to the caller, which knows the realm's cards).
 export async function resolveSitePath(
-  settings: Pick<SiteSettings, 'pageTypes' | 'redirects'>,
+  settings: Pick<SiteSettings, 'pageTypes' | 'redirects'> &
+    Partial<Pick<SiteSettings, 'fixedPages'>>,
   path: string,
   search: SiteSearch,
 ): Promise<SiteAnswer> {
@@ -344,6 +348,16 @@ export async function resolveSitePath(
       if (to !== undefined) {
         return { kind: 'redirect', to, status: redirect.statusCode };
       }
+    }
+  }
+
+  for (let fixed of settings.fixedPages ?? []) {
+    if (fixed.path === normalized) {
+      return {
+        kind: 'fixed',
+        card: fixed.card,
+        ...(fixed.crossRealm ? { crossRealm: true } : {}),
+      };
     }
   }
 

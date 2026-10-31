@@ -33,6 +33,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(sitePathsTests, assert, {});
   });
 
+  test('resolveSitePath: a fixed page comes after literal redirects and before listings and templates', async function (assert) {
+    await runSharedTest(sitePathsTests, assert, {});
+  });
+
   test('resolveSitePath: a template whose search finds nothing falls through', async function (assert) {
     await runSharedTest(sitePathsTests, assert, {});
   });

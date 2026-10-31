@@ -1990,6 +1990,7 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 {{#if (eq key 'site')}}
                   <SiteRoutesPanel
                     @site={{this.config.site}}
+                    @routingRules={{this.config.hostRoutingRules}}
                     @realmURL={{this.realm}}
                     @context={{@context}}
                   />

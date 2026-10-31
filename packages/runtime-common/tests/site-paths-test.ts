@@ -258,6 +258,42 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.deepEqual(await at('/shop/no-such/x'), { kind: 'none' });
   },
 
+  'resolveSitePath: a fixed page comes after literal redirects and before listings and templates':
+    async (assert) => {
+      let products = pageType(0, 'Product', '/shop/{handle}', {
+        listingPath: '/shop',
+      });
+      let search = searchOver(new Map([[products, [kit]]]));
+      let settings = {
+        pageTypes: [products],
+        fixedPages: [
+          { path: '/shop', card: 'https://example.com/r/Landing/shop' },
+          {
+            path: '/shop/starter-kit',
+            card: 'https://other.example/r/Promo/kit',
+            crossRealm: true,
+          },
+          { path: '/old', card: 'https://example.com/r/Old/1' },
+        ],
+        redirects: [{ from: '/old', to: '/shop', statusCode: 301 as const }],
+      };
+      let at = (path: string) => resolveSitePath(settings, path, search);
+      assert.deepEqual(await at('/shop/'), {
+        kind: 'fixed',
+        card: 'https://example.com/r/Landing/shop',
+      });
+      assert.deepEqual(await at('/shop/starter-kit'), {
+        kind: 'fixed',
+        card: 'https://other.example/r/Promo/kit',
+        crossRealm: true,
+      });
+      assert.deepEqual(await at('/old'), {
+        kind: 'redirect',
+        to: '/shop',
+        status: 301,
+      });
+    },
+
   'resolveSitePath: a template whose search finds nothing falls through':
     async (assert) => {
       let products = pageType(0, 'Product', '/shop/{handle}');

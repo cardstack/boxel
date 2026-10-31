@@ -1,8 +1,10 @@
 import {
+  isRedirectRoutingRule,
   parseRedirectStatusCode,
   validateRedirectTarget,
   validateRoutingPath,
   normalizeRoutingPath,
+  type HostRoutingRule,
 } from './host-routing-validation.ts';
 import {
   parsePathTemplate,
@@ -55,11 +57,24 @@ export interface SiteRedirect {
   statusCode: 301 | 302;
 }
 
+// One fixed path serving one card: realm.json's `hostRoutingRules` (ADR 015),
+// read as part of the site so every path is answered by one resolver.
+export interface SiteFixedPage {
+  path: string;
+  card: string;
+  // A card in another realm, served only when a visitor who isn't signed in
+  // may read it.
+  crossRealm?: boolean;
+}
+
 export interface SiteSettings {
   tagline?: string;
   language: string;
   themeColor?: string;
   pageTypes: SitePageType[];
+  // Fixed paths, from realm.json's routing rules. Set by Realm.getSiteSettings.
+  fixedPages: SiteFixedPage[];
+  // The routing rules' redirects come first, then the site's own.
   redirects: SiteRedirect[];
   notFound?: string;
   // The card shown in place of a page whose card fails to render.
@@ -375,6 +390,7 @@ export function readSiteSettings(
     language: str(s.language) ?? 'en',
     themeColor: str(s.themeColor),
     pageTypes,
+    fixedPages: [],
     redirects,
     notFound,
     errorCard,
@@ -382,5 +398,37 @@ export function readSiteSettings(
     listed: s.listed !== false,
     crawlers,
     problems,
+  };
+}
+
+// The site settings with realm.json's routing rules read into them: each rule
+// that serves a card is a fixed page, and each redirect rule a literal
+// redirect, checked before the site's own. The rules are already validated
+// and normalized (Realm.getHostRoutingMap).
+export function withRoutingRules(
+  settings: SiteSettings,
+  rules: HostRoutingRule[],
+): SiteSettings {
+  let fixedPages: SiteFixedPage[] = [];
+  let redirects: SiteRedirect[] = [];
+  for (let rule of rules) {
+    if (isRedirectRoutingRule(rule)) {
+      redirects.push({
+        from: rule.path,
+        to: rule.redirectTo,
+        statusCode: rule.statusCode,
+      });
+    } else {
+      fixedPages.push({
+        path: rule.path,
+        card: rule.id,
+        ...(rule.crossRealm ? { crossRealm: true } : {}),
+      });
+    }
+  }
+  return {
+    ...settings,
+    fixedPages,
+    redirects: [...redirects, ...settings.redirects],
   };
 }

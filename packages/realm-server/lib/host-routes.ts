@@ -3,7 +3,6 @@ import {
   CLIENT_IP_HEADER,
   INFRA_CLIENT_CLASS,
   canonicalPathOf,
-  isRedirectRoutingRule,
   logger,
   normalizeRoutingPath,
   pageTypeMatchFilter,
@@ -284,7 +283,11 @@ export async function resolveSiteRequest(
   requestHeaders?: RequestHeaders,
 ): Promise<SiteAnswer & { share?: HostRouteShare }> {
   let settings = await realm.getSiteSettings();
-  if (!settings.pageTypes.length && !settings.redirects.length) {
+  if (
+    !settings.pageTypes.length &&
+    !settings.redirects.length &&
+    !settings.fixedPages.length
+  ) {
     return { kind: 'none' };
   }
   let path = sitePathOf(realm, requestURL);
@@ -410,16 +413,14 @@ export async function sitePathsForCards(
       // not a URL
     }
   }
-  for (let rule of await realm.getHostRoutingMap()) {
-    if (isRedirectRoutingRule(rule)) {
-      continue;
-    }
-    let key = cardKey(rule.id);
+  let settings = await realm.getSiteSettings();
+  // A fixed page's path is its card's address, ahead of any page type.
+  for (let fixed of settings.fixedPages) {
+    let key = cardKey(fixed.card);
     if (wanted.has(key) && !paths.has(key)) {
-      paths.set(key, { path: normalizeRoutingPath(rule.path) });
+      paths.set(key, { path: fixed.path });
     }
   }
-  let settings = await realm.getSiteSettings();
   let pageTypes = settings.pageTypes.filter((t) => t.template);
   // The types each linked card is, from one read of the index, so each page
   // type is searched only for the cards it can match. A card the index
@@ -511,10 +512,8 @@ export async function sitePaths(
 ): Promise<{ paths: string[]; total: number }> {
   let settings = await realm.getSiteSettings();
   let fixed = new Set<string>(['/']);
-  for (let rule of await realm.getHostRoutingMap()) {
-    if (!isRedirectRoutingRule(rule)) {
-      fixed.add(normalizeRoutingPath(rule.path));
-    }
+  for (let page of settings.fixedPages) {
+    fixed.add(page.path);
   }
   for (let pageType of settings.pageTypes) {
     if (pageType.listingPath) {
@@ -573,17 +572,15 @@ export async function sitePaths(
   return { paths: out, total };
 }
 
-// The card a site serves at `/`: the exact routing rule for it, else the
-// realm's index card. A listing path serves it too, since a listing has no
-// card of its own: the site's home card draws the listing for its path.
+// The card a site serves at `/`: its fixed page there, else the realm's
+// index card. A listing path serves it too, since a listing has no card of
+// its own: the site's home card draws the listing for its path.
 export async function siteHomeCard(realm: Realm): Promise<string> {
-  for (let rule of await realm.getHostRoutingMap()) {
-    if (
-      !isRedirectRoutingRule(rule) &&
-      normalizeRoutingPath(rule.path) === '/'
-    ) {
-      return rule.id;
-    }
+  let home = (await realm.getSiteSettings()).fixedPages.find(
+    (page) => page.path === '/',
+  );
+  if (home) {
+    return home.card;
   }
   return new URL('index', realm.url).href;
 }

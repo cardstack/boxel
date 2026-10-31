@@ -1,13 +1,11 @@
 import { join } from 'path';
 import fsExtra from 'fs-extra';
 const { existsSync } = fsExtra;
-import type {
-  DBAdapter,
-  HostRoutingRule,
-  Realm,
-  ServedRealm,
-} from '@cardstack/runtime-common';
+import type { DBAdapter, Realm, ServedRealm } from '@cardstack/runtime-common';
 import {
+  CLIENT_CLASS_HEADER,
+  CLIENT_IP_HEADER,
+  SupportedMimeType,
   executableExtensions,
   fetchRealmPermissions,
   hasExtension,
@@ -155,52 +153,6 @@ export function knownRealmURL(
 // arrived under a different form. The rule is the serve/redirect union
 // from the realm's routing map — a redirect rule is never served, so its
 // canonicalPathname is only meaningful for serve rules.
-export type MatchedHostRoutingRule = {
-  realm: Realm;
-  rule: HostRoutingRule;
-  canonicalPathname: string;
-};
-
-// Resolve a request URL against the routed realm's host routing rules.
-// Trailing-slash-insensitive: `RealmPaths.local` strips trailing slashes,
-// so '/pricing' and '/pricing/' both match a rule declared as '/pricing'.
-// Returns undefined when the realm has no routing rules or the path
-// matches none. Used both to decide whether a bare routed path is
-// servable (rather than falling through to the module resolver) and to
-// canonicalize the request URL.
-export async function matchHostRoutingRule(
-  requestURL: URL,
-  deps: RealmRoutingDeps,
-): Promise<MatchedHostRoutingRule | undefined> {
-  let realm = await findOrMountRealm(requestURL, deps);
-  if (!realm) {
-    return undefined;
-  }
-  let routingMap = await realm.getHostRoutingMap();
-  if (routingMap.length === 0) {
-    return undefined;
-  }
-  let realmURL = new URL(realm.url);
-  realmURL.protocol = requestURL.protocol;
-  let realmPaths = new RealmPaths(realmURL);
-  let pathInRealm: string;
-  try {
-    pathInRealm = '/' + realmPaths.local(requestURL);
-  } catch {
-    // local() throws when the request is not within the realm; treat as
-    // no match rather than surfacing the error on the hot HTML path.
-    return undefined;
-  }
-  let rule = routingMap.find((r) => r.path === pathInRealm);
-  if (!rule) {
-    return undefined;
-  }
-  return {
-    realm,
-    rule,
-    canonicalPathname: realmURL.pathname + rule.path.replace(/^\//, ''),
-  };
-}
 
 export async function getPublishedRealmInfo(
   requestURL: URL,
@@ -416,4 +368,45 @@ export function candidateRealmURLs(requestURL: URL): string[] {
     candidates.push(`${requestURL.origin}${path}`);
   }
   return [...new Set(candidates)];
+}
+
+// Whether a visitor who isn't signed in may read the card at `cardURL`, as
+// the realm holding it answers: its permissions and its policy decide, as
+// they would for that visitor's own request. A routing rule into another realm
+// serves that realm's prerendered page only when this is true.
+// The check carries the visitor's address, as the client-address middleware
+// set it, because a policy admits a visitor only when it knows where they are
+// calling from.
+export async function anonymousMayRead(
+  cardURL: URL,
+  routingDeps: RealmRoutingDeps,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Promise<boolean> {
+  return (
+    (await anonymousCardDoc(cardURL, routingDeps, requestHeaders)) !== undefined
+  );
+}
+
+// The card's JSON as a visitor who isn't signed in reads it, or undefined
+// when they may not.
+export async function anonymousCardDoc(
+  cardURL: URL,
+  routingDeps: RealmRoutingDeps,
+  requestHeaders: Record<string, string | string[] | undefined>,
+): Promise<string | undefined> {
+  let realm = await findOrMountRealm(cardURL, routingDeps);
+  if (!realm) {
+    return undefined;
+  }
+  let url = new URL(cardURL);
+  url.protocol = new URL(realm.url).protocol;
+  let headers: Record<string, string> = { Accept: SupportedMimeType.CardJson };
+  for (let name of [CLIENT_IP_HEADER, CLIENT_CLASS_HEADER]) {
+    let value = requestHeaders[name];
+    if (typeof value === 'string') {
+      headers[name] = value;
+    }
+  }
+  let response = await realm.handle(new Request(url.href, { headers }));
+  return response?.status === 200 ? await response.text() : undefined;
 }
