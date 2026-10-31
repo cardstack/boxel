@@ -555,8 +555,23 @@ export async function swapKeyIntoShare(
     if (row.state !== 'suspended') {
       throw new UserKeyError(409, 'only a suspended share takes another key');
     }
+    // Limits are the key owner's to set, so a share taken over by another
+    // writer starts from the platform's defaults rather than spending the new
+    // owner's key under limits someone else chose. A writer swapping another
+    // of their own keys into their own share keeps the limits they set.
     let [updated] = await txQuery([
-      `UPDATE key_shares SET owner = `,
+      `UPDATE key_shares SET `,
+      ...[
+        'rate_burst',
+        'rate_refill_per_minute',
+        'daily_budget',
+        'monthly_budget',
+      ].flatMap((column, index) => [
+        `${index === 0 ? '' : ', '}${column} = CASE WHEN owner = `,
+        param(user),
+        ` THEN ${column} END`,
+      ]),
+      `, owner = `,
       param(user),
       `, key_id = `,
       param(keyId),

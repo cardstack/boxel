@@ -16,8 +16,10 @@
 // `key_limit_notices` records the notices sent when a share's or key's use
 // for a period reaches the high-water mark and when it reaches the budget,
 // one row per recipient: the key's owner and, for a share, the direct writers
-// of the share's realm. Its unique index lets each threshold notify each
-// recipient once per period, however many calls cross it together. The label
+// of the share's realm. Its unique index lets each threshold of a budget
+// notify each recipient once per period, however many calls cross it
+// together; an owner who changes the budget mid-period is told again when use
+// reaches the new one. The label
 // is copied, so a notice still reads after the share or key is renamed.
 //
 // The notices table holds no secret, but like the other key tables it is
@@ -83,7 +85,7 @@ exports.up = (pgm) => {
   `);
   pgm.sql(`
     CREATE UNIQUE INDEX IF NOT EXISTS key_limit_notices_once_idx
-      ON key_limit_notices (COALESCE(share_id, key_id), recipient, period, period_ends_at, threshold)
+      ON key_limit_notices (COALESCE(share_id, key_id), recipient, period, period_ends_at, threshold, budget)
   `);
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS key_limit_notices_recipient_idx

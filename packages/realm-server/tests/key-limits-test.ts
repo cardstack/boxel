@@ -30,7 +30,7 @@ import {
   mintKeyWriteTicket,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
-import { shareKey } from '../lib/key-shares.ts';
+import { shareKey, suspendShare, swapKeyIntoShare } from '../lib/key-shares.ts';
 import { keyReadiness } from '../lib/key-readiness.ts';
 import {
   setKeyLimitSink,
@@ -51,9 +51,8 @@ import {
 // counters, and owners and the realm's direct writers are told once at the
 // high-water mark and once at the budget.
 //
-// No binding can be approved for interactive use yet, so each test turns a
-// pipelines-only binding interactive in the database. The counters run on a
-// clock the test moves.
+// The approval API approves a binding for pipelines only, so each test turns
+// one interactive in the database. The counters run on a clock the test moves.
 // ============================================================================
 
 const realmURL = new URL('http://127.0.0.1:4444/key-limits-test/');
@@ -98,6 +97,17 @@ const inboxModule = `
       url: '${VENDOR}/status/{code}',
       path: { code: params('code') },
       headers: { authorization: 'Bearer {{apiKey}}' },
+    };
+
+    @operation static both = {
+      base: 'callApi',
+      params: { code: StringField },
+      url: '${VENDOR}/status/{code}',
+      path: { code: params('code') },
+      headers: {
+        authorization: 'Bearer {{userKey}}',
+        'x-shared-key': '{{apiKey}}',
+      },
     };
   }
 `;
@@ -182,6 +192,26 @@ module(basename(import.meta.filename), function (hooks) {
       value: VALUE,
       ticket: await ticket(owner, 'add'),
     });
+  }
+
+  async function bucketTokens(
+    subject: 'key' | 'share',
+    id: string,
+    caller = OWNER,
+  ) {
+    let [row] = await dbAdapter.execute(
+      `SELECT tokens FROM rate_limit_buckets WHERE bucket_key = $1`,
+      { bind: [JSON.stringify(['key-limit', subject, id, caller])] },
+    );
+    return row ? Number(row.tokens) : undefined;
+  }
+
+  async function budgetUsed(subject: 'key' | 'share', id: string) {
+    let [row] = await dbAdapter.execute(
+      `SELECT count FROM rate_limit_budgets WHERE budget_key = $1 AND period = 'day'`,
+      { bind: [JSON.stringify(['key-limit', subject, id])] },
+    );
+    return row ? Number(row.count) : 0;
   }
 
   async function share(keyId: string) {
@@ -695,5 +725,120 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.strictEqual(byOwner.status, 200, JSON.stringify(byOwner.body));
     assert.strictEqual(byOwner.body.data.attributes.monthlyBudget, 3000);
+  });
+  test('a call refused at one share or key is counted against none of them', async function (assert) {
+    let personal = await addKey(OWNER, 'personal');
+    let sharedKey = await addKey(OWNER, 'shared');
+    let shared = await share(sharedKey.id);
+    await approveInteractive(OWNER, 'both', {
+      userKey: { keyId: personal.id },
+      apiKey: { shareId: shared.id },
+    });
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      rateBurst: 1,
+    });
+
+    assert.strictEqual((await call('both')).status, 200);
+    assert.strictEqual(await bucketTokens('key', personal.id), 2);
+    assert.strictEqual(await budgetUsed('key', personal.id), 1);
+
+    let refused = await call('both');
+    assert.strictEqual(
+      refused.code,
+      'rate-limited',
+      JSON.stringify(refused.body),
+    );
+    assert.strictEqual(
+      await bucketTokens('key', personal.id),
+      2,
+      "the personal key's token is put back when the share refuses the call",
+    );
+    assert.strictEqual(
+      await budgetUsed('key', personal.id),
+      1,
+      'and its budget is not spent',
+    );
+    assert.strictEqual(vendor.requests.length, 1);
+  });
+
+  test('a call refused for a limit uses up no probe of a rejected grant', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, { rateBurst: 1 });
+    assert.strictEqual((await call('check')).status, 200);
+
+    await dbAdapter.execute(
+      `UPDATE user_key_grants SET state = 'rejected', rejected_at = NOW(), last_probe_at = NOW() - interval '1 day' WHERE key_id = $1`,
+      { bind: [key.id] },
+    );
+    let refused = await call('check');
+    assert.strictEqual(
+      refused.code,
+      'rate-limited',
+      JSON.stringify(refused.body),
+    );
+    let [grant] = await dbAdapter.execute(
+      `SELECT last_probe_at < NOW() - interval '1 hour' AS still_due FROM user_key_grants WHERE key_id = $1`,
+      { bind: [key.id] },
+    );
+    assert.true(Boolean(grant.still_due), 'the probe is still due');
+    assert.strictEqual(vendor.requests.length, 1, 'nothing more was sent');
+  });
+
+  test('a monthly budget refuses with the time to the first of the month', async function (assert) {
+    nowMs = Date.UTC(2027, 0, 15, 12);
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+      dailyBudget: 100,
+      monthlyBudget: 2,
+    });
+    assert.strictEqual((await call('check')).status, 200);
+    assert.strictEqual((await call('check')).status, 200);
+    let refused = await call('check');
+    assert.strictEqual(refused.code, 'over-budget');
+    let toMonthEnd = (Date.UTC(2027, 1, 1) - nowMs) / 1000;
+    assert.strictEqual(refused.retryAfter, String(toMonthEnd));
+    assert.deepEqual(
+      (events.find((e) => e.event === 'refused') as { limit: unknown }).limit,
+      { period: 'month', budget: 2 },
+    );
+  });
+
+  test('a writer who swaps their own key into a share starts from the default limits', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      dailyBudget: 7,
+      rateBurst: 9,
+    });
+    await suspendShare(dbAdapter, { user: WRITER, shareId: shared.id });
+    let writerKey = await addKey(WRITER, 'writer-vendor');
+    let { share: swapped } = await swapKeyIntoShare(dbAdapter, keyring, {
+      user: WRITER,
+      shareId: shared.id,
+      keyId: writerKey.id,
+      ticket: (
+        await mintKeyWriteTicket(dbAdapter, WRITER, {
+          action: 'swap',
+          keyId: writerKey.id,
+          realmURL: null,
+          shareId: shared.id,
+        })
+      ).ticket,
+      via: undefined,
+    });
+    assert.strictEqual(swapped.owner, WRITER);
+    assert.deepEqual(
+      swapped.limits,
+      {
+        rateBurst: LIMITS.rateBurst,
+        rateRefillPerMinute: LIMITS.rateRefillPerMinute,
+        dailyBudget: LIMITS.dailyBudget,
+        monthlyBudget: LIMITS.dailyBudget * 30,
+      },
+      "the previous owner's limits don't carry over to the new owner's key",
+    );
   });
 });

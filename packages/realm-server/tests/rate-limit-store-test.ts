@@ -115,6 +115,21 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a refund puts back what a take took, never past a full bucket', async function (assert) {
+        await store.take(KEY, BUCKET, 3);
+        assert.true(await store.refund(KEY, BUCKET, 2));
+        assert.deepEqual(await store.peek(KEY, BUCKET), {
+          admitted: true,
+          remaining: 2,
+        });
+        assert.true(await store.refund(KEY, BUCKET, 3));
+        assert.deepEqual(
+          await store.peek(KEY, BUCKET),
+          { admitted: true, remaining: 3 },
+          'a refund stops at the burst',
+        );
+      });
+
       test('each key has its own bucket', async function (assert) {
         await store.take(KEY, BUCKET, 3);
         assert.false((await store.take(KEY, BUCKET)).admitted);
@@ -239,6 +254,34 @@ module(basename(import.meta.filename), function () {
           used: 1,
           resetsAt: Date.UTC(2027, 2, 1) / 1000,
         });
+      });
+
+      test('an unspend takes back units in the period they were spent in', async function (assert) {
+        let spent = await store.spend(KEY, DAILY, 2);
+        assert.true(spent.admitted);
+        let { resetsAt } = spent as { resetsAt: number };
+        assert.true(await store.unspend(KEY, { period: 'day', resetsAt }));
+        assert.deepEqual(await store.budget(KEY, DAILY), {
+          admitted: true,
+          used: 1,
+          resetsAt,
+        });
+        assert.true(await store.unspend(KEY, { period: 'day', resetsAt }, 5));
+        assert.strictEqual(
+          ((await store.budget(KEY, DAILY)) as { used: number }).used,
+          0,
+          'never below zero',
+        );
+
+        await store.spend(KEY, DAILY);
+        nowMs = NEXT_DAY_S * 1000;
+        await store.spend(KEY, DAILY);
+        await store.unspend(KEY, { period: 'day', resetsAt });
+        assert.strictEqual(
+          ((await store.budget(KEY, DAILY)) as { used: number }).used,
+          1,
+          "an unspend for a period that has turned leaves the new period's count alone",
+        );
       });
 
       test('day and month budgets of one key are counted apart', async function (assert) {

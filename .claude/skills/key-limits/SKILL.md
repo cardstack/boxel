@@ -60,9 +60,10 @@ probe is claimed or any key is opened:
 3. the **budgets are spent**, and a spend that reaches the high-water mark or
    the budget records the notices.
 
-So a call refused for want of budget takes no token, and a refusal uses up no
-probe. Two calls racing for a budget's last unit can leave one holding a token
-it didn't use.
+A call refused at any step is counted against nothing: what it already took or
+spent from another share or key is put back (`DBRateLimitStore.refund`,
+`unspend`), and a refused call uses up no probe. The notices are recorded only
+once every spend has gone through.
 
 ## Refusals
 
@@ -150,8 +151,8 @@ The answer is the limits in force, defaults filled in. A share's listing
 `key_limit_notices` holds one row per recipient when a period's use reaches
 the high-water mark and when it reaches the budget: the key's owner and, for a
 share, each direct writer of the share's realm. A unique index on (share or
-key, recipient, period, period end, threshold) keeps it to one each per
-period, however many calls cross together. The label is copied, so it reads
+key, recipient, period, period end, threshold, budget) keeps it to one each per
+period and budget, however many calls cross together. The label is copied, so it reads
 after a rename. Withheld from `readonly_role` and the SQLite dump, like the
 other key tables.
 

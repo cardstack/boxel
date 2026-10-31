@@ -84,6 +84,18 @@ export interface RateLimitStore {
   // Whether the key has budget left in the current period, without spending
   // any. `used` is what has been spent so far.
   budget(key: string, limit: BudgetLimit): Promise<BudgetOutcome>;
+  // Puts back `cost` tokens an admitted take took, never past a full bucket,
+  // for a caller that took them and then didn't do the work. Answers whether
+  // they went back; a store that can't be written logs and answers false.
+  refund(key: string, limit: TokenBucketLimit, cost?: number): Promise<boolean>;
+  // Takes back `cost` units an admitted spend spent, in the period it spent
+  // them in (the spend's `resetsAt`), never below zero. A period that has
+  // turned since is left alone. Answers as `refund` does.
+  unspend(
+    key: string,
+    period: { period: BudgetPeriod; resetsAt: number },
+    cost?: number,
+  ): Promise<boolean>;
 }
 
 // A key made of its parts, so that no two different lists of parts make the
@@ -314,6 +326,58 @@ export class DBRateLimitStore implements RateLimitStore {
           admitted: false,
           retryAfterSeconds: Math.max(1, resetsAt - Math.floor(nowMs / 1000)),
         };
+  }
+
+  async refund(
+    key: string,
+    limit: TokenBucketLimit,
+    cost = 1,
+  ): Promise<boolean> {
+    assertTokenBucket(limit, cost);
+    try {
+      await query(this.#dbAdapter, [
+        'UPDATE rate_limit_buckets SET tokens = CASE WHEN tokens +',
+        param(cost),
+        '> CAST(',
+        param(limit.burst),
+        'AS DOUBLE PRECISION) THEN CAST(',
+        param(limit.burst),
+        'AS DOUBLE PRECISION) ELSE tokens +',
+        param(cost),
+        'END WHERE bucket_key =',
+        param(key),
+      ] as Expression);
+      return true;
+    } catch (e: unknown) {
+      this.#unavailable('refund token bucket', key, e);
+      return false;
+    }
+  }
+
+  async unspend(
+    key: string,
+    { period, resetsAt }: { period: BudgetPeriod; resetsAt: number },
+    cost = 1,
+  ): Promise<boolean> {
+    assertWholeCount('budget refund', cost);
+    try {
+      await query(this.#dbAdapter, [
+        'UPDATE rate_limit_budgets SET count = CASE WHEN count >',
+        param(cost),
+        'THEN count -',
+        param(cost),
+        'ELSE 0 END WHERE budget_key =',
+        param(key),
+        'AND period =',
+        param(period),
+        'AND expires_at =',
+        param(resetsAt),
+      ] as Expression);
+      return true;
+    } catch (e: unknown) {
+      this.#unavailable('refund budget', key, e);
+      return false;
+    }
   }
 
   #unavailable(action: string, key: string, e: unknown): RateLimitUnavailable {

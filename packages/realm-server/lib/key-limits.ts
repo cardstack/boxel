@@ -40,9 +40,8 @@ import { UserKeyError } from './user-keys.ts';
 //   because a card got popular, and its calls never spend a budget.
 // - **Counted before anything is sent**, and only once every slot has passed
 //   its other checks. The budgets are read first, then the caller's bucket is
-//   taken from, then the budgets are spent, so a call refused for want of
-//   budget takes no token. Two calls racing for the last unit of a budget can
-//   leave one holding a token it didn't use.
+//   taken from, then the budgets are spent. A call refused at any step is
+//   counted against nothing: what it already took or spent is put back.
 // - **Fail closed.** A counter that can't be read or written refuses the call
 //   `rate-limit-unavailable` (503) and nothing is sent.
 // - **Notices.** When a period's use reaches the high-water mark, and when it
@@ -230,9 +229,10 @@ export interface LimitedCall {
 }
 
 // Counts an interactive call against every share and key filling its slots,
-// or throws the refusal for the first limit it is over. Nothing is counted
-// when it throws, except as the module comment says of a race for a budget's
-// last unit.
+// or throws the refusal for the first limit it is over. A call refused at any
+// share or key is counted against none of them: what an earlier one took or
+// spent is put back before the refusal is thrown, so a call whose second
+// share is over its limit can't wear down the first one's.
 export async function chargeInteractiveCall(
   dbAdapter: DBAdapter,
   call: LimitedCall,
@@ -243,6 +243,8 @@ export async function chargeInteractiveCall(
   }
   let store = storeOf(dbAdapter);
 
+  // Reading every budget first refuses a call that is plainly over one
+  // without taking anything at all.
   for (let limited of subjects) {
     for (let budget of budgetsOf(limited.limits)) {
       let outcome = await store.budget(budgetKey(limited.subject), budget);
@@ -254,30 +256,63 @@ export async function chargeInteractiveCall(
       }
     }
   }
+
+  // What this call has taken and spent so far, to put back if a later share
+  // or key refuses it.
+  let taken: { key: string; bucket: ReturnType<typeof bucketOf> }[] = [];
+  let spent: {
+    key: string;
+    period: BudgetPeriod;
+    resetsAt: number;
+  }[] = [];
+  let giveBack = async () => {
+    for (let { key, bucket } of taken) {
+      await store.refund(key, bucket);
+    }
+    for (let { key, period, resetsAt } of spent) {
+      await store.unspend(key, { period, resetsAt });
+    }
+  };
+
   for (let limited of subjects) {
     let bucket = bucketOf(limited.limits);
-    let outcome = await store.take(
-      bucketKey(limited.subject, call.caller),
-      bucket,
-    );
+    let key = bucketKey(limited.subject, call.caller);
+    let outcome = await store.take(key, bucket);
     if (!outcome.admitted) {
+      await giveBack();
       throw refuse(call, limited, outcome, {
         rateBurst: bucket.burst,
         rateRefillPerMinute: bucket.refillPerMinute,
       });
     }
+    taken.push({ key, bucket });
   }
+
+  // A budget spent by another call between the read above and here refuses
+  // this one; the spends are kept until every one has gone through, so the
+  // notices below are sent only for a call that was counted.
+  let reached: {
+    limited: LimitedSubject;
+    budget: { period: BudgetPeriod; limit: number };
+    outcome: Extract<BudgetOutcome, { admitted: true }>;
+  }[] = [];
   for (let limited of subjects) {
     for (let budget of budgetsOf(limited.limits)) {
-      let outcome = await store.spend(budgetKey(limited.subject), budget);
+      let key = budgetKey(limited.subject);
+      let outcome = await store.spend(key, budget);
       if (!outcome.admitted) {
+        await giveBack();
         throw refuse(call, limited, outcome, {
           period: budget.period,
           budget: budget.limit,
         });
       }
-      await noticeThresholds(dbAdapter, limited, budget, outcome);
+      spent.push({ key, period: budget.period, resetsAt: outcome.resetsAt });
+      reached.push({ limited, budget, outcome });
     }
+  }
+  for (let { limited, budget, outcome } of reached) {
+    await noticeThresholds(dbAdapter, limited, budget, outcome);
   }
 }
 
