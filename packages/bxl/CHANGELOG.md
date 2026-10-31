@@ -15,8 +15,8 @@ versions may change syntax behavior until `1.0.0`.
 - **Request-context builtins for card operations.** A new eager
   `request-context` library gives a program what one request carries:
   `params("key")` reads the payload the caller sent, `actor()` returns the
-  caller's user id as a string (`"anonymous"` for a caller who isn't signed
-  in), `instance()` / `instance("key")` read the stored document,
+  authenticated caller's user id as a string, `instance()` /
+  `instance("key")` read the stored document,
   `realmConfig()` / `realmConfig("key")` read the settings of the realm the
   edit lands in, and `policy()` reads the policy card a permission is judged
   against. They are allowed in the `mutation` and `transform` profiles and
