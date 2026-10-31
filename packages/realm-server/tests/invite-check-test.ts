@@ -132,7 +132,9 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    function buildApp(configuredSecret: string | undefined = secret) {
+    // The secret is passed explicitly, never defaulted: `buildApp(undefined)`
+    // has to build the endpoint with no secret configured.
+    function buildApp(configuredSecret: string | undefined) {
       let app = new Koa();
       let router = new Router();
       router.get(
@@ -155,7 +157,7 @@ module(basename(import.meta.filename), function () {
       invitee: string,
       options: { secret?: string; app?: Koa } = {},
     ) {
-      let request = supertest((options.app ?? buildApp()).callback()).get(
+      let request = supertest((options.app ?? buildApp(secret)).callback()).get(
         `/_invite-check?inviter=${encodeURIComponent(inviter)}&invitee=${encodeURIComponent(invitee)}`,
       );
       if (options.secret !== '') {
@@ -210,7 +212,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('rejects a missing or malformed user id', async function (assert) {
-      let response = await supertest(buildApp().callback())
+      let response = await supertest(buildApp(secret).callback())
         .get(`/_invite-check?inviter=${encodeURIComponent(owner)}`)
         .set('Authorization', `Bearer ${secret}`);
       assert.strictEqual(response.status, 400, 'invitee is missing');
