@@ -10,6 +10,10 @@ import {
 //
 // - A link to a card the site routes points at that card's path, on the
 //   request's own host and mount.
+// - A link marked with a site path (`data-boxel-card-link="/shop"`, which
+//   `<CardLink @path>` writes) points at that path on the request's host and
+//   mount. A card prerenders without knowing where a site mounts it, so this is
+//   how its links to listings and other non-card pages get real addresses.
 // - The page's canonical link and og:url name the same path on the
 //   request's host. Host Mode v2 names the canonical host URL in its own
 //   mapping, which only the realm's owner sets.
@@ -50,12 +54,24 @@ export function siteRewriter(opts: {
 
   return {
     body(html, documentBase) {
-      if (!pathByCard.size || !html.includes('href')) {
+      if (
+        !html.includes('href') ||
+        (!pathByCard.size && !html.includes('data-boxel-card-link'))
+      ) {
         return html;
       }
       let template = document.createElement('template');
       template.innerHTML = html;
       for (let anchor of template.content.querySelectorAll('a[href]')) {
+        let sitePath = anchor.getAttribute('data-boxel-card-link');
+        if (sitePath?.startsWith('/') && !sitePath.startsWith('//')) {
+          let [path, hash] = sitePath.split('#');
+          anchor.setAttribute(
+            'href',
+            at(requestMount, path) + (hash ? `#${hash}` : ''),
+          );
+          continue;
+        }
         let href = anchor.getAttribute('href')!;
         // A link within the page itself stays as written.
         if (href.startsWith('#') || href.startsWith('?')) {

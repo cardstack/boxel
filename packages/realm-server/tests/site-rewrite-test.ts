@@ -70,6 +70,18 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a link marked with a site path points at that path under the site', function (assert) {
+    let html = rewriter().body(
+      '<a href="#/shop" data-boxel-card-link="/shop">Shop</a><a href="#/journal" data-boxel-card-link="/journal#latest">Journal</a><a href="x" data-boxel-card-link="//elsewhere.example/">Out</a>',
+      new URL(`${STORE}Storefront/main`),
+    );
+    assert.deepEqual(hrefs(html), [
+      'https://view.example/sites/owner/shop/shop',
+      'https://view.example/sites/owner/shop/journal#latest',
+      'x',
+    ]);
+  });
+
   test('a page that answers 404 carries no canonical link or og:url', function (assert) {
     let head = siteRewriter({
       requestMount: new URL('https://view.example/sites/owner/shop/'),
