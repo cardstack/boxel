@@ -329,7 +329,7 @@ module.exports = {
       rules: {
         '@cardstack/boxel/no-url-form-base-imports': [
           'error',
-          { allowAliasOutsideImports: true },
+          { allowBaseRealmURLPaths: true },
         ],
       },
     },

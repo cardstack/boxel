@@ -26,6 +26,10 @@ the URL form: the text before the first interpolation, a string literal
 interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
 `baseRealm.url` interpolated first (`` `${baseRealm.url}card-api` ``).
 
+A specifier built from `baseRealm.url` with `+` or `new URL(path, baseRealm.url)`
+(or its `.href`) is flagged too, without a fix, since it has no spelling to
+rewrite.
+
 ## Every other position
 
 Anywhere else, a string or template literal that contains the alias is flagged,
@@ -65,6 +69,15 @@ URL something fetches or compares, so the rule leaves the rewrite to the author.
 `true` stops the rule from reporting the alias outside import positions in the
 files it applies to. Import positions are still checked. It is meant for an
 override that lists tests of alias tolerance, canonicalization or migration.
+
+### `allowBaseRealmURLPaths`
+
+`true` stops the rule from reporting the alias built from `baseRealm.url`
+outside import positions: a template that appends a path to it,
+`baseRealm.url + path`, and `new URL(path, baseRealm.url)`. The alias spelled
+out is still reported, and import positions are still checked. It is meant for
+an override that lists files a remediation entry names as building alias-form
+resources this way, and keeps the spelled-out alias out of them.
 
 ## Examples
 

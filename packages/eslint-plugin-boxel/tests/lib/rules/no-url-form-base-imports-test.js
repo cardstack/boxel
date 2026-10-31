@@ -73,6 +73,19 @@ ruleTester.run('no-url-form-base-imports', rule, {
       code: "let id = baseRealm.url + 'index';",
       options: [{ allowAliasOutsideImports: true }],
     },
+    // A path appended to `baseRealm.url` in a file listed as a known gap
+    {
+      code: 'let id = `${baseRealm.url}index`;',
+      options: [{ allowBaseRealmURLPaths: true }],
+    },
+    {
+      code: "let id = baseRealm.url + 'index';",
+      options: [{ allowBaseRealmURLPaths: true }],
+    },
+    {
+      code: "let url = new URL('card-api', baseRealm.url).href;",
+      options: [{ allowBaseRealmURLPaths: true }],
+    },
     // `importResource` with a canonical specifier, or one it cannot read
     "let mod = importResource(this, () => '@cardstack/base/card-api');",
     'let mod = importResource(this, () => this.args.url);',
@@ -161,12 +174,51 @@ ruleTester.run('no-url-form-base-imports', rule, {
       code: "function internalKeyForDisplay() { return 'https://cardstack.com/base/x'; }",
       errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
-    // The option leaves import positions checked
+    // The options leave import positions checked
     {
       code: "import { CardDef } from 'https://cardstack.com/base/card-api';",
       output: "import { CardDef } from '@cardstack/base/card-api';",
       options: [{ allowAliasOutsideImports: true }],
       errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: "let api = await loader.import(baseRealm.url + 'card-api');",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import(baseRealm.url + 'card-api');",
+      options: [{ allowBaseRealmURLPaths: true }],
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    // `allowBaseRealmURLPaths` still reports the alias spelled out
+    {
+      code: "let id = 'https://cardstack.com/base/cards/skill';",
+      options: [{ allowBaseRealmURLPaths: true }],
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let selector = `[data-test-id="https://cardstack.com/base/cards/skill"]`;',
+      options: [{ allowBaseRealmURLPaths: true }],
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // An import specifier built from `baseRealm.url`, which has no spelling to
+    // rewrite
+    {
+      code: "let api = await loader.import(baseRealm.url + 'card-api');",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await import(baseRealm.url + 'card-api');",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import(new URL('card-api', baseRealm.url));",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import(new URL('card-api', baseRealm.url).href);",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
     },
     {
       code: "import { CardDef } from 'https://cardstack.com/base/card-api';",

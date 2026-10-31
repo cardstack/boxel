@@ -10,6 +10,11 @@ const { PREFIX_REALM_ALIASES } = require('../utils/prefix-realms');
 // restatement of `PREFIX_REALMS`.
 const CANONICAL_PREFIX = '@cardstack/base/';
 const URL_FORM_PREFIX = PREFIX_REALM_ALIASES[CANONICAL_PREFIX];
+if (!URL_FORM_PREFIX) {
+  throw new Error(
+    `PREFIX_REALMS gives ${CANONICAL_PREFIX} no alias, so no-url-form-base-imports has nothing to check`,
+  );
+}
 
 // The first character of a path appended to a realm URL, as against a
 // delimiter that closes the URL inside a larger string.
@@ -45,6 +50,10 @@ module.exports = {
           // which spells the alias as data. Import positions are still
           // checked.
           allowAliasOutsideImports: { type: 'boolean' },
+          // For a file listed as a known gap that builds alias-form resources
+          // from `baseRealm.url`. Those forms are allowed outside import
+          // positions; the alias spelled out is still reported.
+          allowBaseRealmURLPaths: { type: 'boolean' },
         },
         additionalProperties: false,
       },
@@ -52,13 +61,16 @@ module.exports = {
     messages: {
       'no-url-form-base-imports':
         'Use "{{canonical}}" instead of the URL-form specifier "{{specifier}}".',
+      builtURLFormSpecifier:
+        'Import the base-realm module as "@cardstack/base/…" rather than building its URL-form specifier from `baseRealm.url`.',
       aliasOutsideAllowedPosition:
         "The `https://cardstack.com/base/` alias may appear only in `baseRealm`, the base realm's registration and permission rows, `registeredRealmURL`, code that recognizes legacy alias data, and tests of alias tolerance, canonicalization or migration. Name a base-realm resource as `@cardstack/base/…`. `baseRealm.url` is read where the base realm's registered URL itself is meant; a path appended to it spells the alias. Code that recognizes legacy alias data outside the functions this rule knows disables it on the line and says so in the reason.",
     },
   },
 
   create(context) {
-    let { allowAliasOutsideImports = false } = context.options[0] || {};
+    let { allowAliasOutsideImports = false, allowBaseRealmURLPaths = false } =
+      context.options[0] || {};
     // Every node read as an import specifier, reported or not, so the check
     // for other positions leaves it alone.
     let importPositions = new Set();
@@ -148,15 +160,60 @@ module.exports = {
       );
     }
 
+    // `baseRealm.url + path`.
+    function isBaseRealmURLConcatenation(node) {
+      return (
+        node.type === 'BinaryExpression' &&
+        node.operator === '+' &&
+        isBaseRealmURL(node.left)
+      );
+    }
+
+    // `new URL(path, baseRealm.url)`. `new URL(baseRealm.url)` parses the
+    // registered URL itself, so it is not one.
+    function isURLUnderBaseRealmURL(node) {
+      return (
+        node.type === 'NewExpression' &&
+        node.callee.type === 'Identifier' &&
+        node.callee.name === 'URL' &&
+        isBaseRealmURL(node.arguments[1])
+      );
+    }
+
+    // The `baseRealm.url + path` or `new URL(path, baseRealm.url)` a specifier
+    // is built from, reading through a trailing `.href`.
+    function builtFromBaseRealmURL(node) {
+      let built =
+        node.type === 'MemberExpression' &&
+        !node.computed &&
+        node.property.type === 'Identifier' &&
+        node.property.name === 'href'
+          ? node.object
+          : node;
+      return isBaseRealmURLConcatenation(built) || isURLUnderBaseRealmURL(built)
+        ? built
+        : undefined;
+    }
+
+    // Marks each node it reads as an import specifier, so the check for other
+    // positions leaves it alone. A specifier built from `baseRealm.url` has no
+    // spelling to rewrite, so it is reported without a fix.
     function check(node) {
       if (!node) {
         return;
       }
-      importPositions.add(node);
       if (node.type === 'Literal') {
+        importPositions.add(node);
         checkLiteral(node);
       } else if (node.type === 'TemplateLiteral') {
+        importPositions.add(node);
         checkTemplateLiteral(node);
+      } else {
+        let built = builtFromBaseRealmURL(node);
+        if (built) {
+          importPositions.add(built);
+          context.report({ node, messageId: 'builtURLFormSpecifier' });
+        }
       }
     }
 
@@ -343,24 +400,25 @@ module.exports = {
           checkOtherPosition(node, node.value);
         }
       },
+      // Under `allowBaseRealmURLPaths`, only what the template spells out.
       TemplateLiteral(node) {
-        checkOtherPosition(node, templateText(node));
+        checkOtherPosition(
+          node,
+          allowBaseRealmURLPaths
+            ? node.quasis.map((quasi) => quasi.value.raw).join('')
+            : templateText(node),
+        );
       },
       // `baseRealm.url + path` spells an alias-form resource, as the template
       // does.
       BinaryExpression(node) {
-        if (node.operator === '+' && isBaseRealmURL(node.left)) {
+        if (!allowBaseRealmURLPaths && isBaseRealmURLConcatenation(node)) {
           checkOtherPosition(node, URL_FORM_PREFIX);
         }
       },
       // `new URL(path, baseRealm.url)` resolves a path under the alias.
-      // `new URL(baseRealm.url)` parses the registered URL itself.
       NewExpression(node) {
-        if (
-          node.callee.type === 'Identifier' &&
-          node.callee.name === 'URL' &&
-          isBaseRealmURL(node.arguments[1])
-        ) {
+        if (!allowBaseRealmURLPaths && isURLUnderBaseRealmURL(node)) {
           checkOtherPosition(node, URL_FORM_PREFIX);
         }
       },
