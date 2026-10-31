@@ -136,6 +136,36 @@ export name and its operation's name split into words;
 `DELETE /_key-bindings/:id` revokes one (secure session again) and leaves its
 grant.
 
+**From the terminal** (`packages/boxel-cli/src/commands/keys/approve.ts`):
+
+- `boxel keys approve <key or share label> --operation <module>#<Class>[.<op>]
+--realm <url> [--slot] [--instance] [--interactive [--anonymous]] [--yes]`
+  asks for the batch with the CLI's secure session, keeps the operations
+  named (all of the class without `.<op>`) and the slots the key or share
+  fills, prints each request (label, method, path, where the key goes, body)
+  and the hosts the key goes to for the first time, and asks y/N once
+  (`--yes` without a terminal). An approval whose every slot a grant already
+  covers (the batch's `covers`) is posted from the terminal (`via` `cli`).
+  One that needs a new grant is confirmed in the secure window: the CLI
+  opens `approve#module=…&name=…&realm=…&operation=…&key=…&operations=…`
+  with `cli_port`/`cli_state` naming a single-use loopback listener, the
+  window approves under its own session (`via` `window`) and posts only
+  `window_outcome=done`, and the CLI reads the bindings back. The CLI never
+  creates a grant on its own. `--interactive` is posted as asked, and
+  refused 403.
+- `boxel keys revoke` (same shape) deletes the matching bindings of the
+  user's.
+- `boxel keys pending` lists bindings that won't send as approved:
+  `needs-reapproval`, a grant gone, or a fingerprint that differs from the
+  preview's now (`GET /_key-bindings/preview`, ordinary session), so an edit
+  no call has found yet is listed too.
+- `boxel keys ungrant <key> --destination <url>` lists the bindings sent
+  under that grant, confirms, and removes it.
+- `boxel keys swap` reads the share's `operations[].destination` from the
+  realm's share listing; when the key has no grant covering one, the swap
+  is made in the window's `swap-key` page the same way, and otherwise in the
+  terminal.
+
 ## The fingerprint
 
 `fingerprintOf(bindingSnapshot(request, slot))`: SHA-256, as hex, over a

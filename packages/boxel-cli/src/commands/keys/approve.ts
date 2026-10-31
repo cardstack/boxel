@@ -54,9 +54,9 @@ import {
 // machine, and finishes when the window says the approval was made. The
 // terminal never creates a grant on its own.
 //
-// The CLI counts as interactive: nothing it invokes runs as a pipeline, and
-// every approval is for pipelines only until interactive and anonymous use
-// are offered, which the realm server refuses for now.
+// The CLI counts as interactive: nothing it invokes runs as a pipeline. An
+// approval is for pipelines only; `--interactive` and `--anonymous` ask the
+// realm server for more, and it refuses them, since it offers neither.
 
 // How long the CLI waits for the secure window.
 const WINDOW_TIMEOUT_MS = 10 * 60 * 1000;
@@ -641,7 +641,7 @@ const PENDING_REASONS: Record<PendingReason, string> = {
   unreadable: "its operation can't be read now",
 };
 
-// The user's approvals that no longer send: one whose request has changed
+// The user's approvals that don't send as approved: one whose request has changed
 // since it was approved (whether or not a call has found it yet), one whose
 // grant was removed, and one whose operation can't be read now. Read with the
 // profile's ordinary session.

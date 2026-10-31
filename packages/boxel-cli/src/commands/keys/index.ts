@@ -257,11 +257,11 @@ export function registerKeysCommand(program: Command): void {
   )
     .option(
       '--interactive',
-      'Also approve use from a card, the AI assistant and the CLI, not only pipelines (refused by the realm server for now)',
+      'Also approve use from a card, the AI assistant and the CLI, not only pipelines (the realm server refuses it: it offers pipeline use only)',
     )
     .option(
       '--anonymous',
-      'With --interactive, also approve use by anyone who can reach the card (refused by the realm server for now)',
+      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: it offers pipeline use only)',
     )
     .option(
       '--timeout <seconds>',

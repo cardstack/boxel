@@ -164,8 +164,8 @@ function fromResource<T>(resource: {
 }
 
 // Approves operations in one realm in one confirmation. `interactive` and
-// `anonymous` ask for use beyond pipelines, which the realm server refuses
-// until it offers them.
+// `anonymous` ask for use beyond pipelines, which the realm server refuses,
+// since it offers neither.
 export async function approveOperations(
   realmServerUrl: string,
   token: string,
