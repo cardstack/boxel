@@ -47,18 +47,18 @@ import {
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
-  loadHostRoutes,
-  matchHostTableRoute,
-  resolveDynamicRoute,
+  resolveSiteRequest,
   siteHomeCard,
+  sitePathOf,
+  sitePathsForCards,
 } from '../lib/host-routes.ts';
-import { siteRewriter } from '../lib/site-rewrite.ts';
+import { cardKey, linkedCards, siteRewriter } from '../lib/site-rewrite.ts';
 import { framePage } from '../lib/site-frame.ts';
-import {
-  routedPathForCard,
-  routeSnapshot,
-  type HostRouteRow,
-  type HostRouteShare,
+import { SITE_FILES, siteFile, type SiteFileName } from '../lib/site-files.ts';
+import type {
+  HostRouteShare,
+  HostRouteSnapshot,
+  SiteAnswer,
 } from '@cardstack/runtime-common';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
@@ -155,15 +155,10 @@ async function routesCrossRealm(
       matched.rule.crossRealm,
     );
   }
-  // A route table page can also be another realm's card.
-  let tableRoute = await matchHostTableRoute(requestURL, routingDeps);
-  return Boolean(
-    tableRoute?.row.kind === 'page' &&
-    tableRoute.row.cardURL &&
-    !new RealmPaths(new URL(tableRoute.realm.url)).inRealm(
-      new URL(tableRoute.row.cardURL),
-    ),
-  );
+  // A site's pages also show where the cards they link to are served,
+  // which changes with those cards and not with this realm's publish time.
+  let realm = await findOrMountRealm(requestURL, routingDeps);
+  return Boolean(realm && (await realm.getSiteSettings()).pageTypes.length);
 }
 
 async function unshareableFormatsForPage(
@@ -493,6 +488,46 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
 
+    // A site's sitemap.xml, robots.txt and llms.txt, at its root, written
+    // from its settings.
+    let fileName = requestURL.pathname.split('/').pop() as SiteFileName;
+    if (ctxt.method === 'GET' && SITE_FILES.includes(fileName)) {
+      let realm = await findOrMountRealm(requestURL, routingDeps);
+      if (
+        realm &&
+        requestURL.pathname === `${new URL(realm.url).pathname}${fileName}` &&
+        (await hasPublicPermissions(realm, routingDeps))
+      ) {
+        let file = await siteFile(
+          fileName,
+          realm,
+          new URL(new URL(realm.url).pathname, requestURL),
+          requestURL.searchParams,
+          routingDeps,
+        );
+        if (file) {
+          ctxt.type = file.contentType;
+          ctxt.set('Cache-Control', 'public, max-age=300');
+          ctxt.body = file.body;
+          return;
+        }
+      }
+      return next();
+    }
+
+    // What the routing realm's site answers at the request's path, asked once
+    // and only when needed.
+    let siteAnswerPromise:
+      | Promise<(SiteAnswer & { share?: HostRouteShare }) | undefined>
+      | undefined;
+    let siteAnswer = () =>
+      (siteAnswerPromise ??= (async () => {
+        let realm = await findOrMountRealm(requestURL, routingDeps);
+        return realm
+          ? resolveSiteRequest(realm, requestURL, routingDeps, ctxt.req.headers)
+          : undefined;
+      })());
+
     if (
       isDocumentEmbedRequest(ctxt) ||
       (await isCaptureServingRequest(ctxt, requestURL, routingDeps)) ||
@@ -565,10 +600,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // route falls through to the generic 200 shell, a non-route 404s).
           // Requiring public read makes routed and non-routed bare paths
           // behave identically (both next() → 404) on a non-public realm.
-          // A path the realm's route table holds counts as routed too.
+          // A path the realm's site answers counts as routed too.
           let matchedRealm =
             (await matchHostRoutingRule(requestURL, routingDeps))?.realm ??
-            (await matchHostTableRoute(requestURL, routingDeps))?.realm;
+            ((await siteAnswer())?.kind !== 'none'
+              ? await findOrMountRealm(requestURL, routingDeps)
+              : undefined);
           if (
             !matchedRealm ||
             !(await hasPublicPermissions(matchedRealm, routingDeps))
@@ -767,90 +804,86 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
     }
 
-    // Paths the realm's site settings route (its route table), tried after
-    // the exact routing rules.
+    // Then what the realm's site answers, in its precedence order
+    // (runtime-common's resolveSitePath): redirects, listings and pages from
+    // the page types' path templates. A path it doesn't answer is a card's
+    // own address, or nothing.
     let servedShare: HostRouteShare | undefined;
     if (!exactlyRouted && routedRealm) {
-      let tableRoute = await matchHostTableRoute(requestURL, routingDeps);
-      if (tableRoute) {
-        let { realm, row } = tableRoute;
-        servedShare = row.kind === 'page' ? row.share : undefined;
-        let mount = new URL(realm.url).pathname.replace(/\/$/, '');
-        if (row.kind === 'alias' && row.targetPath) {
-          let target = new URL(mount + row.targetPath, requestURL);
-          let forwarded = foreignQueryParams(requestURL.search);
-          if (forwarded) {
-            target.search = forwarded;
-          }
-          ctxt.redirect(target.href);
-          ctxt.status = 301;
-          return;
+      let answer = await siteAnswer();
+      let mount = new URL(routedRealm.url).pathname.replace(/\/$/, '');
+      if (answer?.kind === 'redirect') {
+        let target = new URL(
+          answer.to.startsWith('/') ? mount + answer.to : answer.to,
+          requestURL,
+        );
+        let forwarded = foreignQueryParams(requestURL.search);
+        if (forwarded && !target.search) {
+          target.search = forwarded;
         }
-        let canonical = mount + row.path;
-        if (
-          (row.kind === 'page' || row.kind === 'listing') &&
-          row.path !== '/' &&
-          requestURL.pathname !== canonical
-        ) {
+        ctxt.redirect(target.href);
+        ctxt.status = answer.status;
+        return;
+      }
+      if (answer?.kind === 'page' || answer?.kind === 'listing') {
+        let canonical = mount + (sitePathOf(routedRealm, requestURL) ?? '/');
+        if (canonical !== mount + '/' && requestURL.pathname !== canonical) {
           ctxt.redirect(
             new URL(canonical + requestURL.search, requestURL).href,
           );
           ctxt.status = 308;
           return;
         }
-        if (row.kind === 'listing') {
-          cardURL = new URL(await siteHomeCard(realm));
-        } else if (row.kind === 'gone') {
-          ctxt.status = 410;
-          let notFound = (await realm.getSiteSettings()).notFound;
-          if (notFound) {
-            cardURL = new URL(notFound);
-          }
-        } else if (row.kind === 'page' && row.cardURL) {
-          let target = new URL(row.cardURL);
-          let holds = new RealmPaths(new URL(realm.url)).inRealm(target);
-          if (holds) {
-            cardURL = target;
-          } else if (
-            (await realm.getSiteSettings()).serveSourcePrerender &&
-            (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
-          ) {
-            cardURL = target;
-          } else {
-            log.warn(
-              `not serving ${target.href} at ${requestURL.pathname}: it is in another realm, and either realm.json doesn't opt in or a visitor who isn't signed in may not read it`,
-            );
-          }
+      }
+      if (answer?.kind === 'listing') {
+        cardURL = new URL(await siteHomeCard(routedRealm));
+      } else if (answer?.kind === 'page') {
+        servedShare = answer.share;
+        let target = new URL(answer.card.id);
+        let holds = new RealmPaths(new URL(routedRealm.url)).inRealm(target);
+        if (holds) {
+          cardURL = target;
+        } else if (
+          (await routedRealm.getSiteSettings()).serveSourcePrerender &&
+          (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
+        ) {
+          cardURL = target;
+        } else {
+          log.warn(
+            `not serving ${target.href} at ${requestURL.pathname}: it is in another realm, and either realm.json doesn't opt in or a visitor who isn't signed in may not read it`,
+          );
         }
       } else {
-        // Last, the `:name` routing rules: a query finds the card.
-        let id = await resolveDynamicRoute(
-          routedRealm,
-          requestURL,
-          ctxt.req.headers,
-        );
-        if (id) {
-          cardURL = new URL(id);
-        } else {
-          // A routed card visited at its own card path moves to the address
-          // the site serves it at, so a page has one address.
-          let realmPathname = new URL(routedRealm.url).pathname;
-          let routed = routedPathForCard(
-            await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url),
-            new URL(
-              requestURL.pathname.slice(realmPathname.length),
-              routedRealm.url,
-            ),
+        let path = sitePathOf(routedRealm, requestURL);
+        let ownCard =
+          path && path !== '/'
+            ? new URL(path.slice(1), routedRealm.url)
+            : undefined;
+        // A routed card visited at its own card path moves to the address
+        // the site serves it at, so a page has one address.
+        let routed = ownCard
+          ? (
+              await sitePathsForCards(routedRealm, [ownCard.href], routingDeps)
+            ).get(cardKey(ownCard))
+          : undefined;
+        if (routed) {
+          ctxt.redirect(
+            new URL(mount + routed.path + requestURL.search, requestURL).href,
           );
-          if (routed) {
-            ctxt.redirect(
-              new URL(
-                realmPathname.replace(/\/$/, '') + routed + requestURL.search,
-                requestURL,
-              ).href,
-            );
-            ctxt.status = 301;
-            return;
+          ctxt.status = 301;
+          return;
+        }
+        // A path that names no card is not found: the site's not-found card,
+        // with status 404.
+        let settings = await routedRealm.getSiteSettings();
+        if (
+          (settings.pageTypes.length || settings.notFound) &&
+          !isIndexRequest &&
+          !(await isIndexedCardInstance(cardURL, routingDeps))
+        ) {
+          ctxt.status = 404;
+          if (settings.notFound) {
+            cardURL = new URL(settings.notFound);
           }
         }
       }
@@ -942,35 +975,44 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     }
 
     // A site's pages are rewritten on the way out to the address they are
-    // served at: links to routed cards, the canonical URL and og:url.
+    // served at: links to routed cards, the canonical URL and og:url. The
+    // cards the page and its frame link to are looked up in one batch.
     let canonicalHead: string | undefined;
-    let siteRows: HostRouteRow[] | undefined;
-    if (routedRealm && siteSettings) {
-      let settings = siteSettings;
-      if (settings.pageTypes.length || settings.hostURLs.length) {
-        let realmPathname = new URL(routedRealm.url).pathname;
-        siteRows = await loadHostRoutes(routingDeps.dbAdapter, routedRealm.url);
-        let rewriter = siteRewriter({
-          requestMount: new URL(realmPathname, requestURL),
-          canonicalMount: settings.hostURLs[0]
-            ? new URL(settings.hostURLs[0].url)
-            : undefined,
-          requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
-          rows: siteRows,
-          share: servedShare,
-          document: doc,
-        });
-        if (isolatedHTML != null) {
-          isolatedHTML = rewriter.body(isolatedHTML, cardURL);
+    let sitePaths: Map<string, { path: string; share?: HostRouteShare }> =
+      new Map();
+    if (routedRealm && siteSettings?.pageTypes.length) {
+      let realmPathname = new URL(routedRealm.url).pathname;
+      let linked = new Set<string>([cardKey(cardURL)]);
+      for (let key of linkedCards(isolatedHTML ?? '', cardURL, doc)) {
+        linked.add(key);
+      }
+      if (frame) {
+        for (let key of linkedCards(frame.html, frame.url, doc)) {
+          linked.add(key);
         }
-        if (frame) {
-          frame.html = rewriter.body(frame.html, frame.url);
-        }
-        if (headHTML != null) {
-          headHTML = rewriter.head(headHTML);
-        } else {
-          canonicalHead = rewriter.head('');
-        }
+      }
+      sitePaths = await sitePathsForCards(
+        routedRealm,
+        [...linked],
+        routingDeps,
+      );
+      let rewriter = siteRewriter({
+        requestMount: new URL(realmPathname, requestURL),
+        requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
+        paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
+        share: servedShare,
+        document: doc,
+      });
+      if (isolatedHTML != null) {
+        isolatedHTML = rewriter.body(isolatedHTML, cardURL);
+      }
+      if (frame) {
+        frame.html = rewriter.body(frame.html, frame.url);
+      }
+      if (headHTML != null) {
+        headHTML = rewriter.head(headHTML);
+      } else {
+        canonicalHead = rewriter.head('');
       }
     }
     if (frame) {
@@ -1076,13 +1118,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // than via a separate `window.__hostRoutingMap` global.
       configPatch.hostRoutingMap = hostScopedMap;
     }
-    if (siteRows?.length && routedRealm) {
-      configPatch.hostRouteSnapshot = routeSnapshot(
-        siteRows,
-        routedRealm.url,
-        new URL(routedRealm.url).pathname,
-        { canonical: siteSettings?.hostURLs[0]?.url },
-      );
+    if (routedRealm && siteSettings?.pageTypes.length) {
+      // Where the page and the cards it links to are served, so its links
+      // and navigation need no request. Anything else the host asks for.
+      let snapshot: HostRouteSnapshot = {
+        realm: routedRealm.url,
+        mount: new URL(routedRealm.url).pathname,
+        pages: [...sitePaths].map(([card, { path, share }]) =>
+          share ? [path, card, share] : [path, card],
+        ),
+        listings: siteSettings.pageTypes.flatMap((t) =>
+          t.listingPath ? [t.listingPath] : [],
+        ),
+        ...(siteSettings.notFound ? { notFound: siteSettings.notFound } : {}),
+      };
+      configPatch.hostRouteSnapshot = snapshot;
     }
     if (
       routedRealm &&

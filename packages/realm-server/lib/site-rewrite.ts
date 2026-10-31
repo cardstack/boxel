@@ -1,6 +1,5 @@
 import {
   normalizeRoutingPath,
-  type HostRouteRow,
   type HostRouteShare,
 } from '@cardstack/runtime-common';
 
@@ -11,16 +10,16 @@ import {
 //
 // - A link to a card the site routes points at that card's path, on the
 //   request's own host and mount.
-// - The page's canonical link and og:url name the same path on the site's
-//   canonical host URL (the first in its settings), or on the request's host
-//   when the site lists none.
+// - The page's canonical link and og:url name the same path on the
+//   request's host. Host Mode v2 names the canonical host URL in its own
+//   mapping, which only the realm's owner sets.
 
 export interface SiteRewriter {
   body(html: string, documentBase: URL): string;
   head(html: string): string;
 }
 
-function cardKey(url: URL): string {
+export function cardKey(url: URL): string {
   let key = new URL(url.href);
   key.hash = '';
   key.search = '';
@@ -31,24 +30,18 @@ export function siteRewriter(opts: {
   // Where the routing realm is mounted on the host the request came in on:
   // 'https://shop.example/' or 'https://space.example/fairway-shop/'.
   requestMount: URL;
-  // The canonical host URL's mount, when the site lists one.
-  canonicalMount?: URL;
   // The request's path, relative to the realm's mount: '/shop/driver'.
   requestPath: string;
-  rows: HostRouteRow[];
+  // Where the site serves each linked card, by card key.
+  paths: Map<string, string>;
   // How this page looks when shared, from its page type: each value set
   // replaces the card's own og tag.
   share?: HostRouteShare;
   document: Document;
 }): SiteRewriter {
-  let { requestMount, requestPath, rows, document } = opts;
-  let canonicalMount = opts.canonicalMount ?? requestMount;
-  let pathByCard = new Map<string, string>();
-  for (let row of rows) {
-    if (row.kind === 'page' && row.cardURL) {
-      pathByCard.set(cardKey(new URL(row.cardURL)), row.path);
-    }
-  }
+  let { requestMount, requestPath, document } = opts;
+  let canonicalMount = requestMount;
+  let pathByCard = opts.paths;
   let at = (mount: URL, path: string) =>
     new URL(path.replace(/^\//, ''), mount).href;
 
@@ -129,4 +122,35 @@ export function siteRewriter(opts: {
       return template.innerHTML;
     },
   };
+}
+
+// The cards a page's HTML links to, as card keys: every anchor whose target
+// resolves to an http(s) URL. The rewriter asks the site where each is
+// served, in one batch.
+export function linkedCards(
+  html: string,
+  documentBase: URL,
+  document: Document,
+): string[] {
+  if (!html.includes('href')) {
+    return [];
+  }
+  let template = document.createElement('template');
+  template.innerHTML = html;
+  let keys = new Set<string>();
+  for (let anchor of template.content.querySelectorAll('a[href]')) {
+    let href = anchor.getAttribute('href')!;
+    if (href.startsWith('#') || href.startsWith('?')) {
+      continue;
+    }
+    try {
+      let url = new URL(href, documentBase);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        keys.add(cardKey(url));
+      }
+    } catch {
+      // not a URL
+    }
+  }
+  return [...keys];
 }

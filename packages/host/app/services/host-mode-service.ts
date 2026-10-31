@@ -192,7 +192,9 @@ export default class HostModeService extends Service {
   // treats the path as a card URL, as before.
   async resolveSitePath(
     path: string,
-  ): Promise<{ card: string } | { redirectTo: string } | undefined> {
+  ): Promise<
+    { card: string } | { redirectTo: string } | { notFound: string } | undefined
+  > {
     if (!config.realmServerURL || !this.hostModeOrigin) {
       return undefined;
     }
@@ -212,12 +214,16 @@ export default class HostModeService extends Service {
         kind?: string;
         card?: string;
         to?: string;
+        notFound?: string;
       };
       if (answer.kind === 'page' && answer.card) {
         return { card: answer.card };
       }
       if (answer.kind === 'redirect' && answer.to) {
         return { redirectTo: answer.to };
+      }
+      if (answer.kind === 'none' && answer.notFound) {
+        return { notFound: answer.notFound };
       }
     } catch (e) {
       console.warn(`could not resolve the site path ${path}`, e);

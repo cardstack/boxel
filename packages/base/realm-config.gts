@@ -410,11 +410,6 @@ export class RoutingRuleField extends FieldDef {
       'HTTP status for a redirect rule: 301 (permanent) or 302 (temporary, the default)',
   });
 
-  @field query = contains(StringField, {
-    description:
-      'For a path with :name segments (e.g. "/posts/:slug"): BXL turning {route: {slug}} into a Boxel query. The first card it finds is served',
-  });
-
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;
 }
@@ -440,17 +435,13 @@ export class SitePageTypeField extends FieldDef {
     description:
       'Boxel query filter JSON narrowing which cards get a page. Default: every card of the type',
   });
-  @field where = contains(StringField, {
+  @field path = contains(StringField, {
     description:
-      'A BXL predicate over the card, for what a filter cannot say. Default: none',
-  });
-  @field href = contains(StringField, {
-    description:
-      'The path for a card, as BXL over the card: "/shop/\\(.handle)" or "/shop/" & .handle',
+      "The address of a card's page, as a path template whose variables name the card's fields: /shop/{handle} or /c/{category.slug}/{slug}. A key the card derives is a computed field",
   });
   @field aliases = containsMany(StringField, {
     description:
-      "More paths, as BXL like href, that answer 301 to the card's path",
+      "More addresses, as path templates like path, that answer 301 to the card's page",
   });
   @field listingPath = contains(StringField, {
     description:
@@ -460,7 +451,7 @@ export class SitePageTypeField extends FieldDef {
   @field listingSort = contains(StringField, {
     description: 'Boxel query sort JSON for the listing',
   });
-  // How a page looks when shared: BXL over the card, like href. Each one
+  // How a page looks when shared: BXL over the card. Each one
   // left empty keeps what the card's own head says.
   @field shareTitle = contains(StringField, {
     description: 'og:title for a card\'s page, as BXL: .name & " by " & .brand',
@@ -474,7 +465,8 @@ export class SitePageTypeField extends FieldDef {
   });
 }
 
-// A redirect. `from` may name segments (`/old/:slug`) that `to` reuses.
+// A redirect. `from` may be a path template (`/old/{slug}`) whose variables
+// `to` reuses.
 export class SiteRedirectField extends FieldDef {
   static displayName = 'Site Redirect';
 
@@ -482,17 +474,6 @@ export class SiteRedirectField extends FieldDef {
   @field to = contains(StringField);
   @field statusCode = contains(NumberField, {
     description: '301 (permanent, the default) or 302 (temporary)',
-  });
-}
-
-// An address the site answers at. The first one is canonical.
-export class SiteHostURLField extends FieldDef {
-  static displayName = 'Site Host URL';
-
-  @field url = contains(StringField);
-  @field forward = contains(BooleanField, {
-    description:
-      'Answer with a 301 to the canonical address instead of serving',
   });
 }
 
@@ -512,13 +493,13 @@ export class SiteSettingsField extends FieldDef {
     description: "The site's language, as a BCP 47 tag. Default: en",
   });
   @field themeColor = contains(StringField);
-  @field hostURLs = containsMany(SiteHostURLField);
   @field pageTypes = containsMany(SitePageTypeField, {
     description:
-      'Kinds of page, in precedence order: an earlier page type wins a path',
+      'Kinds of page, in precedence order: an earlier page type is tried first for a path, and gives a card its canonical address',
   });
   @field redirects = containsMany(SiteRedirectField, {
-    description: 'Redirects, tried in order after pages',
+    description:
+      'Redirects in order. One whose from is a fixed path runs before pages; one with variables runs after them, so it never hides a live page',
   });
   @field notFound = linksTo(CardDef, {
     description: 'The card served, with status 404, at a path nothing claims',

@@ -2,38 +2,19 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { JSDOM } from 'jsdom';
-import type { HostRouteRow } from '@cardstack/runtime-common';
-import { siteRewriter } from '../lib/site-rewrite.ts';
+import { linkedCards, siteRewriter } from '../lib/site-rewrite.ts';
 
 const STORE = 'https://realms.example/owner/store/';
-const ROWS: HostRouteRow[] = [
-  {
-    path: '/shop/driver',
-    kind: 'page',
-    cardURL: `${STORE}Product/driver`,
-    claimedAt: 1,
-  },
-  {
-    path: '/p/sku-1',
-    kind: 'alias',
-    cardURL: `${STORE}Product/driver`,
-    targetPath: '/shop/driver',
-    claimedAt: 1,
-  },
-  {
-    path: '/brands/cordell',
-    kind: 'page',
-    cardURL: `${STORE}Brand/cordell`,
-    claimedAt: 1,
-  },
-];
+const PATHS = new Map([
+  [`${STORE}Product/driver`, '/shop/driver'],
+  [`${STORE}Brand/cordell`, '/brands/cordell'],
+]);
 
-function rewriter(canonical?: string) {
+function rewriter() {
   return siteRewriter({
     requestMount: new URL('https://view.example/sites/owner/shop/'),
-    canonicalMount: canonical ? new URL(canonical) : undefined,
     requestPath: '/shop/driver',
-    rows: ROWS,
+    paths: PATHS,
     document: new JSDOM().window.document,
   });
 }
@@ -70,35 +51,31 @@ module(basename(import.meta.filename), function () {
     ]);
   });
 
-  test('the canonical link and og:url name the page on the canonical host URL', function (assert) {
-    let head = rewriter('https://shop.example/').head(
+  test('the canonical link and og:url name the page on the request host, once each', function (assert) {
+    let head = rewriter().head(
       `<title>Driver</title><link rel="canonical" href="${STORE}Product/driver"><meta property="og:url" content="${STORE}Product/driver"><meta property="og:title" content="Driver">`,
     );
     let template = new JSDOM().window.document.createElement('template');
     template.innerHTML = head;
     let canonicals = template.content.querySelectorAll('link[rel="canonical"]');
     let ogURLs = template.content.querySelectorAll('meta[property="og:url"]');
+    let address = 'https://view.example/sites/owner/shop/shop/driver';
     assert.strictEqual(canonicals.length, 1, 'one canonical link');
-    assert.strictEqual(
-      canonicals[0].getAttribute('href'),
-      'https://shop.example/shop/driver',
-    );
+    assert.strictEqual(canonicals[0].getAttribute('href'), address);
     assert.strictEqual(ogURLs.length, 1, 'one og:url');
-    assert.strictEqual(
-      ogURLs[0].getAttribute('content'),
-      'https://shop.example/shop/driver',
-    );
+    assert.strictEqual(ogURLs[0].getAttribute('content'), address);
     assert.ok(
       template.content.querySelector('meta[property="og:title"]'),
       'other head tags stay',
     );
   });
 
-  test('with no host URL listed, the canonical is on the request host', function (assert) {
-    let head = rewriter().head('<title>Driver</title>');
-    assert.true(
-      head.includes('href="https://view.example/sites/owner/shop/shop/driver"'),
-      head,
+  test('linkedCards lists each http(s) link target once, as a card key', function (assert) {
+    let cards = linkedCards(
+      '<a href="../Brand/cordell">A</a><a href="../Brand/cordell.json#x">B</a><a href="#top">C</a><a href="mailto:x@example.com">D</a>',
+      new URL(`${STORE}Product/driver`),
+      new JSDOM().window.document,
     );
+    assert.deepEqual(cards, [`${STORE}Brand/cordell`]);
   });
 });

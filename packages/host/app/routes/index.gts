@@ -144,12 +144,9 @@ export default class Card extends Route {
       let cardUrl = routed?.id;
       if (!cardUrl) {
         // The site's route table, as the served page's snapshot holds it.
-        let known = this.hostNavigation.resolveAddress(`/${normalizedPath}`);
-        if (known && 'redirectTo' in known) {
-          this.hostNavigation.redirect(known.redirectTo);
-          return;
-        }
-        cardUrl = known?.card;
+        cardUrl = this.hostNavigation.resolveAddress(
+          `/${normalizedPath}`,
+        )?.card;
       }
       if (!cardUrl) {
         // The site's route table and `:name` rules, which only the realm
@@ -158,11 +155,22 @@ export default class Card extends Route {
           normalizedPath || '/',
         );
         if (site && 'redirectTo' in site) {
-          this.hostModeService.redirectTo(
-            site.redirectTo,
-            this.forwardableQueryParams(transition),
-          );
+          if (site.redirectTo.startsWith('/')) {
+            // Within the site: the entry is added or replaced as the
+            // navigation that met it calls for.
+            this.hostNavigation.redirect(site.redirectTo);
+          } else {
+            this.hostModeService.redirectTo(
+              site.redirectTo,
+              this.forwardableQueryParams(transition),
+            );
+          }
           return;
+        }
+        if (site && 'notFound' in site) {
+          // A path that serves nothing shows the site's not-found card, as
+          // the server answers a document load with it and a 404.
+          return this.store.get(site.notFound);
         }
         cardUrl =
           site?.card ??

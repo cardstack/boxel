@@ -2038,7 +2038,7 @@ export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
 export * from './site-settings.ts';
 export * from './host-routes.ts';
-export * from './dynamic-routes.ts';
+export * from './site-paths.ts';
 
 export type {
   CardDocument,

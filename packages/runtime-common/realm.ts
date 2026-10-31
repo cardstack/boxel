@@ -162,7 +162,7 @@ import {
   type HostRoutingRule,
 } from './host-routing-validation.ts';
 import { readSiteSettings, type SiteSettings } from './site-settings.ts';
-import { readDynamicRoutes, type DynamicRoute } from './dynamic-routes.ts';
+import type { PathTemplate } from './site-paths.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -2985,7 +2985,9 @@ export class Realm {
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
   #cachedSiteSettings: SiteSettings | null = null;
-  #cachedDynamicRoutes: DynamicRoute[] | null = null;
+  // Each page type's last valid path template, by name, so a template that
+  // is mid-edit and invalid keeps serving the pages it served.
+  #lastGoodTemplates = new Map<string, PathTemplate>();
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -4616,7 +4618,6 @@ export class Realm {
     });
     this.#cachedHostRoutingMap = null;
     this.#cachedSiteSettings = null;
-    this.#cachedDynamicRoutes = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -17121,35 +17122,6 @@ export class Realm {
     }
   }
 
-  // The realm's routing rules with `:name` segments, validated, in order.
-  // Cached until the next index, like the routing map.
-  async getDynamicRoutes(): Promise<DynamicRoute[]> {
-    if (this.#cachedDynamicRoutes) {
-      return this.#cachedDynamicRoutes;
-    }
-    let realmConfigCardURL = new URL(
-      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
-    );
-    try {
-      let indexEntry =
-        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
-      let rules =
-        indexEntry?.type === 'instance'
-          ? (indexEntry.searchDoc ?? {}).hostRoutingRules
-          : undefined;
-      let { routes, problems } = readDynamicRoutes(rules);
-      for (let problem of problems) {
-        this.#log.warn(`dynamic routes of ${this.url}: ${problem}`);
-      }
-      return (this.#cachedDynamicRoutes = routes);
-    } catch (e) {
-      this.#log.warn(
-        `failed to read dynamic routes from RealmConfig card: ${e}`,
-      );
-      return [];
-    }
-  }
-
   // The realm's site settings (`RealmConfig.site`), validated as host mode
   // reads them. Cached until the next index, like the routing map; each
   // problem the read found is logged once per read.
@@ -17167,6 +17139,16 @@ export class Realm {
         indexEntry?.type === 'instance' ? (indexEntry.searchDoc ?? {}) : {};
       let settings = readSiteSettings(searchDoc.site, this.url);
       settings.serveSourcePrerender = searchDoc.serveSourcePrerender === true;
+      for (let pageType of settings.pageTypes) {
+        if (pageType.template) {
+          this.#lastGoodTemplates.set(pageType.name, pageType.template);
+        } else if (this.#lastGoodTemplates.has(pageType.name)) {
+          pageType.template = this.#lastGoodTemplates.get(pageType.name);
+          settings.problems.push(
+            `page type "${pageType.name}": serving its previous path "${pageType.template!.source}" until the new one is valid`,
+          );
+        }
+      }
       for (let problem of settings.problems) {
         this.#log.warn(`site settings of ${this.url}: ${problem}`);
       }

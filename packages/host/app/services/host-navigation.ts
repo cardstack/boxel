@@ -2,6 +2,8 @@ import type RouterService from '@ember/routing/router-service';
 import { later, next, scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
+import { TrackedMap } from 'tracked-built-ins';
+
 import {
   normalizeRoutingPath,
   type HostRouteShare,
@@ -43,6 +45,79 @@ export default class HostNavigationService extends Service {
     let snapshot = (config as { hostRouteSnapshot?: HostRouteSnapshot })
       .hostRouteSnapshot;
     return snapshot && Array.isArray(snapshot.pages) ? snapshot : undefined;
+  }
+
+  // Where the site serves the cards this visit has met, by card key: the
+  // served page and its links first, then each card a later page links to,
+  // asked of the server in batches as its links render. Tracked, so a link
+  // shows its address once it is known.
+  private knownPaths = new TrackedMap<
+    string,
+    { path: string; share?: HostRouteShare } | null
+  >();
+  private seeded = false;
+  private toLearn = new Set<string>();
+
+  private known(): TrackedMap<
+    string,
+    { path: string; share?: HostRouteShare } | null
+  > {
+    if (!this.seeded) {
+      this.seeded = true;
+      for (let [path, card, share] of this.snapshot?.pages ?? []) {
+        this.knownPaths.set(cardKey(card), { path, share });
+      }
+    }
+    return this.knownPaths;
+  }
+
+  // Asks the server where a card is served, batched with the others asked
+  // for in the same render.
+  private learn(card: string) {
+    if (!this.snapshot || this.toLearn.has(card)) {
+      return;
+    }
+    this.toLearn.add(card);
+    scheduleOnce('afterRender', this, this.learnBatch);
+  }
+
+  private async learnBatch() {
+    let cards = [...this.toLearn].slice(0, 100);
+    this.toLearn = new Set([...this.toLearn].slice(100));
+    if (!cards.length || !config.realmServerURL || !this.snapshot) {
+      return;
+    }
+    for (let card of cards) {
+      // Asked once; null until answered, and when the site serves it nowhere.
+      this.knownPaths.set(card, null);
+    }
+    let endpoint = new URL('_host-route', config.realmServerURL);
+    endpoint.searchParams.set('realm', this.snapshot.realm);
+    for (let card of cards) {
+      endpoint.searchParams.append('card', card);
+    }
+    try {
+      let response = await fetch(endpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (response.ok) {
+        let answer = (await response.json()) as {
+          paths?: Record<string, string>;
+          shares?: Record<string, HostRouteShare>;
+        };
+        for (let [card, path] of Object.entries(answer.paths ?? {})) {
+          this.knownPaths.set(cardKey(card), {
+            path,
+            share: answer.shares?.[card],
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('could not learn where the site serves its links', e);
+    }
+    if (this.toLearn.size) {
+      scheduleOnce('afterRender', this, this.learnBatch);
+    }
   }
 
   // The served page carries its card's JSON. The app's first request for
@@ -90,30 +165,32 @@ export default class HostNavigationService extends Service {
     return this.snapshot?.mount;
   }
 
-  // The routed path of a card, realm-relative, from the snapshot.
+  // The routed path of a card, realm-relative, when this visit knows it.
+  // Otherwise the server is asked, and links update when it answers.
   routedPathOf(cardURL: string): string | undefined {
     let key = cardKey(cardURL);
-    return this.snapshot?.pages.find(([, card]) => cardKey(card) === key)?.[0];
+    let known = this.known();
+    if (!known.has(key)) {
+      this.learn(key);
+      return undefined;
+    }
+    return known.get(key)?.path;
   }
 
-  // The card a realm-relative path serves, from the snapshot. A listing
-  // serves the site's home card, which the server answers for.
+  // The card a realm-relative path serves, when this visit knows it.
   cardForPath(path: string): string | undefined {
     let normalized = normalizeRoutingPath(path);
-    return this.snapshot?.pages.find(([p]) => p === normalized)?.[1];
+    for (let [card, entry] of this.known()) {
+      if (entry?.path === normalized) {
+        return card;
+      }
+    }
+    return undefined;
   }
 
-  aliasTarget(path: string): string | undefined {
-    let normalized = normalizeRoutingPath(path);
-    return this.snapshot?.aliases.find(([p]) => p === normalized)?.[1];
-  }
-
-  // What the snapshot says an address on this host serves, without asking
-  // the server: a page's card, or an alias's target address. Undefined when
-  // the snapshot doesn't hold the path (or the site sent none).
-  resolveAddress(
-    pathname: string,
-  ): { card: string } | { redirectTo: string } | undefined {
+  // What an address on this host serves, when this visit knows it without
+  // asking the server. Undefined when it doesn't, or the site sent nothing.
+  resolveAddress(pathname: string): { card: string } | undefined {
     let mount = this.mount;
     if (!mount) {
       return undefined;
@@ -122,16 +199,13 @@ export default class HostNavigationService extends Service {
     if (!withSlash.startsWith(mount)) {
       return undefined;
     }
-    let path = `/${pathname.slice(mount.length)}`;
-    let card = this.cardForPath(path);
-    if (card) {
-      return { card };
-    }
-    let target = this.aliasTarget(path);
-    if (target) {
-      return { redirectTo: this.addressOf(target) };
-    }
-    return undefined;
+    let card = this.cardForPath(`/${pathname.slice(mount.length)}`);
+    return card ? { card } : undefined;
+  }
+
+  // The site's not-found card, shown at a path that serves nothing.
+  get notFoundCard(): string | undefined {
+    return this.snapshot?.notFound;
   }
 
   // The current page's path relative to the site, with its query. Tracked
@@ -438,11 +512,14 @@ export default class HostNavigationService extends Service {
     if (!snapshot || !path) {
       return;
     }
-    let page = snapshot.pages.find(([p]) => p === path);
-    let share: HostRouteShare = (page?.[2] as HostRouteShare | undefined) ?? {};
-    let mount =
-      snapshot.canonical ??
-      new URL(snapshot.mount, window.location.origin).href;
+    let share: HostRouteShare = {};
+    for (let entry of this.known().values()) {
+      if (entry?.path === path) {
+        share = entry.share ?? {};
+        break;
+      }
+    }
+    let mount = new URL(snapshot.mount, window.location.origin).href;
     let address = new URL(path.replace(/^\//, ''), mount).href;
     setHeadTag('link', 'rel', 'canonical', 'href', address);
     setHeadTag('meta', 'property', 'og:url', 'content', address);

@@ -17,6 +17,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
+  test('readSiteSettings: a page type with no valid path is kept without one and reported', async function (assert) {
+    await runSharedTest(siteSettingsTests, assert, {});
+  });
+
   test('readSiteSettings: an invalid page type is dropped and reported, the rest kept', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
@@ -29,15 +33,11 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
-  test('readSiteSettings: redirects keep segment names and default to 301', async function (assert) {
+  test('readSiteSettings: redirects keep template variables and default to 301', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
   test('readSiteSettings: a redirect whose target uses a name its source lacks is dropped', async function (assert) {
-    await runSharedTest(siteSettingsTests, assert, {});
-  });
-
-  test('readSiteSettings: host URLs keep their order, drop bad and repeated entries', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
@@ -46,10 +46,6 @@ module(basename(import.meta.filename), function () {
   });
 
   test('readSiteSettings: reads the frame card, and reports one that is not a card id', async function (assert) {
-    await runSharedTest(siteSettingsTests, assert, {});
-  });
-
-  test('redirectSegmentNames: names whole segments only, once each', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 });

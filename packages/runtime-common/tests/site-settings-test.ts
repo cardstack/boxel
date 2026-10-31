@@ -1,8 +1,4 @@
-import {
-  MAX_SITE_PAGE_TYPES,
-  readSiteSettings,
-  redirectSegmentNames,
-} from '../site-settings.ts';
+import { MAX_SITE_PAGE_TYPES, readSiteSettings } from '../site-settings.ts';
 import type { SharedTests } from '../helpers/index.ts';
 
 const REALM = 'https://realm.example/owner/site';
@@ -10,7 +6,7 @@ const REALM = 'https://realm.example/owner/site';
 const pageType = (overrides: Record<string, unknown> = {}) => ({
   name: 'Products',
   cardType: { module: './product', name: 'Product' },
-  href: '"/shop/" & .handle',
+  path: '/shop/{handle}',
   ...overrides,
 });
 
@@ -21,7 +17,6 @@ const tests: SharedTests<unknown> = Object.freeze({
     let settings = readSiteSettings(undefined, REALM);
     assert.strictEqual(settings.language, 'en');
     assert.true(settings.listed);
-    assert.deepEqual(settings.hostURLs, []);
     assert.deepEqual(settings.pageTypes, []);
     assert.deepEqual(settings.redirects, []);
     assert.strictEqual(settings.notFound, undefined);
@@ -31,7 +26,7 @@ const tests: SharedTests<unknown> = Object.freeze({
   'readSiteSettings: a page type resolves its module and source realm against the realm':
     async (assert) => {
       let { pageTypes, problems } = readSiteSettings(
-        { pageTypes: [pageType({ aliases: ['/p/\\(.sku)', ' '] })] },
+        { pageTypes: [pageType({ aliases: ['/p/{sku}', ' '] })] },
         REALM,
       );
       assert.deepEqual(problems, []);
@@ -42,9 +37,10 @@ const tests: SharedTests<unknown> = Object.freeze({
         module: `${REALM}/product`,
         name: 'Product',
       });
+      assert.strictEqual(pageTypes[0].template?.source, '/shop/{handle}');
       assert.deepEqual(
-        pageTypes[0].aliases,
-        ['/p/\\(.sku)'],
+        pageTypes[0].aliasTemplates.map((t) => t.source),
+        ['/p/{sku}'],
         'blank aliases are dropped',
       );
     },
@@ -68,12 +64,37 @@ const tests: SharedTests<unknown> = Object.freeze({
       });
     },
 
+  'readSiteSettings: a page type with no valid path is kept without one and reported':
+    async (assert) => {
+      let { pageTypes, problems } = readSiteSettings(
+        {
+          pageTypes: [
+            pageType({ name: 'Blank', path: '' }),
+            pageType({ name: 'Partial', path: '/shop/item-{id}' }),
+            pageType({ name: 'Alias', aliases: ['/p/{sku:3}'] }),
+          ],
+        },
+        REALM,
+      );
+      assert.deepEqual(
+        pageTypes.map((t) => [t.name, t.template?.source]),
+        [
+          ['Blank', undefined],
+          ['Partial', undefined],
+          ['Alias', '/shop/{handle}'],
+        ],
+      );
+      assert.deepEqual(pageTypes[2].aliasTemplates, []);
+      assert.strictEqual(problems.length, 3, problems.join('\n'));
+      assert.true(problems[0].includes('no path template'));
+      assert.true(problems[1].includes('whole segment'));
+    },
+
   'readSiteSettings: an invalid page type is dropped and reported, the rest kept':
     async (assert) => {
       let { pageTypes, problems } = readSiteSettings(
         {
           pageTypes: [
-            pageType({ href: '' }),
             pageType({ name: 'Journal', cardType: { module: './post' } }),
             pageType({ name: 'Brands', filter: 'not json' }),
             pageType({ name: 'Bags', sourceRealm: 'ftp://elsewhere/' }),
@@ -86,11 +107,10 @@ const tests: SharedTests<unknown> = Object.freeze({
         pageTypes.map((t) => t.name),
         ['Kept'],
       );
-      assert.strictEqual(problems.length, 4, problems.join('\n'));
-      assert.true(problems[0].includes('no href'));
-      assert.true(problems[1].includes('no card type'));
-      assert.true(problems[2].includes('filter is not a JSON object'));
-      assert.true(problems[3].includes('not an http(s) URL'));
+      assert.strictEqual(problems.length, 3, problems.join('\n'));
+      assert.true(problems[0].includes('no card type'));
+      assert.true(problems[1].includes('filter is not a JSON object'));
+      assert.true(problems[2].includes('not an http(s) URL'));
     },
 
   'readSiteSettings: a bad listing is dropped but the page type kept': async (
@@ -121,61 +141,44 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.true(problems[0].includes('3 dropped'));
   },
 
-  'readSiteSettings: redirects keep segment names and default to 301': async (
-    assert,
-  ) => {
-    let { redirects, problems } = readSiteSettings(
-      {
-        redirects: [
-          { from: '/old/:slug/', to: '/new/:slug' },
-          { from: '/blog', to: 'https://elsewhere.example/', statusCode: 302 },
-        ],
-      },
-      REALM,
-    );
-    assert.deepEqual(problems, []);
-    assert.deepEqual(redirects, [
-      { from: '/old/:slug', to: '/new/:slug', statusCode: 301 },
-      { from: '/blog', to: 'https://elsewhere.example/', statusCode: 302 },
-    ]);
-  },
+  'readSiteSettings: redirects keep template variables and default to 301':
+    async (assert) => {
+      let { redirects, problems } = readSiteSettings(
+        {
+          redirects: [
+            { from: '/old/{slug}/', to: '/new/{slug}' },
+            {
+              from: '/blog',
+              to: 'https://elsewhere.example/',
+              statusCode: 302,
+            },
+          ],
+        },
+        REALM,
+      );
+      assert.deepEqual(problems, []);
+      assert.deepEqual(redirects, [
+        { from: '/old/{slug}', to: '/new/{slug}', statusCode: 301 },
+        { from: '/blog', to: 'https://elsewhere.example/', statusCode: 302 },
+      ]);
+    },
 
   'readSiteSettings: a redirect whose target uses a name its source lacks is dropped':
     async (assert) => {
       let { redirects, problems } = readSiteSettings(
         {
           redirects: [
-            { from: '/old/:slug', to: '/new/:id' },
+            { from: '/old/{slug}', to: '/new/{id}' },
             { from: '/a', to: 'javascript:alert(1)' },
             { from: '/b', to: '/c', statusCode: 307 },
-            { from: '/d/x:y', to: '/e' },
+            { from: '/d/x{y}', to: '/e' },
           ],
         },
         REALM,
       );
       assert.deepEqual(redirects, []);
       assert.strictEqual(problems.length, 4, problems.join('\n'));
-      assert.true(problems[0].includes(':id'));
-    },
-
-  'readSiteSettings: host URLs keep their order, drop bad and repeated entries':
-    async (assert) => {
-      let { hostURLs, problems } = readSiteSettings(
-        {
-          hostURLs: [
-            { url: 'https://shop.example' },
-            { url: 'https://www.shop.example/', forward: true },
-            { url: 'https://shop.example/' },
-            { url: 'mailto:owner@shop.example' },
-          ],
-        },
-        REALM,
-      );
-      assert.deepEqual(hostURLs, [
-        { url: 'https://shop.example/', forward: false },
-        { url: 'https://www.shop.example/', forward: true },
-      ]);
-      assert.strictEqual(problems.length, 2, problems.join('\n'));
+      assert.true(problems[0].includes('{id}'));
     },
 
   'readSiteSettings: reads the not-found card, crawlers and defaults': async (
@@ -218,15 +221,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(bad.frame, undefined);
       assert.strictEqual(bad.problems.length, 1);
     },
-
-  'redirectSegmentNames: names whole segments only, once each': async (
-    assert,
-  ) => {
-    assert.deepEqual(redirectSegmentNames('/a/:b/c/:d'), { names: ['b', 'd'] });
-    assert.true('problem' in redirectSegmentNames('/a/:b/:b'));
-    assert.true('problem' in redirectSegmentNames('/a/:'));
-    assert.true('problem' in redirectSegmentNames('/a/x:b'));
-  },
 });
 
 export default tests;

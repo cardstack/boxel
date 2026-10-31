@@ -4,6 +4,11 @@ import {
   validateRoutingPath,
   normalizeRoutingPath,
 } from './host-routing-validation.ts';
+import {
+  parsePathTemplate,
+  templateVariables,
+  type PathTemplate,
+} from './site-paths.ts';
 import { resolveRRIReference } from './url.ts';
 
 // Reads a realm's site settings (`RealmConfig.site`, from realm.json's index
@@ -16,7 +21,6 @@ import { resolveRRIReference } from './url.ts';
 
 export const MAX_SITE_PAGE_TYPES = 20;
 export const MAX_SITE_REDIRECTS = 500;
-export const MAX_SITE_HOST_URLS = 20;
 export const MAX_SITE_CRAWLERS = 50;
 
 export interface SitePageType {
@@ -26,12 +30,13 @@ export interface SitePageType {
   // Absolute, with a trailing slash.
   sourceRealm: string;
   cardType: { module: string; name: string };
-  // The authored source. href, where and aliases are BXL; the route table
-  // compiles them.
-  href: string;
+  // The page's address as a path template (`/shop/{handle}`), parsed.
+  // Undefined when the authored template is invalid; the problem says why.
+  path: string;
+  template?: PathTemplate;
   filter?: string;
-  where?: string;
-  aliases: string[];
+  // More addresses, as templates, that answer 301 to the card's page.
+  aliasTemplates: PathTemplate[];
   listingPath?: string;
   listingTitle?: string;
   listingSort?: string;
@@ -47,17 +52,10 @@ export interface SiteRedirect {
   statusCode: 301 | 302;
 }
 
-export interface SiteHostURL {
-  url: string;
-  forward: boolean;
-}
-
 export interface SiteSettings {
   tagline?: string;
   language: string;
   themeColor?: string;
-  // The canonical address first.
-  hostURLs: SiteHostURL[];
   pageTypes: SitePageType[];
   redirects: SiteRedirect[];
   notFound?: string;
@@ -71,8 +69,6 @@ export interface SiteSettings {
   serveSourcePrerender?: boolean;
   problems: string[];
 }
-
-const SEGMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function str(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -129,31 +125,6 @@ function isJSON(value: string, shape: 'object' | 'array'): boolean {
   }
 }
 
-// The `:name` segments of a redirect's `from`, or a problem. A name segment
-// is a whole path segment: `/old/:slug`, never `/old/x:slug`.
-export function redirectSegmentNames(
-  from: string,
-): { names: string[] } | { problem: string } {
-  let names: string[] = [];
-  for (let segment of from.split('/').slice(1)) {
-    if (segment.startsWith(':')) {
-      let name = segment.slice(1);
-      if (!SEGMENT_NAME.test(name)) {
-        return { problem: `"${segment}" is not a segment name` };
-      }
-      if (names.includes(name)) {
-        return { problem: `":${name}" appears twice` };
-      }
-      names.push(name);
-    } else if (segment.includes(':')) {
-      return {
-        problem: `"${segment}": a ":" may only start a whole segment`,
-      };
-    }
-  }
-  return { names };
-}
-
 function readPageType(
   value: unknown,
   index: number,
@@ -205,10 +176,25 @@ function readPageType(
     name: refName,
   };
 
-  let href = str(t.href);
-  if (!href) {
-    problems.push(`${label}: no href`);
-    return undefined;
+  let path = str(t.path) ?? '';
+  let parsed = path ? parsePathTemplate(path) : { problem: 'no path template' };
+  let template: PathTemplate | undefined;
+  if ('problem' in parsed) {
+    problems.push(`${label}: path: ${parsed.problem}`);
+  } else {
+    template = parsed;
+  }
+  let aliasTemplates: PathTemplate[] = [];
+  for (let alias of list(t.aliases).map(str)) {
+    if (!alias) {
+      continue;
+    }
+    let parsedAlias = parsePathTemplate(alias);
+    if ('problem' in parsedAlias) {
+      problems.push(`${label}: alias: ${parsedAlias.problem}`);
+    } else {
+      aliasTemplates.push(parsedAlias);
+    }
   }
 
   let filter = str(t.filter);
@@ -240,12 +226,10 @@ function readPageType(
     name,
     sourceRealm,
     cardType,
-    href,
+    path,
+    template,
     filter,
-    where: str(t.where),
-    aliases: list(t.aliases)
-      .map(str)
-      .filter((alias): alias is string => Boolean(alias)),
+    aliasTemplates,
     listingPath,
     listingTitle: str(t.listingTitle),
     listingSort,
@@ -273,27 +257,27 @@ function readRedirect(
     problems.push(`${label}: from must start with /`);
     return undefined;
   }
-  let segments = redirectSegmentNames(from);
-  if ('problem' in segments) {
-    problems.push(`${label}: ${segments.problem}`);
+  let fromTemplate = parsePathTemplate(from);
+  if ('problem' in fromTemplate) {
+    problems.push(`${label}: ${fromTemplate.problem}`);
     return undefined;
   }
-  let targetWarning = validateRedirectTarget(to);
+  let targetWarning = validateRedirectTarget(to.replace(/[{}]/g, ''));
   if (targetWarning) {
     problems.push(`${label}: ${targetWarning}`);
     return undefined;
   }
-  let toNames = redirectSegmentNames(new URL(to, 'http://x').pathname);
-  if ('names' in toNames) {
-    let missing = toNames.names.filter((n) => !segments.names.includes(n));
-    if (missing.length) {
-      problems.push(
-        `${label}: the target uses ${missing
-          .map((n) => `:${n}`)
-          .join(', ')}, which from does not name`,
-      );
-      return undefined;
-    }
+  let named = templateVariables(fromTemplate);
+  let missing = [...to.matchAll(/\{([A-Za-z0-9_.]+)\}/g)]
+    .map((m) => m[1])
+    .filter((n) => !named.includes(n));
+  if (missing.length) {
+    problems.push(
+      `${label}: the target uses ${missing
+        .map((n) => `{${n}}`)
+        .join(', ')}, which from does not name`,
+    );
+    return undefined;
   }
   let statusCode =
     r?.statusCode == null || r.statusCode === ''
@@ -303,7 +287,7 @@ function readRedirect(
     problems.push(`${label}: status code must be 301 or 302`);
     return undefined;
   }
-  return { from: normalizeRoutingPath(from), to, statusCode };
+  return { from: fromTemplate.source, to, statusCode };
 }
 
 export function readSiteSettings(
@@ -313,28 +297,6 @@ export function readSiteSettings(
   let problems: string[] = [];
   let s = record(site) ?? {};
   realmURL = withSlash(realmURL);
-
-  let hostURLs: SiteHostURL[] = [];
-  for (let value of capped(
-    s.hostURLs,
-    MAX_SITE_HOST_URLS,
-    'host URLs',
-    problems,
-  )) {
-    let h = record(value);
-    let raw = str(h?.url);
-    let url = raw ? httpURL(raw) : undefined;
-    if (!url) {
-      problems.push(`host URL "${raw ?? ''}" is not an http(s) URL`);
-      continue;
-    }
-    let href = withSlash(url.href);
-    if (hostURLs.some((existing) => existing.url === href)) {
-      problems.push(`host URL "${href}" is listed twice`);
-      continue;
-    }
-    hostURLs.push({ url: href, forward: h?.forward === true });
-  }
 
   let pageTypes = capped(
     s.pageTypes,
@@ -387,7 +349,6 @@ export function readSiteSettings(
     tagline: str(s.tagline),
     language: str(s.language) ?? 'en',
     themeColor: str(s.themeColor),
-    hostURLs,
     pageTypes,
     redirects,
     notFound,
