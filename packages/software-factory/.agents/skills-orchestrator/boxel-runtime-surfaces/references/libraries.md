@@ -229,7 +229,8 @@ directly — no library load required (drums, tones, UI sound feedback via
 | `CardDef`, `FieldDef`, `Component`                        | 1    | `@cardstack/base/card-api`                         |
 | `StringField`, `NumberField`, etc.                        | 1    | `@cardstack/base/<type>`                           |
 | `getCards`, `Command`                                     | 2    | `@cardstack/runtime-common`                        |
-| `Button`, `Pill`, helpers, icons                          | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
+| `Button`, `Pill`, `cn`, formatters, icons                 | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
+| `eq`, `and`, `add` and the other logic helpers, `element` | 2    | `@cardstack/pretui/helpers`                        |
 | `KanbanPlane`, `KanbanPlacement`, drag/drop board helpers | 2    | `@cardstack/boxel-ui/components`                   |
 | Any host tool (`ai-assistant`, `switch-submode`, etc.)    | 2    | `@cardstack/boxel-host/tools/<name>`               |
 | `restartableTask`                                         | 2    | `ember-concurrency`                                |
