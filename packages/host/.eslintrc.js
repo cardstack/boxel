@@ -287,11 +287,13 @@ module.exports = {
       // the `https://cardstack.com/base/` alias as data. It stays out of their
       // import specifiers.
       files: [
+        'tests/integration/resources/search-test.ts',
         'tests/integration/tools/sanitize-module-list-test.gts',
         'tests/unit/code-ref-test.ts',
         'tests/unit/index-query-engine-test.ts',
         'tests/unit/internal-key-canonicalization-test.ts',
         'tests/unit/is-component-declaration-test.ts',
+        'tests/unit/loader-test.ts',
         'tests/unit/plan-install-test.ts',
         'tests/unit/query-canonicalization-test.ts',
         'tests/unit/virtual-network-realm-for-reference-test.ts',
@@ -301,6 +303,33 @@ module.exports = {
         '@cardstack/boxel/no-url-form-base-imports': [
           'error',
           { allowAliasOutsideImports: true },
+        ],
+      },
+    },
+    {
+      // Tests and fixtures that name base-realm resources by the alias,
+      // appending a path to `baseRealm.url`, without testing alias tolerance.
+      // Each is a known gap listed under ADR 002 §1.4's Remediation, and
+      // leaves this list when it names those resources in prefix form.
+      files: [
+        'tests/acceptance/ai-assistant-test.gts',
+        'tests/acceptance/code-submode/create-file-test.gts',
+        'tests/acceptance/code-submode/file-tree-test.ts',
+        'tests/acceptance/code-submode/recent-files-test.ts',
+        'tests/acceptance/interact-submode-creation-and-permissions-test.gts',
+        'tests/acceptance/interact-submode/create-file-test.gts',
+        'tests/acceptance/prerender-file-extract-test.gts',
+        'tests/integration/components/card-chooser-paging-test.gts',
+        'tests/integration/components/operator-mode-card-chooser-test.gts',
+        'tests/integration/components/realm-config-routing-rule-edit-test.gts',
+        'tests/unit/filedef-export-shape-test.ts',
+        'tests/unit/instance-filter-matcher-test.ts',
+        'tests/unit/module-transpile-cache-test.ts',
+      ],
+      rules: {
+        '@cardstack/boxel/no-url-form-base-imports': [
+          'error',
+          { allowBaseRealmURLPaths: true },
         ],
       },
     },
