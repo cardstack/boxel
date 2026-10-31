@@ -27,7 +27,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not } from './helpers';
 import StarIcon from '@cardstack/boxel-icons/star';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
@@ -330,8 +330,8 @@ export class PretUISpec extends Spec {
   static prefersWideFormat = true;
 
   @field componentName = contains(StringField);
-  // boxel-ui icon export name ('@cardstack/boxel-ui/icons'), resolved at
-  // render time via icon-registry.gts — data, never a static icon
+  // an icon-registry.gts key, resolved to its boxel-icons icon at render
+  // time — data, never a static icon
   @field icon = contains(StringField);
   // ── taxonomy axes (docs/catalog-taxonomy.md) ──
   // category = the primary user-facing home; tier = compositional
@@ -716,9 +716,6 @@ export class PretUISpec extends Spec {
           overflow-wrap: break-word;
         }
         .wb-title-frame {
-          --icon-color: currentColor;
-          --icon-bg: none;
-
           display: grid;
           place-items: center;
           width: var(--_wb-title-frame-size);
@@ -993,9 +990,6 @@ export class PretUISpec extends Spec {
           box-sizing: border-box;
         }
         .mono {
-          --icon-color: currentColor;
-          --icon-bg: none;
-
           flex: none;
           width: var(--fit-mono-size);
           height: var(--fit-mono-size);

@@ -1,68 +1,64 @@
-// GENERATED from scripts/pretui-icon-assignments.json by
-// scripts/pretui-inventory.py — do not hand-edit.
-import {
-  AiBw,
-  ArrowRight,
-  ArrowUp,
-  Atom,
-  BoxelIcon,
-  Card,
-  CardInstance,
-  CaretDown,
-  CheckMark,
-  ChevronRight,
-  Copy,
-  DiagonalArrowLeftUp,
-  DropdownArrowDown,
-  DropdownArrowFilled,
-  Embedded,
-  ExclamationCircle,
-  Eye,
-  Field,
-  File,
-  FileAlert,
-  Fitted,
-  Folder,
-  Form,
-  FourLines,
-  Grid3x3,
-  Group,
-  Head,
-  HighlightIcon,
-  IconCircle,
-  IconCircleSelected,
-  IconCode,
-  IconFunnel,
-  IconGlobe,
-  IconGrid,
-  IconHexagon,
-  IconInherit,
-  IconLink,
-  IconList,
-  IconMinusCircle,
-  IconPencil,
-  IconPlus,
-  IconPlusCircle,
-  IconPlusThin,
-  IconSearch,
-  IconSearchThick,
-  IconTurnDownRight,
-  ImagePlaceholder,
-  Isolated,
-  LoadingIndicator,
-  Lock,
-  Rows4,
-  Send,
-  Sparkle,
-  StarFilled,
-  StarHalfFill,
-  SuccessBordered,
-  ThreeDotsHorizontal,
-  TriangleLeft,
-  TriangleRight,
-  Warning,
-} from '@cardstack/boxel-ui/icons';
+// Maps each name an `icon` field or argument can hold to its boxel-icons
+// icon. Kebab-case keys are boxel-icons names; the PascalCase keys at the end
+// of REGISTRY are older names that stored data still uses.
+import LegacyAlignJustify from '@cardstack/boxel-icons/align-justify';
+import LegacyAperture from '@cardstack/boxel-icons/aperture';
 import LegacyArrowDown from '@cardstack/boxel-icons/arrow-down';
+import LegacyArrowRight from '@cardstack/boxel-icons/arrow-right';
+import LegacyArrowUp from '@cardstack/boxel-icons/arrow-up';
+import LegacyArrowUpLeft from '@cardstack/boxel-icons/arrow-up-left';
+import LegacyAtom from '@cardstack/boxel-icons/atom';
+import LegacyBookCopy from '@cardstack/boxel-icons/book-copy';
+import LegacyBox from '@cardstack/boxel-icons/box';
+import LegacyCaretDown from '@cardstack/boxel-icons/caret-down';
+import LegacyCaretLeft from '@cardstack/boxel-icons/caret-left';
+import LegacyCaretRight from '@cardstack/boxel-icons/caret-right';
+import LegacyCheck from '@cardstack/boxel-icons/check';
+import LegacyChevronDown from '@cardstack/boxel-icons/chevron-down';
+import LegacyChevronRight from '@cardstack/boxel-icons/chevron-right';
+import LegacyCircle from '@cardstack/boxel-icons/circle';
+import LegacyCircleAlert from '@cardstack/boxel-icons/circle-alert';
+import LegacyCircleCheck from '@cardstack/boxel-icons/circle-check';
+import LegacyCircleDot from '@cardstack/boxel-icons/circle-dot';
+import LegacyCircleMinus from '@cardstack/boxel-icons/circle-minus';
+import LegacyCirclePlus from '@cardstack/boxel-icons/circle-plus';
+import LegacyCode from '@cardstack/boxel-icons/code';
+import LegacyCopy from '@cardstack/boxel-icons/copy';
+import LegacyCornerDownRight from '@cardstack/boxel-icons/corner-down-right';
+import LegacyCreditCard from '@cardstack/boxel-icons/credit-card';
+import LegacyCropPortrait from '@cardstack/boxel-icons/crop-portrait';
+import LegacyEllipsis from '@cardstack/boxel-icons/ellipsis';
+import LegacyEye from '@cardstack/boxel-icons/eye';
+import LegacyFile from '@cardstack/boxel-icons/file';
+import LegacyFileAlert from '@cardstack/boxel-icons/file-alert';
+import LegacyFolder from '@cardstack/boxel-icons/folder';
+import LegacyForm from '@cardstack/boxel-icons/form';
+import LegacyFunnel from '@cardstack/boxel-icons/funnel';
+import LegacyGitFork from '@cardstack/boxel-icons/git-fork';
+import LegacyGlobe from '@cardstack/boxel-icons/globe';
+import LegacyGrid3x3 from '@cardstack/boxel-icons/grid-3x3';
+import LegacyHexagon from '@cardstack/boxel-icons/hexagon';
+import LegacyHighlighter from '@cardstack/boxel-icons/highlighter';
+import LegacyImage from '@cardstack/boxel-icons/image';
+import LegacyLayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import LegacyLink from '@cardstack/boxel-icons/link';
+import LegacyList from '@cardstack/boxel-icons/list';
+import LegacyLoaderCircle from '@cardstack/boxel-icons/loader-circle';
+import LegacyLock from '@cardstack/boxel-icons/lock';
+import LegacyPencil from '@cardstack/boxel-icons/pencil';
+import LegacyPlus from '@cardstack/boxel-icons/plus';
+import LegacyRectangleHorizontal from '@cardstack/boxel-icons/rectangle-horizontal';
+import LegacyRectangleVertical from '@cardstack/boxel-icons/rectangle-vertical';
+import LegacyRows4 from '@cardstack/boxel-icons/rows-4';
+import LegacySearch from '@cardstack/boxel-icons/search';
+import LegacySend from '@cardstack/boxel-icons/send';
+import LegacyShare2 from '@cardstack/boxel-icons/share-2';
+import LegacySparkle from '@cardstack/boxel-icons/sparkle';
+import LegacyStar from '@cardstack/boxel-icons/star';
+import LegacyStarHalf from '@cardstack/boxel-icons/star-half';
+import LegacyTextCursorInput from '@cardstack/boxel-icons/text-cursor-input';
+import LegacyTriangleAlert from '@cardstack/boxel-icons/triangle-alert';
+import LegacyUsers from '@cardstack/boxel-icons/users';
 import PretuiIcon001 from '@cardstack/boxel-icons/activity';
 import PretuiIcon002 from '@cardstack/boxel-icons/activity-heartbeat';
 import PretuiIcon003 from '@cardstack/boxel-icons/adjustments-horizontal';
@@ -684,66 +680,68 @@ const REGISTRY: Record<string, any> = {
   workflow: PretuiIcon307,
   'zoom-in': PretuiIcon308,
   'zoom-pan': PretuiIcon309,
-  AiBw,
-  ArrowRight,
-  ArrowUp,
-  Atom,
-  BoxelIcon,
-  Card,
-  CardInstance,
-  CaretDown,
-  CheckMark,
-  ChevronRight,
-  Copy,
-  DiagonalArrowLeftUp,
-  DropdownArrowDown,
-  DropdownArrowFilled,
-  Embedded,
-  ExclamationCircle,
-  Eye,
-  Field,
-  File,
-  FileAlert,
-  Fitted,
-  Folder,
-  Form,
-  FourLines,
-  Grid3x3,
-  Group,
-  Head,
-  HighlightIcon,
-  IconCircle,
-  IconCircleSelected,
-  IconCode,
-  IconFunnel,
-  IconGlobe,
-  IconGrid,
-  IconHexagon,
-  IconInherit,
-  IconLink,
-  IconList,
-  IconMinusCircle,
-  IconPencil,
-  IconPlus,
-  IconPlusCircle,
-  IconPlusThin,
-  IconSearch,
-  IconSearchThick,
-  IconTurnDownRight,
-  ImagePlaceholder,
-  Isolated,
-  LoadingIndicator,
-  Lock,
-  Rows4,
-  Send,
-  Sparkle,
-  StarFilled,
-  StarHalfFill,
-  SuccessBordered,
-  ThreeDotsHorizontal,
-  TriangleLeft,
-  TriangleRight,
-  Warning,
+  // Names Spec cards' `icon` fields store, each resolved to a boxel-icons
+  // icon; a boxel-ui export name is stored data, so its key stays.
+  AiBw: LegacyAperture,
+  ArrowRight: LegacyArrowRight,
+  ArrowUp: LegacyArrowUp,
+  Atom: LegacyAtom,
+  BoxelIcon: LegacyBox,
+  Card: LegacyCreditCard,
+  CardInstance: LegacyBookCopy,
+  CaretDown: LegacyCaretDown,
+  CheckMark: LegacyCheck,
+  ChevronRight: LegacyChevronRight,
+  Copy: LegacyCopy,
+  DiagonalArrowLeftUp: LegacyArrowUpLeft,
+  DropdownArrowDown: LegacyChevronDown,
+  DropdownArrowFilled: LegacyCaretDown,
+  Embedded: LegacyRectangleHorizontal,
+  ExclamationCircle: LegacyCircleAlert,
+  Eye: LegacyEye,
+  Field: LegacyTextCursorInput,
+  File: LegacyFile,
+  FileAlert: LegacyFileAlert,
+  Fitted: LegacyCropPortrait,
+  Folder: LegacyFolder,
+  Form: LegacyForm,
+  FourLines: LegacyAlignJustify,
+  Grid3x3: LegacyGrid3x3,
+  Group: LegacyUsers,
+  Head: LegacyShare2,
+  HighlightIcon: LegacyHighlighter,
+  IconCircle: LegacyCircle,
+  IconCircleSelected: LegacyCircleDot,
+  IconCode: LegacyCode,
+  IconFunnel: LegacyFunnel,
+  IconGlobe: LegacyGlobe,
+  IconGrid: LegacyLayoutGrid,
+  IconHexagon: LegacyHexagon,
+  IconInherit: LegacyGitFork,
+  IconLink: LegacyLink,
+  IconList: LegacyList,
+  IconMinusCircle: LegacyCircleMinus,
+  IconPencil: LegacyPencil,
+  IconPlus: LegacyPlus,
+  IconPlusCircle: LegacyCirclePlus,
+  IconPlusThin: LegacyPlus,
+  IconSearch: LegacySearch,
+  IconSearchThick: LegacySearch,
+  IconTurnDownRight: LegacyCornerDownRight,
+  ImagePlaceholder: LegacyImage,
+  Isolated: LegacyRectangleVertical,
+  LoadingIndicator: LegacyLoaderCircle,
+  Lock: LegacyLock,
+  Rows4: LegacyRows4,
+  Send: LegacySend,
+  Sparkle: LegacySparkle,
+  StarFilled: LegacyStar,
+  StarHalfFill: LegacyStarHalf,
+  SuccessBordered: LegacyCircleCheck,
+  ThreeDotsHorizontal: LegacyEllipsis,
+  TriangleLeft: LegacyCaretLeft,
+  TriangleRight: LegacyCaretRight,
+  Warning: LegacyTriangleAlert,
   ArrowDown: LegacyArrowDown,
 };
 

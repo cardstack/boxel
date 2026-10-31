@@ -9,6 +9,7 @@ scope:
   - packages/*-realm/**
   - packages/*/realm/**
   - packages/software-factory/**
+  - packages/software-factory/.agents/**
   - .claude/skills/gts-component-conventions/**
   - AGENTS.md
 ---

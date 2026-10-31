@@ -476,7 +476,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import { eq } from '@cardstack/boxel-ui/helpers';
+        `import { eq } from '@cardstack/pretui/helpers';
 import MyComponent from 'somewhere';
 <template><MyComponent @flag={{eq 1 1}} /></template>
 `,
@@ -509,7 +509,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import { eq } from '@cardstack/boxel-ui/helpers';
+        `import { eq } from '@cardstack/pretui/helpers';
 import StringField from '@cardstack/base/string';
 import { CardDef, field, contains } from '@cardstack/base/card-api';
 import MyComponent from 'somewhere';
@@ -941,7 +941,7 @@ export class MyCard extends CardDef {
       let responseJson = JSON.parse(response.text);
       assert.strictEqual(
         responseJson.output,
-        `import { eq } from '@cardstack/boxel-ui/helpers';
+        `import { eq } from '@cardstack/pretui/helpers';
 import MyComponent from 'somewhere';
 <template>
   <div>

@@ -7,9 +7,21 @@ import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
+import { modifier } from 'ember-modifier';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Token } from './token';
+
+// Writes each named argument onto the element's inline style as a custom
+// property, the way a sibling modifier sharing the style attribute would.
+const setCssVar = modifier(
+  (element: HTMLElement, _positional: [], named: Record<string, string | undefined>) => {
+    for (let [name, value] of Object.entries(named)) {
+      if (value !== undefined) {
+        element.style.setProperty(`--${name}`, value);
+      }
+    }
+  },
+);
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;

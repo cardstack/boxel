@@ -116,7 +116,7 @@ module.exports = {
         'node/no-deprecated-api': 'off',
         '@cardstack/boxel/template-missing-invokable': [
           'error',
-          { invokables: MISSING_INVOKABLES_CONFIG.invokables },
+          { invokables: MISSING_INVOKABLES_CONFIG.boxelUiInvokables },
         ],
       },
     },

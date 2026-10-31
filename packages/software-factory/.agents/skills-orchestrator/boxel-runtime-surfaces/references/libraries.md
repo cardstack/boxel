@@ -88,10 +88,9 @@ import {
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 
-// Helpers (template helpers — used as {{eq ...}}, {{cn ...}}, etc.)
+// Template helpers — used as {{eq ...}}, {{and ...}}, etc.
 import {
   eq,
-  cn,
   gt,
   gte,
   lt,
@@ -101,8 +100,9 @@ import {
   or,
   multiply,
   add,
-} from '@cardstack/boxel-ui/helpers';
+} from '@cardstack/pretui/helpers';
 import {
+  cn,
   formatDateTime,
   formatNumber,
   formatCurrency,
@@ -229,7 +229,8 @@ directly — no library load required (drums, tones, UI sound feedback via
 | `CardDef`, `FieldDef`, `Component`                        | 1    | `@cardstack/base/card-api`                         |
 | `StringField`, `NumberField`, etc.                        | 1    | `@cardstack/base/<type>`                           |
 | `getCards`, `Command`                                     | 2    | `@cardstack/runtime-common`                        |
-| `Button`, `Pill`, helpers, icons                          | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
+| `Button`, `Pill`, `cn`, formatters, icons                 | 2    | `@cardstack/boxel-ui/{components,helpers,icons/*}` |
+| `eq`, `and`, `add` and the other logic helpers, `element` | 2    | `@cardstack/pretui/helpers`                        |
 | `KanbanPlane`, `KanbanPlacement`, drag/drop board helpers | 2    | `@cardstack/boxel-ui/components`                   |
 | Any host tool (`ai-assistant`, `switch-submode`, etc.)    | 2    | `@cardstack/boxel-host/tools/<name>`               |
 | `restartableTask`                                         | 2    | `ember-concurrency`                                |
