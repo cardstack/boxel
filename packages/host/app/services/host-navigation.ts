@@ -208,6 +208,11 @@ export default class HostNavigationService extends Service {
     return this.snapshot?.notFound;
   }
 
+  // The site's error card, shown in place of a page whose card fails.
+  get errorCard(): string | undefined {
+    return this.snapshot?.errorCard;
+  }
+
   // The current page's path relative to the site, with its query. Tracked
   // through the router, so it changes with every navigation.
   get sitePath(): string | undefined {

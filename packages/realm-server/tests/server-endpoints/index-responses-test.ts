@@ -2652,6 +2652,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                 <template><p data-not-found>Nothing lives here</p></template>
               };
             }
+            export class ErrorPage extends CardDef {
+              static isolated = class extends Component<typeof ErrorPage> {
+                <template><p data-error-page>Something went wrong</p></template>
+              };
+            }
+            export class Broken extends CardDef {
+              static isolated = class extends Component<typeof Broken> {
+                get boom(): string {
+                  throw new Error('this card cannot render');
+                }
+                <template><p data-broken>{{this.boom}}</p></template>
+              };
+            }
             export class Frame extends CardDef {
               static isolated = class extends Component<typeof Frame> {
                 <template><header data-site-header>Site header</header><SitePage /></template>
@@ -2668,6 +2681,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               meta: {
                 adoptsFrom: { module: '../site-pages', name: 'NotFound' },
               },
+            },
+          },
+        ],
+        [
+          'ErrorPage/site.json',
+          {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: { module: '../site-pages', name: 'ErrorPage' },
+              },
+            },
+          },
+        ],
+        [
+          'Broken/1.json',
+          {
+            data: {
+              type: 'card',
+              meta: { adoptsFrom: { module: '../site-pages', name: 'Broken' } },
             },
           },
         ],
@@ -2690,6 +2723,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               type: 'card',
               attributes: {
                 cardInfo: { name: 'Site Source Realm' },
+                hostRoutingRules: [{ path: '/broken' }],
                 site: {
                   tagline: 'Notes from the test site.',
                   pageTypes: [
@@ -2718,6 +2752,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               relationships: {
                 'site.notFound': { links: { self: './NotFound/site' } },
                 'site.frame': { links: { self: './Frame/site' } },
+                'site.errorCard': { links: { self: './ErrorPage/site' } },
+                'hostRoutingRules.0.instance': {
+                  links: { self: './Broken/1' },
+                },
               },
               meta: {
                 adoptsFrom: {
@@ -2854,6 +2892,23 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           `${path} has no canonical address`,
         );
       }
+    });
+
+    test('a page whose card fails to render is the error card, with a 500 and no canonical link', async function (assert) {
+      let response = await get('/broken');
+      assert.strictEqual(response.status, 500);
+
+      assert.true(
+        response.text.includes('data-error-page'),
+
+        'the site’s error card stands in for the page',
+      );
+
+      assert.false(
+        /rel="canonical"/.test(head(response.text)),
+
+        'a failing page has no canonical address',
+      );
     });
 
     test('a card the page type’s filter leaves out is not found', async function (assert) {

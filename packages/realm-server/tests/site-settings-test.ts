@@ -52,4 +52,8 @@ module(basename(import.meta.filename), function () {
   test('readSiteSettings: reads the frame card, and reports one that is not a card id', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
+
+  test('readSiteSettings: reads the error card, and reports one that is not a card id', async function (assert) {
+    await runSharedTest(siteSettingsTests, assert, {});
+  });
 });

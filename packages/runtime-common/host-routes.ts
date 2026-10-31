@@ -144,4 +144,6 @@ export interface HostRouteSnapshot {
   listings: string[];
   // The card shown, with status 404, at a path that serves nothing.
   notFound?: string;
+  // The card shown in place of a page whose card fails to render.
+  errorCard?: string;
 }

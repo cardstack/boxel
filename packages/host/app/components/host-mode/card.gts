@@ -9,7 +9,7 @@ import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import CardError from '@cardstack/host/components/operator-mode/card-error';
+import SiteError from '@cardstack/host/components/host-mode/site-error';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -142,7 +142,7 @@ export default class HostModeCard extends Component<Signature> {
             <p class='not-found-message'>This page could not be found.</p>
           </div>
         {{else}}
-          <CardError @error={{this.cardError}} @hideHeader={{true}} />
+          <SiteError @error={{this.cardError}} />
         {{/if}}
       {{else if this.card}}
         <CardRenderer

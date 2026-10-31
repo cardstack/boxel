@@ -241,6 +241,20 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(bad.frame, undefined);
       assert.strictEqual(bad.problems.length, 1);
     },
+  'readSiteSettings: reads the error card, and reports one that is not a card id':
+    async (assert) => {
+      let settings = readSiteSettings(
+        { errorCard: { id: `${REALM}/ErrorPage/main` } },
+        REALM,
+      );
+      assert.strictEqual(settings.errorCard, `${REALM}/ErrorPage/main`);
+      assert.strictEqual(settings.problems.length, 0);
+      let bad = readSiteSettings({ errorCard: { id: 'not a url' } }, REALM);
+      assert.strictEqual(bad.errorCard, undefined);
+      assert.deepEqual(bad.problems, [
+        'the error card "not a url" is not a card id',
+      ]);
+    },
 });
 
 export default tests;

@@ -34,6 +34,7 @@ import {
   injectHeadHTML,
   injectIsolatedHTML,
   retrieveHeadHTML,
+  pageRenderFailed,
   retrieveIsolatedHTML,
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
@@ -913,23 +914,39 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
     scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
-    let [headMarkup, isolatedMarkup, scopedCSS] = await Promise.all([
-      retrieveHeadHTML({
-        cardURL,
-        dbAdapter,
-        log: headLog,
-      }),
-      retrieveIsolatedHTML({
-        cardURL,
-        dbAdapter,
-        log: isolatedLog,
-      }),
-      retrieveScopedCSS({
-        cardURL,
-        dbAdapter,
-        log: scopedCSSLog,
-      }),
-    ]);
+    let readMarkup = (url: URL) =>
+      Promise.all([
+        retrieveHeadHTML({
+          cardURL: url,
+          dbAdapter,
+          log: headLog,
+        }),
+        retrieveIsolatedHTML({
+          cardURL: url,
+          dbAdapter,
+          log: isolatedLog,
+        }),
+        retrieveScopedCSS({
+          cardURL: url,
+          dbAdapter,
+          log: scopedCSSLog,
+        }),
+      ]);
+    let [headMarkup, isolatedMarkup, scopedCSS] = await readMarkup(cardURL);
+
+    // A page whose card failed to render shows the site's error card in its
+    // place, with status 500, as the not-found card stands in for a missing
+    // one. A card that simply hasn't been rendered yet is left to the app.
+    let servedError = false;
+    if (routedRealm && isolatedMarkup.html == null && !servedNotFound) {
+      let { errorCard } = await routedRealm.getSiteSettings();
+      if (errorCard && (await pageRenderFailed({ cardURL, dbAdapter }))) {
+        cardURL = new URL(errorCard);
+        ctxt.status = 500;
+        servedError = true;
+        [headMarkup, isolatedMarkup, scopedCSS] = await readMarkup(cardURL);
+      }
+    }
     // The page is a read rooted at the card, so a format its type's `read`
     // declares unshareable is served data-only here as on every other route:
     // no markup of it is injected, and the host renders the card from its
@@ -1006,7 +1023,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       lastPublishedAt &&
       indexHTMLHash &&
       isolatedHTML != null &&
-      !servedNotFound
+      !servedNotFound &&
+      !servedError
     ) {
       let generations = await siteGenerations(routedRealm!, routingDeps);
       etag = `"site-${createHash('sha256')
@@ -1057,7 +1075,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         requestPath: `/${requestURL.pathname.slice(mount.pathname.length)}`,
         paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
         share: servedShare,
-        canonical: !servedNotFound,
+        canonical: !servedNotFound && !servedError,
         document: doc,
       });
       if (isolatedHTML != null) {
@@ -1188,6 +1206,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           t.listingPath ? [t.listingPath] : [],
         ),
         ...(siteSettings.notFound ? { notFound: siteSettings.notFound } : {}),
+        ...(siteSettings.errorCard
+          ? { errorCard: siteSettings.errorCard }
+          : {}),
       };
       configPatch.hostRouteSnapshot = snapshot;
     }

@@ -89,6 +89,7 @@ import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
 import RealmApiKeys from './realm-api-keys';
+import SiteRoutesPanel from './site-routes-panel';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -507,6 +508,10 @@ export class SiteSettingsField extends FieldDef {
   });
   @field notFound = linksTo(CardDef, {
     description: 'The card served, with status 404, at a path nothing claims',
+  });
+  @field errorCard = linksTo(CardDef, {
+    description:
+      'The card shown, with status 500, in place of a page whose card fails to render',
   });
   @field frame = linksTo(CardDef, {
     description:
@@ -1982,6 +1987,13 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 />
               {{else}}
                 <Field />
+                {{#if (eq key 'site')}}
+                  <SiteRoutesPanel
+                    @site={{this.config.site}}
+                    @realmURL={{this.realm}}
+                    @context={{@context}}
+                  />
+                {{/if}}
               {{/if}}
             </FieldContainer>
           {{/each-in}}

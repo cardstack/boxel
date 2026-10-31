@@ -7,7 +7,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import { CardContextName } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import CardError from '@cardstack/host/components/operator-mode/card-error';
+import SiteError from '@cardstack/host/components/host-mode/site-error';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
@@ -56,10 +56,7 @@ export default class SitePageOutlet extends Component<Signature> {
         {{#if (isNotFound this.cardResource.cardError)}}
           <p class='message'>This page could not be found.</p>
         {{else}}
-          <CardError
-            @error={{this.cardResource.cardError}}
-            @hideHeader={{true}}
-          />
+          <SiteError @error={{this.cardResource.cardError}} />
         {{/if}}
       {{else if this.cardResource.card}}
         <CardRenderer

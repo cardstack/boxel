@@ -62,6 +62,8 @@ export interface SiteSettings {
   pageTypes: SitePageType[];
   redirects: SiteRedirect[];
   notFound?: string;
+  // The card shown in place of a page whose card fails to render.
+  errorCard?: string;
   // The card every page is shown inside: the site's header, navigation and
   // footer. Its template places the page with <SitePage />.
   frame?: string;
@@ -334,6 +336,17 @@ export function readSiteSettings(
     }
   }
 
+  let errorId = str(record(s.errorCard)?.id);
+  let errorCard: string | undefined;
+  if (errorId) {
+    let url = httpURL(errorId);
+    if (url) {
+      errorCard = url.href;
+    } else {
+      problems.push(`the error card "${errorId}" is not a card id`);
+    }
+  }
+
   let frameId = str(record(s.frame)?.id);
   let frame: string | undefined;
   if (frameId) {
@@ -364,6 +377,7 @@ export function readSiteSettings(
     pageTypes,
     redirects,
     notFound,
+    errorCard,
     frame,
     listed: s.listed !== false,
     crawlers,

@@ -333,14 +333,14 @@ export async function siteAt(
 }
 
 // The realms a site draws on: its page types' source realms and the realms
-// holding its frame and not-found cards, other than its own.
+// holding its frame, not-found and error cards, other than its own.
 export async function siteSourceRealms(
   site: Realm,
   deps: RealmRoutingDeps,
 ): Promise<string[]> {
   let settings = await site.getSiteSettings();
   let sources = new Set(settings.pageTypes.map((t) => t.sourceRealm));
-  for (let card of [settings.frame, settings.notFound]) {
+  for (let card of [settings.frame, settings.notFound, settings.errorCard]) {
     if (card) {
       let realm = await findOrMountRealm(new URL(card), deps).catch(
         () => undefined,
