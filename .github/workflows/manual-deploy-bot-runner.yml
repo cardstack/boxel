@@ -22,6 +22,7 @@ jobs:
       repository: "boxel-bot-runner-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/bot-runner/Dockerfile"
+      platforms: ${{ inputs.environment == 'staging' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
 
   deploy-bot-runner:
     needs: [build-bot-runner]
