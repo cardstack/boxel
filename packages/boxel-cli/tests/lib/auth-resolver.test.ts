@@ -19,16 +19,37 @@ describe('resolveRealmAuthenticator', () => {
     fs.rmSync(profileDir, { recursive: true, force: true });
   });
 
-  it('returns a SeedAuthenticator when a seed is supplied', () => {
+  it('returns a SeedAuthenticator when a seed and a Matrix server name are supplied', () => {
     const result = resolveRealmAuthenticator({
       realmUrl: 'https://app.boxel.ai/demo/',
       realmSecretSeed: 'my-seed',
+      matrixServerName: 'boxel.ai',
       profileManager: pm,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.mode).toBe('seed');
       expect(result.authenticator).toBeInstanceOf(SeedAuthenticator);
+    }
+  });
+
+  it('reports a seed without a Matrix server name as an error, not a guess', () => {
+    const saved = process.env.MATRIX_SERVER_NAME;
+    delete process.env.MATRIX_SERVER_NAME;
+    try {
+      const result = resolveRealmAuthenticator({
+        realmUrl: 'https://app.boxel.ai/demo/',
+        realmSecretSeed: 'my-seed',
+        profileManager: pm,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('MATRIX_SERVER_NAME');
+      }
+    } finally {
+      if (saved !== undefined) {
+        process.env.MATRIX_SERVER_NAME = saved;
+      }
     }
   });
 
@@ -72,6 +93,7 @@ describe('resolveRealmAuthenticator', () => {
     const result = resolveRealmAuthenticator({
       realmUrl: 'not-a-url',
       realmSecretSeed: 'my-seed',
+      matrixServerName: 'boxel.ai',
       profileManager: pm,
     });
     expect(result.ok).toBe(false);

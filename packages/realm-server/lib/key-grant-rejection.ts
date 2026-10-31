@@ -10,6 +10,7 @@ import {
   OperationFailure,
   type CallApiSlot,
 } from '@cardstack/runtime-common/card-operations';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import type { Expression } from '@cardstack/runtime-common/expression';
 
 // Rejected grants: what happens when a vendor refuses a key.
@@ -166,7 +167,11 @@ export async function markGrantRejected(
   // The realm's writers are read before the move, outside its transaction.
   // Only a vendor's refusal gets here, so a successful call never pays for it.
   let writers = shareId
-    ? await fetchDirectWriters(dbAdapter, new URL(realmURL))
+    ? await fetchDirectWriters(
+        dbAdapter,
+        new URL(realmURL),
+        matrixServerNameFromEnv(),
+      )
     : [];
   let moved = await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery([
@@ -375,7 +380,11 @@ export async function markKeyRejected(
   },
 ): Promise<boolean> {
   let writers = shareId
-    ? await fetchDirectWriters(dbAdapter, new URL(realmURL))
+    ? await fetchDirectWriters(
+        dbAdapter,
+        new URL(realmURL),
+        matrixServerNameFromEnv(),
+      )
     : [];
   let moved = await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery([

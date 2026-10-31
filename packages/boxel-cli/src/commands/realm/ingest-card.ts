@@ -669,7 +669,7 @@ export function registerIngestCardCommand(realm: Command): void {
     .option('--dry-run', 'Show what would be copied without writing files')
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint a JWT locally (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT locally (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .action(
       async (
