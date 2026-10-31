@@ -649,7 +649,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 67288,
+      "bytes": 65601,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -690,6 +690,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/d1529afc86.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/d360dfed4b.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -761,10 +765,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/2d656c5f95.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/319c6453ca.css"
         },
         {
@@ -797,15 +797,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/89454eb3c6.css"
+          "module": "src/shell/keys/67891b550a.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/8a19aa2ae5.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/ab01f6face.css"
+          "module": "src/shell/keys/a9020baded.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -813,11 +809,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/b392bfb5cb.css"
+          "module": "src/shell/keys/b3cfb478f6.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/b3cfb478f6.css"
+          "module": "src/shell/keys/b7a38fea87.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -849,11 +845,19 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/e365162cfb.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/e493049fec.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/e62b090fc6.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/ef42dcf82f.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -894,7 +898,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 288808,
+      "bytes": 288925,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1033,6 +1037,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/components/radio-tile.gts",
+          "size": 696
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/components/validation-hint.gts",
           "size": 549
         },
@@ -1099,12 +1108,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 23099
+          "size": 22981
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/client-picker.gts",
-          "size": 3522
+          "size": 3405
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1159,12 +1168,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-picker.gts",
-          "size": 2222
+          "size": 2113
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-tile.gts",
-          "size": 2028
+          "size": 2125
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1249,7 +1258,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/use-key-page.gts",
-          "size": 7949
+          "size": 7827
         },
         {
           "package": "@cardstack/secure-origin",

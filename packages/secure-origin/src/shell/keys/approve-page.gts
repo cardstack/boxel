@@ -39,6 +39,7 @@ import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -148,14 +149,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 <fieldset class='picker'>
                   <legend class='visually-hidden'>{{slotLabel choice}}</legend>
                   {{#each choice.options as |option|}}
-                    <label class='choice' data-test-approve-key={{option.name}}>
-                      <input
-                        type='radio'
-                        name='slot-{{choice.slot}}'
-                        value={{option.id}}
-                        checked={{this.isChosen choice.slot option.id}}
-                        {{on 'change' (fn this.choose choice.slot option.id)}}
-                      />
+                    <RadioTile
+                      @name='slot-{{choice.slot}}'
+                      @value={{option.id}}
+                      @checked={{this.isChosen choice.slot option.id}}
+                      @onChange={{fn this.choose choice.slot option.id}}
+                      data-test-approve-key={{option.name}}
+                    >
                       <span class='option'>
                         <span class='option-name'>{{option.name}}</span>
                         {{#if option.rejected}}
@@ -177,7 +177,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             {{this.hostsOf option.covers}}</span>
                         {{/if}}
                       </span>
-                    </label>
+                    </RadioTile>
                   {{else}}
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
@@ -368,33 +368,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .choice {
-        position: relative;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-      }
-      .choice input {
-        position: absolute;
-        opacity: 0;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-      }
-      .choice:has(input:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-      }
-      .choice:has(input:checked) {
-        box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-      }
       .option {
         display: flex;
         flex-direction: column;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         min-width: 0;
         overflow-wrap: anywhere;
       }
