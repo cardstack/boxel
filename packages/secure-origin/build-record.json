@@ -102,7 +102,7 @@
       ]
     },
     "shared.css": {
-      "bytes": 4276,
+      "bytes": 4386,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -110,16 +110,16 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/e1da427584.css"
+          "module": "src/components/e2561eec49.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/e2561eec49.css"
+          "module": "src/components/f21b304789.css"
         }
       ]
     },
     "shared.js": {
-      "bytes": 284266,
+      "bytes": 285796,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -139,7 +139,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 3075
+          "size": 4205
         },
         {
           "package": "@cardstack/secure-origin",
@@ -160,6 +160,11 @@
           "package": "@cardstack/secure-origin",
           "module": "src/helpers/truth-helpers.ts",
           "size": 317
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/modifiers/fit-content.ts",
+          "size": 864
         },
         {
           "package": "@cardstack/secure-origin",
@@ -644,7 +649,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 65859,
+      "bytes": 65926,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -893,7 +898,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 288890,
+      "bytes": 288920,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1228,12 +1233,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-entry.ts",
-          "size": 2398
+          "size": 2399
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/service-account-fields.gts",
-          "size": 6755
+          "size": 6784
         },
         {
           "package": "@cardstack/secure-origin",
