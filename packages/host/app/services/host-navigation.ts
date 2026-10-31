@@ -381,8 +381,11 @@ export default class HostNavigationService extends Service {
           // and showed no new page: make both here.
           location.setURL(full);
           this.pageShown();
-        } else {
+        } else if (location.replaceURL) {
           location.replaceURL(full);
+        } else {
+          // A location with no history to rewrite (the tests' NoneLocation).
+          location.setURL(full);
         }
       },
       () => {
@@ -395,7 +398,7 @@ export default class HostNavigationService extends Service {
     | {
         getURL(): string;
         setURL(url: string): void;
-        replaceURL(url: string): void;
+        replaceURL?(url: string): void;
       }
     | undefined {
     let location = (this.router as unknown as { location?: unknown }).location;

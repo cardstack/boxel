@@ -1737,13 +1737,21 @@ module('Acceptance | host mode tests', function (hooks) {
 
     test('an in-app visit keeps a query the router does not declare', async function (assert) {
       let hostNavigation = getService('host-navigation');
+      // The address a visitor sees and shares: the router's own currentURL
+      // only follows its transitions, and keeps only the params it declares.
+      let address = () =>
+        (
+          getService('router') as unknown as {
+            location: { getURL(): string };
+          }
+        ).location.getURL();
       await visit('/pets/mango');
       await waitFor(`[data-test-host-mode-card="${mango}"]`);
 
       hostNavigation.visit('/?tag=chalkup');
       await waitFor('[data-test-site-home]');
       await settled();
-      assert.strictEqual(currentURL(), '/?tag=chalkup', 'the address keeps it');
+      assert.strictEqual(address(), '/?tag=chalkup', 'the address keeps it');
       assert.strictEqual(
         hostNavigation.sitePath,
         '/?tag=chalkup',
@@ -1753,7 +1761,7 @@ module('Acceptance | host mode tests', function (hooks) {
       hostNavigation.visit('/?tag=bouldering');
       await settled();
       assert.strictEqual(
-        currentURL(),
+        address(),
         '/?tag=bouldering',
         'a visit that changes only that query moves the address',
       );
@@ -1763,7 +1771,7 @@ module('Acceptance | host mode tests', function (hooks) {
       await waitFor(`[data-test-host-mode-card="${mango}"]`);
       await settled();
       assert.strictEqual(
-        currentURL(),
+        address(),
         '/pets/mango',
         'a page without one drops it',
       );
