@@ -67,6 +67,15 @@ async function initESLint(): Promise<any> {
   );
   const importMappings = (importMappingConfig.default ?? importMappingConfig)
     .importMappings;
+  // The `callApi` rules run lowering's own code, which reaches all of
+  // runtime-common and BXL. The specifier is computed so that a package
+  // type-checking this engine from outside (postgres, with an older `lib`)
+  // doesn't type-check that whole graph too; runtime-common checks
+  // `lint-call-api.ts` itself.
+  const { callApiLintPlugin } = (await import(
+    /* webpackIgnore: true */ new URL('./lint-call-api.ts', import.meta.url)
+      .href
+  )) as { callApiLintPlugin: { rules: Record<string, unknown> } };
 
   return new ESLint({
     cwd: HOST_PKG,
@@ -75,8 +84,11 @@ async function initESLint(): Promise<any> {
     // Submission/realm files are in-memory; don't apply host's .eslintignore
     // to them.
     ignore: false,
+    // Rules that run lowering's own code, so they live beside it rather than
+    // in the published ESLint plugin.
+    plugins: { '@cardstack/boxel-operations': callApiLintPlugin },
     overrideConfig: {
-      plugins: ['@cardstack/boxel'],
+      plugins: ['@cardstack/boxel', '@cardstack/boxel-operations'],
       rules: {
         // Prettier runs as a separate pass after ESLint (see lintOne); folding
         // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
@@ -117,6 +129,8 @@ async function initESLint(): Promise<any> {
         '@cardstack/boxel/no-css-position-fixed': 'warn',
         '@cardstack/boxel/no-forbidden-head-tags': 'warn',
         '@cardstack/boxel/no-literal-realm-urls': 'error',
+        '@cardstack/boxel-operations/call-api': 'error',
+        '@cardstack/boxel-operations/call-api-advice': 'warn',
       },
     },
   });

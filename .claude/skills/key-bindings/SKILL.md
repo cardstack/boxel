@@ -109,7 +109,8 @@ order:
    `approved` / `re-approved` row is appended to `key_binding_approvals`.
 
 The window builds what it approves from `POST /_key-bindings/batch`
-(`lib/key-binding-batch.ts`, the window's own session only), whose
+(`lib/key-binding-batch.ts`, a secure-origin session only: the window's own or
+the CLI's), whose
 `attributes.target` names a card or a card type in its realm as the window's
 context does, with `review` for review-changes. It answers every `callApi`
 operation on that card definition, in that realm, that needs the caller's
@@ -127,7 +128,9 @@ nothing about another card calling the same host, which gets its own batch
 and reuses the grant.
 
 The answer carries each binding with `meta.request` (the snapshot below) and
-`meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own,
+`meta.grant` (with `created`). `GET /_key-bindings` lists the caller's own
+(narrowed by `?realm=&module=&name=&operation=&instance=`, each resolved
+from prefix form or a URL as a binding is keyed),
 each with `operationLabel` and `cardName`: what the key page names it by, as
 the approve page does. They are read per type as a batch reads its definition
 (`bindingNames` in `lib/key-binding-batch.ts`), under the same read checks; a
@@ -135,6 +138,39 @@ type the caller can't read, or whose realm fails to mount, is named by its
 export name and its operation's name split into words;
 `DELETE /_key-bindings/:id` revokes one (secure session again) and leaves its
 grant.
+
+**From the terminal** (`packages/boxel-cli/src/commands/keys/approve.ts`):
+
+- `boxel keys approve <key or share label> --operation <module>#<Class>[.<op>]
+--realm <url> [--slot] [--instance] [--interactive [--anonymous]] [--yes]`
+  asks for the batch with the CLI's secure session, keeps the operations
+  named (all of the class without `.<op>`) and the slots the key or share
+  fills, prints each request (label, method, path, where the key goes, body)
+  and the hosts the key goes to for the first time, and asks y/N once
+  (`--yes` without a terminal). An approval whose every slot a grant already
+  covers (the batch's `covers`) is posted from the terminal (`via` `cli`).
+  One that needs a new grant is confirmed in the secure window: the CLI
+  opens `approve#module=…&name=…&realm=…&operation=…&key=…&operations=…`
+  with `cli_port`/`cli_state` naming a single-use loopback listener, the
+  window approves under its own session (`via` `window`) and posts only
+  `window_outcome=done`, and the CLI reads the bindings back
+  (`GET /_key-bindings` with `realm`, `module`, `name` and `instance`, which
+  the server resolves from prefix form or a URL). The CLI never creates a
+  grant on its own. The window approves every slot of an operation, so a
+  `--slot` approval that needs a new grant is refused in the terminal.
+  `--interactive` is posted as asked, and refused 403.
+- `boxel keys revoke` (same shape) lists the user's matching bindings with
+  the same filters and deletes them.
+- `boxel keys pending` lists bindings that won't send as approved:
+  `needs-reapproval`, or a fingerprint that differs from the preview's now
+  (`GET /_key-bindings/preview`, ordinary session), so an edit no call has
+  found yet is listed too, and one whose operation can't be read.
+- `boxel keys ungrant <key> --destination <url>` lists the bindings sent
+  under that grant, confirms, and removes it.
+- `boxel keys swap` reads the share's `operations[].destination` from the
+  realm's share listing; when none of the key's grants (a rejected one
+  included, which the swap reuses) covers one, the swap is made in the
+  window's `swap-key` page the same way, and otherwise in the terminal.
 
 ## The fingerprint
 

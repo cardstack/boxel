@@ -4,6 +4,10 @@
 // has goes in: adding one is a change of its own, made on the key page. Only a
 // direct writer of the realm may swap a key in; anyone else is told an
 // administrator needs to set it up.
+//
+// Opened by `boxel keys swap` (`#cli_port=…&cli_state=…`), for a swap that
+// grants the key a destination it has none for, the page tells the CLI's
+// listener when the swap is made, and nothing else.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -37,7 +41,8 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { openedFor } from './opened-for.ts';
+import { cliOpenedFor, openedFor } from './opened-for.ts';
+import { handToCli } from '../../security/cli-handoff.js';
 
 type State =
   | { name: 'loading' }
@@ -295,7 +300,12 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         share,
         key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
       };
-      this.args.api.close();
+      let { cli } = cliOpenedFor();
+      if (cli) {
+        handToCli(cli, { window: 'done' });
+      } else {
+        this.args.api.close();
+      }
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();

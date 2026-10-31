@@ -772,9 +772,10 @@ module(basename(import.meta.filename), function (hooks) {
           instance: null,
           slot: 'apiKey',
           state: 'active',
+          destination: `${VENDOR}/echo/`,
         },
       ],
-      "the realm's writers see what the share is approved for",
+      "the realm's writers see what the share is approved for, and where it sends",
     );
 
     await dbAdapter.execute(
@@ -870,6 +871,57 @@ module(basename(import.meta.filename), function (hooks) {
         operation.type,
         bindings.body.data[0].attributes.type,
         'both listings spell the type the same way',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
+  });
+
+  test('the bindings listing narrows to a realm, type and operation, each named in prefix form or as a URL', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+      approval('note', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let auth = await secureSessionAuth(dbAdapter, OWNER);
+    let listed = async (query: Record<string, string>) => {
+      let response = await request
+        .get(`/_key-bindings?${new URLSearchParams(query)}`)
+        .set('Authorization', auth);
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data
+        .map(
+          (b: { attributes: { operation: string } }) => b.attributes.operation,
+        )
+        .sort();
+    };
+    let prefix = '@test/key-bindings/';
+    virtualNetwork.addRealmMapping(prefix, realmURL.href);
+    try {
+      assert.deepEqual(
+        await listed({
+          realm: prefix,
+          module: `${prefix}inbox`,
+          name: INBOX.name,
+        }),
+        ['list', 'note'],
+        'a realm and module in prefix form',
+      );
+      assert.deepEqual(
+        await listed({
+          realm: realmURL.href,
+          module: `${realmURL.href}inbox.gts`,
+          name: INBOX.name,
+          operation: 'note',
+        }),
+        ['note'],
+        'as URLs, the module with its extension',
+      );
+      assert.deepEqual(
+        await listed({ realm: realmURL.href, name: 'Elsewhere' }),
+        [],
+        'another type',
       );
     } finally {
       virtualNetwork.removeRealmMapping(prefix);

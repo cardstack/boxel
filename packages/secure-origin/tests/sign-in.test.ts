@@ -151,6 +151,13 @@ describe('handToCli', () => {
     ]);
   });
 
+  test('tells the CLI a change it opened the window for ended, and sends nothing else', () => {
+    assert.deepEqual(handoffFields(callback, { window: 'done' }), [
+      ['state', STATE],
+      ['window_outcome', 'done'],
+    ]);
+  });
+
   test('sends a login token alone the way every CLI accepts it: in the query of a navigation to the listener', () => {
     let navigated: string[] = [];
     let doc = {

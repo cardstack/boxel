@@ -406,6 +406,64 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
+  test('opened by the CLI, only the operations it named start ticked, and the CLI is told once they are approved', async function (assert) {
+    let submitted: { action: string; fields: [string, string][] }[] = [];
+    let submit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+      submitted.push({
+        action: this.action,
+        fields: [...new FormData(this).entries()] as [string, string][],
+      });
+    };
+    try {
+      visitShell(
+        `approve#${new URLSearchParams({
+          module: MODULE,
+          name: 'Inbox',
+          realm: REALM,
+          operation: 'upload',
+          key: 'key-other',
+          operations: 'upload,listPRs',
+          cli_port: '51234',
+          cli_state: 'c'.repeat(32),
+        })}`,
+      );
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      assert
+        .dom('[data-test-approve-key="Another token"] input')
+        .isChecked('the key the CLI named starts chosen');
+      assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+      assert.deepEqual(submitted, [], 'nothing leaves before the user says');
+
+      await click('[data-test-approve-save]');
+      await settled();
+      assert.deepEqual(
+        approvals()[0].operations.map(
+          (o: { operation: string }) => o.operation,
+        ),
+        ['listPRs', 'upload'],
+        'the window approves with its own session what it showed',
+      );
+      assert.deepEqual(submitted, [
+        {
+          action: 'http://127.0.0.1:51234/callback',
+          fields: [
+            ['state', 'c'.repeat(32)],
+            ['window_outcome', 'done'],
+          ],
+        },
+      ]);
+      assert.deepEqual(
+        navigations,
+        [],
+        'the window goes to the CLI instead of closing',
+      );
+    } finally {
+      HTMLFormElement.prototype.submit = submit;
+    }
+  });
+
   test('choosing a key with no grant at a destination makes it new there', async function (assert) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
