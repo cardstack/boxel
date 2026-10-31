@@ -23,6 +23,9 @@ on:
       # from this package's build.
       - "packages/secure-origin/**"
       - "packages/runtime-common/**"
+      # The test realm server serves these cards as the `/test/` realm that
+      # the host's tests import from.
+      - "packages/test-realm-cards/**"
       - ".github/workflows/ci-host.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
