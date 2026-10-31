@@ -16,7 +16,13 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred, type HostRoutingRule } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  type HostRouteSnapshot,
+  type HostRoutingRule,
+} from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -499,6 +505,41 @@ module('Acceptance | host mode tests', function (hooks) {
         },
         'spring-guide.md':
           '# Spring Guide\n\nSprings settle toward their target.\n',
+        // A small site: a home page whose links lead to a card the served
+        // page's snapshot already places and one the app has to ask about,
+        // and the page shown at an address that serves nothing.
+        'site-pages.gts': `
+          import { CardDef, Component } from '@cardstack/base/card-api';
+          import { CardLink } from '@cardstack/base/card-link';
+          export class SiteHome extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p data-test-site-home>Home</p>
+                <CardLink @id='${testHostModeRealmURL}Pet/mango' data-test-site-link='mango'>Mango</CardLink>
+                <CardLink @id='${testHostModeRealmURL}Whitepaper/index' data-test-site-link='whitepaper'>Whitepaper</CardLink>
+              </template>
+            };
+          }
+          export class SiteNotFound extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><p data-test-site-not-found>Nothing lives here</p></template>
+            };
+          }
+        `,
+        'SiteHome/index.json': {
+          data: {
+            meta: {
+              adoptsFrom: { module: '../site-pages', name: 'SiteHome' },
+            },
+          },
+        },
+        'SiteNotFound/index.json': {
+          data: {
+            meta: {
+              adoptsFrom: { module: '../site-pages', name: 'SiteNotFound' },
+            },
+          },
+        },
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
@@ -1377,6 +1418,9 @@ module('Acceptance | host mode tests', function (hooks) {
     try {
       await visit('/test/Whitepaper/index.json');
       await waitFor('[data-test-whitepaper]');
+      // The prerender stays up until the live page can take over; the scroll
+      // offset is carried over at the swap.
+      await waitUntil(() => !document.querySelector('[data-boxel-handoff]'));
 
       assert.dom('[data-host-mode-card-scroll-container]').exists();
       let cardContainer = document.querySelector(
@@ -1556,6 +1600,156 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/');
       await waitFor(stackItem, { count: 0 });
       assert.dom(stackItem).doesNotExist('Back closes the card');
+    });
+  });
+  // A site's served page carries a snapshot of where its own page and links
+  // are served, on the config the realm server rewrites per request. The app
+  // asks `_host-route` for anything else.
+  module('on a site', function (hooks) {
+    let realm = testHostModeRealmURL;
+    let home = `${realm}SiteHome/index`;
+    let mango = `${realm}Pet/mango`;
+    let whitepaper = `${realm}Whitepaper/index`;
+    let notFound = `${realm}SiteNotFound/index`;
+    let config = ENV as { hostRouteSnapshot?: HostRouteSnapshot };
+    let originalFetch: typeof globalThis.fetch;
+    let asked: { cards: string[]; url: string | null }[];
+
+    hooks.beforeEach(function (this) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubCustomSubdomainHostModeService,
+      );
+      config.hostRouteSnapshot = {
+        realm,
+        mount: '/',
+        pages: [
+          ['/', home],
+          ['/pets/mango', mango],
+        ],
+        listings: [],
+        notFound,
+      };
+      // What the realm server's `_host-route` answers for this site: the
+      // whitepaper is served at /papers/white, and nothing at any other
+      // path.
+      asked = [];
+      originalFetch = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        let url = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.href,
+        );
+        if (!url.pathname.endsWith('/_host-route')) {
+          return originalFetch(input, init);
+        }
+        let cards = url.searchParams.getAll('card');
+        let path = url.searchParams.get('url');
+        asked.push({ cards, url: path });
+        let body = path
+          ? path.endsWith('/papers/white')
+            ? { kind: 'page', card: whitepaper }
+            : { kind: 'none', notFound }
+          : {
+              realm,
+              paths: Object.fromEntries(
+                cards
+                  .filter((card) => card === whitepaper)
+                  .map((card) => [card, '/papers/white']),
+              ),
+            };
+        return new Response(JSON.stringify(body), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+    });
+
+    hooks.afterEach(function () {
+      globalThis.fetch = originalFetch;
+      delete config.hostRouteSnapshot;
+    });
+
+    let canonical = () =>
+      document.head
+        .querySelector('link[rel~="canonical"]')
+        ?.getAttribute('href');
+
+    test('an address the snapshot holds shows its card', async function (assert) {
+      await visit('/pets/mango');
+      assert.dom(`[data-test-host-mode-card="${mango}"]`).exists();
+      assert.deepEqual(asked, [], 'the server is not asked');
+    });
+
+    test('a link shows the address its card is served at, asking the server only for what the snapshot lacks', async function (assert) {
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      assert
+        .dom('[data-test-site-link="mango"]')
+        .hasAttribute('href', '/pets/mango', 'a placed card links at once');
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-site-link="whitepaper"]')
+            ?.getAttribute('href') === '/papers/white',
+      );
+      assert
+        .dom('[data-test-site-link="whitepaper"]')
+        .hasAttribute('href', '/papers/white', 'a learned card links there');
+      assert.deepEqual(
+        asked,
+        [{ cards: [whitepaper], url: null }],
+        'one batched request, for the card the snapshot lacks',
+      );
+    });
+
+    test('following a link moves the site to its address, and Back returns', async function (assert) {
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      await click('[data-test-site-link="mango"]');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      assert.strictEqual(currentURL(), '/pets/mango');
+      assert.strictEqual(
+        canonical(),
+        new URL('/pets/mango', window.location.origin).href,
+        'the canonical link follows the page',
+      );
+
+      // Back is a transition to the URL before the link was followed
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      assert.dom(`[data-test-host-mode-card="${home}"]`).exists();
+    });
+
+    test('an address the server places shows its card', async function (assert) {
+      await visit('/papers/white');
+      assert.dom(`[data-test-host-mode-card="${whitepaper}"]`).exists();
+    });
+
+    test('an address that serves nothing shows the not-found card, with no canonical link', async function (assert) {
+      // In-app navigations, as a link makes them: a typed address is a full
+      // page load, whose head the server writes.
+      let hostNavigation = getService('host-navigation');
+      await visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      hostNavigation.visit('/nowhere');
+      await waitFor('[data-test-site-not-found]');
+      await settled();
+      assert.dom(`[data-test-host-mode-card="${notFound}"]`).exists();
+      assert.strictEqual(canonical(), undefined, 'no canonical address');
+
+      hostNavigation.visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      await settled();
+      assert.strictEqual(
+        canonical(),
+        new URL('/pets/mango', window.location.origin).href,
+        'a found page has one again',
+      );
     });
   });
 });

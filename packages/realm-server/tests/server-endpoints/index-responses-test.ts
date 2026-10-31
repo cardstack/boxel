@@ -2585,4 +2585,336 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
     },
   );
+
+  // A published site: one page type whose cards are served at a path
+  // template, with an alias, a filter and a listing; redirects; a not-found
+  // card; a frame; and the files a site serves at its root.
+  module('Published realm: a site’s page types', function (hooks) {
+    let request: SuperTest<Test>;
+    let publishedRealmURLString = 'http://site.localhost:4444/site-source/';
+    let host = new URL(publishedRealmURLString).host;
+    let mount = new URL(publishedRealmURLString).pathname;
+    let get = (path: string, accept = 'text/html') =>
+      request
+        .get(`${mount}${path.replace(/^\//, '')}`)
+        .set('Host', host)
+        .set('Accept', accept);
+    let head = (html: string) =>
+      html.match(/<head>([\s\S]*?)<\/head>/)?.[1] ?? '';
+    let article = (
+      slug: string,
+      name: string,
+      status = 'published',
+    ): [string, object] => [
+      `Article/${slug}.json`,
+      {
+        data: {
+          type: 'card',
+          attributes: { slug, status, cardInfo: { name } },
+          meta: { adoptsFrom: { module: '../article', name: 'Article' } },
+        },
+      },
+    ];
+
+    setupPublishedRealm(hooks, {
+      setup: 'site page types',
+      sourceRealmName: 'Site Source Realm',
+      endpoint: 'site-source',
+      publishedRealmURL: publishedRealmURLString,
+      cards: () => [
+        [
+          'article.gts',
+          `
+            import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+            export class Article extends CardDef {
+              @field slug = contains(StringField);
+              @field status = contains(StringField);
+              static isolated = class extends Component<typeof Article> {
+                <template>
+                  <article data-article={{@model.slug}}>
+                    <h1>{{@model.cardTitle}}</h1>
+                    <a data-next href='./second'>Next</a>
+                    <a data-listing href='#' data-boxel-card-link='/articles'>All</a>
+                  </article>
+                </template>
+              };
+            }
+          `,
+        ],
+        [
+          'site-pages.gts',
+          `
+            import { CardDef, Component } from '@cardstack/base/card-api';
+            import SitePage from '@cardstack/base/site-page';
+            export class NotFound extends CardDef {
+              static isolated = class extends Component<typeof NotFound> {
+                <template><p data-not-found>Nothing lives here</p></template>
+              };
+            }
+            export class Frame extends CardDef {
+              static isolated = class extends Component<typeof Frame> {
+                <template><header data-site-header>Site header</header><SitePage /></template>
+              };
+            }
+          `,
+        ],
+        [
+          'NotFound/site.json',
+          {
+            data: {
+              type: 'card',
+              attributes: { cardInfo: { name: 'Not found' } },
+              meta: {
+                adoptsFrom: { module: '../site-pages', name: 'NotFound' },
+              },
+            },
+          },
+        ],
+        [
+          'Frame/site.json',
+          {
+            data: {
+              type: 'card',
+              meta: { adoptsFrom: { module: '../site-pages', name: 'Frame' } },
+            },
+          },
+        ],
+        article('first', 'First article'),
+        article('second', 'Second article'),
+        article('draft', 'Draft article', 'draft'),
+        [
+          'realm.json',
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Site Source Realm' },
+                site: {
+                  tagline: 'Notes from the test site.',
+                  pageTypes: [
+                    {
+                      name: 'Articles',
+                      cardType: { module: './article', name: 'Article' },
+                      path: '/articles/{slug}',
+                      aliases: ['/a/{slug}'],
+                      filter: JSON.stringify({ eq: { status: 'published' } }),
+                      listingPath: '/articles',
+                      listingTitle: 'All articles',
+                    },
+                  ],
+                  redirects: [
+                    {
+                      from: '/posts/{slug}',
+                      to: '/articles/{slug}',
+                      statusCode: 301,
+                    },
+                    { from: '/old', to: '/articles', statusCode: 302 },
+                  ],
+                  listed: true,
+                  crawlers: [{ userAgent: 'GPTBot', allow: false }],
+                },
+              },
+              relationships: {
+                'site.notFound': { links: { self: './NotFound/site' } },
+                'site.frame': { links: { self: './Frame/site' } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/realm-config',
+                  name: 'RealmConfig',
+                },
+              },
+            },
+          },
+        ],
+      ],
+      onSetup(args) {
+        ({ request } = args);
+      },
+    });
+
+    test('a card is served at its page type’s path, inside the frame', async function (assert) {
+      let response = await get('/articles/first');
+      assert.strictEqual(response.status, 200);
+      assert.true(
+        response.text.includes('data-article="first"'),
+        'the page is the card the path names',
+      );
+      let header = response.text.indexOf('data-site-header');
+      assert.notStrictEqual(header, -1, 'the frame is drawn');
+      assert.true(
+        header < response.text.indexOf('data-article="first"'),
+        'the frame is drawn around the page',
+      );
+    });
+
+    test('a served page keeps its head, beside the card data inlined in it', async function (assert) {
+      let response = await get('/articles/first');
+      let headHTML = head(response.text);
+      assert.true(
+        /<title[^>]*>First article<\/title>/.test(headHTML),
+        'the card’s title is in the head',
+      );
+      assert.true(
+        headHTML.includes(
+          `<link rel="canonical" href="http://${host}${mount}articles/first">`,
+        ),
+        `the canonical link names the page’s address: ${headHTML}`,
+      );
+      assert.true(
+        headHTML.includes(
+          `<meta property="og:url" content="http://${host}${mount}articles/first">`,
+        ),
+        'og:url names the page’s address',
+      );
+      let pageDoc = headHTML.match(
+        /<script type="application\/json" data-boxel-page-doc data-card-url="([^"]+)">([\s\S]*?)<\/script>/,
+      );
+      assert.strictEqual(
+        pageDoc?.[1],
+        `${publishedRealmURLString}Article/first`,
+        'the head carries the page card’s data',
+      );
+      assert.strictEqual(
+        JSON.parse(pageDoc![2]).data.attributes.slug,
+        'first',
+        'the inlined data is the card’s',
+      );
+    });
+
+    test('a page’s links point at the addresses the site serves them at', async function (assert) {
+      let response = await get('/articles/first');
+      assert.true(
+        response.text.includes(
+          `<a data-next="" href="http://${host}${mount}articles/second">`,
+        ),
+        'a link to a routed card points at its page',
+      );
+      assert.true(
+        /<a data-listing="" href="http:\/\/site\.localhost:4444\/site-source\/articles"/.test(
+          response.text,
+        ),
+        'a link marked with a site path points at that path',
+      );
+    });
+
+    test('an alias redirects to the card’s address', async function (assert) {
+      let response = await get('/a/first');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/first`,
+      );
+    });
+
+    test('a card’s own path redirects to its address', async function (assert) {
+      let response = await get('/Article/first');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/first`,
+      );
+    });
+
+    test('a template redirect fills its target from the path', async function (assert) {
+      let response = await get('/posts/second');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/second`,
+      );
+    });
+
+    test('a literal redirect answers with its own status', async function (assert) {
+      let response = await get('/old');
+      assert.strictEqual(response.status, 302);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles`,
+      );
+    });
+
+    test('a listing path is served', async function (assert) {
+      let response = await get('/articles');
+      assert.strictEqual(response.status, 200);
+    });
+
+    test('a path that names no card is the not-found card, with a 404 and no canonical link', async function (assert) {
+      for (let path of ['/articles/nope', '/nothing-here']) {
+        let response = await get(path);
+        assert.strictEqual(response.status, 404, `${path} is not found`);
+        assert.true(
+          response.text.includes('data-not-found'),
+          `${path} shows the not-found card`,
+        );
+        let headHTML = head(response.text);
+        assert.false(
+          /rel="canonical"|property="og:url"/.test(headHTML),
+          `${path} has no canonical address`,
+        );
+      }
+    });
+
+    test('a card the page type’s filter leaves out is not found', async function (assert) {
+      let response = await get('/articles/draft');
+      assert.strictEqual(response.status, 404);
+      assert.true(response.text.includes('data-not-found'));
+    });
+
+    test('robots.txt follows the site’s crawler rules', async function (assert) {
+      let response = await get('/robots.txt', '*/*');
+      assert.strictEqual(response.status, 200);
+      assert.true(
+        response.headers['content-type'].startsWith('text/plain'),
+        'it is plain text',
+      );
+      assert.true(
+        response.text.includes('User-agent: GPTBot\nDisallow: /'),
+        'a crawler the site turns away is disallowed',
+      );
+      assert.true(
+        response.text.includes('User-agent: *\nAllow: /'),
+        'everyone else is allowed on a listed site',
+      );
+      assert.true(
+        response.text.includes(`Sitemap: http://${host}${mount}sitemap.xml`),
+        'it names the sitemap',
+      );
+    });
+
+    test('sitemap.xml lists every page the site serves', async function (assert) {
+      let response = await get('/sitemap.xml', '*/*');
+      assert.strictEqual(response.status, 200);
+      let locs = [...response.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+        (m) => m[1],
+      );
+      for (let slug of ['first', 'second']) {
+        assert.true(
+          locs.includes(`http://${host}${mount}articles/${slug}`),
+          `${slug} is listed: ${locs.join(', ')}`,
+        );
+      }
+      assert.false(
+        locs.some((loc) => loc.includes('draft')),
+        'a card the filter leaves out is not',
+      );
+    });
+
+    test('llms.txt names the site and where to start', async function (assert) {
+      let response = await get('/llms.txt', '*/*');
+      assert.strictEqual(response.status, 200);
+      assert.true(response.text.startsWith('# '), 'it opens with a title');
+      assert.true(
+        response.text.includes('> Notes from the test site.'),
+        'it carries the tagline',
+      );
+      assert.true(
+        response.text.includes(
+          `- [All articles](http://${host}${mount}articles)`,
+        ),
+        'it links each listing',
+      );
+    });
+  });
 });
