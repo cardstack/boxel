@@ -71,5 +71,30 @@ export class Person extends CardDef {
 export let counter = 0;
 export function increment() {
   counter++;
-}`.trim();
+}
+${moduleProvenanceMarks([
+  ['Person', 'Person'],
+  ['counter', 'counter'],
+  ['increment', 'increment'],
+])}`.trim();
+}
+
+// What transpilation appends to a module that declares exports: a helper,
+// then one call per declared export, as [local binding, export name].
+export function moduleProvenanceMarks(exports: [string, string][]) {
+  return `
+function _markModuleProvenance(value, name) {
+  let key = Symbol.for("module-provenance");
+  if (typeof value === 'function' && Object.isExtensible(value) && !Object.prototype.hasOwnProperty.call(value, key)) {
+    Object.defineProperty(value, key, {
+      value: Object.freeze({
+        module: import.meta.url,
+        name
+      })
+    });
+  }
+}
+${exports
+  .map(([local, name]) => `_markModuleProvenance(${local}, "${name}");`)
+  .join('\n')}`.trim();
 }

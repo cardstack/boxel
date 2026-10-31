@@ -2,6 +2,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { Loader, getField } from '@cardstack/runtime-common';
+import { moduleProvenanceOf } from '@cardstack/runtime-common/loader-plugin';
 
 import { getTypes } from '@cardstack/host/utils/file-def-attributes-extractor';
 
@@ -55,29 +56,18 @@ module('Integration | bundled base oracle', function (hooks) {
   // Serving order cannot be staged in a test: `Loader.loaders` is static, so a
   // class the app already captured stays captured whatever a fresh loader
   // does. What makes the answer order-independent is that only a declarer
-  // publishes, so the registry has one entry for the class and it is
-  // `card-api`. That is asserted directly, beside the ref it produces.
+  // marks a class, so the class's mark names `card-api` and nothing else can
+  // overwrite it. That is asserted directly, beside the ref it produces.
   test('a re-exporter does not take the credit for a class it borrows', async function (assert) {
     let loader = getService('loader-service').loader;
     let { ImageDef } = await loader.import<any>(
       '@cardstack/base/image-file-def',
     );
 
-    let registry = (
-      globalThis as {
-        __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
-      }
-    ).__boxelBundledBaseIdentities;
-
-    assert.strictEqual(
-      registry?.['card-api']?.ImageDef,
-      ImageDef,
-      'card-api publishes ImageDef, being the module that declares it',
-    );
-    assert.strictEqual(
-      registry?.['image-file-def']?.ImageDef,
-      undefined,
-      'image-file-def publishes nothing for a class it only re-exports',
+    assert.deepEqual(
+      moduleProvenanceOf(ImageDef),
+      { module: '@cardstack/base/card-api', name: 'ImageDef' },
+      'ImageDef is marked by card-api, the module that declares it',
     );
     assert.deepEqual(
       Loader.identify(ImageDef),

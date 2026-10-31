@@ -4,6 +4,8 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
+import { moduleProvenanceMarks } from '@cardstack/runtime-common/etc/test-fixtures';
+
 import RealmService from '@cardstack/host/services/realm';
 import ReadTextFileTool from '@cardstack/host/tools/read-text-file';
 
@@ -84,9 +86,10 @@ module('Integration | tools | read-text-file', function (hooks) {
       realm: testRealmURL,
     });
 
-    assert.strictEqual(
+    // A .gts path is served as its transpiled module.
+    assert.codeEqual(
       result.content,
-      `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
+      `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}\n${moduleProvenanceMarks([['TestComponent', 'default']])}`,
     );
   });
 
