@@ -136,6 +136,9 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
   let keyId: string;
   // The approve pages the CLI opened, and the bindings that existed when the
   // window was opened, before it approved anything.
+  // How the stand-in approve page ends: approving what the CLI named, or
+  // cancelled before approving anything.
+  let windowEnds: 'approved' | 'cancelled' = 'approved';
   let windows: {
     url: URL;
     fragment: URLSearchParams;
@@ -201,6 +204,23 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     expect(url.pathname).toBe(`${secureOriginURL.pathname}/approve`);
     let fragment = new URLSearchParams(url.hash.slice(1));
     windows.push({ url, fragment, bindingsBefore: await bindingCount() });
+    if (windowEnds === 'cancelled') {
+      void (async () => {
+        let told = await fetch(
+          `http://127.0.0.1:${fragment.get('cli_port')}/callback`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              state: fragment.get('cli_state')!,
+              window_outcome: 'cancelled',
+            }).toString(),
+          },
+        );
+        expect(told.status).toBe(200);
+      })();
+      return true;
+    }
     void (async () => {
       let window = await secureSessionAuth(getTestDbAdapter()!, matrixId);
       let headers = {
@@ -363,6 +383,35 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
         approvedVia: 'window',
       }),
     ]);
+  });
+
+  it('ends at once, approving nothing, when the secure window is cancelled', async () => {
+    windowEnds = 'cancelled';
+    try {
+      let before = await bindingCount();
+      let started = Date.now();
+      await expect(
+        keysApprove('my key', {
+          ...deps,
+          operation: 'service#Elsewhere.other',
+          realm,
+          yes: true,
+        }),
+      ).rejects.toThrow(/^Not approved: the secure window was closed/);
+      expect(
+        Date.now() - started,
+        'it does not wait for the window to time out',
+      ).toBeLessThan(60_000);
+      expect(windows.at(-1)!.fragment.get('operations')).toBe('other');
+      expect(await bindingCount()).toBe(before);
+      let { key } = await keysShow('my key', deps);
+      expect(
+        key.grants?.map((g) => g.destination),
+        'the key is granted nothing new',
+      ).not.toContain(`${vendor.alternateUrl}/`);
+    } finally {
+      windowEnds = 'approved';
+    }
   });
 
   it('asks the realm server for interactive use, which it refuses, even when the approval needs a new grant', async () => {

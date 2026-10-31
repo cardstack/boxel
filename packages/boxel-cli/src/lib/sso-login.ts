@@ -170,8 +170,11 @@ export type LoopbackResult =
   | { kind: 'window'; outcome: WindowOutcome };
 
 // How a page of the secure window the CLI opened ended: the change it was
-// opened for was made.
-export type WindowOutcome = 'done';
+// opened for was made (`done`), or the user cancelled or closed the window
+// first (`cancelled`). Only the realm server says what changed.
+export type WindowOutcome = 'done' | 'cancelled';
+
+const WINDOW_OUTCOMES: readonly string[] = ['done', 'cancelled'];
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -279,8 +282,8 @@ export async function startLoopbackCallback(opts?: {
       }
 
       if (posted?.has('window_outcome')) {
-        const outcome = posted.get('window_outcome');
-        if (outcome !== 'done') {
+        const outcome = posted.get('window_outcome') ?? '';
+        if (!WINDOW_OUTCOMES.includes(outcome)) {
           fail(
             res,
             'That response from the secure window was not recognized.',
@@ -288,7 +291,11 @@ export async function startLoopbackCallback(opts?: {
           );
           return;
         }
-        succeed(res, { kind: 'window', outcome }, 'Back to your terminal');
+        succeed(
+          res,
+          { kind: 'window', outcome: outcome as WindowOutcome },
+          outcome === 'done' ? 'Back to your terminal' : 'Nothing was changed',
+        );
         return;
       }
 

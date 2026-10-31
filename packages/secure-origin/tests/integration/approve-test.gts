@@ -459,6 +459,113 @@ module('Integration | approve pages', function (hooks) {
         [],
         'the window goes to the CLI instead of closing',
       );
+
+      await click('[data-test-keys-close]');
+      assert.strictEqual(
+        submitted.length,
+        1,
+        'closing once the approval is made tells the CLI nothing more',
+      );
+    } finally {
+      HTMLFormElement.prototype.submit = submit;
+    }
+  });
+
+  module('opened by the CLI, ended before approving', function (hooks) {
+    let submitted: { action: string; fields: [string, string][] }[];
+    let submit = HTMLFormElement.prototype.submit;
+    const CLI_STATE = 'c'.repeat(32);
+    const CANCELLED = [
+      {
+        action: 'http://127.0.0.1:51234/callback',
+        fields: [
+          ['state', CLI_STATE],
+          ['window_outcome', 'cancelled'],
+        ] as [string, string][],
+      },
+    ];
+
+    hooks.beforeEach(function () {
+      submitted = [];
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      visitShell(
+        `approve#${new URLSearchParams({
+          module: MODULE,
+          name: 'Inbox',
+          realm: REALM,
+          operation: 'upload',
+          key: 'key-other',
+          operations: 'upload',
+          cli_port: '51234',
+          cli_state: CLI_STATE,
+        })}`,
+      );
+    });
+
+    hooks.afterEach(function () {
+      HTMLFormElement.prototype.submit = submit;
+    });
+
+    test('Cancel tells the CLI the approval was cancelled, and approves nothing', async function (assert) {
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-cancel]');
+      assert.deepEqual(submitted, CANCELLED);
+      assert.deepEqual(approvals(), [], 'nothing is approved');
+      assert.deepEqual(
+        navigations,
+        [],
+        'the window goes to the CLI instead of closing',
+      );
+
+      await click('[data-test-keys-close]');
+      assert.strictEqual(submitted.length, 1, 'the CLI is told once');
+    });
+
+    test('closing the window tells the CLI the approval was cancelled', async function (assert) {
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
+      assert.deepEqual(approvals(), [], 'nothing is approved');
+    });
+
+    test('closing a window that has no session tells the CLI the approval was cancelled', async function (assert) {
+      forgetSession();
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-signed-out]');
+      await click('[data-test-keys-signed-out-close]');
+      assert.deepEqual(submitted, CANCELLED);
+    });
+
+    test('closing a window that couldn’t load the batch tells the CLI the approval was cancelled', async function (assert) {
+      serve({
+        'POST _key-bindings/batch': () => refusal(500, 'Something broke'),
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-load-failed]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
+    });
+  });
+
+  test('opened without the CLI, the page offers no Cancel, and Close closes the window', async function (assert) {
+    let submit = HTMLFormElement.prototype.submit;
+    let submitted = 0;
+    HTMLFormElement.prototype.submit = () => submitted++;
+    try {
+      visitShell(opened);
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      assert.dom('[data-test-keys-cancel]').doesNotExist();
+      await click('[data-test-keys-close]');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+      assert.strictEqual(submitted, 0, 'nothing is handed anywhere');
     } finally {
       HTMLFormElement.prototype.submit = submit;
     }

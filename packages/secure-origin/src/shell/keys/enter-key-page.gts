@@ -63,7 +63,12 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor, returnsToKeyPage } from './opened-for.ts';
+import {
+  cliOpenedFor,
+  contextRequest,
+  openedFor,
+  returnsToKeyPage,
+} from './opened-for.ts';
 import RadioChoices from './radio-choices.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields from './service-account-fields.gts';
@@ -545,14 +550,23 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   };
 }
 
+// The approve page this one was reached from (`then=approve` or
+// `then=review-changes`), if any.
+function approvalPageThen(): 'approve' | 'review-changes' | undefined {
+  let then = new URLSearchParams(window.location.hash.replace(/^#/, '')).get(
+    'then',
+  );
+  return then === 'approve' || then === 'review-changes' ? then : undefined;
+}
+
 // The approve page this one was opened from, to go back to once `keyId` is
 // added, with what it was opened for and the new key chosen.
 function approvalPageAfter(keyId: string): string | undefined {
-  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  let then = fragment.get('then');
-  if (then !== 'approve' && then !== 'review-changes') {
+  let then = approvalPageThen();
+  if (!then) {
     return undefined;
   }
+  let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   fragment.delete('then');
   // The approve page goes back to the key page it was reached from.
   if (fragment.get('after') === 'keys') {
@@ -567,8 +581,17 @@ export default class EnterKeyPage extends Component<{
   Args: { fromKeyPage?: boolean };
 }> {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='enter-key' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='enter-key'
+      @cli={{this.cli}}
+      as |api|
+    >
       <EnterKey @api={{api}} @fromKeyPage={{@fromKeyPage}} />
     </KeysWindow>
   </template>
+
+  // Reached from an approve page the CLI opened, the window is still the
+  // CLI's: closing it here cancels the approval.
+  private cli = approvalPageThen() ? cliOpenedFor().cli : undefined;
 }
