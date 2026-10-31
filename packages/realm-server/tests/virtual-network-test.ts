@@ -1,5 +1,5 @@
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
-import { VirtualNetwork } from '@cardstack/runtime-common';
+import { VirtualNetwork, rri } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
@@ -357,10 +357,66 @@ module(basename(import.meta.filename), function () {
         TypeError,
         'a base outside its realm is refused as well',
       );
+      // A browser's import map refuses each of these as backtracking above the
+      // prefix, since the remainder is parsed with the target as its base.
+      for (let specifier of [
+        '@scope/realm//other/secret',
+        '@scope/realm///evil.example/x',
+        '@scope/realm/\\other\\secret',
+        '@scope/realm/https://evil.example/x',
+        '@scope/realm/other:secret',
+      ]) {
+        assert.throws(
+          () => vn.resolveImport(specifier),
+          TypeError,
+          `${specifier} is refused rather than mapped`,
+        );
+      }
+    });
+
+    test('resolveRRI: a $REALM/ path cannot leave the realm root, whatever form the base is in', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
       assert.strictEqual(
-        vn.resolveImport('@scope/realm//other/secret'),
-        'http://realm.example/realm//other/secret',
-        'a remainder that starts with / is appended to the target, not resolved from the origin',
+        vn.resolveRRI('$REALM/cards/./x', rri('@scope/realm/a/b')),
+        '@scope/realm/cards/x',
+        'a prefix-form base keeps the result in prefix form',
+      );
+      assert.throws(
+        () => vn.resolveRRI('$REALM/../other/x', rri('@scope/realm/a')),
+        TypeError,
+        'refused against a prefix-form base',
+      );
+      assert.throws(
+        () =>
+          vn.resolveRRI(
+            '$REALM/../other/x',
+            rri('http://realm.example/realm/a'),
+          ),
+        TypeError,
+        'refused against a URL-form base',
+      );
+    });
+
+    test('unresolveURL: a URL is matched in its serialized form', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
+      assert.strictEqual(
+        vn.unresolveURL('http://realm.example/realm/../other/x'),
+        '@scope/other/x',
+        'a dot segment is folded before the prefix is chosen',
+      );
+      assert.strictEqual(
+        vn.unresolveURL('HTTP://REALM.EXAMPLE:80/realm/x'),
+        '@scope/realm/x',
+        'an uppercase host and a default port still match the target',
+      );
+      assert.strictEqual(
+        vn.unresolveURL('http://elsewhere.example/a/../b'),
+        'http://elsewhere.example/a/../b',
+        'a URL no target holds is returned as written',
       );
     });
   });
