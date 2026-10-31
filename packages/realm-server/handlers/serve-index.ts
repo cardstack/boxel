@@ -1163,11 +1163,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         ctxt.req.headers,
       );
       if (pageDoc) {
-        responseHTML = injectHeadHTML(
-          responseHTML,
-          `<script type="application/json" data-boxel-page-doc data-card-url="${escapeAttribute(
-            cardURL.href.replace(/\.json$/, ''),
-          )}">${pageDoc.replace(/</g, '\\u003c')}</script>`,
+        // Beside the head, not inside its markers: injectHeadHTML replaces
+        // what the markers hold, which is the page's title and share tags.
+        let script = `<script type="application/json" data-boxel-page-doc data-card-url="${escapeAttribute(
+          cardURL.href.replace(/\.json$/, ''),
+        )}">${pageDoc.replace(/</g, '\\u003c')}</script>`;
+        responseHTML = responseHTML.replace(
+          '</head>',
+          () => `${script}\n</head>`,
         );
       }
     }
