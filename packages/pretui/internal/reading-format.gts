@@ -45,7 +45,6 @@
 //
 // Pretui — the value formatters' shared Intl plumbing: memoised formatters that never throw, the number and date coercions, and formatClock.
 import { fromIso } from './reading-extras';
-import { formatDuration } from '@cardstack/boxel-ui/helpers';
 
 // ── shared Intl plumbing — memoised, and it never throws ─────────────────
 // Constructing an Intl formatter is the expensive part, so both constructors
@@ -228,5 +227,12 @@ export function formatClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return '0:00';
   }
-  return formatDuration(seconds, { format: 'timer' });
+  let whole = Math.floor(seconds);
+  let hours = Math.floor(whole / 3600);
+  let minutes = Math.floor((whole % 3600) / 60);
+  let secs = String(whole % 60).padStart(2, '0');
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${secs}`;
+  }
+  return `${minutes}:${secs}`;
 }
