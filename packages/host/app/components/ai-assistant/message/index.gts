@@ -482,10 +482,6 @@ export default class AiAssistantMessage extends Component<Signature> {
     return at ? formatDate(at, 'iiii MMM d, yyyy, h:mm aa') : undefined;
   }
 
-  private get shortTime() {
-    return formatDate(this.args.datetime, 'h:mm aa');
-  }
-
   <template>
     <section
       data-scroll-anchor
@@ -599,7 +595,7 @@ export default class AiAssistantMessage extends Component<Signature> {
             @authorName={{unless @hideMeta @authorName}}
             @isSelf={{unless @hideMeta @isSelf}}
             @continued={{@continuesRun}}
-            @time={{this.shortTime}}
+            @timestamp={{@datetime}}
             @avatar={{@profileAvatar}}
           >
             <:attachments>{{#if this.hasItems}}<Attachments

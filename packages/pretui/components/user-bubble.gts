@@ -5,6 +5,8 @@ import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 import { SpeakerLabel } from './speaker-label';
+import { Tooltip } from './tooltip';
+import { fullDate, shortTime } from '../internal/message-time';
 import ChevronDownIcon from '@cardstack/boxel-icons/chevron-down';
 import { cssNumber, cssStyleFrom } from '../pretui-css';
 
@@ -35,8 +37,10 @@ export interface UserBubbleSignature {
      * into an editor and hands the new text back. Edit shows only with
      * `@text`, the source it edits; an unchanged draft saves nothing */
     onEdit?: (text: string) => void;
-    /** when, as the caller formats it; on hover */
-    time?: string;
+    /** when it was sent: shown as '2:04 PM' (beside the author, or on
+     * hover under the bubble), with the full date in a tooltip on that
+     * time */
+    timestamp?: Date;
     /** who posted it. Shown above the bubble, so a room where several
      * people talk to the same assistant reads as one conversation with
      * names, not as a special case */
@@ -113,6 +117,20 @@ export class UserBubble extends Component<UserBubbleSignature> {
       return undefined;
     }
     return this.args.self ? 'You' : this.args.author;
+  }
+  // with an author, the time sits beside the name; without one, under the
+  // bubble
+  get showsFootTime(): boolean {
+    return Boolean(this.args.timestamp) && !this.authorName;
+  }
+  get shortTime(): string {
+    return this.args.timestamp ? shortTime(this.args.timestamp) : '';
+  }
+  get fullDate(): string {
+    return this.args.timestamp ? fullDate(this.args.timestamp) : '';
+  }
+  get isoTime(): string | undefined {
+    return this.args.timestamp?.toISOString();
   }
   get canRetry(): boolean {
     return (
@@ -209,7 +227,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           <SpeakerLabel
             class='pretui-bubble-author'
             @name={{this.authorName}}
-            @time={{@time}}
+            @timestamp={{@timestamp}}
             data-test-pretui-user-bubble-author={{this.authorName}}
           >
             <:mark>{{yield to='avatar'}}</:mark>
@@ -218,7 +236,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           <SpeakerLabel
             class='pretui-bubble-author'
             @name={{this.authorName}}
-            @time={{@time}}
+            @timestamp={{@timestamp}}
             data-test-pretui-user-bubble-author={{this.authorName}}
           />
         {{/if}}
@@ -333,9 +351,16 @@ export class UserBubble extends Component<UserBubbleSignature> {
               data-test-pretui-user-bubble-edit
             >Edit</button>
           {{/unless}}{{/if}}
-        {{#if (if @time (if this.authorName false true))}}<span
-            class='pretui-bubble-time pretui-bubble-hover'
-          >{{@time}}</span>{{/if}}
+        {{#if this.showsFootTime}}
+          <Tooltip @content={{this.fullDate}} @side='right'>
+            <time
+              class='pretui-bubble-time pretui-bubble-hover'
+              datetime={{this.isoTime}}
+              tabindex='0'
+              data-test-pretui-user-bubble-time
+            >{{this.shortTime}}</time>
+          </Tooltip>
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -485,6 +510,7 @@ export class UserBubble extends Component<UserBubbleSignature> {
           color: var(--foreground);
         }
         .pretui-bubble-link:focus-visible,
+        .pretui-bubble-time:focus-visible,
         .pretui-bubble-more:focus-visible,
         .pretui-bubble-act:focus-visible {
           outline: 2px solid var(--ring);
