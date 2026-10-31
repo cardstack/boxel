@@ -11,7 +11,7 @@ import {
   readKeyValue,
   type KeyValueSource,
 } from '../../lib/key-value.ts';
-import { destinationCovers } from '@cardstack/runtime-common/card-operations/call-api';
+import { destinationCovers } from '@cardstack/runtime-common/card-operations/destination-covers';
 import { openBrowser } from '../../lib/open-browser.ts';
 import { prompt } from '../../lib/prompt.ts';
 import {
