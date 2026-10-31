@@ -7,6 +7,7 @@ import { basename } from 'path';
 import {
   query,
   type DBAdapter,
+  type ExecuteOptions,
   type Prerenderer,
 } from '@cardstack/runtime-common';
 import type { RenderRouteOptions } from '@cardstack/runtime-common';
@@ -21,16 +22,29 @@ import { verifyJWT } from '../jwt.ts';
 module(basename(import.meta.filename), function () {
   module('prerender proxy', function () {
     let createPrerenderAuth = buildCreatePrerenderAuth(realmSecretSeed);
-    // Only consulted to resolve a realm's `users` grant; the tests that
-    // exercise one stub the profile lookup, so it is never dialed for real.
-    let matrixURL = 'http://localhost:8008/';
 
-    function makeDbAdapter(rows: any[]): DBAdapter {
+    // `rows` answer the permission queries. The account lookup that resolves
+    // a `users` grant is answered from `accounts`: the ids that hold a Boxel
+    // account, or a function that throws, for a database that can't answer.
+    // Each lookup is recorded, so a test can pin that a realm without a
+    // `users` grant costs none.
+    function makeDbAdapter(
+      rows: any[],
+      accounts: string[] | (() => never) = [],
+    ): DBAdapter & { accountLookups: string[] } {
+      let accountLookups: string[] = [];
       return {
         kind: 'pg',
+        accountLookups,
         async notify() {},
         isClosed: false,
-        async execute() {
+        async execute(sql: string, opts?: ExecuteOptions) {
+          if (/SELECT EXISTS \(SELECT 1 FROM users/i.test(sql)) {
+            let user = String(opts?.bind?.[0]);
+            accountLookups.push(user);
+            let held = typeof accounts === 'function' ? accounts() : accounts;
+            return [{ user_exists: held.includes(user) }];
+          }
           return rows;
         },
         async close() {},
@@ -156,7 +170,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -248,7 +261,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer: undefined,
           dbAdapter: makeDbAdapter([]),
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -283,7 +295,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]),
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -320,7 +331,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter: makeDbAdapter([]), // no permissions
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -372,7 +382,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -384,7 +393,6 @@ module(basename(import.meta.filename), function () {
           kind: 'module',
           prerenderer,
           dbAdapter,
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -480,7 +488,6 @@ module(basename(import.meta.filename), function () {
             kind,
             prerenderer,
             dbAdapter,
-            matrixURL,
             matrixServerName: 'localhost',
             createPrerenderAuth,
           }),
@@ -555,9 +562,15 @@ module(basename(import.meta.filename), function () {
       rows: any[],
       user: string,
       realm: string,
-    ): Promise<{ status: number; permissions?: string[] }> {
+      accounts: string[] | (() => never) = [],
+    ): Promise<{
+      status: number;
+      permissions?: string[];
+      accountLookups: string[];
+    }> {
       let { prerenderer, renderCalls } = makePrerenderer();
-      let dbAdapter = makeDbAdapter(rows);
+      let dbAdapter = makeDbAdapter(rows, accounts);
+      let { accountLookups } = dbAdapter;
       let app = new Koa();
       let router = new Router();
       router.post(
@@ -567,7 +580,6 @@ module(basename(import.meta.filename), function () {
           kind: 'card',
           prerenderer,
           dbAdapter,
-          matrixURL,
           matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
@@ -583,7 +595,7 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', `Bearer ${token}`)
         .send({ data: { attributes: { realm, url: `${realm}card` } } });
       if (response.status !== 201) {
-        return { status: response.status };
+        return { status: response.status, accountLookups };
       }
       let sessions = JSON.parse(renderCalls[0]!.args.auth);
       // Sorted because the claim is compared as a set — `checkPermission`
@@ -592,31 +604,7 @@ module(basename(import.meta.filename), function () {
         sessions[realm],
         realmSecretSeed,
       ).permissions?.sort();
-      return { status: response.status, permissions };
-    }
-
-    // Answers the homeserver's profile lookup with `respond` and counts the
-    // lookups, so a test can pin both how a `users` grant resolves and the
-    // claim that a realm without one costs no round trip.
-    async function withProfileLookups<T>(
-      respond: () => Response,
-      fn: () => Promise<T>,
-    ): Promise<{ result: T; profileRequests: string[] }> {
-      let profileRequests: string[] = [];
-      let realFetch = globalThis.fetch;
-      globalThis.fetch = (async (input: any, init?: any) => {
-        let url = typeof input === 'string' ? input : input.url;
-        if (url.includes('/_matrix/client/v3/profile/')) {
-          profileRequests.push(url);
-          return respond();
-        }
-        return realFetch(input, init);
-      }) as typeof fetch;
-      try {
-        return { result: await fn(), profileRequests };
-      } finally {
-        globalThis.fetch = realFetch;
-      }
+      return { status: response.status, permissions, accountLookups };
     }
 
     const USERS_GRANT_ROWS = [
@@ -631,33 +619,29 @@ module(basename(import.meta.filename), function () {
 
     test('mints the union of the wildcard grant and the caller row', async function (assert) {
       let realm = 'http://example.test/';
-      let { result, profileRequests } = await withProfileLookups(
-        () => new Response('{}', { status: 404 }),
-        () =>
-          mintPrerenderCard(
-            [
-              { username: '*', read: true, write: false, realm_owner: false },
-              {
-                username: '@someone:localhost',
-                read: false,
-                write: true,
-                realm_owner: false,
-              },
-            ],
-            '@someone:localhost',
-            realm,
-          ),
+      let { permissions, accountLookups } = await mintPrerenderCard(
+        [
+          { username: '*', read: true, write: false, realm_owner: false },
+          {
+            username: '@someone:localhost',
+            read: false,
+            write: true,
+            realm_owner: false,
+          },
+        ],
+        '@someone:localhost',
+        realm,
       );
 
       assert.deepEqual(
-        result.permissions,
+        permissions,
         ['read', 'write'],
         "wildcard read is unioned with the row's write",
       );
       assert.deepEqual(
-        profileRequests,
+        accountLookups,
         [],
-        'a realm with no users grant costs no homeserver round trip',
+        'a realm with no users grant costs no account lookup',
       );
     });
 
@@ -676,50 +660,55 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('mints the union of the users grant and the caller row for a registered matrix user', async function (assert) {
+    test('mints the union of the users grant and the caller row for a caller with a Boxel account', async function (assert) {
       let realm = 'http://example.test/';
-      let { result, profileRequests } = await withProfileLookups(
-        () =>
-          new Response(JSON.stringify({ displayname: 'Someone' }), {
-            headers: { 'content-type': 'application/json' },
-          }),
-        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      let { permissions, accountLookups } = await mintPrerenderCard(
+        USERS_GRANT_ROWS,
+        '@someone:localhost',
+        realm,
+        ['@someone:localhost'],
       );
 
       assert.deepEqual(
-        result.permissions,
+        permissions,
         ['read', 'write'],
         "the users grant is unioned with the row's write",
       );
-      assert.strictEqual(
-        profileRequests.length,
-        1,
-        'resolves the users grant against the homeserver once',
+      assert.deepEqual(
+        accountLookups,
+        ['@someone:localhost'],
+        'resolves the users grant against the users table once',
       );
     });
 
-    test('withholds the users grant from an unregistered matrix user', async function (assert) {
+    test('withholds the users grant from a caller with no Boxel account', async function (assert) {
       let realm = 'http://example.test/';
-      let { result } = await withProfileLookups(
-        () => new Response('{}', { status: 404 }),
-        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      let { permissions } = await mintPrerenderCard(
+        USERS_GRANT_ROWS,
+        '@someone:localhost',
+        realm,
+        [],
       );
 
       assert.deepEqual(
-        result.permissions,
+        permissions,
         ['write'],
         "only the caller's own row survives",
       );
     });
 
-    // A homeserver that cannot answer is not evidence the account is absent.
-    // Reading it that way would drop the `users` grant and mint a token the
-    // realm rejects for its whole lifetime, so the request fails instead.
-    test('fails the request when the homeserver cannot resolve the users grant', async function (assert) {
+    // A lookup that fails is not evidence the account is absent. Reading it
+    // that way would drop the `users` grant and mint a token the realm rejects
+    // for its whole lifetime, so the request fails instead.
+    test('fails the request when the account lookup fails', async function (assert) {
       let realm = 'http://example.test/';
-      let { result } = await withProfileLookups(
-        () => new Response('upstream boom', { status: 503 }),
-        () => mintPrerenderCard(USERS_GRANT_ROWS, '@someone:localhost', realm),
+      let result = await mintPrerenderCard(
+        USERS_GRANT_ROWS,
+        '@someone:localhost',
+        realm,
+        () => {
+          throw new Error('database unavailable');
+        },
       );
 
       assert.strictEqual(

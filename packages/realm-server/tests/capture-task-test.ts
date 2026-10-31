@@ -24,20 +24,25 @@ const CARD_ID = `${REALM_URL}Person/fadhlan`;
 function makeDBAdapter(
   rows: Record<string, unknown>[],
   loaderEpoch?: string,
+  accounts: string[] = [],
 ): DBAdapter {
-  // `readRealmLoaderEpoch` reads `realm_generations`, and the lookup of the
+  // `readRealmLoaderEpoch` reads `realm_generations`, the lookup of the
   // realms that name a policy reads `realm.json` rows, of which there are
-  // none here; every other query the task runs (permission fetches) wants the
-  // permission `rows`. Branch on the SQL so neither is handed a permission row
-  // (whose `loader_epoch` would be undefined → the '0' sentinel).
-  let execute = async (sql: string, _opts?: ExecuteOptions) =>
+  // none here, and a `users` grant asks the `users` table whether the runner
+  // holds an account (`accounts`); every other query the task runs
+  // (permission fetches) wants the permission `rows`. Branch on the SQL so
+  // none is handed a permission row (whose `loader_epoch` would be undefined
+  // → the '0' sentinel).
+  let execute = async (sql: string, opts?: ExecuteOptions) =>
     (/realm_generations/i.test(sql)
       ? loaderEpoch !== undefined
         ? [{ loader_epoch: loaderEpoch }]
         : []
       : /realm\.json/i.test(sql)
         ? []
-        : rows) as any;
+        : /SELECT EXISTS \(SELECT 1 FROM users/i.test(sql)
+          ? [{ user_exists: accounts.includes(String(opts?.bind?.[0])) }]
+          : rows) as any;
   return {
     kind: 'pg',
     notify: async () => {},
@@ -55,11 +60,14 @@ function makeDBAdapter(
 function makeTaskArgs({
   dbRows,
   loaderEpoch,
+  accounts,
   onCreatePrerenderAuth,
   onPrerenderCapture,
 }: {
   dbRows: Record<string, unknown>[];
   loaderEpoch?: string;
+  // The ids that hold a Boxel account, for a realm with a `users` grant.
+  accounts?: string[];
   onCreatePrerenderAuth?: (
     userId: string,
     permissions: Record<string, any>,
@@ -90,7 +98,7 @@ function makeTaskArgs({
   } as unknown as Prerenderer;
 
   return {
-    dbAdapter: makeDBAdapter(dbRows, loaderEpoch),
+    dbAdapter: makeDBAdapter(dbRows, loaderEpoch, accounts),
     queuePublisher: {} as QueuePublisher,
     indexWriter: {} as any,
     prerenderer,
@@ -179,61 +187,68 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('mints the union of the users grant for a registered matrix user', async function (assert) {
-      assert.expect(2);
-      let profileRequests: string[] = [];
-      let realFetch = globalThis.fetch;
-      globalThis.fetch = (async (input: any, init?: any) => {
-        let url = typeof input === 'string' ? input : input.url;
-        if (url.includes('/_matrix/client/v3/profile/')) {
-          profileRequests.push(url);
-          return new Response(JSON.stringify({ displayname: 'Alice' }), {
-            headers: { 'content-type': 'application/json' },
-          });
-        }
-        return realFetch(input, init);
-      }) as typeof fetch;
+    const USERS_GRANT_ROWS = [
+      {
+        username: 'users',
+        realm_url: REALM_URL,
+        read: true,
+        write: false,
+        realm_owner: false,
+      },
+      {
+        username: '@alice:localhost',
+        realm_url: REALM_URL,
+        read: false,
+        write: true,
+        realm_owner: false,
+      },
+    ];
 
+    test('mints the union of the users grant for a runner with a Boxel account', async function (assert) {
+      assert.expect(1);
       let authCall:
         | { userId: string; permissions: Record<string, unknown> }
         | undefined;
 
-      try {
-        await runCapture(
-          makeTaskArgs({
-            dbRows: [
-              {
-                username: 'users',
-                realm_url: REALM_URL,
-                read: true,
-                write: false,
-                realm_owner: false,
-              },
-              {
-                username: '@alice:localhost',
-                realm_url: REALM_URL,
-                read: false,
-                write: true,
-                realm_owner: false,
-              },
-            ],
-            onCreatePrerenderAuth: (userId, permissions) => {
-              authCall = { userId, permissions };
-            },
-          }),
-        );
-      } finally {
-        globalThis.fetch = realFetch;
-      }
+      await runCapture(
+        makeTaskArgs({
+          dbRows: USERS_GRANT_ROWS,
+          accounts: ['@alice:localhost'],
+          onCreatePrerenderAuth: (userId, permissions) => {
+            authCall = { userId, permissions };
+          },
+        }),
+      );
 
       assert.deepEqual(authCall, {
         userId: '@alice:localhost',
         permissions: { [REALM_URL]: ['read', 'write'] },
       });
-      assert.strictEqual(
-        profileRequests.length,
-        1,
-        'resolves the users grant against the homeserver once',
+    });
+
+    test('withholds the users grant from a runner with no Boxel account', async function (assert) {
+      assert.expect(1);
+      let authCall:
+        | { userId: string; permissions: Record<string, unknown> }
+        | undefined;
+
+      await runCapture(
+        makeTaskArgs({
+          dbRows: USERS_GRANT_ROWS,
+          accounts: [],
+          onCreatePrerenderAuth: (userId, permissions) => {
+            authCall = { userId, permissions };
+          },
+        }),
+      );
+
+      assert.deepEqual(
+        authCall,
+        {
+          userId: '@alice:localhost',
+          permissions: { [REALM_URL]: ['write'] },
+        },
+        "only the runner's own row survives",
       );
     });
 

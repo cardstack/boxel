@@ -1,18 +1,22 @@
-import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import { basename } from 'path';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
-let matrixUserProfile: { displayname: string } | undefined = undefined;
-// The paired homeserver is named `boxel-ai`; it answers any profile lookup
-// with `matrixUserProfile`, whatever server the user is on.
-let mockMatrixClient = {
-  serverName: 'boxel-ai',
-  async getProfile(_userId) {
-    return matrixUserProfile;
+// Whether the `users` table holds a row for whoever the checker asks about:
+// the one question the checker puts to the database.
+let hasAccount = false;
+let mockDBAdapter = {
+  async execute(sql: string) {
+    if (!/FROM users/i.test(sql)) {
+      throw new Error(`unexpected query: ${sql}`);
+    }
+    return [{ user_exists: hasAccount }];
   },
-} as MatrixClient;
+} as unknown as DBAdapter;
+// The paired homeserver is named `boxel-ai`.
+const SERVER_NAME = 'boxel-ai';
 
 module(`permissions/${basename(import.meta.filename)}`, function () {
   module('world-readable realm', function () {
@@ -20,7 +24,8 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
       {
         '*': ['read'],
       },
-      mockMatrixClient,
+      mockDBAdapter,
+      SERVER_NAME,
     );
 
     test('anyone can read but not write', async function (assert) {
@@ -36,7 +41,8 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
       {
         '*': ['read', 'write'],
       },
-      mockMatrixClient,
+      mockDBAdapter,
+      SERVER_NAME,
     );
 
     test('anyone can read and write', async function (assert) {
@@ -56,10 +62,12 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
         users: ['read'],
         '@matic:boxel-ai': ['read', 'write'],
       },
-      mockMatrixClient,
+      mockDBAdapter,
+      SERVER_NAME,
     );
 
-    test('matrix user can read but not write', async function (assert) {
+    test('a user with an account can read but not write', async function (assert) {
+      hasAccount = true;
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'read'));
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'write'));
 
@@ -68,7 +76,6 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
         'write',
       ]);
 
-      matrixUserProfile = { displayname: 'Not Matic' };
       assert.ok(await permissionsChecker.can('@not-matic:boxel-ai', 'read'));
       assert.notOk(
         await permissionsChecker.can('@not-matic:boxel-ai', 'write'),
@@ -79,7 +86,8 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
       ]);
     });
 
-    test('non-matrix user can not read and write', async function (assert) {
+    test('a user without an account can neither read nor write', async function (assert) {
+      hasAccount = false;
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'read'));
       assert.ok(await permissionsChecker.can('@matic:boxel-ai', 'write'));
 
@@ -88,7 +96,6 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
         'write',
       ]);
 
-      matrixUserProfile = undefined;
       assert.notOk(await permissionsChecker.can('anyone', 'read'));
       assert.notOk(await permissionsChecker.can('anyone', 'write'));
 
@@ -96,7 +103,7 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
     });
 
     test('a user of another homeserver is not granted the users row', async function (assert) {
-      matrixUserProfile = { displayname: 'Someone Elsewhere' };
+      hasAccount = true;
       assert.notOk(
         await permissionsChecker.can('@someone:other.example', 'read'),
       );
@@ -113,7 +120,8 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
         '*': ['read'],
         '@matic:boxel-ai': ['read', 'write', 'realm-owner'],
       },
-      mockMatrixClient,
+      mockDBAdapter,
+      SERVER_NAME,
     );
 
     test('user with permission can do permitted actions', async function (assert) {

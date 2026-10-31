@@ -117,7 +117,8 @@ async function readableRealm(
     !target ||
     !(await new RealmPermissionChecker(
       await fetchRealmPermissions(args.dbAdapter, realmURL),
-      args.matrixClient,
+      args.dbAdapter,
+      args.matrixClient.serverName,
     ).can(caller, 'read'))
   ) {
     throw new UserKeyError(404, 'no such realm');

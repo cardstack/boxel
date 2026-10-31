@@ -113,14 +113,16 @@ JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 
 `userPermissions` on that last line is the **effective** set, never the raw
 per-username row: `effectiveRealmPermissions` unions the realm's `users` grant
-(gated on the matrix account existing), its `*` grant, and the user's own row.
+(gated on the user holding a Boxel account: a row in the realm server's `users`
+table, written on their first sign-in), its `*` grant, and the user's own row.
 It is the single derivation — `RealmPermissionChecker.for` and
-`fetchEffectiveRealmPermissions` both call it, the latter resolving the `users`
-grant from a homeserver URL for callers that hold no matrix client. **Every mint
-site must produce that same union.** Minting the bare row is the standing bug in
-this area: on a realm with a shared grant it yields a token that can never match,
-and the failure is a flat `PermissionMismatch` 401 with nothing pointing at the
-minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops the
+`fetchEffectiveRealmPermissions` both call it, each reading the `users` table
+through `accountCheck`, so it needs only the database and never asks the
+homeserver (whose profile endpoint ADR 011 §1.6 closes to users who share no
+room with the subject). **Every mint site must produce that same union.**
+Minting the bare row is the standing bug in this area: on a realm with a shared
+grant it yields a token that can never match, and the failure is a flat
+`PermissionMismatch` 401 with nothing pointing at the minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops the
 `*` grant for any realm the user has a row in, and it ignores `users` rows
 entirely — so the realms it enumerates for a multi-realm bundle still carry
 row-only claims.

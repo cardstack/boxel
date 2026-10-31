@@ -24,16 +24,14 @@ export default function handlePrerenderProxy({
   kind,
   prerenderer,
   dbAdapter,
-  matrixURL,
   matrixServerName,
   createPrerenderAuth,
 }: {
   kind: 'card' | 'module' | 'file-extract';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
-  // Resolves the realm's `users` grant, which is keyed on whether the caller
-  // has an account on the paired homeserver.
-  matrixURL: string;
+  // Names the paired homeserver, whose users a realm's `users` grant
+  // admits (ADR 004 §1.4).
   matrixServerName: string;
   createPrerenderAuth: (
     userId: string,
@@ -95,17 +93,15 @@ export default function handlePrerenderProxy({
     // realm that carries a shared grant the caller's row alone is not a
     // mintable set.
     //
-    // Resolving a `users` grant reaches the homeserver, so this can fail on
-    // something other than the database — answer through the JSON:API error
-    // envelope like every other failure here rather than letting it fall
-    // through to Koa's bare 500.
+    // A lookup that fails is answered through the JSON:API error envelope like
+    // every other failure here, rather than falling through to Koa's bare 500
+    // or minting a token missing the `users` grant.
     let userPermissions: RealmAction[];
     try {
       userPermissions = await fetchEffectiveRealmPermissions(
         dbAdapter,
         new URL(attrs.realm),
         token.user,
-        matrixURL,
         matrixServerName,
       );
     } catch (err) {
