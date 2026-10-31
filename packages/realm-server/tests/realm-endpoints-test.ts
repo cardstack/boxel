@@ -1855,6 +1855,7 @@ module(basename(import.meta.filename), function () {
         virtualNetwork.mount(testRealm.handle);
 
         let matrixClient = new MatrixClient({
+          serverName: 'localhost',
           matrixURL: realmServerTestMatrix.url,
           username: realmServerTestMatrix.username,
           seed: realmSecretSeed,

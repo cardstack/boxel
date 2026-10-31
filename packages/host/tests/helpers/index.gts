@@ -153,6 +153,7 @@ type ModuleHooks = {
 // homeserver, so it has to match whichever stack is actually running.
 const baseTestMatrix = {
   url: new URL(ENV.matrixURL),
+  serverName: 'localhost',
   username: 'test_realm',
   password: 'password',
 };
@@ -1621,6 +1622,7 @@ async function setupTestRealm({
         new URL(realmURL),
         user,
         baseTestMatrix.url.href,
+        baseTestMatrix.serverName,
       );
     setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });
     if (mockMatrixUtils.loggedInAs) {
@@ -1637,6 +1639,7 @@ async function setupTestRealm({
     queuePublisher: queue,
     virtualNetwork,
     matrixURL: baseTestMatrix.url,
+    matrixServerName: baseTestMatrix.serverName,
     secretSeed: testRealmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer: localIndexer.prerenderer,
@@ -1653,6 +1656,7 @@ async function setupTestRealm({
       queue,
       matrixClient: new MatrixClient({
         matrixURL: baseTestMatrix.url,
+        serverName: baseTestMatrix.serverName,
         username: testRealmServerMatrixUsername,
         seed: testRealmSecretSeed,
       }),

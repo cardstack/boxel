@@ -3,6 +3,11 @@ import { uint8ArrayToHex } from './index.ts';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm.ts';
 import { APP_BOXEL_REALM_EVENT_ROOM_TYPE } from './matrix-constants.ts';
 import type { MatrixEvent } from '@cardstack/base/matrix-event';
+import {
+  federationBaseURLs,
+  isMatrixServerName,
+  isUserOfMatrixServer,
+} from './matrix-server-name.ts';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
 
@@ -94,9 +99,24 @@ export interface MatrixAccess {
   userId: string;
 }
 
+// How long a federation `openid/userinfo` request to another server's
+// homeserver waits for an answer before the next discovered URL is tried.
+const OPENID_USERINFO_TIMEOUT_MS = 10_000;
+
 export class MatrixClient {
   readonly matrixURL: URL;
   readonly username: string;
+  // The name of the Matrix server this client's user is on: the `:server`
+  // suffix of every user id the homeserver issues. Configured, because Matrix
+  // delegation lets it differ from the homeserver's hostname (ADR 004 §1.2);
+  // login checks that the homeserver agrees.
+  readonly serverName: string;
+  // The other homeservers whose OpenID tokens this client verifies, by
+  // server name. A token naming a server outside this list is refused before
+  // that server is looked up, so an unauthenticated caller cannot make the
+  // realm server send requests to a host of their choosing. Empty by default:
+  // federation is configured, not open (ADR 004 §1.4).
+  readonly federationAllowlist: ReadonlySet<string>;
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
@@ -110,19 +130,30 @@ export class MatrixClient {
     username,
     password,
     seed,
+    serverName,
+    federationAllowlist = [],
   }: {
     matrixURL: URL;
     username: string;
     password?: string;
     seed?: string;
+    serverName: string;
+    federationAllowlist?: string[];
   }) {
     if (!password && !seed) {
       throw new Error(
         `Either password or a seed must be specified when creating a matrix client`,
       );
     }
+    if (!isMatrixServerName(serverName)) {
+      throw new Error(
+        `${JSON.stringify(serverName)} is not a Matrix server name`,
+      );
+    }
     this.matrixURL = matrixURL;
     this.username = username;
+    this.serverName = serverName;
+    this.federationAllowlist = new Set(federationAllowlist);
     this.password = password;
     this.seed = seed;
   }
@@ -253,6 +284,11 @@ export class MatrixClient {
       device_id: deviceId,
       user_id: userId,
     } = json;
+    if (!isUserOfMatrixServer(userId, this.serverName)) {
+      throw new Error(
+        `the homeserver at ${this.matrixURL.href} names ${this.username} ${userId}, who is not a user of the configured Matrix server ${this.serverName}`,
+      );
+    }
     this.access = { accessToken, deviceId, userId };
   }
 
@@ -644,29 +680,70 @@ export class MatrixClient {
     }
   }
 
-  async verifyOpenIdToken(openIdToken: string): Promise<string | undefined> {
-    const url = `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(
+  // The user an OpenID token vouches for, asked of the homeserver that issued
+  // it: the one named by the token's `matrix_server_name` (ADR 004 §1.3). The
+  // paired homeserver is asked at this client's URL; any other server is
+  // found by Matrix server discovery, and only when `federationAllowlist`
+  // names it. Undefined when the server is neither the paired one nor
+  // allowlisted, when the token is refused, when no server so named can be
+  // reached, or when the user it vouches for is not a user of that server:
+  // the name is the caller's claim, and a server may only vouch for its own
+  // users.
+  async verifyOpenIdToken(
+    openIdToken: string,
+    matrixServerName: string = this.serverName,
+  ): Promise<string | undefined> {
+    if (!isMatrixServerName(matrixServerName)) {
+      return undefined;
+    }
+    const path = `_matrix/federation/v1/openid/userinfo?access_token=${encodeURIComponent(
       openIdToken,
     )}`;
-    const response = await this.request(url, 'GET', undefined, false);
-    let json:
-      | {
-          sub: string;
+    let paired = matrixServerName === this.serverName;
+    if (!paired && !this.federationAllowlist.has(matrixServerName)) {
+      return undefined;
+    }
+    let response: Response | undefined;
+    if (paired) {
+      response = await this.request(path, 'GET', undefined, false);
+    } else {
+      for (let baseURL of await federationBaseURLs(matrixServerName)) {
+        try {
+          response = await fetch(`${baseURL}${path}`, {
+            signal: AbortSignal.timeout(OPENID_USERINFO_TIMEOUT_MS),
+          });
+          break;
+        } catch {
+          // unreachable at this URL; try the next one discovery names
         }
-      | undefined;
+      }
+      if (!response) {
+        return undefined;
+      }
+    }
+    let json: { sub?: unknown } | undefined;
     const text = await response.text();
     try {
       json = JSON.parse(text);
     } catch (e) {
+      if (!paired) {
+        return undefined;
+      }
       throw new Error(
-        `unable to parse response from ${url}, response was not JSON: ${text}`,
+        `unable to parse response from ${path}, response was not JSON: ${text}`,
       );
     }
     if (!json || !response.ok) {
       return undefined;
-    } else {
-      return json.sub;
     }
+    let { sub } = json;
+    if (
+      typeof sub !== 'string' ||
+      !isUserOfMatrixServer(sub, matrixServerName)
+    ) {
+      return undefined;
+    }
+    return sub;
   }
 
   async isTokenValid() {
@@ -794,14 +871,10 @@ export async function passwordFromSeed(username: string, seed: string) {
   return uint8ArrayToHex(await hash.digest());
 }
 
-export function userIdFromUsername(username: string, matrixURL: string) {
-  let hostname = new URL(matrixURL).hostname;
-  // For *.localhost subdomains (environment mode), the Matrix server_name is
-  // always "localhost" — the subdomains are just Traefik routing labels.
-  let host = hostname.endsWith('.localhost')
-    ? 'localhost'
-    : hostname.split('.').slice(-2).join('.');
-  return `@${username}:${host}`;
+// The full Matrix user id of a localpart on the server named `serverName`,
+// which is the configured server name (ADR 004 §1.2), never a hostname.
+export function userIdFromUsername(username: string, serverName: string) {
+  return `@${username}:${serverName}`;
 }
 
 // Whether the text is a full Matrix user id: `@localpart:server`, the
@@ -818,10 +891,12 @@ export function isMatrixUserId(text: string): boolean {
   );
 }
 
-export function ensureFullMatrixUserId(userId: string, matrixURL: string) {
+// `userId` as a full Matrix user id: itself when it is one, otherwise the
+// localpart it names on the server named `serverName`.
+export function ensureFullMatrixUserId(userId: string, serverName: string) {
   if (userId.startsWith('@') && userId.includes(':')) {
     return userId;
   }
   userId = userId.replace(/^@/, '').replace(/:.*$/, '');
-  return userIdFromUsername(userId, matrixURL);
+  return userIdFromUsername(userId, serverName);
 }

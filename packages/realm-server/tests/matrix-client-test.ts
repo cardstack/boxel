@@ -20,6 +20,7 @@ module(basename(import.meta.filename), function () {
 
     function makeClient() {
       return new MatrixClient({
+        serverName: 'localhost',
         matrixURL,
         username: 'test_realm',
         seed: realmSecretSeed,
@@ -65,6 +66,7 @@ module(basename(import.meta.filename), function () {
         registrationSecret: matrixRegistrationSecret,
       });
       let client = new MatrixClient({
+        serverName: 'localhost',
         matrixURL,
         username,
         password: 'password',

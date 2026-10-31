@@ -57,6 +57,7 @@ import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
 import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
+import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 
 let log = logger('worker');
 
@@ -264,6 +265,7 @@ let autoMigrate = migrateDB || undefined;
     queue,
     virtualNetwork,
     matrixURL: new URL(matrixURL),
+    matrixServerName: matrixServerNameFromEnv(),
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
     reportProgress,

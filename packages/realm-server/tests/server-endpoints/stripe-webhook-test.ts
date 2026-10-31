@@ -84,6 +84,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         user = await insertUser(dbAdapter, userId!, 'cus_123', 'user@test.com');
 
         matrixClient = new MatrixClient({
+          serverName: 'localhost',
           matrixURL: realmServerTestMatrix.url,
           username: 'test_realm',
           seed: realmSecretSeed,

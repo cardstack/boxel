@@ -141,27 +141,31 @@ export async function fetchRealmPermissions(
  * One user's effective permissions in one realm — what `Realm#checkPermission`
  * will compute for them, so this is the set to mint a session token from.
  *
- * Takes a homeserver URL rather than a matrix client because the callers that
- * need it most are worker tasks, which run in a child process that holds no
- * client. The URL is used only to resolve a `users` grant, and only when the
- * realm actually carries one.
+ * Takes a homeserver URL and the paired homeserver's server name rather than
+ * a matrix client because the callers that need it most are worker tasks,
+ * which run in a child process that holds no client. The URL is used only to
+ * resolve a `users` grant, and only when the realm actually carries one and
+ * the user is on the paired homeserver (ADR 004 §1.4).
  */
 export async function fetchEffectiveRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
   username: string,
   matrixURL: string,
+  matrixServerName: string,
 ): Promise<RealmAction[]> {
   let realmPermissions = await fetchRealmPermissions(dbAdapter, realmURL);
   return await effectiveRealmPermissions(
     realmPermissions,
     username,
+    matrixServerName,
     async () => !!(await fetchMatrixProfile(new URL(matrixURL), username)),
   );
 }
 
 // The permission rows that grant to many accounts at once: `*` (everyone,
-// matrix account or not) and `users` (any registered matrix user).
+// matrix account or not) and `users` (any registered user of the paired
+// homeserver).
 const wildcardUsernames = new Set(['*', 'users']);
 
 // The platform's service accounts, by matrix localpart.
