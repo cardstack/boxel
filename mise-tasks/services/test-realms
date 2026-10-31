@@ -93,6 +93,7 @@ NODE_ENV=test \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
+  MATRIX_INVITE_CHECK_SECRET="shhh! it's a secret" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   node main.ts \

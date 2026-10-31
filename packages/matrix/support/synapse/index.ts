@@ -16,6 +16,7 @@ import { APP_BOXEL_REALMS_EVENT_TYPE } from '../matrix-constants.ts';
 import { appURL } from '../isolated-realm-server.ts';
 import {
   isEnvironmentMode,
+  getEnvironmentSlug,
   getSynapseContainerName,
   getSynapseURL,
   registerSynapseWithTraefik,
@@ -125,12 +126,32 @@ function isPortBindError(error: unknown): boolean {
   return /address already in use|port is already allocated/i.test(message);
 }
 
+// The URL at which the Synapse container reaches the realm server, for the
+// invite module (boxel_invite_check) to ask whether one user may invite
+// another. The realm server runs on the host. In standard mode it listens on
+// a fixed port, reached through Docker's name for the host. In environment
+// mode its port is dynamic and Traefik fronts it at a `.localhost` hostname
+// that the container can't resolve on its own, so `synapseDockerParams` maps
+// the URL's hostname to the host gateway, where Traefik listens.
+export function inviteCheckRealmServerURL(explicit?: string): string {
+  if (explicit) {
+    return explicit;
+  }
+  if (isEnvironmentMode()) {
+    return `https://realm-server.${getEnvironmentSlug()}.localhost`;
+  }
+  return 'https://host.docker.internal:4201';
+}
+
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
   options?: {
     publicBaseUrl?: string;
     port?: number;
+    // Where the invite module reaches the realm server from inside the
+    // container; see `inviteCheckRealmServerURL`.
+    realmServerURL?: string;
   },
 ): Promise<SynapseConfig> {
   const templateDir = path.join(import.meta.dirname, template);
@@ -166,6 +187,10 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
+  hsYaml = hsYaml.replace(
+    /{{INVITE_CHECK_REALM_SERVER_URL}}/g,
+    inviteCheckRealmServerURL(options?.realmServerURL),
+  );
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
   await writeTemplates(configDir);
@@ -196,6 +221,9 @@ interface StartOptions {
   containerName?: string;
   suppressRegistrationSecretFile?: true;
   dynamicHostPort?: true;
+  // Where the invite module reaches the realm server from inside the
+  // container. Defaults as `inviteCheckRealmServerURL` describes.
+  realmServerURL?: string;
 }
 
 // Build the `docker run` flags for a Synapse container.
@@ -213,15 +241,30 @@ export function synapseDockerParams(args: {
   ownerPid: number;
   ownerHost: string;
   runAsRoot?: boolean;
+  // Hostnames the container resolves to the host, besides Docker's own
+  // `host.docker.internal`: the one the realm server is reached at.
+  hostNames?: string[];
 }): string[] {
+  // `host.docker.internal` resolves on its own under Docker Desktop and
+  // OrbStack but not under Docker Engine on Linux, where only an explicit
+  // mapping to the host gateway provides it. Mapping it everywhere keeps the
+  // generated config the same on every host.
+  let hostNames = new Set(['host.docker.internal', ...(args.hostNames ?? [])]);
   return [
     '--rm',
+    ...[...hostNames].flatMap((name) => ['--add-host', `${name}:host-gateway`]),
     '--label',
     `${SYNAPSE_OWNER_LABEL}=${args.ownerPid}`,
     '--label',
     `${SYNAPSE_OWNER_HOST_LABEL}=${args.ownerHost}`,
     '-v',
     `${args.configDir}:/data`,
+    // The templates load the invite module (boxel_invite_check) under
+    // `modules:`, so its directory has to be importable inside the container.
+    '-v',
+    `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
+    '-e',
+    'PYTHONPATH=/custom/modules',
     // When the host runs as root (e.g. the Claude-web cloud VM), the synapse
     // image would otherwise drop privileges to its default uid 991, which
     // cannot write the root-owned config dir mounted at /data. Telling the
@@ -412,6 +455,7 @@ export async function synapseStart(
     synCfg = await cfgDirFromTemplate(template, opts?.dataDir, {
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
+      realmServerURL: opts?.realmServerURL,
     });
     // On a host without IPv6, rewrite the generated config's listeners to bind
     // IPv4 only — synapse is reached via localhost:8008 in dev regardless, so
@@ -443,6 +487,9 @@ export async function synapseStart(
       ownerPid: process.pid,
       ownerHost: os.hostname(),
       runAsRoot: process.getuid?.() === 0,
+      hostNames: [
+        new URL(inviteCheckRealmServerURL(opts?.realmServerURL)).hostname,
+      ],
     });
 
     try {
@@ -450,7 +497,8 @@ export async function synapseStart(
         // If you bump this version, bump every other pin of this image with
         // it, so CI keeps caching it from the GHCR mirror and every test runs
         // the same version: .github/workflows/mirror-test-images.yml,
-        // .github/actions/warm-test-images/action.yml and
+        // .github/actions/warm-test-images/action.yml,
+        // packages/matrix/scripts/test-synapse-modules.sh and
         // .devcontainer/claude-web-setup.sh.
         image: 'matrixdotorg/synapse:v1.163.0',
         containerName,

@@ -51,6 +51,7 @@
     "test": "./scripts/test.sh",
     "test:cleanup": "./scripts/remove-test-dbs.sh",
     "test:group": "./scripts/test.sh",
+    "test:synapse-modules": "./scripts/test-synapse-modules.sh",
     "test:compact-synapse-db": "node --test scripts/compact-synapse-db.test.ts",
     "test:shard-assignment": "node --test support/shard-spec-files.test.ts",
     "wait": "sleep 10000000",

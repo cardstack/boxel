@@ -36,6 +36,36 @@ log_config: "/data/log.config"
 presence:
   enabled: false
 
+# Boxel reveals a user's Matrix id only to users who share a realm with them
+# (ADR 011 §1.6), so the homeserver lets no one find or confirm another user
+# by other means: no user directory, a profile only to an authenticated user
+# who shares a room with its subject and never over federation, and no
+# profile data in an invite. The invite module below keeps the room rule.
+user_directory:
+  enabled: false
+require_auth_for_profile_requests: true
+# Synapse refuses to start with this on and require_auth_for_profile_requests
+# off.
+limit_profile_requests_to_users_who_share_rooms: true
+include_profile_data_on_invite: false
+allow_profile_lookup_over_federation: false
+
+# Rejects an invite between two end users who share no realm (ADR 011 §1.5,
+# §1.6) by asking the realm server, which holds the grants. The realm server
+# reads the same secret from MATRIX_INVITE_CHECK_SECRET. An invite from or to
+# a service user is allowed without asking.
+modules:
+  - module: boxel_invite_check.BoxelInviteCheck
+    config:
+      realm_server_url: "{{INVITE_CHECK_REALM_SERVER_URL}}"
+      shared_secret: "shhh! it's a secret"
+# The realm server the module calls terminates TLS with a locally issued
+# development certificate this container doesn't trust, so Synapse's outbound
+# HTTP client skips certificate verification. Development and test only: a
+# deployed homeserver reaches a realm server with a public certificate and
+# leaves this unset.
+use_insecure_ssl_client_just_for_testing_do_not_use: true
+
 retention:
   enabled: true
 
@@ -56,9 +86,8 @@ rc_joins_per_room:
   burst_count: 9999
 # Rooms are created per user: the realm server's Matrix user creates a
 # session room on each user's first sign-in, and the host creates a room for
-# every new AI assistant chat. The realm server also looks up profiles
-# without an access token. So neither room creation nor profile lookups are
-# limited here.
+# every new AI assistant chat. The host also reads the user's own profile on
+# every load. So neither room creation nor profile lookups are limited here.
 rc_room_creation:
   per_second: 10000
   burst_count: 10000
