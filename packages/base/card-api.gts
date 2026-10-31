@@ -1903,6 +1903,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           typeConstraint?: ResolvedCodeRef;
           lockConsumingRealm?: boolean;
           consumingRealm?: URL;
+          interactions?: CardInteractions;
         };
       };
       Blocks: {};
@@ -1948,6 +1949,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                       isFileDefField
                     }}
                     @displayContainer={{@displayContainer}}
+                    @interactions={{@interactions}}
                     ...attributes
                   />
                 {{/let}}
