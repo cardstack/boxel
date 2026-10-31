@@ -17,6 +17,11 @@
 // through OAuth: the `connected` page hands it the service's one-use code and
 // the sign-in's `state`, or why there is none, and the CLI finishes the
 // sign-in with its own secure session. No session leaves this window for it.
+//
+// `boxel keys approve` and `boxel keys swap` wait here too, when their change
+// grants a key a destination it has none for: that is confirmed in this
+// window, under its own session, and the page tells the CLI only that it
+// ended (`window: 'done'`). The CLI reads what changed from the realm server.
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const STATE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -75,19 +80,24 @@ export function cliCallback(
  * What a hand-off carries: a secure session, a login token, or both; or the
  * end of an OAuth sign-in the CLI started.
  * @typedef {{ code: string, state: string } | { error: string }} OAuthOutcome
- * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome }} Handoff
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string, oauth?: OAuthOutcome, window?: 'done' | 'cancelled' }} Handoff
  */
 
 // What the CLI's listener is sent: the state it expects back, the login
 // token for a profile sign-in, the secure session when the CLI takes one, and
-// for an OAuth sign-in its code and state or the reason it ended without one.
+// for an OAuth sign-in its code and state or the reason it ended without one,
+// and for a change finished here, how it ended.
 /**
  * @param {CliCallback} callback
  * @param {Handoff} handoff
  */
-export function handoffFields(callback, { session, loginToken, oauth }) {
+export function handoffFields(
+  callback,
+  { session, loginToken, oauth, window },
+) {
   return [
     ['state', callback.state],
+    ...(window ? [['window_outcome', window]] : []),
     ...(oauth
       ? 'error' in oauth
         ? [['oauth_error', oauth.error]]

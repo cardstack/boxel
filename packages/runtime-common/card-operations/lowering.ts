@@ -26,6 +26,7 @@ import {
 } from './types.ts';
 import type {
   LowerOperationDeclarationsResult,
+  OperationCallApi,
   OperationDefinition,
   OperationLoweringIssue,
   OperationLoweringIssueCode,
@@ -638,10 +639,10 @@ async function lowerOperation(
     }
   }
   if (base === 'callApi') {
-    let request = lowerCallApi(
+    let request = lowerCallApiRequest(
       declaration as CallApiClauses,
+      paramNames,
       sink,
-      (value, path) => templateOf(value, { path, paramNames, sink }),
     );
     if (request) {
       operation.callApi = request;
@@ -1518,7 +1519,7 @@ function checkParamKey(
   key: string,
   paramNames: Set<string>,
   path: string,
-  sink: IssueSink,
+  sink: Pick<IssueSink, 'add'>,
 ) {
   if (!paramNames.has(key)) {
     sink.add(
@@ -1682,7 +1683,7 @@ async function lowerCreate(
 interface TemplateSlot {
   path: string;
   paramNames: Set<string>;
-  sink: IssueSink;
+  sink: Pick<IssueSink, 'add'>;
   // Whether the slot this fills is a link field, which is the one thing a
   // template's shape does not say for itself: a marker is carried through as
   // data, so what it stands for is decided by the field it lands in.
@@ -1691,6 +1692,21 @@ interface TemplateSlot {
   // resolved. A `create` reads the card it was invoked from; an append reads
   // nothing, so an `instance(…)` under one never resolves.
   reads?: boolean;
+}
+
+// A `callApi` declaration's request, lowered and checked as indexing lowers
+// it: `lowerCallApi`, with each value lowered as every other clause's values
+// are. `paramNames` are the keys its `params` schema declares. `boxel lint`
+// runs the same checks over a declaration read from source
+// (`tasks/lint-call-api.ts`), so it reports what indexing would.
+export function lowerCallApiRequest(
+  declaration: CallApiClauses,
+  paramNames: Set<string>,
+  sink: Pick<IssueSink, 'add'>,
+): OperationCallApi | undefined {
+  return lowerCallApi(declaration, sink, (value, path) =>
+    templateOf(value, { path, paramNames, sink }),
+  );
 }
 
 function templateOf(value: unknown, slot: TemplateSlot): OperationTemplate {

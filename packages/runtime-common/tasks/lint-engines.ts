@@ -10,6 +10,7 @@ import { delimiter, extname, resolve } from 'node:path';
 import type { LintMessage, LintResult } from './lint.ts';
 
 import { resolvePrettierConfig } from '../prettier-config.ts';
+import { callApiLintPlugin } from './lint-call-api.ts';
 
 // ---------------------------------------------------------------------------
 // Host config — single source of truth shared with `pnpm run lint`
@@ -75,8 +76,11 @@ async function initESLint(): Promise<any> {
     // Submission/realm files are in-memory; don't apply host's .eslintignore
     // to them.
     ignore: false,
+    // Rules that run lowering's own code, so they live beside it rather than
+    // in the published ESLint plugin.
+    plugins: { '@cardstack/boxel-operations': callApiLintPlugin },
     overrideConfig: {
-      plugins: ['@cardstack/boxel'],
+      plugins: ['@cardstack/boxel', '@cardstack/boxel-operations'],
       rules: {
         // Prettier runs as a separate pass after ESLint (see lintOne); folding
         // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
@@ -117,6 +121,8 @@ async function initESLint(): Promise<any> {
         '@cardstack/boxel/no-css-position-fixed': 'warn',
         '@cardstack/boxel/no-forbidden-head-tags': 'warn',
         '@cardstack/boxel/no-literal-realm-urls': 'error',
+        '@cardstack/boxel-operations/call-api': 'error',
+        '@cardstack/boxel-operations/call-api-advice': 'warn',
       },
     },
   });

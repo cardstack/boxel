@@ -11,6 +11,7 @@ import {
   readKeyValue,
   type KeyValueSource,
 } from '../../lib/key-value.ts';
+import { destinationCovers } from '@cardstack/runtime-common/card-operations/call-api';
 import { openBrowser } from '../../lib/open-browser.ts';
 import { prompt } from '../../lib/prompt.ts';
 import {
@@ -46,6 +47,7 @@ import {
   type ServiceAccountDetails,
   type UserKeyMetadata,
 } from '../../lib/user-keys.ts';
+import { finishInSecureWindow, windowTimeout } from './approve.ts';
 
 // The commands that manage the signed-in user's own keys and the shares that
 // put them into realms. Keys belong to the user, so only the share commands
@@ -83,7 +85,7 @@ export interface KeysCommandDeps {
   confirmFn?: (question: string) => Promise<boolean>;
 }
 
-interface Context {
+export interface Context {
   pm: ProfileManager;
   realmServerUrl: string;
   matrixUserId: string;
@@ -91,7 +93,10 @@ interface Context {
   deps: KeysCommandDeps;
 }
 
-function context(json: boolean | undefined, deps: KeysCommandDeps): Context {
+export function context(
+  json: boolean | undefined,
+  deps: KeysCommandDeps,
+): Context {
   let pm = deps.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
@@ -108,7 +113,7 @@ function context(json: boolean | undefined, deps: KeysCommandDeps): Context {
 
 // Progress for people. Under `--json` it goes to stderr, keeping stdout for
 // the JSON.
-function say(ctx: Context, message: string): void {
+export function say(ctx: Context, message: string): void {
   if (ctx.json) {
     console.error(message);
   } else {
@@ -116,7 +121,7 @@ function say(ctx: Context, message: string): void {
   }
 }
 
-function emit(ctx: Context, value: unknown, print: () => void): void {
+export function emit(ctx: Context, value: unknown, print: () => void): void {
   if (ctx.json) {
     cliLog.output(JSON.stringify(value, null, 2));
   } else {
@@ -165,7 +170,7 @@ export async function signInToManageKeys(
 // The profile's secure session, checked with the realm server, which ends
 // one early on sign-out or a password change. Without a live one, signs in
 // through the browser when someone is there to, and refuses otherwise.
-async function secureToken(ctx: Context): Promise<string> {
+export async function secureToken(ctx: Context): Promise<string> {
   let stored = ctx.pm.getSecureSession();
   if (stored) {
     try {
@@ -196,7 +201,7 @@ async function secureToken(ctx: Context): Promise<string> {
   return session.token;
 }
 
-async function ordinaryToken(ctx: Context): Promise<string> {
+export async function ordinaryToken(ctx: Context): Promise<string> {
   return await ctx.pm.getOrRefreshServerToken();
 }
 
@@ -660,7 +665,10 @@ export async function keysReplace(
   return key;
 }
 
-async function confirm(ctx: Context, question: string): Promise<boolean> {
+export async function confirm(
+  ctx: Context,
+  question: string,
+): Promise<boolean> {
   if (ctx.deps.confirmFn) {
     return await ctx.deps.confirmFn(question);
   }
@@ -754,18 +762,67 @@ export async function keysUnshare(
   return share;
 }
 
+// A swap moves every operation approved for the share to the new key, which
+// grants the key each destination they send to. A swap whose key already has
+// a grant covering each of them is made here; one that grants it a new
+// destination is confirmed in the secure window's swap page, as an approval
+// that does is (see `approve.ts`).
 export async function keysSwap(
   label: string,
-  options: { realm: string; key: string; json?: boolean } & KeysCommandDeps,
+  options: {
+    realm: string;
+    key: string;
+    timeout?: string;
+    json?: boolean;
+  } & KeysCommandDeps,
 ): Promise<KeyShare> {
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, options.key);
-  let share = await swapKeyIntoShare(ctx.realmServerUrl, token, {
-    realm: options.realm,
-    label,
-    keyId: key.id,
-  });
+  let listed = (
+    await listRealmShares(ctx.realmServerUrl, token, options.realm)
+  ).find((s) => s.label === label);
+  let grants = (key.grants ?? []).filter((g) => g.state !== 'rejected');
+  let uncovered = [
+    ...new Set(
+      (listed?.operations ?? [])
+        .map((o) => o.destination)
+        .filter(
+          (d): d is string =>
+            d !== undefined &&
+            !grants.some((g) => destinationCovers(g.destination, d)),
+        ),
+    ),
+  ];
+  let share: KeyShare;
+  if (listed && listed.state === 'suspended' && uncovered.length > 0) {
+    let hosts = uncovered.map((d) => new URL(d).host).join(', ');
+    say(
+      ctx,
+      `${label} is approved for requests to ${hosts}, which ${key.name} has no grant for.`,
+    );
+    await finishInSecureWindow(ctx, {
+      page: 'swap-key',
+      fragment: { realm: listed.realm, share: listed.id, key: key.id },
+      what: `sending ${key.name} to ${hosts}`,
+      timeoutMs: windowTimeout(options.timeout),
+    });
+    let after = (
+      await listRealmShares(ctx.realmServerUrl, token, options.realm)
+    ).find((s) => s.id === listed.id);
+    if (!after || after.state !== 'active' || after.keyId !== key.id) {
+      throw new Error(
+        `The secure window closed without putting ${key.name} into ${label}`,
+      );
+    }
+    share = after;
+  } else {
+    share = await swapKeyIntoShare(ctx.realmServerUrl, token, {
+      realm: options.realm,
+      label,
+      keyId: key.id,
+    });
+  }
   emit(ctx, share, () => {
     console.log(
       `${FG_GREEN}${share.label} in ${share.realm} now holds ${key.name}.${RESET}`,

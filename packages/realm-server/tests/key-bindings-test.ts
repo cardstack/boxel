@@ -772,9 +772,10 @@ module(basename(import.meta.filename), function (hooks) {
           instance: null,
           slot: 'apiKey',
           state: 'active',
+          destination: `${VENDOR}/echo/`,
         },
       ],
-      "the realm's writers see what the share is approved for",
+      "the realm's writers see what the share is approved for, and where it sends",
     );
 
     await dbAdapter.execute(

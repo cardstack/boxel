@@ -678,6 +678,26 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // The realm, among those the active profile holds a token for, that serves
+  // `url`: the longest whose URL `url` starts with.
+  async realmUrlFor(url: string): Promise<string | undefined> {
+    let find = () =>
+      Object.entries(this.getActiveProfile()?.profile.realmTokens ?? {})
+        .filter(([realmUrl, token]) => token && url.startsWith(realmUrl))
+        .map(([realmUrl]) => realmUrl)
+        .sort((a, b) => b.length - a.length)[0];
+    let found = find();
+    if (found) {
+      return found;
+    }
+    try {
+      await this.fetchAndStoreAllRealmTokens();
+    } catch {
+      return undefined;
+    }
+    return find();
+  }
+
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {

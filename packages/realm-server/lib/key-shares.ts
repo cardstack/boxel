@@ -86,6 +86,10 @@ export interface KeyShareOperation {
   instance: string | null;
   slot: string;
   state: 'active' | 'needs-reapproval' | 'suspended';
+  // Where it sends, as last approved: the destination a key swapped into the
+  // share is granted for it, so a swapper can tell beforehand which of them
+  // their key has no grant for.
+  destination: string;
 }
 
 export interface KeyShareNotice {
@@ -703,12 +707,14 @@ export async function listRealmShares(
   let operations = new Map<string, KeyShareOperation[]>();
   if (rows.length > 0) {
     let bindings = await query(dbAdapter, [
-      `SELECT id, share_id, definition_url, export_name, operation_name, instance_url, slot, state FROM key_bindings WHERE share_id IN (`,
+      `SELECT b.id, b.share_id, b.definition_url, b.export_name, b.operation_name, b.instance_url, b.slot, b.state, last.destination
+         FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
+        WHERE b.share_id IN (`,
       ...rows.flatMap((row, i) => [
         ...(i > 0 ? [', '] : []),
         param(row.id as string),
       ]),
-      `) ORDER BY definition_url, export_name, operation_name, instance_url NULLS FIRST, slot`,
+      `) ORDER BY b.definition_url, b.export_name, b.operation_name, b.instance_url NULLS FIRST, b.slot`,
     ]);
     for (let binding of bindings) {
       let shareId = binding.share_id as string;
@@ -723,6 +729,7 @@ export async function listRealmShares(
         instance: (binding.instance_url as string | null) ?? null,
         slot: binding.slot as string,
         state: binding.state as KeyShareOperation['state'],
+        destination: binding.destination as string,
       });
       operations.set(shareId, list);
     }
