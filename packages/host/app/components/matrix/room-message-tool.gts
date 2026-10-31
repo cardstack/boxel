@@ -473,8 +473,6 @@ interface Signature {
     // A failed call the assistant has since retried with a call that
     // succeeded: it settles to "retried below" instead of staying red.
     isSuperseded?: boolean;
-    // the row stands for this many identical finished calls in a row
-    foldCount?: number;
   };
 }
 
@@ -911,9 +909,6 @@ export default class RoomMessageTool extends Component<Signature> {
       return description && description.trim() !== this.askQuestion.trim()
         ? plainTitle(description)
         : 'Your pick';
-    }
-    if (this.args.foldCount && this.args.foldCount > 1) {
-      return `${humanizeToolName(this.baseName)} ×${this.args.foldCount}`;
     }
     // a check names the file it checked, as the board does: "Checked
     // relaunch.gts", not the tool's sentence about a path
