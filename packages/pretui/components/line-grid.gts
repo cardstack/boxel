@@ -5,7 +5,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import { eq } from '../internal/template-helpers';
+import { eq } from '../helpers';
 import { AmountInput } from './amount-input';
 import { Combobox, type ComboboxOption } from './combobox';
 import { Input } from './input';

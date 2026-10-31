@@ -5,7 +5,7 @@ import { precompileTemplate } from "@ember/template-compilation";
 import { setComponentTemplate } from "@ember/component";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
-import { add, element, eq, lt } from "../../internal/template-helpers";
+import { add, element, eq, lt } from "../../helpers";
 import { ExclamationCircle, FailureBordered, LoadingIndicator, SuccessBordered, Warning } from "../../internal/surfaces-icons";
 import { guidFor } from "@ember/object/internals";
 import { cached, tracked } from "@glimmer/tracking";

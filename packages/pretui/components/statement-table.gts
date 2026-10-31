@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
-import { eq } from '../internal/template-helpers';
+import { eq } from '../helpers';
 import { FormatNumber } from './format-number';
 import { formatNumber, toNumber } from '../internal/reading-format';
 import { Button } from './button';

@@ -88,10 +88,9 @@ import {
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 
-// Helpers (template helpers — used as {{eq ...}}, {{cn ...}}, etc.)
+// Template helpers — used as {{eq ...}}, {{and ...}}, etc.
 import {
   eq,
-  cn,
   gt,
   gte,
   lt,
@@ -101,8 +100,9 @@ import {
   or,
   multiply,
   add,
-} from '@cardstack/boxel-ui/helpers';
+} from '@cardstack/pretui/helpers';
 import {
+  cn,
   formatDateTime,
   formatNumber,
   formatCurrency,

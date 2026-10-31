@@ -18,6 +18,7 @@ components/button.md           the component's write-up
 components/button.usage.gts    the component's usage page (knobs + API docs)
 components/button.examples.gts the component's example gallery
 internal/<module>.gts          helpers shared by several components, not components themselves
+helpers.gts                    template helpers for host and cards (eq, and, add, element, …)
 pretui-primitives.gts          shared axis types and resolvers
 pretui-component.gts           PretUISpec, the kit's Spec card
 docs/catalog-taxonomy.md       how each component is classified: category, tier, tags

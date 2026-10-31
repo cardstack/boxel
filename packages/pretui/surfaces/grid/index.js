@@ -10,7 +10,7 @@ import { modifier } from "ember-modifier";
 import { action } from "@ember/object";
 import { on } from "@ember/modifier";
 import { concat, fn, hash } from "@ember/helper";
-import { add, element, eq, lt } from "../../internal/template-helpers";
+import { add, element, eq, lt } from "../../helpers";
 import { ExclamationCircle, FailureBordered, LoadingIndicator, SuccessBordered, Warning } from "../../internal/surfaces-icons";
 import { guidFor } from "@ember/object/internals";
 import { consume, provide } from "ember-provide-consume-context";

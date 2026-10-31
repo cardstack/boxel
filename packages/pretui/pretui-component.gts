@@ -27,7 +27,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
-import { not } from './internal/template-helpers';
+import { not } from './helpers';
 import StarIcon from '@cardstack/boxel-icons/star';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';

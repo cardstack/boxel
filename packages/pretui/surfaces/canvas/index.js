@@ -9,7 +9,7 @@ import { consume, provide } from "ember-provide-consume-context";
 import ContextProvider from "ember-provide-consume-context/components/context-provider";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
-import { add, element, eq, lt } from "../../internal/template-helpers";
+import { add, element, eq, lt } from "../../helpers";
 import { ExclamationCircle, FailureBordered, LoadingIndicator, SuccessBordered, Warning } from "../../internal/surfaces-icons";
 import { guidFor } from "@ember/object/internals";
 import { autoUpdate, computePosition, flip, hide, offset, shift } from "@floating-ui/dom";

@@ -1,6 +1,6 @@
 // Pretui — Table: the DataGrid shell as a yieldable primitive for custom tables.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { eq } from '../internal/template-helpers';
+import { eq } from '../helpers';
 
 // Table — the DataGrid shell as a yieldable primitive (added for the
 // freestyle dogfood pass: composite tables that need custom cell content —
