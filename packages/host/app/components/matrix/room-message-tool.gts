@@ -607,11 +607,18 @@ export default class RoomMessageTool extends Component<Signature> {
     });
     if (this.args.messageTool.toolResultFileDef) {
       isLoading = true;
+      let loadStartedAt = performance.now();
       this.args.messageTool.getCommandResultCard().then((result) => {
         isLoading = false;
-        if (!result && isTesting()) {
+        if (isTesting()) {
+          // A result card that names a saved card is loaded live from its
+          // realm when the store doesn't hold it yet, which is the slow leg of
+          // the chain a test waits on. The duration and branch tell a slow
+          // load apart from one that never finished.
           console.log(
-            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+            result
+              ? `[tool-result-card] result card for tool call ${this.args.messageTool.toolRequest.id} loaded in ${Math.round(performance.now() - loadStartedAt)}ms (realm card: ${result.isRealmCard})`
+              : `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
           );
         }
         if (isTornDown || !result) {
