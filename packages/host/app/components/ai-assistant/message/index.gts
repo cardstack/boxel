@@ -737,23 +737,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .content
         > :deep(
-          .room-message-tool:has(> .pretui-toolrow:not([data-framed]))
-            + .room-message-tool:has(> .pretui-toolrow:not([data-framed]))
+          .room-message-tool:not(.is-framed)
+            + .room-message-tool:not(.is-framed)
         ) {
         margin-top: 0;
       }
       /* a framed call is a box: it stands 8px off the call beside it, so
          two open boxes never touch */
-      .content
-        > :deep(
-          .room-message-tool:has(> .pretui-toolrow[data-framed])
-            + .room-message-tool
-        ),
-      .content
-        > :deep(
-          .room-message-tool
-            + .room-message-tool:has(> .pretui-toolrow[data-framed])
-        ) {
+      .content > :deep(.room-message-tool.is-framed + .room-message-tool),
+      .content > :deep(.room-message-tool + .room-message-tool.is-framed) {
         margin-top: var(--step-8, 8px);
       }
       /* Choreo's layers come first in a message's region and sit out of
@@ -763,6 +755,14 @@ export default class AiAssistantMessage extends Component<Signature> {
         margin-top: 0;
       }
 
+      /* a check right after a write is a step like any other: on the
+         rows' edge, at their size, 4px under the write as work parts are */
+      .ai-assistant-message.code-patch-correctness {
+        --pretui-toolrow-header-min-h: 1.5rem;
+        --pretui-toolrow-header-pad-block: 0.25rem;
+        --pretui-toolgroup-header-min-h: 1.5rem;
+        --pretui-toolgroup-header-pad-block: 0.25rem;
+      }
       .ai-assistant-message.code-patch-correctness
         .content
         > :deep(.room-message-tool.compact + .room-message-tool.compact) {
@@ -1206,24 +1206,15 @@ class AiAssistantConversation extends Component<AiAssistantConversationSignature
       }
       .ai-assistant-conversation-messages
         > :deep(
-          .from-assistant:has(.room-message-tool > .pretui-toolrow[data-framed])
+          .from-assistant:has(.room-message-tool.is-framed)
             + .work-part.meta-hidden
         ),
       .ai-assistant-conversation-messages
         > :deep(
           .from-assistant:has(.room-message-tool)
-            + .work-part.meta-hidden:has(
-              .room-message-tool > .pretui-toolrow[data-framed]
-            )
+            + .work-part.meta-hidden:has(.room-message-tool.is-framed)
         ) {
         margin-top: var(--step-8, 8px);
-      }
-      /* a check right after a write is a step like any other: on the
-         rows' edge, at their size, 4px under the write as work parts are */
-      .ai-assistant-conversation-messages
-        :deep(.code-patch-correctness .pretui-toolrow-header) {
-        min-height: 24px;
-        padding-block: 4px;
       }
 
       /* a part folded away is hidden at once; its region moves what is

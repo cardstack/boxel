@@ -1187,6 +1187,11 @@ export interface ToolRowSignature {
      * call recedes; a running, failed or needs-you call never does. It only
      * shows inside a container that sets --pretui-recede-opacity */
     recede?: boolean;
+    /* Knobs a container sets on the row's class:
+     * --pretui-toolrow-settled-pill-ink / --pretui-toolrow-settled-pill-weight
+     *   the color and weight of card pills in a settled row
+     * --pretui-toolrow-header-pad-block / --pretui-toolrow-header-min-h
+     *   the header's block padding and least height (0.4375rem, 2rem) */
     /** how much of the transcript the call claims. It sets `data-density`;
      * the row says it through its frame (@framed), never with a label */
     density?: ToolDensity;
@@ -1790,6 +1795,16 @@ export class ToolRow extends Component<ToolRowSignature> {
           > .pretui-toolrow-row {
           opacity: 1;
         }
+        /* a settled row hands its card pills the ink and weight its
+           container names for them, so they recede with the row instead
+           of standing out bright over it. Unset, the settled values are
+           invalid and the pills fall back to their own knobs */
+        .pretui-toolrow[data-recede] {
+          --pretui-cardpill-settled-ink: var(--pretui-toolrow-settled-pill-ink);
+          --pretui-cardpill-settled-weight: var(
+            --pretui-toolrow-settled-pill-weight
+          );
+        }
         /* an open row has room to say all of it, and a row that needs the
            reader says all of what it asks: its title wraps */
         .pretui-toolrow:is([data-open='true'], [data-tone='attention'])
@@ -1814,8 +1829,9 @@ export class ToolRow extends Component<ToolRowSignature> {
           display: flex;
           align-items: flex-start;
           gap: var(--pretui-toolrow-gap);
-          padding: 0.4375rem var(--pretui-toolrow-inset);
-          min-height: 2rem;
+          padding: var(--pretui-toolrow-header-pad-block, 0.4375rem)
+            var(--pretui-toolrow-inset);
+          min-height: var(--pretui-toolrow-header-min-h, 2rem);
           box-sizing: border-box;
           border: 0;
           /* square: the row is the one box that rounds, and clips this */
