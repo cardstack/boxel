@@ -123,6 +123,7 @@ export default class Card extends Route {
   ) {
     if (this.hostModeService.isActive) {
       this.hostNavigation.adoptServedDoc();
+      this.hostNavigation.showingNotFound = false;
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
       // to a target card. When the path matches a serve rule, use the
@@ -168,6 +169,7 @@ export default class Card extends Route {
           return;
         }
         if (site && 'notFound' in site) {
+          this.hostNavigation.showingNotFound = true;
           // A path that serves nothing shows the site's not-found card, as
           // the server answers a document load with it and a 404.
           return this.store.get(site.notFound);

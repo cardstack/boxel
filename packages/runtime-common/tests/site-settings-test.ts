@@ -130,6 +130,26 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.strictEqual(problems.length, 2, problems.join('\n'));
   },
 
+  'readSiteSettings: a page type keeps a sort array and drops one that is not':
+    async (assert) => {
+      let { pageTypes, problems } = readSiteSettings(
+        {
+          pageTypes: [
+            pageType({ sort: '[{"by": "publishedOn", "direction": "desc"}]' }),
+            pageType({ name: 'Bad', sort: '{"by": "name"}' }),
+          ],
+        },
+        REALM,
+      );
+      assert.strictEqual(
+        pageTypes[0].sort,
+        '[{"by": "publishedOn", "direction": "desc"}]',
+      );
+      assert.strictEqual(pageTypes[1].sort, undefined);
+      assert.strictEqual(problems.length, 1, problems.join('\n'));
+      assert.true(problems[0].includes('sort is not a JSON array'));
+    },
+
   'readSiteSettings: page types past the cap are dropped and reported': async (
     assert,
   ) => {

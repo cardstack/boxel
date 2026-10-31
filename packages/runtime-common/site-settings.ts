@@ -35,6 +35,9 @@ export interface SitePageType {
   path: string;
   template?: PathTemplate;
   filter?: string;
+  // Boxel query sort JSON: which card wins when two share an address's
+  // values. Without it the search's own order decides.
+  sort?: string;
   // More addresses, as templates, that answer 301 to the card's page.
   aliasTemplates: PathTemplate[];
   listingPath?: string;
@@ -203,6 +206,14 @@ function readPageType(
     return undefined;
   }
 
+  let sort = str(t.sort);
+  if (sort && !isJSON(sort, 'array')) {
+    problems.push(
+      `${label}: sort is not a JSON array; the search's order decides`,
+    );
+    sort = undefined;
+  }
+
   let listingPath = str(t.listingPath);
   let listingSort = str(t.listingSort);
   if (listingPath) {
@@ -229,6 +240,7 @@ function readPageType(
     path,
     template,
     filter,
+    sort,
     aliasTemplates,
     listingPath,
     listingTitle: str(t.listingTitle),

@@ -70,6 +70,21 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a page that answers 404 carries no canonical link or og:url', function (assert) {
+    let head = siteRewriter({
+      requestMount: new URL('https://view.example/sites/owner/shop/'),
+      requestPath: '/no-such-page',
+      paths: PATHS,
+      canonical: false,
+      document: new JSDOM().window.document,
+    }).head(
+      `<title>Not found</title><link rel="canonical" href="${STORE}NotFoundPage/main">`,
+    );
+    assert.false(head.includes('rel="canonical"'), head);
+    assert.false(head.includes('og:url'), head);
+    assert.true(head.includes('<title>Not found</title>'), head);
+  });
+
   test('linkedCards lists each http(s) link target once, as a card key', function (assert) {
     let cards = linkedCards(
       '<a href="../Brand/cordell">A</a><a href="../Brand/cordell.json#x">B</a><a href="#top">C</a><a href="mailto:x@example.com">D</a>',

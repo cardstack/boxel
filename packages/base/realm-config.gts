@@ -439,6 +439,10 @@ export class SitePageTypeField extends FieldDef {
     description:
       "The address of a card's page, as a path template whose variables name the card's fields: /shop/{handle} or /c/{category.slug}/{slug}. A key the card derives is a computed field",
   });
+  @field sort = contains(StringField, {
+    description:
+      'Boxel query sort JSON deciding which card wins when two share an address, e.g. [{"by": "publishedOn", "direction": "desc"}]. Default: the search order',
+  });
   @field aliases = containsMany(StringField, {
     description:
       "More addresses, as path templates like path, that answer 301 to the card's page",

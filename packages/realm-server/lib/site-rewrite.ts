@@ -37,6 +37,9 @@ export function siteRewriter(opts: {
   // How this page looks when shared, from its page type: each value set
   // replaces the card's own og tag.
   share?: HostRouteShare;
+  // False for a page that answers 404: a missing address has no canonical
+  // form to point a search engine at.
+  canonical?: boolean;
   document: Document;
 }): SiteRewriter {
   let { requestMount, requestPath, document } = opts;
@@ -80,14 +83,16 @@ export function siteRewriter(opts: {
       )) {
         stale.remove();
       }
-      let canonical = at(canonicalMount, normalizeRoutingPath(requestPath));
-      let link = document.createElement('link');
-      link.setAttribute('rel', 'canonical');
-      link.setAttribute('href', canonical);
-      let og = document.createElement('meta');
-      og.setAttribute('property', 'og:url');
-      og.setAttribute('content', canonical);
-      template.content.append(link, og);
+      if (opts.canonical !== false) {
+        let canonical = at(canonicalMount, normalizeRoutingPath(requestPath));
+        let link = document.createElement('link');
+        link.setAttribute('rel', 'canonical');
+        link.setAttribute('href', canonical);
+        let og = document.createElement('meta');
+        og.setAttribute('property', 'og:url');
+        og.setAttribute('content', canonical);
+        template.content.append(link, og);
+      }
 
       let share = opts.share;
       let setMeta = (

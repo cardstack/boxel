@@ -161,6 +161,7 @@ export async function searchSiteCards(
   page: { number: number; size: number },
   deps: RealmRoutingDeps,
   requestHeaders?: RequestHeaders,
+  sort?: string,
 ): Promise<{ cards: RouteCard[]; total?: number }> {
   let source = await findOrMountRealm(new URL(pageType.sourceRealm), deps);
   if (!source) {
@@ -176,6 +177,7 @@ export async function searchSiteCards(
         filter: pageTypeWireFilter({ cardType: pageType.cardType, filter }),
         fields: { entry: ['item'] },
         page,
+        ...(sort ? { sort: wireSort(sort) } : {}),
       }),
     }),
   );
@@ -206,6 +208,24 @@ export async function searchSiteCards(
   return { cards, total: doc.meta?.page?.total };
 }
 
+// A page type's sort, written as a Boxel query sort, in the search wire format,
+// which addresses a card's fields through `item.`.
+function wireSort(sort: string): unknown[] {
+  return (JSON.parse(sort) as Record<string, unknown>[]).map((entry) => {
+    let out: Record<string, unknown> = {};
+    for (let [key, value] of Object.entries(entry)) {
+      if (key === 'by' && typeof value === 'string') {
+        out.by = value.startsWith('item.') ? value : `item.${value}`;
+      } else if (key === 'on') {
+        out['item.on'] = value;
+      } else {
+        out[key] = value;
+      }
+    }
+    return out;
+  });
+}
+
 function combine(
   pageType: SitePageType,
   clause: Record<string, unknown>,
@@ -228,6 +248,7 @@ export function siteSearch(
         { number: 0, size: limit },
         deps,
         requestHeaders,
+        pageType.sort,
       );
       if (cards.length > 1) {
         log.warn(

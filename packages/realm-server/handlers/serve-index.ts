@@ -1001,6 +1001,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         requestPath: `/${requestURL.pathname.slice(realmPathname.length)}`,
         paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
         share: servedShare,
+        canonical: ctxt.status !== 404,
         document: doc,
       });
       if (isolatedHTML != null) {

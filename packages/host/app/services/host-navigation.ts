@@ -506,10 +506,22 @@ export default class HostNavigationService extends Service {
   // The tags a shared link and a search engine read, for the page now
   // showing: the server writes them into the page a visitor first loads, and
   // they follow the visitor from there. The title is the page card's own.
+  // Set while the site's not-found card is showing for an address that
+  // serves nothing, which has no canonical form.
+  showingNotFound = false;
+
   private updateHead() {
     let snapshot = this.snapshot;
     let path = this.sitePath?.split('?')[0];
     if (!snapshot || !path) {
+      return;
+    }
+    if (this.showingNotFound) {
+      for (let stale of document.head.querySelectorAll(
+        'link[rel~="canonical"], meta[property="og:url"]',
+      )) {
+        stale.remove();
+      }
       return;
     }
     let share: HostRouteShare = {};

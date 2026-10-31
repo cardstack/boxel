@@ -29,6 +29,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(siteSettingsTests, assert, {});
   });
 
+  test('readSiteSettings: a page type keeps a sort array and drops one that is not', async function (assert) {
+    await runSharedTest(siteSettingsTests, assert, {});
+  });
+
   test('readSiteSettings: page types past the cap are dropped and reported', async function (assert) {
     await runSharedTest(siteSettingsTests, assert, {});
   });
