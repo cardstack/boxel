@@ -22,6 +22,11 @@ export const EVENT_FEED_PATH = '_live';
 // with a long cache lifetime only while `rev` is the card's current one.
 export const CARD_REVISION_PARAM = 'rev';
 
+// The header naming the feed's position on a read, and the range a write's
+// changes took on a write: `<epoch>:<seq>` or `<epoch>:<first>-<last>`
+// (ADR 020 §1.3).
+export const FEED_POSITION_HEADER = 'Boxel-Feed-Position';
+
 // A card's revision as its card+json validator names it: the ETag without its
 // quotes. The validator already changes whenever the document does, its link
 // closure and the server's assembly settings included, so a revision never
@@ -120,11 +125,13 @@ const CREATED: FeedOperation = { name: 'create', base: 'create' };
 const UPDATED: FeedOperation = { name: 'update', base: 'update' };
 const DELETED: FeedOperation = { name: 'delete', base: 'delete' };
 
-export function changesIn(
-  event: RealmEventContent,
-):
-  | { url: string; kind: FeedChangeKind; operation?: FeedOperation }[]
-  | 'reset' {
+interface FeedChange {
+  url: string;
+  kind: FeedChangeKind;
+  operation?: FeedOperation;
+}
+
+export function changesIn(event: RealmEventContent): FeedChange[] | 'reset' {
   switch (event.eventName) {
     case 'update': {
       // The write's own event names its files by their paths in the realm.
@@ -196,6 +203,9 @@ export class RealmEventFeed {
   #outbox: Omit<FeedEvent, 'seq'>[] = [];
   #appending: Promise<void> = Promise.resolve();
   #retryingReset = false;
+  // While an event is being judged its announcements wait, so they reach the
+  // store together and take one contiguous range of positions (ADR 020 §1.3).
+  #holding = false;
   // Poll reads this minute and last, for sizing a reset's spread.
   #polls = { minute: 0, count: 0, previous: 0 };
   #subscribers = new Set<(event: FeedEvent) => void>();
@@ -352,6 +362,21 @@ export class RealmEventFeed {
       return;
     }
     let types = feedTypes(event, this.realmURL);
+    this.#holding = true;
+    try {
+      await this.#judge(changes, types, operations);
+    } finally {
+      this.#holding = false;
+      this.#appending = this.#appending.then(() => this.#flush());
+    }
+    await this.#appending;
+  }
+
+  async #judge(
+    changes: FeedChange[],
+    types: string[] | undefined,
+    operations: Record<string, FeedOperation> | undefined,
+  ) {
     for (let change of changes) {
       let { url, kind } = change;
       let path = this.#pathOf(url);
@@ -389,7 +414,6 @@ export class RealmEventFeed {
         operation,
       );
     }
-    await this.#appending;
   }
 
   // The operation to name for a change: the one that wrote it, remembered
@@ -464,7 +488,46 @@ export class RealmEventFeed {
       ...(operation ? { operation } : {}),
       ...(spread ? { spread } : {}),
     });
-    this.#appending = this.#appending.then(() => this.#flush());
+    if (!this.#holding) {
+      this.#appending = this.#appending.then(() => this.#flush());
+    }
+  }
+
+  // Resolves once every event taken in so far is judged and recorded.
+  async settled(): Promise<void> {
+    await this.#queue;
+    await this.#appending;
+  }
+
+  // The position a response is stamped with: the feed's epoch and head.
+  async position(): Promise<string> {
+    await this.ready();
+    return `${this.#epoch}:${this.#seq}`;
+  }
+
+  // The range of positions announcing changes to `paths` after `after`, as
+  // an operation response names them: `<epoch>:<first>-<last>`, or the head
+  // when none of them was announced, since nothing the audience may read
+  // changed.
+  async positionOfChanges(paths: string[], after: number): Promise<string> {
+    await this.settled();
+    let wanted = new Set(paths.map((path) => path.replace(/\.json$/, '')));
+    let seqs = this.#events
+      .filter(
+        (event) =>
+          event.seq > after &&
+          event.kind !== 'indexed' &&
+          wanted.has(event.path),
+      )
+      .map((event) => event.seq);
+    if (seqs.length === 0) {
+      return `${this.#epoch}:${this.#seq}`;
+    }
+    let first = Math.min(...seqs);
+    let last = Math.max(...seqs);
+    return first === last
+      ? `${this.#epoch}:${first}`
+      : `${this.#epoch}:${first}-${last}`;
   }
 
   // Hands the waiting announcements to the store, which gives them their

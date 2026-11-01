@@ -4,6 +4,10 @@ import { settled } from '@ember/test-helpers';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import {
+  noteFeedPosition,
+  resetFeedPositionsForTests,
+} from '@cardstack/host/lib/feed-positions';
 import type EventFeedService from '@cardstack/host/services/event-feed';
 import {
   REFRESH_REQUESTED_EVENT,
@@ -155,6 +159,7 @@ module('Unit | Service | event-feed', function (hooks) {
 
   hooks.afterEach(function () {
     (globalThis as any).EventSource = originalEventSource;
+    resetFeedPositionsForTests();
   });
 
   function watch() {
@@ -224,6 +229,20 @@ module('Unit | Service | event-feed', function (hooks) {
       'a second subscriber shares the feed',
     );
     unsubscribe();
+  });
+
+  test("a realm's feed opens from the earliest position among the page's reads of it", function (assert) {
+    noteFeedPosition(`${REALM}QuizNight/lamb`, 'e1:7');
+    noteFeedPosition(`${REALM}HostDesk/lamb`, 'e1:3');
+    noteFeedPosition(`${REALM}QuizNight/lamb`, 'e1:9');
+    noteFeedPosition('http://elsewhere.test/other/Card/1', 'e9:1');
+    service.start();
+    watch();
+    assert.strictEqual(
+      FakeEventSource.made[0].url,
+      `${REALM}_live?lastEventId=${encodeURIComponent('e1:3')}`,
+      'a change made after the earliest read is replayed rather than missed',
+    );
   });
 
   test('nothing is opened until the service starts', function (assert) {

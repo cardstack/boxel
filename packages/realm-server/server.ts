@@ -978,8 +978,10 @@ export class RealmServer {
           // `_federated-search` response (miss/join/hit); expose it so the
           // outcome is legible to a browser caller (host DevTools, client
           // telemetry), not just to server-side supertest/curl.
+          // Boxel-Feed-Position is what a page opens the event feed from
+          // (ADR 020 §1.3).
           exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache',
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, Boxel-Feed-Position',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its

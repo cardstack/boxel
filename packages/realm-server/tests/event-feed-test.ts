@@ -602,6 +602,82 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a read carries the feed's position, and a batch's response the contiguous range its changes took", async function (assert) {
+    await newsroom.write('articles/first.json', article('First', 'published'));
+    await newsroom.write(
+      'articles/second.json',
+      article('Second', 'published'),
+    );
+    await newsroom.indexing();
+    // Let the feed finish announcing both cards' index passes.
+    let deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      let indexed = ((await feedWindow()).body as FeedEventWindow).events
+        .filter((event) => event.kind === 'indexed')
+        .map((event) => event.path);
+      if (
+        indexed.includes('articles/first') &&
+        indexed.includes('articles/second')
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    let read = await request
+      .get(`${new URL(NEWSROOM).pathname}articles/first`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(read.status, 200, read.text);
+    let window = (await feedWindow()).body as FeedEventWindow;
+    assert.strictEqual(
+      read.headers['boxel-feed-position'],
+      `${window.epoch}:${window.head}`,
+      'a read names where the feed stood',
+    );
+
+    let before = window.head;
+    let invoked = await request
+      .post(`${new URL(NEWSROOM).pathname}_operations`)
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': 'retitle',
+            href: `${NEWSROOM}articles/first`,
+            data: { headline: 'First, again' },
+          },
+          {
+            op: 'invoke',
+            'boxel:name': 'retitle',
+            href: `${NEWSROOM}articles/second`,
+            data: { headline: 'Second, again' },
+          },
+        ],
+      });
+    assert.strictEqual(invoked.status, 200, invoked.text);
+    let written = (await eventsAfter(before, 2)).filter(
+      (event) => event.kind === 'written',
+    );
+    assert.deepEqual(written.map((event) => event.path).sort(), [
+      'articles/first',
+      'articles/second',
+    ]);
+    let [first, last] = [written[0]!.seq, written[written.length - 1]!.seq];
+    assert.strictEqual(last - first, 1, 'the two changes are adjacent');
+    assert.strictEqual(
+      invoked.headers['boxel-feed-position'],
+      `${window.epoch}:${first}-${last}`,
+      'the response names the range',
+    );
+  });
+
   test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
     let before = await head();
     let patched = await request

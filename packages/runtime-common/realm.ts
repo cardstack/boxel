@@ -10,6 +10,7 @@ import {
   cardRevisionOf,
   EVENT_FEED_HEARTBEAT_MS,
   RealmEventFeed,
+  FEED_POSITION_HEADER,
   type FeedOperation,
 } from './event-feed.ts';
 import { DbFeedStore, MemoryFeedStore } from './event-feed-store.ts';
@@ -6681,6 +6682,10 @@ export class Realm {
     // declined outright depends on these.
     let decided = new Map<EntryPosition, unknown>();
     let results = new Map<EntryPosition, EnvelopeResult>();
+    // The feed's position before the batch commits, and the paths it changed,
+    // for the range its response names.
+    let feedBefore: string | undefined;
+    let changedPaths: string[] = [];
     try {
       // `QUERY` is the read-only spelling, and the realm derives the permission
       // it checks from the method — so a write reaching here arrived on a
@@ -6905,6 +6910,7 @@ export class Realm {
         // refusal from the coordinator names that one rather than the position
         // it took among the entries that write — in the key, in the key beside
         // it naming a conflicting entry, and in the prose.
+        feedBefore = await this.#eventFeed.position();
         let committed = await commitBatch(
           this.batchCore,
           stagedTree(tree, staged),
@@ -6935,6 +6941,9 @@ export class Realm {
             ...this.#mintPosture(coarseDeclined),
             ...anonymousCommit,
           },
+        );
+        changedPaths = committed.flatMap((result) =>
+          result ? [this.paths.local(new URL(result.id))] : [],
         );
         // The coordinator answers in the flat order of the entries it staged,
         // which is the order they were sent in.
@@ -6985,11 +6994,27 @@ export class Realm {
       );
     }
 
-    return this.#operationsResponse(
+    let response = this.#operationsResponse(
       { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
     );
+    // The positions the batch's changes took, one contiguous range, so the
+    // caller knows its own change when the feed brings it (ADR 020 §1.3).
+    if (feedBefore !== undefined) {
+      try {
+        response.headers.set(
+          FEED_POSITION_HEADER,
+          await this.#eventFeed.positionOfChanges(
+            changedPaths,
+            Number(feedBefore.split(':')[1]),
+          ),
+        );
+      } catch {
+        // stamped with the head by the caller instead
+      }
+    }
+    return response;
   }
 
   // Whether a request is part of a render: one marked as a prerender's own
@@ -8364,8 +8389,38 @@ export class Realm {
     if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
-    return await this.internalHandle(request, false);
+    let response = await this.internalHandle(request, false);
+    await this.#stampFeedPosition(request, response);
+    return response;
   };
+
+  // Every read the feed's audience may make carries the feed's position at the
+  // time of the read, and every write the position after its change, so a
+  // client opens the feed from what it holds and knows its own change when it
+  // arrives (ADR 020 §1.3). A response that names its own range, as an
+  // operations batch does, keeps it.
+  async #stampFeedPosition(request: Request, response: Response) {
+    if (
+      !response.ok ||
+      response.headers.has(FEED_POSITION_HEADER) ||
+      request.headers.get(CLIENT_CLASS_HEADER) === INFRA_CLIENT_CLASS
+    ) {
+      return;
+    }
+    try {
+      if (['PUT', 'PATCH', 'POST', 'DELETE'].includes(request.method)) {
+        await this.#eventFeed.settled();
+      }
+      response.headers.set(
+        FEED_POSITION_HEADER,
+        await this.#eventFeed.position(),
+      );
+    } catch {
+      // A response whose headers can't change, or a feed whose store can't
+      // be read, goes out without a position; the client then opens the
+      // feed from its head.
+    }
+  }
 
   // Handles a request a pipeline makes: an `_operations` batch the realm server
   // runs on its own, carrying the session of the user it runs as (a

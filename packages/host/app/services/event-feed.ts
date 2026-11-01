@@ -9,6 +9,8 @@ import {
   type FeedEvent,
 } from '@cardstack/runtime-common';
 
+import { earliestFeedPosition } from '../lib/feed-positions';
+
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -311,7 +313,9 @@ export default class EventFeedService extends Service {
       this.post({ type: 'event', realm, event, id });
       this.receive(realm, event, id);
     };
-    let resumeFrom = this.cursors.get(realm);
+    // Where to start: where the tabs already are, or else the earliest
+    // position among what this page read from the realm (ADR 020 §1.3).
+    let resumeFrom = this.cursors.get(realm) ?? earliestFeedPosition(base.href);
     let feed =
       typeof EventSource === 'function'
         ? streamFeed(feedURL, resumeFrom, deliver, this.timing, () => {
