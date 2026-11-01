@@ -14636,7 +14636,18 @@ export class Realm {
       emit('info', 'skipped-prerender');
       return;
     }
-    if (requestContext.anonymous) {
+    // A caller with no credentials is anonymous whether the realm's public
+    // permissions admitted them or its policy did. The flag above is set only
+    // on the first path, so a visitor a policy admits, and the event feed's
+    // own check of what such a visitor may read, are recognized here too.
+    // Neither has a write of its own in flight, so waiting on everyone's
+    // would hold every read for the whole budget while a crowd writes.
+    if (
+      requestContext.anonymous ||
+      (!requestContext.realmInternal &&
+        !request.headers.get('Authorization') &&
+        !request.headers.get('X-Boxel-Assume-User'))
+    ) {
       // A provably credential-less caller has no write in flight to wait on
       // (anonymous writes are unsupported), so they are never the writer.
       emit('info', 'skipped-not-writer');
