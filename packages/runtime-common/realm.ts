@@ -11,9 +11,18 @@ import {
   EVENT_FEED_HEARTBEAT_MS,
   RealmEventFeed,
   FEED_POSITION_HEADER,
+  EVENT_FEED_WINDOW,
+  type FeedEvent,
   type FeedOperation,
+  type FeedReadability,
 } from './event-feed.ts';
-import { DbFeedStore, MemoryFeedStore } from './event-feed-store.ts';
+import {
+  channelFeedKey,
+  DbFeedStore,
+  MemoryFeedStore,
+  parseFeedKey,
+  type FeedStore,
+} from './event-feed-store.ts';
 import {
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
@@ -382,6 +391,7 @@ import {
   parseOperationsEnvelope,
   pendingWriteOf,
   projectedResult,
+  publishedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -6724,6 +6734,24 @@ export class Realm {
             meta: { entry: outbound.entry.position },
           });
         }
+        // A message on a card's channel speaks to every viewer of the card on
+        // the realm's behalf, which needs the authority a write does too.
+        let speaks = resolved.find(
+          ({ definition }) => definition.base === 'publish',
+        );
+        if (speaks) {
+          throw new OperationFailure({
+            ...(speaks.entry.href ? { id: speaks.entry.href } : {}),
+            status: 400,
+            code: 'wrong-entry-point',
+            title: 'Publish in a read-only batch',
+            detail:
+              `operation "${speaks.entry.name}" publishes a message on the ` +
+              `card's live channel, and a QUERY batch is authorized to read; ` +
+              `send it as a POST`,
+            meta: { entry: speaks.entry.position },
+          });
+        }
       }
 
       // A request sent outside the realm cannot be taken back, so it travels in
@@ -6829,7 +6857,8 @@ export class Realm {
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition, decision } of resolved) {
-        if (isWrite(definition.base)) {
+        // A publish waits for the batch's writes; see below.
+        if (isWrite(definition.base) || definition.base === 'publish') {
           continue;
         }
         let result: OperationResult;
@@ -6983,6 +7012,49 @@ export class Realm {
           } catch (err: unknown) {
             throw atEntry(err, entry.position);
           }
+        }
+      }
+
+      // Each publish puts its message on its card's live channel once the
+      // batch's writes have committed, in request order, so a viewer never
+      // hears of a change before the realm holds it. A publish writes
+      // nothing: it took no part in the lock, staged no file, enqueues no
+      // index job and broadcasts no realm event. Its gate decision was made
+      // with every other entry's, against the card as stored when the batch
+      // began.
+      //
+      // A message that has gone cannot be taken back, and neither can a
+      // committed write, so a publish that fails here answers the batch with
+      // that entry's refusal over whatever already landed — the writes and
+      // any message published ahead of it — as a failing `output` does.
+      for (let { entry, target, definition, decision } of resolved) {
+        if (definition.base !== 'publish') {
+          continue;
+        }
+        try {
+          let result = await runOperation(
+            this.operationCore,
+            {
+              target,
+              name: entry.name,
+              ...(entry.data ? { params: paramsFor(entry) } : {}),
+              ...caller,
+              ...this.#readDeclined(requestContext),
+              route: ENVELOPE_ROUTE,
+            },
+            {
+              gated: { definition, decision },
+              ...this.#anonymousReadOptions(requestContext),
+            },
+          );
+          results.set(
+            entry.position,
+            publishedResult(entry, result, (url) =>
+              this.#virtualNetwork.unresolveURL(url),
+            ),
+          );
+        } catch (err: unknown) {
+          throw atEntry(err, entry.position);
         }
       }
     } catch (err: unknown) {
@@ -7851,6 +7923,9 @@ export class Realm {
           compilePolicyCard(card.href, this.#policyCompileEnvironment()),
         readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
         ...(this.#callApi ? { callApi: this.#callApi } : {}),
+        // A `publish` operation's message goes on the target card's live
+        // channel (ADR 020 §1.8), which answers the position it took.
+        publishMessage: (args) => this.#publishMessage(args),
       };
     }
     return this.#operationCore;
@@ -18094,38 +18169,131 @@ export class Realm {
   // what that visitor is served. The read is marked as the platform's own, so
   // it spends no visitor's budget.
   #eventFeedInstance: RealmEventFeed | undefined;
+  #feedStoreInstance: FeedStore | undefined;
+  // The live channels of this realm's cards (ADR 020 §1.8) this process has
+  // opened: one feed per card, for what is published on it and the card's own
+  // changes.
+  #channels = new Map<string, RealmEventFeed>();
+
+  // A realm served from Postgres shares its feeds' sequences with every
+  // process serving it (ADR 020 §1.3); one the host runs in the browser keeps
+  // them in memory.
+  get #feedStore(): FeedStore {
+    this.#feedStoreInstance ??=
+      this.#dbAdapter.kind === 'pg'
+        ? new DbFeedStore(this.#dbAdapter)
+        : new MemoryFeedStore();
+    return this.#feedStoreInstance;
+  }
+
+  // Whether a visitor who isn't signed in may read a card, answered by reading
+  // it as one through this realm's own gate, so a feed can never disagree with
+  // what that visitor is served.
+  #mayReadAnonymously = async (cardURL: string): Promise<FeedReadability> => {
+    let response = await this.handle(
+      new Request(cardURL, {
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          [CLIENT_CLASS_HEADER]: INFRA_CLIENT_CLASS,
+        },
+      }),
+    );
+    // The validator the visitor's read carries names the revision they
+    // read, which the event passes on for the re-read to address.
+    return response?.status === 200
+      ? { rev: cardRevisionOf(response.headers.get('etag')) }
+      : false;
+  };
+
   get #eventFeed(): RealmEventFeed {
     this.#eventFeedInstance ??= new RealmEventFeed(
       this.url,
-      async (cardURL) => {
-        let response = await this.handle(
-          new Request(cardURL, {
-            headers: {
-              Accept: SupportedMimeType.CardJson,
-              [CLIENT_CLASS_HEADER]: INFRA_CLIENT_CLASS,
-            },
-          }),
-        );
-        // The validator the visitor's read carries names the revision they
-        // read, which the event passes on for the re-read to address.
-        return response?.status === 200
-          ? { rev: cardRevisionOf(response.headers.get('etag')) }
-          : false;
-      },
-      // A realm served from Postgres shares its feed's sequence with every
-      // process serving it (ADR 020 §1.3); one the host runs in the browser
-      // keeps it in memory.
-      this.#dbAdapter.kind === 'pg'
-        ? new DbFeedStore(this.#dbAdapter)
-        : new MemoryFeedStore(),
+      this.#mayReadAnonymously,
+      this.#feedStore,
+      { onAnnounced: (event) => this.#mirrorOntoChannel(event) },
     );
     return this.#eventFeedInstance;
+  }
+
+  // A card's live channel, opened in this process on first use.
+  #channel(path: string): RealmEventFeed {
+    let channel = this.#channels.get(path);
+    if (!channel) {
+      channel = new RealmEventFeed(
+        this.url,
+        this.#mayReadAnonymously,
+        this.#feedStore,
+        { key: channelFeedKey(this.url, path) },
+      );
+      this.#channels.set(path, channel);
+    }
+    return channel;
+  }
+
+  // A change the realm's feed announced, carried onto the card's channel too:
+  // through the channel when this process has it open, and otherwise only
+  // when some process has opened it, so a card nobody follows gets no channel.
+  #mirrorOntoChannel(event: Omit<FeedEvent, 'seq'>) {
+    // A reset can have changed what any card's channel may carry.
+    if (event.kind === 'reset') {
+      for (let channel of this.#channels.values()) {
+        channel.reset();
+      }
+      return;
+    }
+    let open = this.#channels.get(event.path);
+    if (open) {
+      open.mirror(event);
+      return;
+    }
+    this.#feedStore
+      .appendIfExists(
+        channelFeedKey(this.url, event.path),
+        [event],
+        EVENT_FEED_WINDOW,
+      )
+      .catch((error: unknown) => {
+        this.#log.warn(
+          `could not carry a change to ${event.path} onto its channel`,
+          { error },
+        );
+      });
+  }
+
+  // The feed a `_live` request addresses: the realm's, or with `?channel=` a
+  // card's live channel, which answers only when a visitor who isn't signed in
+  // may read that card (ADR 020 §1.8). Undefined when the channel can't be
+  // followed, which is answered as not found, whatever the reason.
+  async #feedFor(request: Request): Promise<RealmEventFeed | undefined> {
+    let path = new URL(request.url).searchParams.get('channel');
+    if (path === null) {
+      return this.#eventFeed;
+    }
+    path = path.replace(/\.json$/, '');
+    if (
+      !path ||
+      path.startsWith('_') ||
+      path.startsWith('/') ||
+      path.split('/').some((part) => part === '..' || part === '.')
+    ) {
+      return undefined;
+    }
+    // Asked on every request, so a card withdrawn from visitors stops being
+    // followable at once; a shared cache keeps this to about one ask a second.
+    let readable = await this.#mayReadAnonymously(new URL(path, this.url).href);
+    return readable ? this.#channel(path) : undefined;
   }
 
   private async eventFeedStream(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Found before the stream opens, so a channel that can't be followed is
+    // answered as not found rather than as an empty stream.
+    let feed = await this.#feedFor(request);
+    if (!feed) {
+      return notFound(request, requestContext);
+    }
     let open = this.#adapter.openEventStream?.();
     if (!open) {
       return createResponse({
@@ -18135,12 +18303,18 @@ export class Realm {
       });
     }
     servedAnonymous(requestContext);
-    let feed = this.#eventFeed;
     let lastEventId =
       request.headers.get('last-event-id') ??
       new URL(request.url).searchParams.get('lastEventId');
     open.write(`retry: 3000\n\n`);
-    for (let event of await feed.replay(lastEventId)) {
+    // A card's channel opened afresh starts from its current messages, the
+    // latest for each key, so a page that joins late hears where things
+    // stand; the realm's own feed starts from now.
+    let first =
+      lastEventId === null && feed !== this.#eventFeed
+        ? (await feed.window()).events
+        : await feed.replay(lastEventId);
+    for (let event of first) {
       open.write(feed.serialize(event));
     }
     let unsubscribe = feed.subscribe((event) =>
@@ -18173,12 +18347,16 @@ export class Realm {
   // The same feed as a poll: one URL per realm, the same answer for every
   // caller, cacheable for a second so a shared cache collapses a crowd.
   private async eventFeedWindow(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
     servedAnonymous(requestContext);
+    let feed = await this.#feedFor(request);
+    if (!feed) {
+      return notFound(request, requestContext);
+    }
     return createResponse({
-      body: JSON.stringify(await this.#eventFeed.window()),
+      body: JSON.stringify(await feed.window()),
       init: {
         headers: {
           'Content-Type': SupportedMimeType.JSON,
@@ -18228,8 +18406,40 @@ export class Realm {
 
   // Another process serving this realm appended to its event feed: pass what
   // it appended to this process's subscribers.
-  async catchUpEventFeed(): Promise<void> {
-    await this.#eventFeedInstance?.catchUp();
+  async catchUpEventFeed(key: string = this.url): Promise<void> {
+    let { path } = parseFeedKey(key);
+    let feed =
+      path === undefined ? this.#eventFeedInstance : this.#channels.get(path);
+    await feed?.catchUp();
+  }
+
+  // Every feed this process has open, after the notifications that would have
+  // said what to read were missed.
+  async catchUpAllEventFeeds(): Promise<void> {
+    await Promise.all(
+      [this.#eventFeedInstance, ...this.#channels.values()].map((feed) =>
+        feed?.catchUp(),
+      ),
+    );
+  }
+
+  // Publishes what a `publish` operation the policy admitted produced on the
+  // target card's live channel (ADR 020 §1.8), and answers with its position.
+  async #publishMessage(args: {
+    cardURL: string;
+    operation: FeedOperation;
+    key?: string;
+    body: unknown;
+  }): Promise<{ position: string }> {
+    let path = this.paths.local(new URL(args.cardURL)).replace(/\.json$/, '');
+    let channel = this.#channel(path);
+    let recorded = await channel.publish({
+      path,
+      operation: args.operation,
+      key: args.key,
+      body: args.body,
+    });
+    return { position: `${channel.epoch}:${recorded.seq}` };
   }
 
   private sendIndexInitiationEvent(updatedFile: string) {

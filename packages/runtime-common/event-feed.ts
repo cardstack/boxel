@@ -1,7 +1,12 @@
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import { logger } from './log.ts';
-import { MemoryFeedStore, type FeedStore } from './event-feed-store.ts';
+import {
+  MemoryFeedStore,
+  supersededMessages,
+  trimWindow,
+  type FeedStore,
+} from './event-feed-store.ts';
 
 // A realm's event feed (ADR 020): one small invalidation per change to a
 // card the feed's audience may read under the realm's permissions and policy,
@@ -48,13 +53,16 @@ export const EVENT_FEED_VERSION = 1;
 
 // `removed`: the card was deleted. `withdrawn`: it still exists but the
 // feed's audience may no longer read it. Both tell a client to drop it.
+// `message`: something published on a card's live channel (ADR 020 §1.8),
+// carried whole, since it is stored nowhere else.
 export type FeedChangeKind =
   | 'written'
   | 'indexed'
   | 'removed'
   | 'withdrawn'
   | 'reset'
-  | 'refresh';
+  | 'refresh'
+  | 'message';
 
 // The operation that produced a change (ADR 020 §1.1): its name and the
 // base it builds on, never who ran it or with what.
@@ -87,6 +95,22 @@ export interface FeedEvent {
   // sized by the realm to the audience it serves (ADR 020 §1.3), so a crowd
   // revalidating everything doesn't arrive at once.
   spread?: number;
+  // For a `message`: the key a later message with the same key replaces it
+  // under, when its operation names one, and what was published.
+  key?: string;
+  body?: unknown;
+}
+
+// A message published on a card's live channel (ADR 020 §1.8), as a page
+// hears it.
+export interface ChannelMessage {
+  // Its position on the channel: a later message has a higher one.
+  seq: number;
+  // The key a later message with the same key replaces it under, if any.
+  key?: string;
+  // The name of the operation that published it.
+  operation?: string;
+  body: unknown;
 }
 
 // What the cacheable poll answers: the head of the sequence and the latest
@@ -96,6 +120,11 @@ export interface FeedEventWindow {
   v?: number;
   epoch: string;
   head: number;
+  // The position the events are complete after. A client that last saw an
+  // earlier one may have missed something, and resets. Messages a later one
+  // with the same key replaced are left out, so the events can skip
+  // positions.
+  from: number;
   events: FeedEvent[];
   // The spread a reset gets now, for a client that finds it fell behind the
   // window and resets itself.
@@ -196,6 +225,7 @@ const POLLS_PER_CLIENT_PER_MINUTE = 20;
 export class RealmEventFeed {
   #epoch = '';
   #seq = 0;
+  #floor = 0;
   #events: FeedEvent[] = [];
   #loaded: Promise<void> | undefined;
   // Announcements waiting for the store to give them positions, and the
@@ -224,17 +254,28 @@ export class RealmEventFeed {
   #wroteBy = new Map<string, { operation: FeedOperation; at: number }>();
 
   readonly realmURL: string;
+  // The store's name for this feed: the realm's URL, or a card's channel key.
+  readonly key: string;
   private mayRead: (cardURL: string) => Promise<FeedReadability>;
   private store: FeedStore;
+  // Told of each change to a card this feed announces, so the realm can mirror
+  // it onto that card's live channel.
+  private onAnnounced?: (event: Omit<FeedEvent, 'seq'>) => void;
 
   constructor(
     realmURL: string,
     mayRead: (cardURL: string) => Promise<FeedReadability>,
     store: FeedStore = new MemoryFeedStore(),
+    options: {
+      key?: string;
+      onAnnounced?: (event: Omit<FeedEvent, 'seq'>) => void;
+    } = {},
   ) {
     this.realmURL = realmURL;
+    this.key = options.key ?? realmURL;
     this.mayRead = mayRead;
     this.store = store;
+    this.onAnnounced = options.onAnnounced;
   }
 
   get epoch(): string {
@@ -251,10 +292,11 @@ export class RealmEventFeed {
   // revalidation (ADR 020 §1.2).
   ready(): Promise<void> {
     this.#loaded ??= (async () => {
-      let loaded = await this.store.load(this.realmURL, EVENT_FEED_WINDOW);
+      let loaded = await this.store.load(this.key, EVENT_FEED_WINDOW);
       this.#epoch = loaded.epoch;
       this.#seq = loaded.head;
       this.#events = loaded.events;
+      this.#floor = loaded.floor;
       if (loaded.restarted) {
         this.reset();
       }
@@ -335,7 +377,55 @@ export class RealmEventFeed {
   async catchUp(): Promise<void> {
     await this.ready();
     await this.#appending;
-    this.#deliver(await this.store.after(this.realmURL, this.#seq));
+    this.#deliver(await this.store.after(this.key, this.#seq));
+  }
+
+  // Publishes a message on this feed, a card's live channel (ADR 020 §1.8):
+  // what a `publish` operation the policy admitted produced. Resolves to the
+  // message as the feed recorded it.
+  async publish(message: {
+    path: string;
+    operation: FeedOperation;
+    key?: string;
+    body: unknown;
+  }): Promise<FeedEvent> {
+    let event: Omit<FeedEvent, 'seq'> = {
+      v: EVENT_FEED_VERSION,
+      kind: 'message',
+      path: message.path,
+      operation: message.operation,
+      ...(message.key !== undefined ? { key: message.key } : {}),
+      body: message.body,
+    };
+    // Recorded on its own, in turn with the feed's other appends, so the
+    // caller learns its position, and a failure is the caller's to see.
+    let step = this.#appending.then(async () => {
+      await this.ready();
+      let [recorded] = await this.store.append(
+        this.key,
+        [event],
+        EVENT_FEED_WINDOW,
+      );
+      this.#deliver(
+        recorded!.seq === this.#seq + 1
+          ? [recorded!]
+          : await this.store.after(this.key, this.#seq),
+      );
+      return recorded!;
+    });
+    this.#appending = step.then(
+      () => undefined,
+      () => undefined,
+    );
+    return await step;
+  }
+
+  // Carries a change the realm's feed announced for this channel's card, so
+  // a page following the channel hears the card change on the same
+  // connection as its messages.
+  mirror(event: Omit<FeedEvent, 'seq'>) {
+    this.#outbox.push(event);
+    this.#appending = this.#appending.then(() => this.#flush());
   }
 
   async #ingest(
@@ -469,6 +559,7 @@ export class RealmEventFeed {
     if (
       kind !== 'reset' &&
       kind !== 'refresh' &&
+      kind !== 'message' &&
       last?.kind === kind &&
       last.rev === rev &&
       now - last.at < 1000
@@ -479,7 +570,7 @@ export class RealmEventFeed {
     if (this.#lastKind.size > EVENT_FEED_WINDOW * 4) {
       this.#lastKind.clear();
     }
-    this.#outbox.push({
+    let event: Omit<FeedEvent, 'seq'> = {
       v: EVENT_FEED_VERSION,
       kind,
       path,
@@ -487,7 +578,11 @@ export class RealmEventFeed {
       ...(types ? { types } : {}),
       ...(operation ? { operation } : {}),
       ...(spread ? { spread } : {}),
-    });
+    };
+    this.#outbox.push(event);
+    if (path || kind === 'reset') {
+      this.onAnnounced?.(event);
+    }
     if (!this.#holding) {
       this.#appending = this.#appending.then(() => this.#flush());
     }
@@ -543,18 +638,18 @@ export class RealmEventFeed {
     try {
       await this.ready();
       let appended = await this.store.append(
-        this.realmURL,
+        this.key,
         batch,
         EVENT_FEED_WINDOW,
       );
       // Another process appended between this one's last position and these:
       // read the gap with them, so this process's subscribers miss nothing.
       if (appended.length > 0 && appended[0]!.seq !== this.#seq + 1) {
-        appended = await this.store.after(this.realmURL, this.#seq);
+        appended = await this.store.after(this.key, this.#seq);
       }
       this.#deliver(appended);
     } catch (error: unknown) {
-      log.warn(`event feed for ${this.realmURL} could not record events`, {
+      log.warn(`event feed ${this.key} could not record events`, {
         error,
       });
       if (!this.#retryingReset) {
@@ -580,9 +675,9 @@ export class RealmEventFeed {
         subscriber(event);
       }
     }
-    if (this.#events.length > EVENT_FEED_WINDOW) {
-      this.#events.splice(0, this.#events.length - EVENT_FEED_WINDOW);
-    }
+    let kept = trimWindow(this.#events, EVENT_FEED_WINDOW);
+    this.#events = kept.events;
+    this.#floor = Math.max(this.#floor, kept.floor);
   }
 
   // A writer's request that every page following the feed reload (ADR 020
@@ -593,7 +688,7 @@ export class RealmEventFeed {
   > {
     await this.ready();
     let claim = await this.store.claimRefresh(
-      this.realmURL,
+      this.key,
       EVENT_FEED_REFRESH_COOLDOWN_MS,
     );
     if (claim.accepted) {
@@ -608,17 +703,20 @@ export class RealmEventFeed {
     this.#countPoll();
     await this.ready();
     await this.#appending;
+    let superseded = supersededMessages(this.#events);
     return {
       v: EVENT_FEED_VERSION,
       epoch: this.#epoch,
       head: this.#seq,
-      events: [...this.#events],
+      from: this.#floor,
+      events: this.#events.filter((event) => !superseded.has(event.seq)),
       spread: this.#spread(),
     };
   }
 
   // The events after `lastEventId` (an id this feed sent), or a reset when
-  // that id is from another epoch or older than the window holds.
+  // that id is from another epoch, older than the window is complete after,
+  // or past the head.
   async replay(lastEventId: string | null): Promise<FeedEvent[]> {
     await this.ready();
     await this.#appending;
@@ -627,8 +725,12 @@ export class RealmEventFeed {
     }
     let [epoch, seqText] = lastEventId.split(':');
     let seq = Number(seqText);
-    let oldest = this.#events[0]?.seq ?? this.#seq + 1;
-    if (epoch !== this.#epoch || !Number.isInteger(seq) || seq < oldest - 1) {
+    if (
+      epoch !== this.#epoch ||
+      !Number.isInteger(seq) ||
+      seq < this.#floor ||
+      seq > this.#seq
+    ) {
       return [
         {
           v: EVENT_FEED_VERSION,

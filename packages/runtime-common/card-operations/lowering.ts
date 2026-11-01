@@ -180,6 +180,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     // Reached only through a declaration: a card with a request to send says
     // what it is.
     callApi: ['card-def'],
+    // Reached only through a declaration: a card's live channel is the card's,
+    // and only a card that declares a message says what one is.
+    publish: ['card-def'],
   };
 
 function declarableBases(
@@ -211,12 +214,23 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'explain' ||
     base === 'validate' ||
     base === 'callApi' ||
+    base === 'publish' ||
     (base === 'update' && kind === 'file-def')
   );
 }
 
 // The name an ad-hoc search is invoked under, which no declaration may take.
 const AD_HOC_QUERY_NAME = 'query';
+
+// Whether `name` is a base operation's other than `publish` itself, read off
+// the exhaustive table above so a further base is covered without a second
+// list to keep in step.
+function isShadowedBaseName(name: string): boolean {
+  return (
+    name !== 'publish' &&
+    Object.prototype.hasOwnProperty.call(DECLARABLE_BY, name)
+  );
+}
 
 // Lower every declared operation on one type.
 //
@@ -298,6 +312,30 @@ export async function lowerOperationDeclarations(
             operation: name,
             path: 'base',
             message: refusal.message,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
+    if (raw[name]?.base === 'publish' && isShadowedBaseName(name)) {
+      // A publish writes nothing, so under a base operation's name it would
+      // answer that name by writing nothing, and a caller reaching for the
+      // built-in would be told it had run. The authoring decorator refuses
+      // the name; this keeps a stored entry from carrying it past the code
+      // that did. Stored invalid on `publish`, so invoking it by name is
+      // refused rather than falling back to the built-in it names.
+      let operation: OperationDefinition = {
+        base: 'publish',
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: 'publish-under-base-name',
+            operation: name,
+            path: name,
+            message: `a "publish" operation sends a message and writes nothing, so it cannot take the name of the "${name}" base operation, whose callers expect it to do what "${name}" does`,
           },
         ],
       };
@@ -523,6 +561,24 @@ async function lowerOperation(
     sink,
     context,
   );
+  // A publish edits no document, so a transform's clauses stored on one
+  // would assemble a program nothing runs. The decorator refuses the keys;
+  // a stored entry is held to the same rule here.
+  if (base === 'publish') {
+    for (let clause of ['set', 'append', 'assert'] as const) {
+      if (
+        (declaration as unknown as Record<string, unknown>)[clause] !==
+        undefined
+      ) {
+        sink.add(
+          'unrunnable-program',
+          clause,
+          `a "publish" operation sends its payload as a message and edits no document, so this \`${clause}\` would never be applied`,
+        );
+      }
+    }
+    statements = [];
+  }
   let rawProgram = (declaration as { transformations?: { $bxl: string } })
     .transformations;
   if (rawProgram && runsNoProgram(base, context.definition.type)) {
@@ -537,7 +593,9 @@ async function lowerOperation(
             ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
             : base === 'callApi'
               ? `a "callApi" operation sends the request it declares rather than running a program over a document, so this program would never be reached`
-              : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+              : base === 'publish'
+                ? `a "publish" operation sends its payload as a message on the card's live channel rather than running a program over a document, so this program would never be reached`
+                : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -606,6 +664,12 @@ async function lowerOperation(
       'output',
       `a "validate" operation answers with what the policy card compiles to, as compiling reports it, so this projection would never be reached`,
     );
+  } else if (base === 'publish' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `a "publish" operation answers with where its message landed on the card's channel, so this projection would never be reached`,
+    );
   } else {
     let output = await lowerOutput(
       declaration.output,
@@ -637,6 +701,21 @@ async function lowerOperation(
       operation.query = query;
     }
   }
+  if (base === 'publish') {
+    let key = (declaration as { key?: unknown }).key;
+    if (key !== undefined && !isBxl(key)) {
+      sink.add(
+        'invalid-program',
+        'key',
+        `a "publish" operation's \`key\` is a program written with the bxl tag, which answers the string a later message supersedes this one by`,
+      );
+    } else if (key !== undefined) {
+      let program = lowerExpression(key.$bxl, 'key', paramNames, sink);
+      if (program) {
+        operation.key = program;
+      }
+    }
+  }
   if (base === 'callApi') {
     let request = lowerCallApi(
       declaration as CallApiClauses,
@@ -666,6 +745,7 @@ async function lowerOperation(
     operation.program,
     operation.input,
     operation.output,
+    operation.key,
   ].every((program) => !program || !usesVolatileCall(program.source));
 
   if (readsActor(operation)) {
@@ -684,7 +764,12 @@ async function lowerOperation(
 // from a request would have to remember this list, and would be reading
 // program text on a path that must not reach the BXL package at all.
 function readsActor(operation: OperationDefinition): boolean {
-  for (let program of [operation.program, operation.input, operation.output]) {
+  for (let program of [
+    operation.program,
+    operation.input,
+    operation.output,
+    operation.key,
+  ]) {
     if (program && callsActor(program.source)) {
       return true;
     }

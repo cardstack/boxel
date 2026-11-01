@@ -13,6 +13,7 @@ import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
   runInputTransform,
+  runKeyTransform,
   runOutputTransform,
   type TransformContext,
 } from './transforms.ts';
@@ -54,6 +55,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
+  type PublishMessage,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -211,6 +213,12 @@ export interface OperationCore {
   // Sends a `callApi`'s request through the realm server's guarded outbound
   // client. A core without it sends nothing.
   callApi?: CallApiSender;
+  // Puts a `publish`'s message on the target card's live channel (ADR 020
+  // §1.8, §1.10) and answers the position it took there. Called once per
+  // admitted publish, after the batch's writes have committed. A core without
+  // it publishes nothing, and refuses every `publish` with 501
+  // `not-implemented`.
+  publishMessage?: PublishMessage;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -593,6 +601,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   explain: true,
   validate: true,
   callApi: true,
+  publish: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -613,6 +622,7 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   explain: [],
   validate: [],
   callApi: [],
+  publish: [],
 };
 
 // The behaviors a target carries only under a name its type declares on
@@ -621,18 +631,21 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // does not exist. An explain and a validate are the two: each answers only on
 // the card that declares it, a policy card, or for a validate the realm's
 // config card too. A callApi is the third: only a card that declares a request
-// has one to send.
+// has one to send. A publish is the fourth: only a card that declares a
+// message says what one on its channel is.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
     validate: true,
     callApi: true,
+    publish: true,
   });
 
 const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
   explain: ['card-def'],
   validate: ['card-def'],
   callApi: ['card-def'],
+  publish: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -1439,7 +1452,11 @@ function refuseAnonymousActor(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  if (!hasTransforms(definition) || !definition.readsActor || request.actor) {
+  if (
+    (!hasTransforms(definition) && !definition.key) ||
+    !definition.readsActor ||
+    request.actor
+  ) {
     return;
   }
   throw new OperationFailure({
@@ -1609,6 +1626,8 @@ async function runBaseOperation(
           : {}),
         realmConfig: () => core.realmConfig(),
       });
+    case 'publish':
+      return await publishOperation(core, canonical, definition);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from
@@ -1653,6 +1672,74 @@ async function runBaseOperation(
         detail: `operation "${canonical.name}" names a base operation the core does not implement`,
       });
   }
+}
+
+// A `publish`: the payload, as the `input` stage left it and the `params`
+// check passed it, is the message, put on the target card's live channel
+// under the key the declaration's `key` program answers. Nothing is staged
+// and nothing is written, so there is no lock to take, no index job to
+// enqueue and no realm event to broadcast: the channel is the realm's, and
+// delivering on it is the one thing this does.
+//
+// A message is published on a card's channel, so a type target — a card that
+// does not exist yet — has none to publish on.
+async function publishOperation(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+): Promise<OperationResult> {
+  if (request.target.kind !== 'instance') {
+    throw new OperationFailure({
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail:
+        `operation "${request.name}" publishes on a card's live channel, so ` +
+        `it is invoked on a card rather than on its type`,
+    });
+  }
+  let cardURL = request.target.url;
+  if (!core.publishMessage) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 501,
+      code: 'not-implemented',
+      title: 'Publishing not available',
+      detail:
+        `operation "${request.name}" publishes on the card's live channel, ` +
+        `and this realm has no channel to publish on`,
+    });
+  }
+  let body = (request.params ?? {}) as Record<string, JsonValue>;
+  let key = await runKeyTransform(
+    definition,
+    body,
+    transformContext(core, request),
+  );
+  let position: string;
+  try {
+    ({ position } = await core.publishMessage({
+      cardURL,
+      operation: { name: request.name, base: 'publish' },
+      ...(key === undefined ? {} : { key }),
+      body,
+    }));
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    // The channel's own failure rather than anything the caller sent.
+    throw new OperationFailure({
+      id: cardURL,
+      status: 500,
+      code: 'internal-error',
+      title: 'Cannot publish',
+      detail:
+        `operation "${request.name}" could not publish its message: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+  return { published: { id: cardURL, position } };
 }
 
 // The payload has to satisfy the schema the definition declares before any

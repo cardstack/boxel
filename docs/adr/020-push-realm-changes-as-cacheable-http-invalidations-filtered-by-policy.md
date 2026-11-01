@@ -130,20 +130,35 @@ update is ready and reload when it suits them. A page whose app
 does not take the notice MUST reload, after a random delay of a few seconds
 so a room of screens doesn't reload at once.
 
-### 1.8. A subscription is an operation
+### 1.8. A subscription is an operation, and a card has a live channel
 
 A page MUST subscribe to the live results of a `query` operation a card type
-declares, or to everything the audience may read in the realm. Whether a
-caller may subscribe MUST be decided by the policy's grant of that operation,
+declares, to a card's live channel, or to everything the audience may read in
+the realm. Whether a caller may subscribe MUST be decided by the policy's
+grant of that operation, or for a channel by its grant of `read` on the card,
 as it decides whether they may run it. A subscription MAY be served as one
 shared, cacheable stream only when its grant admits callers without regard to
 who they are: unconditionally, or by a condition that reads no `actor()`
 beyond `actor() == "anonymous"`. A subscription whose grant reads the caller
 MUST NOT be served on the broadcast lane: what it shows differs per caller,
 so it can't be filtered once. It MUST be served on the caller's personal
-lane (§1.10), or refused when the realm offers none. Each
-subscription MUST have its own URL and window, so a shared cache holds it
-apart from the rest of the realm.
+lane (§1.10), or refused when the realm offers none. Each subscription MUST
+have its own URL, sequence and window, so a shared cache holds it apart from
+the rest of the realm.
+
+A card's live channel carries the card's own changes and the messages
+published on it. A message MUST be published only by invoking a `publish`
+operation the card's type declares, which the policy grants like any other
+operation; it validates its parameters and writes nothing to the realm. A
+message MAY name a key, and a later message with the same key MUST replace an
+earlier one in the channel's window however old it is, so a page that joins
+late hears where things stand. A channel MUST answer as not found for a card
+its audience may not read. A realm SHOULD give a card whose channel only some
+people should follow an id nobody can guess, such as one the realm mints on
+create, since knowing the card's URL is then what admits a follower. Live,
+superseded state, such as an answer a team may still change, SHOULD travel as
+messages; what must last, such as the answer locked in, MUST be written to a
+card.
 
 ### 1.9. The wire, written down and versioned
 
@@ -157,13 +172,20 @@ MUST ignore fields and kinds it doesn't know, so later versions can add them.
   comment every 25 seconds, and each event as `id: <epoch>:<seq>`,
   `event: change`, `data: <event>`. A client resumes with `Last-Event-ID` or
   `?lastEventId=`.
-- Poll: `Accept: application/json`, answered `{ "v": 1, "epoch", "head",
-"events": [...] }`, the latest window, `Cache-Control: public, max-age=1,
+- Poll: `Accept: application/json`, answered `{ "v": 1, "epoch", "head", "from", "events": [...] }`, the latest window,
+  complete after `from`: a client that last saw an earlier position resets.
+  A message a later one with the same key replaced is left out, so positions
+  may skip, `Cache-Control: public, max-age=1,
 stale-while-revalidate=1`.
 - Event: `{ "v": 1, "seq", "kind", "path", "rev"?, "types"?, "operation"? }`,
   where `types` lists type keys relative to the realm or in prefix form, and
   `operation` is `{ "name", "base" }`.
-- Kinds: `written` (the change landed; a client need do nothing), `indexed`
+- Channel: `{realm}/_live?channel=<card path>`, stream or poll, with a
+  sequence of its own. A stream opened without `Last-Event-ID` starts from
+  the channel's window, so a late joiner hears the latest message per key.
+- Kinds: `message` (published on a channel: `"key"?`, `"body"`, and the
+  publishing `"operation"`), `written` (the change landed; a client need do
+  nothing), `indexed`
   (re-read `path`, at `rev` when given), `removed` (the card was deleted),
   `withdrawn` (the audience may no longer read it), `reset` (revalidate
   everything held from this realm), `refresh` (offer the page a reload, §1.7).
@@ -191,12 +213,12 @@ an operation the caller started. A client MUST start on the broadcast lane,
 and SHOULD move to a personal lane only while it takes part in such an
 exchange. A personal lane MUST carry the broadcast events too, so the
 client follows the realm over one connection. Every personal event MUST be
-filtered for that caller under the policy, as a read by them would be. A
-personal lane MUST be opened as a caller the realm can name: a signed-in
-user, or a capability an operation handed the caller, such as the unguessable
-id of the queue ticket it created. Personal events MUST NOT take positions in
-the broadcast sequence, so a broadcast window never shows gaps; they MUST be
-numbered per caller and kept long enough to resume. A client refused a
+filtered for that caller under the policy, as a read by them would be. A personal lane MUST be opened as a caller the realm can name: a signed-in
+user, or a capability an operation handed the caller, such as the
+unguessable id of the queue ticket it created, whose live channel (§1.8) is
+then that caller's alone. Personal events MUST NOT take positions in the
+broadcast sequence; they MUST be numbered per caller and kept long enough to
+resume. A client refused a
 personal lane, or whose lane closes, MUST fall back to the broadcast lane and
 learn the outcome of its own operations from their responses (§1.3), so an
 exchange degrades to slower, never to wrong. A realm SHOULD put what a crowd

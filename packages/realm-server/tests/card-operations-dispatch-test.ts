@@ -9,6 +9,7 @@ import {
   isHeadResult,
   isOperationFailure,
   isSourceResult,
+  lowerOperationDeclarations,
   newOperationScope,
   notApproved,
   OperationFailure,
@@ -26,6 +27,7 @@ import {
   type OperationError,
   type OperationScope,
   type OperationTarget,
+  type PublishMessageArgs,
 } from '@cardstack/runtime-common/card-operations';
 import { GateTrace } from '@cardstack/runtime-common/card-operations/gate-trace';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
@@ -907,6 +909,137 @@ module(basename(import.meta.filename), function () {
         'output',
       );
     });
+    // A publish is lowered here rather than written out by hand, so the key and
+    // input programs it runs are the canonical ones lowering stores.
+    async function publishOperations(
+      declarations: Record<string, unknown>,
+    ): Promise<NonNullable<Definition['operations']>> {
+      let { operations, issues } = await lowerOperationDeclarations(
+        declarations as never,
+        {
+          definition: { type: 'card-def', fields: {}, fieldDefs: {} },
+          lookupDefinition: async () => undefined,
+          identifyCard: () => CARD_DEF,
+        },
+      );
+      if (issues.length > 0) {
+        throw new Error(`publish fixture lowered with ${issues[0].code}`);
+      }
+      return operations;
+    }
+    const PUBLISH_PARAM = function StringField() {} as unknown as never;
+
+    test('a publish hands the realm its key and the input-shaped payload, and writes nothing', async function (assert) {
+      let { core, calls } = stub({
+        operations: await publishOperations({
+          select: {
+            base: 'publish',
+            params: {
+              team: PUBLISH_PARAM,
+              n: PUBLISH_PARAM,
+              choice: PUBLISH_PARAM,
+            },
+            input: { $bxl: '. + { voter: actor() }' },
+            key: { $bxl: 'params("team") + ":" + TEXT(params("n"); "0")' },
+          },
+        }),
+      });
+      let published: PublishMessageArgs[] = [];
+      core.publishMessage = async (args) => {
+        published.push(args);
+        return { position: 'epoch-1:12' };
+      };
+      let before = [...calls];
+      let result = await runOperation(core, {
+        ...invoke(CARD, 'select'),
+        params: { team: 'red', n: 3, choice: 'b' },
+      });
+      assert.deepEqual(published, [
+        {
+          cardURL: `${REALM}person-1`,
+          operation: { name: 'select', base: 'publish' },
+          key: 'red:3',
+          body: {
+            team: 'red',
+            n: 3,
+            choice: 'b',
+            voter: '@test-actor:localhost',
+          },
+        },
+      ]);
+      assert.deepEqual(result, {
+        published: { id: `${REALM}person-1`, position: 'epoch-1:12' },
+      });
+      assert.notOk(
+        calls
+          .slice(before.length)
+          .some((call) =>
+            ['readFileAsText', 'openStoredFile', 'storedContent'].includes(
+              call,
+            ),
+          ),
+        `nothing was read off disk, let alone written: ${calls.join(', ')}`,
+      );
+    });
+
+    test('a publish with no key publishes the payload alone', async function (assert) {
+      let { core } = stub({
+        operations: await publishOperations({
+          react: { base: 'publish', params: { emoji: PUBLISH_PARAM } },
+        }),
+      });
+      let published: PublishMessageArgs[] = [];
+      core.publishMessage = async (args) => {
+        published.push(args);
+        return { position: 'epoch-1:1' };
+      };
+      await runOperation(core, {
+        ...invoke(CARD, 'react'),
+        params: { emoji: 'tada' },
+      });
+      assert.deepEqual(published, [
+        {
+          cardURL: `${REALM}person-1`,
+          operation: { name: 'react', base: 'publish' },
+          body: { emoji: 'tada' },
+        },
+      ]);
+    });
+
+    test('a publish on a realm with no channel is refused as not implemented', async function (assert) {
+      let { core } = stub({
+        operations: await publishOperations({
+          react: { base: 'publish', params: { emoji: PUBLISH_PARAM } },
+        }),
+      });
+      let error = await refusalFrom(() =>
+        runOperation(core, {
+          ...invoke(CARD, 'react'),
+          params: { emoji: 'x' },
+        }),
+      );
+      assert.strictEqual(error.status, 501);
+      assert.strictEqual(error.code, 'not-implemented');
+    });
+
+    test('a publish whose payload leaves out a declared param publishes nothing', async function (assert) {
+      let { core } = stub({
+        operations: await publishOperations({
+          react: { base: 'publish', params: { emoji: PUBLISH_PARAM } },
+        }),
+      });
+      let published = 0;
+      core.publishMessage = async () => {
+        published++;
+        return { position: 'epoch-1:1' };
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'react')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(published, 0, 'nothing was published');
+    });
+
     test('a declaration lowering flagged invalid reports its findings', async function (assert) {
       let { core } = stub({
         operations: {

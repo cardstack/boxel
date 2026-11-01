@@ -5,6 +5,7 @@ import { isTesting } from '@embroider/macros';
 
 import {
   EVENT_FEED_PATH,
+  type ChannelMessage,
   type FeedEventWindow,
   type FeedEvent,
 } from '@cardstack/runtime-common';
@@ -169,9 +170,82 @@ export default class EventFeedService extends Service {
   private cursors = new Map<string, string>();
   private feeds = new Map<string, { stop: () => void }>();
 
+  // The card channels this tab follows (ADR 020 §1.8), by card URL.
+  private channels = new Map<
+    string,
+    {
+      feed: { stop: () => void };
+      listeners: Set<(message: ChannelMessage) => void>;
+    }
+  >();
+
   // Whether this host hears realm events through the event feeds.
   get listening(): boolean {
     return this.started;
+  }
+
+  // Follows a card's live channel: `onMessage` hears each message published
+  // on it, and a change to the card reaches the page as any realm event does.
+  // Returns a function that stops following; the channel closes when nothing
+  // on the page follows it. Nothing is opened before the service starts,
+  // which a prerender never does.
+  followChannel(
+    cardURL: string,
+    realmURL: string,
+    onMessage: (message: ChannelMessage) => void,
+  ): () => void {
+    let base = realmBase(realmURL);
+    if (!this.started || !base || !cardURL.startsWith(base.href)) {
+      return () => {};
+    }
+    let channel = this.channels.get(cardURL);
+    if (!channel) {
+      let path = cardURL.slice(base.href.length).replace(/\.json$/, '');
+      let url = withParam(new URL(EVENT_FEED_PATH, base).href, 'channel', path);
+      let listeners = new Set<(message: ChannelMessage) => void>();
+      let deliver = (event: FeedEvent) => {
+        if (event.kind === 'message') {
+          let message: ChannelMessage = {
+            seq: event.seq,
+            body: event.body,
+            ...(event.key !== undefined ? { key: event.key } : {}),
+            ...(event.operation ? { operation: event.operation.name } : {}),
+          };
+          for (let listener of [...listeners]) {
+            listener(message);
+          }
+          return;
+        }
+        if (event.kind !== 'refresh') {
+          this.relay(realmURL, base!, event);
+        }
+      };
+      let feed =
+        typeof EventSource === 'function'
+          ? streamFeed(url, undefined, deliver, this.timing, () => {
+              let current = this.channels.get(cardURL);
+              current?.feed.stop();
+              if (current) {
+                current.feed = pollFeed(url, undefined, deliver, this.timing);
+              }
+            })
+          : pollFeed(url, undefined, deliver, this.timing);
+      channel = { feed, listeners };
+      this.channels.set(cardURL, channel);
+      // A channel opens from its current messages, not from where the page's
+      // read of the card stood, so the card may have changed in between:
+      // re-read it once.
+      this.relay(realmURL, base, { seq: 0, kind: 'indexed', path });
+    }
+    let { listeners } = channel;
+    listeners.add(onMessage);
+    return () => {
+      listeners.delete(onMessage);
+      if (listeners.size === 0) {
+        this.channels.get(cardURL)?.feed.stop();
+        this.channels.delete(cardURL);
+      }
+    };
   }
 
   // Starts listening for the realms the page watches. Idempotent. A page is
@@ -413,6 +487,11 @@ export default class EventFeedService extends Service {
   }
 }
 
+// `url` with one more query parameter.
+function withParam(url: string, name: string, value: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}${name}=${encodeURIComponent(value)}`;
+}
+
 function realmBase(realm: string): URL | undefined {
   let base: URL;
   try {
@@ -457,7 +536,7 @@ function streamFeed(
       return;
     }
     let current = new EventSource(
-      lastId ? `${url}?lastEventId=${encodeURIComponent(lastId)}` : url,
+      lastId ? withParam(url, 'lastEventId', lastId) : url,
     );
     source = current;
     current.addEventListener('open', () => {
@@ -542,7 +621,9 @@ function pollFeed(
           seen = answer.head;
         } else if (
           answer.epoch !== epoch ||
-          (answer.events[0] && answer.events[0].seq > seen + 1)
+          // The window is complete only after `from`; a feed that names none
+          // is complete from its first event.
+          (answer.from ?? (answer.events[0]?.seq ?? seen + 1) - 1) > seen
         ) {
           // The realm restarted, or more changed than the window holds.
           epoch = answer.epoch;

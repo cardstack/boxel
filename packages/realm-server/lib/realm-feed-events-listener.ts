@@ -1,13 +1,18 @@
 import type { Realm } from '@cardstack/runtime-common';
-import { logger, REALM_FEED_EVENTS_CHANNEL } from '@cardstack/runtime-common';
+import {
+  logger,
+  parseFeedKey,
+  REALM_FEED_EVENTS_CHANNEL,
+} from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
 const log = logger('realm-server:feed-events-listener');
 
 // The event feed's cross-process delivery (ADR 020 §1.3). Every process
 // serving a realm appends to the one stored sequence, and each append
-// notifies `REALM_FEED_EVENTS_CHANNEL` with the realm's URL inside its
-// transaction. A process that hears it reads what it hasn't seen from the
+// notifies `REALM_FEED_EVENTS_CHANNEL` with the feed's key inside its
+// transaction: the realm's URL, or the realm's URL and a card's path for that
+// card's live channel. A process that hears it reads what it hasn't seen from the
 // store and passes it to its own subscribers, so a client connected here
 // hears a change another process announced, at the same position.
 //
@@ -77,24 +82,20 @@ export class RealmFeedEventsListener {
   // mounted realm reads from the last position it holds, which finds them.
   #handleReconnect(): void {
     for (const realm of this.#deps.listMountedRealms()) {
-      this.#catchUp(realm);
+      realm.catchUpAllEventFeeds().catch((err: unknown) => {
+        log.warn(`event feed catch-up failed for ${realm.url}: ${String(err)}`);
+      });
     }
   }
 
   #handleNotification(payload: string | undefined): void {
-    const realmURL = payload?.trim();
-    if (!realmURL) {
+    const key = payload?.trim();
+    if (!key) {
       return;
     }
-    const realm = this.#deps.lookupMountedRealm(realmURL);
-    if (realm) {
-      this.#catchUp(realm);
-    }
-  }
-
-  #catchUp(realm: Realm): void {
-    realm.catchUpEventFeed().catch((err: unknown) => {
-      log.warn(`event feed catch-up failed for ${realm.url}: ${String(err)}`);
+    const realm = this.#deps.lookupMountedRealm(parseFeedKey(key).realmURL);
+    realm?.catchUpEventFeed(key).catch((err: unknown) => {
+      log.warn(`event feed catch-up failed for ${key}: ${String(err)}`);
     });
   }
 }

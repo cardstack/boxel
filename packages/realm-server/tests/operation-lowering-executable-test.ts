@@ -818,4 +818,149 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  // A publish sends its payload as a message on the card's live channel and
+  // writes nothing, so what it lowers to is a payload schema, an optional
+  // `input`, and an optional compaction key — never a program over the card.
+  module('publish declarations', function () {
+    test('a publish lowers to its params and its key, and no program', async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'publish',
+          params: {
+            team: StringFieldClass,
+            n: StringFieldClass,
+            choice: StringFieldClass,
+          },
+          key: { $bxl: 'params("team") + ":" + TEXT(params("n"); "0")' },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      let select = operations.select;
+      assert.strictEqual(select.base, 'publish');
+      assert.notOk(select.invalid, 'and is runnable');
+      assert.deepEqual(
+        Object.keys(select.params ?? {}),
+        ['team', 'n', 'choice'],
+        'the payload schema is stored as declared',
+      );
+      assert.strictEqual(
+        select.key?.syntax,
+        'solidified',
+        `the key is stored canonical: ${select.key?.source}`,
+      );
+      assert.strictEqual(
+        select.program,
+        undefined,
+        'there is no program, since a publish edits no document',
+      );
+      assert.notOk(select.readsActor, 'a key over params reads no actor');
+    });
+
+    test("a publish's key that reads the caller marks the operation as reading one", async function (assert) {
+      let { operations, issues } = await lower({
+        vote: {
+          base: 'publish',
+          params: { choice: StringFieldClass },
+          key: { $bxl: 'actor()' },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      assert.true(
+        operations.vote.readsActor,
+        'so a request that authenticated nobody is refused before it publishes',
+      );
+    });
+
+    test("a publish's key reading an undeclared param is recorded where it is written", async function (assert) {
+      let { issues } = await lower({
+        vote: {
+          base: 'publish',
+          params: { choice: StringFieldClass },
+          key: { $bxl: 'params("team")' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['key: undeclared-param'],
+      );
+    });
+
+    test('a publish carrying a transformations program is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'publish',
+          params: { choice: StringFieldClass },
+          transformations: { $bxl: '.status = "selected";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['transformations: unrunnable-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        'and stores no program',
+      );
+    });
+
+    test("a publish carrying a transform's clauses or an output is refused", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'publish',
+          set: { status: 'selected' },
+          output: { $bxl: '.' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`).sort(),
+        ['output: unrunnable-program', 'set: unrunnable-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        'and the clause assembles no program',
+      );
+    });
+
+    test('a publish under the name of a base operation is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        update: { base: 'publish', params: { choice: StringFieldClass } },
+        publish: { base: 'publish', params: { choice: StringFieldClass } },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.operation}: ${issue.code}`),
+        ['update: publish-under-base-name'],
+        'only the one that takes another base operation is refused',
+      );
+      assert.true(operations.update.invalid, 'it is stored invalid');
+      assert.strictEqual(
+        operations.update.base,
+        'publish',
+        'on the publish base, so its name never falls back to the built-in update',
+      );
+      assert.notOk(
+        operations.publish.invalid,
+        'a publish named after its own base lowers as any other',
+      );
+    });
+
+    test('a publish on a file is a base its def type does not carry', async function (assert) {
+      let { operations } = await lowerOperationDeclarations(
+        { record: { base: 'publish' } } as never,
+        {
+          definition: { ...Report, type: 'file-def' },
+          lookupDefinition,
+          identifyCard: () => undefined,
+        },
+      );
+      assert.deepEqual(
+        operations.record.issues?.map((issue) => issue.code),
+        ['base-not-carried'],
+      );
+    });
+  });
 });

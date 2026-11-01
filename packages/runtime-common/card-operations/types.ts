@@ -315,6 +315,11 @@ export interface OperationDefinition {
   // The request a `callApi` sends, with the values an invocation fills still
   // holding their markers and every credential still a slot.
   callApi?: OperationCallApi;
+  // A `publish`'s compaction key: an expression over the payload the `input`
+  // stage left, which answers the string a later message on the card's
+  // channel supersedes an earlier one by. Absent, no message supersedes
+  // another.
+  key?: OperationProgram;
   // The author's short, plain-text phrase for people, shown wherever the
   // operation is presented to someone. Read as data and acted on by nothing.
   // Absent, the operation is shown under its name split into words.
@@ -453,6 +458,11 @@ export type OperationLoweringIssueCode =
   // Lowering itself failed on this operation, rather than finding something
   // wrong with it. The entry is stored as invalid so that invoking it says so.
   | 'lowering-failed'
+  // A `publish` declared under the name of a base operation. A publish writes
+  // nothing, so it would answer that name — an `update`, a `delete` — by
+  // writing nothing, and a caller reaching for the built-in would be told it
+  // had run.
+  | 'publish-under-base-name'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
@@ -642,6 +652,10 @@ export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'transform',
   'appendContainsMany',
   'appendLine',
+  // A message on a card's live channel, which writes nothing: a visitor's
+  // vote or reaction, admitted by a grant whose `where` reads the card as
+  // stored.
+  'publish',
 ];
 
 // The codes that leave the part of the policy they are recorded against live.
@@ -737,6 +751,9 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   validate: false,
   // A request sent outside the realm changes nothing the realm stores.
   callApi: false,
+  // Nor does a message on a card's live channel: it is delivered to the
+  // card's viewers and stored nowhere the realm reads.
+  publish: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -747,11 +764,13 @@ export function isWrite(base: BaseOperation): boolean {
 // what decides the method a batch carrying it travels on and the permission
 // the realm checks for it. Every write does, and so does a `callApi`: it
 // changes nothing stored, but it acts outside the realm on the realm's
-// behalf, which a caller only permitted to read the realm may not do. A
-// `callApi` is not staged or committed, so the two questions are asked
-// separately.
+// behalf, which a caller only permitted to read the realm may not do. So
+// does a `publish`: it stores nothing, but it speaks to every viewer of the
+// card on the realm's channel, which a caller only permitted to read may not
+// do unless a grant says so. Neither is staged or committed, so the two
+// questions are asked separately.
 export function travelsAsWrite(base: BaseOperation): boolean {
-  return WRITES[base] || base === 'callApi';
+  return WRITES[base] || base === 'callApi' || base === 'publish';
 }
 
 // What an operation runs against. An `instance` target is an existing card or
@@ -1528,6 +1547,32 @@ export interface OperationCallApiResult {
   callApi: unknown;
 }
 
+// A `publish`'s answer: the card whose channel carried the message, and the
+// position the message took there. Its own member rather than an identity
+// result, which reports a version a write left the card at — a publish
+// leaves the card as it was, and a reader of an identity result would take
+// its absent version for a write that changed nothing.
+export interface OperationPublishResult {
+  published: { id: string; position: string };
+}
+
+// What the realm hands a channel to publish: the card whose channel it is,
+// the operation that sent it, the compaction key where the declaration names
+// one, and the body, which is the payload after the `input` stage.
+export interface PublishMessageArgs {
+  cardURL: string;
+  operation: { name: string; base: 'publish' };
+  key?: string;
+  body: JsonValue;
+}
+
+// Delivers a `publish`'s message on the card's live channel (ADR 020 §1.8,
+// §1.10), answering the position it took there. Supplied by the realm, which
+// owns the channel.
+export type PublishMessage = (
+  args: PublishMessageArgs,
+) => Promise<{ position: string }>;
+
 export type ValidatedGrantInertia =
   // A grant on a query whose `where` compiled no search filter. A query is
   // authorized only by composing a grant's filter into the search, and the
@@ -1545,6 +1590,7 @@ export type OperationResult =
   | OperationExplainListingResult
   | OperationValidateResult
   | OperationCallApiResult
+  | OperationPublishResult
   | null;
 
 export function isDocumentResult(
@@ -1596,6 +1642,12 @@ export function isCallApiResult(
   result: OperationResult,
 ): result is OperationCallApiResult {
   return result != null && 'callApi' in result;
+}
+
+export function isPublishResult(
+  result: OperationResult,
+): result is OperationPublishResult {
+  return result != null && 'published' in result;
 }
 
 export type OperationErrorCode =
@@ -1733,6 +1785,10 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // The operation is sound and this realm cannot carry it out: a `publish` on
+  // a realm that has no live channel to put the message on. Carries a 501.
+  // Nothing was done.
+  | 'not-implemented'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

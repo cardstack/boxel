@@ -361,8 +361,18 @@ export type ReconciledWriteResult = OperationWriteResult & {
 // derived from the card.
 export type OperationDocument = Record<string, unknown>;
 
+// What a publish reports: the card whose live channel carried the message, and
+// the position the message took there — the same position a viewer of the
+// channel sees it arrive at, so a caller can tell its own message when the
+// channel brings it back. The card is not written, so there is no version.
+export interface PublishedMessage {
+  id: string;
+  position: string;
+}
+
 export type OperationValueResult =
   | OperationWriteResult
+  | PublishedMessage
   | OperationDocument
   | null;
 
@@ -513,6 +523,8 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
   query: 'type',
   // Invocable in both scopes; see `carriesMember`.
   callApi: 'instance',
+  // A card's live channel is the card's, so there is no type to publish on.
+  publish: 'instance',
 };
 
 // The behaviors reached somewhere other than a batch, which therefore have no
@@ -1114,14 +1126,18 @@ function realmHref(realm: string | URL): string {
 // Reading the answer
 // ---------------------------------------------------------------------------
 
-// How a result is read. A write reports an identity and a read reports a
-// document, both settled by the behavior the name is built on. An entry whose
-// target is a search is `opaque`: which behavior its name resolves to is the
-// matched card's own type to decide, so its result is handed back as the realm
-// reported it rather than read as something it may not be.
-type ResultKind = 'write' | 'read' | 'opaque';
+// How a result is read. A write reports an identity, a publish the position
+// its message took, and a read a document, each settled by the behavior the
+// name is built on. An entry whose target is a search is `opaque`: which
+// behavior its name resolves to is the matched card's own type to decide, so
+// its result is handed back as the realm reported it rather than read as
+// something it may not be.
+type ResultKind = 'write' | 'publish' | 'read' | 'opaque';
 
 function resultKindOf(base: BaseOperation): ResultKind {
+  if (base === 'publish') {
+    return 'publish';
+  }
   return isWrite(base) ? 'write' : 'read';
 }
 
@@ -1140,6 +1156,9 @@ function valueResult(
       `operation "${name}" named one target, and the realm answered it with several results`,
     );
   }
+  if (kind === 'publish') {
+    return publishedMessage(result, name);
+  }
   if (kind !== 'write') {
     return result as OperationDocument;
   }
@@ -1149,6 +1168,17 @@ function valueResult(
     return null;
   }
   return writeResult(data, name);
+}
+
+function publishedMessage(result: WireResult, name: string): PublishedMessage {
+  let data = (result as { data?: Record<string, unknown> | null }).data;
+  let meta = (data?.meta ?? {}) as Record<string, unknown>;
+  if (typeof data?.id !== 'string' || typeof meta.position !== 'string') {
+    throw new Error(
+      `the realm's result for operation "${name}" names no position its message took`,
+    );
+  }
+  return { id: data.id, position: meta.position };
 }
 
 // Every card a committed batch minted, as the name the caller gave it beside
@@ -1208,6 +1238,10 @@ export function writeResultIn(
     return undefined;
   }
   let meta = (data.meta ?? {}) as Record<string, unknown>;
+  // A publish's answer names its card too, and wrote nothing to reconcile.
+  if (typeof meta.position === 'string' && meta.version === undefined) {
+    return undefined;
+  }
   return {
     ...writeResult(data, 'the batch'),
     ...(typeof meta.baseMatched === 'boolean'

@@ -8,6 +8,7 @@ import {
   isOperationFailure,
   isValidateResult,
   isCallApiResult,
+  isPublishResult,
   isWrite,
   type BaseOperation,
   type EntryPosition,
@@ -1104,6 +1105,37 @@ export function writeResult(
           ? {}
           : { baseMatched: result.meta.baseMatched }),
       },
+    },
+  };
+}
+
+// A publish's answer: the card whose channel carried the message, and the
+// position it took there. Shaped as a write's identity is — a JSON:API result
+// object naming the card — so a caller reading `atomic:results` finds the card
+// where a write entry's would be, with `meta.position` where a write's
+// `meta.version` would be. It carries no version because the card did not
+// move: the message is the channel's, not the card's.
+export function publishedResult(
+  entry: EnvelopeEntry,
+  result: OperationResult,
+  // As `writeResult`'s: the realm's canonical spelling of the card's id.
+  canonical: (url: string) => string,
+): EnvelopeResult {
+  if (!isPublishResult(result)) {
+    throw new OperationFailure({
+      ...(entry.href ? { id: entry.href } : {}),
+      status: 500,
+      code: 'internal-error',
+      title: 'Unreadable result',
+      detail: `the publish in entry ${entry.position} answered with no position`,
+      meta: { entry: entry.position },
+    });
+  }
+  return {
+    data: {
+      type: 'card',
+      id: canonical(result.published.id),
+      meta: { position: result.published.position },
     },
   };
 }

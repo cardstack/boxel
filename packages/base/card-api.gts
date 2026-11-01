@@ -75,6 +75,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  type ChannelMessage,
   type Store,
   type SearchResultsComponentSignature,
   type ErrorEntry,
@@ -436,6 +437,16 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
+  // Follows a card's live channel (ADR 020 §1.8): `onMessage` hears each
+  // message a `publish` operation puts on it, starting with the latest for
+  // each key, and a change to the card reaches the page as any change does.
+  // Returns a function that stops following. The card's realm must let a
+  // visitor who isn't signed in read the card. Absent where nothing follows a
+  // channel, such as a prerender, so consumers guard on it.
+  followChannel?: (
+    card: CardDef | string,
+    onMessage: (message: ChannelMessage) => void,
+  ) => () => void;
   // May this session invoke `operation` on `target`? A target is a saved card
   // or its URL, or a card class to ask whether a card of that type may be
   // created (in `opts.realm`, or where a create names no realm, the realm it

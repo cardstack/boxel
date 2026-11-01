@@ -245,6 +245,60 @@ module('Unit | Service | event-feed', function (hooks) {
     );
   });
 
+  test("a page follows a card's channel: messages reach it, card changes reach the store, and the channel closes with its last follower", function (assert) {
+    let card = `${REALM}QuizNight/x7k2`;
+    let heard: unknown[] = [];
+    watch();
+    service.start();
+    let unfollow = service.followChannel(card, REALM, (message) =>
+      heard.push(message),
+    );
+    let source = FakeEventSource.made.find((made) =>
+      made.url.includes('channel='),
+    )!;
+    assert.strictEqual(
+      source.url,
+      `${REALM}_live?channel=${encodeURIComponent('QuizNight/x7k2')}`,
+    );
+    assert.deepEqual(
+      received.map((event) => (event as any).invalidations),
+      [[card]],
+      'the card is re-read once, since it may have changed before the channel opened',
+    );
+
+    source.emit('change', {
+      data: JSON.stringify({
+        seq: 4,
+        kind: 'message',
+        path: 'QuizNight/x7k2',
+        key: 'red:1',
+        operation: { name: 'select', base: 'publish' },
+        body: { team: 'red', choice: 'B' },
+      }),
+    });
+    assert.deepEqual(heard, [
+      {
+        seq: 4,
+        key: 'red:1',
+        operation: 'select',
+        body: { team: 'red', choice: 'B' },
+      },
+    ]);
+    source.emit('change', {
+      data: JSON.stringify({
+        seq: 5,
+        kind: 'indexed',
+        path: 'QuizNight/x7k2',
+        rev: 'r2',
+      }),
+    });
+    assert.strictEqual(received.length, 2, 'the change reaches the store');
+    assert.strictEqual(heard.length, 1, 'and is not a message');
+
+    unfollow();
+    assert.true(source.closed, 'the channel closes when nothing follows it');
+  });
+
   test('nothing is opened until the service starts', function (assert) {
     watch();
     assert.strictEqual(FakeEventSource.made.length, 0);

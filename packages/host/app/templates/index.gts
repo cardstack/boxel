@@ -42,9 +42,11 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
+import type EventFeedService from '@cardstack/host/services/event-feed';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type HostNavigationService from '@cardstack/host/services/host-navigation';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
@@ -75,6 +77,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
+  @service declare private eventFeed: EventFeedService;
+  @service declare private realm: RealmService;
 
   @provide(GetCardContextName)
   private get getCard(): GetCardType {
@@ -178,6 +182,19 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   private installHostNavigation = modifier(() => this.hostNavigation.install());
 
+  // A card's live channel, followed through the event feed (ADR 020 §1.8).
+  private followChannel: NonNullable<CardContext['followChannel']> = (
+    card,
+    onMessage,
+  ) => {
+    let cardURL = idFromCardOrURL(card);
+    let realmURL = cardURL ? this.realm.realmURLOf(cardURL) : undefined;
+    if (!cardURL || !realmURL) {
+      return () => {};
+    }
+    return this.eventFeed.followChannel(cardURL, realmURL, onMessage);
+  };
+
   @action
   removeCardFromStack(cardId: string) {
     this.hostModeStateService.removeCardFromStack(cardId);
@@ -191,6 +208,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      followChannel: this.followChannel,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,

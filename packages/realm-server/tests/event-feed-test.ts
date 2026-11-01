@@ -6,7 +6,9 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   EVENT_FEED_MAX_CHECKS_PER_EVENT,
+  channelFeedKey,
   DbFeedStore,
+  EVENT_FEED_WINDOW,
   parseAddressRanges,
   RealmEventFeed,
   rri,
@@ -52,7 +54,7 @@ const REALM_POLICY = {
 const ARTICLE_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
-  import { operation, params } from "@cardstack/base/operations";
+  import { operation, params, bxl } from "@cardstack/base/operations";
   export class Article extends CardDef {
     @field headline = contains(StringField);
     @field status = contains(StringField);
@@ -60,6 +62,11 @@ const ARTICLE_MODULE = `
       base: 'transform',
       params: { headline: StringField },
       set: { headline: params('headline') },
+    };
+    @operation static cheer = {
+      base: 'publish',
+      params: { reader: StringField, mood: StringField },
+      key: bxl\`params("reader")\`,
     };
   }
 `;
@@ -147,6 +154,11 @@ module(basename(import.meta.filename), function (hooks) {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/newsroom.json': policyCard(`${NEWSROOM}article`, [
               { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+              {
+                operation: 'cheer',
+                anonymous: true,
+                ...PUBLISHED_TO_ANONYMOUS,
+              },
             ]),
             // Opens nothing to callers who aren't signed in.
             'policies/library.json': policyCard(`${LIBRARY}article`, [
@@ -678,6 +690,149 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a card's channel answers only for a card a visitor may read, and carries the card's own changes", async function (assert) {
+    let channel = (path: string) =>
+      request
+        .get(`${new URL(NEWSROOM).pathname}_live`)
+        .query({ channel: path })
+        .set('Accept', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', VISITOR);
+
+    let draft = await channel('articles/draft');
+    assert.strictEqual(
+      draft.status,
+      404,
+      'a draft has no channel a visitor can follow',
+    );
+    let escape = await channel('../elsewhere/Card/1');
+    assert.strictEqual(escape.status, 404, 'a path out of the realm has none');
+
+    let opened = await channel('articles/published');
+    assert.strictEqual(opened.status, 200, opened.text);
+    let window = opened.body as FeedEventWindow;
+    assert.deepEqual(
+      window.events.filter((event) => event.kind !== 'reset'),
+      [],
+      'a new channel carries nothing but, perhaps, the realm feed starting',
+    );
+    assert.strictEqual(window.from, 0);
+
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open early', 'published'),
+    );
+    await newsroom.indexing();
+    let deadline = Date.now() + 10_000;
+    let kinds: string[] = [];
+    while (Date.now() < deadline) {
+      kinds = (
+        (await channel('articles/published')).body as FeedEventWindow
+      ).events
+        .filter((event) => event.kind !== 'reset')
+        .map((event) => `${event.kind} ${event.path}`);
+      if (kinds.includes('indexed articles/published')) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.deepEqual(
+      kinds,
+      ['written articles/published', 'indexed articles/published'],
+      'the channel carries the change the realm feed announced',
+    );
+    let other = (await channel('articles/published')).body as FeedEventWindow;
+    assert.notStrictEqual(
+      other.epoch,
+      ((await feedWindow()).body as FeedEventWindow).epoch,
+      'and keeps a sequence of its own',
+    );
+  });
+
+  test("a visitor's publish lands on the card's channel, the latest per key, and writes nothing", async function (assert) {
+    let cheer = (reader: string, mood: string) =>
+      request
+        .post(`${new URL(NEWSROOM).pathname}_operations`)
+        .set('Accept', SupportedMimeType.BoxelOperations)
+        .set('Content-Type', SupportedMimeType.BoxelOperations)
+        .set('X-Forwarded-For', VISITOR)
+        .send({
+          'boxel:operations': [
+            {
+              op: 'invoke',
+              'boxel:name': 'cheer',
+              href: `${NEWSROOM}articles/published`,
+              data: { reader, mood },
+            },
+          ],
+        });
+    let feedBefore = await head();
+
+    let first = await cheer('ana', 'happy');
+    assert.strictEqual(first.status, 200, first.text);
+    let changed = await cheer('ana', 'thrilled');
+    assert.strictEqual(changed.status, 200, changed.text);
+    let other = await cheer('ben', 'calm');
+    assert.strictEqual(other.status, 200, other.text);
+
+    let channel = (
+      await request
+        .get(`${new URL(NEWSROOM).pathname}_live`)
+        .query({ channel: 'articles/published' })
+        .set('Accept', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', VISITOR)
+    ).body as FeedEventWindow;
+    assert.deepEqual(
+      channel.events
+        .filter((event) => event.kind === 'message')
+        .map(({ key, body, operation }) => ({ key, body, operation })),
+      [
+        {
+          key: 'ana',
+          body: { reader: 'ana', mood: 'thrilled' },
+          operation: { name: 'cheer', base: 'publish' },
+        },
+        {
+          key: 'ben',
+          body: { reader: 'ben', mood: 'calm' },
+          operation: { name: 'cheer', base: 'publish' },
+        },
+      ],
+      "ana's change replaces her first cheer",
+    );
+    let published = (first.body as any)['atomic:results'][0];
+    assert.strictEqual(
+      published.data.meta.position,
+      `${channel.epoch}:1`,
+      'the response names where the message landed on the channel',
+    );
+    assert.strictEqual(
+      await head(),
+      feedBefore,
+      "the realm's own feed hears nothing: no card changed",
+    );
+
+    let draft = await request
+      .post(`${new URL(NEWSROOM).pathname}_operations`)
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': 'cheer',
+            href: `${NEWSROOM}articles/draft`,
+            data: { reader: 'ana', mood: 'curious' },
+          },
+        ],
+      });
+    assert.notStrictEqual(
+      draft.status,
+      200,
+      `the policy admits no cheer on a draft: ${draft.text}`,
+    );
+  });
+
   test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
     let before = await head();
     let patched = await request
@@ -915,5 +1070,64 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
     if (!refused.accepted) {
       assert.ok(refused.retryAfterMs > 0, 'and says how long to wait');
     }
+  });
+
+  test("a channel's window keeps the latest message for each key, however old", async function (assert) {
+    let channel = new RealmEventFeed(
+      REALM,
+      async () => ({}),
+      new DbFeedStore(dbAdapter),
+      { key: channelFeedKey(REALM, 'Game/1') },
+    );
+    let pick = (team: string, choice: string) =>
+      channel.publish({
+        path: 'Game/1',
+        operation: { name: 'select', base: 'publish' },
+        key: `${team}:1`,
+        body: { team, choice },
+      });
+    await pick('red', 'A');
+    await pick('blue', 'C');
+    await pick('red', 'B');
+    let window = await channel.window();
+    assert.deepEqual(
+      window.events.map((event) => event.body),
+      [
+        { team: 'blue', choice: 'C' },
+        { team: 'red', choice: 'B' },
+      ],
+      "red's change replaces red's first pick",
+    );
+    assert.strictEqual(window.from, 0, 'nothing a client needs was dropped');
+
+    for (let i = 0; i < EVENT_FEED_WINDOW + 10; i++) {
+      await channel.publish({
+        path: 'Game/1',
+        operation: { name: 'cheer', base: 'publish' },
+        body: { i },
+      });
+    }
+    let restarted = new RealmEventFeed(
+      REALM,
+      async () => ({}),
+      new DbFeedStore(dbAdapter),
+      { key: channelFeedKey(REALM, 'Game/1') },
+    );
+    let later = await restarted.window();
+    let picks = later.events
+      .filter((event) => event.key !== undefined)
+      .map((event) => event.body);
+    assert.deepEqual(
+      picks,
+      [
+        { team: 'blue', choice: 'C' },
+        { team: 'red', choice: 'B' },
+      ],
+      'the picks outlive the window and a restart',
+    );
+    assert.ok(
+      later.from > 0,
+      'and the window says the cheers before it are gone',
+    );
   });
 });
