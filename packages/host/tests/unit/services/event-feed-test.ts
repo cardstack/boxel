@@ -177,7 +177,7 @@ module('Unit | Service | event-feed', function (hooks) {
     let unsubscribe = watch();
     assert.strictEqual(FakeEventSource.made.length, 1, 'one feed is opened');
     let source = FakeEventSource.made[0];
-    assert.strictEqual(source.url, `${REALM}_events`);
+    assert.strictEqual(source.url, `${REALM}_live`);
 
     source.emit('open');
     source.emit('change', {
@@ -319,7 +319,7 @@ module('Unit | Service | event-feed', function (hooks) {
     assert.strictEqual(FakeEventSource.made.length, 2, 'the next tab opens it');
     assert.strictEqual(
       FakeEventSource.made[1].url,
-      `${REALM}_events?lastEventId=${encodeURIComponent('e1:7')}`,
+      `${REALM}_live?lastEventId=${encodeURIComponent('e1:7')}`,
       'from where the last leader stopped',
     );
     FakeEventSource.made[1].emit('change', {
@@ -398,7 +398,7 @@ module('Unit | Service | event-feed', function (hooks) {
     assert.strictEqual(FakeEventSource.made.length, 2, 'it opens again');
     assert.strictEqual(
       FakeEventSource.made[1].url,
-      `${REALM}_events?lastEventId=${encodeURIComponent('e1:4')}`,
+      `${REALM}_live?lastEventId=${encodeURIComponent('e1:4')}`,
       'from where it stopped',
     );
   });
@@ -415,7 +415,7 @@ module('Unit | Service | event-feed', function (hooks) {
       ) => {
         if (
           !String(input instanceof Request ? input.url : input).includes(
-            '_events',
+            '_live',
           )
         ) {
           return originalFetch(input, init);
@@ -444,7 +444,7 @@ module('Unit | Service | event-feed', function (hooks) {
       ) => {
         if (
           !String(input instanceof Request ? input.url : input).includes(
-            '_events',
+            '_live',
           )
         ) {
           return originalFetch(input, init);

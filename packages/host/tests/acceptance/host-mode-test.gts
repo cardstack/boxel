@@ -1754,7 +1754,7 @@ module('Acceptance | host mode tests', function (hooks) {
         await settled();
         let messageService = getService('message-service');
         assert.true(
-          opened.some((url) => url === `${realm}_events`),
+          opened.some((url) => url === `${realm}_live`),
           `the realm's feed is opened: ${JSON.stringify({
             opened,
             subscribed: messageService.subscribedRealms(),

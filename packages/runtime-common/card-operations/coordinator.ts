@@ -51,6 +51,7 @@ import type { RequestTimings, StageCursor } from '../request-timings.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type { FeedOperation } from '../event-feed.ts';
 
 // ============================================================================
 // The batch coordinator.
@@ -173,6 +174,9 @@ export interface BatchCore {
     options?: {
       clientRequestId?: string | null;
       clientAuthored?: string[];
+      // See `CommitBatchOptions.operationAt`: the operation that wrote each
+      // card, by card URL.
+      operations?: Record<string, FeedOperation>;
       waitForIndex?: boolean;
       // See `CommitBatchOptions.indexWaitBudgetMs`.
       indexWaitBudgetMs?: number;
@@ -234,6 +238,9 @@ export interface CommitBatchOptions {
   // The caller's own id for this batch. Echoed on the realm's index event so a
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
+  // The operation each entry runs, by the position it was sent under, so the
+  // realm's event feed can name what produced each change (ADR 020 §1.1).
+  operationAt?: (position: EntryPosition) => FeedOperation | undefined;
   // Whether the index event should say which of this write's cards carried
   // content the caller supplied.
   //
@@ -2420,10 +2427,21 @@ async function commitStaged(
         .filter((change): change is StagedChange => Boolean(change?.lid))
         .map((change) => change.id)
     : undefined;
+  let operations: Record<string, FeedOperation> | undefined;
+  if (opts.operationAt) {
+    operations = {};
+    for (let [index, change] of staged.entries()) {
+      let operation = change && opts.operationAt(positions[index]);
+      if (change && operation) {
+        operations[change.id] = operation;
+      }
+    }
+  }
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
+      ...(operations ? { operations } : {}),
       ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
       ...(opts.indexWaitBudgetMs === undefined

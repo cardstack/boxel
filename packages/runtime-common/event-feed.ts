@@ -12,7 +12,7 @@ import { logger } from './log.ts';
 // learns the realm's own address. It carries no card content: a client
 // re-reads the card through the ordinary gated read.
 
-export const EVENT_FEED_PATH = '_events';
+export const EVENT_FEED_PATH = '_live';
 
 // The query parameter that addresses a card read by revision (ADR 020 §1.5).
 // A client re-reading a card after an event asks for `{card}?rev=<rev>`, with
@@ -36,14 +36,35 @@ export function cardRevisionOf(
 
 // `refresh` is a writer's request that every page following the feed reload
 // (ADR 020 §1.7). It names no card.
+// The wire version events and the poll carry (ADR 020 §1.9). A client
+// ignores fields and kinds it doesn't know, so a later version can add them.
+export const EVENT_FEED_VERSION = 1;
+
+// `removed`: the card was deleted. `withdrawn`: it still exists but the
+// feed's audience may no longer read it. Both tell a client to drop it.
 export type FeedChangeKind =
   | 'written'
   | 'indexed'
   | 'removed'
+  | 'withdrawn'
   | 'reset'
   | 'refresh';
 
+// The operation that produced a change (ADR 020 §1.1): its name and the
+// base it builds on, never who ran it or with what.
+export interface FeedOperation {
+  name: string;
+  base: string;
+}
+
 export interface FeedEvent {
+  v?: number;
+  operation?: FeedOperation;
+  // The changed cards' types (ADR 020 §1.1), so a client re-runs only the
+  // searches they could affect: keys relative to the realm, or prefix-form
+  // keys such as `@cardstack/base/card-api/CardDef`. Absent when the realm
+  // couldn't say, and then a client re-runs every search.
+  types?: string[];
   // Position in this feed's sequence. Only increases within one `epoch`.
   seq: number;
   kind: FeedChangeKind;
@@ -62,6 +83,7 @@ export interface FeedEvent {
 // events, the same for every caller, so a shared cache can collapse a crowd's
 // polls into one request (ADR 020 §1.3).
 export interface FeedEventWindow {
+  v?: number;
   epoch: string;
   head: number;
   events: FeedEvent[];
@@ -85,31 +107,46 @@ export const EVENT_FEED_HEARTBEAT_MS = 25_000;
 
 // The changes a realm event announces, as card URLs and what happened to
 // them. A full reindex can have changed anything, so it is a reset.
+// A write that ran no named operation is named by its base (ADR 020 §1.1).
+const CREATED: FeedOperation = { name: 'create', base: 'create' };
+const UPDATED: FeedOperation = { name: 'update', base: 'update' };
+const DELETED: FeedOperation = { name: 'delete', base: 'delete' };
+
 export function changesIn(
   event: RealmEventContent,
-): { url: string; kind: FeedChangeKind }[] | 'reset' {
+):
+  | { url: string; kind: FeedChangeKind; operation?: FeedOperation }[]
+  | 'reset' {
   switch (event.eventName) {
-    case 'update':
+    case 'update': {
+      // The write's own event names its files by their paths in the realm.
+      let urlOf = (path: string) => new URL(path, event.realmURL).href;
       return [
-        ...(event.added ?? []).map((url) => ({
-          url,
+        ...(event.added ?? []).map((path) => ({
+          url: urlOf(path),
           kind: 'written' as const,
+          operation: CREATED,
         })),
-        ...(event.updated ?? []).map((url) => ({
-          url,
+        ...(event.updated ?? []).map((path) => ({
+          url: urlOf(path),
           kind: 'written' as const,
+          operation: UPDATED,
         })),
-        ...(event.removed ?? []).map((url) => ({
-          url,
+        ...(event.removed ?? []).map((path) => ({
+          url: urlOf(path),
           kind: 'removed' as const,
+          operation: DELETED,
         })),
       ];
+    }
     case 'index':
       if (event.indexType === 'full') {
         return 'reset';
       }
       if (event.indexType === 'incremental-index-initiation') {
-        return [{ url: event.updatedFile, kind: 'written' }];
+        // The write's own \`update\` event announces it, naming what it was;
+        // this signal of the same write would only repeat it without that.
+        return [];
       }
       return event.invalidations.map((url) => ({ url, kind: 'indexed' }));
     default:
@@ -141,6 +178,9 @@ export class RealmEventFeed {
     { kind: FeedChangeKind; rev?: string; at: number }
   >();
   #queue: Promise<void> = Promise.resolve();
+  // The operation that wrote each path, held from its write until its index
+  // pass is announced, so the \`indexed\` event names it too.
+  #wroteBy = new Map<string, { operation: FeedOperation; at: number }>();
   #lastRefresh: number | undefined;
 
   readonly realmURL: string;
@@ -160,9 +200,14 @@ export class RealmEventFeed {
 
   // Takes a realm event in. Events are judged and announced in the order
   // they arrive.
-  ingest(event: RealmEventContent): Promise<void> {
+  // \`operations\` names the operation that wrote each card, by card URL, for a
+  // write that ran through \`_operations\`.
+  ingest(
+    event: RealmEventContent,
+    operations?: Record<string, FeedOperation>,
+  ): Promise<void> {
     this.#queue = this.#queue
-      .then(() => this.#ingest(event))
+      .then(() => this.#ingest(event, operations))
       .catch((error: unknown) => {
         // A check that fails can't say whether a change is readable, so the
         // feed fails closed: it names no card, and tells every client to
@@ -183,7 +228,10 @@ export class RealmEventFeed {
     this.#announce('reset', '');
   }
 
-  async #ingest(event: RealmEventContent) {
+  async #ingest(
+    event: RealmEventContent,
+    operations?: Record<string, FeedOperation>,
+  ) {
     let changes = changesIn(event);
     if (changes === 'reset') {
       this.reset();
@@ -203,14 +251,23 @@ export class RealmEventFeed {
       this.reset();
       return;
     }
-    for (let { url, kind } of changes) {
+    let types = feedTypes(event, this.realmURL);
+    for (let change of changes) {
+      let { url, kind } = change;
       let path = this.#pathOf(url);
       if (path === undefined) {
         continue;
       }
+      let operation = this.#operationFor(
+        path,
+        kind,
+        operations?.[url] ??
+          operations?.[url.replace(/\.json$/, '')] ??
+          change.operation,
+      );
       if (kind === 'removed') {
         if (this.#visible.delete(path)) {
-          this.#announce('removed', path);
+          this.#announce('removed', path, undefined, types, operation);
         }
         continue;
       }
@@ -219,13 +276,45 @@ export class RealmEventFeed {
         // A card that stops being readable is announced once more, so a
         // visitor holding it finds out it is gone.
         if (this.#visible.delete(path)) {
-          this.#announce('removed', path);
+          this.#announce('withdrawn', path, undefined, types, operation);
         }
         continue;
       }
       this.#visible.add(path);
-      this.#announce(kind, path, kind === 'indexed' ? readable.rev : undefined);
+      this.#announce(
+        kind,
+        path,
+        kind === 'indexed' ? readable.rev : undefined,
+        types,
+        operation,
+      );
     }
+  }
+
+  // The operation to name for a change: the one that wrote it, remembered
+  // from its write for its index pass, which follows within seconds.
+  #operationFor(
+    path: string,
+    kind: FeedChangeKind,
+    operation: FeedOperation | undefined,
+  ): FeedOperation | undefined {
+    let now = Date.now();
+    if (kind === 'written' && operation) {
+      this.#wroteBy.set(path, { operation, at: now });
+      if (this.#wroteBy.size > EVENT_FEED_WINDOW * 4) {
+        let oldest = this.#wroteBy.keys().next().value;
+        if (oldest !== undefined) {
+          this.#wroteBy.delete(oldest);
+        }
+      }
+      return operation;
+    }
+    if (kind === 'indexed') {
+      let wrote = this.#wroteBy.get(path);
+      this.#wroteBy.delete(path);
+      return wrote && now - wrote.at < 60_000 ? wrote.operation : undefined;
+    }
+    return operation;
   }
 
   #pathOf(url: string): string | undefined {
@@ -242,7 +331,13 @@ export class RealmEventFeed {
     return path;
   }
 
-  #announce(kind: FeedChangeKind, path: string, rev?: string) {
+  #announce(
+    kind: FeedChangeKind,
+    path: string,
+    rev?: string,
+    types?: string[],
+    operation?: FeedOperation,
+  ) {
     let now = Date.now();
     let last = this.#lastKind.get(path);
     if (
@@ -259,10 +354,13 @@ export class RealmEventFeed {
       this.#lastKind.clear();
     }
     let event: FeedEvent = {
+      v: EVENT_FEED_VERSION,
       seq: ++this.#seq,
       kind,
       path,
       ...(rev ? { rev } : {}),
+      ...(types ? { types } : {}),
+      ...(operation ? { operation } : {}),
     };
     this.#events.push(event);
     if (this.#events.length > EVENT_FEED_WINDOW) {
@@ -291,7 +389,12 @@ export class RealmEventFeed {
   }
 
   window(): FeedEventWindow {
-    return { epoch: this.epoch, head: this.#seq, events: [...this.#events] };
+    return {
+      v: EVENT_FEED_VERSION,
+      epoch: this.epoch,
+      head: this.#seq,
+      events: [...this.#events],
+    };
   }
 
   // The events after `lastEventId` (an id this feed sent), or a reset when
@@ -304,7 +407,9 @@ export class RealmEventFeed {
     let seq = Number(seqText);
     let oldest = this.#events[0]?.seq ?? this.#seq + 1;
     if (epoch !== this.epoch || !Number.isInteger(seq) || seq < oldest - 1) {
-      return [{ seq: this.#seq, kind: 'reset', path: '' }];
+      return [
+        { v: EVENT_FEED_VERSION, seq: this.#seq, kind: 'reset', path: '' },
+      ];
     }
     return this.#events.filter((event) => event.seq > seq);
   }
@@ -329,6 +434,36 @@ export class RealmEventFeed {
 }
 
 const log = logger('realm:event-feed');
+
+// The types an index event names, as the feed may pass them on (ADR 020
+// §1.1). A key inside the realm becomes relative to it, so a site visitor
+// never learns the realm's own address; a prefix-form key names no address
+// and passes as it is. A key that is an absolute URL elsewhere would name
+// another realm's address, so a set holding one is dropped whole, which leaves
+// a client re-running every search, as it would with no types at all.
+export function feedTypes(
+  event: RealmEventContent,
+  realmURL: string,
+): string[] | undefined {
+  if (
+    event.eventName !== 'index' ||
+    !('invalidatedTypes' in event) ||
+    !Array.isArray(event.invalidatedTypes)
+  ) {
+    return undefined;
+  }
+  let types: string[] = [];
+  for (let key of event.invalidatedTypes) {
+    if (key.startsWith(realmURL)) {
+      types.push(key.slice(realmURL.length));
+    } else if (/^[a-z][a-z0-9+.-]*:/i.test(key)) {
+      return undefined;
+    } else {
+      types.push(key);
+    }
+  }
+  return types;
+}
 
 // An epoch nobody can predict or collide with, so a client never mistakes a
 // restarted feed's positions for the ones it held.

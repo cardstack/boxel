@@ -38,8 +38,9 @@ announced the same way, so a page running that code rebuilds it in place as
 a signed-in page does. An event MUST name the operation that produced the
 change, by its name and base, and MUST NOT name its actor or its parameters;
 a write that ran no named operation is named by its base. An event MAY name
-the changed card's type relative to the realm, so a client re-runs only the
-searches it could affect, and MUST NOT name a type by an absolute URL.
+the changed cards' types, relative to the realm or in prefix form, so a
+client re-runs only the searches they could affect, and MUST NOT name a type
+by an absolute URL.
 
 ### 1.2. Filtered once, by the realm's permissions and policy
 
@@ -155,8 +156,9 @@ MUST ignore fields and kinds it doesn't know, so later versions can add them.
 - Poll: `Accept: application/json`, answered `{ "v": 1, "epoch", "head",
 "events": [...] }`, the latest window, `Cache-Control: public, max-age=1,
 stale-while-revalidate=1`.
-- Event: `{ "v": 1, "seq", "kind", "path", "rev"?, "type"?, "operation"? }`,
-  where `operation` is `{ "name", "base" }`.
+- Event: `{ "v": 1, "seq", "kind", "path", "rev"?, "types"?, "operation"? }`,
+  where `types` lists type keys relative to the realm or in prefix form, and
+  `operation` is `{ "name", "base" }`.
 - Kinds: `written` (the change landed; a client need do nothing), `indexed`
   (re-read `path`, at `rev` when given), `removed` (the card was deleted),
   `withdrawn` (the audience may no longer read it), `reset` (revalidate

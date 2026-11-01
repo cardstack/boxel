@@ -1,6 +1,6 @@
 ---
 name: live-public-sites
-description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the realm's event feed, ADR 020), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_events`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
+description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the realm's event feed, ADR 020), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_live`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
 ---
 
 # Live public sites
@@ -106,7 +106,7 @@ params("n"))] + [...]`. `NOW()` is a spreadsheet serial: format it with
 ## 5. Changing code during an event
 
 - A realm writer can ask every page following a realm's feed to reload:
-  `POST {realm}/_events/refresh`, at most once a minute (ADR 020 §1.7).
+  `POST {realm}/_live/refresh`, at most once a minute (ADR 020 §1.7).
 - A page is first offered the request as a cancelable `boxel-refresh-requested`
   window event whose `detail` has `realm` and `reload()`. An app that calls
   `preventDefault()` keeps the page as it is, tells its visitors an update is

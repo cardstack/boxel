@@ -10,6 +10,7 @@ import {
   cardRevisionOf,
   EVENT_FEED_HEARTBEAT_MS,
   RealmEventFeed,
+  type FeedOperation,
 } from './event-feed.ts';
 import {
   ANONYMOUS_BYTES_READ,
@@ -2313,6 +2314,9 @@ export interface CommitBatchResult {
 
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // The operation that wrote each card, by card URL, for the event feed to
+  // name (ADR 020 §1.1). Only the operations coordinator says.
+  operations?: Record<string, FeedOperation>;
   // The cards among this write's own files whose content the caller supplied
   // verbatim, named the way the invalidation event names them. Reported on
   // that event so a client holding these cards can tell them from the ones
@@ -3312,13 +3316,13 @@ export class Realm {
       // isn't signed in may read, so it answers wherever the policy opens a
       // read or a search to such a visitor.
       .get(
-        '/_events',
+        '/_live',
         SupportedMimeType.EventStream,
         this.eventFeedStream.bind(this),
         EVENT_FEED_ROUTE,
       )
       .get(
-        '/_events',
+        '/_live',
         SupportedMimeType.JSON,
         this.eventFeedWindow.bind(this),
         EVENT_FEED_ROUTE,
@@ -3327,7 +3331,7 @@ export class Realm {
       // §1.7). A `POST`, so it takes the realm's write permission, which no
       // policy grant reaches.
       .post(
-        '/_events/refresh',
+        '/_live/refresh',
         SupportedMimeType.JSON,
         this.requestFeedRefresh.bind(this),
         ACL_ONLY,
@@ -5775,13 +5779,17 @@ export class Realm {
         updatedFiles.length > 0 ||
         removedFiles.length > 0)
     ) {
-      this.broadcastRealmEvent({
-        eventName: 'update',
-        ...(addedFiles.length ? { added: addedFiles } : {}),
-        ...(updatedFiles.length ? { updated: updatedFiles } : {}),
-        ...(removedFiles.length ? { removed: removedFiles } : {}),
-        realmURL: this.url,
-      } as UpdateRealmEventContent);
+      this.broadcastRealmEvent(
+        {
+          eventName: 'update',
+          ...(addedFiles.length ? { added: addedFiles } : {}),
+          ...(updatedFiles.length ? { updated: updatedFiles } : {}),
+          ...(removedFiles.length ? { removed: removedFiles } : {}),
+          realmURL: this.url,
+        } as UpdateRealmEventContent,
+        undefined,
+        options?.operations,
+      );
     }
 
     // persist file meta (created_at) to DB independent of index and retrieve created
@@ -6902,6 +6910,17 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
+            // What each entry ran, so the event feed names the operation that
+            // produced each change (ADR 020 §1.1).
+            operationAt: (position) => {
+              let key = JSON.stringify(position);
+              let staging = writes.find(
+                ({ entry }) => JSON.stringify(entry.position) === key,
+              );
+              return staging
+                ? { name: staging.entry.name, base: staging.definition.base }
+                : undefined;
+            },
             // One request, several cards, and not all of them from the same
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
@@ -18157,8 +18176,10 @@ export class Realm {
   private async broadcastRealmEvent(
     event: RealmEventContent,
     delivery?: RealmEventDelivery,
+    // For the event feed only: Matrix events don't name operations.
+    operations?: Record<string, FeedOperation>,
   ): Promise<void> {
-    void this.#eventFeed.ingest(event);
+    void this.#eventFeed.ingest(event, operations);
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,

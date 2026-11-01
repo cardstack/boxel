@@ -50,9 +50,15 @@ const REALM_POLICY = {
 const ARTICLE_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
+  import { operation, params } from "@cardstack/base/operations";
   export class Article extends CardDef {
     @field headline = contains(StringField);
     @field status = contains(StringField);
+    @operation static retitle = {
+      base: 'transform',
+      params: { headline: StringField },
+      set: { headline: params('headline') },
+    };
   }
 `;
 
@@ -187,7 +193,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   function feedWindow(realm = NEWSROOM) {
     return request
-      .get(`${new URL(realm).pathname}_events`)
+      .get(`${new URL(realm).pathname}_live`)
       .set('Accept', SupportedMimeType.JSON)
       .set('X-Forwarded-For', VISITOR);
   }
@@ -240,9 +246,18 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.stringify(events).includes('Polls open late'),
       'no event carries card content',
     );
+    let written = events.find(
+      (event) =>
+        event.kind === 'written' && event.path === 'articles/published',
+    );
+    assert.deepEqual(
+      written?.operation,
+      { name: 'update', base: 'update' },
+      'a write that ran no named operation is named by its base',
+    );
   });
 
-  test('a card that stops being readable is announced as removed, once', async function (assert) {
+  test('a card that stops being readable is announced as withdrawn, once', async function (assert) {
     // The feed announces a removal only for a card it has seen readable, so
     // a visitor never learns the path of a card they could not read.
     let start = await head();
@@ -262,10 +277,10 @@ module(basename(import.meta.filename), function (hooks) {
     let events = await eventsAfter(before);
     assert.deepEqual(
       events
-        .filter((event) => event.kind === 'removed')
+        .filter((event) => event.kind === 'withdrawn')
         .map(({ kind, path }) => ({ kind, path })),
-      [{ kind: 'removed', path: 'articles/published' }],
-      `announced as removed: ${JSON.stringify(events)}`,
+      [{ kind: 'withdrawn', path: 'articles/published' }],
+      `announced as withdrawn, not removed, since the card still exists: ${JSON.stringify(events)}`,
     );
     let quiet = await head();
     await newsroom.write(
@@ -285,6 +300,7 @@ module(basename(import.meta.filename), function (hooks) {
       'public, max-age=1, stale-while-revalidate=1',
     );
     let body = response.body as FeedEventWindow;
+    assert.strictEqual(body.v, 1, 'says which version of the wire it is');
     assert.strictEqual(typeof body.epoch, 'string', 'names its epoch');
     assert.strictEqual(typeof body.head, 'number', 'and its head');
   });
@@ -292,7 +308,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('the stream delivers changes as they land and replays from Last-Event-ID', async function (assert) {
     let address = server.address();
     let port = typeof address === 'object' && address ? address.port : 4444;
-    let url = `http://127.0.0.1:${port}/newsroom/_events`;
+    let url = `http://127.0.0.1:${port}/newsroom/_live`;
     let controller = new AbortController();
     let response = await fetch(url, {
       headers: {
@@ -503,7 +519,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('a writer may ask the pages following the feed to reload, at most once a minute', async function (assert) {
     let refresh = () =>
       request
-        .post(`${new URL(NEWSROOM).pathname}_events/refresh`)
+        .post(`${new URL(NEWSROOM).pathname}_live/refresh`)
         .set('Accept', SupportedMimeType.JSON);
 
     let visitor = await refresh().set('X-Forwarded-For', VISITOR);
@@ -522,7 +538,7 @@ module(basename(import.meta.filename), function (hooks) {
     let events = (await feedWindow()).body as FeedEventWindow;
     assert.deepEqual(
       events.events.filter((event) => event.seq > before),
-      [{ seq: before + 1, kind: 'refresh', path: '' }],
+      [{ v: 1, seq: before + 1, kind: 'refresh', path: '' }],
       'the feed carries the request and nothing else about it',
     );
 
@@ -536,6 +552,52 @@ module(basename(import.meta.filename), function (hooks) {
       'and says when another is accepted',
     );
     assert.strictEqual(await head(), before + 1, 'the refused one is not sent');
+  });
+
+  test('a change made through an operation names that operation, on its write and its index pass', async function (assert) {
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open', 'published'),
+    );
+    await newsroom.indexing();
+    let before = await head();
+    let invoked = await request
+      .post(`${new URL(NEWSROOM).pathname}_operations`)
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': 'retitle',
+            href: `${NEWSROOM}articles/published`,
+            data: { headline: 'Polls open at dawn' },
+          },
+        ],
+      });
+    assert.strictEqual(invoked.status, 200, invoked.text);
+    let events = await eventsAfter(before, 2);
+    let mine = events.filter((event) => event.path === 'articles/published');
+    assert.deepEqual(
+      mine.map(({ kind, operation }) => ({ kind, operation })),
+      [
+        { kind: 'written', operation: { name: 'retitle', base: 'transform' } },
+        { kind: 'indexed', operation: { name: 'retitle', base: 'transform' } },
+      ],
+      `both events name the operation: ${JSON.stringify(events)}`,
+    );
+    assert.false(
+      JSON.stringify(events).includes('Polls open at dawn'),
+      "no event carries the operation's parameters",
+    );
+    assert.false(
+      JSON.stringify(events).includes(EDITOR),
+      'no event names who ran it',
+    );
   });
 
   test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
@@ -588,7 +650,7 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
     });
     await feed.ingest(changed('Card/1'));
     assert.deepEqual(feed.window().events, [
-      { seq: 1, kind: 'reset', path: '' },
+      { v: 1, seq: 1, kind: 'reset', path: '' },
     ]);
   });
 
@@ -605,19 +667,79 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
     await feed.ingest(changed(...paths));
     assert.strictEqual(checked, 0, 'no card is read');
     assert.deepEqual(feed.window().events, [
-      { seq: 1, kind: 'reset', path: '' },
+      { v: 1, seq: 1, kind: 'reset', path: '' },
     ]);
+  });
+
+  test("an event names the changed cards' types without naming the realm's address", async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => ({}));
+    await feed.ingest({
+      ...changed('Card/1'),
+      invalidatedTypes: [
+        new URL('article/Article', REALM).href,
+        '@cardstack/base/card-api/CardDef',
+      ],
+    } as never);
+    assert.deepEqual(feed.window().events[0].types, [
+      'article/Article',
+      '@cardstack/base/card-api/CardDef',
+    ]);
+  });
+
+  test("a type from another realm's address drops the types, rather than naming that address", async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => ({}));
+    await feed.ingest({
+      ...changed('Card/1'),
+      invalidatedTypes: [
+        new URL('article/Article', REALM).href,
+        'http://elsewhere.test/library/book/Book',
+      ],
+    } as never);
+    assert.strictEqual(feed.window().events[0].types, undefined);
+  });
+
+  test('a change written by an operation names it, on its write and on its index pass', async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => ({ rev: 'r1' }));
+    let card = new URL('Game/1', REALM).href;
+    await feed.ingest(
+      {
+        eventName: 'update',
+        updated: ['Game/1.json'],
+        realmURL: REALM,
+      } as never,
+      { [card]: { name: 'answer', base: 'transform' } },
+    );
+    await feed.ingest(changed('Game/1'));
+    assert.deepEqual(
+      feed.window().events.map(({ kind, operation }) => ({ kind, operation })),
+      [
+        { kind: 'written', operation: { name: 'answer', base: 'transform' } },
+        { kind: 'indexed', operation: { name: 'answer', base: 'transform' } },
+      ],
+    );
+  });
+
+  test('a removal that ran no named operation is named by its base', async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => ({}));
+    await feed.ingest(changed('Game/1'));
+    await feed.ingest({
+      eventName: 'update',
+      removed: ['Game/1.json'],
+      realmURL: REALM,
+    } as never);
+    let removed = feed.window().events.find((e) => e.kind === 'removed');
+    assert.deepEqual(removed?.operation, { name: 'delete', base: 'delete' });
   });
 
   test("a change to the realm's config resets the feed, since it names the policy", async function (assert) {
     let feed = new RealmEventFeed(REALM, async () => ({}));
     await feed.ingest({
       eventName: 'update',
-      updated: [new URL('realm.json', REALM).href],
+      updated: ['realm.json'],
       realmURL: REALM,
     } as never);
     assert.deepEqual(feed.window().events, [
-      { seq: 1, kind: 'reset', path: '' },
+      { v: 1, seq: 1, kind: 'reset', path: '' },
     ]);
   });
 });
