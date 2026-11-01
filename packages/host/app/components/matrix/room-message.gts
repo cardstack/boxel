@@ -74,8 +74,9 @@ interface Signature {
     isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
-    // this message stands for a run of N identical calls folded into it
-    foldCount?: number;
+    // this message stands for a run of messages, each with one finished call
+    // to the same tool, folded into it: every call of the run, its own last
+    foldedTools?: MessageTool[];
     // the settled turn this message belongs to folds its tool rows
     turnFold?: TurnFold;
     turnHead?: TurnHead;
@@ -235,7 +236,48 @@ export default class RoomMessage extends Component<Signature> {
       (tool, index) => (tool.id ?? run.parts?.[index]?.id) === id,
     );
 
+  // one ToolGroup row for consecutive finished calls to one tool
+  private groupRun(
+    group: MessageTool[],
+    keyOf: (k: number) => string,
+  ): ToolRun {
+    let count = group.length;
+    let done = group.filter((tool) => tool.status === 'applied').length;
+    let pending = done < count;
+    let isCheck = group[0]!.name === 'checkCorrectness';
+    let name = humanizeToolName(group[0]!.name ?? 'tool');
+    return {
+      key: keyOf(0),
+      command: group[count - 1]!,
+      count,
+      group,
+      pending,
+      parts: group.map((tool, index) => ({
+        id: keyOf(index),
+        name: tool.name ?? 'tool',
+        state: tool.status === 'applied' ? 'completed' : 'running',
+      })),
+      // a check that found errors still ends applied, so the group
+      // counts checks and leaves their outcome to the rows inside it
+      summary: isCheck
+        ? pending
+          ? `Running ${count} checks · ${done} done`
+          : `Ran ${count} checks`
+        : pending
+          ? `${name} ×${count} · ${done} done`
+          : `${name} ×${count}`,
+    };
+  }
+
   private get toolRuns(): ToolRun[] {
+    // the earlier messages of a folded run are hidden: their calls open
+    // from this one's row, the same way a group within one message does
+    let folded = this.args.foldedTools;
+    if (folded && folded.length > 1) {
+      return [
+        this.groupRun(folded, (k) => folded[k]!.id ?? `folded-call-${k}`),
+      ];
+    }
     let tools = this.message.tools ?? [];
     let runs: ToolRun[] = [];
     let keyOf = (k: number) => tools[k]!.id ?? `call-${k}`;
@@ -268,32 +310,7 @@ export default class RoomMessage extends Component<Signature> {
       }
       let count = j - i + 1;
       if (count >= 3) {
-        let group = tools.slice(i, j + 1);
-        let done = group.filter((tool) => tool.status === 'applied').length;
-        let pending = done < count;
-        let isCheck = tools[i]!.name === 'checkCorrectness';
-        let name = humanizeToolName(tools[i]!.name ?? 'tool');
-        runs.push({
-          key: keyOf(i),
-          command: tools[j]!,
-          count,
-          group,
-          pending,
-          parts: group.map((tool, index) => ({
-            id: tool.id ?? `call-${i + index}`,
-            name: tool.name ?? 'tool',
-            state: tool.status === 'applied' ? 'completed' : 'running',
-          })),
-          // a check that found errors still ends applied, so the group
-          // counts checks and leaves their outcome to the rows inside it
-          summary: isCheck
-            ? pending
-              ? `Running ${count} checks · ${done} done`
-              : `Ran ${count} checks`
-            : pending
-              ? `${name} ×${count} · ${done} done`
-              : `${name} ×${count}`,
-        });
+        runs.push(this.groupRun(tools.slice(i, j + 1), (k) => keyOf(i + k)));
       } else {
         for (let k = i; k <= j; k++) {
           runs.push({ key: keyOf(k), command: tools[k]! });
@@ -586,7 +603,6 @@ export default class RoomMessage extends Component<Signature> {
                 @isError={{bool this.errorMessage}}
                 @isStreaming={{@isStreaming}}
                 @isSuperseded={{this.isRetriedLater command}}
-                @foldCount={{@foldCount}}
               />
             {{/let}}
           {{/if}}

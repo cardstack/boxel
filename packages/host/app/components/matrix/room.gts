@@ -75,6 +75,7 @@ import {
   formatTokenUsage,
 } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
   modelIdsOf,
   pickableModels,
@@ -256,7 +257,7 @@ export default class Room extends Component<Signature> {
                   @isStreaming={{this.isMessageStreaming message}}
                   @inLatestTurn={{this.isInLatestTurn i}}
                   @retryAction={{this.maybeRetryAction i message}}
-                  @foldCount={{this.foldCountFor i}}
+                  @foldedTools={{this.foldedToolsFor i}}
                   @turnFold={{this.turnFoldFor i}}
                   @answerFooter={{this.answerFooterFor i}}
                   @turnHead={{this.turnHeadFor i}}
@@ -2898,13 +2899,17 @@ export default class Room extends Component<Signature> {
   }
 
   // A run of messages that each carry one finished call to the same tool and
-  // nothing else folds into its latest message, which reads "×N"; the latest
-  // stays, so the end of the conversation never moves. A failed call never
-  // folds: it stays in view. A correctness check never folds either: one
-  // that found errors still ends applied, and folded it would be hidden.
+  // nothing else folds into its latest message, which reads "×N" and opens
+  // onto every call of the run; the latest stays, so the end of the
+  // conversation never moves. A failed call never folds: it stays in view. A
+  // correctness check never folds either: one that found errors still ends
+  // applied, and folded it would be hidden.
   @cached
-  private get toolRuns(): { counts: Map<number, number>; folded: Set<number> } {
-    let counts = new Map<number, number>();
+  private get toolRuns(): {
+    calls: Map<number, MessageTool[]>;
+    folded: Set<number>;
+  } {
+    let calls = new Map<number, MessageTool[]>();
     let folded = new Set<number>();
     let soloTool = (message: Message | undefined) => {
       if (
@@ -2922,20 +2927,20 @@ export default class Room extends Component<Signature> {
         : undefined;
     };
     let previous: string | undefined;
-    let run = 0;
+    let run: MessageTool[] = [];
     this.messages.forEach((message, index) => {
       let name = soloTool(message);
       if (name && name === previous) {
         folded.add(index - 1);
-        counts.delete(index - 1);
-        run += 1;
-        counts.set(index, run);
+        calls.delete(index - 1);
+        run = [...run, message.tools![0]!];
+        calls.set(index, run);
       } else {
-        run = 1;
+        run = name ? [message.tools![0]!] : [];
       }
       previous = name;
     });
-    return { counts, folded };
+    return { calls, folded };
   }
 
   private isFoldedMessage = (index: number) =>
@@ -3361,7 +3366,7 @@ export default class Room extends Component<Signature> {
     return url.href;
   };
 
-  private foldCountFor = (index: number) => this.toolRuns.counts.get(index);
+  private foldedToolsFor = (index: number) => this.toolRuns.calls.get(index);
 
   // The calls whose open question or approval is on screen right now, read
   // from the rows themselves (`data-gate-open`). The dock leaves those out,
