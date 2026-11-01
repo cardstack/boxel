@@ -394,10 +394,14 @@ export class RealmEventFeed {
   // The messages a transform collecting from this channel reads (ADR 020
   // §1.8): the latest per key however old, from the store, after every emit
   // this process has under way has landed.
-  async latestMessages(): Promise<FeedEvent[]> {
+  async latestMessages(withinMs?: number): Promise<FeedEvent[]> {
     await this.ready();
     await this.#appending;
-    return await this.store.latestMessages(this.key, EVENT_FEED_WINDOW);
+    return await this.store.latestMessages(
+      this.key,
+      EVENT_FEED_WINDOW,
+      withinMs,
+    );
   }
 
   // Emits a message on this feed, a card's live channel (ADR 020 §1.8):

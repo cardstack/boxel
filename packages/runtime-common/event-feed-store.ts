@@ -67,7 +67,12 @@ export interface FeedStore {
   // 020 §1.8), in order: the latest message for each key, however old, and
   // each message that names no key while the store still keeps it, which is
   // `keep * 4` positions back.
-  latestMessages(key: string, keep: number): Promise<FeedEvent[]>;
+  // `withinMs`, when given, leaves out keyed messages older than that.
+  latestMessages(
+    key: string,
+    keep: number,
+    withinMs?: number,
+  ): Promise<FeedEvent[]>;
   // Whether the feed has announced the card at `path` as readable and not
   // since as removed or withdrawn. A realm's own feed records this as it
   // appends, in every process, so a removal is announced for a card a
@@ -210,7 +215,12 @@ export class MemoryFeedStore implements FeedStore {
     return this.#feed(key).events.filter((event) => event.seq > seq);
   }
 
-  async latestMessages(key: string, keep: number): Promise<FeedEvent[]> {
+  // A feed held in memory records no times, so `withinMs` is not applied.
+  async latestMessages(
+    key: string,
+    keep: number,
+    _withinMs?: number,
+  ): Promise<FeedEvent[]> {
     let feed = this.#feeds.get(key);
     if (!feed) {
       return [];
@@ -426,7 +436,11 @@ export class DbFeedStore implements FeedStore {
     return rows.map((row) => eventOf(row.event));
   }
 
-  async latestMessages(key: string, keep: number): Promise<FeedEvent[]> {
+  async latestMessages(
+    key: string,
+    keep: number,
+    withinMs?: number,
+  ): Promise<FeedEvent[]> {
     // The latest message of each key in one pass over the channel, and the
     // recent unkeyed ones. A correlated max() per row instead grows with the
     // square of the channel's history: a busy waiting room's heartbeats made a
@@ -437,6 +451,13 @@ export class DbFeedStore implements FeedStore {
       'WHERE feed_key =',
       param(key),
       "AND event->>'kind' = 'message' AND event->>'key' IS NOT NULL",
+      ...(withinMs === undefined
+        ? []
+        : [
+            'AND created_at > now() - (',
+            param(withinMs),
+            "* interval '1 millisecond')",
+          ]),
       "ORDER BY event->>'key', seq DESC",
       ') latest UNION ALL SELECT event, seq FROM realm_feed_events WHERE feed_key =',
       param(key),

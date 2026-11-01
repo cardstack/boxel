@@ -1325,6 +1325,12 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
+// How far back a transform's `collect` reads a channel's keyed messages.
+// Without a bound it reads the latest message of every key the channel has
+// ever carried, so a waiting room that has seen ten thousand visitors makes
+// its draw iterate all of them, past the program's step budget. A stopgap for
+// a window the declaration names (see ADR 020's remediation).
+const COLLECT_WINDOW_MS = 5 * 60_000;
 const MODULE_ETAG_VARIANT = 'module';
 
 // A compile this long holds up every other request the process has, so it is
@@ -8373,7 +8379,7 @@ export class Realm {
           // however many keys the channel has, not just those the window in
           // memory still holds. Waiting on the channel's appends also waits
           // on any guarded emit under way, which holds this card's lock.
-          return (await channel.latestMessages())
+          return (await channel.latestMessages(COLLECT_WINDOW_MS))
             .filter(
               (event) =>
                 event.kind === 'message' && event.operation?.name === operation,
