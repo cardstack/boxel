@@ -124,7 +124,7 @@ responses.
 
 A realm writer MAY ask following pages to reload, for a change no re-read
 carries; the realm MUST rate-limit these across processes and MUST send one
-after a republish is indexed. It MUST NOT stand in for an invalidation. A
+after a published copy is republished and indexed. It MUST NOT stand in for an invalidation. A
 page MUST follow the realm that owns its site for these, though it may read
 nothing from it, and MUST ignore one from any other realm. It MUST
 offer an honoured one to the page's cards through the card context and, when
@@ -133,7 +133,9 @@ none takes it, reload after a random few-second delay.
 ## 2. Rationale
 
 The host's reactivity already runs on realm events; only the source is
-missing for a signed-out visitor. Signed-in sessions stay on Matrix because
+missing for a signed-out visitor. Before the feed, the Fairway storefront
+re-ran its search every 15 seconds to show new products, and an edit to a
+product a visitor had already loaded never reached them. Signed-in sessions stay on Matrix because
 the feed carries only what the anonymous audience may read. An event with no
 content, covering only what the visitor could read, discloses nothing polling
 wouldn't, and filtering once makes a change cost the same however many watch.
@@ -143,13 +145,21 @@ absorb the re-read rush. Stored positions, readable-card records and the
 read-position header close the gaps a restart, a replica or a read before the
 feed opened would leave; a per-process reset sent every client back for
 everything at each deploy. One stream per site keeps a multi-realm site under
-HTTP/1.1's six connections per host.
+HTTP/1.1's six connections per host: a few open tabs of the Chorus social app
+were enough to leave new tabs hanging on load.
 
-In a live pub quiz, a room sharing one address spent the anonymous rate limit
-within a minute on per-change re-reads. A refresh from any writer of a shared source realm
-reloaded every site drawing on it. Ordered presence took the channel's next
-position under one row lock, so a waiting room's heartbeats queued and
-starved holds and checkouts.
+A live pub quiz, with a TV, a quizmaster's desk and a table of phones, was the
+first crowd. The room shared one address and spent the anonymous rate limit
+within a minute on per-change re-reads, and a fix to the page's code reached
+the quizmaster's signed-in desk but never the TV. Answers a team may still
+change are messages; the answer locked in at the deadline is a card the realm
+writes, refused once the deadline passes, so no phone's clock decides. A refresh from any writer of a shared source realm
+reloaded every site drawing on it. The ticket sale is the target the
+rest is sized for. Its crowd watches one small status card on the broadcast
+lane, and only the few being admitted hold a personal lane for their place
+and their seat hold. In its waiting room, ordered presence took the channel's
+next position under one row lock, so a thousand fans' heartbeats queued and
+held the database's connections, starving the holds and checkouts.
 
 A subscription is an operation because the realm already declares, grants and
 runs named queries; watching is the same grant. A grant that reads the caller
@@ -161,6 +171,10 @@ can't be filtered once, so it can't be broadcast.
 - **Matrix guest accounts or sliding sync:** an account, a sync loop and a
   credential per visitor for a URL-sized signal.
 - **A required stateful edge (Durable Objects):** vendor lock-in.
+- **No shared caching, as Host Mode v2 plans for launch:** a live site puts
+  every visitor on the realm its owner edits against, and at a ticket sale the
+  origin can't answer every reader. Reads are made shared-cacheable so a CDN
+  can be added unchanged; none is required.
 - **WebSockets or WebTransport:** not cacheable or collapsible by a CDN.
 - **One stream per reader, no poll; or a personal lane for everyone:** origin
   connections grow with the audience.
