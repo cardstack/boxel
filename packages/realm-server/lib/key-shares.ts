@@ -10,6 +10,7 @@ import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-na
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
+import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 
@@ -256,7 +257,15 @@ async function lockDirectWriters(
 ): Promise<Map<string, boolean>> {
   let writers = new Map<string, boolean>();
   for (let user of [...new Set(users)].sort()) {
-    writers.set(user, await isDirectWriterLocked(txQuery, realmURL, user));
+    writers.set(
+      user,
+      await isDirectWriterLocked(
+        txQuery,
+        realmURL,
+        user,
+        matrixServerNameFromEnv(),
+      ),
+    );
   }
   return writers;
 }
@@ -379,7 +388,14 @@ export async function shareKey(
       realmURL: realmURL.href,
       shareId: null,
     });
-    if (!(await isDirectWriterLocked(txQuery, realmURL, owner))) {
+    if (
+      !(await isDirectWriterLocked(
+        txQuery,
+        realmURL,
+        owner,
+        matrixServerNameFromEnv(),
+      ))
+    ) {
       throw new UserKeyError(
         403,
         'a key is shared only into a realm its owner is a direct writer of',
@@ -677,7 +693,14 @@ async function readAsDirectWriter(
 ): Promise<Record<string, unknown>[]> {
   let realmURL = validateRealm(realm);
   return await dbAdapter.withTransaction(async (txQuery) => {
-    if (!(await isDirectWriterLocked(txQuery, realmURL, user))) {
+    if (
+      !(await isDirectWriterLocked(
+        txQuery,
+        realmURL,
+        user,
+        matrixServerNameFromEnv(),
+      ))
+    ) {
       throw new UserKeyError(
         403,
         `only a realm's direct writers see its shares`,

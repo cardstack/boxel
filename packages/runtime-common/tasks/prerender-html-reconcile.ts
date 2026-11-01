@@ -2,6 +2,8 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 import {
   fetchAllRealmsWithOwners,
+  getMatrixUsername,
+  isPublishedRealmAccount,
   jobIdentity,
   systemInitiatedPriority,
 } from '../index.ts';
@@ -87,6 +89,7 @@ const prerenderHtmlReconcile: Task<
   reportStatus,
   log,
   skipPrerenderHtmlRealms,
+  matrixServerName,
 }) =>
   async function (args) {
     let { jobInfo } = args;
@@ -115,9 +118,12 @@ const prerenderHtmlReconcile: Task<
       ...plan.keys(),
     ]);
     let generations = await fetchRealmGenerations(dbAdapter);
-    let realmOwners = await fetchAllRealmsWithOwners(dbAdapter);
+    let realmOwners = await fetchAllRealmsWithOwners(
+      dbAdapter,
+      matrixServerName,
+    );
     let ownerByRealm = new Map(
-      realmOwners.map((realm) => [realm.realm_url, realm.owner_username]),
+      realmOwners.map((realm) => [realm.realm_url, realm.owner_user_id]),
     );
 
     let realmsRepaired = 0;
@@ -136,11 +142,12 @@ const prerenderHtmlReconcile: Task<
         continue;
       }
       // Render as the realm's owner, mirroring how an index pass spawns the
-      // prerender job. Realms owned only by a bot (`realm/…`) are re-enqueued
-      // by the deploy-time from-scratch reindex, so their residue self-heals on
-      // deploy rather than here — the same scoping full-reindex uses.
+      // prerender job. Realms owned only by their own published-realm account
+      // are re-enqueued by the deploy-time from-scratch reindex, so their
+      // residue self-heals on deploy rather than here — the same scoping
+      // full-reindex uses.
       let owner = ownerByRealm.get(realmURL);
-      if (!owner || owner.startsWith('realm/')) {
+      if (!owner || isPublishedRealmAccount(owner, matrixServerName)) {
         // Debug, not warn: a bot-owned realm's residue is expected to heal on
         // the next deploy reindex, so this fires every tick until then and is
         // not actionable on its own.
@@ -178,7 +185,9 @@ const prerenderHtmlReconcile: Task<
       try {
         await enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
-          realmUsername: owner,
+          // A prerender job names the user it runs as by localpart, which the
+          // worker qualifies with its own server name.
+          realmUsername: getMatrixUsername(owner),
           changes: urls.map((url) => ({ url, operation: 'update' as const })),
           // Spawned from committed state: no index pass to wait on.
           spawningIndexPasses: [],

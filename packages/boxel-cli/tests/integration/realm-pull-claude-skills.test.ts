@@ -60,7 +60,10 @@ function mirrorDir(localDir: string): string {
 function runBoxelWithSeed(args: string[]): ReturnType<typeof runBoxel> {
   return runBoxel(args, {
     home: makeEmptyHome(),
-    env: { BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED },
+    env: {
+      BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED,
+      MATRIX_SERVER_NAME: 'localhost',
+    },
   });
 }
 
@@ -149,6 +152,7 @@ describe('realm pull → .claude/skills (integration)', () => {
     // directory deeper on the next round trip.
     let authenticator = new SeedAuthenticator({
       seed: TEST_REALM_SECRET_SEED,
+      matrixServerName: 'localhost',
     });
     let listing = await authenticator.authedRealmFetch(realmUrl, {
       headers: { Accept: 'application/vnd.api+json' },

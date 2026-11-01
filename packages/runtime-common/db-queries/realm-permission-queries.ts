@@ -12,6 +12,7 @@ import {
 } from '../expression.ts';
 import { aiBotUsername, submissionBotUsername } from '../constants.ts';
 import { fetchMatrixProfile, getMatrixUsername } from '../matrix-client.ts';
+import { isUserOfMatrixServer } from '../matrix-server-name.ts';
 import { effectiveRealmPermissions } from '../realm-permission-checker.ts';
 
 async function insertPermission(
@@ -179,8 +180,40 @@ const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
 // who picks one is treated as a bot, which only ever withholds something.
 const botLocalpartSuffixes = ['_realm', '_writer'];
 
-export function isBotAccount(userId: string): boolean {
-  let localpart = getMatrixUsername(userId);
+// The localpart of `userId` when it is the full Matrix id of an account on
+// `matrixServerName`. Undefined for an account on any other server, and for
+// text that is no Matrix id, such as a wildcard row's `*` or `users`. Every
+// service account the platform runs lives on the realm server's paired
+// homeserver (ADR 004 §1.1), so an account elsewhere is never one of them,
+// whatever it is called (ADR 004 §1.2).
+function localpartOn(
+  userId: string,
+  matrixServerName: string,
+): string | undefined {
+  return isUserOfMatrixServer(userId, matrixServerName)
+    ? getMatrixUsername(userId)
+    : undefined;
+}
+
+// Whether `userId` is the account a published realm is registered under:
+// `@realm/<directory>_<id>` on the paired homeserver.
+export function isPublishedRealmAccount(
+  userId: string,
+  matrixServerName: string,
+): boolean {
+  return localpartOn(userId, matrixServerName)?.startsWith('realm/') ?? false;
+}
+
+// Whether `userId` is one of the platform's service accounts: an account on
+// the paired homeserver named by one of the conventions above.
+export function isBotAccount(
+  userId: string,
+  matrixServerName: string,
+): boolean {
+  let localpart = localpartOn(userId, matrixServerName);
+  if (localpart === undefined) {
+    return false;
+  }
   return (
     localpart.startsWith('realm/') ||
     botLocalparts.has(localpart) ||
@@ -188,8 +221,16 @@ export function isBotAccount(userId: string): boolean {
   );
 }
 
-function isDirectWriterRow(username: string, write: boolean): boolean {
-  return write && !wildcardUsernames.has(username) && !isBotAccount(username);
+function isDirectWriterRow(
+  username: string,
+  write: boolean,
+  matrixServerName: string,
+): boolean {
+  return (
+    write &&
+    !wildcardUsernames.has(username) &&
+    !isBotAccount(username, matrixServerName)
+  );
 }
 
 /**
@@ -200,7 +241,8 @@ function isDirectWriterRow(username: string, write: boolean): boolean {
  * `*` or `users` row grants write to everyone it matches without naming
  * anyone, a bot account acts for the platform rather than a person, and a
  * policy grant admits a write without making its caller a writer of the
- * realm, so none of them counts.
+ * realm, so none of them counts. `matrixServerName` names the paired
+ * homeserver, the only server a bot account can be on.
  *
  * Read fresh on each call, like every permission check, so a removed row
  * stops counting at once.
@@ -209,6 +251,7 @@ export async function isDirectWriter(
   dbAdapter: DBAdapter,
   realmURL: URL,
   userId: string,
+  matrixServerName: string,
 ): Promise<boolean> {
   let [row] = (await query(dbAdapter, [
     `SELECT write FROM realm_user_permissions WHERE realm_url =`,
@@ -216,7 +259,7 @@ export async function isDirectWriter(
     `AND username =`,
     param(userId),
   ])) as { write: boolean }[];
-  return !!row && isDirectWriterRow(userId, row.write);
+  return !!row && isDirectWriterRow(userId, row.write, matrixServerName);
 }
 
 /**
@@ -230,6 +273,7 @@ export async function isDirectWriterLocked(
   txQuerier: Querier,
   realmURL: URL,
   userId: string,
+  matrixServerName: string,
 ): Promise<boolean> {
   let [row] = (await txQuerier([
     `SELECT write FROM realm_user_permissions WHERE realm_url =`,
@@ -238,7 +282,7 @@ export async function isDirectWriterLocked(
     param(userId),
     `FOR SHARE`,
   ])) as { write: boolean }[];
-  return !!row && isDirectWriterRow(userId, row.write);
+  return !!row && isDirectWriterRow(userId, row.write, matrixServerName);
 }
 
 /**
@@ -248,6 +292,7 @@ export async function isDirectWriterLocked(
 export async function fetchDirectWriters(
   dbAdapter: DBAdapter,
   realmURL: URL,
+  matrixServerName: string,
 ): Promise<string[]> {
   let rows = (await query(dbAdapter, [
     `SELECT username, write FROM realm_user_permissions WHERE write = true AND realm_url =`,
@@ -255,7 +300,9 @@ export async function fetchDirectWriters(
     `ORDER BY username`,
   ])) as { username: string; write: boolean }[];
   return rows
-    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .filter(({ username, write }) =>
+      isDirectWriterRow(username, write, matrixServerName),
+    )
     .map(({ username }) => username);
 }
 
@@ -275,9 +322,12 @@ export interface DirectWriterRealm {
 export async function fetchDirectWriterRealms(
   dbAdapter: DBAdapter,
   userId: string,
+  matrixServerName: string,
 ): Promise<DirectWriterRealm[]> {
   return (await fetchNamedRealmRows(dbAdapter, userId, 'write'))
-    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .filter(({ username, write }) =>
+      isDirectWriterRow(username, write, matrixServerName),
+    )
     .map(({ realm_url, name }) => ({ url: realm_url, name }));
 }
 
@@ -513,10 +563,17 @@ export async function fetchPublicRealmSummaries(
   }));
 }
 
+/**
+ * Every realm with the full Matrix id of the owner it is indexed as: the
+ * owner its permissions name, and for a published realm whose permissions
+ * name none, its source realm's owner, or failing that the owner its registry
+ * row records. `matrixServerName` names the paired homeserver, which the
+ * registry row's owner is on.
+ */
 export async function fetchAllRealmsWithOwners(
   dbAdapter: DBAdapter,
-): Promise<{ realm_url: string; owner_username: string }[]> {
-  // Get all realms with their owners
+  matrixServerName: string,
+): Promise<{ realm_url: string; owner_user_id: string }[]> {
   const allOwners = (await query(dbAdapter, [
     `SELECT
       realm_url,
@@ -537,12 +594,11 @@ export async function fetchAllRealmsWithOwners(
 
   let ownerByRealm = new Map<string, string>();
   for (const [realmUrl, owners] of realmOwners) {
-    ownerByRealm.set(realmUrl, getMatrixUsername(preferredOwner(owners)!));
+    ownerByRealm.set(realmUrl, preferredOwner(owners, matrixServerName)!);
   }
 
   // Published realms may not have realm_user_permissions entries in older data.
   // Fall back to the published realm's owner (or source realm owner) when missing.
-  // Phase 4: read from realm_registry; aliases keep the loop accessors stable.
   const publishedRealms = (await query(dbAdapter, [
     `SELECT url AS published_realm_url, source_url AS source_realm_url, owner_username FROM realm_registry WHERE kind = 'published'`,
   ])) as {
@@ -556,31 +612,30 @@ export async function fetchAllRealmsWithOwners(
       continue;
     }
     const sourceOwner = ownerByRealm.get(publishedRealm.source_realm_url);
-    const fallbackOwner = getMatrixUsername(publishedRealm.owner_username);
     ownerByRealm.set(
       publishedRealm.published_realm_url,
-      sourceOwner ?? fallbackOwner,
+      sourceOwner ??
+        registryOwnerUserId(publishedRealm.owner_username, matrixServerName),
     );
   }
 
-  return [...ownerByRealm].map(([realm_url, owner_username]) => ({
+  return [...ownerByRealm].map(([realm_url, owner_user_id]) => ({
     realm_url,
-    owner_username,
+    owner_user_id,
   }));
 }
 
-// The username the realm at `realmURL` is indexed as, by the rule
-// `fetchAllRealmsWithOwners` applies to every realm: the owner its permissions
-// name, and for a published realm whose permissions name none, its source
-// realm's owner, or failing that the owner its registry row records.
-// Undefined for a realm with no owner either way.
-export async function fetchRealmOwnerUsername(
+// The full Matrix id of the owner the realm at `realmURL` is indexed as, by
+// the rule `fetchAllRealmsWithOwners` applies to every realm. Undefined for a
+// realm with no owner either way.
+export async function fetchRealmOwnerUserId(
   dbAdapter: DBAdapter,
   realmURL: string,
+  matrixServerName: string,
 ): Promise<string | undefined> {
-  let owner = await ownerByPermissions(dbAdapter, realmURL);
+  let owner = await ownerByPermissions(dbAdapter, realmURL, matrixServerName);
   if (owner) {
-    return getMatrixUsername(owner);
+    return owner;
   }
   let [published] = (await query(dbAdapter, [
     `SELECT source_url, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
@@ -590,32 +645,62 @@ export async function fetchRealmOwnerUsername(
     return undefined;
   }
   let sourceOwner = published.source_url
-    ? await ownerByPermissions(dbAdapter, published.source_url)
+    ? await ownerByPermissions(
+        dbAdapter,
+        published.source_url,
+        matrixServerName,
+      )
     : undefined;
   if (sourceOwner) {
-    return getMatrixUsername(sourceOwner);
+    return sourceOwner;
   }
   return published.owner_username
-    ? getMatrixUsername(published.owner_username)
+    ? registryOwnerUserId(published.owner_username, matrixServerName)
     : undefined;
 }
 
 async function ownerByPermissions(
   dbAdapter: DBAdapter,
   realmURL: string,
+  matrixServerName: string,
 ): Promise<string | undefined> {
   let rows = (await query(dbAdapter, [
     `SELECT username FROM realm_user_permissions WHERE realm_owner = true AND realm_url =`,
     param(realmURL),
   ])) as { username: string }[];
-  return preferredOwner(rows.map(({ username }) => username));
+  return preferredOwner(
+    rows.map(({ username }) => username),
+    matrixServerName,
+  );
 }
 
 // Of the users a realm's permissions name as its owner, the one it is indexed
-// as: its human owner, where the realm's bot owns it too.
-function preferredOwner(owners: string[]): string | undefined {
+// as: its human owner, where the realm's own account owns it too.
+function preferredOwner(
+  owners: string[],
+  matrixServerName: string,
+): string | undefined {
   if (owners.length > 1) {
-    return owners.find((owner) => !owner.startsWith('@realm/')) ?? owners[0];
+    return (
+      owners.find(
+        (owner) => !isPublishedRealmAccount(owner, matrixServerName),
+      ) ?? owners[0]
+    );
   }
   return owners[0];
+}
+
+// The full Matrix id of the owner a `realm_registry` row records. The column
+// holds the owner's localpart (a published realm's row names the realm's own
+// `realm/…` account), and every account a realm server registers a realm
+// under is on its paired homeserver, so that is the server the id is on. A
+// row that already records a full id is read as it is.
+function registryOwnerUserId(
+  ownerUsername: string,
+  matrixServerName: string,
+): string {
+  if (/^@[^:]+:.+$/.test(ownerUsername)) {
+    return ownerUsername;
+  }
+  return `@${ownerUsername.replace(/^@/, '')}:${matrixServerName}`;
 }
