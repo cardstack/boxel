@@ -297,6 +297,16 @@ module('Unit | Service | event-feed', function (hooks) {
     assert.true(source.closed, 'the channel closes when nothing follows it');
   });
 
+  test('a signed-in page, whose realm events come over Matrix, still follows a channel', function (assert) {
+    let card = `${REALM}QuizNight/x7k2`;
+    let unfollow = service.followChannel(card, REALM, () => undefined);
+    assert.true(
+      FakeEventSource.made.some((made) => made.url.includes('channel=')),
+      'the channel opens without the realm feeds having started',
+    );
+    unfollow();
+  });
+
   test('nothing is opened until the service starts', function (assert) {
     watch();
     assert.strictEqual(FakeEventSource.made.length, 0);

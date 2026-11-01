@@ -199,8 +199,9 @@ export default class EventFeedService extends Service {
   // Follows a card's live channel: `onMessage` hears each message emitted
   // on it, and a change to the card reaches the page as any realm event does.
   // Returns a function that stops following; the channel closes when nothing
-  // on the page follows it. Nothing is opened before the service starts,
-  // which a prerender never does.
+  // on the page follows it. A signed-in page follows channels too, since
+  // Matrix carries realm events but never a channel's messages; a render
+  // follows none.
   followChannel(
     cardURL: string,
     realmURL: string | undefined,
@@ -215,7 +216,13 @@ export default class EventFeedService extends Service {
       return () => {};
     }
     let base = realmBase(realmURL);
-    if (!this.started || !base || !cardURL.startsWith(base.href)) {
+    if (
+      typeof window === 'undefined' ||
+      (globalThis as { __boxelRenderContext?: boolean })
+        .__boxelRenderContext === true ||
+      !base ||
+      !cardURL.startsWith(base.href)
+    ) {
       return () => {};
     }
     let channel = this.channels.get(cardURL);
