@@ -3320,6 +3320,15 @@ export class Realm {
         this.publicEventWindow.bind(this),
         PUBLIC_FEED_ROUTE,
       )
+      // A writer asking every page that follows the feed to reload (ADR 020
+      // §1.7). A `POST`, so it takes the realm's write permission, which no
+      // policy grant reaches.
+      .post(
+        '/_public-events/refresh',
+        SupportedMimeType.JSON,
+        this.requestPublicRefresh.bind(this),
+        ACL_ONLY,
+      )
       // Admits every verified user the ACL refuses (see `SEARCH_ROUTE`).
       .get(
         '/_search',
@@ -18088,6 +18097,43 @@ export class Realm {
           'Content-Type': SupportedMimeType.JSON,
           'Cache-Control': 'public, max-age=1, stale-while-revalidate=1',
         },
+      },
+      requestContext,
+    });
+  }
+
+  private async requestPublicRefresh(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let answer = this.#publicFeed.requestRefresh();
+    if (!answer.accepted) {
+      let seconds = Math.ceil(answer.retryAfterMs / 1000);
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '429',
+              title: 'Refresh requested too recently',
+              detail: `A refresh was requested less than a minute ago. Another is accepted in ${seconds}s.`,
+            },
+          ],
+        }),
+        init: {
+          status: 429,
+          headers: {
+            'Content-Type': SupportedMimeType.JSON,
+            'Retry-After': String(seconds),
+          },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ seq: this.#publicFeed.head }),
+      init: {
+        status: 202,
+        headers: { 'Content-Type': SupportedMimeType.JSON },
       },
       requestContext,
     });

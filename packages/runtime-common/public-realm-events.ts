@@ -30,13 +30,21 @@ export function cardRevisionOf(
   return etag.replace(/^"|"$/g, '') || undefined;
 }
 
-export type PublicChangeKind = 'written' | 'indexed' | 'removed' | 'reset';
+// `refresh` is a writer's request that every page following the feed reload
+// (ADR 020 §1.7). It names no card.
+export type PublicChangeKind =
+  | 'written'
+  | 'indexed'
+  | 'removed'
+  | 'reset'
+  | 'refresh';
 
 export interface PublicRealmEvent {
   // Position in this feed's sequence. Only increases within one `epoch`.
   seq: number;
   kind: PublicChangeKind;
-  // The card's path in the realm, without `.json`. Empty for `reset`.
+  // The card's path in the realm, without `.json`. Empty for `reset` and
+  // `refresh`.
   path: string;
   // The revision a visitor who isn't signed in reads the card at, for an
   // `indexed` change, when the realm could name one (see
@@ -57,6 +65,10 @@ export interface PublicEventWindow {
 
 // How many events the feed keeps for replay and for the poll's window.
 export const PUBLIC_EVENT_WINDOW = 256;
+
+// The least time between two refresh requests a realm accepts, so the
+// request stays the rare thing it is meant to be (ADR 020 §1.7).
+export const PUBLIC_REFRESH_COOLDOWN_MS = 60_000;
 
 // How often an idle stream sends a comment, so proxies keep it open.
 export const PUBLIC_EVENT_HEARTBEAT_MS = 25_000;
@@ -119,6 +131,7 @@ export class PublicRealmFeed {
     { kind: PublicChangeKind; rev?: string; at: number }
   >();
   #queue: Promise<void> = Promise.resolve();
+  #lastRefresh: number | undefined;
 
   readonly realmURL: string;
   private mayRead: (cardURL: string) => Promise<PublicReadability>;
@@ -197,6 +210,7 @@ export class PublicRealmFeed {
     let last = this.#lastKind.get(path);
     if (
       kind !== 'reset' &&
+      kind !== 'refresh' &&
       last?.kind === kind &&
       last.rev === rev &&
       now - last.at < 1000
@@ -220,6 +234,23 @@ export class PublicRealmFeed {
     for (let subscriber of [...this.#subscribers]) {
       subscriber(event);
     }
+  }
+
+  // A writer's request that every page following the feed reload (ADR 020
+  // §1.7). Refused within the cooldown of the last accepted one, with how
+  // long until another would be accepted.
+  requestRefresh(
+    now = Date.now(),
+  ): { accepted: true } | { accepted: false; retryAfterMs: number } {
+    if (this.#lastRefresh !== undefined) {
+      let wait = this.#lastRefresh + PUBLIC_REFRESH_COOLDOWN_MS - now;
+      if (wait > 0) {
+        return { accepted: false, retryAfterMs: wait };
+      }
+    }
+    this.#lastRefresh = now;
+    this.#announce('refresh', '');
+    return { accepted: true };
   }
 
   window(): PublicEventWindow {

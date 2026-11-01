@@ -69,6 +69,19 @@ events (`MessageService`), so live searches and resources need no second
 mechanism. Signed-in sessions MUST keep receiving realm events through
 Matrix.
 
+### 1.7. A refresh request, for what a re-read can't bring in
+
+A realm writer MAY ask every page following the feed to reload, for a change
+no re-read carries, such as a new build of the app. The request MUST travel
+as a feed event of its own kind that names nothing but its position. The
+realm MUST accept it only from a writer of the realm, and MUST refuse one
+that arrives within a minute of the last. It MUST NOT stand in for a change
+to cards or modules, which reach a page as invalidations. A page MUST be
+offered the request as a cancelable notice first, so an app can tell its
+visitors an update is ready and reload when it suits them. A page whose app
+does not take the notice MUST reload, after a random delay of a few seconds
+so a room of screens doesn't reload at once.
+
 ## 2. Rationale
 
 The host's reactivity already runs on realm events: the store, live searches
@@ -110,6 +123,10 @@ so a client moves between them without missing anything.
   connections grow with the audience.
 - **Polling each card.** Rejected: no shared revision to collapse on, and
   freshness costs a request per card per reader.
+- **Reloading every page on each code change.** Rejected for the refresh
+  request: a module change already rebuilds a page in place, and a reload
+  per save would put the whole audience back through the page's first load.
+  The refresh request is for the rare change that rebuild can't apply.
 
 ## 4. Remediation
 

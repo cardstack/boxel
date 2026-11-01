@@ -23,6 +23,10 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 // The feed is a stream where the realm offers one, and the realm's cacheable
 // poll where it doesn't or the stream won't connect.
 //
+// A refresh request (ADR 020 §1.7) is not relayed: the page is offered it as
+// a cancelable `boxel-refresh-requested` event, and reloads when nothing on
+// it takes the event.
+//
 // A browser holds one connection per feed however many of its tabs show the
 // site (ADR 020 §1.6). The tabs elect a leader with a Web Lock: the tab that
 // holds the lock opens the feeds, for the realms every tab watches, and passes
@@ -38,6 +42,20 @@ const POLL_INTERVAL_MS = 3_000;
 // starts across a crowd of visitors are spread out rather than arriving at
 // once (ADR 020 §1.5).
 const RELAY_SPREAD_MS = 250;
+
+// The longest a page waits before it reloads on a refresh request nothing on
+// it took, so a room of screens doesn't reload at once (ADR 020 §1.7).
+const REFRESH_SPREAD_MS = 5_000;
+
+// The notice a page gets when its realm asks pages to reload (ADR 020 §1.7).
+// Cancelable: an app that calls `preventDefault()` keeps the page as it is,
+// can tell its visitors an update is ready, and calls `detail.reload()` when it
+// suits them. A page whose app doesn't take it reloads.
+export const REFRESH_REQUESTED_EVENT = 'boxel-refresh-requested';
+export interface RefreshRequestedDetail {
+  realm: string;
+  reload: () => void;
+}
 
 // Per origin, which is all the Web Locks and BroadcastChannel APIs can see.
 const COORDINATION_NAME = 'boxel-public-realm-events';
@@ -99,6 +117,11 @@ export default class PublicRealmEventsService extends Service {
   // The longest wait before an event is relayed. Tests relay at once, since
   // a test waits on the reload an event starts, not on a timer before it.
   relaySpreadMs = isTesting() ? 0 : RELAY_SPREAD_MS;
+  // The longest wait before a refresh request nothing took reloads the page.
+  refreshSpreadMs = isTesting() ? 0 : REFRESH_SPREAD_MS;
+  // Reloads the page. A test stands in for it.
+  reloadPage: () => void = () => window.location.reload();
+  private refreshPending = false;
 
   private started = false;
   // Whether this tab opens the feeds: it holds the lock, or it has no other
@@ -282,6 +305,10 @@ export default class PublicRealmEventsService extends Service {
     if (!base) {
       return;
     }
+    if (event.kind === 'refresh') {
+      this.refreshRequested(realm);
+      return;
+    }
     let relay = () => {
       if (!this.isDestroying && !this.isDestroyed) {
         this.relay(realm, base, event);
@@ -292,6 +319,32 @@ export default class PublicRealmEventsService extends Service {
       relay();
     } else {
       later(relay, delay);
+    }
+  }
+
+  // Offers the page the refresh request, and reloads it when nothing took it.
+  private refreshRequested(realm: string) {
+    if (this.refreshPending) {
+      return;
+    }
+    let reload = () => {
+      if (!this.isDestroying && !this.isDestroyed) {
+        this.reloadPage();
+      }
+    };
+    let notice = new CustomEvent<RefreshRequestedDetail>(
+      REFRESH_REQUESTED_EVENT,
+      { cancelable: true, detail: { realm, reload } },
+    );
+    if (!window.dispatchEvent(notice)) {
+      return;
+    }
+    this.refreshPending = true;
+    let delay = Math.floor(Math.random() * this.refreshSpreadMs);
+    if (delay <= 0) {
+      reload();
+    } else {
+      later(reload, delay);
     }
   }
 

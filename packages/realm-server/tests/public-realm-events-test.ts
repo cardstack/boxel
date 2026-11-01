@@ -494,6 +494,44 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a writer may ask the pages following the feed to reload, at most once a minute', async function (assert) {
+    let refresh = () =>
+      request
+        .post(`${new URL(NEWSROOM).pathname}_public-events/refresh`)
+        .set('Accept', SupportedMimeType.JSON);
+
+    let visitor = await refresh().set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(
+      visitor.status,
+      401,
+      `a visitor who isn't signed in may not ask: ${visitor.text}`,
+    );
+
+    let before = await head();
+    let asked = await refresh().set(
+      'Authorization',
+      `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+    );
+    assert.strictEqual(asked.status, 202, asked.text);
+    let events = (await feedWindow()).body as PublicEventWindow;
+    assert.deepEqual(
+      events.events.filter((event) => event.seq > before),
+      [{ seq: before + 1, kind: 'refresh', path: '' }],
+      'the feed carries the request and nothing else about it',
+    );
+
+    let again = await refresh().set(
+      'Authorization',
+      `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+    );
+    assert.strictEqual(again.status, 429, again.text);
+    assert.ok(
+      Number(again.headers['retry-after']) > 0,
+      'and says when another is accepted',
+    );
+    assert.strictEqual(await head(), before + 1, 'the refused one is not sent');
+  });
+
   test('a realm whose policy opens nothing to callers who are not signed in refuses them its feed', async function (assert) {
     let response = await feedWindow(LIBRARY);
     assert.strictEqual(response.status, 401, response.text);
