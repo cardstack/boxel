@@ -249,42 +249,91 @@ export class PrefixRealmNetwork {
   }
 }
 
-/** Read the prefix map `realmServerURL` serves. Throws when it cannot. */
+/**
+ * How long a read of the map may take, end to end. The map is read ahead of
+ * work that promises to degrade, not stall, when a realm server hangs — the
+ * realm-source staging gives each of its own requests the same budget — and a
+ * read that never settles would hold every caller sharing it (see
+ * `prefixRealmNetworkFor`).
+ */
+export const PREFIX_REALMS_TIMEOUT_MS = 10_000;
+
+/**
+ * Read the prefix map `realmServerURL` serves. Throws when it cannot, naming
+ * the URL it asked, including when the server does not answer within
+ * `timeoutMs`.
+ */
 export async function fetchPrefixRealmURLs(
   realmServerURL: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  timeoutMs: number = PREFIX_REALMS_TIMEOUT_MS,
 ): Promise<Record<string, string>> {
   let url = new URL(PREFIX_REALMS_ENDPOINT, ensureTrailingSlash(realmServerURL))
     .href;
-  let response = await fetchFn(url, {
-    headers: { Accept: SupportedMimeType.JSONAPI },
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Could not read the prefix realm map from ${url}: HTTP ${response.status}`,
+  let failure = (cause: unknown) =>
+    new Error(
+      `Could not read the prefix realm map from ${url}: ${describeFailure(cause)}`,
     );
+  // One signal for the request and its body, so a server that sends headers
+  // and then stalls is bounded too.
+  let signal = AbortSignal.timeout(timeoutMs);
+  let response: Response;
+  try {
+    response = await fetchFn(url, {
+      headers: { Accept: SupportedMimeType.JSONAPI },
+      signal,
+    });
+  } catch (error: unknown) {
+    throw failure(error);
   }
-  return prefixRealmURLsFromDocument(await response.json(), url);
+  if (!response.ok) {
+    throw failure(`HTTP ${response.status}`);
+  }
+  let document: unknown;
+  try {
+    document = await response.json();
+  } catch (error: unknown) {
+    throw failure(error);
+  }
+  return prefixRealmURLsFromDocument(document, url);
+}
+
+// A failed `fetch` says only "fetch failed"; what failed — a refused
+// connection, a DNS miss — is on its `cause`.
+function describeFailure(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  let cause = (error as { cause?: unknown }).cause;
+  return cause instanceof Error
+    ? `${error.message} (${cause.message})`
+    : error.message;
 }
 
 // One network per realm server for the life of the process: a CLI invocation
 // resolves several identifiers against the same server, and the map changes
-// only when the server is reconfigured. A failed read is dropped so the next
-// call asks again.
+// only when the server is reconfigured. Every caller shares the read in
+// flight, so it must settle: `fetchPrefixRealmURLs` bounds it, and a failed or
+// timed-out read is dropped so the next call asks again.
 const networksByServer = new Map<string, Promise<PrefixRealmNetwork>>();
 
 /**
  * The network built from the prefix map `realmServerURL` serves, read once per
- * process. Rejects when the map cannot be read.
+ * process. Rejects when the map cannot be read, or is not read within
+ * `timeoutMs`.
  */
 export function prefixRealmNetworkFor(
   realmServerURL: string,
   fetchFn?: typeof globalThis.fetch,
+  timeoutMs?: number,
 ): Promise<PrefixRealmNetwork> {
   let key = ensureTrailingSlash(realmServerURL);
   let pending = networksByServer.get(key);
   if (!pending) {
-    let attempt = fetchPrefixRealmURLs(key, fetchFn).then(
+    let attempt = fetchPrefixRealmURLs(key, fetchFn, timeoutMs).then(
       (prefixRealmURLs) => new PrefixRealmNetwork(prefixRealmURLs),
     );
     attempt.catch(() => {

@@ -210,6 +210,54 @@ const tests = Object.freeze({
       clearPrefixRealmNetworkCache();
     }
   },
+
+  'gives up on a server that never answers, and asks again next time': async (
+    assert,
+  ) => {
+    clearPrefixRealmNetworkCache();
+    try {
+      // Accepts the request and never answers, as a hung server does; only
+      // the request's own signal ends it.
+      let hangingFetch = ((_input: unknown, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(init.signal!.reason),
+          );
+        })) as typeof globalThis.fetch;
+      await assert.rejects(
+        prefixRealmNetworkFor('https://realms.example.test/', hangingFetch, 20),
+        /Could not read the prefix realm map from https:\/\/realms\.example\.test\/_prefix-realms: .*timeout/i,
+      );
+
+      let calls: string[] = [];
+      let network = await prefixRealmNetworkFor(
+        'https://realms.example.test/',
+        prefixMapFetch(calls),
+      );
+      assert.strictEqual(calls.length, 1, 'the timed-out read was dropped');
+      assert.deepEqual(network.prefixRealmURLs(), SERVED);
+    } finally {
+      clearPrefixRealmNetworkCache();
+    }
+  },
+
+  'names the server, and the cause, when the request fails': async (assert) => {
+    // Shaped as Node's fetch rejects a refused connection. `Object.assign`
+    // rather than the `cause` option: not every package that type-checks this
+    // file has a lib that knows the option.
+    let refusedFetch = (async () => {
+      throw Object.assign(new TypeError('fetch failed'), {
+        cause: new Error('connect ECONNREFUSED 127.0.0.1:4201'),
+      });
+    }) as typeof globalThis.fetch;
+    await assert.rejects(
+      fetchPrefixRealmURLs('http://127.0.0.1:4201/', refusedFetch),
+      new RegExp(
+        'Could not read the prefix realm map from http://127\\.0\\.0\\.1:4201/_prefix-realms: ' +
+          'fetch failed \\(connect ECONNREFUSED 127\\.0\\.0\\.1:4201\\)',
+      ),
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;

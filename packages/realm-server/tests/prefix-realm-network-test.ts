@@ -45,5 +45,13 @@ module(basename(import.meta.filename), function () {
     test('builds one network per server, and asks again after a failed read', async function (assert) {
       await runSharedTest(prefixRealmNetworkTests, assert, {});
     });
+
+    test('gives up on a server that never answers, and asks again next time', async function (assert) {
+      await runSharedTest(prefixRealmNetworkTests, assert, {});
+    });
+
+    test('names the server, and the cause, when the request fails', async function (assert) {
+      await runSharedTest(prefixRealmNetworkTests, assert, {});
+    });
   });
 });
