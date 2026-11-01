@@ -1,8 +1,10 @@
 import { isTesting } from '@embroider/macros';
 
-// The assistant's motion timing, in one place (ADR 007 §1.5: durations and
-// easings come from shared tokens). The curve is operator mode's: it leaves
-// at once and lands softly, without overshoot. Leaving elements ease in.
+// Host motion timing, in one place (ADR 007 §1.5: durations and easings come
+// from shared tokens), for the assistant's regions and the operator-mode
+// stacks' (operator-mode/motion/stack-motion.gts). The curve is operator
+// mode's: it leaves at once and lands softly, without overshoot. Leaving
+// elements ease in.
 
 /** entering and moving: ease-out */
 export const EASE = [0.2, 0.8, 0.2, 1] as const;

@@ -12,7 +12,7 @@ import {
   motionEnabled,
 } from '../../ai-assistant/motion/tokens';
 
-import type { PropSource } from '@cardstack/choreo';
+import type { PropSource, Query } from '@cardstack/choreo';
 
 // A stack's motion, as one Choreo region around its cards (ADR 007 §1.2:
 // one engine reacts to rendered changes; nothing here is started by a
@@ -31,6 +31,14 @@ type Changeset = Parameters<Extract<PropSource, Function>>[1];
 type Sprite = Parameters<Extract<PropSource, Function>>[0];
 
 export const STACK_ITEM_ROLE = 'stack-item';
+
+/**
+ * A card leaving the stack: removed, and claimed by no card that carries its
+ * identity on. The old element of a clone (a card replaced in place by its
+ * copy) is the claimed half of that pair, and leaves with no motion of its
+ * own, since its replacement stands where it stood.
+ */
+const DEPARTED: Query = { role: STACK_ITEM_ROLE, type: 'departed' };
 
 /**
  * The card on top of its stack: the last of the cards standing after the
@@ -53,6 +61,17 @@ const isTopCard = (sprite: Sprite, changeset: Changeset) =>
         ),
     );
 
+/**
+ * Motion is reduced, by the policy the region follows (glimmer-motion's
+ * MotionConfig 'user', the host's default). Read as each pass compiles. A
+ * reduced run lands every positional value at its end as its step opens, so
+ * a value that travels has to stand still here for the card to fade where
+ * it is.
+ */
+const reducesMotion = () =>
+  typeof matchMedia === 'function' &&
+  matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 // How small a card starts as it scales in.
 const SCALE_FROM = 0.1;
 
@@ -63,13 +82,24 @@ const fadeInOnTop: PropSource = (sprite, changeset) =>
 // A phone card slides up from below the viewport: its own height.
 const slideUpOnTop: PropSource = (sprite, changeset) =>
   isTopCard(sprite, changeset) ? [sprite.final?.page.height ?? 0, 0] : [0, 0];
-// A leaving card sinks by its own height as it fades.
-const sinkOut: PropSource = (sprite) => [0, sprite.initial?.page.height ?? 0];
+// Under reduced motion the slide lands at once, so a phone card fades in
+// where it stands instead.
+const fadeInOnTopWhenReduced: PropSource = (sprite, changeset) =>
+  reducesMotion() ? fadeInOnTop(sprite, changeset) : [1, 1];
+// A leaving card sinks by its own height as it fades; under reduced motion
+// it fades where it stood.
+const sinkOut: PropSource = (sprite) =>
+  reducesMotion() ? [0, 0] : [0, sprite.initial?.page.height ?? 0];
 
-// How long a card under an opening phone card stays in view, read by the
-// stylesheet (see stack-item.gts): the entrance's own duration.
-const ENTER_DURATION_STYLE = htmlSafe(
-  `--stack-item-enter-duration: ${DURATION.space}s`,
+// How long a phone card stays in view under a card opening over it, read by
+// the stylesheet as a transition delay (see stack-item.gts). The slide runs
+// on the region's clock, which `@maxFrameStep` slows behind long frames,
+// and the delay runs on the wall clock, so it outlasts the slide by
+// SLOW_FRAME_ALLOWANCE. Holding the covered card a little longer costs
+// nothing to see: the phone card on top paints its own background.
+const SLOW_FRAME_ALLOWANCE = 0.5;
+const COVERED_CARD_STYLE = htmlSafe(
+  `--stack-item-covered-delay: ${DURATION.space + SLOW_FRAME_ALLOWANCE}s`,
 );
 
 interface Signature {
@@ -88,14 +118,15 @@ interface Signature {
  *
  * - the inserted top card scales in and fades in, easing out; on a phone it
  *   slides up from below the viewport instead;
- * - a removed card fades and sinks, easing in over the exit duration;
+ * - a departing card fades and sinks, easing in over the exit duration;
  * - a card whose box changed (uncovered, covered, or expanded) moves by
  *   transform to its new place. Its width and height animate as layout, not
  *   by scale, so its text is never scaled (§1.5); the frame reflows under
  *   the card's content, the way a width transition does.
  *
  * Under reduced motion the region's MotionConfig ('user') lands every move
- * at once and keeps the fades (§1.5).
+ * at once, and a card fades in or out where it stands, on a phone as on a
+ * wide screen (§1.5).
  */
 export default class StackMotion extends Component<Signature> {
   private enabled = motionEnabled('boxel-stack-motion');
@@ -104,7 +135,7 @@ export default class StackMotion extends Component<Signature> {
     {{#if this.enabled}}
       <Choreo
         @maxFrameStep={{MAX_FRAME_STEP}}
-        style={{ENTER_DURATION_STYLE}}
+        style={{COVERED_CARD_STYLE}}
         ...attributes
         as |c|
       >
@@ -114,6 +145,7 @@ export default class StackMotion extends Component<Signature> {
             <c.Tween
               @of={{c.inserted STACK_ITEM_ROLE}}
               @y={{slideUpOnTop}}
+              @opacity={{fadeInOnTopWhenReduced}}
               @duration={{DURATION.space}}
               @ease={{EASE}}
             />
@@ -127,7 +159,7 @@ export default class StackMotion extends Component<Signature> {
             />
           {{/if}}
           <c.Tween
-            @of={{c.removed STACK_ITEM_ROLE}}
+            @of={{DEPARTED}}
             @opacity={{array 1 0}}
             @y={{sinkOut}}
             @duration={{DURATION.exit}}

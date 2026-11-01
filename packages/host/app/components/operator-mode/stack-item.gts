@@ -100,7 +100,7 @@ export interface StackItemComponentAPI {
 // A card's identity for its stack's motion region (motion/stack-motion.gts).
 // An item and its clones share an opening, so a card that takes its saved id
 // or moves stacks keeps its identity: the region sees it kept, not entering
-// again. The region, not the state, holds the name (ADR 007 §1.1).
+// again. This module, not the state, holds the name (ADR 007 §1.1).
 const participantIds = new WeakMap<StackItemOpening, string>();
 let nextParticipantId = 0;
 function participantIdFor(item: StackItem): string {
@@ -276,9 +276,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // margin-top rather than padding-top, to hide scrolled content from view.
     // A change of place or size is shown by the stack's motion region, which
     // measures the card before and after the render.
+    //
+    // Width and height go through custom properties that the stylesheet
+    // reads, not inline width and height. A move borrows the inline width
+    // and height for its flight and hands back what they held when it began,
+    // so a size that changed mid-flight would be lost; with them empty, the
+    // stylesheet's size, read from these properties, stands when the move
+    // lets go.
     return {
-      height: `calc(100% - ${marginTopPx}px)`,
-      width,
+      '--stacked-card-height': `calc(100% - ${marginTopPx}px)`,
+      '--stacked-card-width': width,
       maxWidth: `${maxWidthPercent}%`,
       zIndex: this.args.index + 1,
       marginTop: `${marginTopPx}px`,
@@ -1026,6 +1033,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         z-index: 0;
         pointer-events: none;
       }
+      /* A stacked card's size, from the custom properties stackedCardStyle
+         sets (expanded and phone cards set none and take the rules below) */
+      .item:not(.expanded, .phone-layout) {
+        width: var(--stacked-card-width);
+        height: var(--stacked-card-height);
+      }
       /* the card takes focus as it opens, as focus is handed back to it, and
          as it is clicked. A ring shows where the keyboard brought focus, so a
          keyboard user can see where it is; a click draws none */
@@ -1050,15 +1063,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .item.expanded {
         pointer-events: auto;
       }
-      /* A buried phone card is covered by the top card, so it is hidden:
-         after the time a card opening over it takes to slide in (the
-         stack's motion region sets --stack-item-enter-duration; with motion
-         off it is 0), so it stays in view under the slide. A card that
+      /* A buried phone card is covered by the top card, so it is hidden,
+         after a delay that keeps it in view under a card sliding over it.
+         The stack's motion region sets the delay to outlast the slide
+         (motion/stack-motion.gts); with motion off it is 0. A card that
          closes leaves as a picture kept by the region, so the card it
          uncovers shows at once. */
       .item.phone-layout:not(.expanded) {
         visibility: hidden;
-        transition: visibility 0s linear var(--stack-item-enter-duration, 0s);
+        transition: visibility 0s linear var(--stack-item-covered-delay, 0s);
       }
       /* Its header moves to the top bar once it is the top card, so it
          is left out while buried to keep the content from jumping. */
