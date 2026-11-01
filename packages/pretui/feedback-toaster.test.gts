@@ -350,6 +350,30 @@ module('Pretui | toaster | render', function (hooks) {
     assert.notOk(region.hasAttribute('data-paused'), 'focus leaving resumes');
   });
 
+  test('a focus pause that no focusout cleared does not hold the clocks', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'first', title: 'First', duration: 30 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    let region = document.querySelector('[data-test-pretui-toaster]') as HTMLElement;
+    let dismiss = region.querySelector('[data-test-pretui-toast-dismiss]') as HTMLElement;
+
+    await focus(dismiss);
+    assert.strictEqual(region.getAttribute('data-paused'), 'true', 'focus within pauses');
+
+    // Stands in for a browser that takes focus off a control without
+    // delivering a focusout to the region.
+    dismiss.addEventListener('focusout', (event) => event.stopPropagation());
+    dismiss.blur();
+
+    store.show({ id: 'next', title: 'Next', duration: 0.2 });
+    await waitUntil(
+      () => !document.querySelector('[data-test-pretui-toast-item="next"]'),
+      { timeout: 3000, timeoutMessage: 'the stale focus pause held the clock' },
+    );
+    assert.notOk(region.hasAttribute('data-paused'), 'the pause lifted once focus had left');
+  });
+
   test('dismissing removes the toast and fires its callback', async function (assert) {
     let store = new ToastStore();
     let gone = 0;
