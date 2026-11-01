@@ -4,6 +4,8 @@ date: 2026-10-31
 scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/event-feed.ts
+  - packages/runtime-common/event-feed-store.ts
+  - packages/realm-server/lib/realm-feed-events-listener.ts
   - packages/runtime-common/anonymous-admission.ts
   - packages/realm-server/tests/event-feed-test.ts
   - packages/realm-server/node-realm.ts
@@ -180,6 +182,19 @@ them. An emit MAY `assert` a condition over the card as stored and the realm's
 clock, such as a deadline, and MUST be refused when it doesn't hold, so a
 message that arrives too late never reaches the channel.
 
+Presence, who is here now, MUST NOT take a position on the channel. An
+`emit` MAY declare itself unordered (`ordered: false`), and then MUST name a
+key and MUST NOT `assert`. The realm MUST store an unordered message as the
+latest for its key, with a time it expires, and MUST NOT serialize unordered
+messages behind each other or behind the channel's ordered appends: each one
+costs one write that contends only with the same key. Followers MUST hear
+an unordered message without a position, so a missed one is never a gap to
+resume from, and a page that starts following MUST hear the unexpired
+messages for every key. A `collect` of an unordered emit MUST read the
+unexpired messages for every key. Presence is the same for a person, an
+agent or a crowd of agents, and the same on a public site and in a
+signed-in application.
+
 ### 1.9. The wire, written down and versioned
 
 The feed's wire format is the protocol section below, version 1. A client
@@ -321,6 +336,12 @@ confirmed or rolled back.
   (§1.8): a prefix or type can't express "this game" or "my entry", needs a
   permission model of its own, and leaves topics to the platform rather than
   the author.
+- **Presence as ordered messages.** Rejected: every heartbeat took the
+  channel's next position under one row lock, so a waiting room of a
+  thousand fans queued its heartbeats one at a time and held the database's
+  connections while it did, starving the holds and checkouts that matter.
+  A position also makes a missed heartbeat a gap a page must resume from,
+  when the next one supersedes it anyway.
 - **Reloading every page on each code change.** Rejected for the refresh
   request: a module change already rebuilds a page in place, and a reload
   per save would put the whole audience back through the page's first load.

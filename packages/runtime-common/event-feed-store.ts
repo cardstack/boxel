@@ -15,6 +15,31 @@ import type { FeedEvent } from './event-feed.ts';
 // feed's key; a process that hears it reads what it hasn't seen.
 export const REALM_FEED_EVENTS_CHANNEL = 'realm_feed_events';
 
+// The Postgres channel a store announces each unordered message on (ADR 020
+// §1.8). Its payload is a `PresenceNotice` as JSON, so a process that hears
+// it delivers the message without reading anything.
+export const REALM_PRESENCE_CHANNEL = 'realm_presence';
+
+// What a presence notification carries: the channel, the process that wrote
+// it, which hears its own message directly, and the message itself, left out
+// when it is too large for a notification, for the hearer to read instead.
+export interface PresenceNotice {
+  key: string;
+  origin: string;
+  event?: FeedEvent;
+  operation?: string;
+  messageKey?: string;
+}
+
+// This process, as a presence notice names its writer.
+export const PRESENCE_ORIGIN = globalThis.crypto
+  .randomUUID()
+  .replace(/-/g, '')
+  .slice(0, 12);
+
+// Postgres refuses a notification payload of 8000 bytes or more.
+const MAX_NOTICE_BYTES = 7000;
+
 // The key of a card's live channel: the realm's URL and the card's path in it.
 export function channelFeedKey(realmURL: string, path: string): string {
   return `${realmURL}#${path}`;
@@ -80,6 +105,23 @@ export interface FeedStore {
   wasVisible(key: string, path: string): Promise<boolean>;
   // Records a refresh request unless one was accepted within `cooldownMs`.
   claimRefresh(key: string, cooldownMs: number): Promise<RefreshClaim>;
+  // Records an unordered message (ADR 020 §1.8) as the latest of its
+  // operation and key on the channel `key`, until `expiresInMs` from now. It
+  // takes no position and waits on no other message, and every process
+  // serving the realm is told of it.
+  putPresence(
+    key: string,
+    event: FeedEvent,
+    expiresInMs: number,
+  ): Promise<void>;
+  // The unexpired unordered messages on the channel `key`: of one operation,
+  // or of every operation.
+  presence(key: string, operation?: string): Promise<FeedEvent[]>;
+}
+
+// An unordered message as the feed delivers it: a message with no position.
+export function isPresence(event: FeedEvent): boolean {
+  return event.kind === 'message' && event.unordered === true;
 }
 
 // What an event says about whether the feed's audience may see its card:
@@ -140,6 +182,11 @@ export class MemoryFeedStore implements FeedStore {
       unkeyed: FeedEvent[];
       visible: Set<string>;
     }
+  >();
+  // Unordered messages per channel, by operation and key.
+  #presence = new Map<
+    string,
+    Map<string, { event: FeedEvent; expiresAt: number }>
   >();
 
   #feed(key: string) {
@@ -247,6 +294,46 @@ export class MemoryFeedStore implements FeedStore {
     feed.lastRefresh = now;
     return { accepted: true };
   }
+
+  async putPresence(
+    key: string,
+    event: FeedEvent,
+    expiresInMs: number,
+  ): Promise<void> {
+    let channel = this.#presence.get(key);
+    if (!channel) {
+      channel = new Map();
+      this.#presence.set(key, channel);
+    }
+    channel.set(presenceSlot(event), {
+      event,
+      expiresAt: Date.now() + expiresInMs,
+    });
+  }
+
+  async presence(key: string, operation?: string): Promise<FeedEvent[]> {
+    let channel = this.#presence.get(key);
+    if (!channel) {
+      return [];
+    }
+    let now = Date.now();
+    let live: FeedEvent[] = [];
+    for (let [slot, { event, expiresAt }] of channel) {
+      if (expiresAt <= now) {
+        channel.delete(slot);
+      } else if (
+        operation === undefined ||
+        event.operation?.name === operation
+      ) {
+        live.push(event);
+      }
+    }
+    return live;
+  }
+}
+
+function presenceSlot(event: FeedEvent): string {
+  return `${event.operation?.name ?? ''}\u0000${event.key ?? ''}`;
 }
 
 // Keeps at most `limit` events, dropping the oldest first but the latest
@@ -469,6 +556,75 @@ export class DbFeedStore implements FeedStore {
       'ORDER BY seq',
     ]);
     return rows.map((row) => eventOf(row.event));
+  }
+
+  // One statement, so one round trip in its own transaction: the upsert
+  // locks only this operation and key's row, and the notification goes out
+  // as it commits. Nothing here touches the channel's head row, which every
+  // ordered append takes in turn.
+  async putPresence(
+    key: string,
+    event: FeedEvent,
+    expiresInMs: number,
+  ): Promise<void> {
+    let operation = event.operation?.name ?? '';
+    let messageKey = event.key ?? '';
+    let notice: PresenceNotice = { key, origin: PRESENCE_ORIGIN, event };
+    let payload = JSON.stringify(notice);
+    if (new TextEncoder().encode(payload).length > MAX_NOTICE_BYTES) {
+      payload = JSON.stringify({
+        key,
+        origin: PRESENCE_ORIGIN,
+        operation,
+        messageKey,
+      } satisfies PresenceNotice);
+    }
+    await query(this.#dbAdapter, [
+      'WITH up AS (INSERT INTO realm_presence',
+      '(feed_key, operation, key, event, expires_at) VALUES (',
+      param(key),
+      ',',
+      param(operation),
+      ',',
+      param(messageKey),
+      ',',
+      param(JSON.stringify(event)),
+      '::jsonb, now() + (',
+      param(expiresInMs),
+      "* interval '1 millisecond'))",
+      'ON CONFLICT (feed_key, operation, key) DO UPDATE SET',
+      'event = EXCLUDED.event, expires_at = EXCLUDED.expires_at RETURNING 1)',
+      'SELECT pg_notify(',
+      param(REALM_PRESENCE_CHANNEL),
+      ',',
+      param(payload),
+      ') FROM up',
+    ]);
+    this.#sweepPresence();
+  }
+
+  async presence(key: string, operation?: string): Promise<FeedEvent[]> {
+    let rows = await query(this.#dbAdapter, [
+      'SELECT event FROM realm_presence WHERE feed_key =',
+      param(key),
+      ...(operation === undefined ? [] : ['AND operation =', param(operation)]),
+      'AND expires_at > now()',
+    ]);
+    return rows.map((row) => eventOf(row.event));
+  }
+
+  // Expired rows are only ever skipped by reads; they are deleted at most once
+  // a minute per process, off the write's path.
+  #lastSweep = 0;
+  #sweepPresence() {
+    let now = Date.now();
+    if (now - this.#lastSweep < 60_000) {
+      return;
+    }
+    this.#lastSweep = now;
+    query(this.#dbAdapter, [
+      "DELETE FROM realm_presence WHERE expires_at < now() - interval '1 minute'",
+    ]).catch(() => undefined);
   }
 
   async wasVisible(key: string, path: string): Promise<boolean> {

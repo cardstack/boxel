@@ -23,7 +23,9 @@ import {
   DbFeedStore,
   MemoryFeedStore,
   parseFeedKey,
+  PRESENCE_ORIGIN,
   type FeedStore,
+  type PresenceNotice,
 } from './event-feed-store.ts';
 import {
   ANONYMOUS_BYTES_READ,
@@ -1331,6 +1333,10 @@ const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 // its draw iterate all of them, past the program's step budget. A stopgap for
 // a window the declaration names (see ADR 020's remediation).
 const COLLECT_WINDOW_MS = 5 * 60_000;
+
+// How often a stream following a card's channel is sent the presence that
+// arrived meanwhile (ADR 020 §1.8).
+const PRESENCE_FLUSH_MS = 1000;
 const MODULE_ETAG_VARIANT = 'module';
 
 // A compile this long holds up every other request the process has, so it is
@@ -8371,9 +8377,16 @@ export class Realm {
         // A transform that `collect`s reads the latest messages of an emit
         // from the target card's live channel, inside the write lock, after
         // catching up on what other processes have recorded (ADR 020 §1.8).
-        channelMessages: async ({ cardURL, operation }) => {
+        channelMessages: async ({ cardURL, operation, unordered }) => {
           let path = this.paths.local(new URL(cardURL)).replace(/\.json$/, '');
           let channel = this.#channel(path);
+          // Presence is read as it stands: the unexpired message for each
+          // key, which no append is ordered before.
+          if (unordered) {
+            return (await channel.livePresence(operation)).map(
+              (event) => event.body as JsonValue,
+            );
+          }
           await channel.catchUp();
           // From the store, so the latest message for every key is there
           // however many keys the channel has, not just those the window in
@@ -18574,7 +18587,25 @@ export class Realm {
     // written, so nothing delivered meanwhile falls between the two.
     let held: FeedEvent[] | undefined = [];
     let sent = 0;
+    // Presence is sent at most once a second, the latest for each key: a
+    // crowd's heartbeats would otherwise cost every follower a write each.
+    let presence = new Map<string, FeedEvent>();
+    let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+    let flushPresence = () => {
+      presenceTimer = undefined;
+      let due = [...presence.values()];
+      presence.clear();
+      if (due.length > 0) {
+        stream.write(due.map((event) => feed.serialize(event)).join(''));
+      }
+    };
     let send = (event: FeedEvent) => {
+      // Presence has no position, so it is never a repeat of one sent.
+      if (event.unordered) {
+        presence.set(`${event.operation?.name ?? ''}\u0000${event.key}`, event);
+        presenceTimer ??= setTimeout(flushPresence, PRESENCE_FLUSH_MS);
+        return;
+      }
       if (event.seq <= sent && event.kind !== 'reset') {
         return;
       }
@@ -18610,6 +18641,7 @@ export class Realm {
       uncount();
       unsubscribe();
       clearInterval(heartbeat);
+      clearTimeout(presenceTimer);
     });
     try {
       stream.write(`retry: 3000\n\n`);
@@ -18622,6 +18654,13 @@ export class Realm {
           : await feed.replay(lastEventId);
       for (let event of first) {
         send(event);
+      }
+      // And everyone present on a card's channel, as a page joining late
+      // hears where things stand.
+      if (channel !== undefined && lastEventId === null) {
+        for (let event of await feed.livePresence()) {
+          send(event);
+        }
       }
       let pending = held;
       held = undefined;
@@ -18716,6 +18755,29 @@ export class Realm {
 
   // Another process serving this realm appended to its event feed: pass what
   // it appended to this process's subscribers.
+  // An unordered message another process recorded (ADR 020 §1.8), for the
+  // followers of its channel here. Only a channel this process has open has
+  // anyone to tell; a notice too large to carry its message is read back.
+  async deliverPresence(notice: PresenceNotice): Promise<void> {
+    if (notice.origin === PRESENCE_ORIGIN) {
+      return;
+    }
+    let { path } = parseFeedKey(notice.key);
+    let channel = path === undefined ? undefined : this.#channels.get(path);
+    if (!channel || channel.subscriberCount === 0) {
+      return;
+    }
+    if (notice.event) {
+      channel.deliverPresence(notice.event);
+      return;
+    }
+    for (let event of await channel.livePresence(notice.operation)) {
+      if (event.key === notice.messageKey) {
+        channel.deliverPresence(event);
+      }
+    }
+  }
+
   async catchUpEventFeed(key: string = this.url): Promise<void> {
     let { path } = parseFeedKey(key);
     let feed =
@@ -18753,9 +18815,24 @@ export class Realm {
     key?: string;
     body: unknown;
     guard?: () => Promise<void>;
+    unordered?: { expiresAfterMs: number };
   }): Promise<{ position: string }> {
     let path = this.paths.local(new URL(args.cardURL)).replace(/\.json$/, '');
     let channel = this.#channel(path);
+    // Presence takes no position and waits on none of the channel's appends
+    // (ADR 020 §1.8): one write that contends only with its own key.
+    if (args.unordered && args.key !== undefined) {
+      await channel.presence(
+        {
+          path,
+          operation: args.operation,
+          key: args.key,
+          body: args.body,
+        },
+        args.unordered.expiresAfterMs,
+      );
+      return { position: `${channel.epoch}:0` };
+    }
     let message = {
       path,
       operation: args.operation,

@@ -1868,10 +1868,12 @@ async function withCollectedParams(
     });
   }
   let collected: Record<string, unknown> = { ...(params ?? {}) };
+  let unordered = new Set(entry.definition?.collectUnordered ?? []);
   for (let [param, operation] of Object.entries(collect)) {
     collected[param] = await ctx.channelMessages({
       cardURL: url.href,
       operation,
+      ...(unordered.has(param) ? { unordered: true } : {}),
     });
   }
   return collected;

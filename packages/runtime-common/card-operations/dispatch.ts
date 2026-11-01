@@ -1729,6 +1729,7 @@ async function emitOperation(
       operation: { name: request.name, base: 'emit' },
       ...(key === undefined ? {} : { key }),
       body,
+      ...(definition.unordered ? { unordered: definition.unordered } : {}),
       ...(definition.guard
         ? {
             guard: () => assertEmitGuard(core, request, definition, cardURL),

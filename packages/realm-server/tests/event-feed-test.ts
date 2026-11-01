@@ -9,6 +9,7 @@ import {
   cardRevisionOf,
   channelFeedKey,
   DbFeedStore,
+  REALM_PRESENCE_CHANNEL,
   EVENT_FEED_WINDOW,
   parseAddressRanges,
   RealmEventFeed,
@@ -19,6 +20,7 @@ import type {
   FeedEventWindow,
   FeedEvent,
   FeedStore,
+  PresenceNotice,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -78,6 +80,20 @@ const ARTICLE_MODULE = `
       base: 'emit',
       params: { reader: StringField, mood: StringField },
       key: bxl\`params("reader")\`,
+    };
+    // Who is reading now: presence, the latest per reader, with no position.
+    @operation static here = {
+      base: 'emit',
+      ordered: false,
+      expiresAfter: 60,
+      params: { reader: StringField },
+      key: bxl\`params("reader")\`,
+    };
+    @field present = containsMany(StringField);
+    @operation static rollCall = {
+      base: 'transform',
+      collect: { readers: 'here' },
+      transformations: bxl\`.present = [params("readers")[] | .reader] | sort;\`,
     };
   }
   // A card that shows another's headline, as a leaderboard shows a game's
@@ -191,6 +207,11 @@ module(basename(import.meta.filename), function (hooks) {
               },
               {
                 operation: 'cheer',
+                anonymous: true,
+                ...PUBLISHED_TO_ANONYMOUS,
+              },
+              {
+                operation: 'here',
                 anonymous: true,
                 ...PUBLISHED_TO_ANONYMOUS,
               },
@@ -1236,6 +1257,148 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("presence takes no position on the card's channel, reaches its followers, and a transform collects who is here", async function (assert) {
+    let invoke = (
+      name: string,
+      data: Record<string, unknown>,
+      auth?: string,
+    ) => {
+      let req = request
+        .post(`${new URL(NEWSROOM).pathname}_operations`)
+        .set('Accept', SupportedMimeType.BoxelOperations)
+        .set('Content-Type', SupportedMimeType.BoxelOperations);
+      req = auth
+        ? req.set('Authorization', auth)
+        : req.set('X-Forwarded-For', VISITOR);
+      return req.send({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': name,
+            href: `${NEWSROOM}articles/published`,
+            data,
+          },
+        ],
+      });
+    };
+    let window = async () =>
+      (
+        await request
+          .get(`${new URL(NEWSROOM).pathname}_live`)
+          .query({ channel: 'articles/published' })
+          .set('Accept', SupportedMimeType.JSON)
+          .set('X-Forwarded-For', VISITOR)
+      ).body as FeedEventWindow;
+    let before = await window();
+
+    for (let reader of ['ana', 'ben', 'ana']) {
+      let here = await invoke('here', { reader });
+      assert.strictEqual(here.status, 200, here.text);
+    }
+
+    let after = await window();
+    assert.strictEqual(
+      after.head,
+      before.head,
+      "presence takes no position on the channel, so its head doesn't move",
+    );
+    assert.notOk(
+      after.events.some((event) => event.operation?.name === 'here'),
+      "and isn't in the channel's ordered window",
+    );
+
+    let address = server.address();
+    let port = typeof address === 'object' && address ? address.port : 4444;
+    let controller = new AbortController();
+    let response = await fetch(
+      `http://127.0.0.1:${port}${new URL(NEWSROOM).pathname}_live?channel=articles/published`,
+      {
+        headers: {
+          Accept: SupportedMimeType.EventStream,
+          'X-Forwarded-For': VISITOR,
+        },
+        signal: controller.signal,
+      },
+    );
+    assert.strictEqual(response.status, 200);
+    let reader = response.body!.getReader();
+    let text = '';
+    let framesIn = () =>
+      text
+        .split('\n\n')
+        .map((block) => ({
+          id: block.match(/^id: (.+)$/m)?.[1],
+          data: JSON.parse(block.match(/^data: (.+)$/m)?.[1] ?? 'null'),
+        }))
+        .filter((frame) => frame.data) as {
+        id?: string;
+        data: FeedEvent;
+      }[];
+    let stream = {
+      until: async (done: (frames: ReturnType<typeof framesIn>) => boolean) => {
+        let deadline = Date.now() + 10_000;
+        while (!done(framesIn()) && Date.now() < deadline) {
+          let chunk = await Promise.race([
+            reader.read(),
+            new Promise<undefined>((resolve) =>
+              setTimeout(() => resolve(undefined), 500),
+            ),
+          ]);
+          if (chunk && !chunk.done) {
+            text += new TextDecoder().decode(chunk.value);
+          }
+        }
+        return framesIn();
+      },
+      close: () => controller.abort(),
+    };
+    try {
+      let heard = await stream.until((frames) =>
+        ['ana', 'ben'].every((reader) =>
+          frames.some(
+            (frame) =>
+              frame.data.operation?.name === 'here' &&
+              frame.data.key === reader,
+          ),
+        ),
+      );
+      let presenceFrames = heard.filter(
+        (frame) => frame.data.operation?.name === 'here',
+      );
+      assert.ok(
+        presenceFrames.every(
+          (frame) => frame.id === undefined && frame.data.unordered === true,
+        ),
+        'a page that starts following hears who is here, without positions',
+      );
+      let late = await invoke('here', { reader: 'cy' });
+      assert.strictEqual(late.status, 200, late.text);
+      await stream.until((frames) =>
+        frames.some(
+          (frame) =>
+            frame.data.operation?.name === 'here' && frame.data.key === 'cy',
+        ),
+      );
+      assert.ok(true, 'and hears a newcomer as they arrive');
+    } finally {
+      stream.close();
+    }
+
+    let editor = `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`;
+    let rolled = await invoke('rollCall', {}, editor);
+    assert.strictEqual(rolled.status, 200, rolled.text);
+    await newsroom.indexing();
+    let read = await request
+      .get(`${new URL(NEWSROOM).pathname}articles/published`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', editor);
+    assert.deepEqual(
+      read.body.data.attributes.present,
+      ['ana', 'ben', 'cy'],
+      'the transform collects each reader once',
+    );
+  });
+
   test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
     let before = await head();
     let patched = await request
@@ -1545,6 +1708,8 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
       latestMessages: (...args) => real.latestMessages(...args),
       wasVisible: (...args) => real.wasVisible(...args),
       claimRefresh: (...args) => real.claimRefresh(...args),
+      putPresence: (...args) => real.putPresence(...args),
+      presence: (...args) => real.presence(...args),
     };
     let flaky = new RealmEventFeed(REALM, async () => ({}), store);
     await assert.rejects(flaky.position(), /blinked/);
@@ -1705,6 +1870,71 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
       teams,
       'and every answer is collected',
     );
+  });
+
+  test('presence is the latest per key until it expires, and is told to every process', async function (assert) {
+    let key = channelFeedKey(REALM, 'Room/1');
+    let store = new DbFeedStore(dbAdapter);
+    let here = (who: string, at: number) => ({
+      v: 1,
+      seq: 0,
+      kind: 'message' as const,
+      unordered: true as const,
+      path: 'Room/1',
+      operation: { name: 'here', base: 'emit' },
+      key: who,
+      body: { who, at },
+    });
+    let notices: PresenceNotice[] = [];
+    let listening = await dbAdapter.subscribe(
+      REALM_PRESENCE_CHANNEL,
+      (notification) => {
+        notices.push(JSON.parse(notification.payload ?? '{}'));
+      },
+    );
+    try {
+      await Promise.all([
+        store.putPresence(key, here('ana', 1), 60_000),
+        store.putPresence(key, here('ben', 1), 60_000),
+        store.putPresence(key, here('gone', 1), 1),
+      ]);
+      await store.putPresence(key, here('ana', 2), 60_000);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      let live = await store.presence(key, 'here');
+      assert.deepEqual(
+        live
+          .map((event) => event.body)
+          .sort((a: any, b: any) => a.who.localeCompare(b.who)),
+        [
+          { who: 'ana', at: 2 },
+          { who: 'ben', at: 1 },
+        ],
+        "each key's latest, and none that expired",
+      );
+      assert.deepEqual(
+        await store.presence(key, 'elsewhere'),
+        [],
+        'only the operation asked for',
+      );
+      let feed = new RealmEventFeed(REALM, async () => ({}), store, { key });
+      await feed.ready();
+      assert.strictEqual(feed.head, 0, 'and the channel took no positions');
+      for (let attempt = 0; attempt < 50 && notices.length < 4; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.deepEqual(
+        notices.map((notice) => [notice.key, notice.event?.key]).sort(),
+        [
+          [key, 'ana'],
+          [key, 'ben'],
+          [key, 'gone'],
+          [key, 'ana'],
+        ].sort(),
+        'each write is announced, carrying its message',
+      );
+    } finally {
+      await listening.unsubscribe();
+    }
   });
 
   test("an emit's guard runs in turn with the channel's appends, and a refused one emits nothing", async function (assert) {

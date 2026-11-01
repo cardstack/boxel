@@ -907,9 +907,30 @@ export interface CallApiOperationDeclaration extends OperationCommon {
 // permissions, widened by its policy — and it carries no program and no
 // projection: there is no document for a program to run over, and the answer
 // is where the message landed on the channel.
+//
+// `ordered: false` makes it presence: who is here now, whether a person, an
+// agent or a crowd of agents (ADR 020 §1.8). The message takes no position on
+// the channel and waits on no other message, so a crowd's heartbeats cost one
+// small write each instead of a queue. The latest per key counts until
+// `expiresAfter` seconds pass (60 by default), a page that starts following
+// hears everyone present, and a transform that `collect`s it reads the
+// unexpired messages. An unordered emit needs a `key` and takes no `assert`.
+//
+//   @operation static here = {
+//     base: 'emit',
+//     ordered: false,
+//     expiresAfter: 60,
+//     params: { c: StringField },
+//     key: bxl`params("c")`,
+//   } satisfies OperationDeclaration;
 export interface EmitOperationDeclaration extends OperationCommon {
   readonly base: 'emit';
   readonly key?: BxlProgram;
+  // `false` for presence: an unordered message, latest per key, until it
+  // expires. Absent or `true`, the message takes the channel's next position.
+  readonly ordered?: boolean;
+  // Seconds an unordered message counts for after it is sent.
+  readonly expiresAfter?: number;
   // A precondition judged against the card as stored, before the message goes.
   readonly assert?: EmitAssertClause;
   readonly transformations?: never;
@@ -1042,6 +1063,8 @@ const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   // Says what the program reads, rather than what it does, so it sits beside a
   // raw program as readily as beside the clauses.
   transform: ['collect'],
+  // How the message travels, rather than what it says.
+  emit: ['ordered', 'expiresAfter'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1809,6 +1832,9 @@ function assertValidClauses(
   if (base === 'emit' && declaration.key !== undefined) {
     assertBxlProgram(label, 'key', declaration.key);
   }
+  if (base === 'emit') {
+    assertPresenceShape(label, declaration);
+  }
   if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
     assertNamesItemsToAppend(label, declaration);
   }
@@ -2419,6 +2445,49 @@ function assertValidReference(
       throw new Error(
         `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance(), realmConfig() or card()`,
       );
+  }
+}
+
+// The longest an unordered message may count for: presence is who is here
+// now, and a stale entry is a visitor who left.
+const MAX_PRESENCE_SECONDS = 3600;
+
+function assertPresenceShape(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let { ordered, expiresAfter } = declaration;
+  if (ordered !== undefined && typeof ordered !== 'boolean') {
+    throw new Error(`${label}: \`ordered\` must be true or false`);
+  }
+  if (ordered !== false) {
+    if (expiresAfter !== undefined) {
+      throw new Error(
+        `${label}: \`expiresAfter\` applies only to an unordered emit (\`ordered: false\`); an ordered message stays on the channel until a later one with its key replaces it`,
+      );
+    }
+    return;
+  }
+  if (declaration.key === undefined) {
+    throw new Error(
+      `${label}: an unordered emit needs a \`key\`: each message is the latest for its key, and one with no key would never be replaced`,
+    );
+  }
+  if (declaration.assert !== undefined) {
+    throw new Error(
+      `${label}: an unordered emit takes no \`assert\`: a guard is judged in turn with the channel's ordered writes, which an unordered message never waits on`,
+    );
+  }
+  if (
+    expiresAfter !== undefined &&
+    (typeof expiresAfter !== 'number' ||
+      !Number.isFinite(expiresAfter) ||
+      expiresAfter <= 0 ||
+      expiresAfter > MAX_PRESENCE_SECONDS)
+  ) {
+    throw new Error(
+      `${label}: \`expiresAfter\` must be a number of seconds greater than 0 and at most ${MAX_PRESENCE_SECONDS}`,
+    );
   }
 }
 

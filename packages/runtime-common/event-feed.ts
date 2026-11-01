@@ -99,6 +99,9 @@ export interface FeedEvent {
   // under, when its operation names one, and what was emitted.
   key?: string;
   body?: unknown;
+  // For a `message` an unordered emit sent, such as presence (§1.8): it has
+  // no position, so `seq` is 0 and a client never resumes from it.
+  unordered?: true;
 }
 
 // A message emitted on a card's live channel (ADR 020 §1.8), as a page
@@ -449,6 +452,49 @@ export class RealmEventFeed {
       () => undefined,
     );
     return await step;
+  }
+
+  // Records an unordered message on this channel (ADR 020 §1.8), such as a
+  // visitor's presence, and passes it to this process's subscribers. It
+  // waits on nothing the channel is appending: it takes no position, and it
+  // replaces the last one for its operation and key until it expires.
+  async presence(
+    message: {
+      path: string;
+      operation: FeedOperation;
+      key: string;
+      body: unknown;
+    },
+    expiresInMs: number,
+  ): Promise<FeedEvent> {
+    let event: FeedEvent = {
+      v: EVENT_FEED_VERSION,
+      seq: 0,
+      kind: 'message',
+      unordered: true,
+      path: message.path,
+      operation: message.operation,
+      key: message.key,
+      body: message.body,
+    };
+    await this.store.putPresence(this.key, event, expiresInMs);
+    this.deliverPresence(event);
+    return event;
+  }
+
+  // An unordered message, from this process or as another process's notice
+  // brought it, passed straight to this process's subscribers.
+  deliverPresence(event: FeedEvent) {
+    for (let subscriber of [...this.#subscribers]) {
+      subscriber(event);
+    }
+  }
+
+  // The unexpired unordered messages on this channel, of one operation or
+  // all: what a page starting to follow hears first, and what a `collect`
+  // of an unordered emit reads.
+  async livePresence(operation?: string): Promise<FeedEvent[]> {
+    return await this.store.presence(this.key, operation);
   }
 
   // Carries a change the realm's feed announced for this channel's card, so
@@ -841,10 +887,24 @@ export class RealmEventFeed {
   // One event in the `text/event-stream` format. The id carries the epoch, so
   // a client reconnecting to a restarted server is told to reset rather than
   // missing what changed meanwhile.
+  // An unordered message has no position, so it goes without an id: a
+  // client's last id, and so where it resumes from, stays the last ordered
+  // event it heard.
   serialize(event: FeedEvent): string {
+    if (event.unordered) {
+      let framed = presenceFrames.get(event);
+      if (framed === undefined) {
+        framed = `event: change\ndata: ${JSON.stringify(event)}\n\n`;
+        presenceFrames.set(event, framed);
+      }
+      return framed;
+    }
     return `id: ${this.epoch}:${event.seq}\nevent: change\ndata: ${JSON.stringify(event)}\n\n`;
   }
 }
+
+// Each presence message framed once, however many streams send it.
+const presenceFrames = new WeakMap<FeedEvent, string>();
 
 const log = logger('realm:event-feed');
 

@@ -325,6 +325,12 @@ export interface OperationDefinition {
   // clock, which must answer true for the message to go. `message` is what a
   // refusal says.
   guard?: { program: OperationProgram; message?: string };
+  // An unordered `emit` (`ordered: false`): presence, the latest message per
+  // key until it expires, with no position on the channel (ADR 020 §1.8).
+  unordered?: { expiresAfterMs: number };
+  // The collected params whose emit is unordered, which a transform reads
+  // from the unexpired presence rather than from the channel's sequence.
+  collectUnordered?: string[];
   // A transform's collected params: each param the program reads, mapped to
   // the name of the `emit` on the same type whose latest messages the realm
   // reads off the target card's live channel, under the write lock, and binds
@@ -478,6 +484,10 @@ export type OperationLoweringIssueCode =
   // also declares, or naming an operation that is not an `emit` the type
   // declares.
   | 'invalid-collect'
+  // An `emit`'s `ordered` or `expiresAfter` the realm can't apply: not a
+  // boolean, an unordered emit with no `key` or with an `assert`, or an
+  // expiry that isn't a positive number of seconds up to an hour.
+  | 'invalid-presence'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
@@ -1583,6 +1593,9 @@ export interface EmitMessageArgs {
   // and in turn with the channel's appends, right before the message is
   // recorded; one that throws emits nothing.
   guard?: () => Promise<void>;
+  // An unordered emit's message: presence, recorded as the latest for its
+  // key until it expires, taking no position and waiting on nothing.
+  unordered?: { expiresAfterMs: number };
 }
 
 // Delivers an `emit`'s message on the card's live channel (ADR 020 §1.8,
@@ -1600,6 +1613,8 @@ export type EmitMessage = (
 export type ChannelMessages = (args: {
   cardURL: string;
   operation: string;
+  // The emit is unordered, so its messages are the unexpired presence.
+  unordered?: boolean;
 }) => Promise<JsonValue[]>;
 
 export type ValidatedGrantInertia =

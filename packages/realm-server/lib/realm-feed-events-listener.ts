@@ -3,6 +3,8 @@ import {
   logger,
   parseFeedKey,
   REALM_FEED_EVENTS_CHANNEL,
+  REALM_PRESENCE_CHANNEL,
+  type PresenceNotice,
 } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
@@ -18,6 +20,12 @@ const log = logger('realm-server:feed-events-listener');
 //
 // The listener runs no periodic work: a realm's feed reads by position, so
 // a notification that coalesces several appends is caught up in one read.
+//
+// Presence (ADR 020 §1.8) has no position to catch up from, so its
+// notification carries the message itself on `REALM_PRESENCE_CHANNEL`, and
+// a process that hears it passes it to that channel's followers here. One
+// missed while the connection was down is not recovered: the next heartbeat
+// supersedes it.
 export interface RealmFeedEventsListenerDeps {
   dbAdapter: PgAdapter;
   lookupMountedRealm: (url: string) => Realm | undefined;
@@ -29,6 +37,7 @@ export interface RealmFeedEventsListenerDeps {
 export class RealmFeedEventsListener {
   #deps: RealmFeedEventsListenerDeps;
   #subscription?: NotificationSubscription;
+  #presenceSubscription?: NotificationSubscription;
   #starting?: Promise<void>;
 
   constructor(deps: RealmFeedEventsListenerDeps) {
@@ -48,6 +57,12 @@ export class RealmFeedEventsListener {
         },
         { onReconnect: () => this.#handleReconnect() },
       );
+      this.#presenceSubscription = await this.#deps.dbAdapter.subscribe(
+        REALM_PRESENCE_CHANNEL,
+        (notification) => {
+          this.#handlePresence(notification.payload);
+        },
+      );
     })();
     try {
       await this.#starting;
@@ -63,8 +78,33 @@ export class RealmFeedEventsListener {
       // a start that failed left nothing to unsubscribe
     }
     const sub = this.#subscription;
+    const presence = this.#presenceSubscription;
     this.#subscription = undefined;
-    await sub?.unsubscribe();
+    this.#presenceSubscription = undefined;
+    await Promise.all([sub?.unsubscribe(), presence?.unsubscribe()]);
+  }
+
+  // Exposed for tests; invoked internally by the presence LISTEN handler.
+  handlePresence(payload: string | undefined): void {
+    this.#handlePresence(payload);
+  }
+
+  #handlePresence(payload: string | undefined): void {
+    let notice: PresenceNotice;
+    try {
+      notice = JSON.parse(payload ?? '') as PresenceNotice;
+    } catch {
+      return;
+    }
+    if (typeof notice?.key !== 'string') {
+      return;
+    }
+    const realm = this.#deps.lookupMountedRealm(
+      parseFeedKey(notice.key).realmURL,
+    );
+    realm?.deliverPresence(notice).catch((err: unknown) => {
+      log.warn(`presence delivery failed for ${notice.key}: ${String(err)}`);
+    });
   }
 
   // Exposed for tests; invoked internally by the LISTEN handler.

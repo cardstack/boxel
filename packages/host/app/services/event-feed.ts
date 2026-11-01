@@ -612,6 +612,12 @@ function streamFeed(
   let interim: { stop: () => void } | undefined;
   // Each event once, whether the stream or the interim poll brought it.
   let pass = (event: FeedEvent, id?: string) => {
+    // Presence has no position (ADR 020 §1.8). The stream sends it without an
+    // id, which leaves the last id in place, so it would read as a repeat.
+    if (event.unordered) {
+      deliver(event, undefined);
+      return;
+    }
     let position = parseEventId(id);
     if (
       position &&

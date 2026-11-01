@@ -485,6 +485,15 @@ async function lowerOperation(
   let collected = lowerCollect(declaration, paramNames, siblings, sink);
   if (collected) {
     operation.collect = collected;
+    let unorderedParams = Object.entries(collected)
+      .filter(
+        ([, emitted]) =>
+          (siblings[emitted] as { ordered?: unknown }).ordered === false,
+      )
+      .map(([param]) => param);
+    if (unorderedParams.length > 0) {
+      operation.collectUnordered = unorderedParams;
+    }
   }
   let programParamNames = new Set([
     ...paramNames,
@@ -739,6 +748,12 @@ async function lowerOperation(
     if (guard) {
       operation.guard = guard;
     }
+    let unordered = lowerPresence(declaration, sink);
+    if (unordered) {
+      operation.unordered = unordered;
+      // Presence is never guarded: it waits on no ordered write.
+      delete operation.guard;
+    }
   }
   if (base === 'callApi') {
     let request = lowerCallApi(
@@ -847,6 +862,71 @@ function lowerCollect(
     lowered[param] = emitted;
   }
   return Object.keys(lowered).length > 0 ? lowered : undefined;
+}
+
+// The longest an unordered message may count for, and how long it counts for
+// when the declaration doesn't say.
+const MAX_PRESENCE_SECONDS = 3600;
+const DEFAULT_PRESENCE_SECONDS = 60;
+
+// An emit's `ordered: false` and `expiresAfter` (ADR 020 §1.8). The decorator
+// refuses a malformed pair; a stored entry is held to the same rule here, and
+// an emit whose presence can't be applied stays ordered.
+function lowerPresence(
+  declaration: OperationDeclaration,
+  sink: IssueSink,
+): OperationDefinition['unordered'] {
+  let { ordered, expiresAfter, key, assert } = declaration as {
+    ordered?: unknown;
+    expiresAfter?: unknown;
+    key?: unknown;
+    assert?: unknown;
+  };
+  if (ordered !== undefined && typeof ordered !== 'boolean') {
+    sink.add('invalid-presence', 'ordered', '`ordered` must be true or false');
+    return undefined;
+  }
+  if (ordered !== false) {
+    if (expiresAfter !== undefined) {
+      sink.add(
+        'invalid-presence',
+        'expiresAfter',
+        '`expiresAfter` applies only to an unordered emit (`ordered: false`)',
+      );
+    }
+    return undefined;
+  }
+  if (key === undefined) {
+    sink.add(
+      'invalid-presence',
+      'ordered',
+      'an unordered emit needs a `key`: each message is the latest for its key',
+    );
+    return undefined;
+  }
+  if (assert !== undefined) {
+    sink.add(
+      'invalid-presence',
+      'assert',
+      "an unordered emit takes no `assert`: a guard is judged in turn with the channel's ordered writes, which an unordered message never waits on",
+    );
+    return undefined;
+  }
+  let seconds = expiresAfter ?? DEFAULT_PRESENCE_SECONDS;
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0 ||
+    seconds > MAX_PRESENCE_SECONDS
+  ) {
+    sink.add(
+      'invalid-presence',
+      'expiresAfter',
+      `\`expiresAfter\` must be a number of seconds greater than 0 and at most ${MAX_PRESENCE_SECONDS}`,
+    );
+    return undefined;
+  }
+  return { expiresAfterMs: seconds * 1000 };
 }
 
 // An emit's `assert`: `{ that, message }`, the expression lowered in the
