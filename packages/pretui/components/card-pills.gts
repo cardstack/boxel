@@ -482,8 +482,17 @@ export class CardPills extends Component<CardPillsSignature> {
           font-family: inherit;
           font-size: var(--boxel-ui-label-font-size);
           line-height: var(--boxel-ui-label-line-height);
-          font-weight: 600;
-          color: var(--foreground);
+          /* knobs: --pretui-cardpill-ink / -weight for every pill; a settled
+             ToolRow passes --pretui-cardpill-settled-ink / -weight, which
+             win where its container set them */
+          font-weight: var(
+            --pretui-cardpill-settled-weight,
+            var(--pretui-cardpill-weight, 600)
+          );
+          color: var(
+            --pretui-cardpill-settled-ink,
+            var(--pretui-cardpill-ink, var(--foreground))
+          );
           vertical-align: middle;
           cursor: pointer;
           transition:
