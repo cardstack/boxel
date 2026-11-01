@@ -8,6 +8,8 @@ scope:
   - packages/runtime-common/event-feed-store.ts
   - packages/runtime-common/anonymous-admission.ts
   - packages/runtime-common/card-operations/lowering.ts
+  - packages/runtime-common/card-operations/gate.ts
+  - packages/runtime-common/card-operations/client.ts
   - packages/realm-server/lib/realm-feed-events-listener.ts
   - packages/realm-server/node-realm.ts
   - packages/realm-server/tests/event-feed-test.ts
@@ -130,6 +132,35 @@ nothing from it, and MUST ignore one from any other realm. It MUST
 offer an honoured one to the page's cards through the card context and, when
 none takes it, reload after a random few-second delay.
 
+### 1.9. A crowd's writes wait on nothing they don't need
+
+A write whose order carries no meaning, because a later one with the same key
+replaces it and nothing reads its position, MUST NOT be ordered: it is an
+`emit` with `ordered: false` and a `key` (§1.6). A write whose outcome
+depends on the writes before it, such as a seat hold, a checkout or a
+transform that `collect`s, is ordered and serializes on its card's write
+lock. A caller whose next step reads nothing back through the index MUST NOT
+wait for the write's index pass (`skipIndexWait`), and SHOULD read what it
+just wrote from the card's stored source.
+
+A flow a crowd runs at once, such as an on-sale, a vote or a live quiz, MUST
+NOT depend on indexing at any step. In such a flow a caller MUST NOT create a
+card and then invoke an operation on it, since the gate judges a card by its
+index row. A record the crowd produces SHOULD be written into a card the flow
+already writes, in the same write, and cards that need the index, such as
+receipts, SHOULD be made from those records after the crowd has gone. Hot
+state SHOULD be split across cards, so ordered writes contend only within one.
+A module MUST NOT be deployed while the flow runs, since it reindexes every
+card that uses it.
+
+| Need                                          | Ordered | Waits on index | Today                                                                            | Wanted                                               |
+| --------------------------------------------- | ------- | -------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Presence                                      | no      | no             | `emit`, `ordered: false`, `key`, `expiresAfter`                                  | the same                                             |
+| A durable record per key (an order, a ballot) | no      | no             | a `containsMany` on a sharded card, appended by the transform that does the work | `emit`, `ordered: false`, `retain: true`             |
+| A contested change (hold a seat, sell it)     | yes     | no             | `transform` with `assert`s, sent with `skipIndexWait`                            | declared `indexWait: false`, so no caller can forget |
+| A change others search for soon after         | yes     | yes            | any write                                                                        | the same                                             |
+| Read what was just written                    |         | no             | `GET <card>.json` as `application/vnd.card+source`                               | a `read` declared `from: 'stored'`                   |
+
 ## 2. Rationale
 
 The host's reactivity already runs on realm events; only the source is
@@ -161,6 +192,11 @@ and their seat hold. In its waiting room, ordered presence took the channel's
 next position under one row lock, so a thousand fans' heartbeats queued and
 held the database's connections, starving the holds and checkouts.
 
+Indexing is for peace time: one worker re-renders cards in turn, and under a
+crowd its queue grows by minutes. At the ticket sale, a checkout that created
+an order card and then operated on it waited on that queue, so the purchase is
+now recorded in the write that sells the seats.
+
 A subscription is an operation because the realm already declares, grants and
 runs named queries; watching is the same grant. A grant that reads the caller
 can't be filtered once, so it can't be broadcast.
@@ -183,6 +219,9 @@ can't be filtered once, so it can't be broadcast.
 - **Polling each card:** no shared revision to collapse on.
 - **Topics by path prefix or type:** can't express "this game", and need a
   permission model of their own.
+- **Creating a card per purchase during an on-sale:** the new card can't be
+  operated on until the one index worker has rendered it, so a crowd of
+  checkouts waits on a queue that grows with the crowd.
 - **Reloading on every code change:** a module change already rebuilds in
   place.
 
