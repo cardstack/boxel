@@ -11,9 +11,10 @@ import {
   type FeedEvent,
 } from '@cardstack/runtime-common';
 
+import config from '@cardstack/host/config/environment';
+
 import { earliestFeedPosition } from '../lib/feed-positions';
 
-import type HostModeService from './host-mode-service';
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -127,7 +128,6 @@ function browserCoordination(): TabCoordination | undefined {
 export default class EventFeedService extends Service {
   @service declare private messageService: MessageService;
   @service declare private matrixService: MatrixService;
-  @service declare private hostModeService: HostModeService;
 
   // How tabs coordinate, read when the service starts. Off under test, where
   // one test page runs app after app and each should lead its own feeds at
@@ -149,8 +149,10 @@ export default class EventFeedService extends Service {
   reloadPage: () => void = () => window.location.reload();
   // The realm that owns the site this page is, whose refresh requests alone
   // it honours. Undefined off a site. A test stands in for it.
-  siteRealm: () => string | undefined = () =>
-    this.hostModeService.isActive ? this.hostModeService.realmURL : undefined;
+  siteRealm: () => string | undefined = () => {
+    let site = (config as { hostSite?: unknown }).hostSite;
+    return typeof site === 'string' ? site : undefined;
+  };
   // The cards on the page that take refresh requests themselves.
   private refreshTakers = new Set<(notice: RefreshNotice) => void>();
 
@@ -201,9 +203,17 @@ export default class EventFeedService extends Service {
   // which a prerender never does.
   followChannel(
     cardURL: string,
-    realmURL: string,
+    realmURL: string | undefined,
     onMessage: (message: ChannelMessage) => void,
   ): () => void {
+    // On a site, a card's URL names its realm through the site's alias, as
+    // the realms the page watches do; the realm is the one it falls under.
+    realmURL ??= [...this.watched].find((realm) =>
+      cardURL.startsWith(realmBase(realm)?.href ?? '\u0000'),
+    );
+    if (!realmURL) {
+      return () => {};
+    }
     let base = realmBase(realmURL);
     if (!this.started || !base || !cardURL.startsWith(base.href)) {
       return () => {};
@@ -268,6 +278,12 @@ export default class EventFeedService extends Service {
     try {
       this.joinTabs();
       this.messageService.onFirstSubscription((realm) => this.watch(realm));
+      // The site's own realm, followed for its refresh requests (ADR 020
+      // §1.7) though nothing on the page reads from it.
+      let site = this.siteRealm();
+      if (site) {
+        this.watch(site);
+      }
       this.started = true;
     } catch (error) {
       console.warn('realm event feeds are unavailable', error);

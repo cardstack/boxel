@@ -447,10 +447,16 @@ module('Unit | Service | event-feed', function (hooks) {
   test("a page on a site honours a refresh request only from the site's own realm", function (assert) {
     let reloads = 0;
     service.reloadPage = () => reloads++;
-    service.siteRealm = () => 'http://public-events.test/sites/owner/quiz/';
+    let site = 'http://public-events.test/sites/owner/quiz/';
+    service.siteRealm = () => site;
     service.start();
     watch();
-    FakeEventSource.made[0].emit('change', {
+    let drawnOn = FakeEventSource.made.find((made) =>
+      made.url.startsWith(REALM),
+    )!;
+    let own = FakeEventSource.made.find((made) => made.url === `${site}_live`);
+    assert.ok(own, "the page follows its site's own realm for its requests");
+    drawnOn.emit('change', {
       data: JSON.stringify({ seq: 3, kind: 'refresh', path: '' }),
     });
     assert.strictEqual(
@@ -458,6 +464,10 @@ module('Unit | Service | event-feed', function (hooks) {
       0,
       'a realm the site draws on cannot reload it',
     );
+    own!.emit('change', {
+      data: JSON.stringify({ seq: 4, kind: 'refresh', path: '' }),
+    });
+    assert.strictEqual(reloads, 1, 'its own realm can');
   });
 
   test('a stream that closes after it opened is reopened from the last event id', async function (assert) {

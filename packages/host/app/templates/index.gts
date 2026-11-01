@@ -188,11 +188,14 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     onMessage,
   ) => {
     let cardURL = idFromCardOrURL(card);
-    let realmURL = cardURL ? this.realm.realmURLOf(cardURL) : undefined;
-    if (!cardURL || !realmURL) {
+    if (!cardURL) {
       return () => {};
     }
-    return this.eventFeed.followChannel(cardURL, realmURL, onMessage);
+    return this.eventFeed.followChannel(
+      cardURL,
+      this.realm.realmURLOf(cardURL),
+      onMessage,
+    );
   };
 
   @action
