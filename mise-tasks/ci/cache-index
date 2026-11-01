@@ -207,7 +207,11 @@ wait "$TEST_WAIT_ON_PID"
 echo "Test realms ready. Dumping index tables..."
 . "$REPO_ROOT/scripts/index-cache-tables.sh"
 
-"$REPO_ROOT/scripts/dump-index-cache.sh" boxel /tmp/boxel-index-cache.sql.gz
+HOST_CACHE_REALMS=(base skills openrouter)
+
+# The host-scoped snapshot below is cut from this database, so its realms are
+# checked here.
+"$REPO_ROOT/scripts/dump-index-cache.sh" boxel /tmp/boxel-index-cache.sql.gz "${HOST_CACHE_REALMS[@]}"
 
 # A second, smaller snapshot carrying only the realms a host test shard
 # actually serves. Every shard pays the download and the replay of whatever it
@@ -226,7 +230,6 @@ echo "Test realms ready. Dumping index tables..."
 # `COPY (SELECT <cols> …) TO STDOUT` body, and a `\.` terminator. Header and
 # SELECT share one generated column list so their order cannot drift, and
 # `-q` keeps psql from printing a command tag into the middle of the data.
-HOST_CACHE_REALMS=(base skills openrouter)
 HOST_DUMP=/tmp/boxel-index-cache-host.sql
 
 echo "Dumping host-scoped index cache for realms: ${HOST_CACHE_REALMS[*]}"
@@ -240,14 +243,8 @@ echo "Dumping host-scoped index cache for realms: ${HOST_CACHE_REALMS[*]}"
 REALM_URLS_RAW=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
   "SELECT DISTINCT realm_url FROM boxel_index")
 
-# Each scoped realm must contribute at least one realm_url. Matching nothing
-# would still produce a structurally valid dump — empty COPY blocks, which the
-# verify step accepts because it checks for the block rather than its contents
-# — and would send every consumer back to indexing from scratch with nothing
-# to show it had happened. Fail here instead, while the cause is still legible.
 HOST_REALM_URLS=""
 for realm in "${HOST_CACHE_REALMS[@]}"; do
-  matched=0
   while IFS= read -r realm_url; do
     [ -z "$realm_url" ] && continue
     case "$realm_url" in
@@ -263,15 +260,10 @@ for realm in "${HOST_CACHE_REALMS[@]}"; do
         ;;
     esac
     HOST_REALM_URLS+="${HOST_REALM_URLS:+, }'${realm_url}'"
-    matched=$((matched + 1))
     echo "  ${realm}: ${realm_url}"
   done <<EOF
 ${REALM_URLS_RAW}
 EOF
-  if [ "$matched" -eq 0 ]; then
-    echo "::error title=Host index cache empty::No indexed realm_url ends in '/${realm}/'. Either the realm did not index in this job, or the realm_url form changed — compare against the mount paths in mise-tasks/services/realm-server."
-    exit 1
-  fi
 done
 
 {
