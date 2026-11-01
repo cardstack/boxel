@@ -4,8 +4,9 @@ date: 2026-10-31
 scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/public-realm-events*.ts
+  - packages/runtime-common/anonymous-admission.ts
+  - packages/realm-server/tests/public-realm-events-test.ts
   - packages/realm-server/node-realm.ts
-  - packages/realm-server/handlers/handle-public-realm-events*.ts
   - packages/host/app/services/message-service.ts
   - packages/host/app/services/public-realm-events.ts
 ---

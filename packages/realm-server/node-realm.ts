@@ -1,6 +1,7 @@
 import type {
   RealmAdapter,
   RealmEventDelivery,
+  RealmEventStream,
   Kind,
   FileRef,
   DBAdapter,
@@ -25,6 +26,7 @@ import {
   type LocalPath,
 } from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
+import { PassThrough } from 'stream';
 import sane, { type Watcher } from 'sane';
 
 import type { Dirent, Stats } from 'fs-extra';
@@ -460,6 +462,41 @@ export class NodeAdapter implements RealmAdapter {
     return verifyJWT(token, secret) as TokenClaims & {
       iat: number;
       exp: number;
+    };
+  }
+
+  // A long-lived response body for the realm's public change feed (ADR 020).
+  // Koa pipes it to the client and destroys it when the client goes away,
+  // which is when the realm stops writing to it.
+  openEventStream(): RealmEventStream {
+    let stream = new PassThrough();
+    let closed = false;
+    let callbacks: (() => void)[] = [];
+    let close = () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      for (let callback of callbacks) {
+        callback();
+      }
+    };
+    stream.on('close', close);
+    stream.on('error', close);
+    return {
+      stream,
+      write(text: string) {
+        if (!closed && !stream.writableEnded) {
+          stream.write(text);
+        }
+      },
+      onClose(callback: () => void) {
+        if (closed) {
+          callback();
+        } else {
+          callbacks.push(callback);
+        }
+      },
     };
   }
 

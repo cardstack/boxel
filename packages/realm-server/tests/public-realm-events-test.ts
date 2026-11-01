@@ -1,0 +1,388 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import supertest from 'supertest';
+import type { Test, SuperTest } from 'supertest';
+import { basename, join } from 'path';
+import { dirSync } from 'tmp';
+import {
+  parseAddressRanges,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
+import type {
+  PublicEventWindow,
+  PublicRealmEvent,
+  QueuePublisher,
+  QueueRunner,
+  Realm,
+} from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
+import type { RealmHttpServer as Server } from '../server.ts';
+import {
+  closeServer,
+  createVirtualNetwork,
+  matrixURL,
+  realmConfigCardJSON,
+  runTestRealmServerWithRealms,
+  setupDB,
+  setupTestDatabaseTemplate,
+} from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+
+// ADR 020: a realm's public change feed. A newsroom nobody may read without
+// signing in opens published articles to callers who aren't signed in; a
+// library opens nothing to them.
+const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
+const LIBRARY = 'http://127.0.0.1:4444/library/';
+const ORG = 'http://127.0.0.1:4444/org/';
+const EDITOR = '@editor:localhost';
+const VISITOR = '192.0.2.10';
+
+const REALM_POLICY = {
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+  name: 'RealmPolicy',
+};
+
+const ARTICLE_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Article extends CardDef {
+    @field headline = contains(StringField);
+    @field status = contains(StringField);
+  }
+`;
+
+function article(headline: string, status: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { headline, status },
+      meta: { adoptsFrom: { module: '../article', name: 'Article' } },
+    },
+  });
+}
+
+function policyCard(module: string, grants: Record<string, unknown>[]) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: {
+        rules: [{ targetType: { module, name: 'Article' }, grants }],
+      },
+      meta: { adoptsFrom: REALM_POLICY },
+    },
+  });
+}
+
+const PUBLISHED_TO_ANONYMOUS = {
+  where: 'actor() == "anonymous" and .status == "published"',
+};
+
+module(basename(import.meta.filename), function (hooks) {
+  let newsroom: Realm;
+  let library: Realm;
+  let org: Realm;
+  let request: SuperTest<Test>;
+  let server: Server;
+
+  setupCatalogTestSubset(hooks);
+
+  async function start({
+    dbAdapter,
+    publisher,
+    runner,
+  }: {
+    dbAdapter: PgAdapter;
+    publisher: QueuePublisher;
+    runner: QueueRunner;
+  }) {
+    let result = await runTestRealmServerWithRealms({
+      virtualNetwork: createVirtualNetwork(),
+      realmsRootPath: join(dirSync().name, 'realm_server_1'),
+      clientAddress: {
+        trustedProxyHops: 1,
+        infraAddresses: parseAddressRanges(['203.0.113.5']).ranges,
+      },
+      realms: [
+        {
+          realmURL: new URL(NEWSROOM),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Newsroom',
+              policy: `${ORG}policies/newsroom`,
+            }),
+            'article.gts': ARTICLE_MODULE,
+            'articles/published.json': article('Polls open', 'published'),
+            'articles/draft.json': article('Polls close', 'draft'),
+          },
+          permissions: { [EDITOR]: ['read', 'write', 'realm-owner'] },
+        },
+        {
+          realmURL: new URL(LIBRARY),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Library',
+              policy: `${ORG}policies/library`,
+            }),
+            'article.gts': ARTICLE_MODULE,
+            'articles/shelved.json': article('Shelved', 'published'),
+          },
+          permissions: { [EDITOR]: ['read', 'write', 'realm-owner'] },
+        },
+        {
+          realmURL: new URL(ORG),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({ name: 'Org' }),
+            'policies/newsroom.json': policyCard(`${NEWSROOM}article`, [
+              { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+            ]),
+            // Opens nothing to callers who aren't signed in.
+            'policies/library.json': policyCard(`${LIBRARY}article`, [
+              { operation: 'read' },
+            ]),
+          },
+          permissions: { [EDITOR]: ['read', 'write', 'realm-owner'] },
+        },
+      ],
+      dbAdapter,
+      publisher,
+      runner,
+      matrixURL,
+    });
+    server = result.testRealmHttpServer;
+    request = supertest(server);
+    newsroom = result.realms.find((realm) => realm.url === NEWSROOM)!;
+    library = result.realms.find((realm) => realm.url === LIBRARY)!;
+    org = result.realms.find((realm) => realm.url === ORG)!;
+  }
+
+  async function stop() {
+    for (let realm of [newsroom, library, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
+  setupDB(hooks, {
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      await start({ dbAdapter, publisher, runner });
+    },
+    afterEach: stop,
+  });
+
+  function feedWindow(realm = NEWSROOM) {
+    return request
+      .get(`${new URL(realm).pathname}_public-events`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR);
+  }
+
+  // The feed's events once it has announced at least `count` past `after`.
+  async function eventsAfter(after: number, count = 1) {
+    let deadline = Date.now() + 10_000;
+    for (;;) {
+      let response = await feedWindow();
+      let events = (response.body as PublicEventWindow).events.filter(
+        (event) => event.seq > after,
+      );
+      if (events.length >= count || Date.now() > deadline) {
+        return events;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  async function head() {
+    return ((await feedWindow()).body as PublicEventWindow).head;
+  }
+
+  test('a change to a card a visitor may read is announced by its path, and one to a card they may not is not', async function (assert) {
+    let start = await head();
+    await newsroom.write(
+      'articles/draft.json',
+      article('Polls close late', 'draft'),
+    );
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open late', 'published'),
+    );
+    await newsroom.indexing();
+    let events = await eventsAfter(start);
+    let paths = events.map((event) => event.path);
+    assert.true(
+      paths.includes('articles/published'),
+      `the published article is announced: ${JSON.stringify(events)}`,
+    );
+    assert.false(
+      paths.includes('articles/draft'),
+      'the draft is not announced',
+    );
+    assert.false(
+      JSON.stringify(events).includes(NEWSROOM),
+      "no event names the realm's own address",
+    );
+    assert.false(
+      JSON.stringify(events).includes('Polls open late'),
+      'no event carries card content',
+    );
+  });
+
+  test('a card that stops being readable is announced as removed, once', async function (assert) {
+    // The feed announces a removal only for a card it has seen readable, so
+    // a visitor never learns the path of a card they could not read.
+    let start = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open early', 'published'),
+    );
+    await newsroom.indexing();
+    await eventsAfter(start);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let before = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open', 'draft'),
+    );
+    await newsroom.indexing();
+    let events = await eventsAfter(before);
+    assert.deepEqual(
+      events
+        .filter((event) => event.kind === 'removed')
+        .map(({ kind, path }) => ({ kind, path })),
+      [{ kind: 'removed', path: 'articles/published' }],
+      `announced as removed: ${JSON.stringify(events)}`,
+    );
+    let quiet = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open again', 'draft'),
+    );
+    await newsroom.indexing();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.strictEqual(await head(), quiet, 'and not again while unreadable');
+  });
+
+  test('the poll is the same for every caller and a shared cache may hold it for a second', async function (assert) {
+    let response = await feedWindow();
+    assert.strictEqual(response.status, 200, response.text);
+    assert.strictEqual(
+      response.headers['cache-control'],
+      'public, max-age=1, stale-while-revalidate=1',
+    );
+    let body = response.body as PublicEventWindow;
+    assert.strictEqual(typeof body.epoch, 'string', 'names its epoch');
+    assert.strictEqual(typeof body.head, 'number', 'and its head');
+  });
+
+  test('the stream delivers changes as they land and replays from Last-Event-ID', async function (assert) {
+    let address = server.address();
+    let port = typeof address === 'object' && address ? address.port : 4444;
+    let url = `http://127.0.0.1:${port}/newsroom/_public-events`;
+    let controller = new AbortController();
+    let response = await fetch(url, {
+      headers: {
+        Accept: SupportedMimeType.EventStream,
+        'X-Forwarded-For': VISITOR,
+      },
+      signal: controller.signal,
+    });
+    assert.strictEqual(response.status, 200);
+    assert.true(
+      response.headers.get('content-type')?.startsWith('text/event-stream'),
+      'served as an event stream',
+    );
+    let reader = response.body!.getReader();
+    let text = '';
+    let read = async (until: (text: string) => boolean) => {
+      let deadline = Date.now() + 10_000;
+      while (!until(text) && Date.now() < deadline) {
+        let chunk = await Promise.race([
+          reader.read(),
+          new Promise<undefined>((resolve) =>
+            setTimeout(() => resolve(undefined), 500),
+          ),
+        ]);
+        if (chunk && !chunk.done) {
+          text += new TextDecoder().decode(chunk.value);
+        }
+      }
+      return text;
+    };
+    await read((t) => t.includes('retry:'));
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open live', 'published'),
+    );
+    await newsroom.indexing();
+    await read((t) => t.includes('articles/published'));
+    controller.abort();
+    let match = text.match(/^id: (\S+)$/m);
+    assert.ok(match, `the stream sent an event: ${text}`);
+    let data = text.match(/^data: (.+)$/m)?.[1];
+    let event = JSON.parse(data!) as PublicRealmEvent;
+    assert.strictEqual(event.path, 'articles/published');
+
+    let [epoch, seq] = match![1].split(':');
+    let replay = await fetch(url, {
+      headers: {
+        Accept: SupportedMimeType.EventStream,
+        'X-Forwarded-For': VISITOR,
+        'Last-Event-ID': `${epoch}:${Number(seq) - 1}`,
+      },
+      signal: AbortSignal.timeout(3_000),
+    }).catch(() => undefined);
+    let replayed = '';
+    if (replay?.body) {
+      let replayReader = replay.body.getReader();
+      let chunk = await replayReader.read();
+      replayed += new TextDecoder().decode(chunk.value);
+      if (!replayed.includes('articles/published')) {
+        chunk = await replayReader.read();
+        replayed += new TextDecoder().decode(chunk.value);
+      }
+      await replayReader.cancel();
+    }
+    assert.true(
+      replayed.includes(`id: ${epoch}:${seq}`),
+      `a reconnecting client gets what it missed: ${replayed}`,
+    );
+
+    let stale = await fetch(url, {
+      headers: {
+        Accept: SupportedMimeType.EventStream,
+        'X-Forwarded-For': VISITOR,
+        'Last-Event-ID': 'another-epoch:3',
+      },
+      signal: AbortSignal.timeout(3_000),
+    });
+    let staleReader = stale.body!.getReader();
+    let first = '';
+    while (!first.includes('"kind":"reset"')) {
+      let chunk = await staleReader.read();
+      if (chunk.done) break;
+      first += new TextDecoder().decode(chunk.value);
+    }
+    await staleReader.cancel();
+    assert.true(
+      first.includes('"kind":"reset"'),
+      'a client from another epoch is told to reset',
+    );
+  });
+
+  test('a realm whose policy opens nothing to callers who are not signed in refuses them its feed', async function (assert) {
+    let response = await feedWindow(LIBRARY);
+    assert.strictEqual(response.status, 401, response.text);
+  });
+});

@@ -27,6 +27,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
+import type PublicRealmEventsService from '@cardstack/host/services/public-realm-events';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
@@ -62,6 +63,7 @@ export default class Card extends Route {
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
   @service declare private hostNavigation: HostNavigationService;
+  @service declare private publicRealmEvents: PublicRealmEventsService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
@@ -119,6 +121,9 @@ export default class Card extends Route {
     transition: Transition,
   ) {
     if (this.hostModeService.isActive) {
+      // A visitor who isn't signed in hears realm changes through the
+      // realms' public feeds (ADR 020).
+      this.publicRealmEvents.start();
       this.hostNavigation.adoptServedDoc();
       this.hostNavigation.showingNotFound = false;
       let normalizedPath = params.path ?? '';

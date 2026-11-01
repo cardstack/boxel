@@ -1,8 +1,14 @@
 import { Deferred } from './deferred.ts';
 import {
+  CLIENT_CLASS_HEADER,
   DEFAULT_ANONYMOUS_RATE_LIMIT,
+  INFRA_CLIENT_CLASS,
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
+import {
+  PUBLIC_EVENT_HEARTBEAT_MS,
+  PublicRealmFeed,
+} from './public-realm-events.ts';
 import {
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
@@ -11,6 +17,7 @@ import {
   ANONYMOUS_CARD_DELETE,
   ANONYMOUS_CARD_UPDATE,
   ANONYMOUS_OPERATIONS,
+  ANONYMOUS_PUBLIC_FEED,
   ANONYMOUS_SEARCH,
   ANONYMOUS_STYLESHEET,
   ANONYMOUS_WRITE_CHECK,
@@ -1186,6 +1193,15 @@ const APPLIES_ARCHIVED_SEAL = {
 // grant to admit them to a row, so it answers them with the no-rows document a
 // policy realm whose grants admit nothing gives (see
 // `RouteOptions.admitsVerifiedNonReaders`).
+// The public change feed's routes (ADR 020). The feed is filtered to what a
+// caller who isn't signed in may read, so the ACL's refusal goes on to the
+// policy, which admits such a caller wherever it opens a read or a search to
+// one. It runs nothing a grant admits, so an archived realm's seal has nothing
+// to apply to.
+const PUBLIC_FEED_ROUTE = {
+  consumesCoarseOutcome: true,
+  anonymous: ANONYMOUS_PUBLIC_FEED,
+} as const;
 const SEARCH_ROUTE = {
   ...APPLIES_ARCHIVED_SEAL,
   admitsVerifiedNonReaders: true,
@@ -2366,6 +2382,13 @@ export interface RealmEventDelivery {
   recipients?: string[];
 }
 
+export interface RealmEventStream {
+  stream: Readable;
+  write(text: string): void;
+  // Called once, when the client goes away or the stream is ended.
+  onClose(callback: () => void): void;
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -2465,6 +2488,11 @@ export interface RealmAdapter {
     dbAdapter: DBAdapter,
     opts?: RealmEventDelivery,
   ): Promise<void>;
+
+  // A stream the realm writes a long-lived response into, as its public
+  // change feed does (ADR 020). Node only: an adapter without it answers that
+  // feed's stream as unavailable, and a client falls back to the poll.
+  openEventStream?(): RealmEventStream;
 
   // A private realm sends its realm events into a room of its own, whose
   // members are the users its grants name. An adapter without these sends
@@ -3265,6 +3293,22 @@ export class Realm {
         SupportedMimeType.Mtimes,
         this.realmMtimes.bind(this),
         ACL_ONLY,
+      )
+      // The public change feed (ADR 020): a stream, and the same feed as a
+      // poll a shared cache can hold. It carries only changes a visitor who
+      // isn't signed in may read, so it answers wherever the policy opens a
+      // read or a search to such a visitor.
+      .get(
+        '/_public-events',
+        SupportedMimeType.EventStream,
+        this.publicEventStream.bind(this),
+        PUBLIC_FEED_ROUTE,
+      )
+      .get(
+        '/_public-events',
+        SupportedMimeType.JSON,
+        this.publicEventWindow.bind(this),
+        PUBLIC_FEED_ROUTE,
       )
       // Admits every verified user the ACL refuses (see `SEARCH_ROUTE`).
       .get(
@@ -17882,6 +17926,97 @@ export class Realm {
     itemsDrained!();
   }
 
+  // The public change feed (ADR 020), created on first use. Whether a visitor
+  // who isn't signed in may read a changed card is answered by reading it as
+  // one, through this realm's own gate, so the feed can never disagree with
+  // what that visitor is served. The read is marked as the platform's own, so
+  // it spends no visitor's budget.
+  #publicFeedInstance: PublicRealmFeed | undefined;
+  get #publicFeed(): PublicRealmFeed {
+    this.#publicFeedInstance ??= new PublicRealmFeed(
+      this.url,
+      async (cardURL) => {
+        let response = await this.handle(
+          new Request(cardURL, {
+            headers: {
+              Accept: SupportedMimeType.CardJson,
+              [CLIENT_CLASS_HEADER]: INFRA_CLIENT_CLASS,
+            },
+          }),
+        );
+        return response?.status === 200;
+      },
+    );
+    return this.#publicFeedInstance;
+  }
+
+  private async publicEventStream(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let open = this.#adapter.openEventStream?.();
+    if (!open) {
+      return createResponse({
+        body: null,
+        init: { status: 501, statusText: 'Not Implemented' },
+        requestContext,
+      });
+    }
+    servedAnonymous(requestContext);
+    let feed = this.#publicFeed;
+    let lastEventId =
+      request.headers.get('last-event-id') ??
+      new URL(request.url).searchParams.get('lastEventId');
+    open.write(`retry: 3000\n\n`);
+    for (let event of feed.replay(lastEventId)) {
+      open.write(feed.serialize(event));
+    }
+    let unsubscribe = feed.subscribe((event) =>
+      open.write(feed.serialize(event)),
+    );
+    let heartbeat = setInterval(
+      () => open.write(`: keep-alive\n\n`),
+      PUBLIC_EVENT_HEARTBEAT_MS,
+    );
+    open.onClose(() => {
+      unsubscribe();
+      clearInterval(heartbeat);
+    });
+    let response = createResponse({
+      body: null,
+      init: {
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-store, no-transform',
+          // Tells a buffering proxy to pass each event through as it comes.
+          'X-Accel-Buffering': 'no',
+        },
+      },
+      requestContext,
+    }) as ResponseWithNodeStream;
+    response.nodeStream = open.stream;
+    return response;
+  }
+
+  // The same feed as a poll: one URL per realm, the same answer for every
+  // caller, cacheable for a second so a shared cache collapses a crowd.
+  private async publicEventWindow(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    servedAnonymous(requestContext);
+    return createResponse({
+      body: JSON.stringify(this.#publicFeed.window()),
+      init: {
+        headers: {
+          'Content-Type': SupportedMimeType.JSON,
+          'Cache-Control': 'public, max-age=1, stale-while-revalidate=1',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private sendIndexInitiationEvent(updatedFile: string) {
     this.broadcastRealmEvent({
       eventName: 'index',
@@ -17895,6 +18030,7 @@ export class Realm {
     event: RealmEventContent,
     delivery?: RealmEventDelivery,
   ): Promise<void> {
+    void this.#publicFeed.ingest(event);
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,
@@ -17915,6 +18051,7 @@ export class Realm {
   // The adapter stamps this realm's canonical url on the event, so it reaches
   // subscribed hosts exactly as a web-tier-originated event does.
   async broadcastEvent(event: RealmEventContent): Promise<void> {
+    void this.#publicFeed.ingest(event);
     await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
