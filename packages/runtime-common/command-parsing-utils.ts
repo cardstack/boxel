@@ -1,5 +1,9 @@
 import type { ResolvedCodeRef } from './code-ref.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import {
+  rri,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import { ensureTrailingSlash } from './paths.ts';
 
 export function parseBoxelHostCommandSpecifier(
@@ -23,7 +27,7 @@ export function parseBoxelHostCommandSpecifier(
 
 export function commandUrlToCodeRef(
   commandUrl: string,
-  realmURL: string | undefined,
+  realmURL: RealmIdentifier | undefined,
 ): ResolvedCodeRef | undefined {
   if (!commandUrl) {
     return undefined;
@@ -50,8 +54,9 @@ export function commandUrlToCodeRef(
   }
 
   return {
-    module:
-      `${ensureTrailingSlash(realmURL)}commands/${parsedPath.commandName}` as RealmResourceIdentifier,
+    module: rri(
+      `${ensureTrailingSlash(realmURL)}commands/${parsedPath.commandName}`,
+    ),
     name: parsedPath.exportName,
   };
 }

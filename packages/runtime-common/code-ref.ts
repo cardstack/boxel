@@ -177,7 +177,7 @@ export function isSpecCard(def: any) {
 // leaves the original ref alone for the loader's importMap shim to
 // resolve. (URL-like refs and registered prefixes resolve normally.)
 export function resolveModuleHref(
-  module: string,
+  module: RealmResourceIdentifier,
   relativeTo: RealmResourceIdentifier | URL | undefined,
   virtualNetwork: VirtualNetwork,
 ): string {
@@ -418,10 +418,7 @@ export function getField<T extends BaseDef>(
   return undefined;
 }
 
-export function normalizeCodeRef(ref: CodeRef): {
-  module: string;
-  name: string;
-} {
+export function normalizeCodeRef(ref: CodeRef): ResolvedCodeRef {
   if (!('type' in ref)) {
     return { module: ref.module, name: ref.name };
   }
@@ -474,7 +471,7 @@ export function codeRefForDef(
     : undefined;
 }
 
-export function moduleFrom(ref: CodeRef): string {
+export function moduleFrom(ref: CodeRef): RealmResourceIdentifier {
   if (!('type' in ref)) {
     return ref.module;
   } else {
@@ -492,7 +489,7 @@ export function moduleFrom(ref: CodeRef): string {
 // leaves untouched). Used wherever a code ref carried in a query is compared
 // against a ref derived from a loaded module.
 export function canonicalModuleKey(
-  module: string,
+  module: RealmResourceIdentifier,
   virtualNetwork: VirtualNetwork,
 ): string {
   let href: string;
