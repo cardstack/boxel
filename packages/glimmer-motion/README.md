@@ -53,7 +53,7 @@ rather than from a React translation table.
 - **Layout** — `layout` FLIP animation with scale correction, `layoutId` shared-element transitions and
   crossfade, `<LayoutGroup>`, nested/relative projection, portals, `layoutChange()` / `instantLayoutTransition()`
 - **Presence** — `<Presence>` with `sync` / `wait` / `popLayout`, `@initial={{false}}`, `@custom`,
-  nested `@propagate`, tracked `h.isPresent`
+  nested `@propagate`, tracked `h.isPresent`; plus `snapshot`, this package's own mode (see below)
 - **Drag** — Motion's pan/drag session: axis lock, direction lock, constraints (object / element / ref,
   re-measured on resize), elastic, momentum, snap to origin, `createDragControls()`, `whileDrag`,
   drag + layout, scroll-while-drag, `correctParentTransform()` / `transformViewBoxPoint()`
@@ -231,6 +231,16 @@ _element tree_ it captured before the diff, so a leaving child can't re-render. 
 re-runs from live tracked state for as long as the leaver is on screen. Anything the exit needs (the
 symbol the panel was showing, the rect the modal flew from) has to ride on the item `<Presence>`
 yields, not be read back out of state that has already moved on.
+
+Where it can't, because the leaver renders blocks or state you don't own, use
+`<Presence @mode="snapshot">`. The leaver's block is torn down in the render that removes it, and a
+static copy of the element given the handle plays that element's `exit`. The copy shows the
+element's last frame, lifted out of flow at its seat (`@anchorX` / `@anchorY` apply). It is inert and
+`aria-hidden`, and carries no ids, form-control names or `data-test-*` hooks. It holds the CSS
+animations, scroll offsets and canvas pixels the element showed. An item that comes back replaces its
+copy at once, and with no `exit` or with animations skipped nothing is copied. A copy is a picture:
+motion elements nested inside it don't play their own exits, custom elements inside it are
+constructed again, and its iframes and media don't load.
 
 **3. Declare what you want tweened, because a value in the stylesheet is invisible to the engine.**
 A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and
