@@ -135,12 +135,15 @@ export default class PillMenu extends Component<Signature> {
           /* The collapsed pill row's height, so the menu grows out of the
              place the pill occupied. */
           --pill-menu-collapsed-height: 2.5rem;
-          --pill-menu-expand-duration: 0.2s;
 
-          /* Lets the height keyframe interpolate to its auto endpoint. */
+          /* Lets the height keyframe interpolate to its auto endpoint.
+             --pill-menu-expand-duration is a knob a caller may set (the LLM
+             menu does), so it is only ever read, with the same fallback here
+             and on the scroll region below. */
           interpolate-size: allow-keywords;
           overflow: hidden;
-          animation: pill-menu-expand var(--pill-menu-expand-duration) ease-out;
+          animation: pill-menu-expand var(--pill-menu-expand-duration, 0.2s)
+            ease-out;
         }
 
         /* While the menu height is animating, the squeezed content region
@@ -150,7 +153,8 @@ export default class PillMenu extends Component<Signature> {
            the region programmatically scrollable for the scroll-into-view
            modifier. */
         .pill-menu .menu-content-scroll {
-          animation: pill-menu-settle-scroll var(--pill-menu-expand-duration);
+          animation: pill-menu-settle-scroll
+            var(--pill-menu-expand-duration, 0.2s);
         }
       }
       .pill-menu-button {
