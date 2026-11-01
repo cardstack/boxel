@@ -256,10 +256,11 @@ describe('realm ingest-card (integration)', () => {
     }
   });
 
-  it('ingests via non-URL @cardstack/ identifiers for both the card and --realm', async () => {
-    // `@cardstack/<realm>/` resolves against the profile's realm-server
-    // URL, so these identifiers name the same realm as realmHref. The card
-    // argument and the --realm option resolve independently.
+  it('refuses a prefix-form card identifier the realm server does not serve', async () => {
+    // Prefix-form identifiers resolve through the map the profile's realm
+    // server serves; this fixture registers no prefix for its realm, so the
+    // spelling `@cardstack/test/` must not be turned into a URL by guessing.
+    // The error names the prefixes the server does serve.
     let rriDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-ingest-rri-'));
     try {
       let rriResult = await runBoxel(
@@ -273,8 +274,10 @@ describe('realm ingest-card (integration)', () => {
         ],
         { home, timeout: 120_000 },
       );
-      expect(rriResult.ok, rriResult.stderr).toBe(true);
-      expect(listIngested(rriDir)).toEqual(EXPECTED_INGESTED);
+      expect(rriResult.ok).toBe(false);
+      expect(rriResult.stderr).toContain('no registered realm prefix matches');
+      expect(rriResult.stderr).toContain('@cardstack/base/');
+      expect(listIngested(rriDir)).toEqual([]);
     } finally {
       fs.rmSync(rriDir, { recursive: true, force: true });
     }

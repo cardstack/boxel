@@ -137,7 +137,9 @@ export async function indexingErrors(
     return { ok: false, error: NO_ACTIVE_PROFILE_ERROR };
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return { ok: false, error: resolvedRealm.error };
   }

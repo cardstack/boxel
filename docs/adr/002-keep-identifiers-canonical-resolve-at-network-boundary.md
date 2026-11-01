@@ -57,8 +57,9 @@ These are not identifiers:
 
 ### 1.2. Resolution happens at the network boundary
 
-Code MUST NOT pass an RRI to `new URL()`. Only VirtualNetwork methods MAY
-convert an identifier from one form to the other. Code SHOULD resolve
+Code MUST NOT pass an RRI to `new URL()`. Only the methods of a
+VirtualNetwork, or of a `PrefixRealmNetwork` standing in for one, MAY convert
+an identifier from one form to the other. Code SHOULD resolve
 immediately before the network call, and SHOULD pass the RRI to
 `VirtualNetwork.fetch` directly. Realm membership and path math MUST use
 `RealmPaths`. Code MUST join a relative reference with `resolveRRIReference`,
@@ -70,9 +71,13 @@ call its methods instead of resolving by hand. A store MAY call
 `keyForIdentifier` to fold every spelling of a resource onto one internal key.
 That key MUST NOT leave the store as an identifier.
 
-A client without a VirtualNetwork MUST build one from the prefix map that the
-realm server serves. It MUST NOT derive a URL from a prefix by naming
-convention.
+A client without a VirtualNetwork MUST build a network from the prefix map
+that the realm server serves. A client that can't import `VirtualNetwork` MAY
+build a `PrefixRealmNetwork`, its prefix-resolution subset, instead. A
+`PrefixRealmNetwork` MUST answer as a VirtualNetwork holding the same prefix
+map does, except that it holds no URL mappings and so names an aliased realm
+by the URL it is served at. A client MUST NOT derive a URL from a prefix by
+naming convention.
 
 ### 1.3. Canonical form at the edges
 
@@ -88,7 +93,8 @@ including catalog content, MUST reference a well-known realm by its
 `@cardstack/<realm>/` prefix, not by an environment-specific URL. Each prefix
 MUST be registered on a VirtualNetwork instance with `addRealmMapping`.
 `PREFIX_REALMS` MAY list the prefix names. The URL that a prefix stands for
-MUST live only on a VirtualNetwork. Lint and migration tools MAY hold
+MUST live only on a VirtualNetwork or a `PrefixRealmNetwork`, or in a map read
+off one. Lint and migration tools MAY hold
 prefix-to-URL tables, and these MUST derive from `PREFIX_REALMS`.
 
 New code MUST NOT use the `https://cardstack.com/base/` alias. While the alias
@@ -128,6 +134,12 @@ outlives any one environment's URLs [7]. `resolved*RealmURL` settings let a
 realm be served anywhere, so a naming convention can resolve to the wrong place
 without an error [7].
 
+`VirtualNetwork` reaches the runtime-common barrel and the shimmed-module
+machinery, which boxel-cli's dependency-light type-check cannot resolve and
+the VS Code bundle should not carry. `PrefixRealmNetwork` gives those clients
+its prefix resolution without them [10]. It holds no URL mappings because the
+map it is built from carries prefixes only [10].
+
 Store keys are the one place where the resolved URL is the right form.
 `unresolveURL` leaves a URL-mapped alias unchanged, so only the real URL folds
 every spelling of a resource onto one key [8].
@@ -156,8 +168,7 @@ every spelling of a resource onto one key [8].
   for a key that never leaves the store [7].
 - **Absolute URLs for ids shown to the model**, so that it can follow relative
   links [7, 9].
-- **Resolve prefixes by naming convention without a VirtualNetwork**, as
-  boxel-cli does [1, 7].
+- **Resolve prefixes by naming convention without a VirtualNetwork** [1, 7].
 
 ## 4. Consequences
 
@@ -193,6 +204,8 @@ Neither sees card JSON. Elsewhere, reviewers enforce §1.2 and §1.4.
    `packages/host/app/services/store.ts`.
 9. `packages/host/app/lib/utils.ts`, comments on `skillsIndexId` and
    `skillFileURL`.
+10. `packages/runtime-common/prefix-realm-network.ts`, module comment, and the
+    `RealmPathsVirtualNetwork` note in `packages/runtime-common/paths.ts`.
 
 ## 6. Remediation
 

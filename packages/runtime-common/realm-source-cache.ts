@@ -17,8 +17,10 @@
  * returns sources in memory and never touches a filesystem; the caller decides
  * where they land.
  *
- * The prefix-to-realm map is a parameter rather than a lookup so that a
- * consumer which must not import `PREFIX_REALMS` can pass its own literals.
+ * The prefix-to-realm map is a parameter: the caller reads it off its
+ * VirtualNetwork (`prefixRealmURLsOf`), which is where the URL behind a prefix
+ * lives (ADR 002 §1.4). This module never guesses where a prefix realm is
+ * served.
  */
 
 // `supported-mime-type.ts` is itself import-free, so pulling in the one MIME

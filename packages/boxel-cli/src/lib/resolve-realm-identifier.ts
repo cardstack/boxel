@@ -1,95 +1,95 @@
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  prefixRealmNetworkFor,
+  type PrefixRealmNetwork,
+} from '@cardstack/runtime-common/prefix-realm-network';
+import { isPrefixForm } from '@cardstack/runtime-common/realm-identifiers';
 import { getProfileManager, type ProfileManager } from './profile-manager.ts';
 
 /**
- * Realm resource identifiers (RRIs) in the cardstack scope follow the
- * convention `@cardstack/<realm>/…` → `<realm-server>/<realm>/…` in every
- * environment — the same prefix→URL pairs the realm server registers at boot
- * (`@cardstack/base/`, `@cardstack/catalog/`, `@cardstack/skills/`, …).
+ * Realm identifiers in prefix form (`@cardstack/catalog/…`) resolve on a
+ * network built from the prefix map the realm server serves (ADR 002 §1.2):
+ * where each prefix realm is served is whatever that server says, not a
+ * function of the prefix's spelling.
  */
-const CARDSTACK_SCOPE = '@cardstack/';
 
 export interface ResolveRealmIdentifierOptions {
   /** Override the ProfileManager used to look up the realm-server URL (tests). */
   profileManager?: ProfileManager;
   /**
-   * Explicit realm-server base URL to resolve against. Takes precedence over
-   * the active profile and the REALM_SERVER_URL environment variable.
+   * Explicit realm-server base URL whose prefix map to resolve against. Takes
+   * precedence over the active profile and the REALM_SERVER_URL environment
+   * variable.
    */
   realmServerUrl?: string;
+  /** The fetch that reads the realm server's prefix map (tests). */
+  fetch?: typeof globalThis.fetch;
 }
 
 export type RealmIdentifierResolution =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
-/** Whether the input is a non-URL realm resource identifier (`@cardstack/…`). */
-export function isRealmResourceIdentifier(input: string): boolean {
-  return input.startsWith('@');
-}
+export type RealmNetworkResolution =
+  | { ok: true; network: PrefixRealmNetwork }
+  | { ok: false; error: string };
+
+export type { PrefixRealmNetwork };
 
 /**
- * Resolve a realm identifier argument to a URL. Plain URLs pass through
- * unchanged; `@cardstack/<realm>/…` identifiers resolve against the
- * realm-server base URL from (in order) `options.realmServerUrl`, the active
- * profile, or the REALM_SERVER_URL environment variable.
+ * The network built from the prefix map of the realm server the CLI is
+ * configured against: `options.realmServerUrl`, else the active profile's
+ * server, else REALM_SERVER_URL. Read once per server for the life of the
+ * process.
  */
-export function resolveRealmIdentifier(
-  input: string,
+export async function resolveRealmNetwork(
   options?: ResolveRealmIdentifierOptions,
-): RealmIdentifierResolution {
-  if (!isRealmResourceIdentifier(input)) {
-    return { ok: true, url: input };
-  }
-  if (!input.startsWith(CARDSTACK_SCOPE)) {
-    return {
-      ok: false,
-      error: `Unsupported realm identifier "${input}": only @cardstack/<realm>/ identifiers are supported`,
-    };
-  }
-  let remainder = input.slice(CARDSTACK_SCOPE.length);
-  if (!remainder.split('/')[0]) {
-    return {
-      ok: false,
-      error: `Malformed realm identifier "${input}": expected @cardstack/<realm>/…`,
-    };
-  }
+): Promise<RealmNetworkResolution> {
   let server = resolveRealmServerUrl(options);
   if (!server.ok) {
     return server;
   }
-  return {
-    ok: true,
-    url: new URL(remainder, ensureTrailingSlash(server.url)).href,
-  };
+  try {
+    return {
+      ok: true,
+      network: await prefixRealmNetworkFor(server.url, options?.fetch),
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
- * Split a full-RRI file identifier into its realm identifier and
- * realm-relative path: `@cardstack/catalog/foo/bar.gts` →
- * `{ realm: '@cardstack/catalog/', path: 'foo/bar.gts' }`. Returns undefined
- * when the input isn't an RRI or has no path component after the realm.
+ * Resolve a realm identifier argument to a URL. URL form passes through
+ * unchanged; prefix form resolves on the realm server's network (see
+ * `resolveRealmNetwork`).
  */
-export function splitRealmResourceIdentifier(
+export async function resolveRealmIdentifier(
   input: string,
-): { realm: string; path: string } | undefined {
-  if (!input.startsWith(CARDSTACK_SCOPE)) {
-    return undefined;
+  options?: ResolveRealmIdentifierOptions,
+): Promise<RealmIdentifierResolution> {
+  if (!isPrefixForm(input)) {
+    return { ok: true, url: input };
   }
-  let remainder = input.slice(CARDSTACK_SCOPE.length);
-  let slash = remainder.indexOf('/');
-  if (slash === -1 || slash === remainder.length - 1) {
-    return undefined;
+  let resolved = await resolveRealmNetwork(options);
+  if (!resolved.ok) {
+    return resolved;
   }
-  return {
-    realm: `${CARDSTACK_SCOPE}${remainder.slice(0, slash)}/`,
-    path: remainder.slice(slash + 1),
-  };
+  try {
+    return { ok: true, url: resolved.network.toURLHref(input) };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
-function resolveRealmServerUrl(
+export function resolveRealmServerUrl(
   options?: ResolveRealmIdentifierOptions,
-): RealmIdentifierResolution {
+): { ok: true; url: string } | { ok: false; error: string } {
   if (options?.realmServerUrl) {
     return { ok: true, url: options.realmServerUrl };
   }

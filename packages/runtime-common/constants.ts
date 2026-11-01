@@ -1,22 +1,14 @@
 import { RealmPaths } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
-import {
-  ri,
-  rri,
-  type RealmIdentifier,
-  type RealmResourceIdentifier,
-} from './realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { RealmPermissions } from './index.ts';
+import { baseRealmAliasURL, baseRealmRRI } from './realm-prefixes.ts';
 
-export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const baseRealm = new RealmPaths(new URL(baseRealmAliasURL));
 
-/**
- * The base realm's canonical RRI prefix. Use this when building code
- * refs that should match what `Loader.identify` / `identifyCard` emit
- * for base-realm classes (which canonicalise via `vn.unresolveURL`
- * to the registered `@cardstack/base/` prefix).
- */
-export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
+// Declared beside the prefix declaration, which dependency-light consumers can
+// import; re-exported here for everything else.
+export { baseRealmRRI };
 
 /**
  * Build a `RealmResourceIdentifier` for a module inside the base realm.

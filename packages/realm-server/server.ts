@@ -914,6 +914,7 @@ export class RealmServer {
       dbAdapter: this.dbAdapter,
       matrixClient: this.matrixClient,
       getIndexHTML: this.getIndexHTML,
+      virtualNetwork: this.virtualNetwork,
       cardSizeLimitBytes: this.cardSizeLimitBytes,
       fileSizeLimitBytes: this.fileSizeLimitBytes,
       audioSizeLimitBytes: this.audioSizeLimitBytes,
