@@ -148,7 +148,7 @@ module('parse gate > realm-prefixed imports', function (hooks) {
   test('all four adoption shapes type-check against fetched realm sources', async function (assert) {
     assert.timeout(180_000);
     let { errors } = await runGlintCheck(shapeFiles(), {
-      prefixRealmURLs: PREFIX_REALM_URLS,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch(),
     });
 
@@ -162,7 +162,7 @@ module('parse gate > realm-prefixed imports', function (hooks) {
   test('a clean run carries no warnings', async function (assert) {
     assert.timeout(180_000);
     let { warnings } = await runGlintCheck(shapeFiles(), {
-      prefixRealmURLs: PREFIX_REALM_URLS,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch(),
     });
 
@@ -192,7 +192,7 @@ export class ContributorE extends Profile {
         },
       ],
       {
-        prefixRealmURLs: PREFIX_REALM_URLS,
+        readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
         fetchFn: stubRealmFetch({ files: DEGRADED_CATALOG_FILES }),
       },
     );
@@ -264,7 +264,7 @@ export class ContributorE extends Profile {
   test('an unreachable realm degrades to the shim instead of failing the gate', async function (assert) {
     assert.timeout(180_000);
     let { errors, warnings } = await runGlintCheck(shapeFiles(), {
-      prefixRealmURLs: PREFIX_REALM_URLS,
+      readPrefixRealmURLs: async () => PREFIX_REALM_URLS,
       fetchFn: stubRealmFetch({ fail: true }),
     });
 

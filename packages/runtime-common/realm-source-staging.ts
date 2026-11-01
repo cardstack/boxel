@@ -9,9 +9,9 @@
  * parse gate did this identically and had already started to drift (option
  * named `realmOrigin` vs `targetRealm`, a silent skip vs a logged warn), so it
  * lives here once. Where each prefix realm is served is a parameter too: the
- * caller reads the map off the network it built from the realm server's
- * `/_prefix-realms` (ADR 002 §1.2), and this module never derives a realm URL
- * from a prefix's spelling.
+ * caller passes a reader for the map off the network it built from the realm
+ * server's `/_prefix-realms` (ADR 002 §1.2), and this module never derives a
+ * realm URL from a prefix's spelling.
  *
  * Degrade, don't fail. A prefix whose sources could not be fetched is written
  * as an ambient `declare module` shim rather than left to surface as a hard
@@ -65,23 +65,25 @@ export interface StageRealmSourcesOptions {
    * The realm prefixes this caller treats as realm imports (with trailing
    * slash), minus the base realm, which is already aliased to real sources
    * locally. Names only, derived from `PREFIX_REALMS`: where each is served
-   * comes from `prefixRealmURLs`. Listed on their own so a referenced prefix
-   * can still be shimmed when no map could be read.
+   * comes from `readPrefixRealmURLs`. Listed on their own so a referenced
+   * prefix can still be shimmed when no map could be read.
    */
   prefixes: string[];
   /**
-   * Where each prefix realm is served, read off a network built from the realm
-   * server's prefix map (`prefixRealmURLsOf` / `PrefixRealmNetwork`). Undefined
-   * when the caller has no realm server to ask, or could not read its map:
-   * every referenced prefix is then shimmed. A prefix absent from the map is
-   * shimmed too.
+   * Reads where each prefix realm is served, off a network built from the
+   * realm server's prefix map (`PrefixRealmNetwork`). Called only once a file
+   * references one of `prefixes`, so a parse whose files import nothing but
+   * the base realm never asks the realm server. Resolves undefined when the
+   * caller has no realm server to ask, and rejects when the map could not be
+   * read; either way every referenced prefix is shimmed, with a warning saying
+   * which. A prefix absent from the map is shimmed too.
    */
-  prefixRealmURLs: Record<string, string> | undefined;
+  readPrefixRealmURLs: () => Promise<Record<string, string> | undefined>;
   fetchFn?: typeof globalThis.fetch;
   /** See `FetchRealmSourcesOptions.cacheScope` — the identity behind `fetchFn`. */
   cacheScope?: string;
   /**
-   * Reports a degradation worth surfacing (no origin, the fetch threw, an
+   * Reports a degradation worth surfacing (no prefix map, the fetch threw, an
    * unsafe module path). Left to the caller so each keeps its own channel
    * (`cliLog.warn`, the factory logger); omit to stay silent. Individual fetch
    * failures are not warned here — they come back in `failures` for the caller
@@ -152,7 +154,7 @@ async function resolveRealmSources(
     tempDir,
     files,
     prefixes,
-    prefixRealmURLs: servedPrefixRealmURLs,
+    readPrefixRealmURLs,
     fetchFn,
     cacheScope,
     onWarn,
@@ -165,16 +167,27 @@ async function resolveRealmSources(
   if (referenced.length === 0) {
     return { realmPaths: {}, shimmedPrefixes: [], failures: [], warnings: [] };
   }
+  let shimEveryReferenced = (): StageRealmSourcesResult => ({
+    realmPaths: {},
+    shimmedPrefixes: referenced,
+    failures: [],
+    warnings: describeDegradations([], referenced),
+  });
+
+  let servedPrefixRealmURLs: Record<string, string> | undefined;
+  try {
+    servedPrefixRealmURLs = await readPrefixRealmURLs();
+  } catch (error: unknown) {
+    warn(
+      `${error instanceof Error ? error.message : String(error)} — realm-prefixed imports (${referenced.join(', ')}) fall back to the ambient shim.`,
+    );
+    return shimEveryReferenced();
+  }
   if (!servedPrefixRealmURLs) {
     warn(
       `Realm-prefixed imports (${referenced.join(', ')}) but no realm server prefix map to resolve them against — falling back to the ambient shim.`,
     );
-    return {
-      realmPaths: {},
-      shimmedPrefixes: referenced,
-      failures: [],
-      warnings: describeDegradations([], referenced),
-    };
+    return shimEveryReferenced();
   }
 
   // Hand every prefix this caller handles to the fetch, not just the prefixes

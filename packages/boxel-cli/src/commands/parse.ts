@@ -314,10 +314,10 @@ async function retryWithPoll<T>(
 /**
  * Where each prefix realm is served, read off the network built from the
  * prefix map of the realm server this CLI is configured against — the same
- * server `boxel search` queries. No server configured means the imports get
- * the shim, which the staging reports if anything references one; a server
- * whose map cannot be read is warned about here, since the staging cannot tell
- * the two apart.
+ * server `boxel search` queries. Undefined when no server is configured, and
+ * rejects when its map cannot be read; the staging calls this only once a file
+ * references a prefix realm, and reports either case as a fall back to the
+ * shim.
  */
 async function prefixRealmURLsForParse(
   pm: ProfileManager,
@@ -326,14 +326,7 @@ async function prefixRealmURLsForParse(
   if (!server.ok) {
     return undefined;
   }
-  try {
-    return (await prefixRealmNetworkFor(server.url)).prefixRealmURLs();
-  } catch (error: unknown) {
-    cliLog.warn(
-      `${error instanceof Error ? error.message : String(error)} — realm-prefixed imports fall back to the ambient shim.`,
-    );
-    return undefined;
-  }
+  return (await prefixRealmNetworkFor(server.url)).prefixRealmURLs();
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +454,7 @@ export async function parseRealm(
     if (gtsContents.length > 0) {
       try {
         let glintResult = await runGlintCheck(gtsContents, {
-          prefixRealmURLs: await prefixRealmURLsForParse(pm),
+          readPrefixRealmURLs: () => prefixRealmURLsForParse(pm),
           // The staging walk authenticates the same way fetchSource above
           // does, so a non-public prefix realm resolves to real sources
           // instead of degrading to the shim.
@@ -714,10 +707,12 @@ function linkResolvedDeps(nodeModulesDir: string): void {
  */
 interface RunGlintCheckOptions {
   /**
-   * Where each prefix realm is served, as the realm server's prefix map has
-   * it. Without it, realm-prefixed imports fall back to the ambient shim.
+   * Reads where each prefix realm is served, as the realm server's prefix map
+   * has it; the staging calls it only when a file references a prefix realm
+   * (see `StageRealmSourcesOptions.readPrefixRealmURLs`). Without it,
+   * realm-prefixed imports fall back to the ambient shim.
    */
-  prefixRealmURLs?: Record<string, string>;
+  readPrefixRealmURLs?: () => Promise<Record<string, string> | undefined>;
   fetchFn?: typeof globalThis.fetch;
   /** Identity behind `fetchFn`, partitioning the realm-source memo. */
   cacheScope?: string;
@@ -753,7 +748,8 @@ export async function runGlintCheck(
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
-      prefixRealmURLs: glintOptions.prefixRealmURLs,
+      readPrefixRealmURLs:
+        glintOptions.readPrefixRealmURLs ?? (async () => undefined),
       fetchFn: glintOptions.fetchFn,
       cacheScope: glintOptions.cacheScope,
       onWarn: (message) => cliLog.warn(message),

@@ -113,7 +113,9 @@ describe('boxel parse — realm-prefixed imports (in-process glint)', () => {
       let { errors, warnings } = await runGlintCheck(
         Object.entries(SHAPES).map(([path, content]) => ({ path, content })),
         {
-          prefixRealmURLs: { '@cardstack/catalog/': CATALOG_URL },
+          readPrefixRealmURLs: async () => ({
+            '@cardstack/catalog/': CATALOG_URL,
+          }),
           fetchFn: stubRealmFetch(),
         },
       );
