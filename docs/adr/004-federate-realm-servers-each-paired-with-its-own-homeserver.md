@@ -32,7 +32,8 @@ user's own homeserver through Matrix federation. Federation is not built yet,
 and the host still allows only one realm server. This ADR records the target
 design and the rules that keep new code compatible with it. The `users`-row
 rule in §1.4, and §1.5, §1.6, and §1.9, were decided when this ADR was
-recorded, not on its `date`.
+recorded, not on its `date`. The second paragraph of §1.3, and the first
+sentence of §1.4, were decided after it was recorded.
 
 ## 1. Decision
 
@@ -57,11 +58,18 @@ issued it, named by the token's `matrix_server_name`, through
 verify its own session tokens. A realm server MUST NOT accept another realm
 server's session token as proof of identity.
 
+A realm server MUST NOT send a request to a homeserver that a token names,
+unless that homeserver is the paired one or its operator lists it in
+`MATRIX_FEDERATION_ALLOWLIST`. It MUST refuse a token that names any other
+homeserver. It MUST refuse a token when the user that the homeserver returns
+is not a user of that homeserver.
+
 ### 1.4. Realm permissions decide access
 
-A realm server SHOULD accept users from any homeserver. Realm permissions and
-policies MUST decide what each user can do. A realm MAY limit access by
-homeserver in its policy, by matching the `:server` suffix of the user id.
+A realm server SHOULD accept users from every homeserver it verifies tokens
+with (§1.3). Realm permissions and policies MUST decide what each user can do.
+A realm MAY limit access by homeserver in its policy, by matching the
+`:server` suffix of the user id.
 
 A realm's `users` permission row MUST grant access only to users of the
 paired homeserver. A user of another homeserver MUST be granted access by full
@@ -117,6 +125,14 @@ user with their own homeserver keeps that true across realm servers. Trust
 between realm servers would be a second identity system that competes with
 Matrix [10].
 
+A token's `matrix_server_name` comes from a caller the realm server has not
+authenticated yet. Without a bound, any caller could make the realm server
+send discovery and userinfo requests to hosts of the caller's choice, so a
+realm server contacts only the homeservers its operator lists [14]. The name
+is only the caller's claim, so a homeserver may vouch only for its own users.
+Otherwise a homeserver that a caller runs could vouch for a user of the paired
+homeserver [14].
+
 A localpart is unique only on one homeserver, so only the full id names a
 user. A server name cannot be derived from a hostname, because Matrix
 delegation lets the two differ: the server name `stack.cards` is served by a
@@ -154,8 +170,14 @@ to find [10].
 - **Realm servers trust each other's session tokens**, for example through
   published signing keys. This makes a second identity authority beside
   Matrix [10].
-- **A per-server allowlist of homeservers.** Realm permissions and policies
-  already express this per realm [10].
+- **A per-server allowlist of homeservers that decides what their users may
+  do.** Realm permissions and policies already express this per realm [10].
+  The list in §1.3 bounds only which homeservers a realm server sends
+  requests to [14].
+- **Verify tokens with any homeserver, sending each request through the
+  outbound guard's destination check.** The guard refuses private and
+  reserved addresses, but a caller would still choose which public hosts the
+  realm server sends requests to [14].
 - **One shared deployment of the infrastructure realms.** Each server serves
   its own copy instead [10].
 - **The home realm server proxies cross-server queries.** This needs
@@ -208,6 +230,8 @@ Beyond the gaps under Remediation, federation needs this work:
 12. `shimBundledBase` in `packages/host/app/lib/bundled-base.ts`, which serves
     `@cardstack/base/*` from the host bundle.
 13. `docs/realm-resource-identifiers.md`, added in #5720.
+14. #7085, which verifies OpenID tokens with their issuing homeserver, and its
+    review, which weighed the allowlist against the outbound guard.
 
 ## 7. Remediation
 

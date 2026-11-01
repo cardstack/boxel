@@ -115,7 +115,7 @@ export class MatrixClient {
   // server name. A token naming a server outside this list is refused before
   // that server is looked up, so an unauthenticated caller cannot make the
   // realm server send requests to a host of their choosing. Empty by default:
-  // federation is configured, not open (ADR 004 §1.4).
+  // federation is configured, not open (ADR 004 §1.3).
   readonly federationAllowlist: ReadonlySet<string>;
   private access: MatrixAccess | undefined;
   private password?: string;
