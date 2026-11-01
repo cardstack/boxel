@@ -148,6 +148,31 @@ type Config = ReturnType<typeof config>;
 // further via the env var for fleets with bigger pg instances; lower
 // it to throttle a noisy realm.
 const DEFAULT_POOL_MAX = 40;
+// A counting semaphore: `acquire` waits while every slot is taken, and slots
+// are handed on in the order they were asked for.
+class SlotGate {
+  #free: number;
+  #waiting: (() => void)[] = [];
+  constructor(slots: number) {
+    this.#free = slots;
+  }
+  async acquire(): Promise<void> {
+    if (this.#free > 0) {
+      this.#free--;
+      return;
+    }
+    await new Promise<void>((resolve) => this.#waiting.push(resolve));
+  }
+  release(): void {
+    let next = this.#waiting.shift();
+    if (next) {
+      next();
+    } else {
+      this.#free++;
+    }
+  }
+}
+
 function configuredPoolMax(): number {
   let rawValue = process.env.PG_POOL_MAX;
   if (!rawValue) {
@@ -307,6 +332,13 @@ export class PgAdapter implements DBAdapter {
   // pins a pool connection while it waits, and two writers aimed at different
   // cards never meet here at all. See withFileWriteLocks.
   #fileWriteQueue = new Map<string, Promise<void>>();
+  // A write section holds a pool connection for its lock transaction while its
+  // own queries take more from the same pool. Unbounded, as many concurrent
+  // writers as the pool has connections each hold one and wait forever for a
+  // second, which a crowd of creates reaches at once: they name no file, so
+  // nothing queues them in memory. So at most half the pool holds a lock
+  // transaction at a time, and the rest is left for the work inside them.
+  #lockTransactions: SlotGate;
 
   constructor(opts?: { autoMigrate?: boolean; migrationLogging?: boolean }) {
     if (opts?.autoMigrate) {
@@ -317,6 +349,7 @@ export class PgAdapter implements DBAdapter {
     this.config = config();
     let { user, host, database, password, port } = this.config;
     let max = configuredPoolMax();
+    this.#lockTransactions = new SlotGate(Math.max(1, Math.floor(max / 2)));
     this.#scheduler = new ConnectionScheduler({
       limit: max,
       tenantShare: configuredPoolTenantShare(),
@@ -1188,82 +1221,87 @@ export class PgAdapter implements DBAdapter {
     fn: (releaseLocks: () => void) => Promise<T>,
   ): Promise<{ work: Promise<T> }> {
     let work: Promise<T> | undefined;
-    await this.withConnection(async (queryFn) => {
-      await queryFn(['BEGIN']);
-      let holdStart: number | undefined;
-      try {
-        for (const { key, mode } of lockPlan) {
-          await queryFn([
-            mode === 'shared'
-              ? `SELECT pg_advisory_xact_lock_shared(`
-              : `SELECT pg_advisory_xact_lock(`,
-            param(key),
-            `::bigint)`,
-          ]);
-        }
-        holdStart = Date.now();
-        const releasedEarly = new Deferred<void>();
-        work = fn(() => releasedEarly.fulfill());
-        // Whichever comes first. The rejection arm exists so a section that
-        // fails before releasing still rolls back here, the way it always
-        // has, rather than committing and reporting the failure from a
-        // transaction that already ended — and attaching it is also what
-        // keeps a rejection that nobody has awaited yet from surfacing as an
-        // unhandled one in the window between the commit and the caller.
-        const failure = await Promise.race([
-          work.then(
-            () => undefined,
-            (error: unknown) => ({ error }),
-          ),
-          releasedEarly.promise.then(() => undefined),
-        ]);
-        if (failure) {
-          throw failure.error;
-        }
-        await queryFn(['COMMIT']);
-      } catch (err: unknown) {
+    await this.#lockTransactions.acquire();
+    try {
+      await this.withConnection(async (queryFn) => {
+        await queryFn(['BEGIN']);
+        let holdStart: number | undefined;
         try {
-          await queryFn(['ROLLBACK']);
-        } catch (rollbackErr: unknown) {
-          // Rollback failed — the xact-locks are still released when the
-          // connection's transaction is aborted (pg auto-rollbacks on client
-          // release), so there is no stale-lock problem. Logged for
-          // visibility, and the original error is what propagates.
-          log.warn(
-            `ROLLBACK after advisory-lock error for ${context.realmUrl} failed: ${String(rollbackErr)}`,
+          for (const { key, mode } of lockPlan) {
+            await queryFn([
+              mode === 'shared'
+                ? `SELECT pg_advisory_xact_lock_shared(`
+                : `SELECT pg_advisory_xact_lock(`,
+              param(key),
+              `::bigint)`,
+            ]);
+          }
+          holdStart = Date.now();
+          const releasedEarly = new Deferred<void>();
+          work = fn(() => releasedEarly.fulfill());
+          // Whichever comes first. The rejection arm exists so a section that
+          // fails before releasing still rolls back here, the way it always
+          // has, rather than committing and reporting the failure from a
+          // transaction that already ended — and attaching it is also what
+          // keeps a rejection that nobody has awaited yet from surfacing as an
+          // unhandled one in the window between the commit and the caller.
+          const failure = await Promise.race([
+            work.then(
+              () => undefined,
+              (error: unknown) => ({ error }),
+            ),
+            releasedEarly.promise.then(() => undefined),
+          ]);
+          if (failure) {
+            throw failure.error;
+          }
+          await queryFn(['COMMIT']);
+        } catch (err: unknown) {
+          try {
+            await queryFn(['ROLLBACK']);
+          } catch (rollbackErr: unknown) {
+            // Rollback failed — the xact-locks are still released when the
+            // connection's transaction is aborted (pg auto-rollbacks on client
+            // release), so there is no stale-lock problem. Logged for
+            // visibility, and the original error is what propagates.
+            log.warn(
+              `ROLLBACK after advisory-lock error for ${context.realmUrl} failed: ${String(rollbackErr)}`,
+            );
+          }
+          throw err;
+        } finally {
+          const now = Date.now();
+          // Measured from before the in-process queue rather than from the
+          // transaction, so it covers everything between the call and the hold:
+          // waiting behind a same-file writer in memory, checking out a pool
+          // client, and blocking in postgres. Timing only the last of those
+          // would report no contention in exactly the case the queue exists for,
+          // where the wait is spent in memory and never reaches the lock.
+          //
+          // A caller that never reached the hold waited for the whole of its
+          // time here and held for none of it, which is what a failed
+          // acquisition should read as rather than as a zero-length wait.
+          const waitMs = (holdStart ?? now) - context.enqueuedAt;
+          const holdMs = holdStart === undefined ? 0 : now - holdStart;
+          // `files` is what the write named, and `scope` says whether it got a
+          // key each (`files`), fell back to the realm past the ceiling
+          // (`realm`), or named no file and holds only the realm guard
+          // (`guard`) — so a long `waitMs` reads as the ceiling or a realm
+          // lifecycle operation rather than as contention over one card.
+          let scope =
+            lockPlan[0]?.mode === 'exclusive'
+              ? 'realm'
+              : context.fileCount === 0
+                ? 'guard'
+                : 'files';
+          lockLog.info(
+            `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`,
           );
         }
-        throw err;
-      } finally {
-        const now = Date.now();
-        // Measured from before the in-process queue rather than from the
-        // transaction, so it covers everything between the call and the hold:
-        // waiting behind a same-file writer in memory, checking out a pool
-        // client, and blocking in postgres. Timing only the last of those
-        // would report no contention in exactly the case the queue exists for,
-        // where the wait is spent in memory and never reaches the lock.
-        //
-        // A caller that never reached the hold waited for the whole of its
-        // time here and held for none of it, which is what a failed
-        // acquisition should read as rather than as a zero-length wait.
-        const waitMs = (holdStart ?? now) - context.enqueuedAt;
-        const holdMs = holdStart === undefined ? 0 : now - holdStart;
-        // `files` is what the write named, and `scope` says whether it got a
-        // key each (`files`), fell back to the realm past the ceiling
-        // (`realm`), or named no file and holds only the realm guard
-        // (`guard`) — so a long `waitMs` reads as the ceiling or a realm
-        // lifecycle operation rather than as contention over one card.
-        let scope =
-          lockPlan[0]?.mode === 'exclusive'
-            ? 'realm'
-            : context.fileCount === 0
-              ? 'guard'
-              : 'files';
-        lockLog.info(
-          `writeLock realm=${context.realmUrl} waitMs=${waitMs} holdMs=${holdMs} files=${context.fileCount} scope=${scope}`,
-        );
-      }
-    });
+      });
+    } finally {
+      this.#lockTransactions.release();
+    }
     // Only reachable once the transaction ended without the section having
     // failed inside it, which is where `work` is assigned.
     return { work: work! };
