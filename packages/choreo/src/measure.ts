@@ -89,7 +89,19 @@ export const offsetBox = (el: Element): DOMRect =>
     el
   ).getBoundingClientRect();
 
-export const measure = (el: Element): Snapshot => ({
+/**
+ * Does the element have a layout box? One under `display: none` (its own or
+ * an ancestor's, as with the `hidden` attribute) measures as an empty rect at
+ * the page origin, which is no place to move from or to.
+ */
+export const isRendered = (el: Element): boolean =>
+  el.getClientRects().length > 0;
+
+/** `undefined` for an element with no layout box (see `isRendered`) */
+export const measure = (el: Element): Snapshot | undefined =>
+  isRendered(el) ? snapshotOf(el) : undefined;
+
+const snapshotOf = (el: Element): Snapshot => ({
   el: el.getBoundingClientRect(),
   // read with the geometry, while the element is still attached: a removed
   // skin is detached DOM by the time a crossing asks what color it wore
@@ -112,5 +124,10 @@ export const boundsOf = (snap: Snapshot, root: DOMRect): Bounds => ({
 });
 
 /** measure an element straight into bounds — what a beacon needs */
-export const measureBounds = (el: Element, root: DOMRect): Bounds =>
-  boundsOf(measure(el), root);
+export const measureBounds = (
+  el: Element,
+  root: DOMRect,
+): Bounds | undefined => {
+  const snap = measure(el);
+  return snap && boundsOf(snap, root);
+};
