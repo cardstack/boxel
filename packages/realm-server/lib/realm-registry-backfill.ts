@@ -173,9 +173,11 @@ async function upsertBootstrapRealms(
 // `realm_user_permissions` are touched, so it cannot grant access to a
 // realm policy never authorized.
 //
-// Matrix server_name is always "localhost" for `*.localhost` subdomains
-// (see `userIdFromUsername` in matrix-client.ts), so usernames like
-// `@skills_realm:localhost` work in both standard and env mode unchanged.
+// The development homeserver is named `localhost` in env mode too, where
+// `*.localhost` subdomains only route to it, and `localhost` is the server
+// name a realm server uses when `MATRIX_SERVER_NAME` is unset
+// (`matrixServerNameFromEnv`). So usernames like `@skills_realm:localhost`
+// work in both standard and env mode unchanged.
 async function seedEnvironmentPermissionParity(
   opts: RegistryBackfillOpts,
 ): Promise<number> {

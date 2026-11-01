@@ -6,6 +6,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { Querier } from '@cardstack/runtime-common/expression';
+import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
@@ -602,16 +603,23 @@ export interface SharedRealm {
 // The realms each of the user's keys is shared into, by key id, each realm
 // once with every share that puts the key there, by name and then address.
 // These are the shares `listOwnShares` lists, read for every key at once.
-// With `keyId`, only that key's.
+// With `keyId`, only that key's. `matrixServerName` names the paired
+// homeserver.
 export async function listOwnSharedRealms(
   dbAdapter: DBAdapter,
   owner: string,
-  { keyId }: { keyId?: string } = {},
+  { keyId, matrixServerName }: { keyId?: string; matrixServerName: string },
 ): Promise<Map<string, SharedRealm[]>> {
   let byKey = new Map<string, SharedRealm[]>();
   if (keyId !== undefined && !isUUID(keyId)) {
     return byKey;
   }
+  // A realm's name is shown to an owner who may read the realm: through its
+  // `*` row, their own row, or its `users` row, which grants only to users of
+  // the paired homeserver (ADR 004 §1.4).
+  let readingRows = isUserOfMatrixServer(owner, matrixServerName)
+    ? `'*', 'users', ks.owner`
+    : `'*', ks.owner`;
   let rows = (await query(dbAdapter, [
     `SELECT ks.id, ks.label, ks.state, ks.key_id, ks.realm_url,
             (SELECT config.pristine_doc->'attributes'->'cardInfo'->>'name'
@@ -624,7 +632,7 @@ export async function listOwnSharedRealms(
                  SELECT 1 FROM realm_user_permissions rup
                  WHERE rup.realm_url = ks.realm_url
                    AND rup.read = true
-                   AND rup.username IN ('*', 'users', ks.owner))
+                   AND rup.username IN (${readingRows}))
              LIMIT 1) AS name
      FROM key_shares ks
      WHERE ks.key_id IS NOT NULL AND ks.owner = `,

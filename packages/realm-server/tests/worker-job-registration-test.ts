@@ -42,6 +42,7 @@ function makeWorker(queue: QueueRunner, indexJobsOnly?: boolean) {
     queuePublisher: {} as any,
     virtualNetwork: { fetch: (() => {}) as any } as any,
     matrixURL: new URL('http://localhost:8008'),
+    matrixServerName: 'localhost',
     realmServerMatrixUsername: 'realm_server',
     secretSeed: 'test-seed',
     prerenderer: {} as any,

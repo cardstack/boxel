@@ -851,6 +851,7 @@ module(basename(import.meta.filename), function () {
           prerenderer: proxiedPrerenderer,
           dbAdapter,
           matrixURL: 'http://localhost:8008/',
+          matrixServerName: 'localhost',
           // The same origin-level session `auth()` adds for this realm.
           createPrerenderAuth: (userId, realmPermissions) => {
             let sessions = JSON.parse(

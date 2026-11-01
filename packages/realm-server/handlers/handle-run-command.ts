@@ -109,6 +109,7 @@ export default function handleRunCommand({
       let outcome = await prepareRunCommand({
         dbAdapter,
         matrixURL: matrixClient.matrixURL.href,
+        matrixServerName: matrixClient.serverName,
         createPrerenderAuth,
         realmURL,
         runAs: userId,

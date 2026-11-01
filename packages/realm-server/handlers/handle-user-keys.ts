@@ -349,12 +349,17 @@ export function handleMintKeyWriteTicket({
   });
 }
 
-export function handleListUserKeys({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleListUserKeys({
+  dbAdapter,
+  matrixClient,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let keys = await listUserKeys(dbAdapter, owner);
     let grants = await listOwnerGrants(dbAdapter, owner);
-    let sharedInto = await listOwnSharedRealms(dbAdapter, owner);
+    let sharedInto = await listOwnSharedRealms(dbAdapter, owner, {
+      matrixServerName: matrixClient.serverName,
+    });
     let oauth = await describeOAuthKeys(dbAdapter, owner, keys);
     await sendJSON(ctxt, 200, {
       data: keys.map((key) =>
@@ -369,13 +374,17 @@ export function handleListUserKeys({ dbAdapter }: CreateRoutesArgs): Handler {
   });
 }
 
-export function handleShowUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleShowUserKey({
+  dbAdapter,
+  matrixClient,
+}: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let key = await getUserKey(dbAdapter, owner, ctxt.params.keyId);
     let grants = await listKeyGrants(dbAdapter, owner, key.id);
     let sharedInto = await listOwnSharedRealms(dbAdapter, owner, {
       keyId: key.id,
+      matrixServerName: matrixClient.serverName,
     });
     let oauth = await describeOAuthKeys(dbAdapter, owner, [key]);
     await sendJSON(ctxt, 200, {

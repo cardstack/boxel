@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
+import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
 import { join } from 'path';
 import fsExtra from 'fs-extra';
@@ -139,6 +140,7 @@ function parseOverrideHost(rawOverride: string): OverrideHost | null {
 async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
+  matrixServerName: string,
   sourceRealmURL: string,
   publishedRealmURL: string,
 ): Promise<{ applied: boolean; publishedRealmURL: string }> {
@@ -172,12 +174,16 @@ async function maybeApplyPublishedRealmOverride(
     dbAdapter,
     new URL(sourceRealmURL),
   );
-  let effectivePermissions = new Set([
-    ...(permissions['*'] ?? []),
-    ...(permissions['users'] ?? []),
-    ...(permissions[ownerUserId] ?? []),
-  ]);
-  if (!effectivePermissions.has('write')) {
+  // The publisher is the signed-in user of this request, whose account the
+  // realm server verified when it issued their session, so the `users` row
+  // applies whenever they are on the paired homeserver (ADR 004 §1.4).
+  let effectivePermissions = await effectiveRealmPermissions(
+    permissions,
+    ownerUserId,
+    matrixServerName,
+    async () => true,
+  );
+  if (!effectivePermissions.includes('write')) {
     return { applied: false, publishedRealmURL };
   }
 
@@ -475,6 +481,7 @@ export default function handlePublishRealm({
     let overrideResult = await maybeApplyPublishedRealmOverride(
       dbAdapter,
       ownerUserId,
+      matrixClient.serverName,
       sourceRealmURL,
       publishedRealmURL,
     );

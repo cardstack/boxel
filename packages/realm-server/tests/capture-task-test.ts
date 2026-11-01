@@ -104,6 +104,7 @@ function makeTaskArgs({
       trace: () => {},
     } as any,
     matrixURL: 'http://localhost:8008',
+    matrixServerName: 'localhost',
     getReader: () => ({}) as any,
     getAuthedFetch: async () => fetch,
     createPrerenderAuth: (userId, permissions, opts) => {

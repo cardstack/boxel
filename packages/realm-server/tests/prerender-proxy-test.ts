@@ -157,6 +157,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter,
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -248,6 +249,7 @@ module(basename(import.meta.filename), function () {
           prerenderer: undefined,
           dbAdapter: makeDbAdapter([]),
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -282,6 +284,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter: makeDbAdapter([]),
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -318,6 +321,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter: makeDbAdapter([]), // no permissions
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -369,6 +373,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter,
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -380,6 +385,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter,
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );
@@ -475,6 +481,7 @@ module(basename(import.meta.filename), function () {
             prerenderer,
             dbAdapter,
             matrixURL,
+            matrixServerName: 'localhost',
             createPrerenderAuth,
           }),
         );
@@ -561,6 +568,7 @@ module(basename(import.meta.filename), function () {
           prerenderer,
           dbAdapter,
           matrixURL,
+          matrixServerName: 'localhost',
           createPrerenderAuth,
         }),
       );

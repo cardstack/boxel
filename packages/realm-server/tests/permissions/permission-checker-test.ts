@@ -5,7 +5,10 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 
 let matrixUserProfile: { displayname: string } | undefined = undefined;
+// The paired homeserver is named `boxel-ai`; it answers any profile lookup
+// with `matrixUserProfile`, whatever server the user is on.
 let mockMatrixClient = {
+  serverName: 'boxel-ai',
   async getProfile(_userId) {
     return matrixUserProfile;
   },
@@ -90,6 +93,17 @@ module(`permissions/${basename(import.meta.filename)}`, function () {
       assert.notOk(await permissionsChecker.can('anyone', 'write'));
 
       assert.deepEqual(await permissionsChecker.for('anyone'), []);
+    });
+
+    test('a user of another homeserver is not granted the users row', async function (assert) {
+      matrixUserProfile = { displayname: 'Someone Elsewhere' };
+      assert.notOk(
+        await permissionsChecker.can('@someone:other.example', 'read'),
+      );
+      assert.deepEqual(
+        await permissionsChecker.for('@someone:other.example'),
+        [],
+      );
     });
   });
 

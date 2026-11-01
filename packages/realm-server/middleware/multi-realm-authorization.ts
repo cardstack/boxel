@@ -35,6 +35,7 @@ import {
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
@@ -470,7 +471,8 @@ async function admitAnonymousSearch(
 // The realms among `urls` that let `principal` read them through a grant they
 // share with callers rather than through a row of the caller's own: their `*`
 // grant, which lets anyone read, or their `users` grant, which lets any caller
-// with a Matrix account read, judged as `effectiveRealmPermissions` judges it.
+// with an account on the paired homeserver read, judged as
+// `effectiveRealmPermissions` judges it (ADR 004 §1.4).
 //
 // The `users` grant is a user's alone. A realm-authority principal is a render,
 // and what it renders is served to every viewer, signed in or not, so it reads
@@ -510,6 +512,7 @@ async function realmsReadableThroughSharedGrants(
   if (
     readableToUsers.length > 0 &&
     principal?.kind === 'user' &&
+    isUserOfMatrixServer(principal.user, matrixClient.serverName) &&
     (await hasMatrixProfile(matrixClient, principal.user))
   ) {
     for (let realmURL of readableToUsers) {

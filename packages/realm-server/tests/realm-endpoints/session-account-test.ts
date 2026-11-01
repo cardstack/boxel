@@ -71,6 +71,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let response = await postSession(
         await openIdToken(
           new MatrixClient({
+            serverName: 'localhost',
             matrixURL: new URL(matrixURL),
             username,
             password,
@@ -93,6 +94,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let response = await postSession(
         await openIdToken(
           new MatrixClient({
+            serverName: 'localhost',
             matrixURL: new URL(matrixURL),
             username,
             password,
@@ -109,6 +111,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let response = await postSession(
         await openIdToken(
           new MatrixClient({
+            serverName: 'localhost',
             matrixURL: new URL(matrixURL),
             username,
             password,
@@ -131,6 +134,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       let response = await postSession(
         await openIdToken(
           new MatrixClient({
+            serverName: 'localhost',
             matrixURL: realmServerTestMatrix.url,
             username: realmServerTestMatrix.username,
             seed: realmSecretSeed,
