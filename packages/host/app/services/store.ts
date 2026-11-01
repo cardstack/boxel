@@ -137,12 +137,12 @@ import type CardService from './card-service';
 import type ClientTelemetryService from './client-telemetry';
 import type EnvironmentService from './environment-service';
 
+import type EventFeedService from './event-feed';
 import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
-import type PublicRealmEventsService from './public-realm-events';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
@@ -386,7 +386,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
-  @service declare private publicRealmEvents: PublicRealmEventsService;
+  @service declare private eventFeed: EventFeedService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private session: SessionService;
@@ -1351,10 +1351,10 @@ export default class StoreService extends Service implements StoreInterface {
     // A site page reads its cards without holding references, and names a
     // realm the site draws on by the site's alias, which realm lookup doesn't
     // know. So in host mode a card read follows the realm the card itself
-    // names, through that realm's public feed (ADR 020).
+    // names, through that realm's event feed (ADR 020).
     if (
       this.hostModeService.isActive &&
-      this.publicRealmEvents.listening &&
+      this.eventFeed.listening &&
       isCardInstance(result)
     ) {
       let realmURL = result[realmURLSymbol]?.href;
@@ -5037,7 +5037,7 @@ export default class StoreService extends Service implements StoreInterface {
       // if a save acknowledges them while it is in flight: the realm may have
       // answered the read before that save wrote.
       let pinnedAtRead = this.#pinnedFields(instance);
-      // A re-read a public feed event started names the card's revision, so
+      // A re-read a event feed event started names the card's revision, so
       // every visitor re-reading it asks for one URL a shared cache can answer
       // (ADR 020 §1.5). The document carries its own id either way.
       let readURL: string = instance.id;
@@ -5163,7 +5163,7 @@ export default class StoreService extends Service implements StoreInterface {
   private subscribeToRealm(url: RealmResourceIdentifier | URL) {
     // A host-mode visitor hears realm events only through the realms' public
     // feeds (ADR 020), so the store subscribes there once those are listening.
-    if (this.hostModeService.isActive && !this.publicRealmEvents.listening) {
+    if (this.hostModeService.isActive && !this.eventFeed.listening) {
       return;
     }
 

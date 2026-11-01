@@ -1,6 +1,6 @@
 ---
 name: live-public-sites
-description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the public change feed, ADR 020), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_public-events`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
+description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the realm's event feed, ADR 020), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_events`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
 ---
 
 # Live public sites
@@ -11,7 +11,7 @@ every one of them at once. This skill is what a pub quiz (a TV, a
 quizmaster's desk, a table of phones, all signed out but the desk) taught,
 written for the next one: a ticket on-sale with a queue.
 
-Cite rules as ADR 020 §x.y (the public change feed) and ADR 017 §x.y (site
+Cite rules as ADR 020 §x.y (the realm's event feed) and ADR 017 §x.y (site
 addresses) rather than restating them. The `realm-policy-authoring` skill
 covers opening operations to visitors who aren't signed in (`anonymous: true`)
 and the realm's `anonymousRateLimit`; `card-operations-authoring` covers
@@ -106,7 +106,7 @@ params("n"))] + [...]`. `NOW()` is a spreadsheet serial: format it with
 ## 5. Changing code during an event
 
 - A realm writer can ask every page following a realm's feed to reload:
-  `POST {realm}/_public-events/refresh`, at most once a minute (ADR 020 §1.7).
+  `POST {realm}/_events/refresh`, at most once a minute (ADR 020 §1.7).
 - A page is first offered the request as a cancelable `boxel-refresh-requested`
   window event whose `detail` has `realm` and `reload()`. An app that calls
   `preventDefault()` keeps the page as it is, tells its visitors an update is

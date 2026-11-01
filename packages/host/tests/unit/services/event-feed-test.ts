@@ -4,14 +4,14 @@ import { settled } from '@ember/test-helpers';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import type MessageService from '@cardstack/host/services/message-service';
-import type PublicRealmEventsService from '@cardstack/host/services/public-realm-events';
+import type EventFeedService from '@cardstack/host/services/event-feed';
 import {
   REFRESH_REQUESTED_EVENT,
   type RefreshRequestedDetail,
   type TabChannel,
   type TabCoordination,
-} from '@cardstack/host/services/public-realm-events';
+} from '@cardstack/host/services/event-feed';
+import type MessageService from '@cardstack/host/services/message-service';
 
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
@@ -134,12 +134,12 @@ function tabMessageService() {
   };
 }
 
-module('Unit | Service | public-realm-events', function (hooks) {
+module('Unit | Service | event-feed', function (hooks) {
   setupTest(hooks);
 
   let originalEventSource: unknown;
   let messageService: MessageService;
-  let service: PublicRealmEventsService;
+  let service: EventFeedService;
   let received: RealmEventContent[];
 
   hooks.beforeEach(function () {
@@ -149,9 +149,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
     messageService = this.owner.lookup(
       'service:message-service',
     ) as MessageService;
-    service = this.owner.lookup(
-      'service:public-realm-events',
-    ) as PublicRealmEventsService;
+    service = this.owner.lookup('service:event-feed') as EventFeedService;
     received = [];
   });
 
@@ -166,20 +164,20 @@ module('Unit | Service | public-realm-events', function (hooks) {
   // Another tab of the same browser, with its own message bus.
   function makeTab(owner: any, browser: FakeBrowser) {
     let tab = owner
-      .factoryFor('service:public-realm-events')
-      .create() as PublicRealmEventsService;
+      .factoryFor('service:event-feed')
+      .create() as EventFeedService;
     let bus = tabMessageService();
     Object.defineProperty(tab, 'messageService', { value: bus });
     tab.coordination = browser.coordination();
     return { tab, bus };
   }
 
-  test("a realm the page watches gets its public feed, and each change reaches the realm's subscribers as an incremental index event", function (assert) {
+  test("a realm the page watches gets its event feed, and each change reaches the realm's subscribers as an incremental index event", function (assert) {
     service.start();
     let unsubscribe = watch();
     assert.strictEqual(FakeEventSource.made.length, 1, 'one feed is opened');
     let source = FakeEventSource.made[0];
-    assert.strictEqual(source.url, `${REALM}_public-events`);
+    assert.strictEqual(source.url, `${REALM}_events`);
 
     source.emit('open');
     source.emit('change', {
@@ -321,7 +319,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
     assert.strictEqual(FakeEventSource.made.length, 2, 'the next tab opens it');
     assert.strictEqual(
       FakeEventSource.made[1].url,
-      `${REALM}_public-events?lastEventId=${encodeURIComponent('e1:7')}`,
+      `${REALM}_events?lastEventId=${encodeURIComponent('e1:7')}`,
       'from where the last leader stopped',
     );
     FakeEventSource.made[1].emit('change', {

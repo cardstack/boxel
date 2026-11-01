@@ -3,20 +3,21 @@ status: proposed
 date: 2026-10-31
 scope:
   - packages/runtime-common/realm.ts
-  - packages/runtime-common/public-realm-events*.ts
+  - packages/runtime-common/event-feed.ts
   - packages/runtime-common/anonymous-admission.ts
-  - packages/realm-server/tests/public-realm-events-test.ts
+  - packages/realm-server/tests/event-feed-test.ts
   - packages/realm-server/node-realm.ts
   - packages/host/app/services/message-service.ts
-  - packages/host/app/services/public-realm-events.ts
+  - packages/host/app/services/event-feed.ts
 ---
 
-# 020. Push public realm changes as cacheable HTTP invalidations, not Matrix
+# 020. Push realm changes as cacheable HTTP invalidations, filtered by policy
 
 A visitor who isn't signed in has no Matrix account, so the realm events that
 keep a signed-in host live never reach them, and a published site can only
-poll. We give each realm a public change feed: one small invalidation per
-change to a card a signed-out visitor may read, filtered once where it is
+poll. We give each realm an event feed: one small invalidation per change to
+a card the feed's audience may read under the realm's permissions and policy,
+whether the realm itself is public or private, filtered once where it is
 produced, carried over plain HTTP as server-sent events and as a cacheable
 "changes since" poll, and followed by re-reads that shared caches can serve.
 The design target is a ticket on-sale: millions of readers, one writer
@@ -27,17 +28,19 @@ stream, no per-reader state at the origin and no stateful edge service.
 ### 1.1. One invalidation per change, at write time
 
 A realm MUST give each change to a card a position in a per-realm sequence
-that only increases. It MUST produce the change's public event when the write
+that only increases. It MUST produce the change's feed event when the write
 lands, not when indexing finishes. An event MUST name only the card URL, the
 kind of change, and the sequence position. It MUST NOT carry card content.
 A change to a module that a visitor who isn't signed in may load MUST be
 announced the same way, so a page running that code rebuilds it in place as
 a signed-in page does.
 
-### 1.2. Filtered once, by the realm's policy for a signed-out visitor
+### 1.2. Filtered once, by the realm's permissions and policy
 
-The public feed MUST carry only changes to cards a signed-out visitor may
-read under the realm's permissions and policy. The realm MUST decide this
+The feed MUST carry only changes to cards its audience may read under the
+realm's permissions and policy, so a private realm whose policy opens some
+cards has a feed of those cards and no others. The audience it serves is
+callers who aren't signed in. The realm MUST decide this
 once per change, where the event is produced. The server MUST NOT evaluate
 policy per subscriber, and a client MUST NOT be trusted to filter.
 
@@ -94,12 +97,12 @@ The host's reactivity already runs on realm events: the store, live searches
 and capability answers all listen in one place. Only the source is missing
 for a visitor who isn't signed in. Giving that visitor Matrix would mean an
 account, a sync loop and room membership to learn that a card changed, and a
-credential inside the public path.
+credential in the path a signed-out page takes.
 
 An event that carries no content and covers only cards a signed-out visitor
 may read discloses nothing that visitor could not learn by polling the card.
-Filtering where the event is produced keeps a private card's changes off the
-public feed by construction, and keeps the cost of a change independent of
+Filtering where the event is produced keeps changes to a card the audience
+may not read off the feed by construction, and keeps the cost of a change independent of
 how many people are watching.
 
 At ticket-sale scale the origin cannot hold a connection per reader. A
@@ -128,7 +131,7 @@ what a rebuild can't apply.
   any proxy or CDN, and scales with the cache rather than the origin.
 - **Matrix for signed-out visitors** (guest accounts, sliding sync). Rejected:
   per-visitor accounts and sync for a URL-sized signal, and credentials in
-  the public path.
+  the path a signed-out page takes.
 - **Durable Objects or another stateful edge fan-out as a requirement.**
   Rejected: ties the platform to one vendor's stateful product. §1.4 still
   lets a deployment add one.

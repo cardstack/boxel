@@ -1735,7 +1735,7 @@ module('Acceptance | host mode tests', function (hooks) {
       );
     });
 
-    test('a visitor who is not signed in hears the realm through its public feed', async function (assert) {
+    test('a visitor who is not signed in hears the realm through its event feed', async function (assert) {
       let opened: string[] = [];
       let original = globalThis.EventSource;
       class RecordingEventSource {
@@ -1754,7 +1754,7 @@ module('Acceptance | host mode tests', function (hooks) {
         await settled();
         let messageService = getService('message-service');
         assert.true(
-          opened.some((url) => url === `${realm}_public-events`),
+          opened.some((url) => url === `${realm}_events`),
           `the realm's feed is opened: ${JSON.stringify({
             opened,
             subscribed: messageService.subscribedRealms(),

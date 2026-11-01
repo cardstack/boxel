@@ -189,11 +189,11 @@ export const ANONYMOUS_OPERATIONS: AnonymousDispatch = {
   counted: 'by-handler',
 };
 
-// The public change feed (ADR 020) carries only changes such a caller may
+// The event feed (ADR 020) carries only changes such a caller may
 // read, so it is opened wherever the policy opens a read or a search to one.
 // Its stream counts once when it opens and its poll once per answer, which a
 // shared cache in front absorbs.
-export const ANONYMOUS_PUBLIC_FEED: AnonymousDispatch = {
+export const ANONYMOUS_EVENT_FEED: AnonymousDispatch = {
   operations: ['read', 'query'],
   counted: 'once-served',
 };

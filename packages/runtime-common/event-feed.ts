@@ -1,14 +1,16 @@
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
-// A realm's public change feed (ADR 020): one small invalidation per change to
-// a card a visitor who isn't signed in may read, for hosts that have no Matrix
-// session to hear realm events through. An event names the card by its path
+// A realm's event feed (ADR 020): one small invalidation per change to a
+// card the feed's audience may read under the realm's permissions and policy,
+// whether the realm is public or private. The audience it serves today is
+// callers who aren't signed in, the hosts that have no Matrix session to hear
+// realm events through. An event names the card by its path
 // in the realm, never by its absolute URL, so a site that serves the realm
 // under an alias (ADR 018) passes events through unchanged and a visitor never
 // learns the realm's own address. It carries no card content: a client
 // re-reads the card through the ordinary gated read.
 
-export const PUBLIC_EVENTS_PATH = '_public-events';
+export const EVENT_FEED_PATH = '_events';
 
 // The query parameter that addresses a card read by revision (ADR 020 §1.5).
 // A client re-reading a card after an event asks for `{card}?rev=<rev>`, with
@@ -32,17 +34,17 @@ export function cardRevisionOf(
 
 // `refresh` is a writer's request that every page following the feed reload
 // (ADR 020 §1.7). It names no card.
-export type PublicChangeKind =
+export type FeedChangeKind =
   | 'written'
   | 'indexed'
   | 'removed'
   | 'reset'
   | 'refresh';
 
-export interface PublicRealmEvent {
+export interface FeedEvent {
   // Position in this feed's sequence. Only increases within one `epoch`.
   seq: number;
-  kind: PublicChangeKind;
+  kind: FeedChangeKind;
   // The card's path in the realm, without `.json`. Empty for `reset` and
   // `refresh`.
   path: string;
@@ -57,27 +59,27 @@ export interface PublicRealmEvent {
 // What the cacheable poll answers: the head of the sequence and the latest
 // events, the same for every caller, so a shared cache can collapse a crowd's
 // polls into one request (ADR 020 §1.3).
-export interface PublicEventWindow {
+export interface FeedEventWindow {
   epoch: string;
   head: number;
-  events: PublicRealmEvent[];
+  events: FeedEvent[];
 }
 
 // How many events the feed keeps for replay and for the poll's window.
-export const PUBLIC_EVENT_WINDOW = 256;
+export const EVENT_FEED_WINDOW = 256;
 
 // The least time between two refresh requests a realm accepts, so the
 // request stays the rare thing it is meant to be (ADR 020 §1.7).
-export const PUBLIC_REFRESH_COOLDOWN_MS = 60_000;
+export const EVENT_FEED_REFRESH_COOLDOWN_MS = 60_000;
 
 // How often an idle stream sends a comment, so proxies keep it open.
-export const PUBLIC_EVENT_HEARTBEAT_MS = 25_000;
+export const EVENT_FEED_HEARTBEAT_MS = 25_000;
 
 // The changes a realm event announces, as card URLs and what happened to
 // them. A full reindex can have changed anything, so it is a reset.
 export function changesIn(
   event: RealmEventContent,
-): { url: string; kind: PublicChangeKind }[] | 'reset' {
+): { url: string; kind: FeedChangeKind }[] | 'reset' {
   switch (event.eventName) {
     case 'update':
       return [
@@ -110,35 +112,35 @@ export function changesIn(
 
 // What `mayRead` answers: whether a visitor who isn't signed in may read the
 // card, and the revision they read it at when the realm can name one.
-export type PublicReadability = false | { rev?: string };
+export type FeedReadability = false | { rev?: string };
 
 // One realm's feed, held in memory by the process that serves the realm.
 // `mayRead` answers whether a visitor who isn't signed in may read a card, as
 // the realm itself answers that visitor's read (ADR 020 §1.2). It is asked
 // once per change, never per subscriber.
-export class PublicRealmFeed {
+export class RealmEventFeed {
   readonly epoch = randomEpoch();
   #seq = 0;
-  #events: PublicRealmEvent[] = [];
-  #subscribers = new Set<(event: PublicRealmEvent) => void>();
+  #events: FeedEvent[] = [];
+  #subscribers = new Set<(event: FeedEvent) => void>();
   // Cards this feed has announced as readable, so a removal is announced
   // only for a card a visitor could have seen.
-  #public = new Set<string>();
+  #visible = new Set<string>();
   // The last kind and revision announced per path, to drop a repeat of the
   // same change the realm reports through two events.
   #lastKind = new Map<
     string,
-    { kind: PublicChangeKind; rev?: string; at: number }
+    { kind: FeedChangeKind; rev?: string; at: number }
   >();
   #queue: Promise<void> = Promise.resolve();
   #lastRefresh: number | undefined;
 
   readonly realmURL: string;
-  private mayRead: (cardURL: string) => Promise<PublicReadability>;
+  private mayRead: (cardURL: string) => Promise<FeedReadability>;
 
   constructor(
     realmURL: string,
-    mayRead: (cardURL: string) => Promise<PublicReadability>,
+    mayRead: (cardURL: string) => Promise<FeedReadability>,
   ) {
     this.realmURL = realmURL;
     this.mayRead = mayRead;
@@ -162,7 +164,7 @@ export class PublicRealmFeed {
   async #ingest(event: RealmEventContent) {
     let changes = changesIn(event);
     if (changes === 'reset') {
-      this.#public.clear();
+      this.#visible.clear();
       this.#announce('reset', '');
       return;
     }
@@ -172,7 +174,7 @@ export class PublicRealmFeed {
         continue;
       }
       if (kind === 'removed') {
-        if (this.#public.delete(path)) {
+        if (this.#visible.delete(path)) {
           this.#announce('removed', path);
         }
         continue;
@@ -181,12 +183,12 @@ export class PublicRealmFeed {
       if (!readable) {
         // A card that stops being readable is announced once more, so a
         // visitor holding it finds out it is gone.
-        if (this.#public.delete(path)) {
+        if (this.#visible.delete(path)) {
           this.#announce('removed', path);
         }
         continue;
       }
-      this.#public.add(path);
+      this.#visible.add(path);
       this.#announce(kind, path, kind === 'indexed' ? readable.rev : undefined);
     }
   }
@@ -205,7 +207,7 @@ export class PublicRealmFeed {
     return path;
   }
 
-  #announce(kind: PublicChangeKind, path: string, rev?: string) {
+  #announce(kind: FeedChangeKind, path: string, rev?: string) {
     let now = Date.now();
     let last = this.#lastKind.get(path);
     if (
@@ -218,18 +220,18 @@ export class PublicRealmFeed {
       return;
     }
     this.#lastKind.set(path, { kind, rev, at: now });
-    if (this.#lastKind.size > PUBLIC_EVENT_WINDOW * 4) {
+    if (this.#lastKind.size > EVENT_FEED_WINDOW * 4) {
       this.#lastKind.clear();
     }
-    let event: PublicRealmEvent = {
+    let event: FeedEvent = {
       seq: ++this.#seq,
       kind,
       path,
       ...(rev ? { rev } : {}),
     };
     this.#events.push(event);
-    if (this.#events.length > PUBLIC_EVENT_WINDOW) {
-      this.#events.splice(0, this.#events.length - PUBLIC_EVENT_WINDOW);
+    if (this.#events.length > EVENT_FEED_WINDOW) {
+      this.#events.splice(0, this.#events.length - EVENT_FEED_WINDOW);
     }
     for (let subscriber of [...this.#subscribers]) {
       subscriber(event);
@@ -243,7 +245,7 @@ export class PublicRealmFeed {
     now = Date.now(),
   ): { accepted: true } | { accepted: false; retryAfterMs: number } {
     if (this.#lastRefresh !== undefined) {
-      let wait = this.#lastRefresh + PUBLIC_REFRESH_COOLDOWN_MS - now;
+      let wait = this.#lastRefresh + EVENT_FEED_REFRESH_COOLDOWN_MS - now;
       if (wait > 0) {
         return { accepted: false, retryAfterMs: wait };
       }
@@ -253,13 +255,13 @@ export class PublicRealmFeed {
     return { accepted: true };
   }
 
-  window(): PublicEventWindow {
+  window(): FeedEventWindow {
     return { epoch: this.epoch, head: this.#seq, events: [...this.#events] };
   }
 
   // The events after `lastEventId` (an id this feed sent), or a reset when
   // that id is from another epoch or older than the window holds.
-  replay(lastEventId: string | null): PublicRealmEvent[] {
+  replay(lastEventId: string | null): FeedEvent[] {
     if (!lastEventId) {
       return [];
     }
@@ -272,7 +274,7 @@ export class PublicRealmFeed {
     return this.#events.filter((event) => event.seq > seq);
   }
 
-  subscribe(subscriber: (event: PublicRealmEvent) => void): () => void {
+  subscribe(subscriber: (event: FeedEvent) => void): () => void {
     this.#subscribers.add(subscriber);
     return () => {
       this.#subscribers.delete(subscriber);
@@ -286,7 +288,7 @@ export class PublicRealmFeed {
   // One event in the `text/event-stream` format. The id carries the epoch, so
   // a client reconnecting to a restarted server is told to reset rather than
   // missing what changed meanwhile.
-  serialize(event: PublicRealmEvent): string {
+  serialize(event: FeedEvent): string {
     return `id: ${this.epoch}:${event.seq}\nevent: change\ndata: ${JSON.stringify(event)}\n\n`;
   }
 }

@@ -10,8 +10,8 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type {
-  PublicEventWindow,
-  PublicRealmEvent,
+  FeedEventWindow,
+  FeedEvent,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -31,7 +31,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
-// ADR 020: a realm's public change feed. A newsroom nobody may read without
+// ADR 020: a realm's event feed. A newsroom nobody may read without
 // signing in opens published articles to callers who aren't signed in; a
 // library opens nothing to them.
 const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
@@ -185,7 +185,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   function feedWindow(realm = NEWSROOM) {
     return request
-      .get(`${new URL(realm).pathname}_public-events`)
+      .get(`${new URL(realm).pathname}_events`)
       .set('Accept', SupportedMimeType.JSON)
       .set('X-Forwarded-For', VISITOR);
   }
@@ -195,7 +195,7 @@ module(basename(import.meta.filename), function (hooks) {
     let deadline = Date.now() + 10_000;
     for (;;) {
       let response = await feedWindow();
-      let events = (response.body as PublicEventWindow).events.filter(
+      let events = (response.body as FeedEventWindow).events.filter(
         (event) => event.seq > after,
       );
       if (events.length >= count || Date.now() > deadline) {
@@ -206,7 +206,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function head() {
-    return ((await feedWindow()).body as PublicEventWindow).head;
+    return ((await feedWindow()).body as FeedEventWindow).head;
   }
 
   test('a change to a card a visitor may read is announced by its path, and one to a card they may not is not', async function (assert) {
@@ -282,7 +282,7 @@ module(basename(import.meta.filename), function (hooks) {
       response.headers['cache-control'],
       'public, max-age=1, stale-while-revalidate=1',
     );
-    let body = response.body as PublicEventWindow;
+    let body = response.body as FeedEventWindow;
     assert.strictEqual(typeof body.epoch, 'string', 'names its epoch');
     assert.strictEqual(typeof body.head, 'number', 'and its head');
   });
@@ -290,7 +290,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('the stream delivers changes as they land and replays from Last-Event-ID', async function (assert) {
     let address = server.address();
     let port = typeof address === 'object' && address ? address.port : 4444;
-    let url = `http://127.0.0.1:${port}/newsroom/_public-events`;
+    let url = `http://127.0.0.1:${port}/newsroom/_events`;
     let controller = new AbortController();
     let response = await fetch(url, {
       headers: {
@@ -332,7 +332,7 @@ module(basename(import.meta.filename), function (hooks) {
     let match = text.match(/^id: (\S+)$/m);
     assert.ok(match, `the stream sent an event: ${text}`);
     let data = text.match(/^data: (.+)$/m)?.[1];
-    let event = JSON.parse(data!) as PublicRealmEvent;
+    let event = JSON.parse(data!) as FeedEvent;
     assert.strictEqual(event.path, 'articles/published');
 
     let [epoch, seq] = match![1].split(':');
@@ -434,7 +434,7 @@ module(basename(import.meta.filename), function (hooks) {
       article('Polls open at last', 'published'),
     );
     await newsroom.indexing();
-    let indexed: PublicRealmEvent | undefined;
+    let indexed: FeedEvent | undefined;
     let deadline = Date.now() + 10_000;
     while (!indexed && Date.now() < deadline) {
       indexed = (await eventsAfter(start)).find(
@@ -497,7 +497,7 @@ module(basename(import.meta.filename), function (hooks) {
   test('a writer may ask the pages following the feed to reload, at most once a minute', async function (assert) {
     let refresh = () =>
       request
-        .post(`${new URL(NEWSROOM).pathname}_public-events/refresh`)
+        .post(`${new URL(NEWSROOM).pathname}_events/refresh`)
         .set('Accept', SupportedMimeType.JSON);
 
     let visitor = await refresh().set('X-Forwarded-For', VISITOR);
@@ -513,7 +513,7 @@ module(basename(import.meta.filename), function (hooks) {
       `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
     );
     assert.strictEqual(asked.status, 202, asked.text);
-    let events = (await feedWindow()).body as PublicEventWindow;
+    let events = (await feedWindow()).body as FeedEventWindow;
     assert.deepEqual(
       events.events.filter((event) => event.seq > before),
       [{ seq: before + 1, kind: 'refresh', path: '' }],

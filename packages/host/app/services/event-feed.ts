@@ -4,9 +4,9 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import {
-  PUBLIC_EVENTS_PATH,
-  type PublicEventWindow,
-  type PublicRealmEvent,
+  EVENT_FEED_PATH,
+  type FeedEventWindow,
+  type FeedEvent,
 } from '@cardstack/runtime-common';
 
 import type MatrixService from './matrix-service';
@@ -15,7 +15,7 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // Realm events for a session that has no Matrix to hear them through: a
 // visitor of a published site who isn't signed in. Each realm the page starts
-// watching gets the realm's public change feed (ADR 020), and each change is
+// watching gets the realm's event feed (ADR 020), and each change is
 // relayed through MessageService as the incremental index event Matrix would
 // have delivered, so the store, live searches and resources stay current with
 // no second mechanism (ADR 020 §1.6).
@@ -58,12 +58,12 @@ export interface RefreshRequestedDetail {
 }
 
 // Per origin, which is all the Web Locks and BroadcastChannel APIs can see.
-const COORDINATION_NAME = 'boxel-public-realm-events';
+const COORDINATION_NAME = 'boxel-event-feed';
 
 // What the tabs say to each other on the channel.
 type TabMessage =
   // The leader passing on an event, with the id the feed gave it.
-  | { type: 'event'; realm: string; event: PublicRealmEvent; id?: string }
+  | { type: 'event'; realm: string; event: FeedEvent; id?: string }
   // A tab naming the realms it watches, for the leader to open, and the last
   // event id it saw for each.
   | { type: 'watch'; realms: string[]; cursors: Record<string, string> }
@@ -104,7 +104,7 @@ function browserCoordination(): TabCoordination | undefined {
   };
 }
 
-export default class PublicRealmEventsService extends Service {
+export default class EventFeedService extends Service {
   @service declare private messageService: MessageService;
   @service declare private matrixService: MatrixService;
 
@@ -137,7 +137,7 @@ export default class PublicRealmEventsService extends Service {
   private cursors = new Map<string, string>();
   private feeds = new Map<string, { stop: () => void }>();
 
-  // Whether this host hears realm events through the public feeds.
+  // Whether this host hears realm events through the event feeds.
   get listening(): boolean {
     return this.started;
   }
@@ -154,7 +154,7 @@ export default class PublicRealmEventsService extends Service {
       this.messageService.onFirstSubscription((realm) => this.watch(realm));
       this.started = true;
     } catch (error) {
-      console.warn('public realm events are unavailable', error);
+      console.warn('realm event feeds are unavailable', error);
     }
   }
 
@@ -276,8 +276,8 @@ export default class PublicRealmEventsService extends Service {
     if (!base) {
       return;
     }
-    let feedURL = new URL(PUBLIC_EVENTS_PATH, base).href;
-    let deliver = (event: PublicRealmEvent, id?: string) => {
+    let feedURL = new URL(EVENT_FEED_PATH, base).href;
+    let deliver = (event: FeedEvent, id?: string) => {
       this.post({ type: 'event', realm, event, id });
       this.receive(realm, event, id);
     };
@@ -297,7 +297,7 @@ export default class PublicRealmEventsService extends Service {
   }
 
   // An event, from this tab's feed or the leader's.
-  private receive(realm: string, event: PublicRealmEvent, id?: string) {
+  private receive(realm: string, event: FeedEvent, id?: string) {
     if (id) {
       this.cursors.set(realm, id);
     }
@@ -348,7 +348,7 @@ export default class PublicRealmEventsService extends Service {
     }
   }
 
-  private relay(realm: string, base: URL, event: PublicRealmEvent) {
+  private relay(realm: string, base: URL, event: FeedEvent) {
     if (event.kind === 'written') {
       // Announced when the write lands, before indexing: a read now would
       // find the revision before it, and the `indexed` event that follows
@@ -398,7 +398,7 @@ function parseEventId(
 function streamFeed(
   url: string,
   resumeFrom: string | undefined,
-  deliver: (event: PublicRealmEvent, id?: string) => void,
+  deliver: (event: FeedEvent, id?: string) => void,
   unavailable: () => void,
 ): { stop: () => void } {
   // A tab taking over from another resumes from the last id the tabs saw.
@@ -432,7 +432,7 @@ function streamFeed(
 function pollFeed(
   url: string,
   resumeFrom: string | undefined,
-  deliver: (event: PublicRealmEvent, id?: string) => void,
+  deliver: (event: FeedEvent, id?: string) => void,
 ): { stop: () => void } {
   // Resuming from another tab's last id compares the first answer against it
   // rather than adopting it as where this page starts.
@@ -447,7 +447,7 @@ function pollFeed(
         headers: { Accept: 'application/json' },
       });
       if (response.ok && !stopped) {
-        let answer = (await response.json()) as PublicEventWindow;
+        let answer = (await response.json()) as FeedEventWindow;
         let idOf = (seq: number) => `${answer.epoch}:${seq}`;
         if (epoch === undefined) {
           // The first answer sets where this page starts from.
@@ -486,12 +486,12 @@ function pollFeed(
   };
 }
 
-function parseEvent(data: unknown): PublicRealmEvent | undefined {
+function parseEvent(data: unknown): FeedEvent | undefined {
   if (typeof data !== 'string') {
     return undefined;
   }
   try {
-    let event = JSON.parse(data) as PublicRealmEvent;
+    let event = JSON.parse(data) as FeedEvent;
     return typeof event.path === 'string' && typeof event.kind === 'string'
       ? event
       : undefined;
@@ -502,6 +502,6 @@ function parseEvent(data: unknown): PublicRealmEvent | undefined {
 
 declare module '@ember/service' {
   interface Registry {
-    'public-realm-events': PublicRealmEventsService;
+    'event-feed': EventFeedService;
   }
 }
