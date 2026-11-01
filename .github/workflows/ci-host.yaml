@@ -1566,6 +1566,8 @@ jobs:
     name: Update PR status comment
     needs:
       - host-merge-reports-and-publish
+      - host-test-time
+      - host-peak-heap
     if: ${{ !cancelled() && needs.host-merge-reports-and-publish.result == 'success' }}
     uses: ./.github/workflows/pr-status-comment.yml
     permissions:
@@ -1576,7 +1578,7 @@ jobs:
     with:
       head-sha: ${{ github.event.pull_request.head.sha || github.sha }}
       pr-number: ${{ github.event.pull_request.number }}
-      slots: host-tests
+      slots: host-tests host-test-time host-peak-heap
     secrets: inherit
 
   host-memory-baseline:
@@ -1607,16 +1609,148 @@ jobs:
       - name: Check memory baseline
         run: node packages/host/scripts/check-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
 
+  # Fails when the shards spent much longer in their test step than recent runs
+  # of the same kind, and reports the comparison in the PR status comment. A
+  # leak that retains the app between tests shows up here as GC time even when
+  # the per-test junit times and the per-module memory deltas look normal. See
+  # packages/host/scripts/host-test-time.mjs. Hand-run builds are skipped: they
+  # are compared with neither main nor pull request runs.
+  host-test-time:
+    name: Host Test Time
+    if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') && github.event_name != 'workflow_dispatch' }}
+    concurrency:
+      group: host-test-time-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: host-test
+    # Follows host-test onto RunsOn; see host-test. It only reads the jobs API,
+    # so where it runs doesn't change what it measures.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-test-time/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/actions/
+            /packages/host/scripts/
+            /packages/host/test-time-baseline.json
+      # Needed before the slot upload on a RunsOn runner whose label carries
+      # `extras=s3-cache`; see .github/actions/init. This job skips init
+      # because it needs no workspace install.
+      - if: startsWith(runner.name, 'runs-on--')
+        uses: runs-on/action@dfae4d98c5537a0dc7bbb7e6b9211f30ba240f6d # v2.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - name: Compare host test time with recent runs
+        id: compare
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p slot
+          node packages/host/scripts/host-test-time.mjs check packages/host/test-time-baseline.json --slot slot/slot.md
+
+      # Always uploaded on a pull request, also when the run is not slower, so
+      # the section from an earlier commit's slower run doesn't stay in the
+      # comment.
+      - name: Upload host-test-time slot
+        if: ${{ github.event_name == 'pull_request' && hashFiles('slot/slot.md') != '' }}
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: pr-comment-slot-host-test-time
+          path: slot/
+          retention-days: 7
+
+      - name: Fail when slower
+        if: ${{ steps.compare.outputs.slower == 'true' }}
+        run: |
+          echo "::error title=Host tests slower than recent runs::See the job summary."
+          exit 1
+
+  # Fails when the shards' heap peaked far above recent main runs, and reports
+  # the comparison in the PR status comment. It is a check of its own, apart
+  # from Host Memory Baseline, so that a leak shows as its own failure and is
+  # not taken for that job's per-module noise. See
+  # packages/host/scripts/host-peak-heap.mjs.
+  host-peak-heap:
+    name: Host Peak Heap
+    if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
+    concurrency:
+      group: host-peak-heap-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: host-test
+    # Follows host-test onto RunsOn; see host-test. It only reads the shards'
+    # memory reports, so where it runs doesn't change what it measures.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.HOST_TEST_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-peak-heap/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/actions/
+            /packages/host/scripts/
+            /packages/host/peak-heap-baseline.json
+      # Needed before the artifact steps on a RunsOn runner whose label
+      # carries `extras=s3-cache`; see .github/actions/init. This job skips
+      # init because it needs no workspace install.
+      - if: startsWith(runner.name, 'runs-on--')
+        uses: runs-on/action@dfae4d98c5537a0dc7bbb7e6b9211f30ba240f6d # v2.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - name: Download memory reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: all-memory-reports
+          pattern: memory-report-*
+          merge-multiple: true
+
+      - name: Compare peak heap with recent main runs
+        id: compare
+        run: |
+          mkdir -p slot
+          node packages/host/scripts/host-peak-heap.mjs check all-memory-reports packages/host/peak-heap-baseline.json --slot slot/slot.md
+
+      # Always uploaded on a pull request, also when the heap is not higher, so
+      # the section from an earlier commit's leak doesn't stay in the comment.
+      - name: Upload host-peak-heap slot
+        if: ${{ github.event_name == 'pull_request' && hashFiles('slot/slot.md') != '' }}
+        uses: ./.github/actions/upload-artifact-retry
+        with:
+          name: pr-comment-slot-host-peak-heap
+          path: slot/
+          retention-days: 7
+
+      - name: Fail when higher
+        if: ${{ steps.compare.outputs.higher == 'true' }}
+        run: |
+          echo "::error title=Host test heap far above main::See the job summary."
+          exit 1
+
   host-memory-baseline-update:
     name: Update Host Baselines
     # Intentionally scoped to push-to-main only so the job only runs in a
     # context where the PR workflow file cannot be modified by an untrusted
     # branch — this is the one job that holds `contents: write`.
     #
-    # Maintains two committed per-module measurement files from each main
-    # run: packages/host/memory-baseline.json (gates PRs on memory
-    # regressions) and packages/host/tests/test-module-timings.json (drives
-    # duration-weighted shard assignment; see tests/helpers/shard-modules.ts).
+    # Maintains four committed measurement files from each main run:
+    # packages/host/memory-baseline.json (gates PRs on memory regressions),
+    # packages/host/tests/test-module-timings.json (drives duration-weighted
+    # shard assignment; see tests/helpers/shard-modules.ts) and
+    # packages/host/test-time-baseline.json (recent main and pull request test
+    # times, which the Host Test Time job compares a run with) and
+    # packages/host/peak-heap-baseline.json (recent main peak heaps, which the
+    # Host Peak Heap job compares a run with).
     #
     # We refresh whenever host-test completes (success OR failure), not only
     # on full green. An unrelated shard flake otherwise freezes the memory
@@ -1641,6 +1775,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+      # host-test-time.mjs reads the shards' step times from the jobs API.
+      actions: read
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1682,7 +1818,7 @@ jobs:
           name: host-test-report-merged
           path: merged-junit-report
 
-      - name: Update memory baseline and shard timings
+      - name: Update memory baseline, shard timings, test time and peak heap baselines
         # Retry from the latest main: another PR may merge to main while host
         # CI is running (~15+ min), causing `git push` to be rejected. On each
         # retry we fetch and hard-reset to the freshest tip-of-main, then
@@ -1695,6 +1831,8 @@ jobs:
         # ignore intervening `[skip ci]` baseline-update commits from this
         # same job because those don't represent newer code, just concurrent
         # baseline updates that the merge-aware script handles correctly.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -1714,6 +1852,13 @@ jobs:
 
             node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
 
+            # Non-fatal for the same reason as the shard timings below: a
+            # GitHub API failure here must not hold back the memory baseline.
+            node packages/host/scripts/host-test-time.mjs update packages/host/test-time-baseline.json ||
+              echo "::warning title=Test time baseline not refreshed::host-test-time.mjs update failed"
+            node packages/host/scripts/host-peak-heap.mjs update all-memory-reports packages/host/peak-heap-baseline.json ||
+              echo "::warning title=Peak heap baseline not refreshed::host-peak-heap.mjs update failed"
+
             # Shard-timing refresh is gated on drift: the file is only
             # rewritten when regenerating it improves the predicted
             # slowest-shard time by over a minute, so balance-equivalent
@@ -1730,11 +1875,11 @@ jobs:
               echo "No merged junit report from a first attempt with every shard passing — leaving shard timings unchanged."
             fi
 
-            if git diff --quiet packages/host/memory-baseline.json packages/host/tests/test-module-timings.json; then
+            if git diff --quiet packages/host/memory-baseline.json packages/host/tests/test-module-timings.json packages/host/test-time-baseline.json packages/host/peak-heap-baseline.json; then
               echo "Baselines unchanged — nothing to commit."
               exit 0
             fi
-            git add packages/host/memory-baseline.json packages/host/tests/test-module-timings.json
+            git add packages/host/memory-baseline.json packages/host/tests/test-module-timings.json packages/host/test-time-baseline.json packages/host/peak-heap-baseline.json
             git commit -m "Update host test baselines [skip ci]"
 
             if git push; then
