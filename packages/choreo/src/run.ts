@@ -177,6 +177,12 @@ interface RunOptions {
   /** the element the camera transform drives (the region's scene wrapper) */
   cameraFrame?: HTMLElement;
   /**
+   * The run replaces one still playing its moves. What it moves is already
+   * moving on screen, so its first frame advances like any other instead of
+   * standing still.
+   */
+  continuing?: boolean;
+  /**
    * Nothing in this region is staying — every participant it can see is a
    * leaver. See the note in `park`: it decides whether a gate this run stops
    * at is a gate anybody could still open.
@@ -481,22 +487,33 @@ export class ChoreoRun implements Run {
    * run started by a render pass would otherwise open with that whole step
    * on its own clock: every cue the clock starts, gates, or drives frame by
    * frame (a camera, a wire, a later cue's start) would begin that far in.
-   * The tweens the run started get the same fresh start from holdBack.
+   * The tweens the run started get the same fresh start from holdBack. A
+   * run that opens `continuing` skips it.
    */
   private freshClock = false;
+  /**
+   * The run replaces one still playing its moves and has not painted yet.
+   * Its first frame continues a motion already on screen, so it advances
+   * like any other frame, the clock and its tweens alike: standing still
+   * there would draw the last frame twice. A later start (a resume, a gate)
+   * is from rest.
+   */
+  private continuing = false;
   /** the frame timestamp holdBack saw last; undefined before its first frame */
   private lastStamp: number | undefined;
   /**
    * motion-dom's clock as the run (re)started ticking. That clock holds one
-   * reading for a whole task, so this is also the time every tween started
-   * or resumed in that task was dated from, however long the task ran on
-   * either side of it.
+   * reading until the microtask queue next drains, and startTicking reads it
+   * in the same synchronous call that started or resumed the run's tweens,
+   * so this is the time they were dated from, however long the task ran
+   * before it.
    */
   private startedAt = 0;
   private autoTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
+    this.continuing = options.continuing ?? false;
     this.reduced = options.reduced ?? false;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
     this.camera3d = options.camera3d ?? {
@@ -934,7 +951,7 @@ export class ChoreoRun implements Run {
       return;
     }
     this.ticking = true;
-    this.freshClock = true;
+    this.freshClock = !this.continuing;
     this.lastStamp = undefined;
     this.startedAt = time.now();
     // read runs before update: the animations tick after the hold-back
@@ -945,9 +962,16 @@ export class ChoreoRun implements Run {
   private stopTicking() {
     if (this.ticking) {
       this.ticking = false;
+      this.continuing = false;
       cancelFrame(this.tick);
       cancelFrame(this.holdBack);
     }
+  }
+
+  /** what one painted frame advances a running clock: the frame loop's delta, capped */
+  private frameStep(data: FrameData) {
+    const step = this.options.maxFrameStep;
+    return step ? Math.min(data.delta, step) : data.delta;
   }
 
   /**
@@ -959,11 +983,12 @@ export class ChoreoRun implements Run {
    *
    * - on the first frame the run paints, to this frame, less the progress
    *   it had as the run started. A tween the pass began was dated from
-   *   motion-dom's clock, which holds one reading for a whole task, so a
-   *   pass late in a long task would date it back to the task's start and
-   *   its first frame would show that much of it gone; it opens at zero
-   *   instead. A tween resuming with the run is dated from the same reading
-   *   less its held time, and keeps it;
+   *   motion-dom's clock, which holds one reading through a synchronous
+   *   stretch of work, so a pass late in a long one would date it back to
+   *   that reading and its first frame would show that much of it gone; it
+   *   opens at zero instead. A tween resuming with the run is dated from
+   *   the same reading less its held time, and keeps it. A `continuing`
+   *   run moves them one ordinary frame further, as its clock moves;
    * - after that, with a cap, on by the time past the cap since the last
    *   frame: it resumes from where the last frame left it, plus one step.
    *
@@ -980,6 +1005,12 @@ export class ChoreoRun implements Run {
     if (!step) {
       // no cap: the fresh start is this frame's only business
       cancelFrame(this.holdBack);
+    }
+    // the first frame of a run continuing one in flight is an ordinary one
+    const opening =
+      last === undefined && this.continuing ? this.frameStep(data) : 0;
+    if (last === undefined) {
+      this.continuing = false;
     }
     for (const t of this.tracks) {
       for (const c of t.controls ?? []) {
@@ -1009,7 +1040,7 @@ export class ChoreoRun implements Run {
         }
         if (last === undefined) {
           const progress = Math.max(0, this.startedAt - inner.startTime);
-          inner.startTime = data.timestamp - progress;
+          inner.startTime = data.timestamp - progress - opening;
         } else if (step && data.timestamp - last > step) {
           inner.startTime += data.timestamp - last - step;
         }
@@ -1022,12 +1053,7 @@ export class ChoreoRun implements Run {
       this.stopTicking();
       return;
     }
-    const step = this.options.maxFrameStep;
-    const delta = this.freshClock
-      ? 0
-      : step
-        ? Math.min(data.delta, step)
-        : data.delta;
+    const delta = this.freshClock ? 0 : this.frameStep(data);
     this.freshClock = false;
     const next = this.master + delta * this.rate;
     const gate = this.gates.find(
