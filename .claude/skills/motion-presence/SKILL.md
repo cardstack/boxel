@@ -39,7 +39,10 @@ const keyOf = (todo) => todo.id;
   `packages/choreo-gallery/realm/shell/gallery-grid.gts`).
 - `@mode`: `"sync"` (default — leavers and newcomers together), `"wait"`
   (newcomer holds until the leaver finishes), `"popLayout"` (leaver out of
-  flow immediately so siblings close up; `@anchorX`/`@anchorY` available).
+  flow immediately so siblings close up; `@anchorX`/`@anchorY` available),
+  `"snapshot"` (glimmer-motion's own: the leaver's block goes with the
+  render, and a static, inert copy of its last frame plays its exit out of
+  flow — see below).
 - `@initial={{false}}` skips the first-render entrance. **Caution:** the
   presence context is inherited — blocking the first entrance blocks it for
   every motion node inside the block too. If children animate on mount,
@@ -56,6 +59,12 @@ anything the exit needs — the label the panel showed, the row the modal flew
 from — must ride on the item `<Presence>` yields, not be read back out of
 state that has already moved on. The modifier freezes an exiting element's
 _props_, but your template's own bindings are yours to keep stable.
+
+When the leaver renders content you can't put on the item — a component's
+caller blocks, `...attributes`, test hooks — use `@mode="snapshot"`: nothing
+live stays behind, so nothing re-renders and no hook is duplicated. The copy
+is a picture, so motion elements nested in it don't play their own exits.
+`packages/host/app/components/pill-menu/index.gts` is the worked example.
 
 ## When NOT
 

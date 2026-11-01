@@ -37,6 +37,7 @@ import {
   SVGVisualElement,
   visualElementStore,
 } from 'motion-dom';
+import { MotionGlobalConfig } from 'motion-utils';
 
 import { registerBusyProbe } from './activity.ts';
 import { initFeatures } from './features.ts';
@@ -64,6 +65,19 @@ import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
 import { motionSpeed, onMotionSpeed, slowed } from './speed.ts';
 import { styleValue } from './unitless.ts';
+
+/**
+ * The values motion-dom can hand to the browser to play (its
+ * `acceleratedValues`), each with the property its computed style shows it
+ * under. While the browser plays one, its motion value does not follow frame
+ * by frame.
+ */
+const BROWSER_PLAYED: Record<string, string> = {
+  opacity: 'opacity',
+  clipPath: 'clip-path',
+  filter: 'filter',
+  transform: 'transform',
+};
 
 /** motion-dom's own `defaultLayoutTransition`, which it does not export */
 const DEFAULT_LAYOUT_TRANSITION = {
@@ -272,7 +286,7 @@ const pendingPops: { apply: () => void }[] = [];
 let popFlushBooked = false;
 
 /** where a popLayout leaver is sitting, and the box it has to be pinned inside */
-interface PopSeat {
+export interface PopSeat {
   h: number;
   isRTL: boolean;
   left: number;
@@ -282,7 +296,29 @@ interface PopSeat {
   w: number;
 }
 
-function seatOf(el: MotionEl): PopSeat | undefined {
+/**
+ * The two insets that pin a box lifted out of flow to its seat: one inline,
+ * from the side `anchorX` names (mirrored in right-to-left text), and one
+ * block, from the side `anchorY` names.
+ */
+export function seatInsets(
+  seat: PopSeat,
+  anchorX: 'left' | 'right',
+  anchorY: 'top' | 'bottom',
+): {
+  block: ['top' | 'bottom', number];
+  inline: ['left' | 'right', number];
+} {
+  const { w, h, top, left, parentWidth, parentHeight, isRTL } = seat;
+  const fromLeft = (anchorX === 'left') !== isRTL;
+  return {
+    inline: fromLeft ? ['left', left] : ['right', parentWidth - w - left],
+    block:
+      anchorY === 'bottom' ? ['bottom', parentHeight - h - top] : ['top', top],
+  };
+}
+
+export function seatOf(el: MotionEl): PopSeat | undefined {
   const parent = (el as HTMLElement).offsetParent as HTMLElement | null;
   const cs = getComputedStyle(el);
   const w = parseFloat(cs.width),
@@ -1322,6 +1358,59 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     }
   }
 
+  /**
+   * `<Presence @mode="snapshot">`: what a static copy of this element needs to
+   * play the exit this element would have played. <Presence> reads it from
+   * its diff, before the render that removes the element.
+   *
+   * The copy starts from every value this element shows now. The browser
+   * plays some of them (opacity, clip-path, filter, a whole transform), and a
+   * motion value does not follow those frame by frame, so those are read from
+   * the computed style. The copy inherits nothing from the variant tree: the
+   * tree it would inherit from has already moved on.
+   *
+   * Undefined when there is no exit to play: the element declares no `exit`
+   * of its own, has not mounted, or animations are skipped.
+   */
+  exitForCopy(): { element: MotionEl; props: MotionProps } | undefined {
+    const { element, ve, latest } = this;
+    if (this.destroyed || !element?.isConnected || !ve?.current || !latest) {
+      return undefined;
+    }
+    const props = latest.props as MotionProps;
+    if (
+      props.exit === undefined ||
+      this.config.skipAnimations ||
+      MotionGlobalConfig.skipAnimations ||
+      MotionGlobalConfig.instantAnimations
+    ) {
+      return undefined;
+    }
+    const computed = getComputedStyle(element);
+    const initial: Record<string, string | number> = {};
+    ve.values.forEach((value, key) => {
+      const css = BROWSER_PLAYED[key];
+      if (css) {
+        const shown = computed.getPropertyValue(css);
+        initial[key] = key === 'opacity' ? parseFloat(shown) : shown;
+      } else {
+        initial[key] = value.get() as string | number;
+      }
+    });
+    return {
+      element,
+      props: {
+        initial,
+        exit: props.exit,
+        variants: props.variants,
+        transition: props.transition,
+        custom: props.custom,
+        transformTemplate: props.transformTemplate,
+        inherit: false,
+      },
+    };
+  }
+
   /** popLayout: a leaving element is lifted out of flow at its last box so siblings can close up */
   private pop(el: MotionEl, isPresent: boolean, handle: PresenceHandle) {
     if (isPresent) {
@@ -1338,18 +1427,10 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     if (!seat) {
       return;
     }
-    const { w, h, top, left, parentWidth, parentHeight, isRTL } = seat;
-    const right = parentWidth - w - left,
-      bottom = parentHeight - h - top;
-    const x =
-      handle.anchorX === 'left'
-        ? isRTL
-          ? `right:${right}`
-          : `left:${left}`
-        : isRTL
-          ? `left:${left}`
-          : `right:${right}`;
-    const y = handle.anchorY === 'bottom' ? `bottom:${bottom}` : `top:${top}`;
+    const { w, h } = seat;
+    const { inline, block } = seatInsets(seat, handle.anchorX, handle.anchorY);
+    const x = `${inline[0]}:${inline[1]}`;
+    const y = `${block[0]}:${block[1]}`;
     const id = `pop-${Math.random().toString(36).slice(2, 8)}`;
     el.dataset['motionPopId'] = id;
     // measured above against the layout as it stands; the lift itself waits
