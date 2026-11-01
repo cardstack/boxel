@@ -6,6 +6,7 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   EVENT_FEED_MAX_CHECKS_PER_EVENT,
+  DbFeedStore,
   parseAddressRanges,
   RealmEventFeed,
   rri,
@@ -19,6 +20,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
@@ -649,8 +651,8 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
       throw new Error('the gate could not be asked');
     });
     await feed.ingest(changed('Card/1'));
-    assert.deepEqual(feed.window().events, [
-      { v: 1, seq: 1, kind: 'reset', path: '' },
+    assert.deepEqual((await feed.window()).events, [
+      { v: 1, seq: 1, kind: 'reset', path: '', spread: 250 },
     ]);
   });
 
@@ -666,8 +668,8 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
     );
     await feed.ingest(changed(...paths));
     assert.strictEqual(checked, 0, 'no card is read');
-    assert.deepEqual(feed.window().events, [
-      { v: 1, seq: 1, kind: 'reset', path: '' },
+    assert.deepEqual((await feed.window()).events, [
+      { v: 1, seq: 1, kind: 'reset', path: '', spread: 250 },
     ]);
   });
 
@@ -680,7 +682,7 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
         '@cardstack/base/card-api/CardDef',
       ],
     } as never);
-    assert.deepEqual(feed.window().events[0].types, [
+    assert.deepEqual((await feed.window()).events[0].types, [
       'article/Article',
       '@cardstack/base/card-api/CardDef',
     ]);
@@ -695,7 +697,7 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
         'http://elsewhere.test/library/book/Book',
       ],
     } as never);
-    assert.strictEqual(feed.window().events[0].types, undefined);
+    assert.strictEqual((await feed.window()).events[0].types, undefined);
   });
 
   test('a change written by an operation names it, on its write and on its index pass', async function (assert) {
@@ -711,7 +713,10 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
     );
     await feed.ingest(changed('Game/1'));
     assert.deepEqual(
-      feed.window().events.map(({ kind, operation }) => ({ kind, operation })),
+      (await feed.window()).events.map(({ kind, operation }) => ({
+        kind,
+        operation,
+      })),
       [
         { kind: 'written', operation: { name: 'answer', base: 'transform' } },
         { kind: 'indexed', operation: { name: 'answer', base: 'transform' } },
@@ -727,7 +732,9 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
       removed: ['Game/1.json'],
       realmURL: REALM,
     } as never);
-    let removed = feed.window().events.find((e) => e.kind === 'removed');
+    let removed = (await feed.window()).events.find(
+      (e) => e.kind === 'removed',
+    );
     assert.deepEqual(removed?.operation, { name: 'delete', base: 'delete' });
   });
 
@@ -738,8 +745,99 @@ module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
       updated: ['realm.json'],
       realmURL: REALM,
     } as never);
-    assert.deepEqual(feed.window().events, [
-      { v: 1, seq: 1, kind: 'reset', path: '' },
+    assert.deepEqual((await feed.window()).events, [
+      { v: 1, seq: 1, kind: 'reset', path: '', spread: 250 },
     ]);
+  });
+});
+
+module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
+  const REALM = 'http://feed.test/stored/';
+  let dbAdapter: PgAdapter;
+
+  setupDB(hooks, {
+    beforeEach: async (adapter) => {
+      dbAdapter = adapter;
+    },
+  });
+
+  function feed() {
+    return new RealmEventFeed(
+      REALM,
+      async () => ({}),
+      new DbFeedStore(dbAdapter),
+    );
+  }
+
+  function changed(path: string) {
+    return {
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [new URL(path, REALM).href],
+      realmURL: REALM,
+    } as RealmEventContent;
+  }
+
+  test('a feed found stored keeps its epoch and positions, and announces one reset', async function (assert) {
+    let first = feed();
+    await first.ingest(changed('Card/1'));
+    let before = await first.window();
+
+    let restarted = feed();
+    let after = await restarted.window();
+    assert.strictEqual(after.epoch, before.epoch, 'the epoch carries on');
+    assert.deepEqual(
+      after.events.map(({ seq, kind, path }) => ({ seq, kind, path })),
+      [
+        { seq: 1, kind: 'indexed', path: 'Card/1' },
+        { seq: 2, kind: 'reset', path: '' },
+      ],
+      'what was announced before is still there to resume from, then one reset',
+    );
+    assert.deepEqual(
+      await restarted.replay(`${before.epoch}:1`),
+      [after.events[1]!],
+      'a client that held position 1 resumes from it',
+    );
+  });
+
+  test('two feeds on one database give out one sequence, and each hears the other', async function (assert) {
+    let one = feed();
+    let two = feed();
+    await one.ingest(changed('Card/1'));
+    await two.ready();
+    await two.ingest(changed('Card/2'));
+    let heard: number[] = [];
+    one.subscribe((event) => heard.push(event.seq));
+    await one.catchUp();
+    let window = await one.window();
+    assert.deepEqual(
+      window.events.map(({ seq, kind, path }) => ({ seq, kind, path })),
+      [
+        { seq: 1, kind: 'indexed', path: 'Card/1' },
+        { seq: 2, kind: 'reset', path: '' },
+        { seq: 3, kind: 'indexed', path: 'Card/2' },
+      ],
+    );
+    assert.deepEqual(heard, [2, 3], 'one passes on what two appended');
+
+    await one.ingest(changed('Card/3'));
+    await two.catchUp();
+    assert.deepEqual(
+      (await two.window()).events.map((event) => event.seq),
+      [1, 2, 3, 4],
+      'and two hears what one appends after',
+    );
+  });
+
+  test('a refresh accepted by one process is refused by another within the cooldown', async function (assert) {
+    let one = feed();
+    let two = feed();
+    assert.deepEqual(await one.requestRefresh(), { accepted: true });
+    let refused = await two.requestRefresh();
+    assert.false(refused.accepted, 'the cooldown is stored, not per process');
+    if (!refused.accepted) {
+      assert.ok(refused.retryAfterMs > 0, 'and says how long to wait');
+    }
   });
 });

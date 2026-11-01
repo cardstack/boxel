@@ -1,6 +1,7 @@
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import { logger } from './log.ts';
+import { MemoryFeedStore, type FeedStore } from './event-feed-store.ts';
 
 // A realm's event feed (ADR 020): one small invalidation per change to a
 // card the feed's audience may read under the realm's permissions and policy,
@@ -77,6 +78,10 @@ export interface FeedEvent {
   // is announced before indexing, when the read would still find the last
   // revision.
   rev?: string;
+  // For a `reset`: the milliseconds a client spreads its revalidation over,
+  // sized by the realm to the audience it serves (ADR 020 §1.3), so a crowd
+  // revalidating everything doesn't arrive at once.
+  spread?: number;
 }
 
 // What the cacheable poll answers: the head of the sequence and the latest
@@ -87,6 +92,9 @@ export interface FeedEventWindow {
   epoch: string;
   head: number;
   events: FeedEvent[];
+  // The spread a reset gets now, for a client that finds it fell behind the
+  // window and resets itself.
+  spread?: number;
 }
 
 // How many events the feed keeps for replay and for the poll's window.
@@ -159,14 +167,37 @@ export function changesIn(
 // card, and the revision they read it at when the realm can name one.
 export type FeedReadability = false | { rev?: string };
 
-// One realm's feed, held in memory by the process that serves the realm.
-// `mayRead` answers whether a visitor who isn't signed in may read a card, as
-// the realm itself answers that visitor's read (ADR 020 §1.2). It is asked
-// once per change, never per subscriber.
+// One realm's feed. `mayRead` answers whether a visitor who isn't signed in
+// may read a card, as the realm itself answers that visitor's read (ADR 020
+// §1.2); it is asked once per change, never per subscriber. Positions come
+// from the store, which every process serving the realm shares (ADR 020
+// §1.3); this process keeps the recent window in memory for reads, and hears
+// what other processes append through `catchUp`.
+// How long a feed whose store failed waits before announcing the reset that
+// covers what it lost.
+const EVENT_FEED_STORE_RETRY_MS = 1000;
+
+// A reset's spread: a floor, a share per member of the audience, and a cap. A
+// poll reaches the realm about once every 3 s per client, and less behind a
+// shared cache, so polls in the last minute over 20 is a floor on how many
+// clients poll.
+const RESET_SPREAD_MIN_MS = 250;
+const RESET_SPREAD_PER_CLIENT_MS = 10;
+const RESET_SPREAD_MAX_MS = 30_000;
+const POLLS_PER_CLIENT_PER_MINUTE = 20;
+
 export class RealmEventFeed {
-  readonly epoch = randomEpoch();
+  #epoch = '';
   #seq = 0;
   #events: FeedEvent[] = [];
+  #loaded: Promise<void> | undefined;
+  // Announcements waiting for the store to give them positions, and the
+  // chain that hands them over in order.
+  #outbox: Omit<FeedEvent, 'seq'>[] = [];
+  #appending: Promise<void> = Promise.resolve();
+  #retryingReset = false;
+  // Poll reads this minute and last, for sizing a reset's spread.
+  #polls = { minute: 0, count: 0, previous: 0 };
   #subscribers = new Set<(event: FeedEvent) => void>();
   // Cards this feed has announced as readable, so a removal is announced
   // only for a card a visitor could have seen.
@@ -181,27 +212,49 @@ export class RealmEventFeed {
   // The operation that wrote each path, held from its write until its index
   // pass is announced, so the `indexed` event names it too.
   #wroteBy = new Map<string, { operation: FeedOperation; at: number }>();
-  #lastRefresh: number | undefined;
 
   readonly realmURL: string;
   private mayRead: (cardURL: string) => Promise<FeedReadability>;
+  private store: FeedStore;
 
   constructor(
     realmURL: string,
     mayRead: (cardURL: string) => Promise<FeedReadability>,
+    store: FeedStore = new MemoryFeedStore(),
   ) {
     this.realmURL = realmURL;
     this.mayRead = mayRead;
+    this.store = store;
+  }
+
+  get epoch(): string {
+    return this.#epoch;
   }
 
   get head(): number {
     return this.#seq;
   }
 
+  // Loads the feed from its store, once. A feed found stored is one a
+  // process served before, so it announces one reset: a card removed or
+  // withdrawn while nobody was watching is found by every client's
+  // revalidation (ADR 020 §1.2).
+  ready(): Promise<void> {
+    this.#loaded ??= (async () => {
+      let loaded = await this.store.load(this.realmURL, EVENT_FEED_WINDOW);
+      this.#epoch = loaded.epoch;
+      this.#seq = loaded.head;
+      this.#events = loaded.events;
+      if (loaded.restarted) {
+        this.reset();
+      }
+    })();
+    return this.#loaded;
+  }
+
   // Takes a realm event in. Events are judged and announced in the order
-  // they arrive.
-  // `operations` names the operation that wrote each card, by card URL, for a
-  // write that ran through `_operations`.
+  // they arrive. `operations` names the operation that wrote each card, by
+  // card URL, for a write that ran through `_operations`.
   ingest(
     event: RealmEventContent,
     operations?: Record<string, FeedOperation>,
@@ -225,7 +278,54 @@ export class RealmEventFeed {
   // permissions or the policy it names.
   reset() {
     this.#visible.clear();
-    this.#announce('reset', '');
+    this.#announce(
+      'reset',
+      '',
+      undefined,
+      undefined,
+      undefined,
+      this.#spread(),
+    );
+  }
+
+  // How long clients should spread a reset's revalidation over: longer the
+  // more clients this process serves.
+  #spread(): number {
+    let audience =
+      this.#subscribers.size +
+      Math.ceil(this.#pollsLastMinute() / POLLS_PER_CLIENT_PER_MINUTE);
+    return Math.min(
+      RESET_SPREAD_MAX_MS,
+      RESET_SPREAD_MIN_MS + audience * RESET_SPREAD_PER_CLIENT_MS,
+    );
+  }
+
+  #countPoll() {
+    let minute = Math.floor(Date.now() / 60_000);
+    if (minute !== this.#polls.minute) {
+      this.#polls = {
+        minute,
+        count: 0,
+        previous: minute === this.#polls.minute + 1 ? this.#polls.count : 0,
+      };
+    }
+    this.#polls.count++;
+  }
+
+  #pollsLastMinute(): number {
+    let minute = Math.floor(Date.now() / 60_000);
+    if (minute === this.#polls.minute) {
+      return this.#polls.count + this.#polls.previous;
+    }
+    return minute === this.#polls.minute + 1 ? this.#polls.count : 0;
+  }
+
+  // Reads what other processes appended since this one last looked, and
+  // passes it to this process's subscribers.
+  async catchUp(): Promise<void> {
+    await this.ready();
+    await this.#appending;
+    this.#deliver(await this.store.after(this.realmURL, this.#seq));
   }
 
   async #ingest(
@@ -289,6 +389,7 @@ export class RealmEventFeed {
         operation,
       );
     }
+    await this.#appending;
   }
 
   // The operation to name for a change: the one that wrote it, remembered
@@ -337,6 +438,7 @@ export class RealmEventFeed {
     rev?: string,
     types?: string[],
     operation?: FeedOperation,
+    spread?: number,
   ) {
     let now = Date.now();
     let last = this.#lastKind.get(path);
@@ -353,62 +455,125 @@ export class RealmEventFeed {
     if (this.#lastKind.size > EVENT_FEED_WINDOW * 4) {
       this.#lastKind.clear();
     }
-    let event: FeedEvent = {
+    this.#outbox.push({
       v: EVENT_FEED_VERSION,
-      seq: ++this.#seq,
       kind,
       path,
       ...(rev ? { rev } : {}),
       ...(types ? { types } : {}),
       ...(operation ? { operation } : {}),
-    };
-    this.#events.push(event);
+      ...(spread ? { spread } : {}),
+    });
+    this.#appending = this.#appending.then(() => this.#flush());
+  }
+
+  // Hands the waiting announcements to the store, which gives them their
+  // positions, and passes them on. A store that fails loses them: the feed
+  // logs it and, a moment later, announces a reset, so clients revalidate
+  // rather than miss them.
+  async #flush() {
+    if (this.#outbox.length === 0) {
+      return;
+    }
+    let batch = this.#outbox;
+    this.#outbox = [];
+    try {
+      await this.ready();
+      let appended = await this.store.append(
+        this.realmURL,
+        batch,
+        EVENT_FEED_WINDOW,
+      );
+      // Another process appended between this one's last position and these:
+      // read the gap with them, so this process's subscribers miss nothing.
+      if (appended.length > 0 && appended[0]!.seq !== this.#seq + 1) {
+        appended = await this.store.after(this.realmURL, this.#seq);
+      }
+      this.#deliver(appended);
+    } catch (error: unknown) {
+      log.warn(`event feed for ${this.realmURL} could not record events`, {
+        error,
+      });
+      if (!this.#retryingReset) {
+        this.#retryingReset = true;
+        setTimeout(() => {
+          this.#retryingReset = false;
+          this.reset();
+        }, EVENT_FEED_STORE_RETRY_MS);
+      }
+    }
+  }
+
+  // Takes positioned events in, in order, skipping any already held, and
+  // passes them to this process's subscribers.
+  #deliver(events: FeedEvent[]) {
+    for (let event of [...events].sort((a, b) => a.seq - b.seq)) {
+      if (event.seq <= this.#seq) {
+        continue;
+      }
+      this.#seq = event.seq;
+      this.#events.push(event);
+      for (let subscriber of [...this.#subscribers]) {
+        subscriber(event);
+      }
+    }
     if (this.#events.length > EVENT_FEED_WINDOW) {
       this.#events.splice(0, this.#events.length - EVENT_FEED_WINDOW);
-    }
-    for (let subscriber of [...this.#subscribers]) {
-      subscriber(event);
     }
   }
 
   // A writer's request that every page following the feed reload (ADR 020
-  // §1.7). Refused within the cooldown of the last accepted one, with how
-  // long until another would be accepted.
-  requestRefresh(
-    now = Date.now(),
-  ): { accepted: true } | { accepted: false; retryAfterMs: number } {
-    if (this.#lastRefresh !== undefined) {
-      let wait = this.#lastRefresh + EVENT_FEED_REFRESH_COOLDOWN_MS - now;
-      if (wait > 0) {
-        return { accepted: false, retryAfterMs: wait };
-      }
+  // §1.7). Refused within the cooldown of the last accepted one, across every
+  // process serving the realm, with how long until another is accepted.
+  async requestRefresh(): Promise<
+    { accepted: true } | { accepted: false; retryAfterMs: number }
+  > {
+    await this.ready();
+    let claim = await this.store.claimRefresh(
+      this.realmURL,
+      EVENT_FEED_REFRESH_COOLDOWN_MS,
+    );
+    if (claim.accepted) {
+      this.#announce('refresh', '');
+      await this.#appending;
     }
-    this.#lastRefresh = now;
-    this.#announce('refresh', '');
-    return { accepted: true };
+    return claim;
   }
 
-  window(): FeedEventWindow {
+  // What the poll answers. Each call counts as one poll, for sizing resets.
+  async window(): Promise<FeedEventWindow> {
+    this.#countPoll();
+    await this.ready();
+    await this.#appending;
     return {
       v: EVENT_FEED_VERSION,
-      epoch: this.epoch,
+      epoch: this.#epoch,
       head: this.#seq,
       events: [...this.#events],
+      spread: this.#spread(),
     };
   }
 
   // The events after `lastEventId` (an id this feed sent), or a reset when
   // that id is from another epoch or older than the window holds.
-  replay(lastEventId: string | null): FeedEvent[] {
+  async replay(lastEventId: string | null): Promise<FeedEvent[]> {
+    await this.ready();
+    await this.#appending;
     if (!lastEventId) {
       return [];
     }
     let [epoch, seqText] = lastEventId.split(':');
     let seq = Number(seqText);
     let oldest = this.#events[0]?.seq ?? this.#seq + 1;
-    if (epoch !== this.epoch || !Number.isInteger(seq) || seq < oldest - 1) {
+    if (epoch !== this.#epoch || !Number.isInteger(seq) || seq < oldest - 1) {
       return [
-        { v: EVENT_FEED_VERSION, seq: this.#seq, kind: 'reset', path: '' },
+        {
+          v: EVENT_FEED_VERSION,
+          seq: this.#seq,
+          kind: 'reset',
+          path: '',
+          spread: this.#spread(),
+        },
       ];
     }
     return this.#events.filter((event) => event.seq > seq);
@@ -463,10 +628,4 @@ export function feedTypes(
     }
   }
   return types;
-}
-
-// An epoch nobody can predict or collide with, so a client never mistakes a
-// restarted feed's positions for the ones it held.
-function randomEpoch(): string {
-  return globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }

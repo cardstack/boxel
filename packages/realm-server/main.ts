@@ -48,6 +48,7 @@ import { realmDiskPath } from './lib/realm-disk-path.ts';
 import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
+import { RealmFeedEventsListener } from './lib/realm-feed-events-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
@@ -657,6 +658,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
+  let feedEventsListener: RealmFeedEventsListener | undefined;
   let jobsFinishedListener: JobsFinishedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
@@ -989,6 +991,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           indexUpdatedListener?.shutDown(),
+          feedEventsListener?.shutDown(),
           jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
@@ -1136,6 +1139,15 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     listMountedRealms: () => realms,
   });
   await indexUpdatedListener.start();
+
+  // The event feed's cross-process delivery (ADR 020 §1.3): a peer's append
+  // reaches the clients connected to this process.
+  feedEventsListener = new RealmFeedEventsListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+    listMountedRealms: () => realms,
+  });
+  await feedEventsListener.start();
 
   // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
   // On `jobs_finished` it drops the finished job's cache rows immediately

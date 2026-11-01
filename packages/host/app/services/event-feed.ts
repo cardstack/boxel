@@ -344,7 +344,13 @@ export default class EventFeedService extends Service {
         this.relay(realm, base, event);
       }
     };
-    let delay = Math.floor(Math.random() * this.relaySpreadMs);
+    // A reset has every visitor revalidate everything, so it is spread over
+    // the time the realm sized to its audience (ADR 020 §1.3).
+    let spread =
+      event.kind === 'reset' && this.relaySpreadMs > 0
+        ? Math.max(this.relaySpreadMs, event.spread ?? 0)
+        : this.relaySpreadMs;
+    let delay = Math.floor(Math.random() * spread);
     if (delay <= 0) {
       relay();
     } else {
@@ -537,7 +543,15 @@ function pollFeed(
           // The realm restarted, or more changed than the window holds.
           epoch = answer.epoch;
           seen = answer.head;
-          deliver({ seq: answer.head, kind: 'reset', path: '' }, idOf(seen));
+          deliver(
+            {
+              seq: answer.head,
+              kind: 'reset',
+              path: '',
+              ...(answer.spread ? { spread: answer.spread } : {}),
+            },
+            idOf(seen),
+          );
         } else {
           for (let event of answer.events) {
             if (event.seq > seen) {

@@ -12,6 +12,7 @@ import {
   RealmEventFeed,
   type FeedOperation,
 } from './event-feed.ts';
+import { DbFeedStore, MemoryFeedStore } from './event-feed-store.ts';
 import {
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
@@ -18056,6 +18057,12 @@ export class Realm {
           ? { rev: cardRevisionOf(response.headers.get('etag')) }
           : false;
       },
+      // A realm served from Postgres shares its feed's sequence with every
+      // process serving it (ADR 020 §1.3); one the host runs in the browser
+      // keeps it in memory.
+      this.#dbAdapter.kind === 'pg'
+        ? new DbFeedStore(this.#dbAdapter)
+        : new MemoryFeedStore(),
     );
     return this.#eventFeedInstance;
   }
@@ -18078,7 +18085,7 @@ export class Realm {
       request.headers.get('last-event-id') ??
       new URL(request.url).searchParams.get('lastEventId');
     open.write(`retry: 3000\n\n`);
-    for (let event of feed.replay(lastEventId)) {
+    for (let event of await feed.replay(lastEventId)) {
       open.write(feed.serialize(event));
     }
     let unsubscribe = feed.subscribe((event) =>
@@ -18116,7 +18123,7 @@ export class Realm {
   ): Promise<Response> {
     servedAnonymous(requestContext);
     return createResponse({
-      body: JSON.stringify(this.#eventFeed.window()),
+      body: JSON.stringify(await this.#eventFeed.window()),
       init: {
         headers: {
           'Content-Type': SupportedMimeType.JSON,
@@ -18131,7 +18138,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let answer = this.#eventFeed.requestRefresh();
+    let answer = await this.#eventFeed.requestRefresh();
     if (!answer.accepted) {
       let seconds = Math.ceil(answer.retryAfterMs / 1000);
       return createResponse({
@@ -18162,6 +18169,12 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // Another process serving this realm appended to its event feed: pass what
+  // it appended to this process's subscribers.
+  async catchUpEventFeed(): Promise<void> {
+    await this.#eventFeedInstance?.catchUp();
   }
 
   private sendIndexInitiationEvent(updatedFile: string) {

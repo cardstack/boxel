@@ -1920,6 +1920,7 @@ export * from './worker.ts';
 export * from './stream.ts';
 export * from './realm.ts';
 export * from './event-feed.ts';
+export * from './event-feed-store.ts';
 export type { AnonymousCaller, AnonymousCount } from './anonymous-admission.ts';
 export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
