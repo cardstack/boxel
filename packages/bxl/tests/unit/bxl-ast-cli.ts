@@ -475,6 +475,37 @@ deepStrictEqual(
   },
   'predicate profile does not treat validator.js functions as SQL-lowerable',
 );
+// sha256 is a classified pure scalar: an explicit allow in every denylist
+// profile, including the two write-time ones and transform, and refused by
+// the allowlist profiles, which cannot lower or route it.
+for (const profile of [
+  'mutation',
+  'transform',
+  'derive',
+  'policy',
+  'authorization',
+] as const) {
+  deepStrictEqual(
+    classifyBxlProfileFunction(profile, 'sha256'),
+    { safety: 'allow', normalizedName: 'SHA256', category: 'boundedScalar' },
+    `${profile} profile allows sha256`,
+  );
+  strictEqual(
+    parseBxlAst('sha256("seed" + .id)', {
+      readableSyntax: false,
+      profile,
+    }).profileIssues.filter((issue) => issue.severity === 'error').length,
+    0,
+    `${profile} profile raises no issue for a sha256 call`,
+  );
+}
+for (const profile of ['predicate', 'route'] as const) {
+  strictEqual(
+    classifyBxlProfileFunction(profile, 'sha256').safety,
+    'deny',
+    `${profile} profile refuses sha256`,
+  );
+}
 deepStrictEqual(
   classifyBxlProfileFunction('policy', 'isAfter'),
   {

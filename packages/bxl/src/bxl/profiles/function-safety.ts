@@ -127,7 +127,17 @@ export const BXL_AUTHORIZATION_GRAPH_CALLS = names([
   'via',
 ]);
 
+/**
+ * Pure scalar calls: bounded work, and an answer that depends on nothing but
+ * their arguments. Classifying them is what makes the decision an
+ * explicit `allow` in every denylist profile rather than an `unclassified` one;
+ * the allowlist profiles (`predicate`, `route`) still refuse them.
+ *
+ * `sha256` is here for a deterministic ordering a reader can recompute, such
+ * as a lottery keyed on `sha256(seed + id)` in a mutation or transform.
+ */
 export const BXL_BOUNDED_SCALAR_CALLS = names([
+  'sha256',
   'ACCRINT',
   'BASE',
   'BESSELI',
