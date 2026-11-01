@@ -111,8 +111,11 @@ events with its own (§1.10), never both, and MUST follow all the realms a site 
 connection, through the site's boundary (ADR 018). It MUST stop following a
 realm when nothing on the page watches it. It MUST deliver each event through the same path as Matrix realm
 events (`MessageService`), so live searches and resources need no second
-mechanism. Signed-in sessions MUST keep receiving realm events through
-Matrix.
+mechanism. Signed-in sessions MUST keep receiving realm events through Matrix, and
+every page, signed in or not, MUST follow a card's live channel through the
+feed: Matrix carries a realm's events but never a channel's messages. The
+functions that let a card follow a channel and take refresh requests MUST be
+offered by every card context the host provides.
 
 ### 1.7. A refresh request, for what a re-read can't bring in
 
@@ -121,8 +124,12 @@ no re-read carries, such as a new build of the app. The request MUST travel
 as a feed event of its own kind that names nothing but its position. The
 realm MUST accept it only from a writer of the realm, and MUST refuse one
 that arrives within a minute of the last. It MUST NOT stand in for a change
-to cards or modules, which reach a page as invalidations. A page MUST honour a refresh request only from the realm that owns
-its site, so a writer of a realm many sites draw on can't reload them all.
+to cards or modules, which reach a page as invalidations. A page MUST honour a refresh request only from the realm that owns its site,
+so a writer of a realm many sites draw on can't reload them all. On a
+published site that is the published realm, which the page MUST follow for
+its refresh requests though nothing on it reads from that realm. A republish
+replaces the code those pages run, so the realm MUST send one refresh request
+once the republished realm is indexed.
 The once-a-minute limit MUST hold across every process that serves the realm.
 A page MUST be offered the request as a cancelable notice first, through the
 card context rather than a global event, so an app can tell its visitors an
@@ -142,9 +149,12 @@ who they are: unconditionally, or by a condition that reads no `actor()`
 beyond `actor() == "anonymous"`. A subscription whose grant reads the caller
 MUST NOT be served on the broadcast lane: what it shows differs per caller,
 so it can't be filtered once. It MUST be served on the caller's personal
-lane (§1.10), or refused when the realm offers none. Each subscription MUST
-have its own URL, sequence and window, so a shared cache holds it apart from
-the rest of the realm.
+lane (§1.10), or refused when the realm offers none. Each subscription MUST have its own URL, sequence and window, so a shared
+cache holds it apart from the rest of the realm. A card type SHOULD put on a
+channel only the operations whose results must reach other screens at once;
+everything else, a value computed from cards that changed included, reaches
+a page through the realm feed's announcement of the card and its re-read at
+the announced revision.
 
 A card's live channel carries the card's own changes and the messages
 emitted on it. A message MUST be emitted only by invoking an `emit`
@@ -155,10 +165,14 @@ earlier one in the channel's window however old it is, so a page that joins
 late hears where things stand. A channel MUST answer as not found for a card
 its audience may not read. A realm SHOULD give a card whose channel only some
 people should follow an id nobody can guess, such as one the realm mints on
-create, since knowing the card's URL is then what admits a follower. Live,
-superseded state, such as an answer a team may still change, SHOULD travel as
-messages; what must last, such as the answer locked in, MUST be written to a
-card.
+create, since knowing the card's URL is then what admits a follower. Live, superseded state, such as an answer a team may still change, SHOULD
+travel as messages; what must last, such as the answer locked in, MUST be
+written to a card. The realm MUST be what turns messages into that write: a
+transform MAY `collect` the latest messages of an emit from its card's
+channel, read inside its write lock, and a caller MUST NOT be able to supply
+them. An emit MAY `assert` a condition over the card as stored and the realm's
+clock, such as a deadline, and MUST be refused when it doesn't hold, so a
+message that arrives too late never reaches the channel.
 
 ### 1.9. The wire, written down and versioned
 

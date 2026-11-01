@@ -8352,6 +8352,20 @@ export class Realm {
         // the half that response carries. An executor never opens the realm's
         // config document itself, for the reason it opens nothing else.
         realmConfig: () => this.getRealmConfig(),
+        // A transform that `collect`s reads the latest messages of an emit
+        // from the target card's live channel, inside the write lock, after
+        // catching up on what other processes have recorded (ADR 020 §1.8).
+        channelMessages: async ({ cardURL, operation }) => {
+          let path = this.paths.local(new URL(cardURL)).replace(/\.json$/, '');
+          let channel = this.#channel(path);
+          await channel.catchUp();
+          return (await channel.window()).events
+            .filter(
+              (event) =>
+                event.kind === 'message' && event.operation?.name === operation,
+            )
+            .map((event) => event.body as JsonValue);
+        },
       };
     }
     return this.#batchCore;
@@ -18499,6 +18513,13 @@ export class Realm {
     let feed =
       path === undefined ? this.#eventFeedInstance : this.#channels.get(path);
     await feed?.catchUp();
+  }
+
+  // Asks every page following this realm's feed to reload, as a writer's
+  // request does, for the platform's own reasons: a republish replaces what
+  // those pages run (ADR 020 §1.7). Held to the same once-a-minute limit.
+  async requestEventFeedRefresh() {
+    return await this.#eventFeed.requestRefresh();
   }
 
   // Every feed this process has open, after the notifications that would have

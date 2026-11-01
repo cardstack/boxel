@@ -38,6 +38,7 @@ import SecureSignIn from '@cardstack/host/components/matrix/secure-sign-in';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import { liveCardContext } from '@cardstack/host/lib/live-card-context';
 import { signInOnSecureOrigin } from '@cardstack/host/lib/secure-sign-in';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -172,22 +173,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.toolService.toolContext;
   }
 
-  // A card's live channel, followed through the event feed (ADR 020 §1.8).
+  // Following a card's channel and taking refresh requests (ADR 020).
   // Matrix carries the realm's events here, but never a channel's messages.
-  private followChannel: NonNullable<CardContext['followChannel']> = (
-    card,
-    onMessage,
-  ) => {
-    let cardURL = typeof card === 'string' ? card : card.id;
-    if (!cardURL) {
-      return () => {};
-    }
-    return this.eventFeed.followChannel(
-      cardURL,
-      this.realm.realmURLOf(cardURL),
-      onMessage,
-    );
-  };
+  @cached
+  private get live() {
+    return liveCardContext(this.eventFeed, this.realm);
+  }
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
@@ -197,7 +188,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
-      followChannel: this.followChannel,
+      ...this.live,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,

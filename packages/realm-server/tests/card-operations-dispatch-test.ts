@@ -1040,6 +1040,92 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(emitted, 0, 'nothing was emitted');
     });
 
+    // The card an emit's `assert` judges, as its stored file holds it.
+    function quizSource(attributes: Record<string, unknown>): string {
+      return JSON.stringify({
+        data: { type: 'card', attributes, meta: { adoptsFrom: PERSON } },
+      });
+    }
+    const TIMED_SELECT = {
+      select: {
+        base: 'emit',
+        params: { choice: EMIT_PARAM },
+        assert: {
+          that: { $bxl: 'now <= (.lockAt | fromdateiso8601)' },
+          message: 'Time ran out.',
+        },
+      },
+    };
+
+    test('an emit whose assert does not hold against the stored card and the clock is refused, and nothing is emitted', async function (assert) {
+      let { core } = stub({
+        operations: await emitOperations(TIMED_SELECT),
+        source: quizSource({ lockAt: '2020-01-01T00:00:00Z' }),
+      });
+      let emitted = 0;
+      core.emitMessage = async () => {
+        emitted++;
+        return { position: 'epoch-1:1' };
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, {
+          ...invoke(CARD, 'select'),
+          params: { choice: 'a' },
+        }),
+      );
+      assert.strictEqual(error.status, 400);
+      assert.strictEqual(error.code, 'assertion-failed');
+      assert.strictEqual(error.detail, 'Time ran out.', "the author's message");
+      assert.strictEqual(emitted, 0, 'nothing was emitted');
+    });
+
+    test('an emit whose assert holds is emitted', async function (assert) {
+      let { core, calls } = stub({
+        operations: await emitOperations(TIMED_SELECT),
+        source: quizSource({ lockAt: '2999-01-01T00:00:00Z' }),
+      });
+      let emitted = 0;
+      core.emitMessage = async () => {
+        emitted++;
+        return { position: 'epoch-1:1' };
+      };
+      await runOperation(core, {
+        ...invoke(CARD, 'select'),
+        params: { choice: 'a' },
+      });
+      assert.strictEqual(emitted, 1, 'the message went');
+      assert.true(
+        calls.includes('readFileAsText'),
+        'the guard read the card as stored',
+      );
+    });
+
+    test("an emit's assert that answers something other than a boolean is the program's mistake", async function (assert) {
+      let { core } = stub({
+        operations: await emitOperations({
+          select: {
+            base: 'emit',
+            params: { choice: EMIT_PARAM },
+            assert: { that: { $bxl: '.lockAt' } },
+          },
+        }),
+        source: quizSource({ lockAt: '2999-01-01T00:00:00Z' }),
+      });
+      let emitted = 0;
+      core.emitMessage = async () => {
+        emitted++;
+        return { position: 'epoch-1:1' };
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, {
+          ...invoke(CARD, 'select'),
+          params: { choice: 'a' },
+        }),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(emitted, 0, 'nothing was emitted');
+    });
+
     test('a declaration lowering flagged invalid reports its findings', async function (assert) {
       let { core } = stub({
         operations: {

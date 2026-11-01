@@ -361,7 +361,7 @@ export type ReconciledWriteResult = OperationWriteResult & {
 // derived from the card.
 export type OperationDocument = Record<string, unknown>;
 
-// What a emit reports: the card whose live channel carried the message, and
+// What an emit reports: the card whose live channel carried the message, and
 // the position the message took there — the same position a viewer of the
 // channel sees it arrive at, so a caller can tell its own message when the
 // channel brings it back. The card is not written, so there is no version.
@@ -1126,7 +1126,7 @@ function realmHref(realm: string | URL): string {
 // Reading the answer
 // ---------------------------------------------------------------------------
 
-// How a result is read. A write reports an identity, a emit the position
+// How a result is read. A write reports an identity, an emit the position
 // its message took, and a read a document, each settled by the behavior the
 // name is built on. An entry whose target is a search is `opaque`: which
 // behavior its name resolves to is the matched card's own type to decide, so
@@ -1238,7 +1238,7 @@ export function writeResultIn(
     return undefined;
   }
   let meta = (data.meta ?? {}) as Record<string, unknown>;
-  // A emit's answer names its card too, and wrote nothing to reconcile.
+  // An emit's answer names its card too, and wrote nothing to reconcile.
   if (typeof meta.position === 'string' && meta.version === undefined) {
     return undefined;
   }

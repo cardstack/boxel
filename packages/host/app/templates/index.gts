@@ -37,6 +37,7 @@ import config from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
 
+import { liveCardContext } from '@cardstack/host/lib/live-card-context';
 import { startPrerenderHandoff } from '@cardstack/host/lib/prerender-handoff';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -182,21 +183,11 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   private installHostNavigation = modifier(() => this.hostNavigation.install());
 
-  // A card's live channel, followed through the event feed (ADR 020 §1.8).
-  private followChannel: NonNullable<CardContext['followChannel']> = (
-    card,
-    onMessage,
-  ) => {
-    let cardURL = idFromCardOrURL(card);
-    if (!cardURL) {
-      return () => {};
-    }
-    return this.eventFeed.followChannel(
-      cardURL,
-      this.realm.realmURLOf(cardURL),
-      onMessage,
-    );
-  };
+  // Following a card's channel and taking refresh requests (ADR 020).
+  @cached
+  private get live() {
+    return liveCardContext(this.eventFeed, this.realm);
+  }
 
   @action
   removeCardFromStack(cardId: string) {
@@ -211,8 +202,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
-      followChannel: this.followChannel,
-      takeRefreshRequests: (taker) => this.eventFeed.takeRefreshRequests(taker),
+      ...this.live,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,

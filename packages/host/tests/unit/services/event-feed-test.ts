@@ -4,17 +4,23 @@ import { settled } from '@ember/test-helpers';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+
 import {
   noteFeedPosition,
   resetFeedPositionsForTests,
 } from '@cardstack/host/lib/feed-positions';
+
+import { liveCardContext } from '@cardstack/host/lib/live-card-context';
 import type EventFeedService from '@cardstack/host/services/event-feed';
 import type {
   TabChannel,
   TabCoordination,
 } from '@cardstack/host/services/event-feed';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RealmService from '@cardstack/host/services/realm';
 
+import type { CardDef } from '@cardstack/base/card-api';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // A site's realm, as a visitor's page reaches it through the site's alias.
@@ -303,6 +309,26 @@ module('Unit | Service | event-feed', function (hooks) {
     assert.true(
       FakeEventSource.made.some((made) => made.url.includes('channel=')),
       'the channel opens without the realm feeds having started',
+    );
+    unfollow();
+  });
+
+  test("a card is followed through the realm it was read from, even one the realm service doesn't know", function (assert) {
+    let live = liveCardContext(service, {
+      realmURLOf: () => undefined,
+    } as unknown as RealmService);
+    let card = {
+      id: `${REALM}QuizNight/x7k2`,
+      [realmURLSymbol]: new URL(REALM),
+    } as unknown as CardDef;
+    let unfollow = live.followChannel(card, () => undefined);
+    assert.true(
+      FakeEventSource.made.some(
+        (made) =>
+          made.url ===
+          `${REALM}_live?channel=${encodeURIComponent('QuizNight/x7k2')}`,
+      ),
+      "the channel opens under the site's alias",
     );
     unfollow();
   });

@@ -315,11 +315,21 @@ export interface OperationDefinition {
   // The request a `callApi` sends, with the values an invocation fills still
   // holding their markers and every credential still a slot.
   callApi?: OperationCallApi;
-  // A `emit`'s compaction key: an expression over the payload the `input`
+  // An `emit`'s compaction key: an expression over the payload the `input`
   // stage left, which answers the string a later message on the card's
   // channel supersedes an earlier one by. Absent, no message supersedes
   // another.
   key?: OperationProgram;
+  // An `emit`'s precondition: an expression over the card as stored (`.` is
+  // its id and attributes), run in the transform profile so it may read the
+  // clock, which must answer true for the message to go. `message` is what a
+  // refusal says.
+  guard?: { program: OperationProgram; message?: string };
+  // A transform's collected params: each param the program reads, mapped to
+  // the name of the `emit` on the same type whose latest messages the realm
+  // reads off the target card's live channel, under the write lock, and binds
+  // there. A caller cannot send one.
+  collect?: Record<string, string>;
   // The author's short, plain-text phrase for people, shown wherever the
   // operation is presented to someone. Read as data and acted on by nothing.
   // Absent, the operation is shown under its name split into words.
@@ -458,11 +468,16 @@ export type OperationLoweringIssueCode =
   // Lowering itself failed on this operation, rather than finding something
   // wrong with it. The entry is stored as invalid so that invoking it says so.
   | 'lowering-failed'
-  // A `emit` declared under the name of a base operation. A emit writes
+  // An `emit` declared under the name of a base operation. An emit writes
   // nothing, so it would answer that name — an `update`, a `delete` — by
   // writing nothing, and a caller reaching for the built-in would be told it
   // had run.
   | 'emit-under-base-name'
+  // A `collect` that cannot be filled: on a base other than `transform`, not a
+  // map of param names to operation names, naming a param the `params` schema
+  // also declares, or naming an operation that is not an `emit` the type
+  // declares.
+  | 'invalid-collect'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
@@ -765,7 +780,7 @@ export function isWrite(base: BaseOperation): boolean {
 // the realm checks for it. Every write does, and so does a `callApi`: it
 // changes nothing stored, but it acts outside the realm on the realm's
 // behalf, which a caller only permitted to read the realm may not do. So
-// does a `emit`: it stores nothing, but it speaks to every viewer of the
+// does an `emit`: it stores nothing, but it speaks to every viewer of the
 // card on the realm's channel, which a caller only permitted to read may not
 // do unless a grant says so. Neither is staged or committed, so the two
 // questions are asked separately.
@@ -1547,9 +1562,9 @@ export interface OperationCallApiResult {
   callApi: unknown;
 }
 
-// A `emit`'s answer: the card whose channel carried the message, and the
+// An `emit`'s answer: the card whose channel carried the message, and the
 // position the message took there. Its own member rather than an identity
-// result, which reports a version a write left the card at — a emit
+// result, which reports a version a write left the card at — an emit
 // leaves the card as it was, and a reader of an identity result would take
 // its absent version for a write that changed nothing.
 export interface OperationEmitResult {
@@ -1566,12 +1581,21 @@ export interface EmitMessageArgs {
   body: JsonValue;
 }
 
-// Delivers a `emit`'s message on the card's live channel (ADR 020 §1.8,
+// Delivers an `emit`'s message on the card's live channel (ADR 020 §1.8,
 // §1.10), answering the position it took there. Supplied by the realm, which
 // owns the channel.
 export type EmitMessage = (
   args: EmitMessageArgs,
 ) => Promise<{ position: string }>;
+
+// The bodies of the latest message per key that the emit named `operation`
+// published on the card's live channel, in channel order — the channel's
+// compacted window, filtered to that operation. Supplied by the realm, which
+// owns the channel, and read under the write lock on the card.
+export type ChannelMessages = (args: {
+  cardURL: string;
+  operation: string;
+}) => Promise<JsonValue[]>;
 
 export type ValidatedGrantInertia =
   // A grant on a query whose `where` compiled no search filter. A query is
@@ -1785,7 +1809,7 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
-  // The operation is sound and this realm cannot carry it out: a `emit` on
+  // The operation is sound and this realm cannot carry it out: an `emit` on
   // a realm that has no live channel to put the message on. Carries a 501.
   // Nothing was done.
   | 'not-implemented'

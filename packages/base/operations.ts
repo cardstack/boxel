@@ -169,7 +169,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // A `callApi` is a request to a service outside the realm, and only a card
 // that declares one has a request to send.
 //
-// A `emit` sends a message on the card's live channel, and only a card that
+// An `emit` sends a message on the card's live channel, and only a card that
 // declares one says what a message is.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
@@ -569,6 +569,38 @@ export interface TransformOperationDeclaration extends OperationCommon {
   readonly append?: AppendClause;
   readonly assert?: AssertClause;
   readonly set?: SetClause;
+  // The messages a program reads off the target card's live channel, by the
+  // param it reads them under: `collect: { picks: 'select' }` hands the
+  // program `params("picks")`, the bodies of the latest message per key that
+  // the card's `select` emit published, in channel order. `select` must be an
+  // `emit` declared on the same type.
+  //
+  // The realm reads the channel under the write lock it takes on the card, as
+  // the program stages, so a message emitted after that read is not counted:
+  // the program sees the channel as it stood when the card was locked. A
+  // caller cannot supply a collected param. `input` runs before the lock and
+  // so cannot read one either; the program and the clauses can.
+  readonly collect?: CollectClause;
+}
+
+// Param name → the name of an `emit` operation declared on the same type.
+export interface CollectClause {
+  readonly [param: string]: string;
+}
+
+// A guard an `emit` holds before it publishes: `that` is an expression over the
+// card as stored — `.` is its id and attributes — with `params()`, `actor()`,
+// `realmConfig()` and the clock (`now`, epoch seconds), answering true for a
+// message that may go. False refuses the emit with `assertion-failed` and
+// `message`, and nothing is published.
+//
+//   assert: {
+//     that: bxl`now <= (.lockAt | fromdateiso8601)`,
+//     message: 'Time ran out.',
+//   },
+export interface EmitAssertClause {
+  readonly that: BxlProgram;
+  readonly message?: string;
 }
 
 export interface CreateOperationDeclaration extends OperationCommon {
@@ -878,6 +910,8 @@ export interface CallApiOperationDeclaration extends OperationCommon {
 export interface EmitOperationDeclaration extends OperationCommon {
   readonly base: 'emit';
   readonly key?: BxlProgram;
+  // A precondition judged against the card as stored, before the message goes.
+  readonly assert?: EmitAssertClause;
   readonly transformations?: never;
   readonly output?: never;
 }
@@ -992,7 +1026,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // The parts of the request it sends.
   callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
   // The message's compaction key. The message itself is the payload.
-  emit: ['key'],
+  emit: ['key', 'assert'],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -1005,6 +1039,9 @@ const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   read: ['links', 'html'],
   query: ['links', 'html'],
   callApi: ['perInstance'],
+  // Says what the program reads, rather than what it does, so it sits beside a
+  // raw program as readily as beside the clauses.
+  transform: ['collect'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1320,7 +1357,7 @@ function noProgramReason(
     return `a "callApi" operation sends the request it declares rather than running a program over a document`;
   }
   if (base === 'emit') {
-    return `a "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document`;
+    return `an "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document`;
   }
   return undefined;
 }
@@ -1438,12 +1475,12 @@ function assertValidDeclaration(
       `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
     );
   }
-  // A emit writes nothing, so under the name of a base operation it would
+  // An emit writes nothing, so under the name of a base operation it would
   // answer that name — an `update`, a `delete` — by writing nothing at all,
   // and a caller reaching for the built-in would be told it had run.
   if (base === 'emit' && key !== 'emit' && isBaseOperationName(key)) {
     throw new Error(
-      `${label}: a "emit" operation sends a message and writes nothing, so it cannot take the name of the "${key}" base operation, whose callers expect it to do what "${key}" does`,
+      `${label}: an "emit" operation sends a message and writes nothing, so it cannot take the name of the "${key}" base operation, whose callers expect it to do what "${key}" does`,
     );
   }
   if (base === 'validate') {
@@ -1575,10 +1612,17 @@ function assertValidDeclaration(
   }
   if (base === 'emit' && declaration.output !== undefined) {
     throw new Error(
-      `${label}: a "emit" operation answers with where its message landed on the card's channel, so it carries no \`output\` to reshape it`,
+      `${label}: an "emit" operation answers with where its message landed on the card's channel, so it carries no \`output\` to reshape it`,
     );
   }
-  assertReferencesResolve(label, declaration, paramNames);
+  assertReferencesResolve(
+    label,
+    declaration,
+    new Set([
+      ...paramNames,
+      ...collectedParams(label, declaration, paramNames),
+    ]),
+  );
   if (base === 'query') {
     assertQueryIsWellFormed(label, declaration.query);
   }
@@ -1677,7 +1721,22 @@ function assertValidClauses(
       throw new Error(`${label}: \`append\` must carry a \`value\` to append`);
     }
   }
-  if (declaration.assert !== undefined) {
+  if (base === 'emit' && declaration.assert !== undefined) {
+    let assertion = declaration.assert;
+    if (!isPlainObject(assertion)) {
+      throw new Error(
+        `${label}: an "emit" operation's \`assert\` is an object carrying the expression \`that\` must hold, and the \`message\` to refuse with`,
+      );
+    }
+    assertOnlyKeys(label, 'assert', assertion, ['that', 'message']);
+    assertBxlProgram(label, 'assert.that', assertion.that);
+    if (
+      assertion.message !== undefined &&
+      typeof assertion.message !== 'string'
+    ) {
+      throw new Error(`${label}: \`assert.message\` must be a string`);
+    }
+  } else if (declaration.assert !== undefined) {
     let assertion = declaration.assert;
     if (!isPlainObject(assertion)) {
       throw new Error(
@@ -1818,6 +1877,41 @@ function assertValidClauses(
       }
     }
   }
+}
+
+// The params a transform's `collect` names, held to its shape: a plain object
+// mapping each param the program reads to the emit whose messages it reads
+// there. A collected param is the realm's to fill, so it may not also be one
+// the caller sends. Whether each name is an emit the type declares is
+// lowering's to judge — a declaration may name an emit declared after it, or
+// on a subclass's ancestor, which nothing here can see yet.
+function collectedParams(
+  label: string,
+  declaration: Record<string, unknown>,
+  paramNames: Set<string>,
+): string[] {
+  let collect = declaration.collect;
+  if (collect === undefined) {
+    return [];
+  }
+  if (!isPlainObject(collect) || Object.keys(collect).length === 0) {
+    throw new Error(
+      `${label}: \`collect\` must be an object mapping each param the program reads to the name of an emit declared on this type`,
+    );
+  }
+  for (let [param, emitted] of Object.entries(collect)) {
+    if (typeof emitted !== 'string' || emitted.length === 0) {
+      throw new Error(
+        `${label}: \`collect.${param}\` must name an emit operation declared on this type`,
+      );
+    }
+    if (paramNames.has(param)) {
+      throw new Error(
+        `${label}: \`collect.${param}\` names a param the realm fills from the card's channel, so \`params\` cannot also declare it for the caller to send`,
+      );
+    }
+  }
+  return Object.keys(collect);
 }
 
 // The shape of a declared request. What its values may hold — where a slot
@@ -2489,7 +2583,7 @@ type PayloadArgs<Declaration> = Declaration extends {
 // reports what the policy decided and why — or, for one whose params ask for a
 // `list`, one page of explanations — a validate reports what the policy
 // compiles to, a callApi reports the vendor's response, or what its
-// `output` maps that response to, and a emit reports where its message
+// `output` maps that response to, and an emit reports where its message
 // landed on the card's channel.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
@@ -3050,7 +3144,11 @@ function carriedOperations(
       base: declaration.base,
       declared: true,
       ...(declaration.optimistic === undefined
-        ? {}
+        ? // A program reading the card's channel cannot run on the client,
+          // which does not hold what the realm reads there.
+          'collect' in declaration && declaration.collect !== undefined
+          ? { optimistic: false }
+          : {}
         : { optimistic: declaration.optimistic }),
       ...(declaration.base === 'query'
         ? { query: queryDeclaration(declaration) }

@@ -226,6 +226,7 @@ export { resolveQueryTargets } from './find-targets.ts';
 export {
   hasTransforms,
   runInputTransform,
+  runGuardTransform,
   runKeyTransform,
   runOutputTransform,
 } from './transforms.ts';
@@ -308,6 +309,7 @@ export type {
   OperationCallApi,
   OperationCallApiResult,
   OperationEmitResult,
+  ChannelMessages,
   EmitMessage,
   EmitMessageArgs,
   LowerOperationDeclarationsResult,

@@ -966,6 +966,10 @@ export default function handlePublishRealm({
               // runs co-equal with indexing (see prerenderHtmlPriority).
               awaitedByPublish: true,
             })
+            // A republish is a new build of the site: once it is indexed, the
+            // pages open on it are asked to reload, so they stop running the
+            // code it replaced (ADR 020 §1.7).
+            .then(() => publishedRealm.requestEventFeedRefresh())
             .catch((err: unknown) => {
               log.error(
                 `background publish reindex failed for ${publishedRealmURL}: ${

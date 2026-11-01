@@ -42,6 +42,7 @@ import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
   isOperationFailure,
+  type ChannelMessages,
   type EntryPosition,
   type OperationIdentityResult,
 } from './types.ts';
@@ -232,6 +233,11 @@ export interface BatchCore {
   // that declares none answers with an empty map, which is what tells a
   // program naming a setting that this realm has none.
   realmConfig(): Promise<Record<string, JsonValue>>;
+  // The latest message per key that an emit published on a card's live
+  // channel (ADR 020 §1.8, §1.10), for a transform that `collect`s them.
+  // Called inside the lock on that card. A core without it refuses every such
+  // transform with 501 `not-implemented`.
+  channelMessages?: ChannelMessages;
 }
 
 export interface CommitBatchOptions {
@@ -729,6 +735,9 @@ async function stageBatch(
           storedLink: core.storedLink,
           resolvedLink: core.resolvedLink,
           lookupDefinition: core.lookupDefinition,
+          ...(core.channelMessages
+            ? { channelMessages: core.channelMessages }
+            : {}),
         });
       return entry.admit
         ? stageAdmitted(entry, entry.admit, position, stage, () =>

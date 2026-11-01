@@ -53,7 +53,7 @@ const REALM_POLICY = {
 };
 
 const ARTICLE_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, linksTo, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import { operation, params, bxl } from "@cardstack/base/operations";
   export class Article extends CardDef {
@@ -64,11 +64,29 @@ const ARTICLE_MODULE = `
       params: { headline: StringField },
       set: { headline: params('headline') },
     };
+    @field cheerers = containsMany(StringField);
+    // What lasts of the cheers: who cheered, read off the card's channel
+    // inside the write.
+    @operation static tally = {
+      base: 'transform',
+      collect: { cheers: 'cheer' },
+      transformations: bxl\`.cheerers += [params("cheers")[] | .reader];\`,
+    };
     @operation static cheer = {
       base: 'emit',
       params: { reader: StringField, mood: StringField },
       key: bxl\`params("reader")\`,
     };
+  }
+  // A card that shows another's headline, as a leaderboard shows a game's
+  // scores: computed from the card it links to.
+  export class Digest extends Article {
+    @field lead = linksTo(() => Article);
+    @field leadHeadline = contains(StringField, {
+      computeVia: function (this: Digest) {
+        return this.lead?.headline;
+      },
+    });
   }
 `;
 
@@ -964,6 +982,108 @@ module(basename(import.meta.filename), function (hooks) {
       (await feedWindow()).status,
       200,
       'the poll a shared cache absorbs is still there',
+    );
+  });
+
+  test('a card computed from another is announced when that one changes, at a revision that reads the new value', async function (assert) {
+    await newsroom.write(
+      'digests/today.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { headline: 'Today', status: 'published' },
+          relationships: {
+            lead: { links: { self: '../articles/published' } },
+          },
+          meta: { adoptsFrom: { module: '../article', name: 'Digest' } },
+        },
+      }),
+    );
+    await newsroom.indexing();
+    let before = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls stay open late', 'published'),
+    );
+    await newsroom.indexing();
+    let deadline = Date.now() + 15_000;
+    let digest: FeedEvent | undefined;
+    while (!digest && Date.now() < deadline) {
+      digest = (await eventsAfter(before, 1)).find(
+        (event) => event.kind === 'indexed' && event.path === 'digests/today',
+      );
+      if (!digest) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    assert.ok(digest?.rev, 'the digest is announced with a revision');
+    let read = await request
+      .get(`${new URL(NEWSROOM).pathname}digests/today`)
+      .query({ rev: digest!.rev! })
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(read.status, 200, read.text);
+    assert.strictEqual(
+      read.body.data.attributes.leadHeadline,
+      'Polls stay open late',
+      'reading it at that revision brings the recomputed value',
+    );
+  });
+
+  test("a transform that collects an emit's messages writes them into the card, the latest per key", async function (assert) {
+    let invoke = (
+      name: string,
+      data: Record<string, unknown>,
+      auth?: string,
+    ) => {
+      let req = request
+        .post(`${new URL(NEWSROOM).pathname}_operations`)
+        .set('Accept', SupportedMimeType.BoxelOperations)
+        .set('Content-Type', SupportedMimeType.BoxelOperations);
+      req = auth
+        ? req.set('Authorization', auth)
+        : req.set('X-Forwarded-For', VISITOR);
+      return req.send({
+        'boxel:operations': [
+          {
+            op: 'invoke',
+            'boxel:name': name,
+            href: `${NEWSROOM}articles/published`,
+            data,
+          },
+        ],
+      });
+    };
+    for (let [reader, mood] of [
+      ['ana', 'happy'],
+      ['ben', 'calm'],
+      ['ana', 'thrilled'],
+    ]) {
+      let cheered = await invoke('cheer', { reader, mood });
+      assert.strictEqual(cheered.status, 200, cheered.text);
+    }
+    let editor = `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`;
+    let tallied = await invoke('tally', {}, editor);
+    assert.strictEqual(tallied.status, 200, tallied.text);
+    let forged = await invoke(
+      'tally',
+      { cheers: [{ reader: 'mallory' }] },
+      editor,
+    );
+    assert.strictEqual(
+      forged.status,
+      400,
+      `a caller can't supply what the channel holds: ${forged.text}`,
+    );
+    await newsroom.indexing();
+    let read = await request
+      .get(`${new URL(NEWSROOM).pathname}articles/published`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Authorization', editor);
+    assert.deepEqual(
+      [...read.body.data.attributes.cheerers].sort(),
+      ['ana', 'ben'],
+      'each reader once: the latest cheer per key',
     );
   });
 

@@ -962,5 +962,153 @@ module(basename(import.meta.filename), function () {
         ['base-not-carried'],
       );
     });
+
+    test("an emit's assert lowers to a guard the realm runs before the message goes", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          params: { choice: StringFieldClass },
+          assert: {
+            that: { $bxl: 'now <= (.lockAt | fromdateiso8601)' },
+            message: 'Time ran out.',
+          },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      assert.strictEqual(
+        operations.select.guard?.message,
+        'Time ran out.',
+        'the message travels with the guard',
+      );
+      assert.strictEqual(
+        operations.select.guard?.program.syntax,
+        'solidified',
+        `the guard is stored canonical: ${operations.select.guard?.program.source}`,
+      );
+      assert.false(
+        operations.select.deterministic,
+        'a guard reading the clock is not deterministic',
+      );
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        "and it assembles no program, as a transform's assert would",
+      );
+    });
+
+    test("an emit's assert that is not an expression is refused", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          assert: { unique: 'tags', by: params('choice') },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['assert: invalid-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+    });
+  });
+
+  // A transform's `collect` binds the latest messages an emit on the same type
+  // published on the card's channel to a param the program reads.
+  module('collected params', function () {
+    const SELECT = {
+      base: 'emit',
+      params: { team: StringFieldClass, choice: StringFieldClass },
+      key: { $bxl: 'params("team")' },
+    };
+    // The form the pub quiz's desk locks a question with. `instance()` names
+    // the card's own values inside the iteration, where `.` is each message.
+    const LOCK_PROGRAM =
+      '.tags += [params("picks")[] | select(.n == instance("status")) | .choice];';
+
+    test('a transform that collects an emit lowers, reading the collected param in its program', async function (assert) {
+      let { operations, issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'select' },
+          transformations: { $bxl: LOCK_PROGRAM },
+        },
+      });
+      assert.deepEqual(issues, [], 'nothing is recorded');
+      assert.deepEqual(operations.lockQuestion.collect, { picks: 'select' });
+      assert.ok(operations.lockQuestion.program, 'the program is stored');
+      assert.false(
+        operations.lockQuestion.deterministic,
+        "a program reading the channel is never run on the client's optimistic path",
+      );
+    });
+
+    test('a collect naming something other than an emit on the type is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        escalate: { base: 'transform', set: { status: 'escalated' } },
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'escalate', votes: 'missing' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['collect.picks: invalid-collect', 'collect.votes: invalid-collect'],
+      );
+      assert.true(operations.lockQuestion.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.lockQuestion.collect,
+        undefined,
+        'and stores nothing to collect',
+      );
+    });
+
+    test('a collected param the schema also declares is refused', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          params: { picks: StringFieldClass },
+          collect: { picks: 'select' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['collect.picks: invalid-collect'],
+      );
+    });
+
+    test('a collect on a base other than transform is refused', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        tally: {
+          base: 'emit',
+          collect: { picks: 'select' },
+        },
+      });
+      assert.deepEqual(
+        issues.map(
+          (issue) => `${issue.operation} ${issue.path}: ${issue.code}`,
+        ),
+        ['tally collect: invalid-collect'],
+      );
+    });
+
+    test('an input reading a collected param is recorded, since input runs before the channel is read', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'select' },
+          input: { $bxl: '. + { count: (params("picks") | length) }' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['input: undeclared-param'],
+      );
+    });
   });
 });

@@ -1109,7 +1109,7 @@ export function writeResult(
   };
 }
 
-// A emit's answer: the card whose channel carried the message, and the
+// An emit's answer: the card whose channel carried the message, and the
 // position it took there. Shaped as a write's identity is — a JSON:API result
 // object naming the card — so a caller reading `atomic:results` finds the card
 // where a write entry's would be, with `meta.position` where a write's

@@ -62,7 +62,7 @@ import {
 } from './telemetry.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
-import type { OperationTemplate } from './types.ts';
+import type { ChannelMessages, OperationTemplate } from './types.ts';
 
 // ============================================================================
 // The `create`, `update` and `delete` executors.
@@ -487,6 +487,10 @@ export interface StagingContext {
     codeRef: CodeRef,
     relativeTo: URL,
   ): Promise<Definition | undefined>;
+  // The latest messages an emit published on a card's live channel, for a
+  // transform that collects them. Absent where the realm has no channel, which
+  // refuses such a transform.
+  channelMessages?: ChannelMessages;
 }
 
 // ---------------------------------------------------------------------------
@@ -1497,7 +1501,12 @@ async function transform(
     });
   }
   let program = programFor(entry, url);
-  let params = resolvedParams(entry, ctx, url);
+  let params = await withCollectedParams(
+    entry,
+    ctx,
+    url,
+    resolvedParams(withoutCollected(entry, url), ctx, url),
+  );
   let resource = storedResource(stored.content, url);
   let definition = await transformTargetDefinition(resource, url, ctx);
   let bxl = await loadBxlMutation();
@@ -1800,6 +1809,70 @@ function resolvedParams(
         : jsonParam(value, key, url);
   }
   return resolved;
+}
+
+// A collected param is the realm's to fill, so a payload carrying one is
+// refused rather than overwritten: either answer would leave the caller
+// believing they had said something the program read.
+function withoutCollected(entry: TransformEntry, url: URL): TransformEntry {
+  let collect = entry.definition?.collect;
+  if (!collect) {
+    return entry;
+  }
+  for (let param of Object.keys(collect)) {
+    if (own(entry.params ?? {}, param) !== undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail:
+          `operation "${entry.name ?? 'transform'}" fills params("${param}") ` +
+          `from the card's live channel, so the payload cannot carry it`,
+      });
+    }
+  }
+  return entry;
+}
+
+// The params a program reads, with each collected one bound to the messages
+// its emit published on the target card's channel.
+//
+// Read here, while the batch holds the write lock on the card, so what the
+// program collects is the channel as it stood when this entry staged: a
+// message emitted after this read is not counted, and the next transform to
+// collect from the channel is the one that sees it. A read of a channel is a
+// read of what other callers published, so the operation is never a candidate
+// for the client's optimistic path (lowering marks it non-deterministic).
+async function withCollectedParams(
+  entry: TransformEntry,
+  ctx: StagingContext,
+  url: URL,
+  params: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  let collect = entry.definition?.collect;
+  if (!collect) {
+    return params;
+  }
+  if (!ctx.channelMessages) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 501,
+      code: 'not-implemented',
+      title: 'Channel not available',
+      detail:
+        `operation "${entry.name ?? 'transform'}" reads the card's live ` +
+        `channel, and this realm has no channel to read`,
+    });
+  }
+  let collected: Record<string, unknown> = { ...(params ?? {}) };
+  for (let [param, operation] of Object.entries(collect)) {
+    collected[param] = await ctx.channelMessages({
+      cardURL: url.href,
+      operation,
+    });
+  }
+  return collected;
 }
 
 // A param value held to being JSON. A program's context is plain data — the

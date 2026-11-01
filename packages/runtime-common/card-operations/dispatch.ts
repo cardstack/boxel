@@ -13,6 +13,7 @@ import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
   runInputTransform,
+  runGuardTransform,
   runKeyTransform,
   runOutputTransform,
   type TransformContext,
@@ -74,7 +75,12 @@ import type {
   SingleCardDocument,
   SingleFileMetaDocument,
 } from '../document-types.ts';
-import type { LooseCardResource, FileMetaResource } from '../resource-types.ts';
+import type {
+  CardResource,
+  LooseCardResource,
+  FileMetaResource,
+} from '../resource-types.ts';
+import { isCardResource } from '../card-document-shape.ts';
 import type { InstanceOrError, IndexedFile } from '../index-query-engine.ts';
 import type { SearchResult } from '../realm-index-query-engine.ts';
 import type { SearchEntryQuery } from '../search-entry.ts';
@@ -213,7 +219,7 @@ export interface OperationCore {
   // Sends a `callApi`'s request through the realm server's guarded outbound
   // client. A core without it sends nothing.
   callApi?: CallApiSender;
-  // Puts a `emit`'s message on the target card's live channel (ADR 020
+  // Puts an `emit`'s message on the target card's live channel (ADR 020
   // §1.8, §1.10) and answers the position it took there. Called once per
   // admitted emit, after the batch's writes have committed. A core without
   // it emits nothing, and refuses every `emit` with 501
@@ -631,7 +637,7 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // does not exist. An explain and a validate are the two: each answers only on
 // the card that declares it, a policy card, or for a validate the realm's
 // config card too. A callApi is the third: only a card that declares a request
-// has one to send. A emit is the fourth: only a card that declares a
+// has one to send. An emit is the fourth: only a card that declares a
 // message says what one on its channel is.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
@@ -1674,7 +1680,7 @@ async function runBaseOperation(
   }
 }
 
-// A `emit`: the payload, as the `input` stage left it and the `params`
+// An `emit`: the payload, as the `input` stage left it and the `params`
 // check passed it, is the message, put on the target card's live channel
 // under the key the declaration's `key` program answers. Nothing is staged
 // and nothing is written, so there is no lock to take, no index job to
@@ -1711,6 +1717,7 @@ async function emitOperation(
     });
   }
   let body = (request.params ?? {}) as Record<string, JsonValue>;
+  await assertEmitGuard(core, request, definition, cardURL);
   let key = await runKeyTransform(
     definition,
     body,
@@ -1740,6 +1747,88 @@ async function emitOperation(
     });
   }
   return { emitted: { id: cardURL, position } };
+}
+
+// An emit's `assert`, judged against the card as stored and the realm's clock
+// before anything is emitted. The card is read from its file rather than from
+// the index, so a write that has landed is what the guard sees whether or not
+// it has been indexed yet. No lock is taken: an emit stages nothing, and a
+// guard that held a moment before a concurrent write is the same answer the
+// gate's own predicate gives a read.
+//
+// `.` is the card's id and attributes, which is also what `instance()` reads.
+// The guard answers `true` for a message that may go; `false` refuses the
+// emit with `assertion-failed` and the declaration's message, as a
+// transform's failed `assert` refuses its write; anything else is the
+// program's mistake.
+async function assertEmitGuard(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+  cardURL: string,
+): Promise<void> {
+  let guard = definition.guard;
+  if (!guard) {
+    return;
+  }
+  let url = new URL(cardURL);
+  let content = await core.readFileAsText(
+    `${localPathFor(core, url)}.json` as LocalPath,
+  );
+  let resource = content === undefined ? undefined : storedCardIn(content);
+  if (!resource) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${cardURL} does not exist in realm ${core.realmURL}`,
+    });
+  }
+  let card: Record<string, unknown> = {
+    ...(resource.attributes ?? {}),
+    id: cardURL,
+  };
+  let held = await runGuardTransform(definition, card, {
+    ...transformContext(core, request),
+    instance: card,
+  });
+  if (held === true) {
+    return;
+  }
+  if (held === false) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 400,
+      code: 'assertion-failed',
+      title: 'Assertion failed',
+      detail:
+        guard.message ??
+        `operation "${request.name}" asserts something the card does not hold`,
+      meta: { operation: request.name },
+    });
+  }
+  throw new OperationFailure({
+    id: cardURL,
+    status: 400,
+    code: 'invalid-params',
+    title: 'Cannot run transform',
+    detail:
+      `the \`assert\` of operation "${request.name}" answers whether the ` +
+      `message may go, and this program answered something other than ` +
+      `true or false`,
+    meta: { operation: request.name, stage: 'assert' },
+  });
+}
+
+function storedCardIn(content: string): CardResource | undefined {
+  let resource: unknown;
+  try {
+    resource = (JSON.parse(content) as { data?: unknown }).data;
+  } catch {
+    return undefined;
+  }
+  return isCardResource(resource) ? resource : undefined;
 }
 
 // The payload has to satisfy the schema the definition declares before any
