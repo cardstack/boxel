@@ -389,6 +389,16 @@ export class RealmPolicyCache {
     this.#env = env;
   }
 
+  // Names the policy card as last compiled: its URL and its row as the index
+  // held it, so it changes whenever the policy does. Undefined before a
+  // compile, and for a realm that names no policy. A card's validator carries
+  // it, so a read the policy admitted is re-read when the policy changes
+  // (ADR 020 §1.5).
+  get fingerprint(): string | undefined {
+    let current = this.#current;
+    return current ? `${current.compiled.card}@${current.row}` : undefined;
+  }
+
   // The realm's compiled policy, or undefined for a realm that has no policy.
   async get(): Promise<CompiledRealmPolicy | undefined> {
     let card = await this.#env.policyCard();

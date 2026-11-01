@@ -1847,6 +1847,16 @@ function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
   }
 }
 
+// A short, stable hash of `text`, for folding a value into a validator.
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
@@ -8650,6 +8660,7 @@ export class Realm {
     let requestContext = await this.createRequestContext(requiredPermission, {
       asksBothLanes: localPath === CAPABILITIES_PATH,
     });
+    this.#notePermissions(requestContext.permissions);
     if (isLocal) {
       requestContext.realmInternal = true;
     }
@@ -8784,15 +8795,32 @@ export class Realm {
       }
       // A caller admitted without a session whose address has no budget left
       // is answered before the request runs (see `AnonymousAdmission.callerFor`).
+      // A read that names a revision runs first, though: one at the card's
+      // current revision is the re-read the event feed asked for, which every
+      // visitor behind one address makes, so it costs no one's budget
+      // (ADR 020 §1.5).
+      let revision =
+        request.method === 'GET'
+          ? new URL(request.url).searchParams.get(CARD_REVISION_PARAM)
+          : null;
       let turnedAway = this.#anonymous.turnedAway(requestContext);
-      if (turnedAway) {
+      if (turnedAway && !revision) {
         return turnedAway;
       }
-      return await this.#anonymous.charge(
-        request,
-        requestContext,
-        await dispatch.handle(),
-      );
+      let response = await dispatch.handle();
+      if (
+        revision &&
+        requestContext.anonymousCaller &&
+        response.ok &&
+        cardRevisionOf(response.headers.get('etag')) === revision
+      ) {
+        return response;
+      }
+      if (turnedAway) {
+        await response.body?.cancel().catch(() => undefined);
+        return turnedAway;
+      }
+      return await this.#anonymous.charge(request, requestContext, response);
     } catch (e) {
       if (e instanceof AuthenticationError) {
         return createResponse({
@@ -17722,8 +17750,35 @@ export class Realm {
   // Returns undefined if the cache has been invalidated since the last
   // `getRealmInfo()` call — callers should call `getRealmInfo()` first
   // (which we already do on every getCard request) to refresh the hash.
+  //
+  // It also carries what decides who may read the realm's cards: the realm's
+  // permissions as the last request found them, and the policy as last
+  // compiled. So a card's revision changes when the policy or permissions
+  // that admit it do (ADR 020 §1.5), and a shared cache holding the card at
+  // its old revision is asked again.
   private getCachedRealmInfoHash(): string | undefined {
-    return this.#cachedRealmInfoHash ?? undefined;
+    let info = this.#cachedRealmInfoHash ?? undefined;
+    if (!info) {
+      return undefined;
+    }
+    let authorization = [
+      this.#permissionsFingerprint,
+      this.#policyCache.fingerprint,
+    ]
+      .filter(Boolean)
+      .join('|');
+    return authorization ? `${info}.${fnv1a(authorization)}` : info;
+  }
+
+  // The realm's permissions, as the last request read them, in a stable
+  // order (see `getCachedRealmInfoHash`).
+  #permissionsFingerprint: string | undefined;
+  #notePermissions(permissions: RealmPermissions) {
+    this.#permissionsFingerprint = JSON.stringify(
+      Object.keys(permissions)
+        .sort()
+        .map((user) => [user, [...(permissions[user] ?? [])].sort()]),
+    );
   }
 
   // Public so the publish/unpublish handlers can invalidate the SOURCE

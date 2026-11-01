@@ -6,6 +6,7 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   EVENT_FEED_MAX_CHECKS_PER_EVENT,
+  cardRevisionOf,
   channelFeedKey,
   DbFeedStore,
   EVENT_FEED_WINDOW,
@@ -93,6 +94,16 @@ function policyCard(module: string, grants: Record<string, unknown>[]) {
   });
 }
 
+// The newsroom's config, with how many reads a visitor's address gets a
+// window.
+function newsroomConfig(anonymousRequests: number) {
+  return realmConfigCardJSON({
+    name: 'Newsroom',
+    policy: `${ORG}policies/newsroom`,
+    config: { anonymousRequests },
+  });
+}
+
 const PUBLISHED_TO_ANONYMOUS = {
   where: 'actor() == "anonymous" and .status == "published"',
 };
@@ -126,10 +137,7 @@ module(basename(import.meta.filename), function (hooks) {
         {
           realmURL: new URL(NEWSROOM),
           fileSystem: {
-            'realm.json': realmConfigCardJSON({
-              name: 'Newsroom',
-              policy: `${ORG}policies/newsroom`,
-            }),
+            'realm.json': newsroomConfig(1000),
             'article.gts': ARTICLE_MODULE,
             'articles/published.json': article('Polls open', 'published'),
             'articles/draft.json': article('Polls close', 'draft'),
@@ -153,7 +161,12 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/newsroom.json': policyCard(`${NEWSROOM}article`, [
-              { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+              {
+                operation: 'read',
+                ...PUBLISHED_TO_ANONYMOUS,
+                rateLimitRequests: 'realmConfig("anonymousRequests")',
+                rateLimitWindowSeconds: '600',
+              },
               {
                 operation: 'cheer',
                 anonymous: true,
@@ -830,6 +843,91 @@ module(basename(import.meta.filename), function (hooks) {
       draft.status,
       200,
       `the policy admits no cheer on a draft: ${draft.text}`,
+    );
+  });
+
+  test("a card's revision changes when the permissions or policy that admit it do", async function (assert) {
+    let read = () =>
+      request
+        .get(`${new URL(NEWSROOM).pathname}articles/published`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('X-Forwarded-For', VISITOR);
+    let before = (await read()).headers['etag'];
+    assert.ok(before, "a visitor's read carries a validator");
+    assert.strictEqual((await read()).headers['etag'], before, 'a stable one');
+
+    let patched = await request
+      .patch(`${new URL(NEWSROOM).pathname}_permissions`)
+      .set('Accept', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send({
+        data: {
+          id: NEWSROOM,
+          type: 'permissions',
+          attributes: { permissions: { '@reader:localhost': ['read'] } },
+        },
+      });
+    assert.strictEqual(patched.status, 200, patched.text);
+    let afterPermissions = (await read()).headers['etag'];
+    assert.notStrictEqual(
+      afterPermissions,
+      before,
+      'new permissions make a new revision',
+    );
+
+    await org.write(
+      'policies/newsroom.json',
+      policyCard(`${NEWSROOM}article`, [
+        { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+      ]),
+    );
+    await org.indexing();
+    let deadline = Date.now() + 10_000;
+    let afterPolicy = afterPermissions;
+    while (afterPolicy === afterPermissions && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      afterPolicy = (await read()).headers['etag'];
+    }
+    assert.notStrictEqual(
+      afterPolicy,
+      afterPermissions,
+      'and so does a new policy',
+    );
+  });
+
+  test("a visitor's read at the card's current revision costs no budget; one at an old revision does", async function (assert) {
+    await newsroom.write('realm.json', newsroomConfig(2));
+    await newsroom.indexing();
+    let read = (query: Record<string, string> = {}) =>
+      request
+        .get(`${new URL(NEWSROOM).pathname}articles/published`)
+        .query(query)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('X-Forwarded-For', VISITOR);
+    let first = await read();
+    assert.strictEqual(first.status, 200, first.text);
+    let rev = cardRevisionOf(first.headers['etag'])!;
+    assert.strictEqual((await read()).status, 200, 'the second read fits');
+    assert.strictEqual(
+      (await read()).status,
+      429,
+      'a third plain read is over the limit',
+    );
+    for (let i = 0; i < 3; i++) {
+      let reread = await read({ rev });
+      assert.strictEqual(
+        reread.status,
+        200,
+        `a re-read at the current revision is served: ${reread.text}`,
+      );
+    }
+    assert.strictEqual(
+      (await read({ rev: 'not-a-revision' })).status,
+      429,
+      'a read naming any other revision is counted as any read is',
     );
   });
 
