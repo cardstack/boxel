@@ -427,16 +427,25 @@ export class DbFeedStore implements FeedStore {
   }
 
   async latestMessages(key: string, keep: number): Promise<FeedEvent[]> {
+    // The latest message of each key in one pass over the channel, and the
+    // recent unkeyed ones. A correlated max() per row instead grows with the
+    // square of the channel's history: a busy waiting room's heartbeats made a
+    // draw take minutes, holding its card's lock all the while.
     let rows = await query(this.#dbAdapter, [
-      'SELECT event FROM realm_feed_events e WHERE feed_key =',
+      'SELECT event, seq FROM (',
+      "SELECT DISTINCT ON (event->>'key') event, seq FROM realm_feed_events",
+      'WHERE feed_key =',
       param(key),
-      "AND event->>'kind' = 'message' AND (",
-      "(event->>'key' IS NULL AND seq > (SELECT head FROM realm_feeds f",
-      'WHERE f.feed_key = e.feed_key) -',
+      "AND event->>'kind' = 'message' AND event->>'key' IS NOT NULL",
+      "ORDER BY event->>'key', seq DESC",
+      ') latest UNION ALL SELECT event, seq FROM realm_feed_events WHERE feed_key =',
+      param(key),
+      "AND event->>'kind' = 'message' AND event->>'key' IS NULL",
+      'AND seq > (SELECT head FROM realm_feeds WHERE feed_key =',
+      param(key),
+      ') -',
       param(keep * 4),
-      ") OR (event->>'key' IS NOT NULL AND seq = (",
-      'SELECT max(seq) FROM realm_feed_events l WHERE l.feed_key = e.feed_key',
-      "AND l.event->>'key' = e.event->>'key'))) ORDER BY seq",
+      'ORDER BY seq',
     ]);
     return rows.map((row) => eventOf(row.event));
   }
