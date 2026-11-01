@@ -610,4 +610,180 @@ module('Unit | Service | event-feed', function (hooks) {
       Math.random = originalRandom;
     }
   });
+  // Waits, a second at most, until `done` holds.
+  async function waitFor(done: () => boolean) {
+    let deadline = Date.now() + 1_000;
+    while (!done() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  // Answers the realm's poll with `window` while a test runs, and everything
+  // else as the page would.
+  async function withPoll(
+    window: (url: string) => unknown,
+    body: (asked: string[]) => Promise<void>,
+  ) {
+    let originalFetch = globalThis.fetch;
+    let asked: string[] = [];
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      let url = String(input instanceof Request ? input.url : input);
+      if (!url.includes('_live')) {
+        return originalFetch(input, init);
+      }
+      asked.push(url);
+      return new Response(JSON.stringify(window(url)), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    try {
+      await body(asked);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  test("a channel followed by poll hears the channel's current messages first", async function (assert) {
+    (globalThis as any).EventSource = undefined;
+    service.timing = { pollMs: 5, retryFirstMs: 1 };
+    let heard: unknown[] = [];
+    await withPoll(
+      () => ({
+        v: 1,
+        epoch: 'c1',
+        head: 7,
+        from: 0,
+        events: [
+          { seq: 3, kind: 'indexed', path: 'QuizNight/x7k2' },
+          {
+            seq: 5,
+            kind: 'message',
+            path: 'QuizNight/x7k2',
+            key: 'red:1',
+            body: { team: 'red', choice: 'B' },
+          },
+          {
+            seq: 7,
+            kind: 'message',
+            path: 'QuizNight/x7k2',
+            key: 'blue:1',
+            body: { team: 'blue', choice: 'A' },
+          },
+        ],
+      }),
+      async () => {
+        let unfollow = service.followChannel(
+          `${REALM}QuizNight/x7k2`,
+          REALM,
+          (message) => heard.push(message.body),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        unfollow();
+      },
+    );
+    assert.deepEqual(
+      heard,
+      [
+        { team: 'red', choice: 'B' },
+        { team: 'blue', choice: 'A' },
+      ],
+      'the latest per key, once each',
+    );
+  });
+
+  test('a stream that closes after it opened is carried by the poll, from the last event id, until it opens again', async function (assert) {
+    service.timing = { pollMs: 5, retryFirstMs: 40 };
+    await withPoll(
+      () => ({
+        v: 1,
+        epoch: 'e1',
+        head: 6,
+        from: 0,
+        events: [
+          { seq: 4, kind: 'indexed', path: 'Card/old' },
+          { seq: 5, kind: 'indexed', path: 'Card/1' },
+          { seq: 6, kind: 'indexed', path: 'Card/2' },
+        ],
+      }),
+      async (asked) => {
+        service.start();
+        watch();
+        let first = FakeEventSource.made[0];
+        first.emit('open');
+        first.emit('change', {
+          data: JSON.stringify({ seq: 4, kind: 'indexed', path: 'Card/old' }),
+          lastEventId: 'e1:4',
+        });
+        // Turned away on a reconnect, as a realm at its stream cap does.
+        first.readyState = FakeEventSource.CLOSED;
+        first.emit('error');
+        await waitFor(() => received.length >= 3);
+        assert.ok(asked.length > 0, 'the page polls while the stream is down');
+        assert.deepEqual(
+          received.map((event) => (event as any).invalidations?.[0]),
+          [`${REALM}Card/old`, `${REALM}Card/1`, `${REALM}Card/2`],
+          'and hears what changed after the last event the stream brought, once',
+        );
+        await waitFor(() => FakeEventSource.made.length > 1);
+        let second = FakeEventSource.made[1];
+        assert.ok(second, 'the stream is tried again');
+        second.emit('open');
+        let polls = asked.length;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.strictEqual(
+          asked.length,
+          polls,
+          'and the poll stops once it opens',
+        );
+      },
+    );
+  });
+
+  test("a channel's reset is spread like the realm's, and a card withdrawn stops the channel", async function (assert) {
+    let originalRandom = Math.random;
+    Math.random = () => 0.5;
+    try {
+      service.relaySpreadMs = 200;
+      let card = `${REALM}QuizNight/x7k2`;
+      service.followChannel(card, REALM, () => undefined);
+      await settled();
+      received.length = 0;
+      let handle = messageService.subscribe(REALM, (event) =>
+        received.push(event),
+      );
+      let source = FakeEventSource.made.find((made) =>
+        made.url.includes('channel='),
+      )!;
+      source.emit('change', {
+        data: JSON.stringify({ seq: 9, kind: 'reset', path: '', spread: 400 }),
+      });
+      assert.strictEqual(received.length, 0, 'not relayed at once');
+      await settled();
+      assert.strictEqual(received.length, 1, 'relayed after the wait');
+      source.emit('change', {
+        data: JSON.stringify({
+          seq: 10,
+          kind: 'withdrawn',
+          path: 'QuizNight/x7k2',
+        }),
+      });
+      assert.true(source.closed, 'the channel stops following the card');
+      await settled();
+      handle();
+    } finally {
+      Math.random = originalRandom;
+    }
+  });
+
+  test('a service going away closes the card channels it follows', function (assert) {
+    service.followChannel(`${REALM}QuizNight/x7k2`, REALM, () => undefined);
+    let source = FakeEventSource.made.find((made) =>
+      made.url.includes('channel='),
+    )!;
+    run(() => service.destroy());
+    assert.true(source.closed);
+  });
 });

@@ -1063,7 +1063,14 @@ module(basename(import.meta.filename), function () {
         source: quizSource({ lockAt: '2020-01-01T00:00:00Z' }),
       });
       let emitted = 0;
-      core.emitMessage = async () => {
+      let guarded = 0;
+      // As the realm does: the emit's assert runs right before the message
+      // is recorded, and one that throws records nothing.
+      core.emitMessage = async (args) => {
+        if (args.guard) {
+          guarded++;
+          await args.guard();
+        }
         emitted++;
         return { position: 'epoch-1:1' };
       };
@@ -1076,6 +1083,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(error.status, 400);
       assert.strictEqual(error.code, 'assertion-failed');
       assert.strictEqual(error.detail, 'Time ran out.', "the author's message");
+      assert.strictEqual(guarded, 1, 'the assert was handed to the realm');
       assert.strictEqual(emitted, 0, 'nothing was emitted');
     });
 
@@ -1085,7 +1093,14 @@ module(basename(import.meta.filename), function () {
         source: quizSource({ lockAt: '2999-01-01T00:00:00Z' }),
       });
       let emitted = 0;
-      core.emitMessage = async () => {
+      let guarded = 0;
+      // As the realm does: the emit's assert runs right before the message
+      // is recorded, and one that throws records nothing.
+      core.emitMessage = async (args) => {
+        if (args.guard) {
+          guarded++;
+          await args.guard();
+        }
         emitted++;
         return { position: 'epoch-1:1' };
       };
@@ -1094,6 +1109,11 @@ module(basename(import.meta.filename), function () {
         params: { choice: 'a' },
       });
       assert.strictEqual(emitted, 1, 'the message went');
+      assert.strictEqual(
+        guarded,
+        1,
+        'after the realm ran the assert it was handed',
+      );
       assert.true(
         calls.includes('readFileAsText'),
         'the guard read the card as stored',
@@ -1112,7 +1132,14 @@ module(basename(import.meta.filename), function () {
         source: quizSource({ lockAt: '2999-01-01T00:00:00Z' }),
       });
       let emitted = 0;
-      core.emitMessage = async () => {
+      let guarded = 0;
+      // As the realm does: the emit's assert runs right before the message
+      // is recorded, and one that throws records nothing.
+      core.emitMessage = async (args) => {
+        if (args.guard) {
+          guarded++;
+          await args.guard();
+        }
         emitted++;
         return { position: 'epoch-1:1' };
       };
@@ -1123,6 +1150,7 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(guarded, 1, 'the realm ran the assert it was handed');
       assert.strictEqual(emitted, 0, 'nothing was emitted');
     });
 

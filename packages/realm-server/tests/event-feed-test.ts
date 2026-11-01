@@ -18,6 +18,7 @@ import {
 import type {
   FeedEventWindow,
   FeedEvent,
+  FeedStore,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -25,6 +26,7 @@ import type {
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
+import { refreshAfterRepublish } from '../handlers/handle-publish-realm.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
@@ -132,6 +134,7 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  let feedDbAdapter: PgAdapter;
 
   setupCatalogTestSubset(hooks);
 
@@ -144,6 +147,7 @@ module(basename(import.meta.filename), function (hooks) {
     publisher: QueuePublisher;
     runner: QueueRunner;
   }) {
+    feedDbAdapter = dbAdapter;
     let result = await runTestRealmServerWithRealms({
       virtualNetwork: createVirtualNetwork(),
       realmsRootPath: join(dirSync().name, 'realm_server_1'),
@@ -947,6 +951,151 @@ module(basename(import.meta.filename), function (hooks) {
       429,
       'a read naming any other revision is counted as any read is',
     );
+    assert.strictEqual(
+      (await read({ rev, bust: '1' })).status,
+      429,
+      'and so is one that adds anything to the URL the feed hands out',
+    );
+    // Not the card document: whatever the realm answers it with, the
+    // exemption doesn't serve it.
+    let asJSON = await request
+      .get(`${new URL(NEWSROOM).pathname}articles/published`)
+      .query({ rev })
+      .set('Accept', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR);
+    assert.notStrictEqual(
+      asJSON.status,
+      200,
+      `nor one that asks for anything but the card document: ${asJSON.status}`,
+    );
+  });
+
+  test("a card's revision is the same whichever kind of request came before it", async function (assert) {
+    let owner = `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`;
+    // Readable by anyone, so a visitor's read is judged from `*` alone.
+    let patched = await request
+      .patch(`${new URL(NEWSROOM).pathname}_permissions`)
+      .set('Accept', 'application/vnd.api+json')
+      .set('Authorization', owner)
+      .send({
+        data: {
+          id: NEWSROOM,
+          type: 'permissions',
+          attributes: { permissions: { '*': ['read'] } },
+        },
+      });
+    assert.strictEqual(patched.status, 200, patched.text);
+    let before = (await readCard('articles/published')).headers['etag'];
+    assert.ok(before, "a visitor's read carries a validator");
+    let owners = await request
+      .get(`${new URL(NEWSROOM).pathname}_permissions`)
+      .set('Accept', 'application/vnd.api+json')
+      .set('Authorization', owner);
+    assert.strictEqual(owners.status, 200, owners.text);
+    assert.strictEqual(
+      (await readCard('articles/published')).headers['etag'],
+      before,
+      "an owner's request between two reads changes no card's revision",
+    );
+  });
+
+  test("a channel's stream ends when its card is withdrawn", async function (assert) {
+    // Announced as readable first: the feed withdraws only a card it
+    // announced.
+    let start = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open early', 'published'),
+    );
+    await newsroom.indexing();
+    await eventsAfter(start, 2);
+    let address = server.address();
+    let port = typeof address === 'object' && address ? address.port : 4444;
+    let url = `http://127.0.0.1:${port}/newsroom/_live?channel=${encodeURIComponent('articles/published')}`;
+    let response = await fetch(url, {
+      headers: {
+        Accept: SupportedMimeType.EventStream,
+        'X-Forwarded-For': VISITOR,
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    assert.strictEqual(response.status, 200);
+    let reader = response.body!.getReader();
+    let text = '';
+    let ended = false;
+    let pump = (async () => {
+      for (;;) {
+        let chunk = await reader.read();
+        if (chunk.done) {
+          ended = true;
+          return;
+        }
+        text += new TextDecoder().decode(chunk.value);
+      }
+    })().catch(() => undefined);
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open', 'draft'),
+    );
+    await newsroom.indexing();
+    let deadline = Date.now() + 15_000;
+    while (!ended && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.true(ended, `the stream ended: ${text}`);
+    assert.true(
+      text.includes('"kind":"withdrawn"'),
+      'after telling the page the card is withdrawn',
+    );
+    await pump;
+    let again = await request
+      .get(`${new URL(NEWSROOM).pathname}_live`)
+      .query({ channel: 'articles/published' })
+      .set('Accept', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(
+      again.status,
+      404,
+      'and the channel answers as not found',
+    );
+  });
+
+  test('every spelling of a card names one channel, and anything that is not a card names none', async function (assert) {
+    let channel = (path: string) =>
+      request
+        .get(`${new URL(NEWSROOM).pathname}_live`)
+        .query({ channel: path })
+        .set('Accept', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', VISITOR);
+    for (let path of [
+      'articles/published?x=1',
+      'articles/published#x',
+      'articles/../_live',
+      '\\\\elsewhere/articles/published',
+      'articles/',
+    ]) {
+      assert.strictEqual(
+        (await channel(path)).status,
+        404,
+        `${path} names no channel`,
+      );
+    }
+    let plain = (await channel('articles/published')).body as FeedEventWindow;
+    let spelled = (await channel('articles/./published.json'))
+      .body as FeedEventWindow;
+    assert.strictEqual(
+      spelled.epoch,
+      plain.epoch,
+      'another spelling of the card is the same channel',
+    );
+    let rows = (await feedDbAdapter.execute(
+      `SELECT feed_key FROM realm_feeds WHERE feed_key LIKE '%#%'`,
+    )) as { feed_key: string }[];
+    assert.deepEqual(
+      rows.map((row) => row.feed_key),
+      [channelFeedKey(NEWSROOM, 'articles/published')],
+      'and only that one is stored',
+    );
   });
 
   test('an edit to the policy card resets the feed, since what a visitor may read can have changed', async function (assert) {
@@ -1263,9 +1412,10 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
     } as RealmEventContent;
   }
 
-  test('a feed found stored keeps its epoch and positions, and announces one reset', async function (assert) {
+  test('a feed found stored keeps its epoch and positions, and announces no reset', async function (assert) {
     let first = feed();
     await first.ingest(changed('Card/1'));
+    await first.ingest(changed('Card/2'));
     let before = await first.window();
 
     let restarted = feed();
@@ -1275,14 +1425,132 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
       after.events.map(({ seq, kind, path }) => ({ seq, kind, path })),
       [
         { seq: 1, kind: 'indexed', path: 'Card/1' },
-        { seq: 2, kind: 'reset', path: '' },
+        { seq: 2, kind: 'indexed', path: 'Card/2' },
       ],
-      'what was announced before is still there to resume from, then one reset',
+      'what was announced before is still there to resume from, and nothing is reset',
     );
     assert.deepEqual(
-      await restarted.replay(`${before.epoch}:1`),
-      [after.events[1]!],
+      (await restarted.replay(`${before.epoch}:1`)).map((event) => event.seq),
+      [2],
       'a client that held position 1 resumes from it',
+    );
+  });
+
+  test('a removal is announced whichever feed announced the card, and after a reset', async function (assert) {
+    let one = feed();
+    let two = feed();
+    await one.ingest(changed('Card/1'));
+    await one.ingest(changed('Card/2'));
+    await two.ready();
+    await two.ingest({
+      eventName: 'update',
+      removed: ['Card/1.json'],
+      realmURL: REALM,
+    } as RealmEventContent);
+    two.reset();
+    await two.settled();
+    await two.ingest({
+      eventName: 'update',
+      removed: ['Card/2.json', 'Card/never-announced.json'],
+      realmURL: REALM,
+    } as RealmEventContent);
+    let window = await two.window();
+    assert.deepEqual(
+      window.events
+        .filter((event) => event.kind !== 'indexed')
+        .map(({ kind, path }) => ({ kind, path })),
+      [
+        { kind: 'removed', path: 'Card/1' },
+        { kind: 'reset', path: '' },
+        { kind: 'removed', path: 'Card/2' },
+      ],
+      'both removals are announced by the feed that never announced the cards, and a card never announced as readable is not named',
+    );
+    await two.ingest({
+      eventName: 'update',
+      removed: ['Card/1.json'],
+      realmURL: REALM,
+    } as RealmEventContent);
+    assert.strictEqual(
+      (await two.window()).head,
+      window.head,
+      'and a card already announced removed is not announced again',
+    );
+  });
+
+  test('a card that stops being readable is withdrawn by a feed that never announced it', async function (assert) {
+    let one = feed();
+    await one.ingest(changed('Card/1'));
+    let two = new RealmEventFeed(
+      REALM,
+      async () => false,
+      new DbFeedStore(dbAdapter),
+    );
+    await two.ingest(changed('Card/1'));
+    await two.ingest(changed('Card/9'));
+    let events = (await two.window()).events.filter((event) => event.seq > 1);
+    assert.deepEqual(
+      events.map(({ kind, path }) => ({ kind, path })),
+      [{ kind: 'withdrawn', path: 'Card/1' }],
+    );
+  });
+
+  test('a feed that falls further behind than the store keeps tells its clients to reset', async function (assert) {
+    let one = feed();
+    await one.ingest(changed('Card/1'));
+    let heard: FeedEvent[] = [];
+    one.subscribe((event) => heard.push(event));
+    let store = new DbFeedStore(dbAdapter);
+    let count = EVENT_FEED_WINDOW * 4 + 50;
+    await store.append(
+      REALM,
+      Array.from({ length: count }, (_, i) => ({
+        v: 1,
+        kind: 'indexed' as const,
+        path: `Bulk/${i}`,
+      })),
+      EVENT_FEED_WINDOW,
+    );
+    await one.catchUp();
+    let reset = heard.find((event) => event.kind === 'reset');
+    assert.ok(reset, 'a reset reaches its subscribers');
+    assert.strictEqual(
+      heard.indexOf(reset!),
+      0,
+      'before anything after the positions it missed',
+    );
+    assert.strictEqual(one.head, count + 1, 'and it is at the head');
+    let replayed = await one.replay(`${(await one.window()).epoch}:2`);
+    assert.deepEqual(
+      replayed.map((event) => event.kind),
+      ['reset'],
+      'a client that held a position it missed is told to reset too',
+    );
+  });
+
+  test('a feed whose first load fails loads again on the next ask', async function (assert) {
+    let failing = true;
+    let real = new DbFeedStore(dbAdapter);
+    let store: FeedStore = {
+      load: async (key, keep) => {
+        if (failing) {
+          failing = false;
+          throw new Error('the database blinked');
+        }
+        return await real.load(key, keep);
+      },
+      append: (...args) => real.append(...args),
+      appendIfExists: (...args) => real.appendIfExists(...args),
+      after: (...args) => real.after(...args),
+      latestMessages: (...args) => real.latestMessages(...args),
+      wasVisible: (...args) => real.wasVisible(...args),
+      claimRefresh: (...args) => real.claimRefresh(...args),
+    };
+    let flaky = new RealmEventFeed(REALM, async () => ({}), store);
+    await assert.rejects(flaky.position(), /blinked/);
+    assert.ok(
+      /^[0-9a-f]+:0$/.test(await flaky.position()),
+      'the next ask loads the feed',
     );
   });
 
@@ -1300,19 +1568,38 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
       window.events.map(({ seq, kind, path }) => ({ seq, kind, path })),
       [
         { seq: 1, kind: 'indexed', path: 'Card/1' },
-        { seq: 2, kind: 'reset', path: '' },
-        { seq: 3, kind: 'indexed', path: 'Card/2' },
+        { seq: 2, kind: 'indexed', path: 'Card/2' },
       ],
     );
-    assert.deepEqual(heard, [2, 3], 'one passes on what two appended');
+    assert.deepEqual(heard, [2], 'one passes on what two appended');
 
     await one.ingest(changed('Card/3'));
     await two.catchUp();
     assert.deepEqual(
       (await two.window()).events.map((event) => event.seq),
-      [1, 2, 3, 4],
+      [1, 2, 3],
       'and two hears what one appends after',
     );
+  });
+
+  test('a republish inside the cooldown asks its pages to reload once the cooldown is up', async function (assert) {
+    let answers: Awaited<ReturnType<Realm['requestEventFeedRefresh']>>[] = [
+      { accepted: false, retryAfterMs: 20 },
+      { accepted: true },
+    ];
+    let asked: number[] = [];
+    let started = Date.now();
+    await refreshAfterRepublish(
+      {
+        requestEventFeedRefresh: async () => {
+          asked.push(Date.now() - started);
+          return answers[asked.length - 1]!;
+        },
+      },
+      REALM,
+    );
+    assert.strictEqual(asked.length, 2, 'asked again');
+    assert.ok(asked[1]! >= 20, 'after the wait the realm named');
   });
 
   test('a refresh accepted by one process is refused by another within the cooldown', async function (assert) {
@@ -1382,6 +1669,78 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
     assert.ok(
       later.from > 0,
       'and the window says the cheers before it are gone',
+    );
+  });
+
+  test("the messages a transform collects are every key's latest, however many keys there are", async function (assert) {
+    let key = channelFeedKey(REALM, 'Game/2');
+    let channel = new RealmEventFeed(
+      REALM,
+      async () => ({}),
+      new DbFeedStore(dbAdapter),
+      { key },
+    );
+    await channel.ready();
+    let teams = EVENT_FEED_WINDOW + 44;
+    await new DbFeedStore(dbAdapter).append(
+      key,
+      Array.from({ length: teams }, (_, i) => ({
+        v: 1,
+        kind: 'message' as const,
+        path: 'Game/2',
+        operation: { name: 'answer', base: 'emit' },
+        key: `team-${i}`,
+        body: { team: i },
+      })),
+      EVENT_FEED_WINDOW,
+    );
+    await channel.catchUp();
+    assert.ok(
+      (await channel.window()).events.length <= EVENT_FEED_WINDOW,
+      'the window in memory holds no more than it keeps',
+    );
+    let collected = await channel.latestMessages();
+    assert.strictEqual(
+      collected.length,
+      teams,
+      'and every answer is collected',
+    );
+  });
+
+  test("an emit's guard runs in turn with the channel's appends, and a refused one emits nothing", async function (assert) {
+    let key = channelFeedKey(REALM, 'Game/3');
+    let channel = new RealmEventFeed(
+      REALM,
+      async () => ({}),
+      new DbFeedStore(dbAdapter),
+      { key },
+    );
+    let order: string[] = [];
+    let message = (body: unknown) => ({
+      path: 'Game/3',
+      operation: { name: 'answer', base: 'emit' },
+      body,
+    });
+    let first = channel.emit(message(1), async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      order.push('guard 1');
+    });
+    let second = channel.emit(message(2), async () => {
+      order.push('guard 2');
+      throw new Error('too late');
+    });
+    let collected = channel.latestMessages().then((events) => {
+      order.push('collected');
+      return events;
+    });
+    await first;
+    await assert.rejects(second, /too late/);
+    let messages = await collected;
+    assert.deepEqual(order, ['guard 1', 'guard 2', 'collected']);
+    assert.deepEqual(
+      messages.map((event) => event.body),
+      [1],
+      'the collect waited for both, and the refused message is not there',
     );
   });
 });

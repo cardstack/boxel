@@ -1579,6 +1579,10 @@ export interface EmitMessageArgs {
   operation: { name: string; base: 'emit' };
   key?: string;
   body: JsonValue;
+  // The emit's `assert`, which the realm runs holding the card's write lock
+  // and in turn with the channel's appends, right before the message is
+  // recorded; one that throws emits nothing.
+  guard?: () => Promise<void>;
 }
 
 // Delivers an `emit`'s message on the card's live channel (ADR 020 §1.8,
@@ -1589,9 +1593,10 @@ export type EmitMessage = (
 ) => Promise<{ position: string }>;
 
 // The bodies of the latest message per key that the emit named `operation`
-// published on the card's live channel, in channel order — the channel's
-// compacted window, filtered to that operation. Supplied by the realm, which
-// owns the channel, and read under the write lock on the card.
+// published on the card's live channel, however many keys there are, and the
+// messages naming no key the channel still keeps, in channel order. Supplied
+// by the realm, which owns the channel, and read under the write lock on the
+// card, which a guarded emit holds too.
 export type ChannelMessages = (args: {
   cardURL: string;
   operation: string;

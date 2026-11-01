@@ -487,7 +487,7 @@ export interface StagingContext {
     codeRef: CodeRef,
     relativeTo: URL,
   ): Promise<Definition | undefined>;
-  // The latest messages an emit published on a card's live channel, for a
+  // The latest messages an emit put on a card's live channel, for a
   // transform that collects them. Absent where the realm has no channel, which
   // refuses such a transform.
   channelMessages?: ChannelMessages;
@@ -1836,13 +1836,15 @@ function withoutCollected(entry: TransformEntry, url: URL): TransformEntry {
 }
 
 // The params a program reads, with each collected one bound to the messages
-// its emit published on the target card's channel.
+// its emit put on the target card's channel.
 //
 // Read here, while the batch holds the write lock on the card, so what the
 // program collects is the channel as it stood when this entry staged: a
-// message emitted after this read is not counted, and the next transform to
-// collect from the channel is the one that sees it. A read of a channel is a
-// read of what other callers published, so the operation is never a candidate
+// guarded emit takes the same lock, so it waits for this write and judges its
+// guard against what it wrote; an unguarded message emitted after this read
+// is not counted, and the next transform to collect from the channel is the
+// one that sees it. A read of a channel is a
+// read of what other callers emitted, so the operation is never a candidate
 // for the client's optimistic path (lowering marks it non-deterministic).
 async function withCollectedParams(
   entry: TransformEntry,

@@ -253,9 +253,6 @@ export class RealmEventFeed {
   // Poll reads this minute and last, for sizing a reset's spread.
   #polls = { minute: 0, count: 0, previous: 0 };
   #subscribers = new Set<(event: FeedEvent) => void>();
-  // Cards this feed has announced as readable, so a removal is announced
-  // only for a card a visitor could have seen.
-  #visible = new Set<string>();
   // The last kind and revision announced per path, to drop a repeat of the
   // same change the realm reports through two events.
   #lastKind = new Map<
@@ -300,10 +297,11 @@ export class RealmEventFeed {
     return this.#seq;
   }
 
-  // Loads the feed from its store, once. A feed found stored is one a
-  // process served before, so it announces one reset: a card removed or
-  // withdrawn while nobody was watching is found by every client's
-  // revalidation (ADR 020 §1.2).
+  // Loads the feed from its store, once. A feed found stored continues where
+  // it stood: its positions and the cards it announced as readable are the
+  // store's, shared by every process, so a process that starts later, or
+  // again, has nothing to reset (ADR 020 §1.2). A load that fails is tried
+  // again by the next caller rather than leaving the feed unusable.
   ready(): Promise<void> {
     this.#loaded ??= (async () => {
       let loaded = await this.store.load(this.key, EVENT_FEED_WINDOW);
@@ -311,10 +309,10 @@ export class RealmEventFeed {
       this.#seq = loaded.head;
       this.#events = loaded.events;
       this.#floor = loaded.floor;
-      if (loaded.restarted) {
-        this.reset();
-      }
-    })();
+    })().catch((error: unknown) => {
+      this.#loaded = undefined;
+      throw error;
+    });
     return this.#loaded;
   }
 
@@ -343,7 +341,6 @@ export class RealmEventFeed {
   // for a change the feed can't attribute to cards, such as the realm's
   // permissions or the policy it names.
   reset() {
-    this.#visible.clear();
     this.#announce(
       'reset',
       '',
@@ -391,18 +388,33 @@ export class RealmEventFeed {
   async catchUp(): Promise<void> {
     await this.ready();
     await this.#appending;
-    this.#deliver(await this.store.after(this.key, this.#seq));
+    this.#deliverFromStore(await this.store.after(this.key, this.#seq));
+  }
+
+  // The messages a transform collecting from this channel reads (ADR 020
+  // §1.8): the latest per key however old, from the store, after every emit
+  // this process has under way has landed.
+  async latestMessages(): Promise<FeedEvent[]> {
+    await this.ready();
+    await this.#appending;
+    return await this.store.latestMessages(this.key, EVENT_FEED_WINDOW);
   }
 
   // Emits a message on this feed, a card's live channel (ADR 020 §1.8):
-  // what a `emit` operation the policy admitted produced. Resolves to the
+  // what an `emit` operation the policy admitted produced. Resolves to the
   // message as the feed recorded it.
-  async emit(message: {
-    path: string;
-    operation: FeedOperation;
-    key?: string;
-    body: unknown;
-  }): Promise<FeedEvent> {
+  //
+  // `guard`, when given, runs first, in turn with the feed's other appends,
+  // and a guard that throws emits nothing.
+  async emit(
+    message: {
+      path: string;
+      operation: FeedOperation;
+      key?: string;
+      body: unknown;
+    },
+    guard?: () => Promise<void>,
+  ): Promise<FeedEvent> {
     let event: Omit<FeedEvent, 'seq'> = {
       v: EVENT_FEED_VERSION,
       kind: 'message',
@@ -415,16 +427,17 @@ export class RealmEventFeed {
     // caller learns its position, and a failure is the caller's to see.
     let step = this.#appending.then(async () => {
       await this.ready();
+      await guard?.();
       let [recorded] = await this.store.append(
         this.key,
         [event],
         EVENT_FEED_WINDOW,
       );
-      this.#deliver(
-        recorded!.seq === this.#seq + 1
-          ? [recorded!]
-          : await this.store.after(this.key, this.#seq),
-      );
+      if (recorded!.seq === this.#seq + 1) {
+        this.#deliver([recorded!]);
+      } else {
+        this.#deliverFromStore(await this.store.after(this.key, this.#seq));
+      }
       return recorded!;
     });
     this.#appending = step.then(
@@ -481,6 +494,10 @@ export class RealmEventFeed {
     types: string[] | undefined,
     operations: Record<string, FeedOperation> | undefined,
   ) {
+    // What this event has decided so far, ahead of the store recording it.
+    let decided = new Map<string, boolean>();
+    let wasVisible = async (path: string) =>
+      decided.get(path) ?? (await this.store.wasVisible(this.key, path));
     for (let change of changes) {
       let { url, kind } = change;
       let path = this.#pathOf(url);
@@ -494,8 +511,12 @@ export class RealmEventFeed {
           operations?.[url.replace(/\.json$/, '')] ??
           change.operation,
       );
+      // Whether a visitor could hold the card is what the feed announced,
+      // as the store records it for every process, so a removal is
+      // announced whichever process announced the card and however long ago.
       if (kind === 'removed') {
-        if (this.#visible.delete(path)) {
+        if (await wasVisible(path)) {
+          decided.set(path, false);
           this.#announce('removed', path, undefined, types, operation);
         }
         continue;
@@ -504,12 +525,13 @@ export class RealmEventFeed {
       if (!readable) {
         // A card that stops being readable is announced once more, so a
         // visitor holding it finds out it is gone.
-        if (this.#visible.delete(path)) {
+        if (await wasVisible(path)) {
+          decided.set(path, false);
           this.#announce('withdrawn', path, undefined, types, operation);
         }
         continue;
       }
-      this.#visible.add(path);
+      decided.set(path, true);
       this.#announce(
         kind,
         path,
@@ -659,9 +681,10 @@ export class RealmEventFeed {
       // Another process appended between this one's last position and these:
       // read the gap with them, so this process's subscribers miss nothing.
       if (appended.length > 0 && appended[0]!.seq !== this.#seq + 1) {
-        appended = await this.store.after(this.key, this.#seq);
+        this.#deliverFromStore(await this.store.after(this.key, this.#seq));
+      } else {
+        this.#deliver(appended);
       }
-      this.#deliver(appended);
     } catch (error: unknown) {
       log.warn(`event feed ${this.key} could not record events`, {
         error,
@@ -674,6 +697,48 @@ export class RealmEventFeed {
         }, EVENT_FEED_STORE_RETRY_MS);
       }
     }
+  }
+
+  // Takes in what the store holds after this process's position. The store
+  // keeps every position for a few windows, so one missing from the run is
+  // one it trimmed before this process read it: what was there is lost to
+  // this process's subscribers, who are told to reset, and the window is
+  // complete only after it (ADR 020 §1.3).
+  #deliverFromStore(events: FeedEvent[]) {
+    let sorted = [...events]
+      .filter((event) => event.seq > this.#seq)
+      .sort((a, b) => a.seq - b.seq);
+    // The last place the run skips a position. Before it, at most the latest
+    // messages per key the store keeps however old.
+    let gap = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      let previous = i === 0 ? this.#seq : sorted[i - 1]!.seq;
+      if (sorted[i]!.seq !== previous + 1) {
+        gap = i;
+      }
+    }
+    if (gap === -1) {
+      this.#deliver(sorted);
+      return;
+    }
+    this.#deliver(sorted.slice(0, gap));
+    let lost = sorted[gap]!.seq - 1;
+    log.warn(
+      `event feed ${this.key} missed positions up to ${lost}; its clients reset`,
+    );
+    this.#floor = Math.max(this.#floor, lost);
+    this.#seq = Math.max(this.#seq, lost);
+    let reset: FeedEvent = {
+      v: EVENT_FEED_VERSION,
+      seq: lost,
+      kind: 'reset',
+      path: '',
+      spread: this.#spread(),
+    };
+    for (let subscriber of [...this.#subscribers]) {
+      subscriber(reset);
+    }
+    this.#deliver(sorted.slice(gap));
   }
 
   // Takes positioned events in, in order, skipping any already held, and

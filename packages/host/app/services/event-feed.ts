@@ -20,7 +20,7 @@ import type MessageService from './message-service';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // Realm events for a session that has no Matrix to hear them through: a
-// visitor of a emitted site who isn't signed in. Each realm the page starts
+// visitor of a published site who isn't signed in. Each realm the page starts
 // watching gets the realm's event feed (ADR 020), and each change is
 // relayed through MessageService as the incremental index event Matrix would
 // have delivered, so the store, live searches and resources stay current with
@@ -231,6 +231,15 @@ export default class EventFeedService extends Service {
       let url = withParam(new URL(EVENT_FEED_PATH, base).href, 'channel', path);
       let listeners = new Set<(message: ChannelMessage) => void>();
       let deliver = (event: FeedEvent) => {
+        // The card is gone, or its visitors may no longer read it: the
+        // realm ends the channel's stream, and following it further would
+        // only be refused (ADR 020 §1.8).
+        if (
+          (event.kind === 'removed' || event.kind === 'withdrawn') &&
+          event.path === path
+        ) {
+          this.channels.get(cardURL)?.feed.stop();
+        }
         if (event.kind === 'message') {
           let message: ChannelMessage = {
             seq: event.seq,
@@ -244,19 +253,28 @@ export default class EventFeedService extends Service {
           return;
         }
         if (event.kind !== 'refresh') {
-          this.relay(realmURL, base!, event);
+          // Spread as the realm's own events are, a reset most of all, so a
+          // crowd following one channel doesn't re-read at once.
+          this.relaySpread(realmURL!, base!, event);
         }
       };
+      // A channel opened afresh starts from its current messages, on the
+      // poll as on the stream, so a page that joins late hears where things
+      // stand.
       let feed =
         typeof EventSource === 'function'
-          ? streamFeed(url, undefined, deliver, this.timing, () => {
+          ? streamFeed(url, undefined, deliver, this.timing, (lastId) => {
               let current = this.channels.get(cardURL);
               current?.feed.stop();
               if (current) {
-                current.feed = pollFeed(url, undefined, deliver, this.timing);
+                current.feed = pollFeed(url, lastId, deliver, this.timing, {
+                  fromWindow: true,
+                });
               }
             })
-          : pollFeed(url, undefined, deliver, this.timing);
+          : pollFeed(url, undefined, deliver, this.timing, {
+              fromWindow: true,
+            });
       channel = { feed, listeners };
       this.channels.set(cardURL, channel);
       // A channel opens from its current messages, not from where the page's
@@ -302,6 +320,11 @@ export default class EventFeedService extends Service {
       feed.stop();
     }
     this.feeds.clear();
+    for (let channel of this.channels.values()) {
+      channel.feed.stop();
+      channel.listeners.clear();
+    }
+    this.channels.clear();
     this.abortLockRequest?.abort();
     this.releaseLock?.();
     this.channel?.close();
@@ -425,12 +448,17 @@ export default class EventFeedService extends Service {
     let resumeFrom = this.cursors.get(realm) ?? earliestFeedPosition(base.href);
     let feed =
       typeof EventSource === 'function'
-        ? streamFeed(feedURL, resumeFrom, deliver, this.timing, () => {
+        ? streamFeed(feedURL, resumeFrom, deliver, this.timing, (lastId) => {
             // The stream is unavailable here: fall back to the poll.
             this.feeds.get(realm)?.stop();
             this.feeds.set(
               realm,
-              pollFeed(feedURL, this.cursors.get(realm), deliver, this.timing),
+              pollFeed(
+                feedURL,
+                this.cursors.get(realm) ?? lastId,
+                deliver,
+                this.timing,
+              ),
             );
           })
         : pollFeed(feedURL, resumeFrom, deliver, this.timing);
@@ -450,6 +478,12 @@ export default class EventFeedService extends Service {
       this.refreshRequested(realm);
       return;
     }
+    this.relaySpread(realm, base, event);
+  }
+
+  // Relays an event after a random delay, so the re-reads it starts across a
+  // crowd are spread out.
+  private relaySpread(realm: string, base: URL, event: FeedEvent) {
     let relay = () => {
       if (!this.isDestroying && !this.isDestroyed) {
         this.relay(realm, base, event);
@@ -559,18 +593,41 @@ function streamFeed(
   resumeFrom: string | undefined,
   deliver: (event: FeedEvent, id?: string) => void,
   timing: FeedTiming,
-  unavailable: () => void,
+  // Called with the last event id the stream delivered when the realm never
+  // streamed to this page, for the poll that takes over for good.
+  unavailable: (lastId: string | undefined) => void,
 ): { stop: () => void } {
   // A tab taking over from another resumes from the last id the tabs saw.
   // The browser sends `Last-Event-ID` only on its own reconnects, so a
   // request this client opens names it in the query, which the realm also
   // reads.
   let lastId = resumeFrom;
+  let last = parseEventId(resumeFrom);
   let everOpened = false;
   let failures = 0;
   let stopped = false;
   let source: EventSource | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // The poll that carries the page while a stream that ran before is down.
+  let interim: { stop: () => void } | undefined;
+  // Each event once, whether the stream or the interim poll brought it.
+  let pass = (event: FeedEvent, id?: string) => {
+    let position = parseEventId(id);
+    if (
+      position &&
+      last &&
+      position.epoch === last.epoch &&
+      position.seq <= last.seq &&
+      event.kind !== 'reset'
+    ) {
+      return;
+    }
+    if (position) {
+      last = position;
+      lastId = id;
+    }
+    deliver(event, id);
+  };
   let open = () => {
     if (stopped) {
       return;
@@ -582,29 +639,36 @@ function streamFeed(
     current.addEventListener('open', () => {
       everOpened = true;
       failures = 0;
+      interim?.stop();
+      interim = undefined;
     });
     current.addEventListener('change', (message) => {
       let { data, lastEventId } = message as MessageEvent;
       let event = parseEvent(data);
       if (event) {
-        lastId = lastEventId || lastId;
-        deliver(event, lastEventId || undefined);
+        pass(event, lastEventId || undefined);
       }
     });
     current.addEventListener('error', () => {
       // A dropped connection the browser is retrying stays CONNECTING. One it
       // gave up on is CLOSED: an HTTP error on a reconnect (a deploy's 502, a
-      // 429), or a realm that never offered a stream.
+      // 503 from a realm holding as many streams as it can), or a realm that
+      // never offered a stream.
       if (current.readyState !== EventSource.CLOSED || stopped) {
         return;
       }
+      current.close();
       if (!everOpened) {
         // Never connected: the realm doesn't stream here, so poll instead.
-        unavailable();
+        stopped = true;
+        unavailable(lastId);
         return;
       }
-      // It streamed before, so it should again: reopen from the last id,
-      // waiting longer after each failure.
+      // It streamed before, so it should again. Until it does the page
+      // polls from where the stream left off, which a shared cache absorbs
+      // (ADR 020 §1.4), and the stream is tried again, waiting longer after
+      // each failure.
+      interim ??= pollFeed(url, lastId, pass, timing);
       failures++;
       timer = setTimeout(open, backoff(failures, timing));
     });
@@ -615,6 +679,8 @@ function streamFeed(
       stopped = true;
       clearTimeout(timer);
       source?.close();
+      interim?.stop();
+      interim = undefined;
     },
   };
 }
@@ -624,6 +690,10 @@ function pollFeed(
   resumeFrom: string | undefined,
   deliver: (event: FeedEvent, id?: string) => void,
   timing: FeedTiming,
+  // For a card's channel: a first answer with nothing to resume from delivers
+  // the messages in the window, the latest per key, rather than starting
+  // after them (ADR 020 §1.8).
+  { fromWindow = false }: { fromWindow?: boolean } = {},
 ): { stop: () => void } {
   // Resuming from another tab's last id compares the first answer against it
   // rather than adopting it as where this page starts.
@@ -659,6 +729,13 @@ function pollFeed(
           // The first answer sets where this page starts from.
           epoch = answer.epoch;
           seen = answer.head;
+          if (fromWindow) {
+            for (let event of answer.events) {
+              if (event.kind === 'message') {
+                deliver(event, idOf(event.seq));
+              }
+            }
+          }
         } else if (
           answer.epoch !== epoch ||
           // The window is complete only after `from`; a feed that names none

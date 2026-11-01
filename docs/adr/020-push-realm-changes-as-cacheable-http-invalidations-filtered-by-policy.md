@@ -53,8 +53,14 @@ policy per subscriber, and a client MUST NOT be trusted to filter. A change
 to anything that decides what the audience may read MUST be announced as a
 reset: the realm's permissions, the `policy` pointer in `realm.json`, the
 policy card wherever it lives, and a linked card a grant's condition reads. A
-feed that restarts MUST announce one reset, so a card removed or withdrawn
-while it was down is found by every client's revalidation.
+card's removal or withdrawal MUST be announced whenever the feed announced
+the card as readable, whichever process announced it and however long ago,
+so the realm MUST keep which cards its feed has announced as readable where
+every process serving it reads them, beside the sequence (§1.3). A feed whose
+sequence and record of readable cards outlive the process MUST NOT announce a
+reset when a process starts serving it: nothing it announced is lost, and a
+reset per process would send every client back for everything it holds at
+each deploy and each lazily mounted realm.
 
 ### 1.3. Plain HTTP, two readings of one feed
 

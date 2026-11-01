@@ -18,6 +18,7 @@ import {
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
+  type Realm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
@@ -418,6 +419,40 @@ async function touchFilesModifiedSince(
     } else if (entry.isFile() && (await stat(path)).mtimeMs >= since) {
       await utimes(path, now, now);
     }
+  }
+}
+
+// Asks the pages open on a republished realm to reload (ADR 020 §1.7). The
+// realm accepts one refresh request a minute, so a republish that follows
+// another within it asks again once the minute is up, rather than leaving its
+// pages on the build before. Asked at most twice; a failure is logged as the
+// refresh's, not the reindex's.
+export async function refreshAfterRepublish(
+  realm: Pick<Realm, 'requestEventFeedRefresh'>,
+  realmURL: string,
+): Promise<void> {
+  try {
+    let answer = await realm.requestEventFeedRefresh();
+    if (answer.accepted) {
+      return;
+    }
+    let wait = answer.retryAfterMs;
+    await new Promise<void>((resolve) => {
+      let timer = setTimeout(resolve, wait);
+      timer.unref?.();
+    });
+    answer = await realm.requestEventFeedRefresh();
+    if (!answer.accepted) {
+      log.warn(
+        `the refresh request after republishing ${realmURL} was refused twice; pages open on it keep the build before until they reload`,
+      );
+    }
+  } catch (err: unknown) {
+    log.error(
+      `the refresh request after republishing ${realmURL} failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
   }
 }
 
@@ -969,14 +1004,18 @@ export default function handlePublishRealm({
             // A republish is a new build of the site: once it is indexed, the
             // pages open on it are asked to reload, so they stop running the
             // code it replaced (ADR 020 §1.7).
-            .then(() => publishedRealm.requestEventFeedRefresh())
-            .catch((err: unknown) => {
-              log.error(
-                `background publish reindex failed for ${publishedRealmURL}: ${
-                  err instanceof Error ? err.message : String(err)
-                }`,
-              );
-            });
+            .then(
+              () => {
+                void refreshAfterRepublish(publishedRealm, publishedRealmURL);
+              },
+              (err: unknown) => {
+                log.error(
+                  `background publish reindex failed for ${publishedRealmURL}: ${
+                    err instanceof Error ? err.message : String(err)
+                  }`,
+                );
+              },
+            );
         }
       }
 

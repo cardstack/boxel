@@ -490,6 +490,12 @@ export class NodeAdapter implements RealmAdapter {
           stream.write(text);
         }
       },
+      end() {
+        if (!stream.writableEnded) {
+          stream.end();
+        }
+        close();
+      },
       onClose(callback: () => void) {
         if (closed) {
           callback();

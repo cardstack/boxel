@@ -37,9 +37,6 @@ export interface LoadedFeed {
   // The position the events are complete after: a client that last saw an
   // earlier one may have missed something and resets.
   floor: number;
-  // The feed was found stored, so this process continues one that ran before:
-  // the feed announces a reset, so every client revalidates once (ADR 020 §1.2).
-  restarted: boolean;
 }
 
 export type RefreshClaim =
@@ -66,8 +63,41 @@ export interface FeedStore {
   ): Promise<FeedEvent[] | undefined>;
   // The events after `seq`, in order: what another process appended.
   after(key: string, seq: number): Promise<FeedEvent[]>;
+  // The messages a transform that collects from a card's channel reads (ADR
+  // 020 §1.8), in order: the latest message for each key, however old, and
+  // each message that names no key while the store still keeps it, which is
+  // `keep * 4` positions back.
+  latestMessages(key: string, keep: number): Promise<FeedEvent[]>;
+  // Whether the feed has announced the card at `path` as readable and not
+  // since as removed or withdrawn. A realm's own feed records this as it
+  // appends, in every process, so a removal is announced for a card a
+  // visitor could have seen whichever process announced it (ADR 020 §1.2).
+  wasVisible(key: string, path: string): Promise<boolean>;
   // Records a refresh request unless one was accepted within `cooldownMs`.
   claimRefresh(key: string, cooldownMs: number): Promise<RefreshClaim>;
+}
+
+// What an event says about whether the feed's audience may see its card:
+// visible after a `written` or `indexed` change, gone after a `removed` or
+// `withdrawn` one, and nothing for every other kind. Only a realm's own feed
+// records it; a channel's mirrored changes repeat what the realm's recorded.
+export function visibilityOf(
+  key: string,
+  event: Pick<FeedEvent, 'kind' | 'path'>,
+): boolean | undefined {
+  if (!event.path || parseFeedKey(key).path !== undefined) {
+    return undefined;
+  }
+  switch (event.kind) {
+    case 'written':
+    case 'indexed':
+      return true;
+    case 'removed':
+    case 'withdrawn':
+      return false;
+    default:
+      return undefined;
+  }
 }
 
 // A message superseded by a later one with the same key carries nothing a
@@ -99,13 +129,26 @@ export class MemoryFeedStore implements FeedStore {
       events: FeedEvent[];
       floor: number;
       lastRefresh?: number;
+      // The latest message per key, however far the window moved past it,
+      // and the messages with no key the store still keeps.
+      latest: Map<string, FeedEvent>;
+      unkeyed: FeedEvent[];
+      visible: Set<string>;
     }
   >();
 
   #feed(key: string) {
     let feed = this.#feeds.get(key);
     if (!feed) {
-      feed = { epoch: randomEpoch(), head: 0, events: [], floor: 0 };
+      feed = {
+        epoch: randomEpoch(),
+        head: 0,
+        events: [],
+        floor: 0,
+        latest: new Map(),
+        unkeyed: [],
+        visible: new Set(),
+      };
       this.#feeds.set(key, feed);
     }
     return feed;
@@ -118,7 +161,6 @@ export class MemoryFeedStore implements FeedStore {
       head: feed.head,
       events: [...feed.events],
       floor: feed.floor,
-      restarted: false,
     };
   }
 
@@ -132,6 +174,24 @@ export class MemoryFeedStore implements FeedStore {
       (event) => ({ ...event, seq: ++feed.head }) as FeedEvent,
     );
     feed.events.push(...appended);
+    for (let event of appended) {
+      if (event.kind === 'message') {
+        if (event.key !== undefined) {
+          feed.latest.set(event.key, event);
+        } else {
+          feed.unkeyed.push(event);
+        }
+      }
+      let visible = visibilityOf(key, event);
+      if (visible === true) {
+        feed.visible.add(event.path);
+      } else if (visible === false) {
+        feed.visible.delete(event.path);
+      }
+    }
+    feed.unkeyed = feed.unkeyed.filter(
+      (event) => event.seq > feed.head - keep * 4,
+    );
     let kept = trimWindow(feed.events, keep * 4);
     feed.events = kept.events;
     feed.floor = Math.max(feed.floor, kept.floor);
@@ -148,6 +208,21 @@ export class MemoryFeedStore implements FeedStore {
 
   async after(key: string, seq: number): Promise<FeedEvent[]> {
     return this.#feed(key).events.filter((event) => event.seq > seq);
+  }
+
+  async latestMessages(key: string, keep: number): Promise<FeedEvent[]> {
+    let feed = this.#feeds.get(key);
+    if (!feed) {
+      return [];
+    }
+    return [
+      ...feed.latest.values(),
+      ...feed.unkeyed.filter((event) => event.seq > feed.head - keep * 4),
+    ].sort((a, b) => a.seq - b.seq);
+  }
+
+  async wasVisible(key: string, path: string): Promise<boolean> {
+    return this.#feeds.get(key)?.visible.has(path) ?? false;
   }
 
   async claimRefresh(key: string, cooldownMs: number): Promise<RefreshClaim> {
@@ -212,12 +287,12 @@ export class DbFeedStore implements FeedStore {
   }
 
   async load(key: string, keep: number): Promise<LoadedFeed> {
-    let created = await query(this.#dbAdapter, [
+    await query(this.#dbAdapter, [
       'INSERT INTO realm_feeds (feed_key, epoch, head) VALUES (',
       param(key),
       ',',
       param(randomEpoch()),
-      ', 0) ON CONFLICT (feed_key) DO NOTHING RETURNING epoch',
+      ', 0) ON CONFLICT (feed_key) DO NOTHING',
     ]);
     let [row] = await query(this.#dbAdapter, [
       'SELECT epoch, head FROM realm_feeds WHERE feed_key =',
@@ -240,7 +315,6 @@ export class DbFeedStore implements FeedStore {
       head,
       events: rows.map((r) => eventOf(r.event)),
       floor,
-      restarted: created.length === 0,
     };
   }
 
@@ -292,6 +366,28 @@ export class DbFeedStore implements FeedStore {
             '::jsonb)',
           ]);
         }
+        // Whether each card is one the audience may see, as the events say,
+        // so a later removal is judged against what was announced rather
+        // than what this process remembers.
+        for (let event of appended) {
+          let visible = visibilityOf(key, event);
+          if (visible === true) {
+            await tx([
+              'INSERT INTO realm_feed_visible (feed_key, path) VALUES (',
+              param(key),
+              ',',
+              param(event.path),
+              ') ON CONFLICT DO NOTHING',
+            ]);
+          } else if (visible === false) {
+            await tx([
+              'DELETE FROM realm_feed_visible WHERE feed_key =',
+              param(key),
+              'AND path =',
+              param(event.path),
+            ]);
+          }
+        }
         // Kept a few windows deep, so a client a little behind can still
         // resume, with the latest message for each key kept however old;
         // older events are of no use to anyone.
@@ -328,6 +424,31 @@ export class DbFeedStore implements FeedStore {
       'ORDER BY seq',
     ]);
     return rows.map((row) => eventOf(row.event));
+  }
+
+  async latestMessages(key: string, keep: number): Promise<FeedEvent[]> {
+    let rows = await query(this.#dbAdapter, [
+      'SELECT event FROM realm_feed_events e WHERE feed_key =',
+      param(key),
+      "AND event->>'kind' = 'message' AND (",
+      "(event->>'key' IS NULL AND seq > (SELECT head FROM realm_feeds f",
+      'WHERE f.feed_key = e.feed_key) -',
+      param(keep * 4),
+      ") OR (event->>'key' IS NOT NULL AND seq = (",
+      'SELECT max(seq) FROM realm_feed_events l WHERE l.feed_key = e.feed_key',
+      "AND l.event->>'key' = e.event->>'key'))) ORDER BY seq",
+    ]);
+    return rows.map((row) => eventOf(row.event));
+  }
+
+  async wasVisible(key: string, path: string): Promise<boolean> {
+    let rows = await query(this.#dbAdapter, [
+      'SELECT 1 FROM realm_feed_visible WHERE feed_key =',
+      param(key),
+      'AND path =',
+      param(path),
+    ]);
+    return rows.length > 0;
   }
 
   async claimRefresh(key: string, cooldownMs: number): Promise<RefreshClaim> {

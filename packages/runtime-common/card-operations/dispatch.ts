@@ -221,9 +221,9 @@ export interface OperationCore {
   callApi?: CallApiSender;
   // Puts an `emit`'s message on the target card's live channel (ADR 020
   // §1.8, §1.10) and answers the position it took there. Called once per
-  // admitted emit, after the batch's writes have committed. A core without
-  // it emits nothing, and refuses every `emit` with 501
-  // `not-implemented`.
+  // admitted emit; in an `_operations` batch, after the batch's writes have
+  // committed. A core without it emits nothing, and refuses every `emit`
+  // with 501 `not-implemented`.
   emitMessage?: EmitMessage;
 }
 
@@ -1717,7 +1717,6 @@ async function emitOperation(
     });
   }
   let body = (request.params ?? {}) as Record<string, JsonValue>;
-  await assertEmitGuard(core, request, definition, cardURL);
   let key = await runKeyTransform(
     definition,
     body,
@@ -1730,6 +1729,11 @@ async function emitOperation(
       operation: { name: request.name, base: 'emit' },
       ...(key === undefined ? {} : { key }),
       body,
+      ...(definition.guard
+        ? {
+            guard: () => assertEmitGuard(core, request, definition, cardURL),
+          }
+        : {}),
     }));
   } catch (err: unknown) {
     if (isOperationFailure(err)) {
@@ -1752,9 +1756,11 @@ async function emitOperation(
 // An emit's `assert`, judged against the card as stored and the realm's clock
 // before anything is emitted. The card is read from its file rather than from
 // the index, so a write that has landed is what the guard sees whether or not
-// it has been indexed yet. No lock is taken: an emit stages nothing, and a
-// guard that held a moment before a concurrent write is the same answer the
-// gate's own predicate gives a read.
+// it has been indexed yet. The realm runs it holding the card's write lock and
+// in turn with the channel's appends, so it can't pass against a card a
+// concurrent write is about to change: a transform that collects from the
+// channel and writes what lasts holds that lock, and an emit after it sees
+// what it wrote (ADR 020 §1.8).
 //
 // `.` is the card's id and attributes, which is also what `instance()` reads.
 // The guard answers `true` for a message that may go; `false` refuses the
