@@ -209,6 +209,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
       followChannel: this.followChannel,
+      takeRefreshRequests: (taker) => this.eventFeed.takeRefreshRequests(taker),
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,

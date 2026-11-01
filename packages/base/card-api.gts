@@ -76,6 +76,7 @@ import {
   type getCards,
   type getCardCollection,
   type ChannelMessage,
+  type RefreshNotice,
   type Store,
   type SearchResultsComponentSignature,
   type ErrorEntry,
@@ -447,6 +448,12 @@ export interface CardContext<T extends CardDef = CardDef> {
     card: CardDef | string,
     onMessage: (message: ChannelMessage) => void,
   ) => () => void;
+  // Takes the page's refresh requests (ADR 020 §1.7): while a card takes
+  // them, the page doesn't reload when the site's realm asks it to; the card
+  // can tell its visitors an update is ready and call `notice.reload()` when
+  // it suits them. Returns a function that stops taking them. Absent off a
+  // site, so consumers guard on it.
+  takeRefreshRequests?: (taker: (notice: RefreshNotice) => void) => () => void;
   // May this session invoke `operation` on `target`? A target is a saved card
   // or its URL, or a card class to ask whether a card of that type may be
   // created (in `opts.realm`, or where a create names no realm, the realm it

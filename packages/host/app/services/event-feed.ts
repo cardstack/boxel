@@ -6,12 +6,14 @@ import { isTesting } from '@embroider/macros';
 import {
   EVENT_FEED_PATH,
   type ChannelMessage,
+  type RefreshNotice,
   type FeedEventWindow,
   type FeedEvent,
 } from '@cardstack/runtime-common';
 
 import { earliestFeedPosition } from '../lib/feed-positions';
 
+import type HostModeService from './host-mode-service';
 import type MatrixService from './matrix-service';
 import type MessageService from './message-service';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -75,16 +77,6 @@ const RELAY_SPREAD_MS = 250;
 // it took, so a room of screens doesn't reload at once (ADR 020 §1.7).
 const REFRESH_SPREAD_MS = 5_000;
 
-// The notice a page gets when its realm asks pages to reload (ADR 020 §1.7).
-// Cancelable: an app that calls `preventDefault()` keeps the page as it is,
-// can tell its visitors an update is ready, and calls `detail.reload()` when it
-// suits them. A page whose app doesn't take it reloads.
-export const REFRESH_REQUESTED_EVENT = 'boxel-refresh-requested';
-export interface RefreshRequestedDetail {
-  realm: string;
-  reload: () => void;
-}
-
 // Per origin, which is all the Web Locks and BroadcastChannel APIs can see.
 const COORDINATION_NAME = 'boxel-event-feed';
 
@@ -135,6 +127,7 @@ function browserCoordination(): TabCoordination | undefined {
 export default class EventFeedService extends Service {
   @service declare private messageService: MessageService;
   @service declare private matrixService: MatrixService;
+  @service declare private hostModeService: HostModeService;
 
   // How tabs coordinate, read when the service starts. Off under test, where
   // one test page runs app after app and each should lead its own feeds at
@@ -154,6 +147,23 @@ export default class EventFeedService extends Service {
   };
   // Reloads the page. A test stands in for it.
   reloadPage: () => void = () => window.location.reload();
+  // The realm that owns the site this page is, whose refresh requests alone
+  // it honours. Undefined off a site. A test stands in for it.
+  siteRealm: () => string | undefined = () =>
+    this.hostModeService.isActive ? this.hostModeService.realmURL : undefined;
+  // The cards on the page that take refresh requests themselves.
+  private refreshTakers = new Set<(notice: RefreshNotice) => void>();
+
+  // Lets a card take the page's refresh requests (ADR 020 §1.7): while any
+  // card does, the page doesn't reload on its own, and the card calls
+  // `notice.reload()` when it suits its visitors. Returns a function that
+  // stops taking them.
+  takeRefreshRequests(taker: (notice: RefreshNotice) => void): () => void {
+    this.refreshTakers.add(taker);
+    return () => {
+      this.refreshTakers.delete(taker);
+    };
+  }
   private refreshPending = false;
 
   private started = false;
@@ -437,7 +447,15 @@ export default class EventFeedService extends Service {
   }
 
   // Offers the page the refresh request, and reloads it when nothing took it.
+  // Offers the request to the cards on the page that take refresh requests,
+  // and reloads it when none does (ADR 020 §1.7). A page honours a request
+  // only from the realm that owns its site, so a writer of a realm many sites
+  // draw on can't reload them all.
   private refreshRequested(realm: string) {
+    let own = this.siteRealm();
+    if (own && realmBase(own)?.href !== realmBase(realm)?.href) {
+      return;
+    }
     if (this.refreshPending) {
       return;
     }
@@ -446,11 +464,10 @@ export default class EventFeedService extends Service {
         this.reloadPage();
       }
     };
-    let notice = new CustomEvent<RefreshRequestedDetail>(
-      REFRESH_REQUESTED_EVENT,
-      { cancelable: true, detail: { realm, reload } },
-    );
-    if (!window.dispatchEvent(notice)) {
+    if (this.refreshTakers.size > 0) {
+      for (let taker of [...this.refreshTakers]) {
+        taker({ reload });
+      }
       return;
     }
     this.refreshPending = true;

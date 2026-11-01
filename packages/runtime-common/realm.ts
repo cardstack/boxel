@@ -12,6 +12,8 @@ import {
   RealmEventFeed,
   FEED_POSITION_HEADER,
   EVENT_FEED_WINDOW,
+  EVENT_FEED_MAX_STREAMS,
+  EVENT_FEED_STREAM_RETRY_AFTER_SECONDS,
   type FeedEvent,
   type FeedOperation,
   type FeedReadability,
@@ -17579,6 +17581,9 @@ export class Realm {
       ...this.#policyCompileEnvironment(),
       policyCard: async () => (await this.getRealmPolicy())?.card,
       revisitCard: (file, realmURL) => this.#revisitPolicyCard(file, realmURL),
+      // What any visitor may read can have changed with the policy, so the
+      // event feed resets (ADR 020 §1.2).
+      onRecompiled: () => this.#eventFeedInstance?.reset(),
     });
   }
 
@@ -18225,6 +18230,10 @@ export class Realm {
   // it spends no visitor's budget.
   #eventFeedInstance: RealmEventFeed | undefined;
   #feedStoreInstance: FeedStore | undefined;
+  // The streams this process holds open for this realm, its channels
+  // included, and how many it will (ADR 020 §1.4).
+  #openFeedStreams = 0;
+  eventFeedStreamCap = EVENT_FEED_MAX_STREAMS;
   // The live channels of this realm's cards (ADR 020 §1.8) this process has
   // opened: one feed per card, for what is published on it and the card's own
   // changes.
@@ -18349,6 +18358,28 @@ export class Realm {
     if (!feed) {
       return notFound(request, requestContext);
     }
+    if (this.#openFeedStreams >= this.eventFeedStreamCap) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: '503',
+              title: 'Too many live streams',
+              detail:
+                'This server holds as many live streams as it can; poll the same URL with Accept: application/json instead.',
+            },
+          ],
+        }),
+        init: {
+          status: 503,
+          headers: {
+            'Content-Type': SupportedMimeType.JSON,
+            'Retry-After': String(EVENT_FEED_STREAM_RETRY_AFTER_SECONDS),
+          },
+        },
+        requestContext,
+      });
+    }
     let open = this.#adapter.openEventStream?.();
     if (!open) {
       return createResponse({
@@ -18379,7 +18410,9 @@ export class Realm {
       () => open.write(`: keep-alive\n\n`),
       EVENT_FEED_HEARTBEAT_MS,
     );
+    this.#openFeedStreams++;
     open.onClose(() => {
+      this.#openFeedStreams--;
       unsubscribe();
       clearInterval(heartbeat);
     });

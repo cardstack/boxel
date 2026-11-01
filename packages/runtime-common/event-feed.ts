@@ -113,6 +113,12 @@ export interface ChannelMessage {
   body: unknown;
 }
 
+// What a card that takes a page's refresh requests is handed (ADR 020 §1.7).
+export interface RefreshNotice {
+  // Reloads the page, when it suits the card's visitors.
+  reload(): void;
+}
+
 // What the cacheable poll answers: the head of the sequence and the latest
 // events, the same for every caller, so a shared cache can collapse a crowd's
 // polls into one request (ADR 020 §1.3).
@@ -146,6 +152,14 @@ export const EVENT_FEED_MAX_CHECKS_PER_EVENT = 64;
 
 // How often an idle stream sends a comment, so proxies keep it open.
 export const EVENT_FEED_HEARTBEAT_MS = 25_000;
+
+// The most streams one process holds open for one realm, its channels
+// included (ADR 020 §1.4). A stream asked for past it is answered 503 with a
+// `Retry-After`, and the client polls instead, which a shared cache absorbs.
+export const EVENT_FEED_MAX_STREAMS = 2_000;
+// How long a client turned away at the cap is asked to wait before it asks
+// for a stream again.
+export const EVENT_FEED_STREAM_RETRY_AFTER_SECONDS = 30;
 
 // The changes a realm event announces, as card URLs and what happened to
 // them. A full reindex can have changed anything, so it is a reset.

@@ -9,11 +9,9 @@ import {
   resetFeedPositionsForTests,
 } from '@cardstack/host/lib/feed-positions';
 import type EventFeedService from '@cardstack/host/services/event-feed';
-import {
-  REFRESH_REQUESTED_EVENT,
-  type RefreshRequestedDetail,
-  type TabChannel,
-  type TabCoordination,
+import type {
+  TabChannel,
+  TabCoordination,
 } from '@cardstack/host/services/event-feed';
 import type MessageService from '@cardstack/host/services/message-service';
 
@@ -430,28 +428,36 @@ module('Unit | Service | event-feed', function (hooks) {
     );
   });
 
-  test('an app that takes the refresh notice reloads when it chooses to', function (assert) {
+  test('a card that takes refresh requests reloads the page when it chooses to', function (assert) {
     let reloads = 0;
     service.reloadPage = () => reloads++;
-    let taken: RefreshRequestedDetail | undefined;
-    let take = (event: Event) => {
-      event.preventDefault();
-      taken = (event as CustomEvent<RefreshRequestedDetail>).detail;
-    };
-    window.addEventListener(REFRESH_REQUESTED_EVENT, take);
-    try {
-      service.start();
-      watch();
-      FakeEventSource.made[0].emit('change', {
-        data: JSON.stringify({ seq: 3, kind: 'refresh', path: '' }),
-      });
-      assert.strictEqual(reloads, 0, 'the page stays as it is');
-      assert.strictEqual(taken?.realm, REALM, 'the notice names the realm');
-      taken?.reload();
-      assert.strictEqual(reloads, 1, 'and reloads when the app says so');
-    } finally {
-      window.removeEventListener(REFRESH_REQUESTED_EVENT, take);
-    }
+    let taken: { reload(): void } | undefined;
+    let release = service.takeRefreshRequests((notice) => (taken = notice));
+    service.start();
+    watch();
+    FakeEventSource.made[0].emit('change', {
+      data: JSON.stringify({ seq: 3, kind: 'refresh', path: '' }),
+    });
+    assert.strictEqual(reloads, 0, 'the page stays as it is');
+    taken?.reload();
+    assert.strictEqual(reloads, 1, 'and reloads when the card says so');
+    release();
+  });
+
+  test("a page on a site honours a refresh request only from the site's own realm", function (assert) {
+    let reloads = 0;
+    service.reloadPage = () => reloads++;
+    service.siteRealm = () => 'http://public-events.test/sites/owner/quiz/';
+    service.start();
+    watch();
+    FakeEventSource.made[0].emit('change', {
+      data: JSON.stringify({ seq: 3, kind: 'refresh', path: '' }),
+    });
+    assert.strictEqual(
+      reloads,
+      0,
+      'a realm the site draws on cannot reload it',
+    );
   });
 
   test('a stream that closes after it opened is reopened from the last event id', async function (assert) {

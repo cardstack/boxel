@@ -931,6 +931,42 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('an edit to the policy card resets the feed, since what a visitor may read can have changed', async function (assert) {
+    // A read first, so the realm has compiled its policy.
+    await request
+      .get(`${new URL(NEWSROOM).pathname}articles/published`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    let before = await head();
+    await org.write(
+      'policies/newsroom.json',
+      policyCard(`${NEWSROOM}article`, [
+        { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+      ]),
+    );
+    await org.indexing();
+    let events = await eventsAfter(before);
+    assert.ok(
+      events.some((event) => event.kind === 'reset'),
+      `the feed resets: ${JSON.stringify(events)}`,
+    );
+  });
+
+  test('a stream past the cap is turned away with 503 and when to try again, and the poll still answers', async function (assert) {
+    newsroom.eventFeedStreamCap = 0;
+    let stream = await request
+      .get(`${new URL(NEWSROOM).pathname}_live`)
+      .set('Accept', 'text/event-stream')
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(stream.status, 503, stream.text);
+    assert.ok(Number(stream.headers['retry-after']) > 0, 'says when');
+    assert.strictEqual(
+      (await feedWindow()).status,
+      200,
+      'the poll a shared cache absorbs is still there',
+    );
+  });
+
   test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
     let before = await head();
     let patched = await request

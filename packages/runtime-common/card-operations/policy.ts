@@ -259,6 +259,9 @@ export interface PolicyCompileEnvironment {
 // pointer names right now, and a way to have that card indexed again.
 export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
   policyCard(): Promise<string | undefined>;
+  // Told when a compile replaces an earlier one: the policy, or a definition
+  // its rules name, changed, and with it what any caller may read.
+  onRecompiled?(): void;
   // Runs the card's index visit again: an index of `file`, the file the card
   // is stored in, in the realm at `realmURL` that holds it, which need not be
   // the realm the policy governs. Resolves once that visit has settled,
@@ -576,6 +579,9 @@ export class RealmPolicyCache {
         refresh.inputs.push(url),
       );
       logIssues(card, compilation.compiled.issues);
+      if (current) {
+        this.#env.onRecompiled?.();
+      }
     }
     let { compiled } = compilation;
     recordSafely('policy-compile', () =>
