@@ -55,20 +55,27 @@ export type ReadTarget =
  * inputs: a full @cardstack/ identifier as <path> carries its own realm, which
  * `network` places (the realm server's network, needed only then); otherwise
  * --realm is required. The realm comes back as the network answers it, in URL
- * form.
+ * form. A prefix-form <path> the network cannot place is refused, with or
+ * without --realm: it is never a realm-relative path.
  */
 export function resolveReadTarget(
   path: string,
   realm: string | undefined,
   network?: Pick<
     PrefixRealmNetwork,
-    'realmForReference' | 'pathBelowNamespace'
+    'realmForReference' | 'pathBelowNamespace' | 'knownRealms'
   >,
 ): ReadTarget {
-  let ownRealm = isPrefixForm(path)
-    ? network?.realmForReference(path)
-    : undefined;
-  if (ownRealm) {
+  if (isPrefixForm(path)) {
+    let ownRealm = network?.realmForReference(path);
+    if (!ownRealm) {
+      return {
+        ok: false,
+        error:
+          `cannot resolve ${JSON.stringify(path)}: no registered realm prefix ` +
+          `matches it (registered: ${(network?.knownRealms() ?? []).join(', ')})`,
+      };
+    }
     if (realm) {
       return {
         ok: false,

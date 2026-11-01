@@ -74,15 +74,28 @@ describe('resolveReadTarget', () => {
     }
   });
 
-  it('rejects a prefix the network does not know as it would a relative path', () => {
+  it('refuses a prefix the network does not serve, naming the served prefixes', () => {
     let target = resolveReadTarget(
-      '@other/realm/hello.json',
+      '@cardstack/openrouter/hello.json',
       undefined,
+      network,
+    );
+    expect(target).toEqual({
+      ok: false,
+      error:
+        'cannot resolve "@cardstack/openrouter/hello.json": no registered realm prefix matches it (registered: @cardstack/catalog/)',
+    });
+  });
+
+  it('refuses a prefix the network does not serve even with --realm, rather than reading it as a relative path', () => {
+    let target = resolveReadTarget(
+      '@cardstack/openrouter/hello.json',
+      'http://localhost:4201/user/realm/',
       network,
     );
     expect(target.ok).toBe(false);
     if (!target.ok) {
-      expect(target.error).toContain('--realm is required');
+      expect(target.error).toContain('no registered realm prefix matches it');
     }
   });
 });
