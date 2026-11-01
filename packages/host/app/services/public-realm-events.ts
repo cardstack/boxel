@@ -29,6 +29,11 @@ export default class PublicRealmEventsService extends Service {
   private started = false;
   private feeds = new Map<string, { stop: () => void }>();
 
+  // Whether this host hears realm events through the public feeds.
+  get listening(): boolean {
+    return this.started;
+  }
+
   // Starts listening for the realms the page watches. Idempotent.
   start() {
     if (this.started || typeof window === 'undefined') {

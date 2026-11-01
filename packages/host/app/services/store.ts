@@ -141,6 +141,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type PublicRealmEventsService from './public-realm-events';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
@@ -384,6 +385,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
+  @service declare private publicRealmEvents: PublicRealmEventsService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private session: SessionService;
@@ -5123,7 +5125,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private subscribeToRealm(url: RealmResourceIdentifier | URL) {
-    if (this.hostModeService.isActive) {
+    // A host-mode visitor hears realm events only through the realms' public
+    // feeds (ADR 020), so the store subscribes there once those are listening.
+    if (this.hostModeService.isActive && !this.publicRealmEvents.listening) {
       return;
     }
 
