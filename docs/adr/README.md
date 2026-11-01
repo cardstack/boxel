@@ -34,3 +34,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [017](017-address-a-sites-cards-with-path-templates-resolved-against-the-index.md)              | Address a site's cards with path templates resolved against the index                     | proposed |
 | [018](018-serve-the-realms-a-site-draws-on-under-aliases-through-one-boundary.md)               | Serve the realms a site draws on under aliases, through one boundary                      | proposed |
 | [019](019-link-and-frame-a-sites-pages-through-base-contracts-not-card-code.md)                 | Link and frame a site's pages through base contracts, not card code                       | proposed |
+| [020](020-push-public-realm-changes-as-cacheable-http-invalidations.md)                         | Push public realm changes as cacheable HTTP invalidations, not Matrix                     | proposed |
