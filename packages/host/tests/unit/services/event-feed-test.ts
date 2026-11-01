@@ -381,6 +381,93 @@ module('Unit | Service | event-feed', function (hooks) {
     }
   });
 
+  test('a stream that closes after it opened is reopened from the last event id', async function (assert) {
+    service.timing = { pollMs: 5, retryFirstMs: 1 };
+    service.start();
+    watch();
+    let first = FakeEventSource.made[0];
+    first.emit('open');
+    first.emit('change', {
+      data: JSON.stringify({ seq: 4, kind: 'written', path: 'Card/1' }),
+      lastEventId: 'e1:4',
+    });
+    // A reconnect the browser gave up on, as after a deploy's 502.
+    first.readyState = FakeEventSource.CLOSED;
+    first.emit('error');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.strictEqual(FakeEventSource.made.length, 2, 'it opens again');
+    assert.strictEqual(
+      FakeEventSource.made[1].url,
+      `${REALM}_events?lastEventId=${encodeURIComponent('e1:4')}`,
+      'from where it stopped',
+    );
+  });
+
+  test('the poll stops for good when the realm refuses it', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    (globalThis as any).EventSource = undefined;
+    try {
+      service.timing = { pollMs: 5, retryFirstMs: 1 };
+      let asked = 0;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        if (
+          !String(input instanceof Request ? input.url : input).includes(
+            '_events',
+          )
+        ) {
+          return originalFetch(input, init);
+        }
+        asked++;
+        return new Response(null, { status: 401 });
+      }) as typeof fetch;
+      service.start();
+      watch();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      assert.strictEqual(asked, 1, 'a refused poll is not asked again');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('a poll the realm asks to wait waits that long', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    (globalThis as any).EventSource = undefined;
+    try {
+      service.timing = { pollMs: 5, retryFirstMs: 1 };
+      let asked = 0;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        if (
+          !String(input instanceof Request ? input.url : input).includes(
+            '_events',
+          )
+        ) {
+          return originalFetch(input, init);
+        }
+        asked++;
+        return new Response(null, {
+          status: 429,
+          headers: { 'Retry-After': '1' },
+        });
+      }) as typeof fetch;
+      service.start();
+      watch();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      assert.strictEqual(
+        asked,
+        1,
+        'one ask in the second the realm named, not one per poll interval',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test('a relay waits a short random time, so a crowd does not re-read at once', async function (assert) {
     let originalRandom = Math.random;
     Math.random = () => 0.5;

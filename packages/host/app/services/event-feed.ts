@@ -38,6 +38,31 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const POLL_INTERVAL_MS = 3_000;
 
+// How a feed client waits after a failure: from the first retry delay,
+// doubling, to at most a minute, each wait jittered so a crowd that lost the
+// realm at once (a deploy) doesn't come back at once.
+const RETRY_FIRST_MS = 1_000;
+const RETRY_MOST_MS = 60_000;
+
+interface FeedTiming {
+  pollMs: number;
+  retryFirstMs: number;
+}
+
+function backoff(attempt: number, timing: FeedTiming): number {
+  let ceiling = Math.min(
+    RETRY_MOST_MS,
+    timing.retryFirstMs * 2 ** Math.max(0, attempt - 1),
+  );
+  return Math.floor(ceiling / 2 + Math.random() * (ceiling / 2));
+}
+
+// The wait a `Retry-After` header asks for, when it names seconds.
+function retryAfterMs(response: Response): number | undefined {
+  let seconds = Number(response.headers.get('retry-after'));
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
+}
+
 // The longest a tab waits before relaying an event, so the re-reads a change
 // starts across a crowd of visitors are spread out rather than arriving at
 // once (ADR 020 §1.5).
@@ -119,6 +144,11 @@ export default class EventFeedService extends Service {
   relaySpreadMs = isTesting() ? 0 : RELAY_SPREAD_MS;
   // The longest wait before a refresh request nothing took reloads the page.
   refreshSpreadMs = isTesting() ? 0 : REFRESH_SPREAD_MS;
+  // How often the poll asks, and the first wait after a failure.
+  timing: FeedTiming = {
+    pollMs: POLL_INTERVAL_MS,
+    retryFirstMs: RETRY_FIRST_MS,
+  };
   // Reloads the page. A test stands in for it.
   reloadPage: () => void = () => window.location.reload();
   private refreshPending = false;
@@ -284,15 +314,15 @@ export default class EventFeedService extends Service {
     let resumeFrom = this.cursors.get(realm);
     let feed =
       typeof EventSource === 'function'
-        ? streamFeed(feedURL, resumeFrom, deliver, () => {
+        ? streamFeed(feedURL, resumeFrom, deliver, this.timing, () => {
             // The stream is unavailable here: fall back to the poll.
             this.feeds.get(realm)?.stop();
             this.feeds.set(
               realm,
-              pollFeed(feedURL, this.cursors.get(realm), deliver),
+              pollFeed(feedURL, this.cursors.get(realm), deliver, this.timing),
             );
           })
-        : pollFeed(feedURL, resumeFrom, deliver);
+        : pollFeed(feedURL, resumeFrom, deliver, this.timing);
     this.feeds.set(realm, feed);
   }
 
@@ -399,40 +429,72 @@ function streamFeed(
   url: string,
   resumeFrom: string | undefined,
   deliver: (event: FeedEvent, id?: string) => void,
+  timing: FeedTiming,
   unavailable: () => void,
 ): { stop: () => void } {
   // A tab taking over from another resumes from the last id the tabs saw.
-  // The browser sends `Last-Event-ID` only on its own reconnects, so the
-  // first request names it in the query, which the realm also reads.
-  let source = new EventSource(
-    resumeFrom ? `${url}?lastEventId=${encodeURIComponent(resumeFrom)}` : url,
-  );
-  let opened = false;
-  source.addEventListener('open', () => {
-    opened = true;
-  });
-  source.addEventListener('change', (message) => {
-    let { data, lastEventId } = message as MessageEvent;
-    let event = parseEvent(data);
-    if (event) {
-      deliver(event, lastEventId || undefined);
+  // The browser sends `Last-Event-ID` only on its own reconnects, so a
+  // request this client opens names it in the query, which the realm also
+  // reads.
+  let lastId = resumeFrom;
+  let everOpened = false;
+  let failures = 0;
+  let stopped = false;
+  let source: EventSource | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let open = () => {
+    if (stopped) {
+      return;
     }
-  });
-  source.addEventListener('error', () => {
-    // A stream that never opened, and that the browser gave up on, is one
-    // the realm doesn't offer. One that dropped later reconnects by itself
-    // and resumes from its last event id.
-    if (!opened && source.readyState === EventSource.CLOSED) {
-      unavailable();
-    }
-  });
-  return { stop: () => source.close() };
+    let current = new EventSource(
+      lastId ? `${url}?lastEventId=${encodeURIComponent(lastId)}` : url,
+    );
+    source = current;
+    current.addEventListener('open', () => {
+      everOpened = true;
+      failures = 0;
+    });
+    current.addEventListener('change', (message) => {
+      let { data, lastEventId } = message as MessageEvent;
+      let event = parseEvent(data);
+      if (event) {
+        lastId = lastEventId || lastId;
+        deliver(event, lastEventId || undefined);
+      }
+    });
+    current.addEventListener('error', () => {
+      // A dropped connection the browser is retrying stays CONNECTING. One it
+      // gave up on is CLOSED: an HTTP error on a reconnect (a deploy's 502, a
+      // 429), or a realm that never offered a stream.
+      if (current.readyState !== EventSource.CLOSED || stopped) {
+        return;
+      }
+      if (!everOpened) {
+        // Never connected: the realm doesn't stream here, so poll instead.
+        unavailable();
+        return;
+      }
+      // It streamed before, so it should again: reopen from the last id,
+      // waiting longer after each failure.
+      failures++;
+      timer = setTimeout(open, backoff(failures, timing));
+    });
+  };
+  open();
+  return {
+    stop: () => {
+      stopped = true;
+      clearTimeout(timer);
+      source?.close();
+    },
+  };
 }
 
 function pollFeed(
   url: string,
   resumeFrom: string | undefined,
   deliver: (event: FeedEvent, id?: string) => void,
+  timing: FeedTiming,
 ): { stop: () => void } {
   // Resuming from another tab's last id compares the first answer against it
   // rather than adopting it as where this page starts.
@@ -440,13 +502,28 @@ function pollFeed(
   let epoch = cursor?.epoch;
   let seen = cursor?.seq ?? 0;
   let stopped = false;
+  let failures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let poll = async () => {
+    let wait = timing.pollMs;
     try {
       let response = await fetch(url, {
         headers: { Accept: 'application/json' },
       });
-      if (response.ok && !stopped) {
+      if (stopped) {
+        return;
+      }
+      if ([401, 403, 404].includes(response.status)) {
+        // The realm refuses this page its feed, or has none: asking again
+        // changes nothing, and each ask spends the visitor's budget.
+        stopped = true;
+        return;
+      }
+      if (!response.ok) {
+        failures++;
+        wait = retryAfterMs(response) ?? backoff(failures, timing);
+      } else {
+        failures = 0;
         let answer = (await response.json()) as FeedEventWindow;
         let idOf = (seq: number) => `${answer.epoch}:${seq}`;
         if (epoch === undefined) {
@@ -471,10 +548,12 @@ function pollFeed(
         }
       }
     } catch {
-      // offline for a moment: the next poll asks again
+      // Offline for a moment: wait longer each time it keeps failing.
+      failures++;
+      wait = backoff(failures, timing);
     }
     if (!stopped) {
-      timer = setTimeout(poll, POLL_INTERVAL_MS);
+      timer = setTimeout(poll, wait);
     }
   };
   void poll();

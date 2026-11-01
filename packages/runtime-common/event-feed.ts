@@ -1,5 +1,7 @@
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
+import { logger } from './log.ts';
+
 // A realm's event feed (ADR 020): one small invalidation per change to a
 // card the feed's audience may read under the realm's permissions and policy,
 // whether the realm is public or private. The audience it serves today is
@@ -71,6 +73,12 @@ export const EVENT_FEED_WINDOW = 256;
 // The least time between two refresh requests a realm accepts, so the
 // request stays the rare thing it is meant to be (ADR 020 §1.7).
 export const EVENT_FEED_REFRESH_COOLDOWN_MS = 60_000;
+
+// The most changes one realm event is judged card by card. Past it, a read
+// per card would hold back every later event (a module change can invalidate
+// thousands of instances), so the feed resets instead and lets each client
+// revalidate what it holds.
+export const EVENT_FEED_MAX_CHECKS_PER_EVENT = 64;
 
 // How often an idle stream sends a comment, so proxies keep it open.
 export const EVENT_FEED_HEARTBEAT_MS = 25_000;
@@ -155,17 +163,44 @@ export class RealmEventFeed {
   ingest(event: RealmEventContent): Promise<void> {
     this.#queue = this.#queue
       .then(() => this.#ingest(event))
-      .catch(() => {
-        // A failed check announces nothing; the next change is judged anew.
+      .catch((error: unknown) => {
+        // A check that fails can't say whether a change is readable, so the
+        // feed fails closed: it names no card, and tells every client to
+        // revalidate what it holds rather than missing the change.
+        log.warn(`event feed for ${this.realmURL} reset after a failed check`, {
+          error,
+        });
+        this.reset();
       });
     return this.#queue;
+  }
+
+  // Tells every client to revalidate everything it holds from this realm:
+  // for a change the feed can't attribute to cards, such as the realm's
+  // permissions or the policy it names.
+  reset() {
+    this.#visible.clear();
+    this.#announce('reset', '');
   }
 
   async #ingest(event: RealmEventContent) {
     let changes = changesIn(event);
     if (changes === 'reset') {
-      this.#visible.clear();
-      this.#announce('reset', '');
+      this.reset();
+      return;
+    }
+    // A change to the realm's own config can change which policy governs it,
+    // and so what every visitor may read.
+    if (
+      changes.some(
+        ({ url }) => url === new URL('realm.json', this.realmURL).href,
+      )
+    ) {
+      this.reset();
+      return;
+    }
+    if (changes.length > EVENT_FEED_MAX_CHECKS_PER_EVENT) {
+      this.reset();
       return;
     }
     for (let { url, kind } of changes) {
@@ -293,6 +328,10 @@ export class RealmEventFeed {
   }
 }
 
+const log = logger('realm:event-feed');
+
+// An epoch nobody can predict or collide with, so a client never mistakes a
+// restarted feed's positions for the ones it held.
 function randomEpoch(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }

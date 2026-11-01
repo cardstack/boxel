@@ -5,7 +5,9 @@ import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
+  EVENT_FEED_MAX_CHECKS_PER_EVENT,
   parseAddressRanges,
+  RealmEventFeed,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -405,6 +407,10 @@ module(basename(import.meta.filename), function (hooks) {
       vary.includes('authorization'),
       `a cache holding it answers only another caller without credentials: ${anonymous.headers['vary']}`,
     );
+    assert.true(
+      vary.includes('x-boxel-site'),
+      `nor a caller visiting through a site, which may be answered differently: ${anonymous.headers['vary']}`,
+    );
     let head = await request
       .head(`${new URL(NEWSROOM).pathname}articles/published`)
       .set('Accept', SupportedMimeType.CardJson)
@@ -465,8 +471,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       current.headers['cache-control'],
-      'public, max-age=3600, immutable',
-      'the current revision is cacheable for a long time',
+      'public, max-age=0, s-maxage=30, must-revalidate',
+      'a shared cache holds the current revision briefly, then asks again',
     );
     assert.strictEqual(
       current.body.data.attributes.headline,
@@ -532,8 +538,86 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await head(), before + 1, 'the refused one is not sent');
   });
 
+  test("a change to the realm's permissions resets the feed, since any card's readability may have moved", async function (assert) {
+    let before = await head();
+    let patched = await request
+      .patch(`${new URL(NEWSROOM).pathname}_permissions`)
+      .set('Accept', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send({
+        data: {
+          id: NEWSROOM,
+          type: 'permissions',
+          attributes: { permissions: { '@reader:localhost': ['read'] } },
+        },
+      });
+    assert.strictEqual(patched.status, 200, patched.text);
+    let events = await eventsAfter(before);
+    assert.deepEqual(
+      events.map((event) => event.kind),
+      ['reset'],
+      'every client is told to revalidate what it holds',
+    );
+  });
+
   test('a realm whose policy opens nothing to callers who are not signed in refuses them its feed', async function (assert) {
     let response = await feedWindow(LIBRARY);
     assert.strictEqual(response.status, 401, response.text);
+  });
+});
+
+// The feed on its own, with the readability check stood in for.
+module(`${basename(import.meta.filename)} > RealmEventFeed`, function () {
+  const REALM = 'http://feed.test/realm/';
+
+  function changed(...paths: string[]) {
+    return {
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: paths.map((path) => new URL(path, REALM).href),
+      realmURL: REALM,
+    } as const;
+  }
+
+  test('a check that fails resets the feed rather than dropping the change', async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => {
+      throw new Error('the gate could not be asked');
+    });
+    await feed.ingest(changed('Card/1'));
+    assert.deepEqual(feed.window().events, [
+      { seq: 1, kind: 'reset', path: '' },
+    ]);
+  });
+
+  test('an event that changes more cards than are judged one by one resets the feed', async function (assert) {
+    let checked = 0;
+    let feed = new RealmEventFeed(REALM, async () => {
+      checked++;
+      return {};
+    });
+    let paths = Array.from(
+      { length: EVENT_FEED_MAX_CHECKS_PER_EVENT + 1 },
+      (_, i) => `Card/${i}`,
+    );
+    await feed.ingest(changed(...paths));
+    assert.strictEqual(checked, 0, 'no card is read');
+    assert.deepEqual(feed.window().events, [
+      { seq: 1, kind: 'reset', path: '' },
+    ]);
+  });
+
+  test("a change to the realm's config resets the feed, since it names the policy", async function (assert) {
+    let feed = new RealmEventFeed(REALM, async () => ({}));
+    await feed.ingest({
+      eventName: 'update',
+      updated: [new URL('realm.json', REALM).href],
+      realmURL: REALM,
+    } as never);
+    assert.deepEqual(feed.window().events, [
+      { seq: 1, kind: 'reset', path: '' },
+    ]);
   });
 });

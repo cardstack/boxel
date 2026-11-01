@@ -408,7 +408,10 @@ export function siteBoundary(
       }
     }
     if (!boundaries.length) {
-      return next();
+      await next();
+      // The same URL can answer differently once a request names a site.
+      ctxt.vary(SITE_HEADER);
+      return;
     }
     let translator = new SiteTranslator(boundaries);
 
@@ -434,6 +437,13 @@ export function siteBoundary(
     }
 
     await next();
+
+    // Which boundary translates a response can depend on the request's
+    // `X-Boxel-Site` header as much as on its URL, so a shared cache must
+    // key on the header too: otherwise it could hand one site's aliased
+    // document to another site, or the realm's own document, which names its
+    // address, to a site's visitor (ADR 018, ADR 020 §1.5).
+    ctxt.vary(SITE_HEADER);
 
     // Outbound.
     for (let [name, value] of Object.entries(ctxt.response.headers)) {

@@ -104,12 +104,15 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
 // How a card+json read addressed by its current revision is cached (ADR 020
 // §1.5), where its unaddressed read would be shared-cacheable. The document
-// at a revision never changes, so a cache need not ask again. The lifetime is
-// still bounded, because whether a visitor may read it can: a policy that
-// stops admitting the card leaves a cached copy answering for at most this
-// long, and only to a caller who already holds the revision's URL, which the
-// feed gave out while the card was readable.
-const CARD_REVISION_CACHE_CONTROL = 'public, max-age=3600, immutable';
+// at a revision never changes, so a shared cache holds it without asking for
+// a short while, which is what collapses a crowd's re-reads after an event.
+// Whether a visitor may read it can change without the revision changing,
+// though: a policy, a grant or the realm's permissions can withdraw it. So
+// the lifetime is short, the browser keeps nothing, and a cache must ask the
+// realm, which judges the read again, once it lapses. A withdrawn card stays
+// in a shared cache for at most this long.
+const CARD_REVISION_CACHE_CONTROL =
+  'public, max-age=0, s-maxage=30, must-revalidate';
 // How a module compiled for a caller the policy gate admitted is cached:
 // by that caller alone, revalidated on every use like a reader's module.
 const GRANTED_MODULE_CACHE_CONTROL = 'private, max-age=0';
@@ -16838,6 +16841,9 @@ export class Realm {
     }
     affected.delete('*');
     await this.notifyRealmsListUpdated([...affected]);
+    // What a visitor may read can have changed for any card, so the event
+    // feed has every client revalidate what it holds (ADR 020 §1.2).
+    this.#eventFeed.reset();
     return await this.getRealmPermissions(request, requestContext);
   }
 
