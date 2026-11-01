@@ -2004,6 +2004,31 @@ function computedOnly(
   return { ...pristine, attributes } as CardResource;
 }
 
+// The search document with only the card's links, the one thing it supplies
+// that the stored document can't. Like the computed overlay above, it carries
+// the card's own stored fields too, and those must never shadow what is
+// stored, an emptied list included.
+function linkedOnly(
+  searchDoc: Record<string, unknown>,
+  definition: Definition,
+): Record<string, unknown> {
+  let linked: Record<string, unknown> = {};
+  for (let [field, value] of Object.entries(searchDoc)) {
+    let defId = definition.fields[field];
+    let fieldDef =
+      defId === undefined ? undefined : definition.fieldDefs[defId];
+    if (
+      !fieldDef ||
+      fieldDef.type === 'linksTo' ||
+      fieldDef.type === 'linksToMany' ||
+      (fieldDef.type === 'contains' && !fieldDef.isPrimitive)
+    ) {
+      linked[field] = value;
+    }
+  }
+  return linked;
+}
+
 async function gatherOverlays(
   definition: Definition,
   url: URL,
@@ -2066,7 +2091,9 @@ async function gatherOverlays(
     ...(row?.pristine
       ? { computeds: project(computedOnly(row.pristine, definition), schema) }
       : {}),
-    ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
+    ...(row?.searchDoc
+      ? { linked: linkedOnly(row.searchDoc, definition) }
+      : {}),
     unavailable,
   };
 }
