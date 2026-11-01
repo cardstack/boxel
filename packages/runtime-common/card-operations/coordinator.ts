@@ -234,7 +234,7 @@ export interface BatchCore {
   // program naming a setting that this realm has none.
   realmConfig(): Promise<Record<string, JsonValue>>;
   // The latest message per key that an emit put on a card's live
-  // channel (ADR 020 §1.8, §1.10), for a transform that `collect`s them.
+  // channel (ADR 023 §1.6, §1.7), for a transform that `collect`s them.
   // Called inside the lock on that card. A core without it refuses every such
   // transform with 501 `not-implemented`.
   channelMessages?: ChannelMessages;
@@ -245,7 +245,7 @@ export interface CommitBatchOptions {
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
   // The operation each entry runs, by the position it was sent under, so the
-  // realm's event feed can name what produced each change (ADR 020 §1.1).
+  // realm's event feed can name what produced each change (ADR 023 §1.1).
   operationAt?: (position: EntryPosition) => FeedOperation | undefined;
   // Whether the index event should say which of this write's cards carried
   // content the caller supplied.

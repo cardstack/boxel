@@ -10,7 +10,7 @@ import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
 const log = logger('realm-server:feed-events-listener');
 
-// The event feed's cross-process delivery (ADR 020 §1.3). Every process
+// The event feed's cross-process delivery (ADR 023 §1.1). Every process
 // serving a realm appends to the one stored sequence, and each append
 // notifies `REALM_FEED_EVENTS_CHANNEL` with the feed's key inside its
 // transaction: the realm's URL, or the realm's URL and a card's path for that
@@ -21,7 +21,7 @@ const log = logger('realm-server:feed-events-listener');
 // The listener runs no periodic work: a realm's feed reads by position, so
 // a notification that coalesces several appends is caught up in one read.
 //
-// Presence (ADR 020 §1.8) has no position to catch up from, so its
+// Presence (ADR 023 §1.6) has no position to catch up from, so its
 // notification carries the message itself on `REALM_PRESENCE_CHANNEL`, and
 // a process that hears it passes it to that channel's followers here. One
 // missed while the connection was down is not recovered: the next heartbeat

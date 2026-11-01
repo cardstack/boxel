@@ -2,7 +2,7 @@ import type { DBAdapter } from './db.ts';
 import { param, query } from './expression.ts';
 import type { FeedEvent } from './event-feed.ts';
 
-// Where a realm's event feeds keep their sequences (ADR 020 §1.3). A store
+// Where a realm's event feeds keep their sequences (ADR 023 §1.1). A store
 // gives out positions and keeps the recent events, so that every process
 // serving the realm shares one sequence per feed and a restart continues it.
 // The feed keeps its own copy of the window in memory for reads; the store is
@@ -15,8 +15,8 @@ import type { FeedEvent } from './event-feed.ts';
 // feed's key; a process that hears it reads what it hasn't seen.
 export const REALM_FEED_EVENTS_CHANNEL = 'realm_feed_events';
 
-// The Postgres channel a store announces each unordered message on (ADR 020
-// §1.8). Its payload is a `PresenceNotice` as JSON, so a process that hears
+// The Postgres channel a store announces each unordered message on (ADR 023
+// §1.6). Its payload is a `PresenceNotice` as JSON, so a process that hears
 // it delivers the message without reading anything.
 export const REALM_PRESENCE_CHANNEL = 'realm_presence';
 
@@ -101,11 +101,11 @@ export interface FeedStore {
   // Whether the feed has announced the card at `path` as readable and not
   // since as removed or withdrawn. A realm's own feed records this as it
   // appends, in every process, so a removal is announced for a card a
-  // visitor could have seen whichever process announced it (ADR 020 §1.2).
+  // visitor could have seen whichever process announced it (ADR 023 §1.2).
   wasVisible(key: string, path: string): Promise<boolean>;
   // Records a refresh request unless one was accepted within `cooldownMs`.
   claimRefresh(key: string, cooldownMs: number): Promise<RefreshClaim>;
-  // Records an unordered message (ADR 020 §1.8) as the latest of its
+  // Records an unordered message (ADR 023 §1.6) as the latest of its
   // operation and key on the channel `key`, until `expiresInMs` from now. It
   // takes no position and waits on no other message, and every process
   // serving the realm is told of it.

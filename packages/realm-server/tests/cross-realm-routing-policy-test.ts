@@ -27,7 +27,7 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // A site realm anyone may read routes two paths to cards a store realm holds.
 // The store realm is private: no one but its owner is on its ACL. Its policy
 // opens one of the two cards to visitors who aren't signed in, and the site
-// realm's realm.json opts in to serving the store's own prerender (ADR 016). The page at the
+// realm's realm.json opts in to serving the store's own prerender (ADR 021 §1.6). The page at the
 // opened card's path is the store's; the other path is served as if unrouted.
 const SITE = 'http://127.0.0.1:4444/site/';
 const STORE = 'http://127.0.0.1:4444/store/';

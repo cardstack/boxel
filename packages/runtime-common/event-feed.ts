@@ -8,19 +8,19 @@ import {
   type FeedStore,
 } from './event-feed-store.ts';
 
-// A realm's event feed (ADR 020): one small invalidation per change to a
+// A realm's event feed (ADR 023): one small invalidation per change to a
 // card the feed's audience may read under the realm's permissions and policy,
 // whether the realm is public or private. The audience it serves today is
 // callers who aren't signed in, the hosts that have no Matrix session to hear
 // realm events through. An event names the card by its path
 // in the realm, never by its absolute URL, so a site that serves the realm
-// under an alias (ADR 018) passes events through unchanged and a visitor never
-// learns the realm's own address. It carries no card content: a client
+// under an alias (ADR 022 §1.2) passes events through unchanged and a
+// visitor never learns the realm's own address. It carries no card content: a client
 // re-reads the card through the ordinary gated read.
 
 export const EVENT_FEED_PATH = '_live';
 
-// The query parameter that addresses a card read by revision (ADR 020 §1.5).
+// The query parameter that addresses a card read by revision (ADR 023 §1.4).
 // A client re-reading a card after an event asks for `{card}?rev=<rev>`, with
 // the event's `rev`, so every reader of that revision asks for the same URL
 // and a shared cache answers all but the first. The realm answers that URL
@@ -29,7 +29,7 @@ export const CARD_REVISION_PARAM = 'rev';
 
 // The header naming the feed's position on a read, and the range a write's
 // changes took on a write: `<epoch>:<seq>` or `<epoch>:<first>-<last>`
-// (ADR 020 §1.3).
+// (ADR 023 §1.1).
 export const FEED_POSITION_HEADER = 'Boxel-Feed-Position';
 
 // A card's revision as its card+json validator names it: the ETag without its
@@ -46,14 +46,14 @@ export function cardRevisionOf(
 }
 
 // `refresh` is a writer's request that every page following the feed reload
-// (ADR 020 §1.7). It names no card.
-// The wire version events and the poll carry (ADR 020 §1.9). A client
+// (ADR 023 §1.8). It names no card.
+// The wire version events and the poll carry (ADR 023 §1.3). A client
 // ignores fields and kinds it doesn't know, so a later version can add them.
 export const EVENT_FEED_VERSION = 1;
 
 // `removed`: the card was deleted. `withdrawn`: it still exists but the
 // feed's audience may no longer read it. Both tell a client to drop it.
-// `message`: something emitted on a card's live channel (ADR 020 §1.8),
+// `message`: something emitted on a card's live channel (ADR 023 §1.6),
 // carried whole, since it is stored nowhere else.
 export type FeedChangeKind =
   | 'written'
@@ -64,7 +64,7 @@ export type FeedChangeKind =
   | 'refresh'
   | 'message';
 
-// The operation that produced a change (ADR 020 §1.1): its name and the
+// The operation that produced a change (ADR 023 §1.1): its name and the
 // base it builds on, never who ran it or with what.
 export interface FeedOperation {
   name: string;
@@ -74,7 +74,7 @@ export interface FeedOperation {
 export interface FeedEvent {
   v?: number;
   operation?: FeedOperation;
-  // The changed cards' types (ADR 020 §1.1), so a client re-runs only the
+  // The changed cards' types (ADR 023 §1.1), so a client re-runs only the
   // searches they could affect: keys relative to the realm, or prefix-form
   // keys such as `@cardstack/base/card-api/CardDef`. Absent when the realm
   // couldn't say, and then a client re-runs every search.
@@ -92,7 +92,7 @@ export interface FeedEvent {
   // revision.
   rev?: string;
   // For a `reset`: the milliseconds a client spreads its revalidation over,
-  // sized by the realm to the audience it serves (ADR 020 §1.3), so a crowd
+  // sized by the realm to the audience it serves (ADR 023 §1.3), so a crowd
   // revalidating everything doesn't arrive at once.
   spread?: number;
   // For a `message`: the key a later message with the same key replaces it
@@ -104,7 +104,7 @@ export interface FeedEvent {
   unordered?: true;
 }
 
-// A message emitted on a card's live channel (ADR 020 §1.8), as a page
+// A message emitted on a card's live channel (ADR 023 §1.6), as a page
 // hears it.
 export interface ChannelMessage {
   // Its position on the channel: a later message has a higher one.
@@ -116,7 +116,7 @@ export interface ChannelMessage {
   body: unknown;
 }
 
-// What a card that takes a page's refresh requests is handed (ADR 020 §1.7).
+// What a card that takes a page's refresh requests is handed (ADR 023 §1.8).
 export interface RefreshNotice {
   // Reloads the page, when it suits the card's visitors.
   reload(): void;
@@ -124,7 +124,7 @@ export interface RefreshNotice {
 
 // What the cacheable poll answers: the head of the sequence and the latest
 // events, the same for every caller, so a shared cache can collapse a crowd's
-// polls into one request (ADR 020 §1.3).
+// polls into one request (ADR 023 §1.3).
 export interface FeedEventWindow {
   v?: number;
   epoch: string;
@@ -144,7 +144,7 @@ export interface FeedEventWindow {
 export const EVENT_FEED_WINDOW = 256;
 
 // The least time between two refresh requests a realm accepts, so the
-// request stays the rare thing it is meant to be (ADR 020 §1.7).
+// request stays the rare thing it is meant to be (ADR 023 §1.8).
 export const EVENT_FEED_REFRESH_COOLDOWN_MS = 60_000;
 
 // The most changes one realm event is judged card by card. Past it, a read
@@ -157,7 +157,7 @@ export const EVENT_FEED_MAX_CHECKS_PER_EVENT = 64;
 export const EVENT_FEED_HEARTBEAT_MS = 25_000;
 
 // The most streams one process holds open for one realm, its channels
-// included (ADR 020 §1.4). A stream asked for past it is answered 503 with a
+// included (ADR 023 §1.3). A stream asked for past it is answered 503 with a
 // `Retry-After`, and the client polls instead, which a shared cache absorbs.
 export const EVENT_FEED_MAX_STREAMS = 2_000;
 // How long a client turned away at the cap is asked to wait before it asks
@@ -166,7 +166,7 @@ export const EVENT_FEED_STREAM_RETRY_AFTER_SECONDS = 30;
 
 // The changes a realm event announces, as card URLs and what happened to
 // them. A full reindex can have changed anything, so it is a reset.
-// A write that ran no named operation is named by its base (ADR 020 §1.1).
+// A write that ran no named operation is named by its base (ADR 023 §1.1).
 const CREATED: FeedOperation = { name: 'create', base: 'create' };
 const UPDATED: FeedOperation = { name: 'update', base: 'update' };
 const DELETED: FeedOperation = { name: 'delete', base: 'delete' };
@@ -221,10 +221,10 @@ export function changesIn(event: RealmEventContent): FeedChange[] | 'reset' {
 export type FeedReadability = false | { rev?: string };
 
 // One realm's feed. `mayRead` answers whether a visitor who isn't signed in
-// may read a card, as the realm itself answers that visitor's read (ADR 020
+// may read a card, as the realm itself answers that visitor's read (ADR 023
 // §1.2); it is asked once per change, never per subscriber. Positions come
-// from the store, which every process serving the realm shares (ADR 020
-// §1.3); this process keeps the recent window in memory for reads, and hears
+// from the store, which every process serving the realm shares (ADR 023
+// §1.1); this process keeps the recent window in memory for reads, and hears
 // what other processes append through `catchUp`.
 // How long a feed whose store failed waits before announcing the reset that
 // covers what it lost.
@@ -251,7 +251,7 @@ export class RealmEventFeed {
   #appending: Promise<void> = Promise.resolve();
   #retryingReset = false;
   // While an event is being judged its announcements wait, so they reach the
-  // store together and take one contiguous range of positions (ADR 020 §1.3).
+  // store together and take one contiguous range of positions.
   #holding = false;
   // Poll reads this minute and last, for sizing a reset's spread.
   #polls = { minute: 0, count: 0, previous: 0 };
@@ -303,7 +303,7 @@ export class RealmEventFeed {
   // Loads the feed from its store, once. A feed found stored continues where
   // it stood: its positions and the cards it announced as readable are the
   // store's, shared by every process, so a process that starts later, or
-  // again, has nothing to reset (ADR 020 §1.2). A load that fails is tried
+  // again, has nothing to reset (ADR 023 §1.2). A load that fails is tried
   // again by the next caller rather than leaving the feed unusable.
   ready(): Promise<void> {
     this.#loaded ??= (async () => {
@@ -394,8 +394,8 @@ export class RealmEventFeed {
     this.#deliverFromStore(await this.store.after(this.key, this.#seq));
   }
 
-  // The messages a transform collecting from this channel reads (ADR 020
-  // §1.8): the latest per key however old, from the store, after every emit
+  // The messages a transform collecting from this channel reads (ADR 023
+  // §1.6): the latest per key however old, from the store, after every emit
   // this process has under way has landed.
   async latestMessages(withinMs?: number): Promise<FeedEvent[]> {
     await this.ready();
@@ -407,7 +407,7 @@ export class RealmEventFeed {
     );
   }
 
-  // Emits a message on this feed, a card's live channel (ADR 020 §1.8):
+  // Emits a message on this feed, a card's live channel (ADR 023 §1.6):
   // what an `emit` operation the policy admitted produced. Resolves to the
   // message as the feed recorded it.
   //
@@ -454,7 +454,7 @@ export class RealmEventFeed {
     return await step;
   }
 
-  // Records an unordered message on this channel (ADR 020 §1.8), such as a
+  // Records an unordered message on this channel (ADR 023 §1.6), such as a
   // visitor's presence, and passes it to this process's subscribers. It
   // waits on nothing the channel is appending: it takes no position, and it
   // replaces the last one for its operation and key until it expires.
@@ -753,7 +753,7 @@ export class RealmEventFeed {
   // keeps every position for a few windows, so one missing from the run is
   // one it trimmed before this process read it: what was there is lost to
   // this process's subscribers, who are told to reset, and the window is
-  // complete only after it (ADR 020 §1.3).
+  // complete only after it (ADR 023 §1.3).
   #deliverFromStore(events: FeedEvent[]) {
     let sorted = [...events]
       .filter((event) => event.seq > this.#seq)
@@ -809,8 +809,8 @@ export class RealmEventFeed {
     this.#floor = Math.max(this.#floor, kept.floor);
   }
 
-  // A writer's request that every page following the feed reload (ADR 020
-  // §1.7). Refused within the cooldown of the last accepted one, across every
+  // A writer's request that every page following the feed reload (ADR 023
+  // §1.8). Refused within the cooldown of the last accepted one, across every
   // process serving the realm, with how long until another is accepted.
   async requestRefresh(): Promise<
     { accepted: true } | { accepted: false; retryAfterMs: number }
@@ -908,7 +908,7 @@ const presenceFrames = new WeakMap<FeedEvent, string>();
 
 const log = logger('realm:event-feed');
 
-// The types an index event names, as the feed may pass them on (ADR 020
+// The types an index event names, as the feed may pass them on (ADR 023
 // §1.1). A key inside the realm becomes relative to it, so a site visitor
 // never learns the realm's own address; a prefix-form key names no address
 // and passes as it is. A key that is an absolute URL elsewhere would name

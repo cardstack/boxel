@@ -422,7 +422,7 @@ async function touchFilesModifiedSince(
   }
 }
 
-// Asks the pages open on a republished realm to reload (ADR 020 §1.7). The
+// Asks the pages open on a republished realm to reload (ADR 023 §1.8). The
 // realm accepts one refresh request a minute, so a republish that follows
 // another within it asks again once the minute is up, rather than leaving its
 // pages on the build before. Asked at most twice; a failure is logged as the
@@ -1003,7 +1003,7 @@ export default function handlePublishRealm({
             })
             // A republish is a new build of the site: once it is indexed, the
             // pages open on it are asked to reload, so they stop running the
-            // code it replaced (ADR 020 §1.7).
+            // code it replaced (ADR 023 §1.8).
             .then(
               () => {
                 void refreshAfterRepublish(publishedRealm, publishedRealmURL);

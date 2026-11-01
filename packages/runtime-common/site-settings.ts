@@ -16,10 +16,10 @@ import { resolveRRIReference } from './url.ts';
 // Reads a realm's site settings (`RealmConfig.site`, from realm.json's index
 // entry) the way host mode uses them. Only the base contract fields are read,
 // so a site realm's RealmConfig subclass can add whatever its editors need.
-// Every value is validated on every read (ADR 015 §1.2): an invalid entry is
+// Every value is validated on every read (ADR 021 §1.1): an invalid entry is
 // dropped and reported in `problems`, the rest are kept, and missing values
 // take their defaults. Nothing here compiles an authored string into a
-// regular expression (ADR 015 §1.3).
+// regular expression (ADR 021 §1.1).
 
 export const MAX_SITE_PAGE_TYPES = 20;
 export const MAX_SITE_REDIRECTS = 500;
@@ -57,8 +57,8 @@ export interface SiteRedirect {
   statusCode: 301 | 302;
 }
 
-// One fixed path serving one card: realm.json's `hostRoutingRules` (ADR 015),
-// read as part of the site so every path is answered by one resolver.
+// One fixed path serving one card: realm.json's `hostRoutingRules`, read as
+// part of the site so every path is answered by one resolver (ADR 021 §1.4).
 export interface SiteFixedPage {
   path: string;
   card: string;
@@ -85,7 +85,7 @@ export interface SiteSettings {
   listed: boolean;
   crawlers: { userAgent: string; allow: boolean }[];
   // realm.json's `serveSourcePrerender`, which lets a route serve a card
-  // another realm holds (ADR 016). Set by Realm.getSiteSettings.
+  // another realm holds (ADR 021 §1.6). Set by Realm.getSiteSettings.
   serveSourcePrerender?: boolean;
   problems: string[];
 }

@@ -909,7 +909,7 @@ export interface CallApiOperationDeclaration extends OperationCommon {
 // is where the message landed on the channel.
 //
 // `ordered: false` makes it presence: who is here now, whether a person, an
-// agent or a crowd of agents (ADR 020 §1.8). The message takes no position on
+// agent or a crowd of agents (ADR 023 §1.6). The message takes no position on
 // the channel and waits on no other message, so a crowd's heartbeats cost one
 // small write each instead of a queue. The latest per key counts until
 // `expiresAfter` seconds pass (60 by default), a page that starts following

@@ -1,4 +1,4 @@
-// A realm's event feeds (ADR 020), kept so that every process serving the
+// A realm's event feeds (ADR 023), kept so that every process serving the
 // realm shares one sequence and a restart continues it rather than starting a
 // new one. A feed is keyed by the realm's URL, or, for a card's live channel,
 // by the realm's URL and the card's path joined by `#`. `realm_feeds` holds

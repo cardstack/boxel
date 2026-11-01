@@ -636,7 +636,7 @@ strictEqual(
 
 console.log('BXL semantic AST/profile/storage projection: all checks passed');
 
-// The route profile (ADR 015 §1.4): what a page type's href may say.
+// The route profile (ADR 021 §1.1): what a page type's href may say.
 for (const [href, readableSyntax] of [
   ['"/shop/" & .handle', true],
   ['"/collections/" & LOWER(.season) & "-" & .year', true],

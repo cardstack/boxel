@@ -122,7 +122,7 @@ export default class Card extends Route {
   ) {
     if (this.hostModeService.isActive) {
       // A visitor who isn't signed in hears realm changes through the
-      // realms' event feeds (ADR 020).
+      // realms' event feeds (ADR 023).
       this.eventFeed.start();
       this.hostNavigation.adoptServedDoc();
       this.hostNavigation.showingNotFound = false;

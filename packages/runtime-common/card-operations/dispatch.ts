@@ -219,8 +219,8 @@ export interface OperationCore {
   // Sends a `callApi`'s request through the realm server's guarded outbound
   // client. A core without it sends nothing.
   callApi?: CallApiSender;
-  // Puts an `emit`'s message on the target card's live channel (ADR 020
-  // §1.8, §1.10) and answers the position it took there. Called once per
+  // Puts an `emit`'s message on the target card's live channel (ADR 023
+  // §1.6, §1.7) and answers the position it took there. Called once per
   // admitted emit; in an `_operations` batch, after the batch's writes have
   // committed. A core without it emits nothing, and refuses every `emit`
   // with 501 `not-implemented`.
@@ -1761,7 +1761,7 @@ async function emitOperation(
 // in turn with the channel's appends, so it can't pass against a card a
 // concurrent write is about to change: a transform that collects from the
 // channel and writes what lasts holds that lock, and an emit after it sees
-// what it wrote (ADR 020 §1.8).
+// what it wrote (ADR 023 §1.6).
 //
 // `.` is the card's id and attributes, which is also what `instance()` reads.
 // The guard answers `true` for a message that may go; `false` refuses the

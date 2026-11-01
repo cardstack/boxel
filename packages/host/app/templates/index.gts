@@ -183,7 +183,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   private installHostNavigation = modifier(() => this.hostNavigation.install());
 
-  // Following a card's channel and taking refresh requests (ADR 020).
+  // Following a card's channel and taking refresh requests (ADR 023).
   @cached
   private get live() {
     return liveCardContext(this.eventFeed, this.realm);

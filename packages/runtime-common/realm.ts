@@ -118,8 +118,8 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // a conditional *write*, which is what `If-Match` asks about, and that question
 // is about the card rather than about the representation it was read in.
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
-// How a card+json read addressed by its current revision is cached (ADR 020
-// §1.5), where its unaddressed read would be shared-cacheable. The document
+// How a card+json read addressed by its current revision is cached (ADR 023
+// §1.4), where its unaddressed read would be shared-cacheable. The document
 // at a revision never changes, so a shared cache holds it without asking for
 // a short while, which is what collapses a crowd's re-reads after an event.
 // Whether a visitor may read it can change without the revision changing,
@@ -1223,13 +1223,13 @@ const APPLIES_ARCHIVED_SEAL = {
 // grant to admit them to a row, so it answers them with the no-rows document a
 // policy realm whose grants admit nothing gives (see
 // `RouteOptions.admitsVerifiedNonReaders`).
-// The event feed's routes (ADR 020). The feed is filtered to what a
+// The event feed's routes (ADR 023). The feed is filtered to what a
 // caller who isn't signed in may read, so the ACL's refusal goes on to the
 // policy, which admits such a caller wherever it opens a read or a search to
 // one. It runs nothing a grant admits, so an archived realm's seal has nothing
 // to apply to.
 // The most card channels one realm keeps open in a process that nothing here
-// follows (ADR 020 §1.8). Past it the oldest are closed; each is loaded again
+// follows (ADR 023 §1.6). Past it the oldest are closed; each is loaded again
 // from the store when asked for.
 const MAX_OPEN_CHANNELS = 1_000;
 const EVENT_FEED_ROUTE = {
@@ -1331,11 +1331,11 @@ const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 // Without a bound it reads the latest message of every key the channel has
 // ever carried, so a waiting room that has seen ten thousand visitors makes
 // its draw iterate all of them, past the program's step budget. A stopgap for
-// a window the declaration names (see ADR 020's remediation).
+// a window the declaration names (see ADR 023's remediation).
 const COLLECT_WINDOW_MS = 5 * 60_000;
 
 // How often a stream following a card's channel is sent the presence that
-// arrived meanwhile (ADR 020 §1.8).
+// arrived meanwhile (ADR 023 §1.6).
 const PRESENCE_FLUSH_MS = 1000;
 const MODULE_ETAG_VARIANT = 'module';
 
@@ -2355,7 +2355,7 @@ export interface CommitBatchResult {
 export interface WriteOptions {
   clientRequestId?: string | null;
   // The operation that wrote each card, by card URL, for the event feed to
-  // name (ADR 020 §1.1). Only the operations coordinator says.
+  // name (ADR 023 §1.1). Only the operations coordinator says.
   operations?: Record<string, FeedOperation>;
   // The cards among this write's own files whose content the caller supplied
   // verbatim, named the way the invalidation event names them. Reported on
@@ -2550,7 +2550,7 @@ export interface RealmAdapter {
   ): Promise<void>;
 
   // A stream the realm writes a long-lived response into, as its public
-  // change feed does (ADR 020). Node only: an adapter without it answers that
+  // change feed does (ADR 023). Node only: an adapter without it answers that
   // feed's stream as unavailable, and a client falls back to the poll.
   openEventStream?(): RealmEventStream;
 
@@ -3354,7 +3354,7 @@ export class Realm {
         this.realmMtimes.bind(this),
         ACL_ONLY,
       )
-      // The event feed (ADR 020): a stream, and the same feed as a
+      // The event feed (ADR 023): a stream, and the same feed as a
       // poll a shared cache can hold. It carries only changes a visitor who
       // isn't signed in may read, so it answers wherever the policy opens a
       // read or a search to such a visitor.
@@ -3370,8 +3370,8 @@ export class Realm {
         this.eventFeedWindow.bind(this),
         EVENT_FEED_ROUTE,
       )
-      // A writer asking every page that follows the feed to reload (ADR 020
-      // §1.7). A `POST`, so it takes the realm's write permission, which no
+      // A writer asking every page that follows the feed to reload (ADR 023
+      // §1.8). A `POST`, so it takes the realm's write permission, which no
       // policy grant reaches.
       .post(
         '/_live/refresh',
@@ -6978,7 +6978,7 @@ export class Realm {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
             // What each entry ran, so the event feed names the operation that
-            // produced each change (ADR 020 §1.1).
+            // produced each change (ADR 023 §1.1).
             operationAt: (position) => {
               let key = JSON.stringify(position);
               let staging = writes.find(
@@ -7106,7 +7106,7 @@ export class Realm {
       requestContext,
     );
     // The positions the batch's changes took, one contiguous range, so the
-    // caller knows its own change when the feed brings it (ADR 020 §1.3).
+    // caller knows its own change when the feed brings it (ADR 023 §1.1).
     if (feedBefore !== undefined) {
       try {
         response.headers.set(
@@ -7958,7 +7958,7 @@ export class Realm {
         readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
         ...(this.#callApi ? { callApi: this.#callApi } : {}),
         // An `emit` operation's message goes on the target card's live
-        // channel (ADR 020 §1.8), which answers the position it took.
+        // channel (ADR 023 §1.6), which answers the position it took.
         emitMessage: (args) => this.#emitMessage(args),
       };
     }
@@ -8376,7 +8376,7 @@ export class Realm {
         realmConfig: () => this.getRealmConfig(),
         // A transform that `collect`s reads the latest messages of an emit
         // from the target card's live channel, inside the write lock, after
-        // catching up on what other processes have recorded (ADR 020 §1.8).
+        // catching up on what other processes have recorded (ADR 023 §1.6).
         channelMessages: async ({ cardURL, operation, unordered }) => {
           let path = this.paths.local(new URL(cardURL)).replace(/\.json$/, '');
           let channel = this.#channel(path);
@@ -8531,7 +8531,7 @@ export class Realm {
   // Every read the feed's audience may make carries the feed's position at the
   // time of the read, and every write the position after its change, so a
   // client opens the feed from what it holds and knows its own change when it
-  // arrives (ADR 020 §1.3). A response that names its own range, as an
+  // arrives (ADR 023 §1.1). A response that names its own range, as an
   // operations batch does, keeps it.
   async #stampFeedPosition(request: Request, response: Response) {
     if (
@@ -8846,7 +8846,7 @@ export class Realm {
       // A read that names a revision runs first, though: one at the card's
       // current revision is the re-read the event feed asked for, which every
       // visitor behind one address makes, so it costs no one's budget
-      // (ADR 020 §1.5).
+      // (ADR 023 §1.4).
       //
       // Only the URL the feed hands out qualifies: a card+json `GET` of a card
       // whose query is `rev` alone, so the exempt URL is one a shared cache
@@ -13606,7 +13606,7 @@ export class Realm {
   }
 
   // The revision a read names when it is the re-read the event feed asks for
-  // (ADR 020 §1.5): a `GET` for card+json of a card, whose query is `rev` and
+  // (ADR 023 §1.4): a `GET` for card+json of a card, whose query is `rev` and
   // nothing else. Undefined for every other request, `?rev=` or not.
   #feedRevisionRead(request: Request, localPath: string): string | undefined {
     if (request.method !== 'GET') {
@@ -14531,7 +14531,7 @@ export class Realm {
     // ETag short-circuit returns 304 cheaply when nothing changed.
     //
     // A read the policy admitted for a caller who authenticated nobody is
-    // `public` too (ADR 020 §1.5): every such caller is the same caller to
+    // `public` too (ADR 023 §1.4): every such caller is the same caller to
     // the policy, so they all get the same document, and a shared cache may
     // hand it to the next one. `must-revalidate` is what keeps that safe
     // when the policy or the card changes: the cache asks the realm before
@@ -17141,7 +17141,7 @@ export class Realm {
     affected.delete('*');
     await this.notifyRealmsListUpdated([...affected]);
     // What a visitor may read can have changed for any card, so the event
-    // feed has every client revalidate what it holds (ADR 020 §1.2).
+    // feed has every client revalidate what it holds (ADR 023 §1.2).
     this.#eventFeed.reset();
     return await this.getRealmPermissions(request, requestContext);
   }
@@ -17701,7 +17701,7 @@ export class Realm {
       policyCard: async () => (await this.getRealmPolicy())?.card,
       revisitCard: (file, realmURL) => this.#revisitPolicyCard(file, realmURL),
       // What any visitor may read can have changed with the policy, so the
-      // event feed resets (ADR 020 §1.2).
+      // event feed resets (ADR 023 §1.2).
       onRecompiled: () => this.#eventFeedInstance?.reset(),
     });
   }
@@ -17878,7 +17878,7 @@ export class Realm {
   // It also carries what decides who may read the realm's cards: the realm's
   // permissions as the last request found them, and the policy as last
   // compiled. So a card's revision changes when the policy or permissions
-  // that admit it do (ADR 020 §1.5), and a shared cache holding the card at
+  // that admit it do (ADR 023 §1.4), and a shared cache holding the card at
   // its old revision is asked again.
   private getCachedRealmInfoHash(): string | undefined {
     let info = this.#cachedRealmInfoHash ?? undefined;
@@ -18344,7 +18344,7 @@ export class Realm {
     itemsDrained!();
   }
 
-  // The event feed (ADR 020), created on first use. Whether a visitor
+  // The event feed (ADR 023), created on first use. Whether a visitor
   // who isn't signed in may read a changed card is answered by reading it as
   // one, through this realm's own gate, so the feed can never disagree with
   // what that visitor is served. The read is marked as the platform's own, so
@@ -18352,16 +18352,16 @@ export class Realm {
   #eventFeedInstance: RealmEventFeed | undefined;
   #feedStoreInstance: FeedStore | undefined;
   // The streams this process holds open for this realm, its channels
-  // included, and how many it will (ADR 020 §1.4).
+  // included, and how many it will (ADR 023 §1.3).
   #openFeedStreams = 0;
   eventFeedStreamCap = EVENT_FEED_MAX_STREAMS;
-  // The live channels of this realm's cards (ADR 020 §1.8) this process has
+  // The live channels of this realm's cards (ADR 023 §1.6) this process has
   // opened: one feed per card, for what is emitted on it and the card's own
   // changes.
   #channels = new Map<string, RealmEventFeed>();
 
   // A realm served from Postgres shares its feeds' sequences with every
-  // process serving it (ADR 020 §1.3); one the host runs in the browser keeps
+  // process serving it (ADR 023 §1.1); one the host runs in the browser keeps
   // them in memory.
   get #feedStore(): FeedStore {
     this.#feedStoreInstance ??=
@@ -18484,7 +18484,7 @@ export class Realm {
 
   // The feed a `_live` request addresses: the realm's, or with `?channel=` a
   // card's live channel, which answers only when a visitor who isn't signed in
-  // may read that card (ADR 020 §1.8). Undefined when the channel can't be
+  // may read that card (ADR 023 §1.6). Undefined when the channel can't be
   // followed, which is answered as not found, whatever the reason.
   async #feedFor(
     request: Request,
@@ -18570,7 +18570,7 @@ export class Realm {
     }
     let stream = open;
     // Counted from the moment it passes the cap, before anything is awaited,
-    // so a burst can't all pass it (ADR 020 §1.4).
+    // so a burst can't all pass it (ADR 023 §1.3).
     this.#openFeedStreams++;
     let counted = true;
     let uncount = () => {
@@ -18614,8 +18614,8 @@ export class Realm {
       if (channel === undefined) {
         return;
       }
-      // A channel follows its card only while a visitor may read it (ADR 020
-      // §1.8): a card gone or withdrawn ends the stream, and after a reset it
+      // A channel follows its card only while a visitor may read it (ADR 023
+      // §1.6): a card gone or withdrawn ends the stream, and after a reset it
       // is asked again. The client's reconnect then meets the gate.
       if (event.kind === 'removed' || event.kind === 'withdrawn') {
         stream.end();
@@ -18755,7 +18755,7 @@ export class Realm {
 
   // Another process serving this realm appended to its event feed: pass what
   // it appended to this process's subscribers.
-  // An unordered message another process recorded (ADR 020 §1.8), for the
+  // An unordered message another process recorded (ADR 023 §1.6), for the
   // followers of its channel here. Only a channel this process has open has
   // anyone to tell; a notice too large to carry its message is read back.
   async deliverPresence(notice: PresenceNotice): Promise<void> {
@@ -18787,7 +18787,7 @@ export class Realm {
 
   // Asks every page following this realm's feed to reload, as a writer's
   // request does, for the platform's own reasons: a republish replaces what
-  // those pages run (ADR 020 §1.7). Held to the same once-a-minute limit.
+  // those pages run (ADR 023 §1.8). Held to the same once-a-minute limit.
   async requestEventFeedRefresh() {
     return await this.#eventFeed.requestRefresh();
   }
@@ -18803,7 +18803,7 @@ export class Realm {
   }
 
   // Emits what an `emit` operation the policy admitted produced on the
-  // target card's live channel (ADR 020 §1.8), and answers with its position.
+  // target card's live channel (ADR 023 §1.6), and answers with its position.
   //
   // An emit with an `assert` runs it holding the card's write lock, the one a
   // transform collecting from the channel holds while it reads the messages
@@ -18820,7 +18820,7 @@ export class Realm {
     let path = this.paths.local(new URL(args.cardURL)).replace(/\.json$/, '');
     let channel = this.#channel(path);
     // Presence takes no position and waits on none of the channel's appends
-    // (ADR 020 §1.8): one write that contends only with its own key.
+    // (ADR 023 §1.6): one write that contends only with its own key.
     if (args.unordered && args.key !== undefined) {
       await channel.presence(
         {
@@ -18917,8 +18917,8 @@ export class Realm {
     // The fingerprint card revisions carry is taken from the permissions as
     // stored, never from the map this request is judged by, which a
     // world-readable read trims: two processes reading the same rows, and a
-    // read and a write in one process, then name the same revision (ADR 020
-    // §1.5).
+    // read and a write in one process, then name the same revision (ADR 023
+    // §1.4).
     this.#notePermissions(fetched);
     let isWorldReadable = fetched['*']?.includes('read') ?? false;
     let permissions: RealmPermissions =
