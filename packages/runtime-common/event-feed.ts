@@ -144,7 +144,7 @@ export function changesIn(
         return 'reset';
       }
       if (event.indexType === 'incremental-index-initiation') {
-        // The write's own \`update\` event announces it, naming what it was;
+        // The write's own `update` event announces it, naming what it was;
         // this signal of the same write would only repeat it without that.
         return [];
       }
@@ -179,7 +179,7 @@ export class RealmEventFeed {
   >();
   #queue: Promise<void> = Promise.resolve();
   // The operation that wrote each path, held from its write until its index
-  // pass is announced, so the \`indexed\` event names it too.
+  // pass is announced, so the `indexed` event names it too.
   #wroteBy = new Map<string, { operation: FeedOperation; at: number }>();
   #lastRefresh: number | undefined;
 
@@ -200,8 +200,8 @@ export class RealmEventFeed {
 
   // Takes a realm event in. Events are judged and announced in the order
   // they arrive.
-  // \`operations\` names the operation that wrote each card, by card URL, for a
-  // write that ran through \`_operations\`.
+  // `operations` names the operation that wrote each card, by card URL, for a
+  // write that ran through `_operations`.
   ingest(
     event: RealmEventContent,
     operations?: Record<string, FeedOperation>,
