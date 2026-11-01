@@ -18,8 +18,18 @@
  * runtime-common barrel and the shimmed-module machinery, whose imports the
  * dependency-light consumers cannot resolve (see the note on
  * `RealmPathsVirtualNetwork` in `paths.ts`). It satisfies that interface, so
- * `RealmPaths` accepts it, and its methods keep `VirtualNetwork`'s semantics
- * so a consumer can swap one for the other.
+ * `RealmPaths` accepts it. ADR 002 §1.2 names it as the network such a client
+ * builds.
+ *
+ * Given the same prefix map, its methods answer as `VirtualNetwork`'s do, with
+ * one difference: it holds no URL mappings, because the map it is built from
+ * carries prefixes only, so it knows a realm only by its prefix and the URL it
+ * is served at, never by an alias. For a reference into
+ * the base realm, `VirtualNetwork.realmForReference` answers the alias the
+ * realm is known by (`https://cardstack.com/base/`) and this answers where it
+ * is served, which is what a caller fetching through the answer needs; and
+ * `unresolveURL` leaves an alias URL as written. The shared tests run both
+ * classes over the same cases, and pin that difference.
  *
  * This module imports only leaf modules. Keep it that way, or the consumers it
  * exists for lose it.
@@ -159,8 +169,9 @@ export class PrefixRealmNetwork {
 
   /**
    * The URL of the realm holding `reference`, matched against each registered
-   * prefix and its target, longest match first. Answers in URL form, so a
-   * caller can compare it against a realm's own URL. Undefined when no
+   * prefix and its target, longest match first. Answers the URL the realm is
+   * served at, never an alias (see the module comment), so a caller can fetch
+   * through it or compare it against a realm's own URL. Undefined when no
    * registered realm holds the reference.
    */
   realmForReference(reference: string): RealmIdentifier | undefined {

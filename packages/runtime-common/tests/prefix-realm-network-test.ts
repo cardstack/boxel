@@ -8,7 +8,37 @@ import {
   prefixRealmURLsOf,
   prefixRealmsDocument,
 } from '../prefix-realm-network.ts';
+import type { RealmIdentifier } from '../realm-identifiers.ts';
+import { baseRealmAliasURL } from '../realm-prefixes.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 import type { SharedTests } from '../helpers/index.ts';
+
+// The prefix resolution `PrefixRealmNetwork` shares with `VirtualNetwork`,
+// typed loosely enough that either class can be passed.
+interface PrefixResolver {
+  addRealmMapping(prefix: string, realmURL: string): void;
+  knownRealms(): RealmIdentifier[];
+  toURL(rri: string): URL;
+  toURLHref(rri: string): string;
+  realmForReference(reference: string): string | undefined;
+  pathBelowNamespace(identifier: string): string;
+  unresolveURL(url: string): string;
+}
+
+// Runs `check` against a `VirtualNetwork` and a `PrefixRealmNetwork` holding
+// the same prefix map, so the subset cannot drift from the class it stands in
+// for. Their one difference, an aliased realm, has a case of its own.
+function eachNetwork(
+  prefixRealmURLs: Record<string, string>,
+  check: (network: PrefixResolver, name: string) => void,
+) {
+  let virtualNetwork = new VirtualNetwork();
+  for (let [prefix, realmURL] of Object.entries(prefixRealmURLs)) {
+    virtualNetwork.addRealmMapping(prefix, realmURL);
+  }
+  check(virtualNetwork, 'VirtualNetwork');
+  check(new PrefixRealmNetwork(prefixRealmURLs), 'PrefixRealmNetwork');
+}
 
 // A served map whose catalog is deliberately away from `<server>/catalog/`,
 // so a resolution that guessed from the prefix's spelling would come out
@@ -36,90 +66,170 @@ const tests = Object.freeze({
   'resolves a prefix-form identifier through its registered mapping': async (
     assert,
   ) => {
-    let network = new PrefixRealmNetwork(SERVED);
-    assert.strictEqual(
-      network.toURLHref('@cardstack/catalog/blog/author.gts'),
-      'https://catalog.example.test/blog/author.gts',
-    );
-    assert.strictEqual(
-      network.toURL('@cardstack/base/').href,
-      'https://realms.example.test/base/',
-    );
+    eachNetwork(SERVED, (network, name) => {
+      assert.strictEqual(
+        network.toURLHref('@cardstack/catalog/blog/author.gts'),
+        'https://catalog.example.test/blog/author.gts',
+        name,
+      );
+      assert.strictEqual(
+        network.toURL('@cardstack/base/').href,
+        'https://realms.example.test/base/',
+        name,
+      );
+    });
   },
 
   'passes a URL-form identifier through and refuses an unregistered prefix':
     async (assert) => {
-      let network = new PrefixRealmNetwork(SERVED);
-      assert.strictEqual(
-        network.toURLHref('https://elsewhere.example.test/card.json'),
-        'https://elsewhere.example.test/card.json',
-      );
-      assert.throws(
-        () => network.toURL('@other/realm/card.json'),
-        /no registered realm prefix matches it \(registered: @cardstack\/base\/, @cardstack\/catalog\/\)/,
-      );
+      eachNetwork(SERVED, (network, name) => {
+        assert.strictEqual(
+          network.toURLHref('https://elsewhere.example.test/card.json'),
+          'https://elsewhere.example.test/card.json',
+          name,
+        );
+        assert.throws(
+          () => network.toURL('@other/realm/card.json'),
+          /no registered realm prefix matches it \(registered: @cardstack\/base\/, @cardstack\/catalog\/\)/,
+          name,
+        );
+      });
     },
 
   'normalizes trailing slashes on registration': async (assert) => {
-    let network = new PrefixRealmNetwork();
-    network.addRealmMapping(
-      '@cardstack/skills',
-      'https://realms.example.test/skills',
-    );
-    assert.deepEqual(network.prefixRealmURLs(), {
-      '@cardstack/skills/': 'https://realms.example.test/skills/',
+    eachNetwork({}, (network, name) => {
+      network.addRealmMapping(
+        '@cardstack/skills',
+        'https://realms.example.test/skills',
+      );
+      assert.deepEqual(
+        prefixRealmURLsOf(network),
+        { '@cardstack/skills/': 'https://realms.example.test/skills/' },
+        name,
+      );
+      assert.deepEqual(network.knownRealms(), ['@cardstack/skills/'], name);
     });
-    assert.deepEqual(network.knownRealms(), ['@cardstack/skills/']);
   },
 
   'places a reference in its realm by prefix or by served URL, longest match first':
     async (assert) => {
-      let network = new PrefixRealmNetwork({
-        ...SERVED,
-        '@cardstack/base-extras/': 'https://realms.example.test/base-extras/',
-      });
-      assert.strictEqual(
-        network.realmForReference('@cardstack/base-extras/x.gts'),
-        'https://realms.example.test/base-extras/',
-        'the deeper prefix wins over the one it extends',
-      );
-      assert.strictEqual(
-        network.realmForReference('https://catalog.example.test/a/b.gts'),
-        'https://catalog.example.test/',
-        'a served URL is placed too',
-      );
-      assert.strictEqual(
-        network.realmForReference('https://elsewhere.example.test/x'),
-        undefined,
+      // The inner realm is served below the outer one's URL and registered
+      // after it, so a first match would place its references in the outer
+      // realm.
+      eachNetwork(
+        {
+          ...SERVED,
+          '@example/outer/': 'https://nested.example.test/',
+          '@example/inner/': 'https://nested.example.test/inner/',
+        },
+        (network, name) => {
+          assert.strictEqual(
+            network.realmForReference(
+              'https://nested.example.test/inner/x.gts',
+            ),
+            'https://nested.example.test/inner/',
+            `${name}: the deeper realm wins over the one it sits in`,
+          );
+          assert.strictEqual(
+            network.realmForReference('@example/inner/x.gts'),
+            'https://nested.example.test/inner/',
+            `${name}: a prefix-form reference answers in URL form`,
+          );
+          assert.strictEqual(
+            network.realmForReference('https://catalog.example.test/a/b.gts'),
+            'https://catalog.example.test/',
+            `${name}: a served URL is placed too`,
+          );
+          assert.strictEqual(
+            network.realmForReference('https://elsewhere.example.test/x'),
+            undefined,
+            name,
+          );
+        },
       );
     },
 
   'reads the path below the namespace from the spelling alone': async (
     assert,
   ) => {
-    let network = new PrefixRealmNetwork(SERVED);
-    assert.strictEqual(
-      network.pathBelowNamespace('@cardstack/catalog/a/b.gts'),
-      'a/b.gts',
-    );
-    assert.strictEqual(network.pathBelowNamespace('@cardstack/catalog/'), '');
-    assert.strictEqual(
-      network.pathBelowNamespace('https://realms.example.test/base/a%20b.gts'),
-      'base/a b.gts',
-    );
+    eachNetwork(SERVED, (network, name) => {
+      assert.strictEqual(
+        network.pathBelowNamespace('@cardstack/catalog/a/b.gts'),
+        'a/b.gts',
+        name,
+      );
+      assert.strictEqual(
+        network.pathBelowNamespace('@cardstack/catalog/'),
+        '',
+        name,
+      );
+      assert.strictEqual(
+        network.pathBelowNamespace(
+          'https://realms.example.test/base/a%20b.gts',
+        ),
+        'base/a b.gts',
+        name,
+      );
+    });
   },
 
   'folds a served URL back onto its prefix': async (assert) => {
-    let network = new PrefixRealmNetwork(SERVED);
-    assert.strictEqual(
-      network.unresolveURL('https://catalog.example.test/a.gts'),
-      '@cardstack/catalog/a.gts',
-    );
-    assert.strictEqual(
-      network.unresolveURL('https://elsewhere.example.test/a.gts'),
-      'https://elsewhere.example.test/a.gts',
-    );
+    eachNetwork(SERVED, (network, name) => {
+      assert.strictEqual(
+        network.unresolveURL('https://catalog.example.test/a.gts'),
+        '@cardstack/catalog/a.gts',
+        name,
+      );
+      assert.strictEqual(
+        network.unresolveURL('https://elsewhere.example.test/a.gts'),
+        'https://elsewhere.example.test/a.gts',
+        name,
+      );
+    });
   },
+
+  'knows an aliased realm only by its served URL, where VirtualNetwork also knows the alias':
+    async (assert) => {
+      // Registered the way the realm server registers the base realm: the
+      // alias URL-mapped onto where the realm is served, and the prefix mapped
+      // there too. The map a client builds from carries only the prefix.
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addURLMapping(
+        new URL(baseRealmAliasURL),
+        new URL('https://realms.example.test/base/'),
+      );
+      virtualNetwork.addRealmMapping(
+        '@cardstack/base/',
+        'https://realms.example.test/base/',
+      );
+      let network = new PrefixRealmNetwork(prefixRealmURLsOf(virtualNetwork));
+
+      assert.strictEqual(
+        network.toURLHref('@cardstack/base/card-api.gts'),
+        virtualNetwork.toURLHref('@cardstack/base/card-api.gts'),
+        'a prefix resolves alike',
+      );
+      assert.strictEqual(
+        virtualNetwork.realmForReference('@cardstack/base/card-api.gts'),
+        baseRealmAliasURL,
+        'VirtualNetwork folds back to the alias the realm is known by',
+      );
+      assert.strictEqual(
+        network.realmForReference('@cardstack/base/card-api.gts'),
+        'https://realms.example.test/base/',
+        'PrefixRealmNetwork answers where the realm is served',
+      );
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(`${baseRealmAliasURL}card-api.gts`),
+        '@cardstack/base/card-api.gts',
+        'VirtualNetwork folds an alias URL onto the prefix',
+      );
+      assert.strictEqual(
+        network.unresolveURL(`${baseRealmAliasURL}card-api.gts`),
+        `${baseRealmAliasURL}card-api.gts`,
+        'PrefixRealmNetwork leaves an alias URL as written',
+      );
+    },
 
   'the served document round-trips through the client parser': async (
     assert,

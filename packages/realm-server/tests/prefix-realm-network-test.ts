@@ -30,6 +30,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(prefixRealmNetworkTests, assert, {});
     });
 
+    test('knows an aliased realm only by its served URL, where VirtualNetwork also knows the alias', async function (assert) {
+      await runSharedTest(prefixRealmNetworkTests, assert, {});
+    });
+
     test('the served document round-trips through the client parser', async function (assert) {
       await runSharedTest(prefixRealmNetworkTests, assert, {});
     });
