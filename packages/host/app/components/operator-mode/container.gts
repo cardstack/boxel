@@ -55,9 +55,11 @@ import CreateListingModal from './create-listing-modal';
 
 import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
+import type EventFeedService from '../../services/event-feed';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
@@ -72,6 +74,8 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  @service declare private eventFeed: EventFeedService;
+  @service declare private realm: RealmService;
   @service declare private capabilities: CapabilitiesService;
   @service declare private cardService: CardService;
   @service declare matrixService: MatrixService;
@@ -168,6 +172,23 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.toolService.toolContext;
   }
 
+  // A card's live channel, followed through the event feed (ADR 020 §1.8).
+  // Matrix carries the realm's events here, but never a channel's messages.
+  private followChannel: NonNullable<CardContext['followChannel']> = (
+    card,
+    onMessage,
+  ) => {
+    let cardURL = typeof card === 'string' ? card : card.id;
+    if (!cardURL) {
+      return () => {};
+    }
+    return this.eventFeed.followChannel(
+      cardURL,
+      this.realm.realmURLOf(cardURL),
+      onMessage,
+    );
+  };
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): CardContext {
@@ -176,6 +197,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      followChannel: this.followChannel,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,
