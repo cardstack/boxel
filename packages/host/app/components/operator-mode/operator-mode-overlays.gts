@@ -15,12 +15,7 @@ import {
   Menu,
 } from '@cardstack/boxel-ui/components';
 
-import {
-  cn,
-  copyCardURLToClipboard,
-  or,
-  toMenuItems,
-} from '@cardstack/boxel-ui/helpers';
+import { cn, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -49,6 +44,7 @@ import {
   AdornCheckmarkSelected,
 } from '@cardstack/host/components/adorn/adorn-select-checkmark';
 
+import { copyOpenableURLToClipboard } from '@cardstack/host/utils/clipboard';
 import { removeCardJsonExtension } from '@cardstack/host/utils/search/types';
 
 import { htmlComponent } from '../../lib/html-component';
@@ -60,6 +56,7 @@ import Overlays from './overlays';
 import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
+import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
 import type {
   BaseDef,
@@ -78,6 +75,7 @@ function shouldRenderCompact(width: number, height: number): boolean {
 
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
   @consume(CardCrudFunctionsContextName)
@@ -595,7 +593,8 @@ export default class OperatorModeOverlays extends Overlays {
 
     const copyUrlItem: MenuItemOptions = {
       label: isFile ? 'Copy File URL' : 'Copy Card URL',
-      action: () => copyCardURLToClipboard(cardId),
+      action: () =>
+        copyOpenableURLToClipboard(cardId, this.network.virtualNetwork),
       icon: IconLink,
     };
 

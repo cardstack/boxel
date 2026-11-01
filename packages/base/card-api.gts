@@ -6290,7 +6290,7 @@ function getStore(instance: BaseDef): CardStore {
 // explicit store). Returns undefined when none is available, or when the
 // reference can't be resolved, so callers can degrade to URL math.
 export function resolveInstanceURL(
-  instance: CardDef,
+  instance: CardDef | FileDef,
   reference: string,
 ): URL | undefined {
   try {

@@ -33,7 +33,6 @@ import {
 import {
   MenuDivider,
   MenuItem,
-  copyCardURLToClipboard,
   getContrastColor,
   toMenuItems,
 } from '@cardstack/boxel-ui/helpers';
@@ -76,6 +75,7 @@ import keepScrollWhileBuried from '../../modifiers/keep-scroll-while-buried';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
+import { copyOpenableURLToClipboard } from '../../utils/clipboard';
 import { removeCardJsonExtension } from '../../utils/search/types';
 import CardRenderer from '../card-renderer';
 
@@ -676,7 +676,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem({
         label: 'Copy Card URL',
         action: () =>
-          this.cardIdentifier && copyCardURLToClipboard(this.cardIdentifier),
+          this.cardIdentifier &&
+          copyOpenableURLToClipboard(
+            this.cardIdentifier,
+            this.network.virtualNetwork,
+          ),
         icon: IconLink,
         disabled: !this.cardIdentifier,
       }),
