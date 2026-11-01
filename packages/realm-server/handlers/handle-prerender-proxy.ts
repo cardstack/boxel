@@ -150,18 +150,24 @@ export default function handlePrerenderProxy({
           loaderEpoch: undefined,
         }
       : undefined;
+    // Every kind lands on a warm tab of this realm's affinity under the
+    // caller's session, which keeps every module it has already evaluated. The
+    // realm's loader epoch changes whenever one of its modules is written or
+    // reindexed, and the module and render routes reset the tab's loader when
+    // the epoch they are given differs from the one they last cleared for.
+    // Without the epoch, a module that was checked or rendered, then
+    // rewritten, keeps its first evaluation for as long as the tab is reused.
+    // The epoch comes from the database, never from the caller (see the scrub
+    // above).
+    //
+    // This is the committed epoch, the one capture renders also send. The
+    // uncommitted epochs an index pass sends go to tabs under the realm's
+    // authority session, a different affinity from this caller's, so the two
+    // series do not alternate on one tab. A tab the pool moves from one
+    // affinity to the other resets at most once, then follows its new series.
     try {
+      let loaderEpoch = await readRealmLoaderEpoch(dbAdapter, attrs.realm);
       if (kind === 'module') {
-        // The module render lands on a warm tab of this realm's affinity,
-        // which keeps every module it has already evaluated. The realm's
-        // loader epoch changes whenever one of its modules is written or
-        // reindexed, and the module route resets the tab's loader when the
-        // epoch it is given differs from the one it last cleared for.
-        // Without the epoch, a module that was checked, then rewritten, keeps
-        // reporting its first evaluation for as long as the tab is reused.
-        // The epoch comes from the database, never from the caller (see the
-        // scrub above).
-        let loaderEpoch = await readRealmLoaderEpoch(dbAdapter, attrs.realm);
         prerenderResponse = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: attrs.realm,
@@ -184,6 +190,7 @@ export default function handlePrerenderProxy({
           renderOptions: {
             ...(userRenderOptions ?? {}),
             ...passFlag,
+            loaderEpoch,
           },
         });
         prerenderResponse =
