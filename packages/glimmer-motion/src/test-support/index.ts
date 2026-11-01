@@ -42,6 +42,7 @@ import { rootProjectionNode } from 'motion-dom';
 
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
+import { MEMORY_ATTRIBUTE } from '../memory.ts';
 import { setMotionSpeed } from '../speed.ts';
 
 export { isMotionIdle, whatIsBusy } from '../activity.ts';
@@ -49,11 +50,11 @@ export { isMotionIdle, whatIsBusy } from '../activity.ts';
 const nextFrame = () =>
   new Promise<void>((resolve) => frame.postRender(() => resolve()));
 
+const testRoot = (): Element =>
+  document.querySelector('#ember-testing') ?? document.body;
+
 /** the box QUnit renders the test into; every measurement here is relative to it */
-const container = (): DOMRect =>
-  (
-    document.querySelector('#ember-testing') ?? document.body
-  ).getBoundingClientRect();
+const container = (): DOMRect => testRoot().getBoundingClientRect();
 
 export interface Box {
   height: number;
@@ -110,6 +111,37 @@ export function boundsAndShape(
   element: Element,
 ): Box & ReturnType<typeof shape> {
   return { ...shape(element), ...bounds(element) };
+}
+
+/**
+ * The first LIVE match for `selector`: never a memory, a leaver kept on screen
+ * while its exit plays (a `<Presence @mode="snapshot">` copy, a leaver in a
+ * `<Choreo>` orphan layer).
+ *
+ * A memory's test hooks carry a suffix (`data-test-title-memory`), so a
+ * selector made of test hooks already matches only live elements. Any other
+ * selector (a class, a role, a tag) can match a memory as well as whatever
+ * replaced it, and a bare `querySelector` can answer with the memory: an
+ * element whose component has already been torn down, which is inert, and
+ * whose box is where the old scene stood. Clicking it does nothing; measuring
+ * it measures the past. Neither failure names itself. Such a query, made while
+ * an exit may still be playing, should come through here.
+ */
+export function live<E extends Element = HTMLElement>(
+  selector: string,
+  root: ParentNode = testRoot(),
+): E | null {
+  return liveAll<E>(selector, root)[0] ?? null;
+}
+
+/** every live match for `selector`, in document order: see `live()` */
+export function liveAll<E extends Element = HTMLElement>(
+  selector: string,
+  root: ParentNode = testRoot(),
+): E[] {
+  return [...root.querySelectorAll<E>(selector)].filter(
+    (el) => !el.closest(`[${MEMORY_ATTRIBUTE}]`),
+  );
 }
 
 export interface SettleOptions {

@@ -63,8 +63,8 @@ const MENU_EXIT_TRANSITION = tween({
  * The menu's exit belongs to the motion engine (ADR 007 §1.2). Its header and
  * content are the caller's blocks, rendered from state that `@onCollapse` has
  * already moved on, so the live menu cannot stay on screen to fade: it would
- * re-render as the collapsed face, beside the pill, with the caller's
- * `...attributes` and test hooks. The menu is the one item of a
+ * re-render as the collapsed face, beside the pill, and stay focusable and
+ * clickable while it faded. The menu is the one item of a
  * `<Presence @mode="snapshot">` instead: the live menu leaves with the render
  * that collapses it, and the engine fades a static, inert copy of its last
  * frame over the pill. With motion off nothing is copied.

@@ -2,9 +2,9 @@
  * glimmer-motion — Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
  *
- * `registerBusyProbe` and the participant-host API are the seams a layer built
- * on top (such as `@cardstack/choreo`) uses to take part in settling and in
- * motion elements' lifecycles.
+ * `registerBusyProbe`, the participant-host API and memories are the seams a
+ * layer built on top (such as `@cardstack/choreo`) uses to take part in
+ * settling, in motion elements' lifecycles, and in keeping leavers on screen.
  */
 export { type BusyProbe, registerBusyProbe } from './activity.ts';
 export { createDragControls, DragControls } from './gestures/drag-controls.ts';
@@ -37,6 +37,14 @@ export {
   LayoutGroup,
   snapshotOnRender,
 } from './layout-group.gts';
+export type { ScrollPosition, Shown, ShownAnimation } from './memory.ts';
+export {
+  keepAsMemory,
+  MEMORY_ATTRIBUTE,
+  MEMORY_HOOK_SUFFIX,
+  readAnimations,
+  trackScrolls,
+} from './memory.ts';
 export type { MotionEl, MotionProps } from './motion.ts';
 export { default as motion, MotionModifier } from './motion.ts';
 export type { MotionConfigContext } from './motion-config.gts';

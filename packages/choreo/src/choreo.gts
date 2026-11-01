@@ -23,10 +23,14 @@ import { modifier } from 'ember-modifier';
 import {
   closestMotionConfig,
   flushPendingMounts,
+  keepAsMemory,
   motionSpeed,
   postRender,
+  readAnimations,
   registerBusyProbe,
+  type Shown,
   snapshotOnRender,
+  trackScrolls,
 } from 'glimmer-motion';
 
 import { type BeaconRef, measureBeacons } from './beacons.ts';
@@ -286,43 +290,6 @@ interface Signature {
 let debugStyle: HTMLStyleElement | undefined;
 
 /**
- * Two rules every region shares. An orphaned skin flies with its
- * backdrop-filters OFF: a backdrop-filter can never be cached — it
- * re-samples and re-blurs whatever is behind it on every frame — and
- * inside a scaling, fading leaver that is paid at full price for the
- * whole flight (the camera demo's four glass panels, over its gradient
- * washes, was the return trip's jank). It is also the wrong picture: a
- * skin is a memory of the OLD scene, and its glass sampling the new
- * scene behind it shows the wrong world. The panels keep their own
- * translucent grounds, so they still read as glass in the crossfade.
- *
- * And an orphaned skin does not REPLAY ITS BIRTH: re-inserting a node
- * restarts every CSS animation on it, so a leaver re-parented into the
- * orphan layer re-ran its entrance choreography — rules drawing
- * themselves, letters settling out of a blur — while it was supposed to
- * be dying. A one-frame-old memory acting out its own arrival is the
- * flash the Towers film chased for a night. The run's own exit motion
- * is WAAPI and survives re-parenting untouched; only stylesheet
- * animations restart, and on a memory they are all lies.
- */
-let orphanStyle: HTMLStyleElement | undefined;
-function ensureOrphanStyle() {
-  if (orphanStyle) {
-    return;
-  }
-  orphanStyle = document.createElement('style');
-  orphanStyle.setAttribute('data-choreo-style', '');
-  orphanStyle.textContent =
-    '[data-choreo-orphans] *,' +
-    '[data-choreo-orphans] *::before,' +
-    '[data-choreo-orphans] *::after' +
-    '{backdrop-filter:none!important;' +
-    '-webkit-backdrop-filter:none!important;' +
-    'animation:none!important;}';
-  document.head.appendChild(orphanStyle);
-}
-
-/**
  * A fingerprint of the collected timeline tree, for telling an EDIT from
  * noise while a run's own orphans are aloft. Mid-flight, compiled cues are
  * value-laden (every re-measure shifts them), so sameScore cannot answer
@@ -452,6 +419,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
   private leaving = new Set<ChoreoNode>();
   private snapshots = new Map<ChoreoNode, Snapshot>();
+  /** the stylesheet animations the region showed before the render, for the memories of what it removes */
+  private shownAnimations: Shown['animations'] = new Map();
+  /** every scroll offset inside the region, kept as it scrolls: a removed element has lost its own */
+  private scrolls?: Shown['scrolls'];
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
@@ -714,6 +685,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private snapshot() {
     this.snapshots.clear();
     this.rootSnapshot = this.element?.getBoundingClientRect();
+    this.shownAnimations = this.element
+      ? readAnimations(this.element)
+      : new Map();
     const wired = this.args.inView ? this.nearView : undefined;
     for (const node of this.participants) {
       const el = node.element;
@@ -1464,10 +1438,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     el.style.height = `${page.height / sy}px`;
     el.style.boxSizing = 'border-box';
     el.style.margin = '0';
-    el.style.pointerEvents = 'none';
-    // one texture, transformed — not a subtree re-rastered per frame
-    el.style.willChange = 'transform, opacity';
-    layer.appendChild(el);
+    // a memory of the old scene: inert, held at the frame it showed, and one
+    // texture transformed rather than a subtree re-rastered per frame
+    keepAsMemory(
+      el,
+      { animations: this.shownAnimations, scrolls: this.scrolls ?? new Map() },
+      () => layer.appendChild(el),
+    );
     this.orphans.add(s.node);
     this.orphanBounds.set(s.node, s.initial);
   }
@@ -1528,7 +1505,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   host = modifier((el: HTMLDivElement) => {
     this.element = el;
     setChoreoHost(el, this);
-    ensureOrphanStyle();
+    const scrolls = trackScrolls(el);
+    this.scrolls = scrolls.scrolls;
     if (getComputedStyle(el).position === 'static') {
       el.style.position = 'relative';
     }
@@ -1542,6 +1520,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     return () => {
+      scrolls.stop();
       setChoreoHost(el, undefined);
       this.element = undefined;
     };

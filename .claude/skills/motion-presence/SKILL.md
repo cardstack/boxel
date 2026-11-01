@@ -61,9 +61,13 @@ state that has already moved on. The modifier freezes an exiting element's
 _props_, but your template's own bindings are yours to keep stable.
 
 When the leaver renders content you can't put on the item — a component's
-caller blocks, `...attributes`, test hooks — use `@mode="snapshot"`: nothing
-live stays behind, so nothing re-renders and no hook is duplicated. The copy
-is a picture, so motion elements nested in it don't play their own exits.
+caller blocks, `...attributes` — use `@mode="snapshot"`: nothing live stays
+behind, so nothing re-renders. The copy is a memory (the same treatment
+`<Choreo>` gives its parked leavers): inert, held at its last frame, with no
+ids or form-control names. Its test hooks are suffixed (`data-test-title`
+becomes `data-test-title-memory`), so a test's selectors find only the live
+element. It is a picture, so motion elements nested in it don't play their own
+exits.
 `packages/host/app/components/pill-menu/index.gts` is the worked example.
 
 ## When NOT

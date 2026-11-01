@@ -28,7 +28,8 @@ import { captureExit, type ExitCopy } from './snapshot.ts';
  * passed to plays that element's exit, lifted out of flow at its seat. Use it
  * where a leaver's content comes from state that moves on as it leaves, such
  * as a component's blocks: a live leaver would re-render from that state, and
- * its ids and test hooks would sit beside its replacement. See snapshot.ts.
+ * stay focusable, with its ids and form controls, beside its replacement. The
+ * copy is kept as a memory (see memory.ts). See snapshot.ts.
  */
 interface Signature<T> {
   Args: {
