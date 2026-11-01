@@ -32,6 +32,7 @@ TASK_MEMORY_MB=$(node -e '
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  MATRIX_SERVER_NAME=boxel.ai \
   LOW_CREDIT_THRESHOLD=2000 \
   OPENROUTER_REALM_URL='https://app.boxel.ai/openrouter/' \
   exec node worker-manager.ts \
