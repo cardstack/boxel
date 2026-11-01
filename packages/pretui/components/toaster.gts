@@ -475,6 +475,7 @@ export class Toaster extends Component<ToasterSignature> {
       let handle: ReturnType<typeof setTimeout> | undefined;
       let tick = () => {
         handle = undefined;
+        this.dropStaleFocus();
         if (!this.paused && clock.tick(TOAST_TICK_MS)) {
           this.dismissAndKeepFocus(id);
           return;
@@ -490,14 +491,27 @@ export class Toaster extends Component<ToasterSignature> {
     },
   );
 
+  /**
+   * `focused` is cleared by a focusout, and a browser need not fire one when
+   * it removes a focused element from the DOM, as when a dismissed toast's
+   * focused control goes with no neighbour or prior element to take focus.
+   * A flag left set would pause every later clock, so each tick checks it
+   * against where focus actually is.
+   */
+  private dropStaleFocus() {
+    if (this.focused && !this.regionEl?.contains(document.activeElement)) {
+      this.focused = false;
+    }
+  }
+
   // ── Element wiring and focus ─────────────────────────────────────────
 
   captureRegion = modifier((el: HTMLElement) => {
     this.regionEl = el;
-    // A focusout fires while Glimmer removes a focused dismiss control from
-    // the DOM, which is mid-render, and `focused` is state that render reads.
-    // The flag is therefore written once the render has finished; the
-    // microtask keeps the events' order.
+    // A browser may fire a focusout while Glimmer removes a focused dismiss
+    // control from the DOM (Chromium does), which is mid-render, and
+    // `focused` is state that render reads. The flag is therefore written
+    // once the render has finished; the microtask keeps the events' order.
     let setFocused = (value: boolean) => {
       queueMicrotask(() => {
         if (this.regionEl === el && this.focused !== value) {
