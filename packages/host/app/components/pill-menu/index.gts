@@ -3,9 +3,17 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { motion, Presence, to, tween } from 'glimmer-motion';
+
 import { Button, Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
+
+import {
+  DURATION,
+  EASE_IN,
+  motionEnabled,
+} from '../ai-assistant/motion/tokens';
 
 export type PillMenuItem = {
   cardId: string;
@@ -28,6 +36,22 @@ interface Signature {
   };
 }
 
+// The expanded menu is the one item of a <Presence>, so its exit can play
+// after `isExpanded` has already flipped. One stable array per state: the
+// presence diffs its items by identity.
+type MenuFace = { id: 'menu' };
+const MENU_PRESENT: MenuFace[] = [{ id: 'menu' }];
+const MENU_ABSENT: MenuFace[] = [];
+const faceKey = (face: MenuFace) => face.id;
+
+// Leaving eases in (ADR 007 §1.5). Opacity only: a fade cannot deform the
+// menu's text, and under reduced motion it is the short fade §1.5 asks for.
+const MENU_EXIT = to({ opacity: 0 });
+const MENU_EXIT_TRANSITION = tween({
+  duration: DURATION.exit,
+  ease: [...EASE_IN],
+});
+
 /**
  * A pill that expands into a menu and collapses back to the pill.
  *
@@ -36,19 +60,43 @@ interface Signature {
  * other face renders in the same pass. The expand animation is CSS on the
  * menu root, so no state tracks whether it is playing.
  *
- * The menu has no exit animation. Its header and content are the caller's
- * blocks, rendered from the caller's own state, which `@onCollapse` has
- * already moved on: a copy of the menu kept in the DOM while it fades would
- * re-render as the collapsed face, and would carry the caller's
- * `...attributes` and test hooks beside the live pill. A faithful exit needs
- * a snapshot the motion engine owns (ADR 007 §1.2), not a live block.
+ * The menu's exit belongs to the motion engine (ADR 007 §1.2). Its header and
+ * content are the caller's blocks, rendered from state that `@onCollapse` has
+ * already moved on, so the live menu cannot stay on screen to fade: it would
+ * re-render as the collapsed face, beside the pill, with the caller's
+ * `...attributes` and test hooks. The menu is the one item of a
+ * `<Presence @mode="snapshot">` instead: the live menu leaves with the render
+ * that collapses it, and the engine fades a static, inert copy of its last
+ * frame over the pill. With motion off nothing is copied.
  */
 export default class PillMenu extends Component<Signature> {
   <template>
-    {{#if this.isExpanded}}
+    {{#unless this.isExpanded}}
+      <Button
+        @kind='secondary'
+        @size='extra-small'
+        @pill={{true}}
+        {{on 'click' this.expandMenu}}
+        class='pill-menu-button'
+        data-test-pill-menu-button
+        data-test-pill-menu-collapsed
+        ...attributes
+      >
+        {{yield to='headerIcon'}}
+        {{yield to='headerDetail'}}
+        <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
+      </Button>
+    {{/unless}}
+    <Presence
+      @items={{this.menuFaces}}
+      @key={{faceKey}}
+      @mode='snapshot'
+      as |_face h|
+    >
       <div
         class='pill-menu
           {{if (has-block "contentActions") "has-content-actions"}}'
+        {{motion presence=h exit=this.menuExit transition=MENU_EXIT_TRANSITION}}
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
@@ -90,22 +138,7 @@ export default class PillMenu extends Component<Signature> {
           </div>
         </div>
       </div>
-    {{else}}
-      <Button
-        @kind='secondary'
-        @size='extra-small'
-        @pill={{true}}
-        {{on 'click' this.expandMenu}}
-        class='pill-menu-button'
-        data-test-pill-menu-button
-        data-test-pill-menu-collapsed
-        ...attributes
-      >
-        {{yield to='headerIcon'}}
-        {{yield to='headerDetail'}}
-        <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
-      </Button>
-    {{/if}}
+    </Presence>
     <style scoped>
       .pill-menu {
         --boxel-header-gap: var(--boxel-sp-4xs);
@@ -336,6 +369,16 @@ export default class PillMenu extends Component<Signature> {
   </template>
 
   @tracked isExpanded = false;
+  private motion = motionEnabled();
+
+  private get menuFaces(): MenuFace[] {
+    return this.isExpanded ? MENU_PRESENT : MENU_ABSENT;
+  }
+
+  /** With motion off the menu has no exit to play, and nothing is copied. */
+  private get menuExit() {
+    return this.motion ? MENU_EXIT : undefined;
+  }
 
   @action expandMenu() {
     if (this.isExpanded) {
