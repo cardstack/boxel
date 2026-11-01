@@ -307,11 +307,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
                 ),
               ]),
             ),
-            // The served-at map the host registers its prefixes from, read off
-            // this server's own network so it is the same map `/_prefix-realms`
-            // serves every other client: where this server was told to serve
-            // each prefix realm, not where the host's build guessed it would be.
-            prefixRealmURLs: prefixRealmURLsOf(virtualNetwork),
             cardSizeLimitBytes,
             fileSizeLimitBytes,
             audioSizeLimitBytes,
@@ -328,6 +323,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
                 ? Boolean(config.signInOnSecureOrigin)
                 : process.env.SIGN_IN_ON_SECURE_ORIGIN === 'true',
           });
+          // The served-at map the host registers its prefixes from, read off
+          // this server's own network so it is the same map `/_prefix-realms`
+          // serves every other client: where this server was told to serve
+          // each prefix realm, not where the host's build guessed it would be.
+          // Assigned rather than merged: `merge` is deep, and would keep any
+          // prefix the build lists and this server does not register, at the
+          // build's own origin.
+          config.prefixRealmURLs = prefixRealmURLsOf(virtualNetwork);
           return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
         },
       );
