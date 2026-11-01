@@ -88,6 +88,13 @@ editor MUST show the owner each problem with the settings, and SHOULD show
 the addresses that two cards, or two page types, share. Where two cards share
 an address, the first in the page type's sort MUST be served.
 
+### 1.7. A lookup that fails is not a missing page
+
+A path whose page-type search fails, or is refused, MUST NOT be answered with
+the not-found card. It MUST answer 503 with a `Retry-After`, or 429 with one
+when the realm's anonymous rate limit refused the search. Only a search that
+succeeds and finds no card falls through to the next step of §1.3.
+
 ## 2. Rationale
 
 The specs began with a stored route table, rebuilt on index events. A table
@@ -106,6 +113,14 @@ slug or a year is a computed field, which the index stores and searches.
 
 Two resolvers drift. Before §1.4, an exact routing rule and a page type could
 claim the same path and answer it differently on the server and in the app.
+
+The search runs as the visitor, so the realm's policy answers for them, and
+it spends that visitor's anonymous budget. At a live event a room shares one
+address, and a pub quiz's phones used that budget up: the refused searches
+read as "no card", and every phone showed the site's not-found page for a
+game that was running. §1.7 makes that failure say what it is. A page a crowd
+opens at once is better served as a fixed page (§1.4), which reads one card
+and searches nothing.
 
 ## 3. Considered options
 

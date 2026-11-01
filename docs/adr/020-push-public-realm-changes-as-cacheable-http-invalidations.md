@@ -30,6 +30,9 @@ A realm MUST give each change to a card a position in a per-realm sequence
 that only increases. It MUST produce the change's public event when the write
 lands, not when indexing finishes. An event MUST name only the card URL, the
 kind of change, and the sequence position. It MUST NOT carry card content.
+A change to a module that a visitor who isn't signed in may load MUST be
+announced the same way, so a page running that code rebuilds it in place as
+a signed-in page does.
 
 ### 1.2. Filtered once, by the realm's policy for a signed-out visitor
 
@@ -59,7 +62,10 @@ A response to a signed-out read of a card the policy admits MUST be cacheable
 by shared caches, since every signed-out visitor gets the same document. A
 client re-reading after an event MUST ask for the card at the event's
 revision, so the URL is the same for every reader of that revision. A client
-SHOULD spread its re-read over a short random delay.
+SHOULD spread its re-read over a short random delay. A signed-out read at a
+revision the feed named MUST NOT count against the realm's anonymous rate
+limit: the feed asked for it, and every visitor behind one address asks for
+the same immutable document.
 
 ### 1.6. One connection per browser, into the existing reactivity path
 
@@ -102,6 +108,18 @@ pollers with one request per location. Revision-addressed re-reads let the
 same cache absorb the rush that follows each change. The stream remains the
 low-latency path for an ordinary site, and both readings share one sequence,
 so a client moves between them without missing anything.
+
+A live pub quiz, with a TV, a quizmaster and a table of phones on one site,
+showed what the first version missed. A room of visitors shares one address:
+the venue's network, or the proxy in front of the realm. The anonymous rate
+limit counts per address, and every change sent every screen back for the
+card, so the room used up the limit within a minute and the realm refused its
+answers. Exempting the feed's own revision reads keeps the limit for what a
+visitor chooses to do. The feed also carried no module changes, so a page
+kept the code it first loaded for as long as it stayed open, and a fix
+reached the quizmaster's signed-in desk but never the TV. Announcing module
+changes lets a page rebuild in place; the refresh request (§1.7) remains for
+what a rebuild can't apply.
 
 ## 3. Considered options
 
