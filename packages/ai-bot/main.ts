@@ -48,13 +48,11 @@ import {
   type BotToolTurn,
   type ClassifiedToolCalls,
 } from './lib/bot-tools/index.ts';
+import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
-  INTERRUPTED_TOOL_CALL_REASON,
-  publishDeclinedResult,
-} from './lib/bot-tools/results.ts';
-import {
+  answerDeclinedToolCalls,
   ApprovalClaims,
-  declinedToolCalls,
+  claimDeclinedToolCalls,
   handlesRoomEvent,
   releasedToolCalls,
   unreleasedApproval,
@@ -68,7 +66,6 @@ import {
 } from '@cardstack/runtime-common/ai/stop';
 import {
   approvalReaction,
-  declinedByReactionReason,
   isApprovalResult,
 } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
@@ -634,18 +631,11 @@ Common issues are:
           }
           // The calls declined with a 👎 and not yet answered, claimed like
           // approved ones so a call is answered once.
-          let declinedCalls = declinedToolCalls(
+          pendingDeclinedCalls = claimDeclinedToolCalls(
+            approvalClaims,
             eventList,
             aiBotUserId,
             new Set(botTools.map((tool) => tool.name)),
-          );
-          let freshDeclines = new Set(
-            approvalClaims
-              .claim(eventList, declinedCalls)
-              .map((entry) => entry.call.id),
-          );
-          pendingDeclinedCalls = declinedCalls.filter((entry) =>
-            freshDeclines.has(entry.call.id),
           );
           // A reaction answers the held calls on its message; it is not a
           // turn of its own, so its handler stops here.
@@ -1305,25 +1295,16 @@ Common issues are:
               pendingCanceledReason,
             );
           }
-          for (let declined of pendingDeclinedCalls) {
-            let outcome = await publishDeclinedResult(
-              declined.call,
-              {
-                client,
-                roomId: room.roomId,
-                requestEventId: declined.requestEventId,
-                agentId: declined.agentId ?? pendingReleasedAgentId,
-              },
-              declinedByReactionReason(
-                declined.call.function.name,
-                room.getMember(declined.reaction.sender)?.name ??
-                  declined.reaction.sender,
-              ),
-            );
-            if (!outcome.published) {
-              approvalClaims.release(declined.call.id);
-            }
-          }
+          await answerDeclinedToolCalls(
+            pendingDeclinedCalls,
+            approvalClaims,
+            {
+              client,
+              roomId: room.roomId,
+              agentId: pendingReleasedAgentId,
+            },
+            (userId) => room.getMember(userId)?.name,
+          );
           let outcomes = await fulfillBotToolCalls(entries, stopped);
           // An approved call whose result never reached the room (or whose
           // tool this run was not offered) is left to a later handler run.
