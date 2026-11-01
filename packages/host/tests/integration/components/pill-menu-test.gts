@@ -1,10 +1,23 @@
-import { click, render } from '@ember/test-helpers';
+import { find, render, rerender } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import { setupRenderingTest } from '../../helpers/setup';
+
+// A native click runs the component's handler synchronously, so the callback
+// counts are read before anything can settle. `rerender()` waits for the
+// render but not for test waiters, so a component that held its state change
+// open until an animation ended (behind a waiter that `await click()` would
+// sit on) fails these assertions instead of passing late.
+function clickNow(selector: string) {
+  let element = find(selector);
+  if (!(element instanceof HTMLElement)) {
+    throw new Error(`no element matches ${selector}`);
+  }
+  element.click();
+}
 
 module('Integration | Component | pill-menu', function (hooks) {
   setupRenderingTest(hooks);
@@ -27,34 +40,38 @@ module('Integration | Component | pill-menu', function (hooks) {
     assert.dom('[data-test-pill-menu-collapsed]').exists('starts as a pill');
     assert.dom('[data-test-pill-menu-header]').doesNotExist();
 
-    await click('[data-test-pill-menu-collapsed]');
-    assert.strictEqual(expanded, 1, 'onExpand fires with the click');
+    clickNow('[data-test-pill-menu-collapsed]');
+    assert.strictEqual(expanded, 1, 'onExpand fires in the click handler');
+    await rerender();
     assert.dom('[data-test-pill-menu-header]').exists('the menu is rendered');
     assert.dom('[data-test-menu-content]').exists();
     assert.dom('[data-test-pill-menu-collapsed]').doesNotExist();
 
-    await click('[data-test-pill-menu-header] [data-test-pill-menu-button]');
+    clickNow('[data-test-pill-menu-header] [data-test-pill-menu-button]');
     assert.strictEqual(
       collapsed,
       1,
-      'onCollapse fires with the click, not when an animation ends',
+      'onCollapse fires in the click handler, not when an animation ends',
     );
+    await rerender();
     assert
       .dom('[data-test-pill-menu-collapsed]')
-      .exists('the pill is back in the same render as the state change');
+      .exists('the pill is back on the next render');
     assert.dom('[data-test-pill-menu-header]').doesNotExist();
     assert.dom('[data-test-menu-content]').doesNotExist();
 
-    await click('[data-test-pill-menu-collapsed]');
+    clickNow('[data-test-pill-menu-collapsed]');
     assert.strictEqual(expanded, 2, 'the menu expands again');
+    await rerender();
     assert.dom('[data-test-pill-menu-header]').exists();
 
-    await click('[data-test-pill-menu-detail-close]');
+    clickNow('[data-test-pill-menu-detail-close]');
     assert.strictEqual(
       collapsed,
       2,
-      'the header detail also collapses, as a state change',
+      'the header detail also collapses in the click handler',
     );
+    await rerender();
     assert.dom('[data-test-pill-menu-collapsed]').exists();
   });
 });
