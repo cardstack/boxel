@@ -1977,6 +1977,33 @@ function reasonFor(
 // definition graph with a cycle guard, at a definition lookup per hop, on
 // every transform; the depth that earns that is worth measuring against real
 // declarations rather than guessing at here.
+// The indexed document with only what may hold a computed value: a computed
+// field, or a compound field whose own fields may be computed. A stored field's
+// indexed value is no overlay. The stored document answers for it, even when
+// the answer is an empty list the overlay would otherwise read as a gap: the
+// index can still hold a list the card has since emptied, and handing that
+// over as computed would make the card's own field read-only to the next
+// write.
+function computedOnly(
+  pristine: CardResource,
+  definition: Definition,
+): CardResource {
+  let attributes: Record<string, unknown> = {};
+  for (let [field, value] of Object.entries(pristine.attributes ?? {})) {
+    let defId = definition.fields[field];
+    let fieldDef =
+      defId === undefined ? undefined : definition.fieldDefs[defId];
+    if (
+      !fieldDef ||
+      fieldDef.isComputed ||
+      (fieldDef.type === 'contains' && !fieldDef.isPrimitive)
+    ) {
+      attributes[field] = value;
+    }
+  }
+  return { ...pristine, attributes } as CardResource;
+}
+
 async function gatherOverlays(
   definition: Definition,
   url: URL,
@@ -2036,7 +2063,9 @@ async function gatherOverlays(
     }
   }
   return {
-    ...(row?.pristine ? { computeds: project(row.pristine, schema) } : {}),
+    ...(row?.pristine
+      ? { computeds: project(computedOnly(row.pristine, definition), schema) }
+      : {}),
     ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
     unavailable,
   };
