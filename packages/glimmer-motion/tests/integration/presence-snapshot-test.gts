@@ -9,13 +9,17 @@ import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
 import MotionConfig from 'glimmer-motion/motion-config';
 import Presence from 'glimmer-motion/presence';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import {
+  animationsSettled,
+  live,
+  setupMotion,
+} from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { nextFrame, spy } from '../helpers/motion';
 
 const keyOf = (it: { key: string }) => it.key;
-const copies = () => findAll('[inert][aria-hidden="true"]') as HTMLElement[];
+const copies = () => findAll('[data-motion-memory]') as HTMLElement[];
 const FADE = { opacity: 0 };
 const SLOW = { duration: 0.4, ease: 'linear' } as const;
 
@@ -77,12 +81,8 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     assert
       .dom('[data-test-panel]')
       .doesNotExist('the live block left with the render');
-    assert.dom('#panel').doesNotExist('the copy carries no ids');
-    assert
-      .dom('[data-test-label]')
-      .doesNotExist('the copy carries no test hooks');
     const [copy] = copies();
-    assert.ok(copy, 'an inert, hidden copy plays the exit');
+    assert.ok(copy, 'a copy plays the exit');
     assert.strictEqual(
       copy?.textContent?.trim(),
       'menu',
@@ -271,7 +271,65 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     );
   });
 
-  test('the copy holds the CSS animations and scroll offsets its element showed', async function (assert) {
+  test('the copy is a memory: inert, hidden, found only by its suffixed hooks, and skipped by live()', async function (assert) {
+    const s = new State();
+    await render(
+      <template>
+        <Presence @items={{s.items}} @key={{keyOf}} @mode='snapshot' as |it h|>
+          <div
+            id='panel'
+            class='presence-snapshot-panel'
+            data-test-panel='a'
+            style='width:120px;height:60px'
+            {{motion presence=h exit=FADE transition=SLOW}}
+          >
+            <label for='panel-name'>name</label>
+            {{! template-lint-disable no-autofocus-attribute }}
+            <input id='panel-name' autofocus />
+            <svg width='10' height='10'>
+              <defs>
+                <linearGradient id='presence-snapshot-ink'>
+                  <stop offset='0' stop-color='red' />
+                </linearGradient>
+              </defs>
+              <rect width='10' height='10' fill='url(#presence-snapshot-ink)' />
+            </svg>
+          </div>
+        </Presence>
+      </template>,
+    );
+    await nextFrame();
+    s.close();
+    await settled();
+
+    const [copy] = copies();
+    assert.ok(copy, 'the copy is marked as a memory');
+    assert.dom(copy).hasAttribute('inert').hasAttribute('aria-hidden', 'true');
+    assert.strictEqual(copy!.style.willChange, 'transform, opacity');
+    assert.dom('#panel').doesNotExist('its HTML elements carry no ids');
+    assert.dom('#panel-name').doesNotExist();
+    assert.false(
+      copy!.querySelector('input')!.hasAttribute('autofocus'),
+      'nor autofocus',
+    );
+    assert
+      .dom('#presence-snapshot-ink')
+      .exists('its SVG elements keep the ids its own fills resolve through');
+    assert
+      .dom('[data-test-panel]')
+      .doesNotExist('a test hook selector finds only live elements');
+    assert
+      .dom('[data-test-panel-memory="a"]')
+      .exists({ count: 1 }, 'the copy carries its hooks suffixed, with values');
+    assert.dom('.presence-snapshot-panel').exists({ count: 1 });
+    assert.strictEqual(
+      live('.presence-snapshot-panel'),
+      null,
+      'live() skips it for any other selector',
+    );
+  });
+
+  test('the copy holds still at the frame its element showed', async function (assert) {
     const s = new State();
     await render(
       <template>
@@ -291,6 +349,17 @@ module('Integration | motion | Presence snapshot', function (hooks) {
             height: 40px;
             overflow: auto;
           }
+          @keyframes presence-snapshot-turn {
+            to {
+              rotate: 1turn;
+            }
+          }
+          .presence-snapshot-turn {
+            animation: presence-snapshot-turn 10s linear infinite;
+          }
+          .presence-snapshot-glass {
+            backdrop-filter: blur(4px);
+          }
         </style>
         <Presence @items={{s.items}} @key={{keyOf}} @mode='snapshot' as |it h|>
           <div
@@ -298,6 +367,8 @@ module('Integration | motion | Presence snapshot', function (hooks) {
             {{motion presence=h exit=FADE transition=SLOW}}
           >
             <div class='presence-snapshot-rise' data-test-risen>risen</div>
+            <div class='presence-snapshot-turn' data-test-turn>turn</div>
+            <div class='presence-snapshot-glass' data-test-glass>glass</div>
             <div class='presence-snapshot-scroller' data-test-scroller>
               <div style='height:200px'></div>
             </div>
@@ -308,6 +379,9 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     const risen = find('[data-test-risen]') as HTMLElement;
     await waitUntil(() => risen.getAnimations().length === 0);
     (find('[data-test-scroller]') as HTMLElement).scrollTop = 50;
+    const turned = Number(
+      find('[data-test-turn]')!.getAnimations()[0]!.currentTime,
+    );
 
     s.close();
     await settled();
@@ -323,6 +397,27 @@ module('Integration | motion | Presence snapshot', function (hooks) {
       copy!.querySelector('.presence-snapshot-scroller')!.scrollTop,
       50,
       'the copy is scrolled where its element was',
+    );
+    const [turn] = copy!
+      .querySelector('[data-test-turn-memory]')!
+      .getAnimations();
+    assert.strictEqual(
+      turn?.playState,
+      'paused',
+      'an animation the element was running holds still on the copy',
+    );
+    const held = Number(turn!.currentTime);
+    assert.true(
+      held >= turned && held < turned + 1000,
+      `at the time it had reached (${turned} → ${held})`,
+    );
+    await nextFrame();
+    assert.strictEqual(Number(turn!.currentTime), held, 'and stays there');
+    assert.strictEqual(
+      getComputedStyle(copy!.querySelector('[data-test-glass-memory]')!)
+        .backdropFilter,
+      'none',
+      "the copy's backdrop filters are off",
     );
   });
 });

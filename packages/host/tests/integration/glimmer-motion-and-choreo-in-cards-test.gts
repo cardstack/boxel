@@ -129,12 +129,12 @@ module('Integration | glimmer-motion and Choreo in cards', function (hooks) {
 
     await click('[data-test-hide]');
     assert
-      .dom('[data-choreo-orphans] [data-test-leaver]')
+      .dom('[data-choreo-orphans] [data-test-leaver-memory]')
       .exists('the removed element moves to the orphan layer for its exit');
 
     await animationsSettled();
     assert
-      .dom('[data-test-leaver]')
+      .dom('[data-test-leaver-memory]')
       .doesNotExist('it unmounts when its exit ends');
   });
 
