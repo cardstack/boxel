@@ -1735,6 +1735,36 @@ module('Acceptance | host mode tests', function (hooks) {
       );
     });
 
+    test('a visitor who is not signed in hears the realm through its public feed', async function (assert) {
+      let opened: string[] = [];
+      let original = globalThis.EventSource;
+      class RecordingEventSource {
+        static CLOSED = 2;
+        readyState = 0;
+        constructor(url: string) {
+          opened.push(url);
+        }
+        addEventListener() {}
+        close() {}
+      }
+      (globalThis as any).EventSource = RecordingEventSource;
+      try {
+        await visit('/pets/mango');
+        await waitFor(`[data-test-host-mode-card="${mango}"]`);
+        await settled();
+        let messageService = getService('message-service');
+        assert.true(
+          opened.some((url) => url === `${realm}_public-events`),
+          `the realm's feed is opened: ${JSON.stringify({
+            opened,
+            subscribed: messageService.subscribedRealms(),
+          })}`,
+        );
+      } finally {
+        (globalThis as any).EventSource = original;
+      }
+    });
+
     test('an in-app visit keeps a query the router does not declare', async function (assert) {
       let hostNavigation = getService('host-navigation');
       // The address a visitor sees and shares: the router's own currentURL

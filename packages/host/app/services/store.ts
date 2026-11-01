@@ -1347,6 +1347,20 @@ export default class StoreService extends Service implements StoreInterface {
               dependencyTrackingContext: opts?.dependencyTrackingContext,
             },
           });
+    // A site page reads its cards without holding references, and names a
+    // realm the site draws on by the site's alias, which realm lookup doesn't
+    // know. So in host mode a card read follows the realm the card itself
+    // names, through that realm's public feed (ADR 020).
+    if (
+      this.hostModeService.isActive &&
+      this.publicRealmEvents.listening &&
+      isCardInstance(result)
+    ) {
+      let realmURL = result[realmURLSymbol]?.href;
+      if (realmURL) {
+        this.#subscribeToRealmURL(realmURL);
+      }
+    }
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
@@ -5138,6 +5152,10 @@ export default class StoreService extends Service implements StoreInterface {
       );
       return;
     }
+    this.#subscribeToRealmURL(realmURL);
+  }
+
+  #subscribeToRealmURL(realmURL: string) {
     let subscription = this.subscriptions.get(realmURL);
     if (!subscription) {
       this.subscriptions.set(realmURL, {
