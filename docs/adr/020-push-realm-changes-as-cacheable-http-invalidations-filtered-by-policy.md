@@ -76,12 +76,14 @@ its own change when it arrives and can apply a batch whole.
 
 ### 1.4. No per-reader state at the origin
 
-The realm server MUST NOT keep any state for a feed subscriber beyond its
-open response. A deployment MUST work without a stateful edge service. An
+The realm server MUST NOT keep any state for a subscriber to the broadcast
+lane beyond its open response; a personal lane's state is the subscriptions
+named on its one connection (§1.10). A deployment MUST work without a stateful edge service. An
 edge fan-out service MAY sit in front when it serves the same wire format.
-The realm server MUST cap the open streams per realm in each process. A
-stream request over the cap MUST be answered 503 with a `Retry-After`, and a
-client MUST then use the poll, which a shared cache absorbs.
+The realm server MUST cap the open streams per realm in each process, with
+personal lanes under a cap of their own inside it. A stream request over the
+cap MUST be answered 503 with a `Retry-After`, and a client MUST then use the
+broadcast poll, which a shared cache absorbs.
 
 ### 1.5. Re-reads a shared cache can serve
 
@@ -104,7 +106,8 @@ reads are then never shared-cached.
 ### 1.6. One connection per browser, into the existing reactivity path
 
 The host MUST hold at most one feed connection per browser, shared between
-its tabs, and MUST follow all the realms a site draws on over that one
+its tabs: the broadcast stream, or a personal lane that carries the broadcast
+events with its own (§1.10), never both, and MUST follow all the realms a site draws on over that one
 connection, through the site's boundary (ADR 018). It MUST stop following a
 realm when nothing on the page watches it. It MUST deliver each event through the same path as Matrix realm
 events (`MessageService`), so live searches and resources need no second
@@ -136,8 +139,9 @@ as it decides whether they may run it. A subscription MAY be served as one
 shared, cacheable stream only when its grant admits callers without regard to
 who they are: unconditionally, or by a condition that reads no `actor()`
 beyond `actor() == "anonymous"`. A subscription whose grant reads the caller
-MUST be refused on the feed: what it shows differs per caller, so it can't be
-filtered once, and a signed-in caller hears it through Matrix. Each
+MUST NOT be served on the broadcast lane: what it shows differs per caller,
+so it can't be filtered once. It MUST be served on the caller's personal
+lane (§1.10), or refused when the realm offers none. Each
 subscription MUST have its own URL and window, so a shared cache holds it
 apart from the rest of the realm.
 
@@ -166,8 +170,38 @@ stale-while-revalidate=1`.
 - Refresh: `POST {realm}/_live/refresh` by a realm writer, answered 202
   `{ "seq" }`, or 429 with `Retry-After` within a minute of the last.
 - Revision read: `GET {card}?rev=<rev>`.
+- Personal lane (§1.10): `GET {realm}/_live/personal` as a stream, with the
+  caller's `Authorization` or `?capability=<card id>`, and `?operation=...`
+  for each subscription. Its events carry `lane: "personal"` and an id
+  `<epoch>:<seq>/<own>`, the broadcast position followed by the caller's own.
+  A kind `message` carries an operation's result for this caller: `{ "kind":
+"message", "operation", "path"?, "body" }`.
 - Position on reads and operation responses: `Boxel-Feed-Position:
 <epoch>:<seq>` (an atomic batch: `<epoch>:<first>-<last>`).
+
+### 1.10. Two lanes: broadcast for crowds, personal for conversations
+
+A feed MUST offer a broadcast lane: the same events for every member of its
+audience, read as the cacheable poll or the stream, so a shared cache
+answers a crowd of any size from one origin request a second. A feed MAY
+offer a personal lane: one stream per caller, opened by a subscription
+operation (§1.8), for an exchange with many kinds of message that differ per
+caller, such as a place in a queue, a seat hold running out, or the result of
+an operation the caller started. A client MUST start on the broadcast lane,
+and SHOULD move to a personal lane only while it takes part in such an
+exchange. A personal lane MUST carry the broadcast events too, so the
+client follows the realm over one connection. Every personal event MUST be
+filtered for that caller under the policy, as a read by them would be. A
+personal lane MUST be opened as a caller the realm can name: a signed-in
+user, or a capability an operation handed the caller, such as the unguessable
+id of the queue ticket it created. Personal events MUST NOT take positions in
+the broadcast sequence, so a broadcast window never shows gaps; they MUST be
+numbered per caller and kept long enough to resume. A client refused a
+personal lane, or whose lane closes, MUST fall back to the broadcast lane and
+learn the outcome of its own operations from their responses (§1.3), so an
+exchange degrades to slower, never to wrong. A realm SHOULD put what a crowd
+watches together, such as seats left per section, in a card the broadcast
+lane announces, rather than in personal messages to each member.
 
 ## 2. Rationale
 
@@ -233,6 +267,12 @@ confirmed or rolled back.
 - **One stream per reader from the realm server, with no cacheable poll.**
   Rejected: fine for a pub quiz, but at an on-sale the origin's open
   connections grow with the audience.
+- **The broadcast lane alone.** Rejected: an exchange that differs per caller,
+  such as a queue position or a hold timer, can't be filtered once, and
+  polling for it costs a request per caller per tick.
+- **A personal lane for everyone.** Rejected: at an on-sale the origin holds a
+  connection per fan, and no shared cache can absorb it. Personal lanes are
+  for the few taking part in an exchange; the crowd reads the broadcast.
 - **Polling each card.** Rejected: no shared revision to collapse on, and
   freshness costs a request per card per reader.
 - **Topics by path prefix or card type.** Rejected for operation topics
