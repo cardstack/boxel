@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: '021'
 date: 2026-10-30
 scope:
   - packages/base/realm-config.gts
@@ -88,4 +89,4 @@ reads only the base fields.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/016.md](remediation/016.md).
+Superseded by ADR 021. Its known gaps moved to [remediation/021.md](remediation/021.md).

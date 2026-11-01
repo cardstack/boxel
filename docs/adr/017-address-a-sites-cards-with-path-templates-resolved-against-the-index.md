@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: '021'
 date: 2026-10-31
 scope:
   - packages/runtime-common/site-paths.ts
@@ -137,4 +138,4 @@ and searches nothing.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/017.md](remediation/017.md).
+Superseded by ADR 021. Its known gaps moved to [remediation/021.md](remediation/021.md).

@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: '023'
 date: 2026-10-31
 scope:
   - packages/runtime-common/realm.ts
@@ -400,4 +401,4 @@ confirmed or rolled back.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/020.md](remediation/020.md).
+Superseded by ADR 023. Its known gaps moved to [remediation/023.md](remediation/023.md).

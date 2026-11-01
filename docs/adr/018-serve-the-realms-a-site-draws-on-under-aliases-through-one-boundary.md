@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: '022'
 date: 2026-10-31
 scope:
   - packages/realm-server/lib/site-boundary.ts
@@ -105,4 +106,4 @@ and a realm's name written into content.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/018.md](remediation/018.md).
+Superseded by ADR 022. Its known gaps moved to [remediation/022.md](remediation/022.md).

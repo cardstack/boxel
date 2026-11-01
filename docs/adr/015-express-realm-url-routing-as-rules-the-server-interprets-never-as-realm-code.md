@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: '021'
 date: 2026-10-29
 scope:
   - packages/base/realm-config.gts
@@ -102,4 +103,4 @@ validates it for that reason.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/015.md](remediation/015.md).
+Superseded by ADR 021. Its known gaps moved to [remediation/021.md](remediation/021.md).
