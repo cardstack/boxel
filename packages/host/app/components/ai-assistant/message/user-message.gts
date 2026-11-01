@@ -19,8 +19,9 @@ interface Signature {
     isSelf?: boolean;
     /** the same author as the message above: the name is not repeated */
     continued?: boolean;
-    /** when, as the label shows it */
-    time?: string;
+    /** when it was sent; the bubble shows the time, and the full date in
+     * a tooltip on it */
+    timestamp?: Date;
     /** the author's profile avatar, the same mark as in the top bar */
     avatar?: ComponentLike;
   };
@@ -37,7 +38,7 @@ const UserMessage: TemplateOnlyComponent<Signature> = <template>
     @author={{@authorName}}
     @self={{@isSelf}}
     @continued={{@continued}}
-    @time={{@time}}
+    @timestamp={{@timestamp}}
     @delivery={{if @isPending 'pending'}}
     data-test-user-message
     ...attributes
