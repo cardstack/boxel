@@ -260,6 +260,53 @@ exchange degrades to slower, never to wrong. A realm SHOULD put what a crowd
 watches together, such as seats left per section, in a card the broadcast
 lane announces, rather than in personal messages to each member.
 
+### 1.11. A crowd's writes wait on nothing they don't need
+
+A write is **ordered** when its outcome depends on the writes before it: a
+seat hold, a checkout, a transform that `collect`s. It serializes on its
+card's write lock, and an ordered `emit` takes the channel's next position.
+A write is **unordered** when a later write with the same key replaces it and
+nothing reads its position: presence, a fan's interest. A write whose order
+carries no meaning MUST NOT be ordered: declare it as an `emit` with
+`ordered: false` and a `key` (§1.8), so each one costs a single upsert that
+contends only with its own key.
+
+A write also chooses whether its answer waits for the card's index pass. By
+default it does, so the caller can read the change back through the index. A
+caller whose next step reads nothing back through the index MUST NOT wait:
+it sends `skipIndexWait` (`operations(card, { skipIndexWait: true })`, or the
+`x-boxel-skip-index-wait: true` header on `_operations`) and SHOULD read the
+state it needs from the card's stored source (`GET <card>.json` with
+`Accept: application/vnd.card+source`), which is current once the write
+commits.
+
+A flow a crowd runs at once, such as an on-sale, a vote or a live quiz, MUST
+NOT depend on indexing at any step. Indexing is for peace time: one worker
+re-renders cards in turn, and under a crowd its queue grows by minutes. In
+such a flow:
+
+- A caller MUST NOT create a card and then invoke an operation on it. The
+  gate judges a card by its index row and refuses it until the card is
+  indexed.
+- A record the crowd produces SHOULD be written into a card the flow already
+  writes, in the same write (an order on the section record its checkout
+  sells from). Cards that need the index, such as receipts and reports,
+  SHOULD be made from those records after the crowd has gone.
+- Hot state SHOULD be split across several cards, so ordered writes contend
+  only within a shard (one record per section, not one per sale).
+- A deploy MUST NOT happen while the flow runs, since a module write starts
+  the reindex of every card that uses it.
+
+What each kind of write is for, and how it is written today and ideally:
+
+| Need                                                       | Ordered | Waits on index | Today                                                                            | Desired                                                                                                      |
+| ---------------------------------------------------------- | ------- | -------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Presence: who is here, what they look at                   | no      | no             | `emit` with `ordered: false`, `key`, `expiresAfter`                              | the same                                                                                                     |
+| A durable record per key, no position (an order, a ballot) | no      | no             | a `containsMany` on a sharded card, appended by the transform that does the work | `emit` with `ordered: false` and `retain: true`: kept without expiry, read by `collect` and from the channel |
+| A contested change (hold a seat, sell it)                  | yes     | no             | `transform` with `assert`s, sent with `skipIndexWait`                            | the declaration says `indexWait: false`, so no caller can forget                                             |
+| A change others search for soon after                      | yes     | yes            | any write, default                                                               | the same                                                                                                     |
+| Read what was just written                                 |         | no             | `GET <card>.json`, `Accept: application/vnd.card+source`                         | a `read` declared `from: 'stored'`                                                                           |
+
 ## 2. Rationale
 
 The host's reactivity already runs on realm events: the store, live searches
@@ -342,6 +389,10 @@ confirmed or rolled back.
   connections while it did, starving the holds and checkouts that matter.
   A position also makes a missed heartbeat a gap a page must resume from,
   when the next one supersedes it anyway.
+- **Creating a card per purchase during an on-sale.** Rejected: the new card
+  can't be operated on until the one index worker has rendered it, so a crowd
+  of checkouts waits on a queue that grows with the crowd. The purchase is
+  recorded in the write that sells the seats, and the card is made afterwards.
 - **Reloading every page on each code change.** Rejected for the refresh
   request: a module change already rebuilds a page in place, and a reload
   per save would put the whole audience back through the page's first load.
