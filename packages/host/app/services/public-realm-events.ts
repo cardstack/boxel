@@ -34,13 +34,19 @@ export default class PublicRealmEventsService extends Service {
     return this.started;
   }
 
-  // Starts listening for the realms the page watches. Idempotent.
+  // Starts listening for the realms the page watches. Idempotent. A page is
+  // served whether or not it can be kept live, so a failure here leaves the
+  // page as it is rather than failing the route that asked.
   start() {
     if (this.started || typeof window === 'undefined') {
       return;
     }
-    this.started = true;
-    this.messageService.onFirstSubscription((realm) => this.open(realm));
+    try {
+      this.messageService.onFirstSubscription((realm) => this.open(realm));
+      this.started = true;
+    } catch (error) {
+      console.warn('public realm events are unavailable', error);
+    }
   }
 
   willDestroy() {
