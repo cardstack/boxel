@@ -10,6 +10,26 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export const PUBLIC_EVENTS_PATH = '_public-events';
 
+// The query parameter that addresses a card read by revision (ADR 020 §1.5).
+// A client re-reading a card after an event asks for `{card}?rev=<rev>`, with
+// the event's `rev`, so every reader of that revision asks for the same URL
+// and a shared cache answers all but the first. The realm answers that URL
+// with a long cache lifetime only while `rev` is the card's current one.
+export const CARD_REVISION_PARAM = 'rev';
+
+// A card's revision as its card+json validator names it: the ETag without its
+// quotes. The validator already changes whenever the document does, its link
+// closure and the server's assembly settings included, so a revision never
+// names two documents.
+export function cardRevisionOf(
+  etag: string | null | undefined,
+): string | undefined {
+  if (!etag || etag.startsWith('W/')) {
+    return undefined;
+  }
+  return etag.replace(/^"|"$/g, '') || undefined;
+}
+
 export type PublicChangeKind = 'written' | 'indexed' | 'removed' | 'reset';
 
 export interface PublicRealmEvent {
@@ -18,6 +38,12 @@ export interface PublicRealmEvent {
   kind: PublicChangeKind;
   // The card's path in the realm, without `.json`. Empty for `reset`.
   path: string;
+  // The revision a visitor who isn't signed in reads the card at, for an
+  // `indexed` change, when the realm could name one (see
+  // `CARD_REVISION_PARAM`). Absent for every other kind: a `written` change
+  // is announced before indexing, when the read would still find the last
+  // revision.
+  rev?: string;
 }
 
 // What the cacheable poll answers: the head of the sequence and the latest
@@ -70,6 +96,10 @@ export function changesIn(
   }
 }
 
+// What `mayRead` answers: whether a visitor who isn't signed in may read the
+// card, and the revision they read it at when the realm can name one.
+export type PublicReadability = false | { rev?: string };
+
 // One realm's feed, held in memory by the process that serves the realm.
 // `mayRead` answers whether a visitor who isn't signed in may read a card, as
 // the realm itself answers that visitor's read (ADR 020 §1.2). It is asked
@@ -82,17 +112,20 @@ export class PublicRealmFeed {
   // Cards this feed has announced as readable, so a removal is announced
   // only for a card a visitor could have seen.
   #public = new Set<string>();
-  // The last kind announced per path, to drop a repeat of the same change
-  // the realm reports through two events.
-  #lastKind = new Map<string, { kind: PublicChangeKind; at: number }>();
+  // The last kind and revision announced per path, to drop a repeat of the
+  // same change the realm reports through two events.
+  #lastKind = new Map<
+    string,
+    { kind: PublicChangeKind; rev?: string; at: number }
+  >();
   #queue: Promise<void> = Promise.resolve();
 
   readonly realmURL: string;
-  private mayRead: (cardURL: string) => Promise<boolean>;
+  private mayRead: (cardURL: string) => Promise<PublicReadability>;
 
   constructor(
     realmURL: string,
-    mayRead: (cardURL: string) => Promise<boolean>,
+    mayRead: (cardURL: string) => Promise<PublicReadability>,
   ) {
     this.realmURL = realmURL;
     this.mayRead = mayRead;
@@ -141,7 +174,7 @@ export class PublicRealmFeed {
         continue;
       }
       this.#public.add(path);
-      this.#announce(kind, path);
+      this.#announce(kind, path, kind === 'indexed' ? readable.rev : undefined);
     }
   }
 
@@ -159,17 +192,27 @@ export class PublicRealmFeed {
     return path;
   }
 
-  #announce(kind: PublicChangeKind, path: string) {
+  #announce(kind: PublicChangeKind, path: string, rev?: string) {
     let now = Date.now();
     let last = this.#lastKind.get(path);
-    if (kind !== 'reset' && last?.kind === kind && now - last.at < 1000) {
+    if (
+      kind !== 'reset' &&
+      last?.kind === kind &&
+      last.rev === rev &&
+      now - last.at < 1000
+    ) {
       return;
     }
-    this.#lastKind.set(path, { kind, at: now });
+    this.#lastKind.set(path, { kind, rev, at: now });
     if (this.#lastKind.size > PUBLIC_EVENT_WINDOW * 4) {
       this.#lastKind.clear();
     }
-    let event: PublicRealmEvent = { seq: ++this.#seq, kind, path };
+    let event: PublicRealmEvent = {
+      seq: ++this.#seq,
+      kind,
+      path,
+      ...(rev ? { rev } : {}),
+    };
     this.#events.push(event);
     if (this.#events.length > PUBLIC_EVENT_WINDOW) {
       this.#events.splice(0, this.#events.length - PUBLIC_EVENT_WINDOW);

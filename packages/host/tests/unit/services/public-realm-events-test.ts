@@ -181,13 +181,29 @@ module('Unit | Service | public-realm-events', function (hooks) {
 
     source.emit('open');
     source.emit('change', {
-      data: JSON.stringify({ seq: 4, kind: 'written', path: 'QuizNight/lamb' }),
+      data: JSON.stringify({ seq: 3, kind: 'written', path: 'QuizNight/lamb' }),
+    });
+    assert.deepEqual(
+      received,
+      [],
+      'a write announced before indexing starts no re-read',
+    );
+    source.emit('change', {
+      data: JSON.stringify({
+        seq: 4,
+        kind: 'indexed',
+        path: 'QuizNight/lamb',
+        rev: '1730000000-abc:card-srcver-lb500',
+      }),
     });
     assert.deepEqual(received, [
       {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${REALM}QuizNight/lamb`],
+        revisions: {
+          [`${REALM}QuizNight/lamb`]: '1730000000-abc:card-srcver-lb500',
+        },
         realmURL: REALM,
       },
     ]);
@@ -238,7 +254,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
     let source = FakeEventSource.made[0];
     source.emit('open');
     source.emit('change', {
-      data: JSON.stringify({ seq: 4, kind: 'written', path: 'QuizNight/lamb' }),
+      data: JSON.stringify({ seq: 4, kind: 'indexed', path: 'QuizNight/lamb' }),
       lastEventId: 'e1:4',
     });
     let expected: RealmEventContent = {
@@ -268,7 +284,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
     second.bus.watch(REALM);
     assert.strictEqual(FakeEventSource.made.length, 1);
     FakeEventSource.made[0].emit('change', {
-      data: JSON.stringify({ seq: 1, kind: 'written', path: 'Card/1' }),
+      data: JSON.stringify({ seq: 1, kind: 'indexed', path: 'Card/1' }),
       lastEventId: 'e1:1',
     });
     assert.strictEqual(
@@ -293,7 +309,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
     second.bus.watch(REALM);
     let source = FakeEventSource.made[0];
     source.emit('change', {
-      data: JSON.stringify({ seq: 7, kind: 'written', path: 'Card/1' }),
+      data: JSON.stringify({ seq: 7, kind: 'indexed', path: 'Card/1' }),
       lastEventId: 'e1:7',
     });
 
@@ -307,7 +323,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
       'from where the last leader stopped',
     );
     FakeEventSource.made[1].emit('change', {
-      data: JSON.stringify({ seq: 8, kind: 'written', path: 'Card/2' }),
+      data: JSON.stringify({ seq: 8, kind: 'indexed', path: 'Card/2' }),
       lastEventId: 'e1:8',
     });
     assert.deepEqual(
@@ -328,7 +344,7 @@ module('Unit | Service | public-realm-events', function (hooks) {
       service.start();
       watch();
       FakeEventSource.made[0].emit('change', {
-        data: JSON.stringify({ seq: 1, kind: 'written', path: 'Card/1' }),
+        data: JSON.stringify({ seq: 1, kind: 'indexed', path: 'Card/1' }),
       });
       assert.strictEqual(received.length, 0, 'not relayed at once');
       await settled();

@@ -296,15 +296,26 @@ export default class PublicRealmEventsService extends Service {
   }
 
   private relay(realm: string, base: URL, event: PublicRealmEvent) {
-    let content: RealmEventContent =
-      event.kind === 'reset'
-        ? { eventName: 'index', indexType: 'full', realmURL: realm }
-        : {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [new URL(event.path, base).href],
-            realmURL: realm,
-          };
+    if (event.kind === 'written') {
+      // Announced when the write lands, before indexing: a read now would
+      // find the revision before it, and the `indexed` event that follows
+      // names the one to read.
+      return;
+    }
+    let content: RealmEventContent;
+    if (event.kind === 'reset') {
+      content = { eventName: 'index', indexType: 'full', realmURL: realm };
+    } else {
+      let card = new URL(event.path, base).href;
+      content = {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [card],
+        // The re-read asks for the card at this revision (ADR 020 §1.5).
+        ...(event.rev ? { revisions: { [card]: event.rev } } : {}),
+        realmURL: realm,
+      };
+    }
     this.messageService.relayRealmEvent(content);
   }
 }

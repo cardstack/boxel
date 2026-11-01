@@ -427,6 +427,73 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("an indexed change names the card's revision, and a read at that revision may be held for a long time", async function (assert) {
+    let start = await head();
+    await newsroom.write(
+      'articles/published.json',
+      article('Polls open at last', 'published'),
+    );
+    await newsroom.indexing();
+    let indexed: PublicRealmEvent | undefined;
+    let deadline = Date.now() + 10_000;
+    while (!indexed && Date.now() < deadline) {
+      indexed = (await eventsAfter(start)).find(
+        (event) =>
+          event.kind === 'indexed' &&
+          event.path === 'articles/published' &&
+          event.rev,
+      );
+      if (!indexed) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    assert.ok(indexed?.rev, `the indexed event names a revision`);
+    let rev = indexed!.rev!;
+    assert.false(
+      JSON.stringify(indexed).includes('Polls open at last'),
+      'which carries no card content',
+    );
+
+    let current = await readCard(
+      `articles/published?rev=${encodeURIComponent(rev)}`,
+    );
+    assert.strictEqual(current.status, 200, current.text);
+    assert.strictEqual(
+      current.headers['etag'],
+      `"${rev}"`,
+      'the revision is the validator the read carries',
+    );
+    assert.strictEqual(
+      current.headers['cache-control'],
+      'public, max-age=3600, immutable',
+      'the current revision is cacheable for a long time',
+    );
+    assert.strictEqual(
+      current.body.data.attributes.headline,
+      'Polls open at last',
+    );
+
+    let stale = await readCard('articles/published?rev=an-older-revision');
+    assert.strictEqual(stale.status, 200, stale.text);
+    assert.strictEqual(
+      stale.headers['cache-control'],
+      'public, max-age=0, must-revalidate',
+      'another revision is answered with the card as it is, cached as usual',
+    );
+
+    let signedIn = await readCard(
+      `articles/published?rev=${encodeURIComponent(rev)}`,
+    ).set(
+      'Authorization',
+      `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+    );
+    assert.strictEqual(
+      signedIn.headers['cache-control'],
+      'private, max-age=0, must-revalidate',
+      "a signed-in caller's read stays private at any revision",
+    );
+  });
+
   test('a realm whose policy opens nothing to callers who are not signed in refuses them its feed', async function (assert) {
     let response = await feedWindow(LIBRARY);
     assert.strictEqual(response.status, 401, response.text);

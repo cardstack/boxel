@@ -6,6 +6,8 @@ import {
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import {
+  CARD_REVISION_PARAM,
+  cardRevisionOf,
   PUBLIC_EVENT_HEARTBEAT_MS,
   PublicRealmFeed,
 } from './public-realm-events.ts';
@@ -100,6 +102,14 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // a conditional *write*, which is what `If-Match` asks about, and that question
 // is about the card rather than about the representation it was read in.
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
+// How a card+json read addressed by its current revision is cached (ADR 020
+// §1.5), where its unaddressed read would be shared-cacheable. The document
+// at a revision never changes, so a cache need not ask again. The lifetime is
+// still bounded, because whether a visitor may read it can: a policy that
+// stops admitting the card leaves a cached copy answering for at most this
+// long, and only to a caller who already holds the revision's URL, which the
+// feed gave out while the card was readable.
+const CARD_REVISION_CACHE_CONTROL = 'public, max-age=3600, immutable';
 // How a module compiled for a caller the policy gate admitted is cached:
 // by that caller alone, revalidated on every use like a reader's module.
 const GRANTED_MODULE_CACHE_CONTROL = 'private, max-age=0';
@@ -14235,6 +14245,27 @@ export class Realm {
     return `${cacheVisibility}, max-age=0, must-revalidate`;
   }
 
+  // The cache directive for a card+json read that names a revision. Only a
+  // read that is shared-cacheable anyway, and whose validator is the revision
+  // it names, gets the long lifetime; one naming any other revision is
+  // answered with the card as it is now and the ordinary directive, so a
+  // stale revision's URL never holds a document for long.
+  private cardRevisionCacheControl(
+    request: Request,
+    cacheControl: string,
+    etag: string | undefined,
+  ): string {
+    let rev = new URL(request.url).searchParams.get(CARD_REVISION_PARAM);
+    if (
+      rev &&
+      cacheControl.startsWith('public,') &&
+      cardRevisionOf(etag) === rev
+    ) {
+      return CARD_REVISION_CACHE_CONTROL;
+    }
+    return cacheControl;
+  }
+
   // What a card+json read varies on. A read the policy admitted for a caller
   // who authenticated nobody is shared-cacheable (see `cardJsonCacheControl`)
   // and is not what a signed-in caller would be answered, so it varies on
@@ -14516,7 +14547,11 @@ export class Realm {
       // in whether a conditional request may be answered from the validator.
       let cacheControl = result.projected
         ? PROJECTED_CARD_JSON_CACHE_CONTROL
-        : this.cardJsonCacheControl(requestContext, { read: true });
+        : this.cardRevisionCacheControl(
+            request,
+            this.cardJsonCacheControl(requestContext, { read: true }),
+            etag,
+          );
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
@@ -14775,7 +14810,11 @@ export class Realm {
               status: 304,
               headers: {
                 etag: matchedEtag,
-                'cache-control': cacheControl,
+                'cache-control': this.cardRevisionCacheControl(
+                  request,
+                  cacheControl,
+                  matchedEtag,
+                ),
                 ...(instanceEntry.lastModified != null
                   ? {
                       'last-modified': formatRFC7231(
@@ -14851,7 +14890,11 @@ export class Realm {
             'content-type': SupportedMimeType.CardJson,
             'cache-control': assembly.projected
               ? PROJECTED_CARD_JSON_CACHE_CONTROL
-              : cacheControl,
+              : this.cardRevisionCacheControl(
+                  request,
+                  cacheControl,
+                  assembly.etag,
+                ),
             ...(assembly.etag ? { etag: assembly.etag } : {}),
             ...etagSuppressedHeader(assembly.etagSuppressed),
             ...(assembly.lastModified != null
@@ -17973,7 +18016,11 @@ export class Realm {
             },
           }),
         );
-        return response?.status === 200;
+        // The validator the visitor's read carries names the revision they
+        // read, which the event passes on for the re-read to address.
+        return response?.status === 200
+          ? { rev: cardRevisionOf(response.headers.get('etag')) }
+          : false;
       },
     );
     return this.#publicFeedInstance;
