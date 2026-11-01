@@ -17,7 +17,7 @@ import {
   type OperationsOptions,
   type OperationDocument,
   type OperationHandle,
-  type PublishedMessage,
+  type EmittedMessage,
   type OperationResultTree,
   type OperationWriteResult,
   type OperationsSubject,
@@ -116,7 +116,7 @@ export const BASE_OPERATIONS = [
   'explain',
   'validate',
   'callApi',
-  'publish',
+  'emit',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -153,7 +153,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
   explain: [],
   validate: [],
   callApi: [],
-  publish: [],
+  emit: [],
 };
 
 // The behaviors a def reaches only by declaring an operation built on them.
@@ -169,7 +169,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // A `callApi` is a request to a service outside the realm, and only a card
 // that declares one has a request to send.
 //
-// A `publish` sends a message on the card's live channel, and only a card that
+// A `emit` sends a message on the card's live channel, and only a card that
 // declares one says what a message is.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
@@ -177,7 +177,7 @@ const DECLARATION_ONLY: Partial<
   explain: ['card'],
   validate: ['card'],
   callApi: ['card'],
-  publish: ['card'],
+  emit: ['card'],
 };
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
@@ -852,13 +852,13 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   readonly perInstance?: boolean;
 }
 
-// Publishes a message on the target card's live channel and writes nothing to
+// Emits a message on the target card's live channel and writes nothing to
 // the realm: no file is staged, no index job is enqueued and no realm event is
 // broadcast. The message is the payload, after `input` has shaped it, so a
 // value the realm stamps — who sent it, when — is one the caller cannot forge.
 //
 //   @operation static vote = {
-//     base: 'publish',
+//     base: 'emit',
 //     params: { team: StringField, choice: StringField },
 //     input: bxl`. + { voter: actor() }`,
 //     key: bxl`params("team") + ":" + actor()`,
@@ -875,8 +875,8 @@ export interface CallApiOperationDeclaration extends OperationCommon {
 // permissions, widened by its policy — and it carries no program and no
 // projection: there is no document for a program to run over, and the answer
 // is where the message landed on the channel.
-export interface PublishOperationDeclaration extends OperationCommon {
-  readonly base: 'publish';
+export interface EmitOperationDeclaration extends OperationCommon {
+  readonly base: 'emit';
   readonly key?: BxlProgram;
   readonly transformations?: never;
   readonly output?: never;
@@ -894,7 +894,7 @@ export type OperationDeclaration =
   | ExplainOperationDeclaration
   | ValidateOperationDeclaration
   | CallApiOperationDeclaration
-  | PublishOperationDeclaration;
+  | EmitOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -992,7 +992,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // The parts of the request it sends.
   callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
   // The message's compaction key. The message itself is the payload.
-  publish: ['key'],
+  emit: ['key'],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -1319,8 +1319,8 @@ function noProgramReason(
   if (base === 'callApi') {
     return `a "callApi" operation sends the request it declares rather than running a program over a document`;
   }
-  if (base === 'publish') {
-    return `a "publish" operation sends its payload as a message on the card's live channel rather than running a program over a document`;
+  if (base === 'emit') {
+    return `a "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document`;
   }
   return undefined;
 }
@@ -1438,12 +1438,12 @@ function assertValidDeclaration(
       `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
     );
   }
-  // A publish writes nothing, so under the name of a base operation it would
+  // A emit writes nothing, so under the name of a base operation it would
   // answer that name — an `update`, a `delete` — by writing nothing at all,
   // and a caller reaching for the built-in would be told it had run.
-  if (base === 'publish' && key !== 'publish' && isBaseOperationName(key)) {
+  if (base === 'emit' && key !== 'emit' && isBaseOperationName(key)) {
     throw new Error(
-      `${label}: a "publish" operation sends a message and writes nothing, so it cannot take the name of the "${key}" base operation, whose callers expect it to do what "${key}" does`,
+      `${label}: a "emit" operation sends a message and writes nothing, so it cannot take the name of the "${key}" base operation, whose callers expect it to do what "${key}" does`,
     );
   }
   if (base === 'validate') {
@@ -1573,9 +1573,9 @@ function assertValidDeclaration(
       `${label}: a "validate" operation answers with what the policy card compiles to, as compiling reports it, so it carries no \`output\` to reshape it`,
     );
   }
-  if (base === 'publish' && declaration.output !== undefined) {
+  if (base === 'emit' && declaration.output !== undefined) {
     throw new Error(
-      `${label}: a "publish" operation answers with where its message landed on the card's channel, so it carries no \`output\` to reshape it`,
+      `${label}: a "emit" operation answers with where its message landed on the card's channel, so it carries no \`output\` to reshape it`,
     );
   }
   assertReferencesResolve(label, declaration, paramNames);
@@ -1747,7 +1747,7 @@ function assertValidClauses(
   if (base === 'appendLine') {
     assertAppendsALine(label, declaration);
   }
-  if (base === 'publish' && declaration.key !== undefined) {
+  if (base === 'emit' && declaration.key !== undefined) {
     assertBxlProgram(label, 'key', declaration.key);
   }
   if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
@@ -2461,7 +2461,7 @@ export type {
   InvokeOptions,
   OperationsOptions,
   OperationDocument,
-  PublishedMessage,
+  EmittedMessage,
   OperationResultTree,
   OperationValueResult,
   OperationWriteResult,
@@ -2489,12 +2489,12 @@ type PayloadArgs<Declaration> = Declaration extends {
 // reports what the policy decided and why — or, for one whose params ask for a
 // `list`, one page of explanations — a validate reports what the policy
 // compiles to, a callApi reports the vendor's response, or what its
-// `output` maps that response to, and a publish reports where its message
+// `output` maps that response to, and a emit reports where its message
 // landed on the card's channel.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
-  : Declaration extends { base: 'publish' }
-    ? PublishedMessage
+  : Declaration extends { base: 'emit' }
+    ? EmittedMessage
     : Declaration extends { base: 'read' }
       ? OperationDocument
       : Declaration extends { base: 'explain'; params: { list: unknown } }
@@ -2524,7 +2524,7 @@ type InstanceScopedBase =
   | 'validate'
   | 'create'
   | 'callApi'
-  | 'publish';
+  | 'emit';
 type TypeScopedBase = 'create' | 'query' | 'callApi';
 
 type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'

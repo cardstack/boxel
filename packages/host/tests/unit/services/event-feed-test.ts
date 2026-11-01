@@ -270,7 +270,7 @@ module('Unit | Service | event-feed', function (hooks) {
         kind: 'message',
         path: 'QuizNight/x7k2',
         key: 'red:1',
-        operation: { name: 'select', base: 'publish' },
+        operation: { name: 'select', base: 'emit' },
         body: { team: 'red', choice: 'B' },
       }),
     });

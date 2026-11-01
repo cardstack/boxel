@@ -23,7 +23,7 @@ import type {
   QueuePublisher,
   Realm,
 } from '@cardstack/runtime-common';
-import type { PublishMessageArgs } from '@cardstack/runtime-common/card-operations';
+import type { EmitMessageArgs } from '@cardstack/runtime-common/card-operations';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   indexingWriterLane,
@@ -351,7 +351,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
-    // A card whose one operation is a `publish`: a message on the card's live
+    // A card whose one operation is an `emit`: a message on the card's live
     // channel, which writes nothing to the realm.
     'poll.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
@@ -363,7 +363,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         @field question = contains(StringField);
 
         @operation static select = {
-          base: 'publish',
+          base: 'emit',
           params: { team: StringField, n: NumberField, choice: StringField },
           input: bxl\`. + { voter: actor() }\`,
           key: bxl\`params("team") + ":" + TEXT(params("n"); "0")\`,
@@ -1302,27 +1302,27 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
     });
 
-    module('publish', function (hooks) {
+    module('emit', function (hooks) {
       // The realm's live channel is supplied to the operation core, so a test
       // stands one in there and puts the realm back as it found it.
-      let published: PublishMessageArgs[];
-      let onPublish: ((args: PublishMessageArgs) => void) | undefined;
-      let realmsOwn: typeof realm.operationCore.publishMessage;
+      let emitted: EmitMessageArgs[];
+      let onEmit: ((args: EmitMessageArgs) => void) | undefined;
+      let realmsOwn: typeof realm.operationCore.emitMessage;
       hooks.beforeEach(function () {
-        realmsOwn = realm.operationCore.publishMessage;
-        published = [];
-        onPublish = undefined;
-        realm.operationCore.publishMessage = async (args) => {
-          onPublish?.(args);
-          published.push(args);
-          return { position: `test:${published.length}` };
+        realmsOwn = realm.operationCore.emitMessage;
+        emitted = [];
+        onEmit = undefined;
+        realm.operationCore.emitMessage = async (args) => {
+          onEmit?.(args);
+          emitted.push(args);
+          return { position: `test:${emitted.length}` };
         };
       });
       hooks.afterEach(function () {
-        realm.operationCore.publishMessage = realmsOwn;
+        realm.operationCore.emitMessage = realmsOwn;
       });
 
-      test('a publish hands its key and body to the channel, answers its position, and writes nothing', async function (assert) {
+      test('an emit hands its key and body to the channel, answers its position, and writes nothing', async function (assert) {
         let before = readFileSync(realmFile('poll-1.json'), 'utf8');
         let jobsBefore = await indexJobIds();
 
@@ -1349,10 +1349,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           ],
           'the entry answers with the card and the position its message took',
         );
-        assert.deepEqual(published, [
+        assert.deepEqual(emitted, [
           {
             cardURL: `${testRealmHref}poll-1`,
-            operation: { name: 'select', base: 'publish' },
+            operation: { name: 'select', base: 'emit' },
             key: 'red:3',
             body: { team: 'red', n: 3, choice: 'b', voter: TESTER },
           },
@@ -1369,11 +1369,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('a publish in a batch with a write is published once the write has committed', async function (assert) {
-        let commentsAtPublish: unknown;
-        onPublish = () => {
-          commentsAtPublish = storedCard('report-published.json').data
-            .attributes?.comments;
+      test('an emit in a batch with a write is emitted once the write has committed', async function (assert) {
+        let commentsAtEmit: unknown;
+        onEmit = () => {
+          commentsAtEmit = storedCard('report-published.json').data.attributes
+            ?.comments;
         };
 
         let response = await post(
@@ -1390,21 +1390,21 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        let [publish, write] = response.body['atomic:results'];
-        assert.strictEqual(publish.data.meta.position, 'test:1');
+        let [emit, write] = response.body['atomic:results'];
+        assert.strictEqual(emit.data.meta.position, 'test:1');
         assert.strictEqual(
           typeof write.data.meta.version,
           'string',
           'the write answers as a write does',
         );
         assert.deepEqual(
-          commentsAtPublish,
+          commentsAtEmit,
           [{ body: 'Voted.', postedBy: TESTER }],
-          'the write was on disk when the message was published, though the publish came first in the batch',
+          'the write was on disk when the message was emitted, though the emit came first in the batch',
         );
       });
 
-      test('a publish in a read-only batch is refused', async function (assert) {
+      test('an emit in a read-only batch is refused', async function (assert) {
         let response = await query(
           envelope(
             invoke('select', {
@@ -1416,11 +1416,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
         assert.strictEqual(response.body.errors[0].code, 'wrong-entry-point');
-        assert.deepEqual(published, [], 'nothing was published');
+        assert.deepEqual(emitted, [], 'nothing was emitted');
       });
 
-      test('a publish on a realm with no channel is refused as not implemented', async function (assert) {
-        realm.operationCore.publishMessage = undefined;
+      test('an emit on a realm with no channel is refused as not implemented', async function (assert) {
+        realm.operationCore.emitMessage = undefined;
 
         let response = await post(
           envelope(

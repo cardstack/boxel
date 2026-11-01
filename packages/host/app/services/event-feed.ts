@@ -19,7 +19,7 @@ import type MessageService from './message-service';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // Realm events for a session that has no Matrix to hear them through: a
-// visitor of a published site who isn't signed in. Each realm the page starts
+// visitor of a emitted site who isn't signed in. Each realm the page starts
 // watching gets the realm's event feed (ADR 020), and each change is
 // relayed through MessageService as the incremental index event Matrix would
 // have delivered, so the store, live searches and resources stay current with
@@ -194,7 +194,7 @@ export default class EventFeedService extends Service {
     return this.started;
   }
 
-  // Follows a card's live channel: `onMessage` hears each message published
+  // Follows a card's live channel: `onMessage` hears each message emitted
   // on it, and a change to the card reaches the page as any realm event does.
   // Returns a function that stops following; the channel closes when nothing
   // on the page follows it. Nothing is opened before the service starts,

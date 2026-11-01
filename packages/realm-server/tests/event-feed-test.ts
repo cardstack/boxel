@@ -65,7 +65,7 @@ const ARTICLE_MODULE = `
       set: { headline: params('headline') },
     };
     @operation static cheer = {
-      base: 'publish',
+      base: 'emit',
       params: { reader: StringField, mood: StringField },
       key: bxl\`params("reader")\`,
     };
@@ -761,7 +761,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("a visitor's publish lands on the card's channel, the latest per key, and writes nothing", async function (assert) {
+  test("a visitor's emit lands on the card's channel, the latest per key, and writes nothing", async function (assert) {
     let cheer = (reader: string, mood: string) =>
       request
         .post(`${new URL(NEWSROOM).pathname}_operations`)
@@ -802,19 +802,19 @@ module(basename(import.meta.filename), function (hooks) {
         {
           key: 'ana',
           body: { reader: 'ana', mood: 'thrilled' },
-          operation: { name: 'cheer', base: 'publish' },
+          operation: { name: 'cheer', base: 'emit' },
         },
         {
           key: 'ben',
           body: { reader: 'ben', mood: 'calm' },
-          operation: { name: 'cheer', base: 'publish' },
+          operation: { name: 'cheer', base: 'emit' },
         },
       ],
       "ana's change replaces her first cheer",
     );
-    let published = (first.body as any)['atomic:results'][0];
+    let emitted = (first.body as any)['atomic:results'][0];
     assert.strictEqual(
-      published.data.meta.position,
+      emitted.data.meta.position,
       `${channel.epoch}:1`,
       'the response names where the message landed on the channel',
     );
@@ -1214,9 +1214,9 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
       { key: channelFeedKey(REALM, 'Game/1') },
     );
     let pick = (team: string, choice: string) =>
-      channel.publish({
+      channel.emit({
         path: 'Game/1',
-        operation: { name: 'select', base: 'publish' },
+        operation: { name: 'select', base: 'emit' },
         key: `${team}:1`,
         body: { team, choice },
       });
@@ -1235,9 +1235,9 @@ module(`${basename(import.meta.filename)} > stored feed`, function (hooks) {
     assert.strictEqual(window.from, 0, 'nothing a client needs was dropped');
 
     for (let i = 0; i < EVENT_FEED_WINDOW + 10; i++) {
-      await channel.publish({
+      await channel.emit({
         path: 'Game/1',
-        operation: { name: 'cheer', base: 'publish' },
+        operation: { name: 'cheer', base: 'emit' },
         body: { i },
       });
     }

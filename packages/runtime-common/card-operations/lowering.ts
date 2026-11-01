@@ -182,7 +182,7 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     callApi: ['card-def'],
     // Reached only through a declaration: a card's live channel is the card's,
     // and only a card that declares a message says what one is.
-    publish: ['card-def'],
+    emit: ['card-def'],
   };
 
 function declarableBases(
@@ -214,7 +214,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'explain' ||
     base === 'validate' ||
     base === 'callApi' ||
-    base === 'publish' ||
+    base === 'emit' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -222,13 +222,12 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
 // The name an ad-hoc search is invoked under, which no declaration may take.
 const AD_HOC_QUERY_NAME = 'query';
 
-// Whether `name` is a base operation's other than `publish` itself, read off
+// Whether `name` is a base operation's other than `emit` itself, read off
 // the exhaustive table above so a further base is covered without a second
 // list to keep in step.
 function isShadowedBaseName(name: string): boolean {
   return (
-    name !== 'publish' &&
-    Object.prototype.hasOwnProperty.call(DECLARABLE_BY, name)
+    name !== 'emit' && Object.prototype.hasOwnProperty.call(DECLARABLE_BY, name)
   );
 }
 
@@ -319,23 +318,23 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
-    if (raw[name]?.base === 'publish' && isShadowedBaseName(name)) {
-      // A publish writes nothing, so under a base operation's name it would
+    if (raw[name]?.base === 'emit' && isShadowedBaseName(name)) {
+      // A emit writes nothing, so under a base operation's name it would
       // answer that name by writing nothing, and a caller reaching for the
       // built-in would be told it had run. The authoring decorator refuses
       // the name; this keeps a stored entry from carrying it past the code
-      // that did. Stored invalid on `publish`, so invoking it by name is
+      // that did. Stored invalid on `emit`, so invoking it by name is
       // refused rather than falling back to the built-in it names.
       let operation: OperationDefinition = {
-        base: 'publish',
+        base: 'emit',
         deterministic: true,
         invalid: true,
         issues: [
           {
-            code: 'publish-under-base-name',
+            code: 'emit-under-base-name',
             operation: name,
             path: name,
-            message: `a "publish" operation sends a message and writes nothing, so it cannot take the name of the "${name}" base operation, whose callers expect it to do what "${name}" does`,
+            message: `a "emit" operation sends a message and writes nothing, so it cannot take the name of the "${name}" base operation, whose callers expect it to do what "${name}" does`,
           },
         ],
       };
@@ -561,10 +560,10 @@ async function lowerOperation(
     sink,
     context,
   );
-  // A publish edits no document, so a transform's clauses stored on one
+  // A emit edits no document, so a transform's clauses stored on one
   // would assemble a program nothing runs. The decorator refuses the keys;
   // a stored entry is held to the same rule here.
-  if (base === 'publish') {
+  if (base === 'emit') {
     for (let clause of ['set', 'append', 'assert'] as const) {
       if (
         (declaration as unknown as Record<string, unknown>)[clause] !==
@@ -573,7 +572,7 @@ async function lowerOperation(
         sink.add(
           'unrunnable-program',
           clause,
-          `a "publish" operation sends its payload as a message and edits no document, so this \`${clause}\` would never be applied`,
+          `a "emit" operation sends its payload as a message and edits no document, so this \`${clause}\` would never be applied`,
         );
       }
     }
@@ -593,8 +592,8 @@ async function lowerOperation(
             ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
             : base === 'callApi'
               ? `a "callApi" operation sends the request it declares rather than running a program over a document, so this program would never be reached`
-              : base === 'publish'
-                ? `a "publish" operation sends its payload as a message on the card's live channel rather than running a program over a document, so this program would never be reached`
+              : base === 'emit'
+                ? `a "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document, so this program would never be reached`
                 : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
@@ -664,11 +663,11 @@ async function lowerOperation(
       'output',
       `a "validate" operation answers with what the policy card compiles to, as compiling reports it, so this projection would never be reached`,
     );
-  } else if (base === 'publish' && declaration.output !== undefined) {
+  } else if (base === 'emit' && declaration.output !== undefined) {
     sink.add(
       'unrunnable-program',
       'output',
-      `a "publish" operation answers with where its message landed on the card's channel, so this projection would never be reached`,
+      `a "emit" operation answers with where its message landed on the card's channel, so this projection would never be reached`,
     );
   } else {
     let output = await lowerOutput(
@@ -701,13 +700,13 @@ async function lowerOperation(
       operation.query = query;
     }
   }
-  if (base === 'publish') {
+  if (base === 'emit') {
     let key = (declaration as { key?: unknown }).key;
     if (key !== undefined && !isBxl(key)) {
       sink.add(
         'invalid-program',
         'key',
-        `a "publish" operation's \`key\` is a program written with the bxl tag, which answers the string a later message supersedes this one by`,
+        `a "emit" operation's \`key\` is a program written with the bxl tag, which answers the string a later message supersedes this one by`,
       );
     } else if (key !== undefined) {
       let program = lowerExpression(key.$bxl, 'key', paramNames, sink);

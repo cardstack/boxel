@@ -393,7 +393,7 @@ import {
   parseOperationsEnvelope,
   pendingWriteOf,
   projectedResult,
-  publishedResult,
+  emittedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -6749,16 +6749,16 @@ export class Realm {
         // A message on a card's channel speaks to every viewer of the card on
         // the realm's behalf, which needs the authority a write does too.
         let speaks = resolved.find(
-          ({ definition }) => definition.base === 'publish',
+          ({ definition }) => definition.base === 'emit',
         );
         if (speaks) {
           throw new OperationFailure({
             ...(speaks.entry.href ? { id: speaks.entry.href } : {}),
             status: 400,
             code: 'wrong-entry-point',
-            title: 'Publish in a read-only batch',
+            title: 'Emit in a read-only batch',
             detail:
-              `operation "${speaks.entry.name}" publishes a message on the ` +
+              `operation "${speaks.entry.name}" emits a message on the ` +
               `card's live channel, and a QUERY batch is authorized to read; ` +
               `send it as a POST`,
             meta: { entry: speaks.entry.position },
@@ -6869,8 +6869,8 @@ export class Realm {
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
       for (let { entry, target, definition, decision } of resolved) {
-        // A publish waits for the batch's writes; see below.
-        if (isWrite(definition.base) || definition.base === 'publish') {
+        // An emit waits for the batch's writes; see below.
+        if (isWrite(definition.base) || definition.base === 'emit') {
           continue;
         }
         let result: OperationResult;
@@ -7027,20 +7027,20 @@ export class Realm {
         }
       }
 
-      // Each publish puts its message on its card's live channel once the
+      // Each emit puts its message on its card's live channel once the
       // batch's writes have committed, in request order, so a viewer never
-      // hears of a change before the realm holds it. A publish writes
+      // hears of a change before the realm holds it. An emit writes
       // nothing: it took no part in the lock, staged no file, enqueues no
       // index job and broadcasts no realm event. Its gate decision was made
       // with every other entry's, against the card as stored when the batch
       // began.
       //
       // A message that has gone cannot be taken back, and neither can a
-      // committed write, so a publish that fails here answers the batch with
+      // committed write, so an emit that fails here answers the batch with
       // that entry's refusal over whatever already landed — the writes and
-      // any message published ahead of it — as a failing `output` does.
+      // any message emitted ahead of it — as a failing `output` does.
       for (let { entry, target, definition, decision } of resolved) {
-        if (definition.base !== 'publish') {
+        if (definition.base !== 'emit') {
           continue;
         }
         try {
@@ -7061,7 +7061,7 @@ export class Realm {
           );
           results.set(
             entry.position,
-            publishedResult(entry, result, (url) =>
+            emittedResult(entry, result, (url) =>
               this.#virtualNetwork.unresolveURL(url),
             ),
           );
@@ -7935,9 +7935,9 @@ export class Realm {
           compilePolicyCard(card.href, this.#policyCompileEnvironment()),
         readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
         ...(this.#callApi ? { callApi: this.#callApi } : {}),
-        // A `publish` operation's message goes on the target card's live
+        // An `emit` operation's message goes on the target card's live
         // channel (ADR 020 §1.8), which answers the position it took.
-        publishMessage: (args) => this.#publishMessage(args),
+        emitMessage: (args) => this.#emitMessage(args),
       };
     }
     return this.#operationCore;
@@ -18235,7 +18235,7 @@ export class Realm {
   #openFeedStreams = 0;
   eventFeedStreamCap = EVENT_FEED_MAX_STREAMS;
   // The live channels of this realm's cards (ADR 020 §1.8) this process has
-  // opened: one feed per card, for what is published on it and the card's own
+  // opened: one feed per card, for what is emitted on it and the card's own
   // changes.
   #channels = new Map<string, RealmEventFeed>();
 
@@ -18511,9 +18511,9 @@ export class Realm {
     );
   }
 
-  // Publishes what a `publish` operation the policy admitted produced on the
+  // Emits what an `emit` operation the policy admitted produced on the
   // target card's live channel (ADR 020 §1.8), and answers with its position.
-  async #publishMessage(args: {
+  async #emitMessage(args: {
     cardURL: string;
     operation: FeedOperation;
     key?: string;
@@ -18521,7 +18521,7 @@ export class Realm {
   }): Promise<{ position: string }> {
     let path = this.paths.local(new URL(args.cardURL)).replace(/\.json$/, '');
     let channel = this.#channel(path);
-    let recorded = await channel.publish({
+    let recorded = await channel.emit({
       path,
       operation: args.operation,
       key: args.key,

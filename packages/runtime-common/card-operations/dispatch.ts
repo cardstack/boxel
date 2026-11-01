@@ -55,7 +55,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
-  type PublishMessage,
+  type EmitMessage,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -213,12 +213,12 @@ export interface OperationCore {
   // Sends a `callApi`'s request through the realm server's guarded outbound
   // client. A core without it sends nothing.
   callApi?: CallApiSender;
-  // Puts a `publish`'s message on the target card's live channel (ADR 020
+  // Puts a `emit`'s message on the target card's live channel (ADR 020
   // §1.8, §1.10) and answers the position it took there. Called once per
-  // admitted publish, after the batch's writes have committed. A core without
-  // it publishes nothing, and refuses every `publish` with 501
+  // admitted emit, after the batch's writes have committed. A core without
+  // it emits nothing, and refuses every `emit` with 501
   // `not-implemented`.
-  publishMessage?: PublishMessage;
+  emitMessage?: EmitMessage;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -601,7 +601,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   explain: true,
   validate: true,
   callApi: true,
-  publish: true,
+  emit: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -622,7 +622,7 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   explain: [],
   validate: [],
   callApi: [],
-  publish: [],
+  emit: [],
 };
 
 // The behaviors a target carries only under a name its type declares on
@@ -631,21 +631,21 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // does not exist. An explain and a validate are the two: each answers only on
 // the card that declares it, a policy card, or for a validate the realm's
 // config card too. A callApi is the third: only a card that declares a request
-// has one to send. A publish is the fourth: only a card that declares a
+// has one to send. A emit is the fourth: only a card that declares a
 // message says what one on its channel is.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
     validate: true,
     callApi: true,
-    publish: true,
+    emit: true,
   });
 
 const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
   explain: ['card-def'],
   validate: ['card-def'],
   callApi: ['card-def'],
-  publish: ['card-def'],
+  emit: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -1626,8 +1626,8 @@ async function runBaseOperation(
           : {}),
         realmConfig: () => core.realmConfig(),
       });
-    case 'publish':
-      return await publishOperation(core, canonical, definition);
+    case 'emit':
+      return await emitOperation(core, canonical, definition);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from
@@ -1674,16 +1674,16 @@ async function runBaseOperation(
   }
 }
 
-// A `publish`: the payload, as the `input` stage left it and the `params`
+// A `emit`: the payload, as the `input` stage left it and the `params`
 // check passed it, is the message, put on the target card's live channel
 // under the key the declaration's `key` program answers. Nothing is staged
 // and nothing is written, so there is no lock to take, no index job to
 // enqueue and no realm event to broadcast: the channel is the realm's, and
 // delivering on it is the one thing this does.
 //
-// A message is published on a card's channel, so a type target — a card that
-// does not exist yet — has none to publish on.
-async function publishOperation(
+// A message is emitted on a card's channel, so a type target — a card that
+// does not exist yet — has none to emit on.
+async function emitOperation(
   core: OperationCore,
   request: OperationRequest,
   definition: OperationDefinition,
@@ -1694,20 +1694,20 @@ async function publishOperation(
       code: 'operation-not-allowed',
       title: 'Operation not allowed',
       detail:
-        `operation "${request.name}" publishes on a card's live channel, so ` +
+        `operation "${request.name}" emits on a card's live channel, so ` +
         `it is invoked on a card rather than on its type`,
     });
   }
   let cardURL = request.target.url;
-  if (!core.publishMessage) {
+  if (!core.emitMessage) {
     throw new OperationFailure({
       id: cardURL,
       status: 501,
       code: 'not-implemented',
-      title: 'Publishing not available',
+      title: 'Emitting not available',
       detail:
-        `operation "${request.name}" publishes on the card's live channel, ` +
-        `and this realm has no channel to publish on`,
+        `operation "${request.name}" emits on the card's live channel, ` +
+        `and this realm has no channel to emit on`,
     });
   }
   let body = (request.params ?? {}) as Record<string, JsonValue>;
@@ -1718,9 +1718,9 @@ async function publishOperation(
   );
   let position: string;
   try {
-    ({ position } = await core.publishMessage({
+    ({ position } = await core.emitMessage({
       cardURL,
-      operation: { name: request.name, base: 'publish' },
+      operation: { name: request.name, base: 'emit' },
       ...(key === undefined ? {} : { key }),
       body,
     }));
@@ -1733,13 +1733,13 @@ async function publishOperation(
       id: cardURL,
       status: 500,
       code: 'internal-error',
-      title: 'Cannot publish',
+      title: 'Cannot emit',
       detail:
-        `operation "${request.name}" could not publish its message: ` +
+        `operation "${request.name}" could not emit its message: ` +
         `${err instanceof Error ? err.message : String(err)}`,
     });
   }
-  return { published: { id: cardURL, position } };
+  return { emitted: { id: cardURL, position } };
 }
 
 // The payload has to satisfy the schema the definition declares before any

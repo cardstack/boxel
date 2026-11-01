@@ -53,7 +53,7 @@ export const EVENT_FEED_VERSION = 1;
 
 // `removed`: the card was deleted. `withdrawn`: it still exists but the
 // feed's audience may no longer read it. Both tell a client to drop it.
-// `message`: something published on a card's live channel (ADR 020 §1.8),
+// `message`: something emitted on a card's live channel (ADR 020 §1.8),
 // carried whole, since it is stored nowhere else.
 export type FeedChangeKind =
   | 'written'
@@ -96,19 +96,19 @@ export interface FeedEvent {
   // revalidating everything doesn't arrive at once.
   spread?: number;
   // For a `message`: the key a later message with the same key replaces it
-  // under, when its operation names one, and what was published.
+  // under, when its operation names one, and what was emitted.
   key?: string;
   body?: unknown;
 }
 
-// A message published on a card's live channel (ADR 020 §1.8), as a page
+// A message emitted on a card's live channel (ADR 020 §1.8), as a page
 // hears it.
 export interface ChannelMessage {
   // Its position on the channel: a later message has a higher one.
   seq: number;
   // The key a later message with the same key replaces it under, if any.
   key?: string;
-  // The name of the operation that published it.
+  // The name of the operation that emitted it.
   operation?: string;
   body: unknown;
 }
@@ -394,10 +394,10 @@ export class RealmEventFeed {
     this.#deliver(await this.store.after(this.key, this.#seq));
   }
 
-  // Publishes a message on this feed, a card's live channel (ADR 020 §1.8):
-  // what a `publish` operation the policy admitted produced. Resolves to the
+  // Emits a message on this feed, a card's live channel (ADR 020 §1.8):
+  // what a `emit` operation the policy admitted produced. Resolves to the
   // message as the feed recorded it.
-  async publish(message: {
+  async emit(message: {
     path: string;
     operation: FeedOperation;
     key?: string;

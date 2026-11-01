@@ -190,8 +190,8 @@ export async function runOutputTransform(
   return await runStage(definition.output.source, result, 'output', ctx);
 }
 
-// Run a `publish`'s `key` over the payload its `input` stage left, and answer
-// the compaction key the message is published under, or undefined for a
+// Run a `emit`'s `key` over the payload its `input` stage left, and answer
+// the compaction key the message is emitted under, or undefined for a
 // declaration that names none. A key is what the channel compares messages
 // by, so it has to be text: a number is spelled the way the program would
 // spell it, and anything else is the program's mistake.

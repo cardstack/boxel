@@ -147,7 +147,7 @@ have its own URL, sequence and window, so a shared cache holds it apart from
 the rest of the realm.
 
 A card's live channel carries the card's own changes and the messages
-published on it. A message MUST be published only by invoking a `publish`
+emitted on it. A message MUST be emitted only by invoking an `emit`
 operation the card's type declares, which the policy grants like any other
 operation; it validates its parameters and writes nothing to the realm. A
 message MAY name a key, and a later message with the same key MUST replace an
@@ -183,8 +183,8 @@ stale-while-revalidate=1`.
 - Channel: `{realm}/_live?channel=<card path>`, stream or poll, with a
   sequence of its own. A stream opened without `Last-Event-ID` starts from
   the channel's window, so a late joiner hears the latest message per key.
-- Kinds: `message` (published on a channel: `"key"?`, `"body"`, and the
-  publishing `"operation"`), `written` (the change landed; a client need do
+- Kinds: `message` (emitted on a channel: `"key"?`, `"body"`, and the
+  emitting `"operation"`), `written` (the change landed; a client need do
   nothing), `indexed`
   (re-read `path`, at `rev` when given), `removed` (the card was deleted),
   `withdrawn` (the audience may no longer read it), `reset` (revalidate
