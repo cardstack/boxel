@@ -14204,7 +14204,12 @@ export class Realm {
     };
   }
 
-  private cardJsonCacheControl(requestContext: RequestContext): string {
+  // `read` says the response answers a card+json `GET` or `HEAD`, the only
+  // ones a shared cache stores; a write's echo passes nothing.
+  private cardJsonCacheControl(
+    requestContext: RequestContext,
+    { read = false }: { read?: boolean } = {},
+  ): string {
     // Mirrors the source/module convention for the public/private
     // visibility decision (world-readable realms get `public` so a
     // CDN can revalidate; auth-gated realms get `private` so a shared
@@ -14214,10 +14219,32 @@ export class Realm {
     // strict that intermediaries can't serve stale-while-revalidate
     // even briefly. With `max-age=0` the browser always asks, the
     // ETag short-circuit returns 304 cheaply when nothing changed.
-    let cacheVisibility = requestContext.permissions['*']?.includes('read')
-      ? 'public'
-      : 'private';
+    //
+    // A read the policy admitted for a caller who authenticated nobody is
+    // `public` too (ADR 020 §1.5): every such caller is the same caller to
+    // the policy, so they all get the same document, and a shared cache may
+    // hand it to the next one. `must-revalidate` is what keeps that safe
+    // when the policy or the card changes: the cache asks the realm before
+    // every reuse, and the realm answers that request through the gate
+    // again. `cardJsonVary` keeps the copy from a signed-in caller.
+    let cacheVisibility =
+      requestContext.permissions['*']?.includes('read') ||
+      (read && requestContext.anonymousCaller)
+        ? 'public'
+        : 'private';
     return `${cacheVisibility}, max-age=0, must-revalidate`;
+  }
+
+  // What a card+json read varies on. A read the policy admitted for a caller
+  // who authenticated nobody is shared-cacheable (see `cardJsonCacheControl`)
+  // and is not what a signed-in caller would be answered, so it varies on
+  // `Authorization` as well: a cache holding it answers only another request
+  // without credentials. A signed-in caller's answer is `private`, so no
+  // shared cache holds that one at all.
+  private cardJsonVary(requestContext: RequestContext): string[] {
+    return requestContext.anonymousCaller
+      ? [...LINK_SHAPE_VARY, 'Authorization']
+      : LINK_SHAPE_VARY;
   }
 
   // Serve instance ids in canonical RRI (prefix) form. Unresolves the primary
@@ -14489,7 +14516,7 @@ export class Realm {
       // in whether a conditional request may be answered from the validator.
       let cacheControl = result.projected
         ? PROJECTED_CARD_JSON_CACHE_CONTROL
-        : this.cardJsonCacheControl(requestContext);
+        : this.cardJsonCacheControl(requestContext, { read: true });
       let lastModified: Record<string, string> =
         result.lastModified != null
           ? { 'last-modified': formatRFC7231(result.lastModified * 1000) }
@@ -14505,7 +14532,7 @@ export class Realm {
         // it: the validator matched, so there is nothing to send.
         return createResponse({
           requestContext,
-          varyOn: LINK_SHAPE_VARY,
+          varyOn: this.cardJsonVary(requestContext),
           body: null,
           init: {
             status: 304,
@@ -14518,7 +14545,7 @@ export class Realm {
       );
       return createResponse({
         requestContext,
-        varyOn: LINK_SHAPE_VARY,
+        varyOn: this.cardJsonVary(requestContext),
         body: null,
         init: {
           headers: {
@@ -14621,7 +14648,9 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let cacheControl = this.cardJsonCacheControl(requestContext, {
+        read: true,
+      });
       // A caller the realm ACL declined is answered only by the read itself,
       // which runs through the policy gate. Both fast paths below answer
       // without running it: the conditional 304 from the validator, and the
@@ -14740,7 +14769,7 @@ export class Realm {
         if (matchedEtag && !assembles) {
           return createResponse({
             requestContext,
-            varyOn: LINK_SHAPE_VARY,
+            varyOn: this.cardJsonVary(requestContext),
             body: null,
             init: {
               status: 304,
@@ -14816,7 +14845,7 @@ export class Realm {
       servedAnonymous(requestContext);
       return createResponse({
         body: assembly.body,
-        varyOn: LINK_SHAPE_VARY,
+        varyOn: this.cardJsonVary(requestContext),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,

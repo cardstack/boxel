@@ -21,6 +21,7 @@ import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
+  createJWT,
   createVirtualNetwork,
   matrixURL,
   realmConfigCardJSON,
@@ -378,6 +379,51 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       first.includes('"kind":"reset"'),
       'a client from another epoch is told to reset',
+    );
+  });
+
+  function readCard(path: string, realm = NEWSROOM) {
+    return request
+      .get(`${new URL(realm).pathname}${path}`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+  }
+
+  test('a signed-out read the policy admits may be held by a shared cache, and a signed-in one may not', async function (assert) {
+    // Every caller who isn't signed in is the same caller to the policy, so
+    // they all get the same document (ADR 020 §1.5).
+    let anonymous = await readCard('articles/published');
+    assert.strictEqual(anonymous.status, 200, anonymous.text);
+    assert.strictEqual(
+      anonymous.headers['cache-control'],
+      'public, max-age=0, must-revalidate',
+    );
+    let vary = (anonymous.headers['vary'] ?? '')
+      .split(',')
+      .map((name: string) => name.trim().toLowerCase());
+    assert.true(
+      vary.includes('authorization'),
+      `a cache holding it answers only another caller without credentials: ${anonymous.headers['vary']}`,
+    );
+    let head = await request
+      .head(`${new URL(NEWSROOM).pathname}articles/published`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(
+      head.headers['cache-control'],
+      'public, max-age=0, must-revalidate',
+      'a HEAD states what the GET sends',
+    );
+
+    let signedIn = await readCard('articles/published').set(
+      'Authorization',
+      `Bearer ${createJWT(newsroom, EDITOR, ['read', 'write', 'realm-owner'])}`,
+    );
+    assert.strictEqual(signedIn.status, 200, signedIn.text);
+    assert.strictEqual(
+      signedIn.headers['cache-control'],
+      'private, max-age=0, must-revalidate',
+      "a signed-in caller's read stays private",
     );
   });
 
