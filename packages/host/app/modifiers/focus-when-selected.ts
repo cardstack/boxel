@@ -22,25 +22,16 @@ function focusIsAvailable(): boolean {
   );
 }
 
-// Less than half of it shows, so a sliver at the window's edge still counts.
-function isOffScreen(element: HTMLElement): boolean {
-  let { top, bottom, height } = element.getBoundingClientRect();
-  let shown = Math.min(bottom, window.innerHeight) - Math.max(top, 0);
-  return shown < height / 2;
-}
-
 // Focuses the item the keyboard cursor moves to. When an arrow key moved it
 // there, the item is also scrolled into view, so the walk down the page stays
-// visible. The item the list opens on is scrolled into view too, or with
-// `scrollOnOpen='when-off-screen'` only when most of it is out of view, so a
-// page that opens on an item near its top stays at its top.
+// visible. The item the list opens on is scrolled into view too, unless
+// `scrollOnOpen='never'`: then the page opens at its top, wherever the item
+// sits.
 export default modifier(
   (
     element: HTMLElement,
     [isSelected]: [boolean | undefined],
-    {
-      scrollOnOpen = 'always',
-    }: { scrollOnOpen?: 'always' | 'when-off-screen' },
+    { scrollOnOpen = 'always' }: { scrollOnOpen?: 'always' | 'never' },
   ) => {
     let selected = !!isSelected;
     let justSelected = selected && !wasSelected.get(element);
@@ -52,7 +43,7 @@ export default modifier(
     ) {
       let fromItem = !!document.activeElement?.closest('[data-nav-index]');
       element.focus({ preventScroll: true });
-      if (fromItem || scrollOnOpen === 'always' || isOffScreen(element)) {
+      if (fromItem || scrollOnOpen === 'always') {
         element.scrollIntoView({ block: 'nearest' });
       }
     }

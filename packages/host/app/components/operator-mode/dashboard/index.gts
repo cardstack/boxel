@@ -27,12 +27,10 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { logger } from '@cardstack/runtime-common';
 
-import { catalogRealmURL, leadWith } from '@cardstack/host/lib/utils';
 import {
   isHostedRealm,
-  listedCatalogRealmURLs,
   listedFavoriteRealmIdentifiers,
-  sortByCreatedAtDesc,
+  orderedCatalogRealmURLs,
   unreachableRealmServersMessage,
 } from '@cardstack/host/lib/workspace-list';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -41,13 +39,14 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import ManageCatalogs from '../workspace-chooser/manage-catalogs';
-
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import CatalogSection from './catalog-section';
+import CatalogsFlyout from './catalogs-flyout';
 import FavoritesFlyout from './favorites-flyout';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
+import SectionHead from './section-head';
 import Workspace from './workspace';
 import {
   COLLAPSED_WORKSPACE_ROWS,
@@ -70,6 +69,10 @@ interface Signature {
 }
 
 const log = logger('component:dashboard');
+
+// With fewer workspaces of their own than this, a user sees the catalog
+// before Workspaces: it has more to open than they do.
+export const CATALOG_LEADS_BELOW = 3;
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -133,7 +136,7 @@ export default class Dashboard extends Component<Signature> {
   });
 
   // Each section is named by the title span in its heading, so a count shown
-  // in a heading, as Catalogs has, stays out of the name.
+  // in a heading stays out of the name.
   private headingId = (section: string) => `${guidFor(this)}-${section}`;
 
   // What Show more and Show fewer control.
@@ -220,13 +223,6 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  @cached
-  private get catalogRealmIdentifiers() {
-    return listedCatalogRealmURLs(
-      this.realmServer.displayedCatalogRealmIdentifiers,
-    );
-  }
-
   private isHosted = (url: string): boolean =>
     isHostedRealm(this.realm.info(url));
 
@@ -240,13 +236,12 @@ export default class Dashboard extends Component<Signature> {
     return this.filterByScope(this.realmServer.userRealmIdentifiers);
   }
 
-  // Newest first, except the Boxel catalog, which always leads.
   @cached
   private get filteredCatalogRealmIdentifiers() {
     return this.filterByScope(
-      leadWith(
-        sortByCreatedAtDesc(this.catalogRealmIdentifiers, this.realm.info),
-        catalogRealmURL,
+      orderedCatalogRealmURLs(
+        this.realmServer.displayedCatalogRealmIdentifiers,
+        this.realm.info,
       ),
     );
   }
@@ -409,14 +404,36 @@ export default class Dashboard extends Component<Signature> {
       : this.filteredCatalogRealmIdentifiers.length;
   }
 
-  // Where each part of the keyboard cursor's walk starts: Favorites, New
-  // Workspace, the recent tiles, the rows shown, then Catalogs.
+  // Decided once, as the dashboard opens, and kept until it closes, so
+  // archiving a workspace or realms that arrive late never swap the sections
+  // under the user. The list has loaded by then: the dashboard renders only
+  // once the session is authenticated, which sign-in sets after assembling
+  // the user's realm list. Counted before the scope filter, so switching to
+  // Hosted doesn't reorder the page.
+  private catalogLeads = this.readCatalogLeads();
+
+  private readCatalogLeads() {
+    return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW;
+  }
+
+  // Listings aren't hosted workspaces, so Hosted hides the shelf.
+  private get isCatalogShelfShown() {
+    return this.scope !== 'hosted';
+  }
+
+  // Where each part of the keyboard cursor's walk starts, in page order:
+  // Favorites, New Workspace, the recent tiles, the rows shown, and Catalogs,
+  // first or last as the page shows it.
+  private get favoritesNavBase() {
+    return this.catalogLeads ? this.renderedCatalogCount : 0;
+  }
+
   private get addWorkspaceNavIndex() {
-    return this.favoritesCount;
+    return this.favoritesNavBase + this.favoritesCount;
   }
 
   private get recentNavBase() {
-    return this.favoritesCount + (this.isAddWorkspaceShown ? 1 : 0);
+    return this.addWorkspaceNavIndex + (this.isAddWorkspaceShown ? 1 : 0);
   }
 
   private get rowsNavBase() {
@@ -424,22 +441,27 @@ export default class Dashboard extends Component<Signature> {
   }
 
   private get catalogNavBase() {
-    return this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
+    return this.catalogLeads
+      ? 0
+      : this.rowsNavBase + this.visibleRowRealmIdentifiers.length;
   }
 
   // What each `[data-nav-index]` shows, in page order. A workspace that is
   // also a favorite is in the walk twice, as a desk and as a tile or row.
   @cached
   private get walkKeys(): string[] {
-    return [
+    let catalogs = this.catalogEmptyMessage
+      ? []
+      : this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`);
+    let workspaces = [
       ...this.favoriteRealmIdentifiers.map((url) => `desk:${url}`),
       ...(this.isAddWorkspaceShown ? ['new-workspace'] : []),
       ...this.recentRealmIdentifiers.map((url) => `workspace:${url}`),
       ...this.visibleRowRealmIdentifiers.map((url) => `workspace:${url}`),
-      ...(this.catalogEmptyMessage
-        ? []
-        : this.filteredCatalogRealmIdentifiers.map((url) => `catalog:${url}`)),
     ];
+    return this.catalogLeads
+      ? [...catalogs, ...workspaces]
+      : [...workspaces, ...catalogs];
   }
 
   // Where the workspace the dashboard opened over sits in the walk, when it
@@ -465,15 +487,17 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  // The cursor takes focus on open, so it never starts on New Workspace while
-  // anything else is shown: the first Enter would create a workspace.
+  // The workspace the dashboard opened over, otherwise the first favorite or
+  // workspace, even when the catalogs lead the page. The cursor takes focus on
+  // open, so it never starts on New Workspace while anything else is shown:
+  // the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
       return returnIndex;
     }
     if (this.favoritesCount > 0) {
-      return 0;
+      return this.favoritesNavBase;
     }
     if (this.userWorkspacesCount > 0) {
       return this.recentNavBase;
@@ -491,6 +515,14 @@ export default class Dashboard extends Component<Signature> {
     label: 'Workspaces',
     icon: LayoutGrid,
     flyout: FavoritesFlyout,
+  };
+
+  private catalogsSection: DashboardSection = {
+    id: 'catalogs',
+    label: 'Catalogs',
+    icon: Store,
+    count: () => this.renderedCatalogCount,
+    flyout: CatalogsFlyout,
   };
 
   private cursor = new KeyboardCursor({
@@ -559,24 +591,30 @@ export default class Dashboard extends Component<Signature> {
             />
           </header>
 
+          {{#if this.catalogLeads}}
+            <CatalogSection
+              @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
+              @emptyMessage={{this.catalogEmptyMessage}}
+              @count={{this.renderedCatalogCount}}
+              @showShelf={{this.isCatalogShelfShown}}
+              @leads={{true}}
+              @navBase={{this.catalogNavBase}}
+              @cursor={{this.cursor}}
+              {{@sections.register this.catalogsSection}}
+            />
+          {{/if}}
+
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'workspaces'}}
             {{@sections.register this.workspacesSection}}
             data-test-dashboard-section='workspaces'
           >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <LayoutGrid
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'workspaces'}}>Workspaces</span>
-              </h2>
-              <p class='section-hint'>Where your cards live.</p>
-            </div>
+            <SectionHead
+              @icon={{LayoutGrid}}
+              @title='Workspaces'
+              @titleId={{this.headingId 'workspaces'}}
+            >Where your cards live.</SectionHead>
 
             <div class='group' data-test-favorites-section>
               <h3 class='group-head'>
@@ -606,13 +644,15 @@ export default class Dashboard extends Component<Signature> {
                   data-test-favorites-list
                 >
                   {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @variant='desk'
-                      @navIndex={{i}}
-                      @isSelected={{eq this.cursor.currentIndex i}}
-                      @selectionActive={{this.cursor.isRingShown}}
-                    />
+                    {{#let (add this.favoritesNavBase i) as |navIndex|}}
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @variant='desk'
+                        @navIndex={{navIndex}}
+                        @isSelected={{eq this.cursor.currentIndex navIndex}}
+                        @selectionActive={{this.cursor.isRingShown}}
+                      />
+                    {{/let}}
                   {{/each}}
                 </div>
               {{/if}}
@@ -784,71 +824,28 @@ export default class Dashboard extends Component<Signature> {
             </div>
           </section>
 
-          <section
-            class='dashboard-section'
-            aria-labelledby={{this.headingId 'catalogs'}}
-            data-test-dashboard-section='catalogs'
-          >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <Store
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'catalogs'}}>Catalogs</span>
-                {{#if this.renderedCatalogCount}}
-                  <span class='group-count'>{{this.renderedCatalogCount}}</span>
-                {{/if}}
-              </h2>
-              <ManageCatalogs />
-              <p class='section-hint'>Apps, fields and themes to use in your
-                workspaces.</p>
-            </div>
-            {{#if this.catalogEmptyMessage}}
-              <p
-                class='group-empty'
-                data-test-catalog-empty
-              >{{this.catalogEmptyMessage}}</p>
-            {{else}}
-              <div class='catalog-list' data-test-catalog-list>
-                {{#each
-                  this.filteredCatalogRealmIdentifiers
-                  as |realmIdentifier i|
-                }}
-                  {{#let (add this.catalogNavBase i) as |navIndex|}}
-                    <Workspace
-                      @realmIdentifier={{realmIdentifier}}
-                      @variant='tile'
-                      @navIndex={{navIndex}}
-                      @isSelected={{eq this.cursor.currentIndex navIndex}}
-                      @selectionActive={{this.cursor.isRingShown}}
-                    />
-                  {{/let}}
-                {{/each}}
-              </div>
-            {{/if}}
-          </section>
+          {{#unless this.catalogLeads}}
+            <CatalogSection
+              @realmIdentifiers={{this.filteredCatalogRealmIdentifiers}}
+              @emptyMessage={{this.catalogEmptyMessage}}
+              @count={{this.renderedCatalogCount}}
+              @showShelf={{this.isCatalogShelfShown}}
+              @navBase={{this.catalogNavBase}}
+              @cursor={{this.cursor}}
+              {{@sections.register this.catalogsSection}}
+            />
+          {{/unless}}
 
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'agents'}}
             data-test-dashboard-section='agents'
           >
-            <div class='section-head'>
-              <h2 class='section-title'>
-                <Bot
-                  class='section-icon'
-                  width='20'
-                  height='20'
-                  aria-hidden='true'
-                />
-                <span id={{this.headingId 'agents'}}>Agents</span>
-              </h2>
-              <p class='section-hint'>Boxel AI works here; your own agent works
-                through the Boxel plugin.</p>
-            </div>
+            <SectionHead
+              @icon={{Bot}}
+              @title='Agents'
+              @titleId={{this.headingId 'agents'}}
+            >Boxel AI works here; your own agent works through the Boxel plugin.</SectionHead>
           </section>
         </div>
       </div>
@@ -1020,35 +1017,10 @@ export default class Dashboard extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
       }
-      .section-head {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-xs);
-        row-gap: var(--boxel-sp-2xs);
-        padding-bottom: var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--boxel-light-10);
-      }
-      .section-title {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        margin: 0;
-        font-size: var(--dashboard-section-title-font-size);
-        font-weight: 700;
-        letter-spacing: -0.015em;
-      }
-      .section-icon,
       .group-icon {
         --icon-color: var(--muted-foreground);
         color: var(--muted-foreground);
         flex-shrink: 0;
-      }
-      .section-hint {
-        flex-basis: 100%;
-        margin: 0;
-        font-size: var(--dashboard-section-hint-font-size);
-        color: var(--muted-foreground);
       }
 
       /* Groups inside a section are quiet labels; the tiles are the
@@ -1088,15 +1060,6 @@ export default class Dashboard extends Component<Signature> {
         margin: 0;
         color: var(--muted-foreground);
         font: 400 var(--boxel-font-sm);
-      }
-      .catalog-list {
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(min(var(--dashboard-tile-min-width), 100%), 1fr)
-        );
-        gap: var(--boxel-sp-lg) var(--boxel-sp);
-        padding: var(--boxel-sp-xs) 0;
       }
       /* As many desks per row as fit at their minimum width, spanning the
          section like the lists below them. */

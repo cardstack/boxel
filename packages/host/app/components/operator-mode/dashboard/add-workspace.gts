@@ -87,7 +87,7 @@ export default class AddWorkspace extends Component<Signature> {
       class={{cn 'add-workspace' is-selected=this.showSelectionRing}}
       data-nav-index={{@navIndex}}
       {{on 'click' (fn this.setIsModalOpen true)}}
-      {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
+      {{focusWhenSelected @isSelected scrollOnOpen='never'}}
       data-test-add-workspace
       data-test-add-workspace-selected={{if @isSelected 'selected'}}
       data-test-workspace-ring={{if this.showSelectionRing 'New Workspace'}}
