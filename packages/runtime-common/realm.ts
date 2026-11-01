@@ -18745,14 +18745,12 @@ export class Realm {
       key: args.key,
       body: args.body,
     };
-    let guard = args.guard;
-    let recorded = guard
-      ? await this.#dbAdapter.withFileWriteLocks(
-          this.url,
-          [`${path}.json`],
-          () => channel.emit(message, guard),
-        )
-      : await channel.emit(message);
+    // A guard runs in turn with the channel's appends, which a `collect`
+    // waits on, so the two are ordered within this process. It takes no file
+    // lock: a lock held across the append needs a second connection to record
+    // it, and a crowd of guarded emits then holds every connection in the pool
+    // while waiting for the lock.
+    let recorded = await channel.emit(message, args.guard);
     return { position: `${channel.epoch}:${recorded.seq}` };
   }
 
