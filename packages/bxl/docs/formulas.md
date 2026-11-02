@@ -35,13 +35,13 @@ already know.
 These conventions are enforced socially in review, not by the compiler.
 The compiler is case-insensitive, so `ISBLANK(x)`, `isblank(x)`, and
 `IsBlank(x)` all resolve to the same function. The convention is about
-communicating *intent* to the reader:
+communicating _intent_ to the reader:
 
-| Reader sees | Interpretation                                      |
-| ----------- | --------------------------------------------------- |
-| `ISBLANK`   | "This is Excel. I could paste it into a cell."      |
-| `present`   | "This is BXL-native. Not portable to Excel."        |
-| `isEmail`   | "This is a validator.js function." |
+| Reader sees | Interpretation                                 |
+| ----------- | ---------------------------------------------- |
+| `ISBLANK`   | "This is Excel. I could paste it into a cell." |
+| `present`   | "This is BXL-native. Not portable to Excel."   |
+| `isEmail`   | "This is a validator.js function."             |
 
 ## Lazy extension libraries
 
@@ -50,13 +50,13 @@ evaluators. Large or specialized helper families are split into lazy
 extension libraries so Boxel only loads them when an expression actually
 calls one of their functions.
 
-| Library | Examples | Runtime behavior |
-| ------- | -------- | ---------------- |
-| `formula-statistical` | `NORM_DIST`, `T_TEST`, `BETA_INV`, `POISSON_DIST` | Loaded by async runtimes when referenced. Dotted Excel names such as `NORM.DIST` are accepted in readable syntax and rewritten to underscores. |
-| `formula-bessel` | `BESSELI`, `BESSELJ`, `BESSELK`, `BESSELY` | Loaded by async runtimes when referenced. |
-| `formula-engineering` | `BIN2DEC`, `BITAND`, `COMPLEX`, `IM*`, `ERF`, `CONVERT`, `UNICHAR` | Loaded by async runtimes when referenced. `ROMAN` and `ARABIC` remain eager. |
-| `formula-financial` | `PMT`, `NPV`, `IRR`, `XIRR`, `FV`, `PV`, `RATE`, `COUPDAYS` | Loaded by async runtimes when referenced; shares the `formula-extras` bundle with lazy engineering. |
-| `validation` | `isEmail`, `isURL`, `isUUID`, `isPostalCode`, `isStrongPassword` | Loaded by async runtimes when referenced. Names and option shapes follow validator.js. |
+| Library               | Examples                                                           | Runtime behavior                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `formula-statistical` | `NORM_DIST`, `T_TEST`, `BETA_INV`, `POISSON_DIST`                  | Loaded by async runtimes when referenced. Dotted Excel names such as `NORM.DIST` are accepted in readable syntax and rewritten to underscores. |
+| `formula-bessel`      | `BESSELI`, `BESSELJ`, `BESSELK`, `BESSELY`                         | Loaded by async runtimes when referenced.                                                                                                      |
+| `formula-engineering` | `BIN2DEC`, `BITAND`, `COMPLEX`, `IM*`, `ERF`, `CONVERT`, `UNICHAR` | Loaded by async runtimes when referenced. `ROMAN` and `ARABIC` remain eager.                                                                   |
+| `formula-financial`   | `PMT`, `NPV`, `IRR`, `XIRR`, `FV`, `PV`, `RATE`, `COUPDAYS`        | Loaded by async runtimes when referenced; shares the `formula-extras` bundle with lazy engineering.                                            |
+| `validation`          | `isEmail`, `isURL`, `isUUID`, `isPostalCode`, `isStrongPassword`   | Loaded by async runtimes when referenced. Names and option shapes follow validator.js.                                                         |
 
 Use `runNativeJqAsync`, `prepareNativeJqAsync`, or
 `prepareBoxelRuntimeAsync` when expressions may call a lazy helper. The sync
@@ -68,22 +68,22 @@ explicitly registered the lazy library.
 These functions exist in Excel or upstream FormulaJS, but are intentionally
 not supported in BXL.
 
-| Family | Functions | Reason |
-| ------ | --------- | ------ |
-| Database | `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`, `DMAX`, `DMIN`, `DPRODUCT`, `DSTDEV`, `DSTDEVP`, `DSUM`, `DVAR`, `DVARP` | Excel database functions assume a flat cell range with criteria ranges. Use `map`, `select`, and `_BY` helpers over JSON rows instead. |
-| Grid reference | `COLUMN`, `ROW`, `SUBTOTAL`, `AGGREGATE` | These require a spreadsheet cell grid. BXL has no equivalent grid model. `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
-| Matrix | `MMULT`, `MUNIT` | Matrix multiplication and identity are better handled by jq array pipelines or dedicated math libraries. |
-| Regression | `LINEST`, `LOGEST`, `GROWTH`, `TREND` | These return regression arrays / projections whose shapes do not map cleanly to single computed fields. |
+| Family         | Functions                                                                                                         | Reason                                                                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Database       | `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`, `DMAX`, `DMIN`, `DPRODUCT`, `DSTDEV`, `DSTDEVP`, `DSUM`, `DVAR`, `DVARP` | Excel database functions assume a flat cell range with criteria ranges. Use `map`, `select`, and `_BY` helpers over JSON rows instead.                                        |
+| Grid reference | `COLUMN`, `ROW`, `SUBTOTAL`, `AGGREGATE`                                                                          | These require a spreadsheet cell grid. BXL has no equivalent grid model. `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
+| Matrix         | `MMULT`, `MUNIT`                                                                                                  | Matrix multiplication and identity are better handled by jq array pipelines or dedicated math libraries.                                                                      |
+| Regression     | `LINEST`, `LOGEST`, `GROWTH`, `TREND`                                                                             | These return regression arrays / projections whose shapes do not map cleanly to single computed fields.                                                                       |
 
 ## Built-in helper inventory (as of v0.1.0-dev)
 
 ### Presence & emptiness
 
-| Name            | Case      | Source | Purpose                                                   |
-| --------------- | --------- | ------ | --------------------------------------------------------- |
-| `ISBLANK(x)`    | UPPERCASE | Excel  | TRUE if `x` is `null` / `undefined`. **Empty string is NOT blank** — matches Excel's strict behavior. |
+| Name            | Case      | Source | Purpose                                                                                                 |
+| --------------- | --------- | ------ | ------------------------------------------------------------------------------------------------------- |
+| `ISBLANK(x)`    | UPPERCASE | Excel  | TRUE if `x` is `null` / `undefined`. **Empty string is NOT blank** — matches Excel's strict behavior.   |
 | `present(x)`    | lowercase | BXL    | TRUE if `x` is neither `null` nor `""`. Looser than ISBLANK; usually what you want for form validation. |
-| `nonempty(arr)` | lowercase | BXL    | Return `arr` stripped of `null` / `""` items.             |
+| `nonempty(arr)` | lowercase | BXL    | Return `arr` stripped of `null` / `""` items.                                                           |
 
 ```bxl
 ISBLANK(Campaign)            → true only when Campaign is null (Excel-strict)
@@ -93,19 +93,20 @@ nonempty(Donor | split(" "))  → drop empty tokens before counting
 ```
 
 **When to use which:**
+
 - `present(x)` — form fields, user input. An empty string counts as "not filled in."
 - `NOT ISBLANK(x)` — matches Excel semantics. Empty string counts as filled.
 
 ### Conditional logic
 
-| Name               | Case      | Source | Purpose                                      |
-| ------------------ | --------- | ------ | -------------------------------------------- |
-| `IF(p, t, e)`       | UPPERCASE | Excel  | Standard if/then/else.                       |
-| `IF(p, t)`          | UPPERCASE | Excel  | Two-arg: defaults else-branch to `false`.    |
-| `IFS(c1, v1, …)`    | UPPERCASE | Excel  | Chained if/elif/else.                        |
-| `IFERROR(v, e)`     | UPPERCASE | Excel  | Swallow errors with fallback.                |
-| `when(p, q)`        | lowercase | BXL    | `IF(p, q, TRUE)` — implication shortcut.     |
-| `implies(p, q)`     | lowercase | BXL    | Alias of `when`, preferred in logic text.    |
+| Name             | Case      | Source | Purpose                                   |
+| ---------------- | --------- | ------ | ----------------------------------------- |
+| `IF(p, t, e)`    | UPPERCASE | Excel  | Standard if/then/else.                    |
+| `IF(p, t)`       | UPPERCASE | Excel  | Two-arg: defaults else-branch to `false`. |
+| `IFS(c1, v1, …)` | UPPERCASE | Excel  | Chained if/elif/else.                     |
+| `IFERROR(v, e)`  | UPPERCASE | Excel  | Swallow errors with fallback.             |
+| `when(p, q)`     | lowercase | BXL    | `IF(p, q, TRUE)` — implication shortcut.  |
+| `implies(p, q)`  | lowercase | BXL    | Alias of `when`, preferred in logic text. |
 
 ```bxl
 -- Excel canonical form:
@@ -159,39 +160,41 @@ projection directly instead of relying on a column number.
 
 ### Text / string
 
-| Name             | Case      | Source | Purpose                                       |
-| ---------------- | --------- | ------ | --------------------------------------------- |
-| `UPPER(s)`       | UPPERCASE | Excel  | Uppercase.                                    |
-| `LOWER(s)`       | UPPERCASE | Excel  | Lowercase.                                    |
-| `TRIM(s)`        | UPPERCASE | Excel  | Strip leading/trailing/double whitespace.     |
-| `LEN(s)`         | UPPERCASE | Excel  | Length in characters.                         |
-| `CONCAT(…)`      | UPPERCASE | Excel  | String concatenation.                         |
-| `SUBSTITUTE(…)`  | UPPERCASE | Excel  | Replace occurrences.                          |
-| `EXACT(a, b)`     | UPPERCASE | Excel  | Case-sensitive equality.                      |
-| `contains(sub)`  | lowercase | jq     | Input contains `sub` (string or structural).  |
-| `startswith(p)`  | lowercase | jq     | Input starts with `p`.                        |
-| `endswith(s)`    | lowercase | jq     | Input ends with `s`.                          |
-| `split(sep)`     | lowercase | jq     | Split string into array by separator.         |
-| `words(s)`       | lowercase | BXL    | Count whitespace-separated non-empty tokens.  |
+| Name            | Case      | Source | Purpose                                                                                                         |
+| --------------- | --------- | ------ | --------------------------------------------------------------------------------------------------------------- |
+| `UPPER(s)`      | UPPERCASE | Excel  | Uppercase.                                                                                                      |
+| `LOWER(s)`      | UPPERCASE | Excel  | Lowercase.                                                                                                      |
+| `TRIM(s)`       | UPPERCASE | Excel  | Strip leading/trailing/double whitespace.                                                                       |
+| `LEN(s)`        | UPPERCASE | Excel  | Length in characters.                                                                                           |
+| `CONCAT(…)`     | UPPERCASE | Excel  | String concatenation.                                                                                           |
+| `SUBSTITUTE(…)` | UPPERCASE | Excel  | Replace occurrences.                                                                                            |
+| `EXACT(a, b)`   | UPPERCASE | Excel  | Case-sensitive equality.                                                                                        |
+| `contains(sub)` | lowercase | jq     | Input contains `sub` (string or structural).                                                                    |
+| `startswith(p)` | lowercase | jq     | Input starts with `p`.                                                                                          |
+| `endswith(s)`   | lowercase | jq     | Input ends with `s`.                                                                                            |
+| `split(sep)`    | lowercase | jq     | Split string into array by separator.                                                                           |
+| `words(s)`      | lowercase | BXL    | Count whitespace-separated non-empty tokens.                                                                    |
+| `sha256(s)`     | lowercase | BXL    | Lowercase hex SHA-256 of `s`'s UTF-8 bytes; `s` must be a string. Same digest on the server and in the browser. |
 
 ```bxl
 UPPER(Currency) = "USD"        -- Excel idiom
 words(Donor) >= 2              -- BXL, no Excel equivalent
 SKU | startswith("BRAND")      -- lowercase jq pipe form
+sha256(Seed + Id)              -- BXL, a key anyone can recompute
 ```
 
 ### Numbers & math
 
-| Name          | Case      | Source | Purpose                             |
-| ------------- | --------- | ------ | ----------------------------------- |
-| `ROUND(n, d)`  | UPPERCASE | Excel  | Round to d decimal places.          |
-| `ABS(n)`      | UPPERCASE | Excel  | Absolute value.                     |
-| `POWER(b, e)`  | UPPERCASE | Excel  | `b^e`.                              |
-| `SQRT(n)`     | UPPERCASE | Excel  | Square root.                        |
-| `MOD(n, d)`    | UPPERCASE | Excel  | Modulo.                             |
-| `length`      | lowercase | jq     | Array/string/object length.         |
-| `min`, `max`  | lowercase | jq     | Array min/max.                      |
-| `add`         | lowercase | jq     | Sum of array.                       |
+| Name          | Case      | Source | Purpose                     |
+| ------------- | --------- | ------ | --------------------------- |
+| `ROUND(n, d)` | UPPERCASE | Excel  | Round to d decimal places.  |
+| `ABS(n)`      | UPPERCASE | Excel  | Absolute value.             |
+| `POWER(b, e)` | UPPERCASE | Excel  | `b^e`.                      |
+| `SQRT(n)`     | UPPERCASE | Excel  | Square root.                |
+| `MOD(n, d)`   | UPPERCASE | Excel  | Modulo.                     |
+| `length`      | lowercase | jq     | Array/string/object length. |
+| `min`, `max`  | lowercase | jq     | Array min/max.              |
+| `add`         | lowercase | jq     | Sum of array.               |
 
 For the full catalog, see the in-repo registry
 (`src/bxl/registry/index.ts`) plus the lazy manifests in

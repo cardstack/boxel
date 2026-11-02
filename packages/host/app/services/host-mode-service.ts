@@ -6,9 +6,7 @@ import window from 'ember-window-mock';
 
 import {
   isExternalRedirectTarget,
-  normalizeRoutingPath,
   sanitizeHeadHTML,
-  type HostRoutingRule,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -122,47 +120,6 @@ export default class HostModeService extends Service {
     return this.operatorModeStateService.realmURL;
   }
 
-  // CS-10055: routing rules from the realm config card. The realm-server
-  // merges this into the @cardstack/host/config/environment meta tag
-  // per-request when the request hits a realm whose config card has
-  // hostRoutingRules — so the first-render decision in the index route
-  // is synchronous and the field is part of the typed config surface
-  // rather than a window global. The rules arrive host-scoped — every
-  // path, and any realm-relative redirect target, already carries the
-  // realm's mount pathname — so a target can go straight to a location
-  // change without the SPA knowing where the realm is mounted.
-  get hostRoutingMap(): HostRoutingRule[] {
-    let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
-    return Array.isArray(map) ? (map as HostRoutingRule[]) : [];
-  }
-
-  // Returns the routing rule matching `path`, else null. A serve rule
-  // carries the target card `id` to render; a redirect rule carries the
-  // `redirectTo` target the SPA should navigate to instead of rendering
-  // anything (see `redirectTo` below).
-  // `path` is the URL pathname on the host (what Ember's `/*path` catch-all
-  // route delivers — e.g. `<user>/<realm>/whitepaper` for a request to
-  // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
-  // absent so the index path is matchable as either '' or '/'. The
-  // server prefixes each rule's `path` with the realm's mount pathname
-  // before injecting the map, so the two sides line up as direct equality
-  // — except for the trailing-slash variance at the realm root. A `/`
-  // rule's injected key is the realm's mount pathname WITH trailing
-  // slash (e.g. `/progressive-cheetah/`), but Ember's catch-all strips
-  // it (`params.path === 'progressive-cheetah'` for either visit form).
-  // Canonicalize both sides with the shared `normalizeRoutingPath` (strips
-  // trailing slashes, preserves the root `/`) before comparing, so
-  // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
-  // map builder and the editor normalize.
-  resolveRoutedPath(path: string): HostRoutingRule | null {
-    let normalized = path.startsWith('/') ? path : `/${path}`;
-    let canonical = normalizeRoutingPath(normalized);
-    let rule = this.hostRoutingMap.find(
-      (r) => normalizeRoutingPath(r.path) === canonical,
-    );
-    return rule ?? null;
-  }
-
   // SPA-side counterpart of the server's HTTP redirect for a redirect
   // routing rule: a full-page navigation to matched paths gets the 3xx
   // from serve-index, but an in-app transition never leaves the SPA, so
@@ -186,7 +143,87 @@ export default class HostModeService extends Service {
   // pick the origin this navigates to. The two are the same value in
   // host mode anyway; only the simulation affordance separates them,
   // and a simulated session should stay on the page it is running from.
+  // What the site serves at a path the exact routing map doesn't hold: the
+  // route table and the `:name` rules, which only the realm server can
+  // resolve. Undefined when the site routes nothing there, so the caller
+  // treats the path as a card URL, as before.
+  async resolveSitePath(
+    path: string,
+  ): Promise<
+    { card: string } | { redirectTo: string } | { notFound: string } | undefined
+  > {
+    if (!config.realmServerURL || !this.hostModeOrigin) {
+      return undefined;
+    }
+    let endpoint = new URL('_host-route', config.realmServerURL);
+    endpoint.searchParams.set(
+      'url',
+      `${this.hostModeOrigin}/${path.replace(/^\//, '')}`,
+    );
+    try {
+      let response = await fetch(endpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      let answer = (await response.json()) as {
+        kind?: string;
+        card?: string;
+        to?: string;
+        notFound?: string;
+      };
+      if (answer.kind === 'page' && answer.card) {
+        return { card: answer.card };
+      }
+      if (answer.kind === 'redirect' && answer.to) {
+        return { redirectTo: answer.to };
+      }
+      if (answer.kind === 'none' && answer.notFound) {
+        return { notFound: answer.notFound };
+      }
+    } catch (e) {
+      console.warn(`could not resolve the site path ${path}`, e);
+    }
+    return undefined;
+  }
+
+  // Where the realm holding a card serves it, when it routes it: the
+  // realm's URL (whose path is the site's mount) and the card's path there.
+  async sitePathForCard(
+    cardURL: string,
+  ): Promise<{ realm: string; path: string } | undefined> {
+    if (!config.realmServerURL) {
+      return undefined;
+    }
+    let endpoint = new URL('_host-route', config.realmServerURL);
+    endpoint.searchParams.append('card', cardURL);
+    try {
+      let response = await fetch(endpoint, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        return undefined;
+      }
+      let answer = (await response.json()) as {
+        realm?: string;
+        paths?: Record<string, string>;
+      };
+      let path = answer.paths?.[cardURL];
+      return answer.realm && path ? { realm: answer.realm, path } : undefined;
+    } catch (e) {
+      console.warn(`could not find the site path of ${cardURL}`, e);
+      return undefined;
+    }
+  }
+
   redirectTo(target: string, queryParams?: Record<string, unknown>) {
+    window.location.replace(this.redirectURL(target, queryParams).href);
+  }
+
+  // Where a redirect leads: its target, carrying the query a visitor came
+  // with unless the target declares its own, as serve-index answers.
+  redirectURL(target: string, queryParams?: Record<string, unknown>): URL {
     let url = isExternalRedirectTarget(target)
       ? new URL(target)
       : new URL(target, window.location.origin);
@@ -203,7 +240,7 @@ export default class HostModeService extends Service {
         }
       }
     }
-    window.location.replace(url.href);
+    return url;
   }
 
   get currentCardId() {

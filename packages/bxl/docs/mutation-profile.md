@@ -478,9 +478,11 @@ in the prepared AST even after displaying a jq-shaped solidification; ordinary
 At the top level of the mutation profile, `Label = expression;` is an
 assignment statement. Inside predicates, assertions, and value expressions,
 readable `=` retains its established comparison meaning. Readable `+=`, `-=`,
-`*=`, and `/=` normalize to canonical `|=` expressions. They are permitted for
-schema-compatible scalar values, but not as a way to replace collection or
-relationship fields wholesale.
+`*=`, and `/=` keep their operator in canonical text: as in jq, the right-hand
+side is evaluated against the whole document rather than the target, so
+`.total += .n` adds the document's `n`, which `.total |= . + .n` would not.
+They are permitted for schema-compatible scalar values, but not as a way to
+replace collection or relationship fields wholesale.
 
 ### 2. Mutation plan
 

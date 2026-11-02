@@ -23,6 +23,7 @@ import type {
   QueuePublisher,
   Realm,
 } from '@cardstack/runtime-common';
+import type { EmitMessageArgs } from '@cardstack/runtime-common/card-operations';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   indexingWriterLane,
@@ -350,6 +351,44 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         }
       }
     `,
+    // A card whose one operation is an `emit`: a message on the card's live
+    // channel, which writes nothing to the realm.
+    'poll.gts': `
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "@cardstack/base/number";
+      import { operation, bxl } from "@cardstack/base/operations";
+
+      export class Poll extends CardDef {
+        @field question = contains(StringField);
+
+        @operation static select = {
+          base: 'emit',
+          params: { team: StringField, n: NumberField, choice: StringField },
+          input: bxl\`. + { voter: actor() }\`,
+          key: bxl\`params("team") + ":" + TEXT(params("n"); "0")\`,
+        };
+
+        static isolated = class Isolated extends Component<typeof this> {
+          <template><h1><@fields.question /></h1></template>
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template><h1><@fields.question /></h1></template>
+        }
+        static fitted = class Fitted extends Component<typeof this> {
+          <template><h1><@fields.question /></h1></template>
+        }
+      }
+    `,
+    'poll-1.json': {
+      data: {
+        type: 'card',
+        attributes: { question: 'Which one?' },
+        meta: {
+          adoptsFrom: { module: rri(`${testRealmHref}poll`), name: 'Poll' },
+        },
+      },
+    },
     'deploys.json': {
       data: {
         type: 'card',
@@ -391,6 +430,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'report-retired',
         'report-settled',
         'report-position',
+        'report-published',
         // One per group test, for the same reason.
         'report-parallel-1',
         'report-parallel-2',
@@ -1259,6 +1299,140 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'operation-not-allowed',
           'a file carries no transform',
         );
+      });
+    });
+
+    module('emit', function (hooks) {
+      // The realm's live channel is supplied to the operation core, so a test
+      // stands one in there and puts the realm back as it found it.
+      let emitted: EmitMessageArgs[];
+      let onEmit: ((args: EmitMessageArgs) => void) | undefined;
+      let realmsOwn: typeof realm.operationCore.emitMessage;
+      hooks.beforeEach(function () {
+        realmsOwn = realm.operationCore.emitMessage;
+        emitted = [];
+        onEmit = undefined;
+        realm.operationCore.emitMessage = async (args) => {
+          onEmit?.(args);
+          emitted.push(args);
+          return { position: `test:${emitted.length}` };
+        };
+      });
+      hooks.afterEach(function () {
+        realm.operationCore.emitMessage = realmsOwn;
+      });
+
+      test('an emit hands its key and body to the channel, answers its position, and writes nothing', async function (assert) {
+        let before = readFileSync(realmFile('poll-1.json'), 'utf8');
+        let jobsBefore = await indexJobIds();
+
+        let response = await post(
+          envelope(
+            invoke('select', {
+              href: '/poll-1',
+              data: { team: 'red', n: 3, choice: 'b' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body['atomic:results'],
+          [
+            {
+              data: {
+                type: 'card',
+                id: `${testRealmHref}poll-1`,
+                meta: { position: 'test:1' },
+              },
+            },
+          ],
+          'the entry answers with the card and the position its message took',
+        );
+        assert.deepEqual(emitted, [
+          {
+            cardURL: `${testRealmHref}poll-1`,
+            operation: { name: 'select', base: 'emit' },
+            key: 'red:3',
+            body: { team: 'red', n: 3, choice: 'b', voter: TESTER },
+          },
+        ]);
+        assert.strictEqual(
+          readFileSync(realmFile('poll-1.json'), 'utf8'),
+          before,
+          'the card is byte for byte what it was',
+        );
+        assert.deepEqual(
+          await indexJobIds(),
+          jobsBefore,
+          'and no index job was enqueued',
+        );
+      });
+
+      test('an emit in a batch with a write is emitted once the write has committed', async function (assert) {
+        let commentsAtEmit: unknown;
+        onEmit = () => {
+          commentsAtEmit = storedCard('report-published.json').data.attributes
+            ?.comments;
+        };
+
+        let response = await post(
+          envelope(
+            invoke('select', {
+              href: '/poll-1',
+              data: { team: 'blue', n: 1, choice: 'a' },
+            }),
+            invoke('addComment', {
+              href: '/report-published',
+              data: { body: 'Voted.' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [emit, write] = response.body['atomic:results'];
+        assert.strictEqual(emit.data.meta.position, 'test:1');
+        assert.strictEqual(
+          typeof write.data.meta.version,
+          'string',
+          'the write answers as a write does',
+        );
+        assert.deepEqual(
+          commentsAtEmit,
+          [{ body: 'Voted.', postedBy: TESTER }],
+          'the write was on disk when the message was emitted, though the emit came first in the batch',
+        );
+      });
+
+      test('an emit in a read-only batch is refused', async function (assert) {
+        let response = await query(
+          envelope(
+            invoke('select', {
+              href: '/poll-1',
+              data: { team: 'red', n: 1, choice: 'a' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.strictEqual(response.body.errors[0].code, 'wrong-entry-point');
+        assert.deepEqual(emitted, [], 'nothing was emitted');
+      });
+
+      test('an emit on a realm with no channel is refused as not implemented', async function (assert) {
+        realm.operationCore.emitMessage = undefined;
+
+        let response = await post(
+          envelope(
+            invoke('select', {
+              href: '/poll-1',
+              data: { team: 'red', n: 1, choice: 'a' },
+            }),
+          ),
+        );
+
+        assert.strictEqual(response.status, 501, 'HTTP 501 status');
+        assert.strictEqual(response.body.errors[0].code, 'not-implemented');
       });
     });
 

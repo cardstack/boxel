@@ -37,6 +37,12 @@ three digits and MUST be the next unused number after the highest assigned
 one. ADR numbers MUST NOT change or be reused. The slug is a short kebab-case
 form of the title.
 
+An ADR not yet submitted to main has no number. It MUST be a file at
+`docs/adr/<slug>.md`, with a slug of two or three words, and MUST be named
+and cited by that slug (`ADR <slug> §x.y`), in the index's drafts table. It
+takes the next unused number only in the PR that merges it to main, which
+MUST rename the file and every citation of it in the same commit.
+
 The frontmatter MUST contain:
 
 - `status`: `proposed`, `accepted`, `superseded`, or `deprecated`.

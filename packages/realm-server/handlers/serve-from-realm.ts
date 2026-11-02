@@ -32,7 +32,7 @@ export function createServeFromRealm(
     if (ctxt.request.path === '/_boom') {
       throw new Error('boom');
     }
-    let request = await fetchRequestFromContext(ctxt);
+    let request: Request = await fetchRequestFromContext(ctxt);
     // Phase 3 lazy mount: trigger findOrMountRealm before dispatching to
     // virtualNetwork.handle so non-pinned realms (source/published) mount
     // on first request. virtualNetwork.handle returns 404 for any URL
@@ -64,6 +64,13 @@ export function createServeFromRealm(
       ctxt.body = `Realm mount failed: ${err?.message ?? err}`;
       return;
     }
+    if (realm) {
+      let forwarded = await siteOperationsForward(realm, request, requestURL);
+      if (forwarded) {
+        request = forwarded;
+        realm = await findOrMountRealm(new URL(forwarded.url), deps);
+      }
+    }
     let realmResponse = await withSearchConnectionTenant(
       ctxt,
       realm ? [realm.url] : [],
@@ -77,4 +84,48 @@ export function createServeFromRealm(
 
     await setContextResponse(ctxt, realmResponse);
   };
+}
+
+// A published site's visitors can write only through the site's own
+// `_operations`: Boxel Link opens no other write to them, and the published
+// copy holds no live data and names no policy. A site that names the live
+// realm its visitors act on, as `config.siteOperationsRealm` in its
+// realm.json, has that route sent on to the live realm's `_operations`, on the
+// same origin and without credentials, so the live realm's own ACL and policy
+// judge each visitor exactly as they would a direct request from someone not
+// signed in. A site that names no realm is untouched.
+async function siteOperationsForward(
+  realm: Realm,
+  request: Request,
+  requestURL: URL,
+): Promise<Request | undefined> {
+  if (request.method !== 'POST') {
+    return undefined;
+  }
+  if (requestURL.pathname !== `${new URL(realm.url).pathname}_operations`) {
+    return undefined;
+  }
+  let target = (await realm.getRealmConfig()).siteOperationsRealm;
+  if (typeof target !== 'string') {
+    return undefined;
+  }
+  let targetPath: string;
+  try {
+    targetPath = new URL(target).pathname.replace(/\/?$/, '/');
+  } catch {
+    log.warn(`${realm.url}: siteOperationsRealm "${target}" is not a URL`);
+    return undefined;
+  }
+  let forwardURL = new URL(`${targetPath}_operations`, requestURL.origin);
+  if (forwardURL.href === requestURL.href) {
+    return undefined;
+  }
+  let headers = new Headers(request.headers);
+  headers.delete('authorization');
+  headers.delete('cookie');
+  return new Request(forwardURL.href, {
+    method: 'POST',
+    headers,
+    body: await request.text(),
+  });
 }

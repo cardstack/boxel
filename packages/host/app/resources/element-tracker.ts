@@ -6,7 +6,12 @@ import type { SafeString } from '@ember/template';
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { CardDef, Format, FieldType } from '@cardstack/base/card-api';
+import type {
+  CardDef,
+  CardInteractions,
+  Format,
+  FieldType,
+} from '@cardstack/base/card-api';
 
 import type { ArgsFor } from 'ember-modifier';
 
@@ -16,6 +21,9 @@ interface Meta {
   format: Format | 'data';
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
+  // Who owns a click on the card (see `CardInteractions`). A card nobody
+  // owns ('none') is not tracked at all.
+  interactions?: CardInteractions;
 }
 
 export interface RenderedCardForOverlayActions {
@@ -24,6 +32,7 @@ export interface RenderedCardForOverlayActions {
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
   format: Format | 'data';
+  interactions?: CardInteractions;
   overlayZIndexStyle?: SafeString;
 }
 
@@ -57,6 +66,10 @@ export default class ElementTracker {
           );
         }
 
+        if (meta.interactions === 'none') {
+          this.teardown();
+          return;
+        }
         this.element = element;
         this.meta = { ...meta };
 
@@ -176,6 +189,7 @@ export default class ElementTracker {
       fieldType: entry.meta.fieldType,
       fieldName: entry.meta.fieldName,
       format: entry.meta.format,
+      interactions: entry.meta.interactions,
     }));
   }
 }

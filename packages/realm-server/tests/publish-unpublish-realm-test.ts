@@ -1212,6 +1212,62 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a republish asks the pages open on the published realm to reload, once it is indexed', async function (assert) {
+        let publish = () =>
+          request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: sourceRealmUrlString,
+                publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+              }),
+            );
+        let first = await publish();
+        assert.strictEqual(first.status, 202, first.text);
+        let publishedRealmURL = new URL(
+          first.body.data.attributes.publishedRealmURL,
+        );
+        let feed = () =>
+          request
+            .get(`${publishedRealmURL.pathname}_live`)
+            .set('Host', publishedRealmURL.host)
+            .set('Accept', 'application/json');
+        let refreshes = async () =>
+          ((await feed()).body?.events ?? []).filter(
+            (event: { kind: string }) => event.kind === 'refresh',
+          ).length;
+        await waitUntil(async () => (await feed()).status === 200, {
+          timeout: 120_000,
+          interval: 1000,
+          timeoutMessage: 'the published realm never served its feed',
+        });
+        assert.strictEqual(
+          await refreshes(),
+          0,
+          'a first publish has no pages to reload',
+        );
+
+        let second = await publish();
+        assert.strictEqual(second.status, 202, second.text);
+        assert.true(
+          await waitUntil(async () => (await refreshes()) === 1, {
+            timeout: 120_000,
+            interval: 1000,
+            timeoutMessage: 'the republish never asked pages to reload',
+          }),
+          'the republish asks once',
+        );
+      });
+
       test('republishing removes files that were deleted from the source realm', async function (assert) {
         let sourceRealmURL = new URL(sourceRealmUrlString);
         let sourceRealmFsPath = join(

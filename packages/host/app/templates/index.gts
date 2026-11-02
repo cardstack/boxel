@@ -28,6 +28,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
+import SitePageOutlet from '@cardstack/host/components/host-mode/site-page-outlet';
 import OperatorModeContainer from '@cardstack/host/components/operator-mode/container';
 import CardContextSearchResults from '@cardstack/host/components/search/card-context-search-results';
 import SecureWindowFallback from '@cardstack/host/components/secure-window-fallback';
@@ -36,12 +37,17 @@ import config from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
 
+import { liveCardContext } from '@cardstack/host/lib/live-card-context';
+import { startPrerenderHandoff } from '@cardstack/host/lib/prerender-handoff';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CapabilitiesService from '@cardstack/host/services/capabilities';
+import type EventFeedService from '@cardstack/host/services/event-feed';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
+import type HostNavigationService from '@cardstack/host/services/host-navigation';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
@@ -67,10 +73,13 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
+  @service declare private hostNavigation: HostNavigationService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
+  @service declare private eventFeed: EventFeedService;
+  @service declare private realm: RealmService;
 
   @provide(GetCardContextName)
   private get getCard(): GetCardType {
@@ -158,15 +167,27 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     return this.card?.cardTitle ?? '';
   }
 
-  private viewCard: ViewCardFn = (cardOrURL) => {
+  // A card opened from a published site is a page navigation to its address,
+  // unless it asks to open over the page.
+  private viewCard: ViewCardFn = (cardOrURL, format, opts) => {
     let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
 
-    let normalizedId = cardId.replace(/\.json$/, '');
-    this.hostModeStateService.pushCard(normalizedId);
+    this.hostNavigation.navigateTo(
+      { card: cardId },
+      { format, overlay: opts?.overlay },
+    );
   };
+
+  private installHostNavigation = modifier(() => this.hostNavigation.install());
+
+  // Following a card's channel and taking refresh requests (ADR event-feed).
+  @cached
+  private get live() {
+    return liveCardContext(this.eventFeed, this.realm);
+  }
 
   @action
   removeCardFromStack(cardId: string) {
@@ -181,6 +202,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      ...this.live,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,
@@ -190,6 +212,13 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       submode: this.hostModeService.isActive
         ? 'host'
         : this.operatorModeStateService.state?.submode,
+      sitePath: this.hostModeService.isActive
+        ? this.hostNavigation.sitePath
+        : undefined,
+      sitePage:
+        this.hostModeService.isActive && this.hostNavigation.frame
+          ? SitePageOutlet
+          : undefined,
     };
   }
 
@@ -244,7 +273,8 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
-  // TODO: remove in CS-9977, with rehydration
+  // Operator mode never shows the prerender; host mode hands it over instead
+  // (handOffPrerender below).
   removeIsolatedMarkup = modifier(() => {
     if (typeof document === 'undefined') {
       return;
@@ -291,6 +321,15 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     }
   });
 
+  // Host mode keeps the prerendered page up until the live card can take
+  // over without a blank frame or a scroll jump (see prerender-handoff).
+  handOffPrerender = modifier((element: HTMLElement) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    return startPrerenderHandoff(element);
+  });
+
   <template>
     {{#if this.hostModeService.isActive}}
       {{#unless this.hostModeService.headTemplateContainsTitle}}
@@ -298,11 +337,19 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       {{/unless}}
 
       <HostModeContent
-        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @primaryCardId={{if
+          this.hostNavigation.frame
+          this.hostNavigation.frame
+          this.hostModeStateService.primaryCard
+        }}
         @stackItemCardIds={{this.hostModeStateService.stackItems}}
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
-        {{this.removeIsolatedMarkup}}
+        @hrefFor={{this.hostNavigation.hrefFor}}
+        @navigateTo={{this.hostNavigation.navigateTo}}
+        @prefetch={{this.hostNavigation.prefetch}}
+        {{this.handOffPrerender}}
+        {{this.installHostNavigation}}
       />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}

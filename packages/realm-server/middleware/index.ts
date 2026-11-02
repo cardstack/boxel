@@ -587,23 +587,36 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
   return computedURL;
 }
 
+// The request's body, read once and kept on the context, so every reader
+// downstream sees the same bytes (and a middleware may replace them with
+// `setRequestBody`). Undefined for a method that carries none.
+export async function readRequestBody(
+  ctxt: Koa.Context,
+): Promise<string | Buffer | undefined> {
+  if (!['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
+    return undefined;
+  }
+  let state = ctxt.state as Record<string, unknown>;
+  if (REQUEST_BODY_STATE in state) {
+    return state[REQUEST_BODY_STATE] as string | Buffer;
+  }
+  let isBinary =
+    ctxt.req.headers['content-type'] === 'application/octet-stream';
+  let reqBody = isBinary
+    ? await nodeStreamToBuffer(ctxt.req)
+    : await nodeStreamToText(ctxt.req);
+  state[REQUEST_BODY_STATE] = reqBody;
+  return reqBody;
+}
+
+export function setRequestBody(ctxt: Koa.Context, body: string | Buffer) {
+  (ctxt.state as Record<string, unknown>)[REQUEST_BODY_STATE] = body;
+}
+
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
-  let reqBody: string | Buffer | undefined;
-  if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
-    let state = ctxt.state as Record<string, unknown>;
-    if (REQUEST_BODY_STATE in state) {
-      reqBody = state[REQUEST_BODY_STATE] as string | Buffer;
-    } else {
-      let isBinary =
-        ctxt.req.headers['content-type'] === 'application/octet-stream';
-      reqBody = isBinary
-        ? await nodeStreamToBuffer(ctxt.req)
-        : await nodeStreamToText(ctxt.req);
-      state[REQUEST_BODY_STATE] = reqBody;
-    }
-  }
+  let reqBody = await readRequestBody(ctxt);
 
   let url = fullRequestURL(ctxt).href;
   // HTTP/2's compat layer presents pseudo-headers (`:method`, `:scheme`,

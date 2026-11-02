@@ -30,6 +30,8 @@ import {
   Deferred,
   SupportedMimeType,
   internalKeyFor,
+  normalizeRoutingPath,
+  resolveRRIReference,
   realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
 
@@ -767,6 +769,51 @@ export default class OperatorModeStateService extends Service {
     // reset stack when primary card is changed
     this._state.hostModeStack.splice(0, this._state.hostModeStack.length);
     this.schedulePersist();
+  }
+
+  // The card host mode opens for `cardId`. A realm's index card is its
+  // interact home; the card its config routes `/` to is its host home, so
+  // that card stands in for the index. Any other card opens as itself.
+  async hostHomeFor(cardId: string): Promise<string> {
+    let realmURL = this.getRealmURLFromItemId(cardId);
+    if (
+      !isRealmIndexCardId(
+        rri(cardId),
+        ri(realmURL),
+        this.network.virtualNetwork,
+      )
+    ) {
+      return cardId;
+    }
+    try {
+      let config = await this.store.get(`${realmURL}realm`);
+      if (!isCardInstance(config)) {
+        return cardId;
+      }
+      let rules =
+        (config as unknown as { hostRoutingRules?: (CardDef | null)[] })
+          .hostRoutingRules ?? [];
+      let home = rules.find(
+        (rule) =>
+          rule &&
+          normalizeRoutingPath(
+            ((rule as { path?: string }).path ?? '').trim() || '/',
+          ) === '/',
+      );
+      if (!home) {
+        return cardId;
+      }
+      // The link's reference is there whether or not the target is loaded.
+      let api = await this.cardService.getAPI();
+      let reference = api.getRelationshipMembershipState(home, 'instance')
+        .membership?.[0]?.reference;
+      return reference
+        ? resolveRRIReference(reference, rri(`${realmURL}realm.json`))
+        : cardId;
+    } catch (error) {
+      console.warn(`Could not read the host home of ${realmURL}`, error);
+      return cardId;
+    }
   }
 
   get hostModePrimaryCard(): string | null {

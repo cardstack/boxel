@@ -47,6 +47,7 @@ import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
+import { siteBoundary } from './lib/site-boundary.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   appOrigin,
@@ -959,7 +960,7 @@ export class RealmServer {
           // here the preflight fails and no browser client can invoke a card
           // operation cross-origin at all.
           allowHeaders:
-            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action',
+            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, X-Boxel-Site',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -977,8 +978,10 @@ export class RealmServer {
           // `_federated-search` response (miss/join/hit); expose it so the
           // outcome is legible to a browser caller (host DevTools, client
           // telemetry), not just to server-side supertest/curl.
+          // Boxel-Feed-Position is what a page opens the event feed from
+          // (ADR event-feed §1.1).
           exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache',
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, Boxel-Feed-Position',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
@@ -1013,6 +1016,16 @@ export class RealmServer {
       })
       .use(convertAcceptHeaderQueryParam)
       .use(methodOverrideSupport)
+      // Everything a published site's visitor receives passes through here
+      // on its way out, and everything they send on its way in.
+      .use(
+        siteBoundary({
+          realms: this.realms,
+          reconciler: this.reconciler,
+          dbAdapter: this.dbAdapter,
+          secret: this.realmSecretSeed,
+        }),
+      )
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,

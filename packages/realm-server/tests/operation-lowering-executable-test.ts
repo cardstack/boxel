@@ -818,4 +818,364 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  // A emit sends its payload as a message on the card's live channel and
+  // writes nothing, so what it lowers to is a payload schema, an optional
+  // `input`, and an optional compaction key — never a program over the card.
+  module('emit declarations', function () {
+    test('a emit lowers to its params and its key, and no program', async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          params: {
+            team: StringFieldClass,
+            n: StringFieldClass,
+            choice: StringFieldClass,
+          },
+          key: { $bxl: 'params("team") + ":" + TEXT(params("n"); "0")' },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      let select = operations.select;
+      assert.strictEqual(select.base, 'emit');
+      assert.notOk(select.invalid, 'and is runnable');
+      assert.deepEqual(
+        Object.keys(select.params ?? {}),
+        ['team', 'n', 'choice'],
+        'the payload schema is stored as declared',
+      );
+      assert.strictEqual(
+        select.key?.syntax,
+        'solidified',
+        `the key is stored canonical: ${select.key?.source}`,
+      );
+      assert.strictEqual(
+        select.program,
+        undefined,
+        'there is no program, since a emit edits no document',
+      );
+      assert.notOk(select.readsActor, 'a key over params reads no actor');
+    });
+
+    test("a emit's key that reads the caller marks the operation as reading one", async function (assert) {
+      let { operations, issues } = await lower({
+        vote: {
+          base: 'emit',
+          params: { choice: StringFieldClass },
+          key: { $bxl: 'actor()' },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      assert.true(
+        operations.vote.readsActor,
+        'so a request that authenticated nobody is refused before it emits',
+      );
+    });
+
+    test("a emit's key reading an undeclared param is recorded where it is written", async function (assert) {
+      let { issues } = await lower({
+        vote: {
+          base: 'emit',
+          params: { choice: StringFieldClass },
+          key: { $bxl: 'params("team")' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['key: undeclared-param'],
+      );
+    });
+
+    test('a emit carrying a transformations program is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          params: { choice: StringFieldClass },
+          transformations: { $bxl: '.status = "selected";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['transformations: unrunnable-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        'and stores no program',
+      );
+    });
+
+    test("a emit carrying a transform's clauses or an output is refused", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          set: { status: 'selected' },
+          output: { $bxl: '.' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`).sort(),
+        ['output: unrunnable-program', 'set: unrunnable-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        'and the clause assembles no program',
+      );
+    });
+
+    test('a emit under the name of a base operation is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        update: { base: 'emit', params: { choice: StringFieldClass } },
+        emit: { base: 'emit', params: { choice: StringFieldClass } },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.operation}: ${issue.code}`),
+        ['update: emit-under-base-name'],
+        'only the one that takes another base operation is refused',
+      );
+      assert.true(operations.update.invalid, 'it is stored invalid');
+      assert.strictEqual(
+        operations.update.base,
+        'emit',
+        'on the emit base, so its name never falls back to the built-in update',
+      );
+      assert.notOk(
+        operations.emit.invalid,
+        'a emit named after its own base lowers as any other',
+      );
+    });
+
+    test('a emit on a file is a base its def type does not carry', async function (assert) {
+      let { operations } = await lowerOperationDeclarations(
+        { record: { base: 'emit' } } as never,
+        {
+          definition: { ...Report, type: 'file-def' },
+          lookupDefinition,
+          identifyCard: () => undefined,
+        },
+      );
+      assert.deepEqual(
+        operations.record.issues?.map((issue) => issue.code),
+        ['base-not-carried'],
+      );
+    });
+
+    test("an emit's assert lowers to a guard the realm runs before the message goes", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          params: { choice: StringFieldClass },
+          assert: {
+            that: { $bxl: 'now <= (.lockAt | fromdateiso8601)' },
+            message: 'Time ran out.',
+          },
+        },
+      });
+      assert.deepEqual(issues, [], 'the declaration lowers with no findings');
+      assert.strictEqual(
+        operations.select.guard?.message,
+        'Time ran out.',
+        'the message travels with the guard',
+      );
+      assert.strictEqual(
+        operations.select.guard?.program.syntax,
+        'solidified',
+        `the guard is stored canonical: ${operations.select.guard?.program.source}`,
+      );
+      assert.false(
+        operations.select.deterministic,
+        'a guard reading the clock is not deterministic',
+      );
+      assert.strictEqual(
+        operations.select.program,
+        undefined,
+        "and it assembles no program, as a transform's assert would",
+      );
+    });
+
+    test("an emit's assert that is not an expression is refused", async function (assert) {
+      let { operations, issues } = await lower({
+        select: {
+          base: 'emit',
+          assert: { unique: 'tags', by: params('choice') },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['assert: invalid-program'],
+      );
+      assert.true(operations.select.invalid, 'the operation is invalid');
+    });
+  });
+
+  // A transform's `collect` binds the latest messages an emit on the same type
+  // published on the card's channel to a param the program reads.
+  module('collected params', function () {
+    const SELECT = {
+      base: 'emit',
+      params: { team: StringFieldClass, choice: StringFieldClass },
+      key: { $bxl: 'params("team")' },
+    };
+    // The form the pub quiz's desk locks a question with. `instance()` names
+    // the card's own values inside the iteration, where `.` is each message.
+    const LOCK_PROGRAM =
+      '.tags += [params("picks")[] | select(.n == instance("status")) | .choice];';
+
+    test('a transform that collects an emit lowers, reading the collected param in its program', async function (assert) {
+      let { operations, issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'select' },
+          transformations: { $bxl: LOCK_PROGRAM },
+        },
+      });
+      assert.deepEqual(issues, [], 'nothing is recorded');
+      assert.deepEqual(operations.lockQuestion.collect, { picks: 'select' });
+      assert.ok(operations.lockQuestion.program, 'the program is stored');
+      assert.false(
+        operations.lockQuestion.deterministic,
+        "a program reading the channel is never run on the client's optimistic path",
+      );
+    });
+
+    test('a collect naming something other than an emit on the type is refused', async function (assert) {
+      let { operations, issues } = await lower({
+        escalate: { base: 'transform', set: { status: 'escalated' } },
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'escalate', votes: 'missing' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['collect.picks: invalid-collect', 'collect.votes: invalid-collect'],
+      );
+      assert.true(operations.lockQuestion.invalid, 'the operation is invalid');
+      assert.strictEqual(
+        operations.lockQuestion.collect,
+        undefined,
+        'and stores nothing to collect',
+      );
+    });
+
+    test('a collected param the schema also declares is refused', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          params: { picks: StringFieldClass },
+          collect: { picks: 'select' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['collect.picks: invalid-collect'],
+      );
+    });
+
+    test('a collect on a base other than transform is refused', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        tally: {
+          base: 'emit',
+          collect: { picks: 'select' },
+        },
+      });
+      assert.deepEqual(
+        issues.map(
+          (issue) => `${issue.operation} ${issue.path}: ${issue.code}`,
+        ),
+        ['tally collect: invalid-collect'],
+      );
+    });
+
+    test('an input reading a collected param is recorded, since input runs before the channel is read', async function (assert) {
+      let { issues } = await lower({
+        select: SELECT,
+        lockQuestion: {
+          base: 'transform',
+          collect: { picks: 'select' },
+          input: { $bxl: '. + { count: (params("picks") | length) }' },
+          transformations: { $bxl: '.status = "locked";' },
+        },
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        ['input: undeclared-param'],
+      );
+    });
+  });
+
+  module('nested links in a create fill', function () {
+    // A note whose contained `info` holds a link, as a card's `cardInfo`
+    // holds its theme.
+    const Info = definition('Info', {
+      label: scalar(),
+      theme: compound('Author', { type: 'linksTo' }),
+    });
+    const Note = definition('Note', {
+      body: scalar(),
+      info: compound('Info'),
+      owner: compound('Author', { type: 'linksTo' }),
+      comments: compound('Comment', { type: 'containsMany' }),
+    });
+    const NoteClass = function Note() {} as unknown as never;
+    const notes = new Map<string, Definition>([
+      ...graph,
+      [refKey(ref('Info')), Info],
+      [refKey(ref('Note')), Note],
+    ]);
+
+    async function lowerCreate(fill: Record<string, unknown>) {
+      return await lowerOperationDeclarations(
+        { mint: { base: 'create', of: NoteClass, fill } } as never,
+        {
+          definition: Report,
+          lookupDefinition: async (codeRef: CodeRef) =>
+            notes.get(refKey(codeRef)),
+          identifyCard: (def) =>
+            (def as unknown) === NoteClass ? ref('Note') : undefined,
+        },
+      );
+    }
+
+    test('a dotted key names a link inside a contained value', async function (assert) {
+      let { operations, issues } = await lowerCreate({
+        body: 'hello',
+        'info.theme': card('../Author/house'),
+      });
+      assert.deepEqual(issues, [], 'the nested link lowers cleanly');
+      assert.deepEqual(
+        operations.mint.fill?.['info.theme'],
+        { $ref: 'card', value: '../Author/house' },
+        'the marker is carried to invocation as written',
+      );
+    });
+
+    test('a dotted key names nothing but a nested link', async function (assert) {
+      let { issues } = await lowerCreate({
+        'info.label': 'a value',
+        'owner.name': 'through a link',
+        'comments.author': card('../Author/house'),
+        'info.missing': card('../Author/house'),
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        [
+          'fill.info.label: unknown-field',
+          'fill.owner.name: unknown-field',
+          'fill.comments.author: unknown-field',
+          'fill.info.missing: unknown-field',
+        ],
+        'a contained value, a path through a link or a collection, and a ' +
+          'missing field are each refused',
+      );
+    });
+  });
 });

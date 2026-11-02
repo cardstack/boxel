@@ -718,6 +718,11 @@ function shouldInsertSpace(
   ) {
     return true;
   }
+  // `.a? // .b` must keep its space: glued, `?//` is read as the
+  // destructuring-alternative operator instead of an optional then `//`.
+  if (previous.value === '?' && current.value.startsWith('//')) {
+    return true;
+  }
 
   if (['.', '[', ']', ')', ':'].includes(current.value)) {
     return false;
@@ -780,6 +785,11 @@ function shouldInsertReadableSpace(
     (previous.type === 'op' || previous.type === 'punc') &&
     (previous.value === ',' || previous.value === ';')
   ) {
+    return true;
+  }
+  // `.a? // .b` must keep its space: glued, `?//` is read as the
+  // destructuring-alternative operator instead of an optional then `//`.
+  if (previous.value === '?' && current.value.startsWith('//')) {
     return true;
   }
 

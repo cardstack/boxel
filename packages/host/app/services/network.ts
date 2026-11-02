@@ -15,6 +15,7 @@ import config from '@cardstack/host/config/environment';
 
 import { shimBundledBase } from '../lib/bundled-base';
 import { shimExternals } from '../lib/externals';
+import { notingFeedPositions } from '../lib/feed-positions';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 
@@ -124,14 +125,18 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
-      // Native (un-stubbed) timer so the fetch retry path's header-timeout
-      // abort and retry backoff still fire during prerender, where
-      // render-timer-stub disables the global setTimeout — otherwise a stalled
-      // fetch there can neither abort nor retry and hangs the render. Outside
-      // prerender this is the global setTimeout, so behavior is unchanged.
-      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
-    });
+    let virtualNetwork = new VirtualNetwork(
+      notingFeedPositions(siteVisitFetch(globalThis.fetch)),
+      {
+        // Native (un-stubbed) timer so the fetch retry path's header-timeout
+        // abort and retry backoff still fire during prerender, where
+        // render-timer-stub disables the global setTimeout — otherwise a stalled
+        // fetch there can neither abort nor retry and hangs the render. Outside
+        // prerender this is the global setTimeout, so behavior is unchanged.
+        scheduleFetchTimer: (callback, ms) =>
+          scheduleNativeTimeout(callback, ms),
+      },
+    );
     this.configureVirtualNetwork(virtualNetwork);
     return virtualNetwork;
   }
@@ -153,6 +158,33 @@ declare module '@ember/service' {
   interface Registry {
     network: NetworkService;
   }
+}
+
+// On a published site, each request to the realm server names the site the
+// visit is to, so the server answers as that site: the realms it draws on are
+// served under the site's own address (see the realm server's
+// site-boundary). The page's config names the site only when the realm server
+// served it as one; the prerenderer never gets that config, so nothing it
+// indexes is aliased.
+function siteVisitFetch(
+  fetch: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  let site = (config as { hostSite?: unknown }).hostSite;
+  if (typeof site !== 'string' || typeof window === 'undefined') {
+    return fetch;
+  }
+  let origins = new Set([window.location.origin]);
+  if (config.realmServerURL) {
+    origins.add(new URL(config.realmServerURL).origin);
+  }
+  return (input, init) => {
+    let request = new Request(input, init);
+    if (!origins.has(new URL(request.url).origin)) {
+      return fetch(request);
+    }
+    request.headers.set('X-Boxel-Site', site);
+    return fetch(request);
+  };
 }
 
 function withTrailingSlash(url: string): string {

@@ -4741,6 +4741,52 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('a reload an event names a revision for reads the card at that revision', async function (assert) {
+    // A public feed event names the revision a visitor re-reads a card at, so
+    // every visitor asks for the same URL and a shared cache can answer it
+    // (ADR event-feed §1.4).
+    let url = `${testRealmURL}Person/revisioned`;
+    let events = interceptRealmEvents();
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON;
+    let readURLs: string[] = [];
+    try {
+      await writePerson('Person/revisioned.json', 'Revisioned');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+
+      await writePerson('Person/revisioned.json', 'Revisioned Again');
+      let event = await events.nextEventFor(url);
+      let { versions: _versions, generation: _generation, ...relayed } = event;
+      let bound = originalFetchJSON.bind(cardService);
+      cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+        if (String(fetchUrl).includes('Person/revisioned')) {
+          readURLs.push(String(fetchUrl));
+        }
+        return bound(fetchUrl, args);
+      };
+      events.deliver({
+        ...relayed,
+        revisions: { [url]: 'rev-1' },
+      } as RealmEventContent);
+      await settled();
+      assert.deepEqual(
+        readURLs,
+        [`${url}?rev=rev-1`],
+        'the reload asks for the card at the revision',
+      );
+      assert.strictEqual(
+        (storeService.peek(url) as any).name,
+        'Revisioned Again',
+        'and the store holds what it read',
+      );
+    } finally {
+      cardService.fetchJSON = originalFetchJSON;
+      events.restore();
+    }
+  });
+
   test('a duplicate arriving while the first reload is still in flight is coalesced into it', async function (assert) {
     // The rules read the instance, and an instance does not reflect a reload
     // until that reload returns — so a second delivery inside that window is

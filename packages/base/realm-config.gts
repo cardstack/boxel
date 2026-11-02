@@ -9,6 +9,7 @@ import {
   getRelationshipMembershipState,
   instanceRealmId,
   linksTo,
+  queryableValue,
   realmURL,
   type CardContext,
   type CardCrudFunctions,
@@ -16,6 +17,7 @@ import {
 import type { RealmEventContent } from './matrix-event';
 import BooleanField from './boolean';
 import NumberField from './number';
+import CodeRefField from './code-ref';
 import StringField from './string';
 import { JsonField } from './json-field';
 import {
@@ -31,6 +33,7 @@ import {
   PermissionsContextName,
   cardDefComputedFields,
   chooseCard,
+  compileSegmentExpression,
   DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
   findRedirectCycles,
@@ -38,6 +41,7 @@ import {
   getFieldIcon,
   isCardInstance,
   isLocalId,
+  primitive,
   RealmPaths,
   REDIRECT_STATUS_CODES,
   realmPolicyRef,
@@ -88,6 +92,7 @@ import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
 import RealmApiKeys from './realm-api-keys';
+import SiteRoutesPanel from './site-routes-panel';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -411,6 +416,430 @@ export class RoutingRuleField extends FieldDef {
 
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;
+}
+
+// A site's settings, held in realm.json so the server reads them with the
+// routing rules (ADR site-routing §1.1). These are the contract host mode reads. A
+// site realm gives them a richer editor by subclassing these fields in a
+// RealmConfig subclass that its realm.json adopts; host mode reads only the
+// fields declared here, and validates them on every read
+// (`readSiteSettings` in runtime-common).
+
+// The refusal for an expression the `route` profile won't run, or undefined
+// when it compiles. Empty text is not a refusal: the row is still being filled.
+function segmentExpressionError(expression: string): string | undefined {
+  if (!expression.trim()) {
+    return undefined;
+  }
+  let compiled = compileSegmentExpression(expression);
+  return compiled.ok ? undefined : compiled.error;
+}
+
+// One row of the segments editor while the author is in it. As with the
+// realm settings editor, the map is rebuilt from the rows each time it is
+// written, so renaming a segment never carries a value across to another.
+interface SegmentRow {
+  id: number;
+  name: string;
+  expression: string;
+}
+
+class SiteSegmentParamsEdit extends Component<typeof SiteSegmentParamsField> {
+  @tracked private rows: SegmentRow[] = Object.entries(
+    this.args.model ?? {},
+  ).map(([name, expression], index) => ({
+    id: index,
+    name,
+    expression: typeof expression === 'string' ? expression : '',
+  }));
+
+  private nextId = this.rows.length;
+
+  // A segment name is written once the author finishes it, not a character
+  // at a time, so `:ye` is never briefly a segment of the site.
+  private namePending = false;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      if (this.namePending) {
+        this.commit();
+      }
+    });
+  }
+
+  private get displayRows() {
+    return this.rows.map((row, index) => ({
+      ...row,
+      index,
+      error: segmentExpressionError(row.expression),
+    }));
+  }
+
+  @action private setName(index: number, name: string) {
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, name } : row,
+    );
+    this.namePending = true;
+  }
+
+  @action private commitNames() {
+    if (this.namePending) {
+      this.commit();
+    }
+  }
+
+  @action private setExpression(index: number, expression: string) {
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, expression } : row,
+    );
+    this.commit();
+  }
+
+  @action private add() {
+    this.rows = [...this.rows, { id: this.nextId++, name: '', expression: '' }];
+  }
+
+  @action private remove(index: number) {
+    this.rows = this.rows.filter((_row, at) => at !== index);
+    this.commit();
+  }
+
+  // A row with no name is not a segment yet, and is left out. A leading colon
+  // is dropped, since authors copy the name from the path.
+  private commit() {
+    this.namePending = false;
+    let params: Record<string, string> = Object.create(null);
+    for (let row of this.rows) {
+      let name = row.name.trim().replace(/^:/, '');
+      if (name) {
+        params[name] = row.expression;
+      }
+    }
+    this.args.set(Object.keys(params).length ? params : undefined);
+  }
+
+  <template>
+    <div class='segment-params-edit' data-test-segment-params-edit>
+      {{#if this.displayRows.length}}
+        <table class='segments'>
+          <thead>
+            <tr>
+              <th scope='col'>Segment</th>
+              <th scope='col'>BXL over the card</th>
+              {{#if @canEdit}}
+                <th scope='col'><span class='visually-hidden'>Remove</span></th>
+              {{/if}}
+            </tr>
+          </thead>
+          <tbody>
+            {{#each this.displayRows key='id' as |row|}}
+              <tr data-test-segment-param-row={{row.index}}>
+                <td class='name-cell'>
+                  <BoxelInput
+                    @value={{row.name}}
+                    @onInput={{fn this.setName row.index}}
+                    @onChange={{this.commitNames}}
+                    @disabled={{not @canEdit}}
+                    @placeholder='slug'
+                    data-test-segment-param-name={{row.index}}
+                  />
+                </td>
+                <td class='expression-cell'>
+                  <BoxelInput
+                    @value={{row.expression}}
+                    @onInput={{fn this.setExpression row.index}}
+                    @disabled={{not @canEdit}}
+                    @placeholder='.title | slugify'
+                    data-test-segment-param-expression={{row.index}}
+                  />
+                  {{#if row.error}}
+                    <span
+                      class='error-note'
+                      data-test-segment-param-error={{row.index}}
+                    >{{row.error}}</span>
+                  {{/if}}
+                </td>
+                {{#if @canEdit}}
+                  <td class='remove-cell'>
+                    <IconButton
+                      @icon={{IconTrash}}
+                      @width='18px'
+                      @height='18px'
+                      {{on 'click' (fn this.remove row.index)}}
+                      aria-label='Remove segment'
+                      data-test-remove-segment-param={{row.index}}
+                    />
+                  </td>
+                {{/if}}
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class='empty' data-test-segment-params-empty>
+          Every :name segment reads the card's field of that name.
+        </p>
+      {{/if}}
+      {{#if @canEdit}}
+        <Button
+          @kind='secondary'
+          @size='small'
+          {{on 'click' this.add}}
+          data-test-add-segment-param
+        >
+          <IconPlus width='12px' height='12px' role='presentation' />
+          Derive a segment
+        </Button>
+      {{/if}}
+    </div>
+    <style scoped>
+      .segment-params-edit {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
+      }
+      .segments {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        padding-bottom: var(--boxel-sp-xxs);
+      }
+      td {
+        vertical-align: top;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs) 0;
+      }
+      .name-cell {
+        width: 28%;
+      }
+      .remove-cell {
+        width: var(--boxel-icon-med);
+        padding-right: 0;
+      }
+      .segments :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
+        min-width: 0;
+      }
+      .error-note {
+        display: block;
+        padding-top: var(--boxel-sp-5xs);
+        padding-left: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--destructive, var(--boxel-error-100));
+        overflow-wrap: break-word;
+      }
+      .empty {
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        color: var(--muted-foreground);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 0.0625rem;
+        height: 0.0625rem;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
+class SiteSegmentParamsEmbedded extends Component<
+  typeof SiteSegmentParamsField
+> {
+  private get entries() {
+    return Object.entries(this.args.model ?? {}).map(([name, expression]) => ({
+      name,
+      expression: typeof expression === 'string' ? expression : '',
+    }));
+  }
+
+  <template>
+    {{#if this.entries.length}}
+      <dl class='segments' data-test-segment-params>
+        {{#each this.entries key='name' as |entry|}}
+          <div class='segment' data-test-segment-param={{entry.name}}>
+            <dt>:{{entry.name}}</dt>
+            <dd>{{entry.expression}}</dd>
+          </div>
+        {{/each}}
+      </dl>
+    {{else}}
+      <p class='empty' data-test-segment-params-empty>
+        Every :name segment reads the card's field of that name.
+      </p>
+    {{/if}}
+    <style scoped>
+      .segments {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+        margin: 0;
+      }
+      .segment {
+        display: grid;
+        grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
+        gap: var(--boxel-sp-xs);
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      dt {
+        font-weight: 600;
+      }
+      dd {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: break-word;
+      }
+      .empty {
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
+// A page type's derived segments, as a map from segment name to the BXL that
+// gives its value (ADR site-routing §1.2). Unlike JsonField it is in the
+// search doc, because host mode reads site settings from there; only string
+// entries are kept, since only those are expressions.
+export class SiteSegmentParamsField extends FieldDef {
+  static displayName = 'Site Path Segments';
+  static [primitive]: Record<string, string>;
+  static embedded = SiteSegmentParamsEmbedded;
+  static atom = SiteSegmentParamsEmbedded;
+  static edit = SiteSegmentParamsEdit;
+  static [queryableValue](value: unknown): Record<string, string> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    let entries = Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    );
+    return entries.length ? Object.fromEntries(entries) : null;
+  }
+}
+
+// One kind of page: every card of a type, from one realm, gets a path.
+export class SitePageTypeField extends FieldDef {
+  static displayName = 'Site Page Type';
+
+  @field name = contains(StringField);
+  @field sourceRealm = contains(StringField, {
+    description:
+      'The realm whose cards this page type serves. Default: this realm',
+  });
+  @field cardType = contains(CodeRefField);
+  @field filter = contains(StringField, {
+    description:
+      'Boxel query filter JSON narrowing which cards get a page. Default: every card of the type',
+  });
+  @field path = contains(StringField, {
+    description:
+      "The address of a card's page, as a path pattern whose :name segments read the card's fields: /shop/:handle or /c/:category.slug/:slug. A segment listed in params gets its value from a BXL expression instead",
+  });
+  @field sort = contains(StringField, {
+    description:
+      'Boxel query sort JSON deciding which card wins when two share an address, e.g. [{"by": "publishedOn", "direction": "desc"}]. Default: the search order',
+  });
+  @field aliases = containsMany(StringField, {
+    description:
+      "More addresses, as path patterns like path, that answer 301 to the card's page",
+  });
+  @field params = contains(SiteSegmentParamsField, {
+    description:
+      'Segments of path and aliases whose value BXL derives from the card, as a map from segment name to expression: { "slug": ".title | slugify" }. Stored when cards are indexed, so a path finds its card with one lookup',
+  });
+  @field listingPath = contains(StringField, {
+    description:
+      'A path that lists every card of this page type. Default: none',
+  });
+  @field listingTitle = contains(StringField);
+  @field listingSort = contains(StringField, {
+    description: 'Boxel query sort JSON for the listing',
+  });
+  // How a page looks when shared: BXL over the card. Each one
+  // left empty keeps what the card's own head says.
+  @field shareTitle = contains(StringField, {
+    description: 'og:title for a card\'s page, as BXL: .name & " by " & .brand',
+  });
+  @field shareDescription = contains(StringField, {
+    description: "og:description for a card's page, as BXL: .summary",
+  });
+  @field shareImage = contains(StringField, {
+    description:
+      "og:image for a card's page, as BXL giving an image URL: .photo.id",
+  });
+}
+
+// A redirect. `from` may be a path pattern (`/old/:slug`) whose `:name`
+// segments `to` reuses.
+export class SiteRedirectField extends FieldDef {
+  static displayName = 'Site Redirect';
+
+  @field from = contains(StringField, {
+    description: 'The old address, as a path pattern: /u/:handle',
+  });
+  @field to = contains(StringField, {
+    description:
+      'Where it goes, reusing the :name segments of from: /people/:handle',
+  });
+  @field statusCode = contains(NumberField, {
+    description: '301 (permanent, the default) or 302 (temporary)',
+  });
+}
+
+// Whether one crawler, by user agent, may read the site.
+export class SiteCrawlerField extends FieldDef {
+  static displayName = 'Site Crawler';
+
+  @field userAgent = contains(StringField);
+  @field allow = contains(BooleanField);
+}
+
+export class SiteSettingsField extends FieldDef {
+  static displayName = 'Site Settings';
+
+  @field tagline = contains(StringField);
+  @field language = contains(StringField, {
+    description: "The site's language, as a BCP 47 tag. Default: en",
+  });
+  @field themeColor = contains(StringField);
+  @field pageTypes = containsMany(SitePageTypeField, {
+    description:
+      'Kinds of page, in precedence order: an earlier page type is tried first for a path, and gives a card its canonical address',
+  });
+  @field redirects = containsMany(SiteRedirectField, {
+    description:
+      'Redirects in order. One whose from is a fixed path runs before pages; one with variables runs after them, so it never hides a live page',
+  });
+  @field notFound = linksTo(CardDef, {
+    description: 'The card served, with status 404, at a path nothing claims',
+  });
+  @field errorCard = linksTo(CardDef, {
+    description:
+      'The card shown, with status 500, in place of a page whose card fails to render',
+  });
+  @field frame = linksTo(CardDef, {
+    description:
+      "The card every page is shown inside: the site's header, navigation and footer",
+  });
+  @field listed = contains(BooleanField, {
+    description: 'Whether search engines may index the site. Default: true',
+  });
+  @field crawlers = containsMany(SiteCrawlerField, {
+    description: 'Per-crawler overrides for robots.txt',
+  });
 }
 
 // The JSON spelling of one setting's value, which is what the table shows and
@@ -1875,6 +2304,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 />
               {{else}}
                 <Field />
+                {{#if (eq key 'site')}}
+                  <SiteRoutesPanel
+                    @site={{this.config.site}}
+                    @routingRules={{this.config.hostRoutingRules}}
+                    @realmURL={{this.realm}}
+                    @context={{@context}}
+                  />
+                {{/if}}
               {{/if}}
             </FieldContainer>
           {{/each-in}}
@@ -2112,6 +2549,17 @@ export class RealmConfig extends CardDef {
   @field policy = contains(StringField, {
     description:
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
+  });
+
+  // Whether a host routing rule may serve a card another realm holds, as
+  // that realm prerendered it. Host mode serves such a card only when a
+  // visitor who isn't signed in may read it (ADR site-routing §1.6).
+  // The realm's published site, as host mode reads it (see SiteSettingsField).
+  @field site = contains(SiteSettingsField);
+
+  @field serveSourcePrerender = contains(BooleanField, {
+    description:
+      "Lets a host routing rule serve a card another realm holds, as that realm prerendered it, when a visitor who isn't signed in may read it. Off by default: rules into other realms are dropped",
   });
 
   // What the policy this realm names compiles to, as the realm compiles it:

@@ -33,6 +33,8 @@ import {
   dbExpression,
   upsertMultipleRows,
 } from './expression.ts';
+import { evaluateSegment } from './host-routes.ts';
+import { ROUTE_VALUES_FIELD, type RouteValue } from './site-paths.ts';
 import {
   clampSerializedError,
   sanitizeForJsonb,
@@ -1340,6 +1342,7 @@ export class Batch {
     }
     this.#assertErrorEntryHasMessage(url, entry);
     this.#invalidations.add(url.href);
+    await this.#withRouteValues(url, entry);
     this.#writeBuffer.push({
       url,
       entry,
@@ -1435,6 +1438,65 @@ export class Batch {
   // (tests). Runs the same guards + invalidation
   // bookkeeping the buffered path does, then writes without waiting for a
   // flush.
+  // The derived path-segment expressions sites need from this realm's cards
+  // (ADR site-routing §1.3), read once per batch. Only the server keeps the
+  // registry; elsewhere, or when it can't be read, there are none.
+  #routeExpressions:
+    | Promise<{ card_type: string; expression: string }[]>
+    | undefined;
+
+  #routeExpressionsForRealm() {
+    if (!this.#routeExpressions) {
+      this.#routeExpressions =
+        this.#dbAdapter.kind === 'pg'
+          ? (
+              this.#query([
+                `SELECT DISTINCT card_type, expression
+                   FROM site_route_expressions WHERE realm_url =`,
+                param(this.realmURL.href),
+              ]) as Promise<{ card_type: string; expression: string }[]>
+            ).catch(() => [])
+          : Promise.resolve([]);
+    }
+    return this.#routeExpressions;
+  }
+
+  // Store each derived segment value a site needs from this card in its
+  // search doc, as `{ expr, value }` under `_route`, so a path is looked up
+  // by containment of that one entry. A value that isn't usable text is left
+  // out: the card then has no address under that page type.
+  async #withRouteValues(url: URL, entry: SearchIndexEntry) {
+    if (entry.type !== 'instance' || !entry.searchData) {
+      return;
+    }
+    let expressions = await this.#routeExpressionsForRealm();
+    if (!expressions.length) {
+      return;
+    }
+    let types = new Set(entry.types ?? []);
+    // One entry per expression, though a card whose type and supertype both
+    // have it registered meets it twice.
+    let values = new Map<string, RouteValue>();
+    for (let { card_type, expression } of expressions) {
+      if (!types.has(card_type) || values.has(expression)) {
+        continue;
+      }
+      let value = evaluateSegment(expression, {
+        ...entry.searchData,
+        id: url.href.replace(/\.json$/, ''),
+      });
+      if (value !== undefined) {
+        values.set(expression, { expr: expression, value });
+      }
+    }
+    if (values.size) {
+      entry.searchData = {
+        ...entry.searchData,
+        [ROUTE_VALUES_FIELD]: [...values.values()],
+      };
+    }
+  }
+
   async updateEntry(url: URL, entry: SearchIndexEntry): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       throw new Error(
@@ -1448,6 +1510,7 @@ export class Batch {
     }
     this.#assertErrorEntryHasMessage(url, entry);
     this.#invalidations.add(url.href);
+    await this.#withRouteValues(url, entry);
     let start = Date.now();
     try {
       await this.#writeEntryNow(

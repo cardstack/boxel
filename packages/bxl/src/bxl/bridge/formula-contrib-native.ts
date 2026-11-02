@@ -22,6 +22,8 @@ import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
 import { excelWildcardSearch } from '../../formulajs/wildcard.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
+import { JqEvaluateError } from '../../jqtools/errors.ts';
+import { sha256Hex } from './sha256.ts';
 import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
@@ -1301,12 +1303,67 @@ function betweenValue(value: unknown, lower: unknown, upper: unknown): boolean {
   return compare(value, lower) >= 0 && compare(value, upper) <= 0;
 }
 
+function slugifyText(text: unknown): string {
+  if (typeof text !== 'string') {
+    throw new JqEvaluateError(
+      `slugify takes a string; got ${text === null ? 'null' : Array.isArray(text) ? 'array' : typeof text}`,
+    );
+  }
+  let out = '';
+  let pendingDash = false;
+  for (let char of text.normalize('NFKD').toLowerCase()) {
+    let code = char.codePointAt(0)!;
+    // Combining marks left by the decomposition: the accent of é.
+    if (code >= 0x300 && code <= 0x36f) {
+      continue;
+    }
+    let isLetterOrDigit =
+      (code >= 0x61 && code <= 0x7a) || (code >= 0x30 && code <= 0x39);
+    if (!isLetterOrDigit) {
+      pendingDash = out.length > 0;
+      continue;
+    }
+    if (pendingDash) {
+      out += '-';
+      pendingDash = false;
+    }
+    out += char;
+  }
+  return out;
+}
+
 const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'between/3'(_input, value, lower, upper) {
     yield betweenValue(value, lower, upper);
   },
   *'like/2'(_input, value, pattern) {
     yield sqlLikeValue(value, pattern);
+  },
+  // sha256(text): lowercase hex SHA-256 of the UTF-8 bytes of a string. Pure
+  // and synchronous, so it gives the same answer in the realm server and the
+  // browser — a lottery that orders entrants by sha256(seed + id) can be
+  // re-run by anyone once the seed is revealed. Anything other than a string
+  // is refused rather than serialized, so the bytes hashed are never a
+  // matter of how a number or object happens to print.
+  *'sha256/1'(_input, text) {
+    if (typeof text !== 'string') {
+      throw new JqEvaluateError(
+        `sha256 takes a string; got ${text === null ? 'null' : Array.isArray(text) ? 'array' : typeof text}`,
+      );
+    }
+    yield sha256Hex(text);
+  },
+  // slugify(text): a URL path segment from text. Letters and digits are kept
+  // and lowercased, accents are dropped (é -> e), and every other run of
+  // characters becomes one `-`, with none at either end. One pass over the
+  // characters with no regular expression, so a site's routing can use it on
+  // authored input (ADR site-routing §1.1). Anything other than a string is
+  // refused.
+  *'slugify/0'(input) {
+    yield slugifyText(input);
+  },
+  *'slugify/1'(_input, text) {
+    yield slugifyText(text);
   },
   *'ABS/1'(_input, value) {
     yield Math.abs(parseExcelNumber(value));

@@ -315,6 +315,35 @@ export interface OperationDefinition {
   // The request a `callApi` sends, with the values an invocation fills still
   // holding their markers and every credential still a slot.
   callApi?: OperationCallApi;
+  // An `emit`'s compaction key: an expression over the payload the `input`
+  // stage left, which answers the string a later message on the card's
+  // channel supersedes an earlier one by. Absent, no message supersedes
+  // another.
+  key?: OperationProgram;
+  // An `emit`'s precondition: an expression over the card as stored (`.` is
+  // its id and attributes), run in the transform profile so it may read the
+  // clock, which must answer true for the message to go. `message` is what a
+  // refusal says.
+  guard?: { program: OperationProgram; message?: string };
+  // An unordered `emit` (`ordered: false`): presence, the latest message per
+  // key until it expires, with no position on the channel (ADR event-feed §1.6).
+  unordered?: { expiresAfterMs: number };
+  // An `emit`'s audience (ADR event-feed §1.7): an expression over the payload
+  // answering whose message it is. The caller must present a capability for
+  // the card naming that subject, and only a follower holding one hears the
+  // message's body.
+  audience?: OperationProgram;
+  // A capability a transform hands its caller once the write lands: the
+  // subject an expression over the payload answers, valid for `expiresAfterMs`.
+  capability?: { subject: OperationProgram; expiresAfterMs: number };
+  // The collected params whose emit is unordered, which a transform reads
+  // from the unexpired presence rather than from the channel's sequence.
+  collectUnordered?: string[];
+  // A transform's collected params: each param the program reads, mapped to
+  // the name of the `emit` on the same type whose latest messages the realm
+  // reads off the target card's live channel, under the write lock, and binds
+  // there. A caller cannot send one.
+  collect?: Record<string, string>;
   // The author's short, plain-text phrase for people, shown wherever the
   // operation is presented to someone. Read as data and acted on by nothing.
   // Absent, the operation is shown under its name split into words.
@@ -453,6 +482,20 @@ export type OperationLoweringIssueCode =
   // Lowering itself failed on this operation, rather than finding something
   // wrong with it. The entry is stored as invalid so that invoking it says so.
   | 'lowering-failed'
+  // An `emit` declared under the name of a base operation. An emit writes
+  // nothing, so it would answer that name — an `update`, a `delete` — by
+  // writing nothing, and a caller reaching for the built-in would be told it
+  // had run.
+  | 'emit-under-base-name'
+  // A `collect` that cannot be filled: on a base other than `transform`, not a
+  // map of param names to operation names, naming a param the `params` schema
+  // also declares, or naming an operation that is not an `emit` the type
+  // declares.
+  | 'invalid-collect'
+  // An `emit`'s `ordered` or `expiresAfter` the realm can't apply: not a
+  // boolean, an unordered emit with no `key` or with an `assert`, or an
+  // expiry that isn't a positive number of seconds up to an hour.
+  | 'invalid-presence'
   // An `instance(…)` inside an `appendContainsMany` item. An append edits the
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
@@ -642,6 +685,10 @@ export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'transform',
   'appendContainsMany',
   'appendLine',
+  // A message on a card's live channel, which writes nothing: a visitor's
+  // vote or reaction, admitted by a grant whose `where` reads the card as
+  // stored.
+  'emit',
 ];
 
 // The codes that leave the part of the policy they are recorded against live.
@@ -737,6 +784,9 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   validate: false,
   // A request sent outside the realm changes nothing the realm stores.
   callApi: false,
+  // Nor does a message on a card's live channel: it is delivered to the
+  // card's viewers and stored nowhere the realm reads.
+  emit: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
@@ -747,11 +797,13 @@ export function isWrite(base: BaseOperation): boolean {
 // what decides the method a batch carrying it travels on and the permission
 // the realm checks for it. Every write does, and so does a `callApi`: it
 // changes nothing stored, but it acts outside the realm on the realm's
-// behalf, which a caller only permitted to read the realm may not do. A
-// `callApi` is not staged or committed, so the two questions are asked
-// separately.
+// behalf, which a caller only permitted to read the realm may not do. So
+// does an `emit`: it stores nothing, but it speaks to every viewer of the
+// card on the realm's channel, which a caller only permitted to read may not
+// do unless a grant says so. Neither is staged or committed, so the two
+// questions are asked separately.
 export function travelsAsWrite(base: BaseOperation): boolean {
-  return WRITES[base] || base === 'callApi';
+  return WRITES[base] || base === 'callApi' || base === 'emit';
 }
 
 // What an operation runs against. An `instance` target is an existing card or
@@ -785,6 +837,10 @@ export interface OperationRequest {
   // one to judge a caller by in another realm, which is what an explain and a
   // validate do, and nothing else reads it.
   principal?: string;
+  // A capability the caller presented and the realm verified (ADR event-feed
+  // §1.7): the card it was issued for and the subject it names. An emit with
+  // an `audience` is sent only when this names that card and subject.
+  capability?: { card: string; subject: string };
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
   // lets it retire the matching optimistic entry rather than reloading.
@@ -1528,6 +1584,63 @@ export interface OperationCallApiResult {
   callApi: unknown;
 }
 
+// An `emit`'s answer: the card whose channel carried the message, and the
+// position the message took there. Its own member rather than an identity
+// result, which reports a version a write left the card at — an emit
+// leaves the card as it was, and a reader of an identity result would take
+// its absent version for a write that changed nothing.
+export interface OperationEmitResult {
+  emitted: { id: string; position: string };
+}
+
+// What the realm hands a channel to emit: the card whose channel it is,
+// the operation that sent it, the compaction key where the declaration names
+// one, and the body, which is the payload after the `input` stage.
+export interface EmitMessageArgs {
+  cardURL: string;
+  operation: { name: string; base: 'emit' };
+  key?: string;
+  body: JsonValue;
+  // The emit's `assert`, which the realm runs holding the card's write lock
+  // and in turn with the channel's appends, right before the message is
+  // recorded; one that throws emits nothing.
+  guard?: () => Promise<void>;
+  // An unordered emit's message: presence, recorded as the latest for its
+  // key until it expires, taking no position and waiting on nothing.
+  unordered?: { expiresAfterMs: number };
+  // Whose message it is (ADR event-feed §1.7): only a follower holding a
+  // capability for the card naming this subject hears its body.
+  audience?: string;
+}
+
+// Signs a capability for a card and a subject, valid for `expiresInMs`, and
+// answers the token (ADR event-feed §1.7). Supplied by the realm, which holds
+// the key.
+export type IssueCapability = (args: {
+  cardURL: string;
+  subject: string;
+  expiresInMs: number;
+}) => Promise<string>;
+
+// Delivers an `emit`'s message on the card's live channel (ADR event-feed §1.6,
+// §1.7), answering the position it took there. Supplied by the realm, which
+// owns the channel.
+export type EmitMessage = (
+  args: EmitMessageArgs,
+) => Promise<{ position: string }>;
+
+// The bodies of the latest message per key that the emit named `operation`
+// published on the card's live channel, however many keys there are, and the
+// messages naming no key the channel still keeps, in channel order. Supplied
+// by the realm, which owns the channel, and read under the write lock on the
+// card, which a guarded emit holds too.
+export type ChannelMessages = (args: {
+  cardURL: string;
+  operation: string;
+  // The emit is unordered, so its messages are the unexpired presence.
+  unordered?: boolean;
+}) => Promise<JsonValue[]>;
+
 export type ValidatedGrantInertia =
   // A grant on a query whose `where` compiled no search filter. A query is
   // authorized only by composing a grant's filter into the search, and the
@@ -1545,6 +1658,7 @@ export type OperationResult =
   | OperationExplainListingResult
   | OperationValidateResult
   | OperationCallApiResult
+  | OperationEmitResult
   | null;
 
 export function isDocumentResult(
@@ -1598,6 +1712,12 @@ export function isCallApiResult(
   return result != null && 'callApi' in result;
 }
 
+export function isEmitResult(
+  result: OperationResult,
+): result is OperationEmitResult {
+  return result != null && 'emitted' in result;
+}
+
 export type OperationErrorCode =
   // No operation of that name, and the name is not a base operation the
   // target's def type carries.
@@ -1647,6 +1767,9 @@ export type OperationErrorCode =
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
   | 'actor-required'
+  // An emit with an `audience` sent without a capability naming its card and
+  // subject (ADR event-feed §1.7).
+  | 'capability-required'
   // The realm ACL declined the caller, and no grant in the realm's policy
   // admits this operation on this target. The detail is the same whether the
   // target exists or not, and whatever the policy holds, so the refusal says
@@ -1739,6 +1862,10 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // The operation is sound and this realm cannot carry it out: an `emit` on
+  // a realm that has no live channel to put the message on. Carries a 501.
+  // Nothing was done.
+  | 'not-implemented'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

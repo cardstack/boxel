@@ -20,6 +20,7 @@
     ],
     "realmServer": [
       "catalog-test-subset-test",
+      "cross-realm-routing-policy-test",
       "direct-writer-queries-test",
       "realm-endpoints/search-test",
       "realm-policy-activation-test",

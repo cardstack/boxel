@@ -1,4 +1,11 @@
-import type { CardContext, FieldFormats, CardCrudFunctions } from './card-api';
+import type {
+  CardContext,
+  CardInteractions,
+  FieldFormats,
+  CardCrudFunctions,
+  OpenCardFn,
+} from './card-api';
+import { CardLink } from './card-link';
 import {
   type Box,
   type Field,
@@ -23,6 +30,8 @@ import {
   type CodeRef,
   type Permissions,
   CardCrudFunctionsContextName,
+  CurrentCardContextName,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -63,6 +72,11 @@ export interface BoxComponentSignature {
        * preview) thread the owning card's realm in directly.
        */
       consumingRealm?: URL;
+      /**
+       * Who owns a click on a linked card rendered here. See
+       * `CardInteractions`. Default: 'open'.
+       */
+      interactions?: CardInteractions;
     };
   };
   Blocks: {};
@@ -83,19 +97,65 @@ const DEFAULT_CARD_CONTEXT = {
   cardComponentModifier: class NoOpModifier extends Modifier<any> {
     modify() {}
   },
-  actions: undefined,
   toolContext: undefined,
   getCard: () => {},
   getCards: () => {},
   getCardCollection: () => {},
 };
 
+// Whether a linked card rendered as a field gets a link over it, so it opens
+// on a click. In the app the environment's own click opens it (the hover
+// outline and label come with that), so the link is for everywhere else: a
+// published site and its prerendered HTML. Isolated and edit formats are a
+// card shown in full or being edited, not a tile pointing at one.
+function coversCard(
+  field: Field | undefined,
+  format: Format,
+  interactions: CardInteractions | undefined,
+  context: CardContext,
+  card: CardDef,
+): boolean {
+  return Boolean(
+    field &&
+    (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') &&
+    format !== 'isolated' &&
+    format !== 'edit' &&
+    (interactions ?? 'open') === 'open' &&
+    context.mode !== 'operator' &&
+    card.id,
+  );
+}
+
+// One slot of a linksToMany whose card hasn't loaded, as during a render that
+// is still loading the field's links. An empty linksTo is different: it shows
+// its type's format with no model, which the default formats draw as empty.
+function isUnloadedSlot(field: Field | undefined, value: unknown): boolean {
+  return Boolean(field && field.fieldType === 'linksToMany' && value == null);
+}
+
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {
   @consume(CardContextName) declare dynamicCardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare cardCrudFunctions: Partial<CardCrudFunctions> | undefined;
+
+  // `openCard` goes through whichever `viewCard` the environment provides
+  // where this card renders, so it opens a card the way that environment
+  // does.
+  private openCard: OpenCardFn = (cardOrURL, opts) => {
+    this.cardCrudFunctions?.viewCard?.(
+      cardOrURL as CardDef | URL | RealmResourceIdentifier,
+      opts?.format ?? 'isolated',
+      {
+        openCardInRightMostStack: opts?.stack === 'rightmost',
+        overlay: opts?.overlay,
+      },
+    );
+  };
 
   get context(): CardContext {
     return {
       ...DEFAULT_CARD_CONTEXT,
+      actions: { openCard: this.openCard },
       ...this.dynamicCardContext,
     };
   }
@@ -135,6 +195,18 @@ export class DefaultFormatsProvider extends Component<DefaultFormatsProviderSign
   @provide(DefaultFormatsContextName)
   get defaultFormats() {
     return this.args.value;
+  }
+}
+
+interface CurrentCardProviderSignature {
+  Args: { card: CardDef };
+  Blocks: { default: [] };
+}
+
+export class CurrentCardProvider extends Component<CurrentCardProviderSignature> {
+  @provide(CurrentCardContextName)
+  get currentCard() {
+    return this.args.card;
   }
 }
 
@@ -398,6 +470,7 @@ export function getBoxComponent(
                             format=effectiveFormats.cardDef
                             fieldType=field.fieldType
                             fieldName=field.name
+                            interactions=@interactions
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
@@ -407,29 +480,50 @@ export function getBoxComponent(
                           data-test-field-component-card
                           ...attributes
                         >
-                          <c.CardOrFieldFormatComponent
-                            @cardOrField={{cardOrField}}
-                            @model={{card}}
-                            @fields={{c.fields}}
-                            @format={{effectiveFormats.cardDef}}
-                            @set={{model.set}}
-                            @fieldName={{model.name}}
-                            @context={{context}}
-                            @configuration={{this.resolvedConfiguration}}
-                            @createCard={{cardCrudFunctions.createCard}}
-                            @viewCard={{cardCrudFunctions.viewCard}}
-                            @saveCard={{cardCrudFunctions.saveCard}}
-                            @editCard={{cardCrudFunctions.editCard}}
-                            @canEdit={{and
-                              (not field.computeVia)
-                              (not field.queryDefinition)
-                              permissions.canWrite
-                            }}
-                            @typeConstraint={{@typeConstraint}}
-                          />
+                          <CurrentCardProvider @card={{card}}>
+                            <c.CardOrFieldFormatComponent
+                              @cardOrField={{cardOrField}}
+                              @model={{card}}
+                              @fields={{c.fields}}
+                              @format={{effectiveFormats.cardDef}}
+                              @set={{model.set}}
+                              @fieldName={{model.name}}
+                              @context={{context}}
+                              @configuration={{this.resolvedConfiguration}}
+                              @createCard={{cardCrudFunctions.createCard}}
+                              @viewCard={{cardCrudFunctions.viewCard}}
+                              @saveCard={{cardCrudFunctions.saveCard}}
+                              @editCard={{cardCrudFunctions.editCard}}
+                              @canEdit={{and
+                                (not field.computeVia)
+                                (not field.queryDefinition)
+                                permissions.canWrite
+                              }}
+                              @typeConstraint={{@typeConstraint}}
+                            />
+                          </CurrentCardProvider>
+                          {{#if
+                            (coversCard
+                              field
+                              effectiveFormats.cardDef
+                              @interactions
+                              context
+                              card
+                            )
+                          }}
+                            <CardLink
+                              @id={{card.id}}
+                              @cover={{true}}
+                            >{{card.cardTitle}}</CardLink>
+                          {{/if}}
                         </CardContainer>
                       </DefaultFormatsProvider>
                     {{/let}}
+                  {{else if (isUnloadedSlot field model.value)}}
+                    {{! A linksToMany slot whose card hasn't loaded. There is no
+                        card to give its type's format, which a card's own
+                        template would read as a card, so nothing is drawn
+                        until it loads. }}
                   {{else if
                     (and
                       (isCompoundField model.value)

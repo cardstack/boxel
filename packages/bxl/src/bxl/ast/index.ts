@@ -29,7 +29,8 @@ export type BxlProfile =
   | 'predicate'
   | 'derive'
   | 'mutation'
-  | 'transform';
+  | 'transform'
+  | 'route';
 
 export type BxlAttachment =
   | 'formula'
@@ -346,6 +347,10 @@ export function validateBxlAst(
 
     if (options.profile === 'transform') {
       validateTransformNode(node, issues);
+    }
+
+    if (options.profile === 'route') {
+      validateRouteNode(node, issues);
     }
   });
 
@@ -669,6 +674,37 @@ function isPredicatePipe(node: BxlBinaryNode): boolean {
   );
 }
 
+// A route expression turns one card into a path (ADR site-routing §1.1): only the
+// calls the route profile allows, and no variables or bindings, so it reads
+// nothing but the card it is handed. `split` is allowed only with one
+// argument; its two-argument form splits on a regular expression.
+function validateRouteNode(node: BxlAstNode, issues: BxlProfileIssue[]) {
+  if (node.type === 'binding' || node.type === 'variable') {
+    issues.push({
+      code: `route-${node.type}-banned`,
+      severity: 'error',
+      message: `${profileMessagePrefix('route')} cannot use jq ${
+        node.type === 'binding' ? 'bindings' : 'variables'
+      }.`,
+      nodeType: node.type,
+    });
+  }
+  if (node.type !== 'call') {
+    return;
+  }
+  let allowed =
+    classifyBxlProfileFunction('route', node.name).safety === 'allow' &&
+    !(node.name === 'split' && node.arity !== 1);
+  if (!allowed) {
+    issues.push({
+      code: 'route-call-banned',
+      severity: 'error',
+      message: `${profileMessagePrefix('route')} cannot use call ${node.name}/${node.arity}.`,
+      nodeType: node.type,
+    });
+  }
+}
+
 function profileMessagePrefix(profile: BxlProfile): string {
   switch (profile) {
     case 'compute':
@@ -685,6 +721,8 @@ function profileMessagePrefix(profile: BxlProfile): string {
       return 'Profile.mutation is for bounded Card/Field write planning and';
     case 'transform':
       return 'Profile.transform shapes a payload or projects a result and';
+    case 'route':
+      return 'Profile.route turns a card into a path and';
   }
 }
 

@@ -17,6 +17,7 @@ import {
   type OperationsOptions,
   type OperationDocument,
   type OperationHandle,
+  type EmittedMessage,
   type OperationResultTree,
   type OperationWriteResult,
   type OperationsSubject,
@@ -115,6 +116,7 @@ export const BASE_OPERATIONS = [
   'explain',
   'validate',
   'callApi',
+  'emit',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -151,6 +153,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
   explain: [],
   validate: [],
   callApi: [],
+  emit: [],
 };
 
 // The behaviors a def reaches only by declaring an operation built on them.
@@ -165,12 +168,16 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 //
 // A `callApi` is a request to a service outside the realm, and only a card
 // that declares one has a request to send.
+//
+// An `emit` sends a message on the card's live channel, and only a card that
+// declares one says what a message is.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
 > = {
   explain: ['card'],
   validate: ['card'],
   callApi: ['card'],
+  emit: ['card'],
 };
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
@@ -562,6 +569,53 @@ export interface TransformOperationDeclaration extends OperationCommon {
   readonly append?: AppendClause;
   readonly assert?: AssertClause;
   readonly set?: SetClause;
+  // The messages a program reads off the target card's live channel, by the
+  // param it reads them under: `collect: { picks: 'select' }` hands the
+  // program `params("picks")`, the bodies of the latest message per key that
+  // the card's `select` emit published, in channel order. `select` must be an
+  // `emit` declared on the same type.
+  //
+  // The realm reads the channel under the write lock it takes on the card, as
+  // the program stages, so a message emitted after that read is not counted:
+  // the program sees the channel as it stood when the card was locked. A
+  // caller cannot supply a collected param. `input` runs before the lock and
+  // so cannot read one either; the program and the clauses can.
+  readonly collect?: CollectClause;
+  // A capability the realm hands the caller once the write lands (ADR
+  // event-feed §1.7): a token, signed by the realm, naming this card and the
+  // subject `subject` gives, a BXL expression over the payload (`.`),
+  // `params()` and `realmConfig()` that answers a string. It expires after
+  // `expiresAfter` seconds (a day by default). The caller presents it to send
+  // an `emit` whose `audience` is that subject, and to follow the card's
+  // channel with that subject's messages in full.
+  //
+  //   capability: { subject: bxl`params("team")`, expiresAfter: 21600 }
+  readonly capability?: CapabilityClause;
+}
+
+export interface CapabilityClause {
+  readonly subject: BxlProgram;
+  readonly expiresAfter?: number;
+}
+
+// Param name → the name of an `emit` operation declared on the same type.
+export interface CollectClause {
+  readonly [param: string]: string;
+}
+
+// A guard an `emit` holds before it publishes: `that` is an expression over the
+// card as stored — `.` is its id and attributes — with `params()`, `actor()`,
+// `realmConfig()` and the clock (`now`, epoch seconds), answering true for a
+// message that may go. False refuses the emit with `assertion-failed` and
+// `message`, and nothing is published.
+//
+//   assert: {
+//     that: bxl`now <= (.lockAt | fromdateiso8601)`,
+//     message: 'Time ran out.',
+//   },
+export interface EmitAssertClause {
+  readonly that: BxlProgram;
+  readonly message?: string;
 }
 
 export interface CreateOperationDeclaration extends OperationCommon {
@@ -845,6 +899,66 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   readonly perInstance?: boolean;
 }
 
+// Emits a message on the target card's live channel and writes nothing to
+// the realm: no file is staged, no index job is enqueued and no realm event is
+// broadcast. The message is the payload, after `input` has shaped it, so a
+// value the realm stamps — who sent it, when — is one the caller cannot forge.
+//
+//   @operation static vote = {
+//     base: 'emit',
+//     params: { team: StringField, choice: StringField },
+//     input: bxl`. + { voter: actor() }`,
+//     key: bxl`params("team") + ":" + actor()`,
+//   } satisfies OperationDeclaration;
+//
+// `key` is the message's compaction key: a later message on the channel with
+// the same key supersedes an earlier one, so a channel carrying the latest
+// vote per voter stays one message per voter however often they change their
+// mind. It is a BXL expression over the payload (`.`), `params()`, `actor()`
+// and `realmConfig()`, and it answers a string. Absent, every message stands
+// on its own.
+//
+// It is authorized as any operation declared on the card is — the realm's own
+// permissions, widened by its policy — and it carries no program and no
+// projection: there is no document for a program to run over, and the answer
+// is where the message landed on the channel.
+//
+// `ordered: false` makes it presence: who is here now, whether a person, an
+// agent or a crowd of agents (ADR event-feed §1.6). The message takes no position on
+// the channel and waits on no other message, so a crowd's heartbeats cost one
+// small write each instead of a queue. The latest per key counts until
+// `expiresAfter` seconds pass (60 by default), a page that starts following
+// hears everyone present, and a transform that `collect`s it reads the
+// unexpired messages. An unordered emit needs a `key` and takes no `assert`.
+//
+//   @operation static here = {
+//     base: 'emit',
+//     ordered: false,
+//     expiresAfter: 60,
+//     params: { c: StringField },
+//     key: bxl`params("c")`,
+//   } satisfies OperationDeclaration;
+export interface EmitOperationDeclaration extends OperationCommon {
+  readonly base: 'emit';
+  readonly key?: BxlProgram;
+  // `false` for presence: an unordered message, latest per key, until it
+  // expires. Absent or `true`, the message takes the channel's next position.
+  readonly ordered?: boolean;
+  // Seconds an unordered message counts for after it is sent.
+  readonly expiresAfter?: number;
+  // A precondition judged against the card as stored, before the message goes.
+  readonly assert?: EmitAssertClause;
+  // Whose message this is (ADR event-feed §1.7): a BXL expression over the
+  // payload, `params()` and `realmConfig()` answering a subject. The emit is
+  // refused unless the caller presents a capability for this card naming
+  // that subject, which an operation's `capability` clause issued. A follower
+  // holding it hears the message whole; every other follower hears that a
+  // message arrived, with its key and no body. Ordered emits only.
+  readonly audience?: BxlProgram;
+  readonly transformations?: never;
+  readonly output?: never;
+}
+
 export type OperationDeclaration =
   | TransformOperationDeclaration
   | CreateOperationDeclaration
@@ -856,7 +970,8 @@ export type OperationDeclaration =
   | AppendContainsManyOperationDeclaration
   | ExplainOperationDeclaration
   | ValidateOperationDeclaration
-  | CallApiOperationDeclaration;
+  | CallApiOperationDeclaration
+  | EmitOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -953,6 +1068,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   validate: [],
   // The parts of the request it sends.
   callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
+  // The message's compaction key. The message itself is the payload.
+  emit: ['key', 'assert'],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -965,6 +1082,12 @@ const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   read: ['links', 'html'],
   query: ['links', 'html'],
   callApi: ['perInstance'],
+  // Says what the program reads, rather than what it does, so it sits beside a
+  // raw program as readily as beside the clauses.
+  // What the caller is handed once the write lands, beside the work.
+  transform: ['collect', 'capability'],
+  // How the message travels and who hears it, rather than what it says.
+  emit: ['ordered', 'expiresAfter', 'audience'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1279,6 +1402,9 @@ function noProgramReason(
   if (base === 'callApi') {
     return `a "callApi" operation sends the request it declares rather than running a program over a document`;
   }
+  if (base === 'emit') {
+    return `an "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document`;
+  }
   return undefined;
 }
 
@@ -1393,6 +1519,14 @@ function assertValidDeclaration(
   if (base === 'validate' && declaration.nonGrantable !== true) {
     throw new Error(
       `${label}: a "validate" operation reports what a policy card compiles to, which only a caller the realm's own permissions let read the card may learn, so no policy may grant it; declare it with \`nonGrantable: true\``,
+    );
+  }
+  // An emit writes nothing, so under the name of a base operation it would
+  // answer that name — an `update`, a `delete` — by writing nothing at all,
+  // and a caller reaching for the built-in would be told it had run.
+  if (base === 'emit' && key !== 'emit' && isBaseOperationName(key)) {
+    throw new Error(
+      `${label}: an "emit" operation sends a message and writes nothing, so it cannot take the name of the "${key}" base operation, whose callers expect it to do what "${key}" does`,
     );
   }
   if (base === 'validate') {
@@ -1522,7 +1656,19 @@ function assertValidDeclaration(
       `${label}: a "validate" operation answers with what the policy card compiles to, as compiling reports it, so it carries no \`output\` to reshape it`,
     );
   }
-  assertReferencesResolve(label, declaration, paramNames);
+  if (base === 'emit' && declaration.output !== undefined) {
+    throw new Error(
+      `${label}: an "emit" operation answers with where its message landed on the card's channel, so it carries no \`output\` to reshape it`,
+    );
+  }
+  assertReferencesResolve(
+    label,
+    declaration,
+    new Set([
+      ...paramNames,
+      ...collectedParams(label, declaration, paramNames),
+    ]),
+  );
   if (base === 'query') {
     assertQueryIsWellFormed(label, declaration.query);
   }
@@ -1621,7 +1767,22 @@ function assertValidClauses(
       throw new Error(`${label}: \`append\` must carry a \`value\` to append`);
     }
   }
-  if (declaration.assert !== undefined) {
+  if (base === 'emit' && declaration.assert !== undefined) {
+    let assertion = declaration.assert;
+    if (!isPlainObject(assertion)) {
+      throw new Error(
+        `${label}: an "emit" operation's \`assert\` is an object carrying the expression \`that\` must hold, and the \`message\` to refuse with`,
+      );
+    }
+    assertOnlyKeys(label, 'assert', assertion, ['that', 'message']);
+    assertBxlProgram(label, 'assert.that', assertion.that);
+    if (
+      assertion.message !== undefined &&
+      typeof assertion.message !== 'string'
+    ) {
+      throw new Error(`${label}: \`assert.message\` must be a string`);
+    }
+  } else if (declaration.assert !== undefined) {
     let assertion = declaration.assert;
     if (!isPlainObject(assertion)) {
       throw new Error(
@@ -1691,6 +1852,23 @@ function assertValidClauses(
   if (base === 'appendLine') {
     assertAppendsALine(label, declaration);
   }
+  if (base === 'emit' && declaration.key !== undefined) {
+    assertBxlProgram(label, 'key', declaration.key);
+  }
+  if (base === 'emit') {
+    assertPresenceShape(label, declaration);
+  }
+  if (base === 'emit' && declaration.audience !== undefined) {
+    assertBxlProgram(label, 'audience', declaration.audience);
+    if (declaration.ordered === false) {
+      throw new Error(
+        `${label}: \`audience\` applies only to an ordered emit; presence is heard by everyone following the card`,
+      );
+    }
+  }
+  if (base === 'transform' && declaration.capability !== undefined) {
+    assertCapabilityShape(label, declaration.capability);
+  }
   if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
     assertNamesItemsToAppend(label, declaration);
   }
@@ -1759,6 +1937,41 @@ function assertValidClauses(
       }
     }
   }
+}
+
+// The params a transform's `collect` names, held to its shape: a plain object
+// mapping each param the program reads to the emit whose messages it reads
+// there. A collected param is the realm's to fill, so it may not also be one
+// the caller sends. Whether each name is an emit the type declares is
+// lowering's to judge — a declaration may name an emit declared after it, or
+// on a subclass's ancestor, which nothing here can see yet.
+function collectedParams(
+  label: string,
+  declaration: Record<string, unknown>,
+  paramNames: Set<string>,
+): string[] {
+  let collect = declaration.collect;
+  if (collect === undefined) {
+    return [];
+  }
+  if (!isPlainObject(collect) || Object.keys(collect).length === 0) {
+    throw new Error(
+      `${label}: \`collect\` must be an object mapping each param the program reads to the name of an emit declared on this type`,
+    );
+  }
+  for (let [param, emitted] of Object.entries(collect)) {
+    if (typeof emitted !== 'string' || emitted.length === 0) {
+      throw new Error(
+        `${label}: \`collect.${param}\` must name an emit operation declared on this type`,
+      );
+    }
+    if (paramNames.has(param)) {
+      throw new Error(
+        `${label}: \`collect.${param}\` names a param the realm fills from the card's channel, so \`params\` cannot also declare it for the caller to send`,
+      );
+    }
+  }
+  return Object.keys(collect);
 }
 
 // The shape of a declared request. What its values may hold — where a slot
@@ -2269,6 +2482,75 @@ function assertValidReference(
   }
 }
 
+// The longest a capability may last: it stands in for a session, and a
+// session this long would outlive the occasion it was handed out for.
+const MAX_CAPABILITY_SECONDS = 30 * 24 * 3600;
+
+function assertCapabilityShape(label: string, capability: unknown) {
+  if (!isPlainObject(capability)) {
+    throw new Error(
+      `${label}: \`capability\` must be an object with a \`subject\` BXL program`,
+    );
+  }
+  assertOnlyKeys(label, 'capability', capability, ['subject', 'expiresAfter']);
+  assertBxlProgram(label, 'capability.subject', capability.subject);
+  let { expiresAfter } = capability;
+  if (
+    expiresAfter !== undefined &&
+    (typeof expiresAfter !== 'number' ||
+      !Number.isInteger(expiresAfter) ||
+      expiresAfter <= 0 ||
+      expiresAfter > MAX_CAPABILITY_SECONDS)
+  ) {
+    throw new Error(
+      `${label}: \`capability.expiresAfter\` must be a whole number of seconds from 1 to ${MAX_CAPABILITY_SECONDS}`,
+    );
+  }
+}
+
+// The longest an unordered message may count for: presence is who is here
+// now, and a stale entry is a visitor who left.
+const MAX_PRESENCE_SECONDS = 3600;
+
+function assertPresenceShape(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let { ordered, expiresAfter } = declaration;
+  if (ordered !== undefined && typeof ordered !== 'boolean') {
+    throw new Error(`${label}: \`ordered\` must be true or false`);
+  }
+  if (ordered !== false) {
+    if (expiresAfter !== undefined) {
+      throw new Error(
+        `${label}: \`expiresAfter\` applies only to an unordered emit (\`ordered: false\`); an ordered message stays on the channel until a later one with its key replaces it`,
+      );
+    }
+    return;
+  }
+  if (declaration.key === undefined) {
+    throw new Error(
+      `${label}: an unordered emit needs a \`key\`: each message is the latest for its key, and one with no key would never be replaced`,
+    );
+  }
+  if (declaration.assert !== undefined) {
+    throw new Error(
+      `${label}: an unordered emit takes no \`assert\`: a guard is judged in turn with the channel's ordered writes, which an unordered message never waits on`,
+    );
+  }
+  if (
+    expiresAfter !== undefined &&
+    (typeof expiresAfter !== 'number' ||
+      !Number.isFinite(expiresAfter) ||
+      expiresAfter <= 0 ||
+      expiresAfter > MAX_PRESENCE_SECONDS)
+  ) {
+    throw new Error(
+      `${label}: \`expiresAfter\` must be a number of seconds greater than 0 and at most ${MAX_PRESENCE_SECONDS}`,
+    );
+  }
+}
+
 function assertBxlProgram(label: string, path: string, value: unknown) {
   if (
     !isBxlMarker(value) ||
@@ -2402,6 +2684,7 @@ export type {
   InvokeOptions,
   OperationsOptions,
   OperationDocument,
+  EmittedMessage,
   OperationResultTree,
   OperationValueResult,
   OperationWriteResult,
@@ -2428,23 +2711,26 @@ type PayloadArgs<Declaration> = Declaration extends {
 // there is nothing left to describe, a read reports its document, an explain
 // reports what the policy decided and why — or, for one whose params ask for a
 // `list`, one page of explanations — a validate reports what the policy
-// compiles to, and a callApi reports the vendor's response, or what its
-// `output` maps that response to.
+// compiles to, a callApi reports the vendor's response, or what its
+// `output` maps that response to, and an emit reports where its message
+// landed on the card's channel.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
-  : Declaration extends { base: 'read' }
-    ? OperationDocument
-    : Declaration extends { base: 'explain'; params: { list: unknown } }
-      ? PolicyExplanationListing
-      : Declaration extends { base: 'explain' }
-        ? PolicyExplanation
-        : Declaration extends { base: 'validate' }
-          ? PolicyValidation
-          : Declaration extends { base: 'callApi'; output: unknown }
-            ? unknown
-            : Declaration extends { base: 'callApi' }
-              ? CallApiResponse
-              : OperationWriteResult;
+  : Declaration extends { base: 'emit' }
+    ? EmittedMessage
+    : Declaration extends { base: 'read' }
+      ? OperationDocument
+      : Declaration extends { base: 'explain'; params: { list: unknown } }
+        ? PolicyExplanationListing
+        : Declaration extends { base: 'explain' }
+          ? PolicyExplanation
+          : Declaration extends { base: 'validate' }
+            ? PolicyValidation
+            : Declaration extends { base: 'callApi'; output: unknown }
+              ? unknown
+              : Declaration extends { base: 'callApi' }
+                ? CallApiResponse
+                : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card
@@ -2460,7 +2746,8 @@ type InstanceScopedBase =
   | 'explain'
   | 'validate'
   | 'create'
-  | 'callApi';
+  | 'callApi'
+  | 'emit';
 type TypeScopedBase = 'create' | 'query' | 'callApi';
 
 type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'
@@ -2986,7 +3273,13 @@ function carriedOperations(
       base: declaration.base,
       declared: true,
       ...(declaration.optimistic === undefined
-        ? {}
+        ? // A program reading the card's channel cannot run on the client,
+          // which does not hold what the realm reads there; nor can one whose
+          // answer carries a capability only the realm can sign.
+          ('collect' in declaration && declaration.collect !== undefined) ||
+          ('capability' in declaration && declaration.capability !== undefined)
+          ? { optimistic: false }
+          : {}
         : { optimistic: declaration.optimistic }),
       ...(declaration.base === 'query'
         ? { query: queryDeclaration(declaration) }

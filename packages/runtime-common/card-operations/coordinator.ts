@@ -42,6 +42,7 @@ import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
   isOperationFailure,
+  type ChannelMessages,
   type EntryPosition,
   type OperationIdentityResult,
 } from './types.ts';
@@ -51,6 +52,7 @@ import type { RequestTimings, StageCursor } from '../request-timings.ts';
 import type { Definition } from '../definitions.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
+import type { FeedOperation } from '../event-feed.ts';
 
 // ============================================================================
 // The batch coordinator.
@@ -173,6 +175,9 @@ export interface BatchCore {
     options?: {
       clientRequestId?: string | null;
       clientAuthored?: string[];
+      // See `CommitBatchOptions.operationAt`: the operation that wrote each
+      // card, by card URL.
+      operations?: Record<string, FeedOperation>;
       waitForIndex?: boolean;
       // See `CommitBatchOptions.indexWaitBudgetMs`.
       indexWaitBudgetMs?: number;
@@ -228,12 +233,20 @@ export interface BatchCore {
   // that declares none answers with an empty map, which is what tells a
   // program naming a setting that this realm has none.
   realmConfig(): Promise<Record<string, JsonValue>>;
+  // The latest message per key that an emit put on a card's live
+  // channel (ADR event-feed §1.6, §1.7), for a transform that `collect`s them.
+  // Called inside the lock on that card. A core without it refuses every such
+  // transform with 501 `not-implemented`.
+  channelMessages?: ChannelMessages;
 }
 
 export interface CommitBatchOptions {
   // The caller's own id for this batch. Echoed on the realm's index event so a
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
+  // The operation each entry runs, by the position it was sent under, so the
+  // realm's event feed can name what produced each change (ADR event-feed §1.1).
+  operationAt?: (position: EntryPosition) => FeedOperation | undefined;
   // Whether the index event should say which of this write's cards carried
   // content the caller supplied.
   //
@@ -722,6 +735,9 @@ async function stageBatch(
           storedLink: core.storedLink,
           resolvedLink: core.resolvedLink,
           lookupDefinition: core.lookupDefinition,
+          ...(core.channelMessages
+            ? { channelMessages: core.channelMessages }
+            : {}),
         });
       return entry.admit
         ? stageAdmitted(entry, entry.admit, position, stage, () =>
@@ -2420,10 +2436,21 @@ async function commitStaged(
         .filter((change): change is StagedChange => Boolean(change?.lid))
         .map((change) => change.id)
     : undefined;
+  let operations: Record<string, FeedOperation> | undefined;
+  if (opts.operationAt) {
+    operations = {};
+    for (let [index, change] of staged.entries()) {
+      let operation = change && opts.operationAt(positions[index]);
+      if (change && operation) {
+        operations[change.id] = operation;
+      }
+    }
+  }
   let committed = await core.commitUnlocked(
     { writes, appends, deletes },
     {
       clientRequestId: opts.clientRequestId ?? null,
+      ...(operations ? { operations } : {}),
       ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
       ...(opts.indexWaitBudgetMs === undefined

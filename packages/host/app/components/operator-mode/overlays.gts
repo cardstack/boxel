@@ -324,13 +324,19 @@ export default class Overlays extends Component<OverlaySignature> {
       };
       renderedCard.element.addEventListener('mouseenter', mouseenter);
       renderedCard.element.addEventListener('mouseleave', mouseleave);
-      renderedCard.element.addEventListener('click', click);
+      // A card that owns its own clicks ('self') keeps the hover ring and
+      // label, but a click on it is the card's: the environment doesn't open
+      // it.
+      let ownsClicks = renderedCard.interactions === 'self';
+      if (!ownsClicks) {
+        renderedCard.element.addEventListener('click', click);
+        renderedCard.element.style.cursor = 'pointer';
+      }
       this.boundRenderedCardElements.set(renderedCard.element, {
         mouseenter,
         mouseleave,
         click,
       });
-      renderedCard.element.style.cursor = 'pointer';
       renderedCard.overlayZIndexStyle = this.zIndexStyle(
         renderedCard.element,
         renderedCard.overlayZIndexStyle,

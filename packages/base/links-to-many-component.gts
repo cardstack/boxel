@@ -795,6 +795,7 @@ export function getLinksToManyComponent({
                             isFileDefField
                           }}
                           @displayContainer={{@displayContainer}}
+                          @interactions={{@interactions}}
                           class='linksToMany-item'
                           data-test-plural-view-item={{i}}
                         />

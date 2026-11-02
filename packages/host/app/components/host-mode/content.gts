@@ -35,6 +35,9 @@ interface Signature {
     removeCardFromStack: (cardId: string) => void;
     openInteractSubmode?: () => void;
     viewCard: ViewCardFn;
+    hrefFor?: CardCrudFunctions['hrefFor'];
+    navigateTo?: CardCrudFunctions['navigateTo'];
+    prefetch?: CardCrudFunctions['prefetch'];
   };
 }
 
@@ -130,6 +133,9 @@ export default class HostModeContent extends Component<Signature> {
   private get cardCrudFunctions(): Optional<CardCrudFunctions> {
     return {
       viewCard: this.args.viewCard,
+      hrefFor: this.args.hrefFor,
+      navigateTo: this.args.navigateTo,
+      prefetch: this.args.prefetch,
     };
   }
 

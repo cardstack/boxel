@@ -99,6 +99,7 @@ import {
   type RealmResourceIdentifier,
   type Saved,
   type VirtualNetwork,
+  CARD_REVISION_PARAM,
   X_BOXEL_LINK_SHAPE_HEADER,
 } from '@cardstack/runtime-common';
 
@@ -136,6 +137,7 @@ import type CardService from './card-service';
 import type ClientTelemetryService from './client-telemetry';
 import type EnvironmentService from './environment-service';
 
+import type EventFeedService from './event-feed';
 import type HostModeService from './host-mode-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
@@ -384,6 +386,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
   @service declare private hostModeService: HostModeService;
+  @service declare private eventFeed: EventFeedService;
   @service declare private network: NetworkService;
   @service declare private environmentService: EnvironmentService;
   @service declare private session: SessionService;
@@ -1345,6 +1348,20 @@ export default class StoreService extends Service implements StoreInterface {
               dependencyTrackingContext: opts?.dependencyTrackingContext,
             },
           });
+    // A site page reads its cards without holding references, and names a
+    // realm the site draws on by the site's alias, which realm lookup doesn't
+    // know. So in host mode a card read follows the realm the card itself
+    // names, through that realm's event feed (ADR event-feed).
+    if (
+      this.hostModeService.isActive &&
+      this.eventFeed.listening &&
+      isCardInstance(result)
+    ) {
+      let realmURL = result[realmURLSymbol]?.href;
+      if (realmURL) {
+        this.#subscribeToRealmURL(realmURL);
+      }
+    }
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
@@ -2961,7 +2978,11 @@ export default class StoreService extends Service implements StoreInterface {
               };
               this.#reloadTargets.set(instance[localIdSymbol], target);
             }
-            this.reloadTask.perform(instance, target);
+            this.reloadTask.perform(
+              instance,
+              target,
+              event.revisions?.[invalidation],
+            );
             reloadsTriggered++;
           } else {
             // One line per skip, naming the rule that decided it.
@@ -3408,7 +3429,13 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadTask = task(
-    async (instance: CardDef, reloadTarget?: ReloadTarget) => {
+    // `revision` is the revision of the card the event named, which the
+    // re-read asks for by URL (see `IncrementalIndexEventContent.revisions`).
+    async (
+      instance: CardDef,
+      reloadTarget?: ReloadTarget,
+      revision?: string,
+    ) => {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
@@ -3428,6 +3455,7 @@ export default class StoreService extends Service implements StoreInterface {
             instance,
             identityMap,
             identityEpoch,
+            revision,
           );
         } catch (err: any) {
           let cardError = processCardError(instance.id, err).errors[0];
@@ -4998,6 +5026,7 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     identityMap: CardStore,
     identityEpoch: number,
+    revision?: string,
   ): Promise<CardDef | undefined> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
@@ -5008,8 +5037,17 @@ export default class StoreService extends Service implements StoreInterface {
       // if a save acknowledges them while it is in flight: the realm may have
       // answered the read before that save wrote.
       let pinnedAtRead = this.#pinnedFields(instance);
+      // A re-read a event feed event started names the card's revision, so
+      // every visitor re-reading it asks for one URL a shared cache can answer
+      // (ADR event-feed §1.4). The document carries its own id either way.
+      let readURL: string = instance.id;
+      if (revision) {
+        let url = this.network.virtualNetwork.toURL(instance.id);
+        url.searchParams.set(CARD_REVISION_PARAM, revision);
+        readURL = url.href;
+      }
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
-        instance.id,
+        readURL,
         undefined,
       )) as SingleCardDocument;
 
@@ -5123,7 +5161,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private subscribeToRealm(url: RealmResourceIdentifier | URL) {
-    if (this.hostModeService.isActive) {
+    // A host-mode visitor hears realm events only through the realms' public
+    // feeds (ADR event-feed), so the store subscribes there once those are listening.
+    if (this.hostModeService.isActive && !this.eventFeed.listening) {
       return;
     }
 
@@ -5134,6 +5174,10 @@ export default class StoreService extends Service implements StoreInterface {
       );
       return;
     }
+    this.#subscribeToRealmURL(realmURL);
+  }
+
+  #subscribeToRealmURL(realmURL: string) {
     let subscription = this.subscriptions.get(realmURL);
     if (!subscription) {
       this.subscriptions.set(realmURL, {
