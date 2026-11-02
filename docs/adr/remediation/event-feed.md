@@ -23,8 +23,10 @@ root, in backticks, and the requirement it breaks.
   announced; a client finds it only on a later reset. Breaks §1.2.
 - There are no subscriptions to a `query` operation's results; a page follows
   the whole realm or one card's live channel. Breaks §1.6.
-- There is no personal lane, so a subscription whose grant reads `actor()` is
-  refused rather than served per caller. Breaks §1.6 and §1.7.
+- The personal lane is opened only with a capability, not as a signed-in
+  user, and filters only channel messages that declare an `audience`; a
+  subscription whose grant reads `actor()` is still refused rather than
+  served per caller. Breaks §1.6 and §1.7.
 
 `packages/runtime-common/realm.ts`:
 

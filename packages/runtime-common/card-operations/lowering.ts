@@ -754,6 +754,36 @@ async function lowerOperation(
       // Presence is never guarded: it waits on no ordered write.
       delete operation.guard;
     }
+    let audience = (declaration as { audience?: unknown }).audience;
+    if (audience !== undefined && !isBxl(audience)) {
+      sink.add(
+        'invalid-program',
+        'audience',
+        `an "emit" operation's \`audience\` is a program written with the bxl tag, which answers the subject whose capability may send and hear the message`,
+      );
+    } else if (audience !== undefined && unordered) {
+      sink.add(
+        'invalid-program',
+        'audience',
+        `\`audience\` applies only to an ordered emit; presence is heard by everyone following the card`,
+      );
+    } else if (audience !== undefined) {
+      let program = lowerExpression(
+        audience.$bxl,
+        'audience',
+        paramNames,
+        sink,
+      );
+      if (program) {
+        operation.audience = program;
+      }
+    }
+  }
+  if (base === 'transform') {
+    let capability = lowerCapability(declaration, paramNames, sink);
+    if (capability) {
+      operation.capability = capability;
+    }
   }
   if (base === 'callApi') {
     let request = lowerCallApi(
@@ -872,6 +902,55 @@ const DEFAULT_PRESENCE_SECONDS = 60;
 // An emit's `ordered: false` and `expiresAfter` (ADR event-feed §1.6). The decorator
 // refuses a malformed pair; a stored entry is held to the same rule here, and
 // an emit whose presence can't be applied stays ordered.
+// A day: long enough for an evening's game or a visit, short enough that a
+// token copied off a screen stops working.
+const DEFAULT_CAPABILITY_SECONDS = 24 * 3600;
+const MAX_CAPABILITY_SECONDS = 30 * 24 * 3600;
+
+// A transform's `capability` clause (ADR event-feed §1.7): the subject a token
+// names, as an expression over the payload, and how long the token lasts.
+function lowerCapability(
+  declaration: OperationDeclaration,
+  paramNames: Set<string>,
+  sink: IssueSink,
+): { subject: OperationProgram; expiresAfterMs: number } | undefined {
+  let clause = (declaration as { capability?: unknown }).capability as
+    | { subject?: unknown; expiresAfter?: unknown }
+    | undefined;
+  if (clause === undefined) {
+    return undefined;
+  }
+  if (!clause || typeof clause !== 'object' || !isBxl(clause.subject)) {
+    sink.add(
+      'invalid-program',
+      'capability',
+      `a \`capability\` names its \`subject\` with a program written with the bxl tag`,
+    );
+    return undefined;
+  }
+  let seconds = clause.expiresAfter ?? DEFAULT_CAPABILITY_SECONDS;
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isInteger(seconds) ||
+    seconds <= 0 ||
+    seconds > MAX_CAPABILITY_SECONDS
+  ) {
+    sink.add(
+      'invalid-program',
+      'capability.expiresAfter',
+      `\`capability.expiresAfter\` must be a whole number of seconds from 1 to ${MAX_CAPABILITY_SECONDS}`,
+    );
+    return undefined;
+  }
+  let subject = lowerExpression(
+    clause.subject.$bxl,
+    'capability.subject',
+    paramNames,
+    sink,
+  );
+  return subject ? { subject, expiresAfterMs: seconds * 1000 } : undefined;
+}
+
 function lowerPresence(
   declaration: OperationDeclaration,
   sink: IssueSink,
@@ -973,6 +1052,8 @@ function readsActor(operation: OperationDefinition): boolean {
     operation.output,
     operation.key,
     operation.guard?.program,
+    operation.audience,
+    operation.capability?.subject,
   ]) {
     if (program && callsActor(program.source)) {
       return true;

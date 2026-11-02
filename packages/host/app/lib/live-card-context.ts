@@ -12,7 +12,7 @@ export function liveCardContext(
   realm: RealmService,
 ): Required<Pick<CardContext, 'followChannel' | 'takeRefreshRequests'>> {
   return {
-    followChannel: (card, onMessage) => {
+    followChannel: (card, onMessage, options) => {
       let cardURL = typeof card === 'string' ? card : card.id;
       if (!cardURL) {
         return () => {};
@@ -24,7 +24,12 @@ export function liveCardContext(
           ? undefined
           : (card as CardDef & { [realmURLSymbol]?: URL })[realmURLSymbol]
               ?.href) ?? realm.realmURLOf(cardURL);
-      return eventFeed.followChannel(cardURL, realmURL, onMessage);
+      return eventFeed.followChannel(
+        cardURL,
+        realmURL,
+        onMessage,
+        options?.capability,
+      );
     },
     takeRefreshRequests: (taker) => eventFeed.takeRefreshRequests(taker),
   };

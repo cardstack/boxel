@@ -14,6 +14,7 @@ import {
   EVENT_FEED_WINDOW,
   EVENT_FEED_MAX_STREAMS,
   EVENT_FEED_STREAM_RETRY_AFTER_SECONDS,
+  forFollower,
   type FeedEvent,
   type FeedOperation,
   type FeedReadability,
@@ -368,8 +369,17 @@ import {
 } from './card-operations/telemetry.ts';
 import {
   runOutputTransform,
+  runSubjectTransform,
   type TransformContext,
 } from './card-operations/transforms.ts';
+import {
+  CAPABILITY_HEADER,
+  CAPABILITY_PARAM,
+  CAPABILITY_SCOPE,
+  capabilitySecret,
+  readCapability,
+  type CapabilityClaims,
+} from './capability-token.ts';
 import type {
   CoarseDeclined,
   OperationCore,
@@ -7021,6 +7031,32 @@ export class Realm {
           let result = writeResult(committed[index], (url) =>
             this.#virtualNetwork.unresolveURL(url),
           );
+          // A `capability` clause hands the caller a token once the write has
+          // landed (ADR event-feed §1.7). Like `output`, it runs after the
+          // commit, so a subject that fails answers 400 over a card that has
+          // already changed.
+          let resultData = (result as { data: Record<string, unknown> | null })
+            .data;
+          if (definition.capability && resultData && committed[index]) {
+            try {
+              let subject = await runSubjectTransform(
+                definition.capability.subject,
+                (entry.data ? paramsFor(entry) : {}) as Record<string, unknown>,
+                'capability',
+                this.#transformContext(entry, caller),
+              );
+              resultData.meta = {
+                ...(resultData.meta as Record<string, unknown>),
+                capability: this.#issueCapability({
+                  cardURL: committed[index]!.id,
+                  subject,
+                  expiresInMs: definition.capability.expiresAfterMs,
+                }),
+              };
+            } catch (err: unknown) {
+              throw atEntry(err, entry.position);
+            }
+          }
           if (!definition.output) {
             results.set(entry.position, result);
             continue;
@@ -7970,6 +8006,9 @@ export class Realm {
         // An `emit` operation's message goes on the target card's live
         // channel (ADR event-feed §1.6), which answers the position it took.
         emitMessage: (args) => this.#emitMessage(args),
+        // A transform's `capability` clause: the token its caller is handed
+        // (ADR event-feed §1.7).
+        issueCapability: async (args) => this.#issueCapability(args),
       };
     }
     return this.#operationCore;
@@ -8273,11 +8312,52 @@ export class Realm {
   #callerOf(
     request: Request,
     requestContext: RequestContext,
-  ): { actor: string; clientRequestId: string } {
+  ): {
+    actor: string;
+    clientRequestId: string;
+    capability?: { card: string; subject: string };
+  } {
+    let capability = this.#capabilityOf(request.headers.get(CAPABILITY_HEADER));
     return {
       actor: requestContext.authenticatedUser ?? '',
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+      ...(capability ? { capability } : {}),
     };
+  }
+
+  // The card and subject a capability token names, when this realm signed it
+  // and it hasn't expired (ADR event-feed §1.7). Card ids are absolute.
+  #capabilityOf(
+    token: string | null | undefined,
+  ): { card: string; subject: string } | undefined {
+    let held = readCapability(
+      token,
+      this.url,
+      this.#realmSecretSeed,
+      (t, secret) => this.#adapter.verifyJWT(t, secret),
+    );
+    return held
+      ? { card: new URL(held.card, this.url).href, subject: held.subject }
+      : undefined;
+  }
+
+  // Signs the capability a transform's `capability` clause hands its caller.
+  #issueCapability(args: {
+    cardURL: string;
+    subject: string;
+    expiresInMs: number;
+  }): string {
+    let claims: CapabilityClaims = {
+      scope: CAPABILITY_SCOPE,
+      realm: this.url,
+      card: this.paths.local(new URL(args.cardURL)).replace(/\.json$/, ''),
+      subject: args.subject,
+    };
+    return this.#adapter.createJWT(
+      claims as unknown as TokenClaims,
+      `${Math.max(1, Math.round(args.expiresInMs / 1000))}s` as ms.StringValue,
+      capabilitySecret(this.#realmSecretSeed),
+    );
   }
 
   // The batch coordinator's collaborators, built the same way and for the same
@@ -18586,10 +18666,22 @@ export class Realm {
   // card's live channel, which answers only when a visitor who isn't signed in
   // may read that card (ADR event-feed §1.6). Undefined when the channel can't be
   // followed, which is answered as not found, whatever the reason.
-  async #feedFor(
-    request: Request,
-  ): Promise<{ feed: RealmEventFeed; channel?: string } | undefined> {
-    let asked = new URL(request.url).searchParams.get('channel');
+  //
+  // A `capability` for the card makes it the follower's personal lane (ADR
+  // event-feed §1.7): the same channel, in the same order, with the messages
+  // for the subject it names in full. `subject` is set only for a capability
+  // this realm signed for this very card.
+  async #feedFor(request: Request): Promise<
+    | {
+        feed: RealmEventFeed;
+        channel?: string;
+        subject?: string;
+        personal?: true;
+      }
+    | undefined
+  > {
+    let searchParams = new URL(request.url).searchParams;
+    let asked = searchParams.get('channel');
     if (asked === null) {
       return { feed: this.#eventFeed };
     }
@@ -18599,8 +18691,21 @@ export class Realm {
     }
     // Asked on every request, so a card withdrawn from visitors stops being
     // followable at once; a shared cache keeps this to about one ask a second.
-    let readable = await this.#mayReadAnonymously(new URL(path, this.url).href);
-    return readable ? { feed: this.#channel(path), channel: path } : undefined;
+    let cardURL = new URL(path, this.url).href;
+    let readable = await this.#mayReadAnonymously(cardURL);
+    if (!readable) {
+      return undefined;
+    }
+    let token = searchParams.get(CAPABILITY_PARAM);
+    let held = this.#capabilityOf(token);
+    return {
+      feed: this.#channel(path),
+      channel: path,
+      ...(held && held.card === cardURL ? { subject: held.subject } : {}),
+      // A request naming a capability is personal whether or not it verifies,
+      // so its answer is never put in a shared cache under that URL.
+      ...(token ? { personal: true as const } : {}),
+    };
   }
 
   // The card path a `?channel=` names, as the realm spells it: resolved
@@ -18637,7 +18742,7 @@ export class Realm {
     if (!followed) {
       return notFound(request, requestContext);
     }
-    let { feed, channel } = followed;
+    let { feed, channel, subject } = followed;
     if (this.#openFeedStreams >= this.eventFeedStreamCap) {
       return createResponse({
         body: JSON.stringify({
@@ -18710,7 +18815,7 @@ export class Realm {
         return;
       }
       sent = Math.max(sent, event.seq);
-      stream.write(feed.serialize(event));
+      stream.write(feed.serialize(forFollower(event, subject)));
       if (channel === undefined) {
         return;
       }
@@ -18804,12 +18909,22 @@ export class Realm {
     if (!followed) {
       return notFound(request, requestContext);
     }
+    let window = await followed.feed.window();
     return createResponse({
-      body: JSON.stringify(await followed.feed.window()),
+      body: JSON.stringify({
+        ...window,
+        events: window.events.map((event) =>
+          forFollower(event, followed.subject),
+        ),
+      }),
       init: {
         headers: {
           'Content-Type': SupportedMimeType.JSON,
-          'Cache-Control': 'public, max-age=1, stale-while-revalidate=1',
+          // A personal lane's window is that follower's alone (ADR event-feed
+          // §1.7), so no shared cache may hold it.
+          'Cache-Control': followed.personal
+            ? 'private, no-store'
+            : 'public, max-age=1, stale-while-revalidate=1',
         },
       },
       requestContext,
@@ -18916,6 +19031,7 @@ export class Realm {
     body: unknown;
     guard?: () => Promise<void>;
     unordered?: { expiresAfterMs: number };
+    audience?: string;
   }): Promise<{ position: string }> {
     let path = this.paths.local(new URL(args.cardURL)).replace(/\.json$/, '');
     let channel = this.#channel(path);
@@ -18938,6 +19054,7 @@ export class Realm {
       operation: args.operation,
       key: args.key,
       body: args.body,
+      ...(args.audience === undefined ? {} : { audience: args.audience }),
     };
     // A guard runs in turn with the channel's appends, which a `collect`
     // waits on, so the two are ordered within this process. It takes no file

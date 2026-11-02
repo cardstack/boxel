@@ -142,6 +142,9 @@ export interface OperationsTransport {
       // Ask the realm to answer once the batch's writes are durable rather than
       // once its index pass has landed. See `OperationsOptions.skipIndexWait`.
       skipIndexWait?: boolean;
+      // A capability to present with the batch. See
+      // `OperationsOptions.capability`.
+      capability?: string;
     },
   ): Promise<OperationsAnswer>;
   defaultWritableRealm(): string | undefined;
@@ -336,6 +339,10 @@ export interface OperationWriteResult {
   // gave it. Present only for a create that named one, which is every create
   // a batch stages.
   lid?: string;
+  // A capability the operation's `capability` clause handed the caller (ADR
+  // event-feed §1.7), to present on later calls and when following the card's
+  // channel.
+  capability?: string;
 }
 
 // A write result as the transport reads it, which is the author's plus the
@@ -483,6 +490,11 @@ export interface OperationsOptions {
   // default, in which case the realm waits for the write's own pass — for a
   // few seconds at most, past which it answers as if this were set.
   skipIndexWait?: boolean;
+  // A capability an earlier operation's result handed this caller (ADR
+  // event-feed §1.7), presented with every call made through this bucket. An
+  // `emit` with an `audience` is sent only with one naming its card and
+  // subject.
+  capability?: string;
 }
 
 export interface OperationsEnvironment {
@@ -657,14 +669,16 @@ async function invokeOne(
   }
   let optimistic = optimisticCandidate(subject, info, name, entry);
   let skipIndexWait = isWrite(info.base) && env.options?.skipIndexWait;
+  let capability = env.options?.capability;
   let answer = await env.transport.send(
     realmURL,
     travelsAsWrite(info.base) ? 'POST' : 'QUERY',
     { 'boxel:operations': [entry] },
-    optimistic || skipIndexWait
+    optimistic || skipIndexWait || capability
       ? {
           ...(optimistic ? { optimistic } : {}),
           ...(skipIndexWait ? { skipIndexWait: true } : {}),
+          ...(capability ? { capability } : {}),
         }
       : undefined,
   );
@@ -1267,6 +1281,9 @@ function writeResult(
     ...(meta.indexPending === true ? { indexPending: true as const } : {}),
     lastModified: Number(meta.lastModified ?? 0),
     ...(typeof data.lid === 'string' ? { lid: data.lid } : {}),
+    ...(typeof meta.capability === 'string'
+      ? { capability: meta.capability }
+      : {}),
   };
 }
 
@@ -1395,16 +1412,18 @@ async function sendBatch(
   // because the caller asked for its answer in a shape nothing can read.
   let projection = projectionOf(root.batch, returned, 'an atomic() builder');
   let skipIndexWait = root.writes && env.options?.skipIndexWait;
+  let capability = env.options?.capability;
   let answer = await env.transport.send(
     root.batch.realmURL,
     root.writes ? 'POST' : 'QUERY',
     { 'boxel:operations': root.members.map((member) => member.wire) },
-    root.batch.adopted.length || skipIndexWait
+    root.batch.adopted.length || skipIndexWait || capability
       ? {
           ...(root.batch.adopted.length
             ? { adopted: [...root.batch.adopted] }
             : {}),
           ...(skipIndexWait ? { skipIndexWait: true } : {}),
+          ...(capability ? { capability } : {}),
         }
       : undefined,
   );

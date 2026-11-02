@@ -115,8 +115,16 @@ from; a new follower MUST hear every unexpired key.
 ### 1.7. Two lanes
 
 A personal lane MUST be opened as a caller the realm can name (a signed-in
-user, or a capability an operation handed out), MUST filter each event for
-that caller, and MUST number its events apart from the broadcast sequence. A
+user, or a capability an operation handed out) and MUST filter each event
+for that caller. It carries the broadcast sequence itself, filtered, so the
+two lanes share positions and neither has gaps the other fills. A capability
+MUST be signed by the realm with a key of its own, name one card and one
+subject, and expire; an operation hands one out only through a declared
+`capability` clause, after its write lands. A message whose `emit` declares
+an `audience` MUST be sent only with a capability naming that card and
+subject, MUST reach in full only followers holding one, and MUST reach every
+other follower with its body withheld, so a page can count what arrived
+without reading it. A personal lane's answers MUST NOT be shared-cached. A
 client MUST start on the broadcast lane and, when a personal lane is refused
 or closes, fall back to it, learning its own outcomes from operation
 responses.

@@ -15,6 +15,7 @@ import {
   runInputTransform,
   runGuardTransform,
   runKeyTransform,
+  runSubjectTransform,
   runOutputTransform,
   type TransformContext,
 } from './transforms.ts';
@@ -57,6 +58,7 @@ import {
   type OperationSourceBody,
   type OperationTarget,
   type EmitMessage,
+  type IssueCapability,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -225,6 +227,10 @@ export interface OperationCore {
   // committed. A core without it emits nothing, and refuses every `emit`
   // with 501 `not-implemented`.
   emitMessage?: EmitMessage;
+  // Signs the capability a transform's `capability` clause hands its caller
+  // (ADR event-feed §1.7). A core without it refuses such a transform before
+  // it writes.
+  issueCapability?: IssueCapability;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -1722,6 +1728,17 @@ async function emitOperation(
     body,
     transformContext(core, request),
   );
+  let audience = definition.audience
+    ? await runSubjectTransform(
+        definition.audience,
+        body,
+        'audience',
+        transformContext(core, request),
+      )
+    : undefined;
+  if (audience !== undefined) {
+    assertHoldsCapability(request, cardURL, audience);
+  }
   let position: string;
   try {
     ({ position } = await core.emitMessage({
@@ -1730,6 +1747,7 @@ async function emitOperation(
       ...(key === undefined ? {} : { key }),
       body,
       ...(definition.unordered ? { unordered: definition.unordered } : {}),
+      ...(audience === undefined ? {} : { audience }),
       ...(definition.guard
         ? {
             guard: () => assertEmitGuard(core, request, definition, cardURL),
@@ -1752,6 +1770,39 @@ async function emitOperation(
     });
   }
   return { emitted: { id: cardURL, position } };
+}
+
+// An emit with an `audience` speaks for one subject, so its caller must hold a
+// capability for this card naming that subject (ADR event-feed §1.7). Refused
+// before anything is emitted, with a 403: a capability would change the
+// outcome, but a session would not, so this is not a 401.
+function assertHoldsCapability(
+  request: OperationRequest,
+  cardURL: string,
+  audience: string,
+): void {
+  let held = request.capability;
+  if (
+    held &&
+    stripJSON(held.card) === stripJSON(cardURL) &&
+    held.subject === audience
+  ) {
+    return;
+  }
+  throw new OperationFailure({
+    id: cardURL,
+    status: 403,
+    code: 'capability-required',
+    title: 'Operation needs a capability',
+    detail: held
+      ? `operation "${request.name}" speaks for "${audience}", and the capability presented is for another card or subject`
+      : `operation "${request.name}" speaks for "${audience}", and this request presented no capability for this card`,
+    meta: { operation: request.name },
+  });
+}
+
+function stripJSON(url: string): string {
+  return url.replace(/\.json$/, '');
 }
 
 // An emit's `assert`, judged against the card as stored and the realm's clock

@@ -581,6 +581,21 @@ export interface TransformOperationDeclaration extends OperationCommon {
   // caller cannot supply a collected param. `input` runs before the lock and
   // so cannot read one either; the program and the clauses can.
   readonly collect?: CollectClause;
+  // A capability the realm hands the caller once the write lands (ADR
+  // event-feed §1.7): a token, signed by the realm, naming this card and the
+  // subject `subject` gives, a BXL expression over the payload (`.`),
+  // `params()` and `realmConfig()` that answers a string. It expires after
+  // `expiresAfter` seconds (a day by default). The caller presents it to send
+  // an `emit` whose `audience` is that subject, and to follow the card's
+  // channel with that subject's messages in full.
+  //
+  //   capability: { subject: bxl`params("team")`, expiresAfter: 21600 }
+  readonly capability?: CapabilityClause;
+}
+
+export interface CapabilityClause {
+  readonly subject: BxlProgram;
+  readonly expiresAfter?: number;
 }
 
 // Param name → the name of an `emit` operation declared on the same type.
@@ -933,6 +948,13 @@ export interface EmitOperationDeclaration extends OperationCommon {
   readonly expiresAfter?: number;
   // A precondition judged against the card as stored, before the message goes.
   readonly assert?: EmitAssertClause;
+  // Whose message this is (ADR event-feed §1.7): a BXL expression over the
+  // payload, `params()` and `realmConfig()` answering a subject. The emit is
+  // refused unless the caller presents a capability for this card naming
+  // that subject, which an operation's `capability` clause issued. A follower
+  // holding it hears the message whole; every other follower hears that a
+  // message arrived, with its key and no body. Ordered emits only.
+  readonly audience?: BxlProgram;
   readonly transformations?: never;
   readonly output?: never;
 }
@@ -1062,9 +1084,10 @@ const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   callApi: ['perInstance'],
   // Says what the program reads, rather than what it does, so it sits beside a
   // raw program as readily as beside the clauses.
-  transform: ['collect'],
-  // How the message travels, rather than what it says.
-  emit: ['ordered', 'expiresAfter'],
+  // What the caller is handed once the write lands, beside the work.
+  transform: ['collect', 'capability'],
+  // How the message travels and who hears it, rather than what it says.
+  emit: ['ordered', 'expiresAfter', 'audience'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -1835,6 +1858,17 @@ function assertValidClauses(
   if (base === 'emit') {
     assertPresenceShape(label, declaration);
   }
+  if (base === 'emit' && declaration.audience !== undefined) {
+    assertBxlProgram(label, 'audience', declaration.audience);
+    if (declaration.ordered === false) {
+      throw new Error(
+        `${label}: \`audience\` applies only to an ordered emit; presence is heard by everyone following the card`,
+      );
+    }
+  }
+  if (base === 'transform' && declaration.capability !== undefined) {
+    assertCapabilityShape(label, declaration.capability);
+  }
   if (base === 'appendContainsMany' && !isBuiltInAppend(name, declaration)) {
     assertNamesItemsToAppend(label, declaration);
   }
@@ -2445,6 +2479,32 @@ function assertValidReference(
       throw new Error(
         `${label}: \`${path}\` is not a typed reference; build one with params(), actor(), instance(), realmConfig() or card()`,
       );
+  }
+}
+
+// The longest a capability may last: it stands in for a session, and a
+// session this long would outlive the occasion it was handed out for.
+const MAX_CAPABILITY_SECONDS = 30 * 24 * 3600;
+
+function assertCapabilityShape(label: string, capability: unknown) {
+  if (!isPlainObject(capability)) {
+    throw new Error(
+      `${label}: \`capability\` must be an object with a \`subject\` BXL program`,
+    );
+  }
+  assertOnlyKeys(label, 'capability', capability, ['subject', 'expiresAfter']);
+  assertBxlProgram(label, 'capability.subject', capability.subject);
+  let { expiresAfter } = capability;
+  if (
+    expiresAfter !== undefined &&
+    (typeof expiresAfter !== 'number' ||
+      !Number.isInteger(expiresAfter) ||
+      expiresAfter <= 0 ||
+      expiresAfter > MAX_CAPABILITY_SECONDS)
+  ) {
+    throw new Error(
+      `${label}: \`capability.expiresAfter\` must be a whole number of seconds from 1 to ${MAX_CAPABILITY_SECONDS}`,
+    );
   }
 }
 
@@ -3214,8 +3274,10 @@ function carriedOperations(
       declared: true,
       ...(declaration.optimistic === undefined
         ? // A program reading the card's channel cannot run on the client,
-          // which does not hold what the realm reads there.
-          'collect' in declaration && declaration.collect !== undefined
+          // which does not hold what the realm reads there; nor can one whose
+          // answer carries a capability only the realm can sign.
+          ('collect' in declaration && declaration.collect !== undefined) ||
+          ('capability' in declaration && declaration.capability !== undefined)
           ? { optimistic: false }
           : {}
         : { optimistic: declaration.optimistic }),

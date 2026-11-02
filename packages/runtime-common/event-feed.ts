@@ -102,6 +102,28 @@ export interface FeedEvent {
   // For a `message` an unordered emit sent, such as presence (§1.8): it has
   // no position, so `seq` is 0 and a client never resumes from it.
   unordered?: true;
+  // For a `message` whose emit declared an `audience` (ADR event-feed §1.7):
+  // the subject it belongs to. Only a follower holding a capability naming
+  // that subject hears its body; every other follower gets the message with
+  // `withheld` and no body, so it can count what arrived without reading it.
+  audience?: string;
+  withheld?: true;
+}
+
+// An event as one follower hears it (ADR event-feed §1.7): whole, unless it is
+// a message for an audience the follower holds no capability for, which
+// arrives with its body withheld. `subject` is what the follower's capability
+// names, if it presented one for this channel.
+export function forFollower(event: FeedEvent, subject?: string): FeedEvent {
+  if (
+    event.kind !== 'message' ||
+    event.audience === undefined ||
+    event.audience === subject
+  ) {
+    return event;
+  }
+  let { body: _body, ...rest } = event;
+  return { ...rest, withheld: true };
 }
 
 // A message emitted on a card's live channel (ADR event-feed §1.6), as a page
@@ -114,6 +136,11 @@ export interface ChannelMessage {
   // The name of the operation that emitted it.
   operation?: string;
   body: unknown;
+  // Whose message it is, for an emit that declared an `audience` (ADR
+  // event-feed §1.7); `withheld` when this follower holds no capability for
+  // that subject, and `body` is then absent.
+  audience?: string;
+  withheld?: true;
 }
 
 // What a card that takes a page's refresh requests is handed (ADR event-feed §1.8).
@@ -419,6 +446,7 @@ export class RealmEventFeed {
       operation: FeedOperation;
       key?: string;
       body: unknown;
+      audience?: string;
     },
     guard?: () => Promise<void>,
   ): Promise<FeedEvent> {
@@ -429,6 +457,7 @@ export class RealmEventFeed {
       operation: message.operation,
       ...(message.key !== undefined ? { key: message.key } : {}),
       body: message.body,
+      ...(message.audience !== undefined ? { audience: message.audience } : {}),
     };
     // Recorded on its own, in turn with the feed's other appends, so the
     // caller learns its position, and a failure is the caller's to see.

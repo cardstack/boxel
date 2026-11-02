@@ -444,9 +444,14 @@ export interface CardContext<T extends CardDef = CardDef> {
   // Returns a function that stops following. The card's realm must let a
   // visitor who isn't signed in read the card. Absent where nothing follows a
   // channel, such as a prerender, so consumers guard on it.
+  //
+  // With a `capability` an operation handed the caller (ADR event-feed §1.7),
+  // this is the caller's personal lane: messages for the subject it names
+  // arrive whole, and others for an audience arrive `withheld`, with no body.
   followChannel?: (
     card: CardDef | string,
     onMessage: (message: ChannelMessage) => void,
+    options?: { capability?: string },
   ) => () => void;
   // Takes the page's refresh requests (ADR event-feed §1.8): while a card takes
   // them, the page doesn't reload when the site's realm asks it to; the card

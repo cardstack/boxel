@@ -218,6 +218,30 @@ export async function runKeyTransform(
   return produced;
 }
 
+// Run an `emit`'s `audience` or a transform's `capability.subject` over the
+// payload, and answer the subject it names (ADR event-feed §1.7). A subject is
+// non-empty text; a number is taken as its text, as a key's is.
+export async function runSubjectTransform(
+  program: { source: string },
+  payload: Record<string, unknown>,
+  stage: 'audience' | 'capability',
+  ctx: TransformContext,
+): Promise<string> {
+  let produced = await runStage(program.source, payload, stage, ctx);
+  if (typeof produced === 'number' && Number.isFinite(produced)) {
+    return String(produced);
+  }
+  if (typeof produced !== 'string' || produced === '') {
+    throw refusal(
+      ctx,
+      stage,
+      `the \`${stage}\` stage names whose message or capability this is, ` +
+        `as text, and this program produced ${describe(produced)}`,
+    );
+  }
+  return produced;
+}
+
 // Run an `emit`'s `assert` over the card as stored, and answer what it
 // produced. Whether that is a yes is the caller's to judge, since only it
 // knows what a refusal says.
@@ -232,7 +256,13 @@ export async function runGuardTransform(
   return await runStage(definition.guard.program.source, card, 'assert', ctx);
 }
 
-type TransformStage = 'input' | 'output' | 'key' | 'assert';
+type TransformStage =
+  | 'input'
+  | 'output'
+  | 'key'
+  | 'assert'
+  | 'audience'
+  | 'capability';
 
 async function runStage(
   source: string,

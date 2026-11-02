@@ -328,6 +328,14 @@ export interface OperationDefinition {
   // An unordered `emit` (`ordered: false`): presence, the latest message per
   // key until it expires, with no position on the channel (ADR event-feed §1.6).
   unordered?: { expiresAfterMs: number };
+  // An `emit`'s audience (ADR event-feed §1.7): an expression over the payload
+  // answering whose message it is. The caller must present a capability for
+  // the card naming that subject, and only a follower holding one hears the
+  // message's body.
+  audience?: OperationProgram;
+  // A capability a transform hands its caller once the write lands: the
+  // subject an expression over the payload answers, valid for `expiresAfterMs`.
+  capability?: { subject: OperationProgram; expiresAfterMs: number };
   // The collected params whose emit is unordered, which a transform reads
   // from the unexpired presence rather than from the channel's sequence.
   collectUnordered?: string[];
@@ -829,6 +837,10 @@ export interface OperationRequest {
   // one to judge a caller by in another realm, which is what an explain and a
   // validate do, and nothing else reads it.
   principal?: string;
+  // A capability the caller presented and the realm verified (ADR event-feed
+  // §1.7): the card it was issued for and the subject it names. An emit with
+  // an `audience` is sent only when this names that card and subject.
+  capability?: { card: string; subject: string };
   // The caller's own id for this request. Echoed on the realm's index event so
   // a client can tell its own write's event from anyone else's, which is what
   // lets it retire the matching optimistic entry rather than reloading.
@@ -1596,7 +1608,19 @@ export interface EmitMessageArgs {
   // An unordered emit's message: presence, recorded as the latest for its
   // key until it expires, taking no position and waiting on nothing.
   unordered?: { expiresAfterMs: number };
+  // Whose message it is (ADR event-feed §1.7): only a follower holding a
+  // capability for the card naming this subject hears its body.
+  audience?: string;
 }
+
+// Signs a capability for a card and a subject, valid for `expiresInMs`, and
+// answers the token (ADR event-feed §1.7). Supplied by the realm, which holds
+// the key.
+export type IssueCapability = (args: {
+  cardURL: string;
+  subject: string;
+  expiresInMs: number;
+}) => Promise<string>;
 
 // Delivers an `emit`'s message on the card's live channel (ADR event-feed §1.6,
 // §1.7), answering the position it took there. Supplied by the realm, which
@@ -1743,6 +1767,9 @@ export type OperationErrorCode =
   // nobody. Distinct from `invalid-params` because nothing the caller sent is
   // wrong: the remedy is credentials, which is what its 401 says.
   | 'actor-required'
+  // An emit with an `audience` sent without a capability naming its card and
+  // subject (ADR event-feed §1.7).
+  | 'capability-required'
   // The realm ACL declined the caller, and no grant in the realm's policy
   // admits this operation on this target. The detail is the same whether the
   // target exists or not, and whatever the policy holds, so the refusal says

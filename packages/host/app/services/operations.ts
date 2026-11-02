@@ -18,6 +18,7 @@ import {
   rri,
   stampBaseVersion,
   SKIP_INDEX_WAIT_HEADER,
+  CAPABILITY_HEADER,
   SupportedMimeType,
   writeResultIn,
   type CodeRef,
@@ -207,6 +208,7 @@ export default class OperationsService
       adopted?: string[];
       optimistic?: OptimisticCandidate;
       skipIndexWait?: boolean;
+      capability?: string;
     },
   ): Promise<OperationsAnswer> {
     this.assertMayWrite(method);
@@ -214,6 +216,11 @@ export default class OperationsService
       Accept: SupportedMimeType.BoxelOperations,
       'Content-Type': SupportedMimeType.BoxelOperations,
     };
+    // A capability an earlier result handed the caller (ADR event-feed §1.7),
+    // which the realm verifies itself.
+    if (opts?.capability) {
+      headers[CAPABILITY_HEADER] = opts.capability;
+    }
     if (method !== 'POST') {
       // A read-only batch is sent as a `QUERY`, which is the method the realm
       // reads as "authorized to read" — spelled the way every other QUERY the

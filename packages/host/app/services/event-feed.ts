@@ -5,6 +5,7 @@ import { isTesting } from '@embroider/macros';
 
 import {
   EVENT_FEED_PATH,
+  CAPABILITY_PARAM,
   type ChannelMessage,
   type RefreshNotice,
   type FeedEventWindow,
@@ -202,10 +203,15 @@ export default class EventFeedService extends Service {
   // on the page follows it. A signed-in page follows channels too, since
   // Matrix carries realm events but never a channel's messages; a render
   // follows none.
+  //
+  // With a `capability`, it follows the caller's personal lane (ADR event-feed
+  // §1.7), a connection of its own, since what the realm sends on it is that
+  // caller's alone.
   followChannel(
     cardURL: string,
     realmURL: string | undefined,
     onMessage: (message: ChannelMessage) => void,
+    capability?: string,
   ): () => void {
     // On a site, a card's URL names its realm through the site's alias, as
     // the realms the page watches do; the realm is the one it falls under.
@@ -225,10 +231,14 @@ export default class EventFeedService extends Service {
     ) {
       return () => {};
     }
-    let channel = this.channels.get(cardURL);
+    let channelKey = capability ? `${cardURL}\u0000${capability}` : cardURL;
+    let channel = this.channels.get(channelKey);
     if (!channel) {
       let path = cardURL.slice(base.href.length).replace(/\.json$/, '');
       let url = withParam(new URL(EVENT_FEED_PATH, base).href, 'channel', path);
+      if (capability) {
+        url = withParam(url, CAPABILITY_PARAM, capability);
+      }
       let listeners = new Set<(message: ChannelMessage) => void>();
       let deliver = (event: FeedEvent) => {
         // The card is gone, or its visitors may no longer read it: the
@@ -238,7 +248,7 @@ export default class EventFeedService extends Service {
           (event.kind === 'removed' || event.kind === 'withdrawn') &&
           event.path === path
         ) {
-          this.channels.get(cardURL)?.feed.stop();
+          this.channels.get(channelKey)?.feed.stop();
         }
         if (event.kind === 'message') {
           let message: ChannelMessage = {
@@ -246,6 +256,10 @@ export default class EventFeedService extends Service {
             body: event.body,
             ...(event.key !== undefined ? { key: event.key } : {}),
             ...(event.operation ? { operation: event.operation.name } : {}),
+            ...(event.audience !== undefined
+              ? { audience: event.audience }
+              : {}),
+            ...(event.withheld ? { withheld: true as const } : {}),
           };
           for (let listener of [...listeners]) {
             listener(message);
@@ -264,7 +278,7 @@ export default class EventFeedService extends Service {
       let feed =
         typeof EventSource === 'function'
           ? streamFeed(url, undefined, deliver, this.timing, (lastId) => {
-              let current = this.channels.get(cardURL);
+              let current = this.channels.get(channelKey);
               current?.feed.stop();
               if (current) {
                 current.feed = pollFeed(url, lastId, deliver, this.timing, {
@@ -276,7 +290,7 @@ export default class EventFeedService extends Service {
               fromWindow: true,
             });
       channel = { feed, listeners };
-      this.channels.set(cardURL, channel);
+      this.channels.set(channelKey, channel);
       // A channel opens from its current messages, not from where the page's
       // read of the card stood, so the card may have changed in between:
       // re-read it once.
@@ -287,8 +301,8 @@ export default class EventFeedService extends Service {
     return () => {
       listeners.delete(onMessage);
       if (listeners.size === 0) {
-        this.channels.get(cardURL)?.feed.stop();
-        this.channels.delete(cardURL);
+        this.channels.get(channelKey)?.feed.stop();
+        this.channels.delete(channelKey);
       }
     };
   }
