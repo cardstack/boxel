@@ -110,6 +110,9 @@ export class Weather extends CardDef {
 `;
 
 const WEATHER = { module: `${TEAM}weather`, name: 'Weather' };
+// The published card a visitor opens. Every behavior but a create is judged
+// against a stored card, so a visitor invokes the operations on this one.
+const TODAY = `${TEAM}today`;
 
 const ANONYMOUS = 'actor() == "anonymous"';
 
@@ -178,8 +181,18 @@ module(basename(import.meta.filename), function (hooks) {
               policy: TEAM_POLICY,
             }),
             'weather.gts': WEATHER_MODULE,
+            'today.json': JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: { adoptsFrom: { module: './weather', name: 'Weather' } },
+              },
+            }),
           },
+          // Anyone may read it, as a realm a public card lives in is; only
+          // its policy opens anything more to visitors.
           permissions: {
+            '*': ['read'],
             [OWNER]: ['read', 'write', 'realm-owner'],
             [READER]: ['read', 'write'],
           },
@@ -326,17 +339,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   function onWeather(name: string) {
     return JSON.stringify({
-      'boxel:operations': [
-        {
-          op: 'invoke',
-          'boxel:name': name,
-          data: {
-            meta: {
-              adoptsFrom: { module: rri(WEATHER.module), name: WEATHER.name },
-            },
-          },
-        },
-      ],
+      'boxel:operations': [{ op: 'invoke', 'boxel:name': name, href: TODAY }],
     });
   }
 
@@ -375,18 +378,10 @@ module(basename(import.meta.filename), function (hooks) {
       .set('X-Forwarded-For', address)
       .send(
         JSON.stringify({
-          checks: [
-            {
-              operation: name,
-              target: {
-                type: { module: rri(WEATHER.module), name: WEATHER.name },
-              },
-              readiness: true,
-            },
-          ],
+          checks: [{ operation: name, target: TODAY, readiness: true }],
         }),
       );
-    return response.body?.answers?.[0];
+    return response.body?.checks?.[0];
   }
 
   async function used(key: unknown[]) {

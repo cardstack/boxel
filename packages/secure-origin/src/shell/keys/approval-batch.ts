@@ -343,9 +343,10 @@ export function offersAnonymous(operations: BatchOperation[]): boolean {
   return operations.some((o) => o.slots.some((s) => s.key === 'apiKey'));
 }
 
-// Whether anonymous use starts ticked: for the CLI's `--anonymous`, or where
-// every share slot in the batch that was approved before was approved for it,
-// so approving it again keeps that.
+// Whether anonymous use starts ticked: for the CLI's `--anonymous`, where the
+// batch holds nothing but share operations approved for signed-in people
+// only, or where every share slot in the batch that was approved before was
+// approved for it, so approving it again keeps that.
 export function initialAnonymous(
   batch: ApprovalBatch,
   { cliAnonymous = false }: { cliAnonymous?: boolean } = {},
@@ -355,6 +356,8 @@ export function initialAnonymous(
   );
   return (
     cliAnonymous ||
+    (allSlots(batch).length > 0 &&
+      allSlots(batchFor(batch, 'interactive')).length === 0) ||
     (approved.length > 0 && approved.every((s) => s.approved!.anonymous))
   );
 }

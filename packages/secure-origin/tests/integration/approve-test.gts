@@ -1238,8 +1238,23 @@ module('Integration | approve pages', function (hooks) {
   });
 
   // A batch whose one operation a workspace's share fills.
-  function serveShareBatch(share: Record<string, unknown> = {}) {
+  function serveShareBatch(
+    share: Record<string, unknown> = {},
+    { signedInOnly = false }: { signedInOnly?: boolean } = {},
+  ) {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
+    let approved = signedInOnly
+      ? {
+          status: 'signed-in-only',
+          approved: {
+            snapshot: shared.slots[0]!.snapshot,
+            keyId: null,
+            shareId: 'share-team',
+            interactive: true,
+            anonymous: false,
+          },
+        }
+      : {};
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
@@ -1257,10 +1272,12 @@ module('Integration | approve pages', function (hooks) {
                   operations: [
                     {
                       ...shared,
+                      ...(signedInOnly ? { status: 'signed-in-only' } : {}),
                       slots: shared.slots.map((s) => ({
                         ...s,
                         slot: 'apiKey',
                         key: 'apiKey',
+                        ...approved,
                       })),
                     },
                   ],
@@ -1389,6 +1406,27 @@ module('Integration | approve pages', function (hooks) {
     let [approval] = approvals();
     assert.true(approval.anonymous);
     assert.strictEqual(approval.anonymousCaps, undefined);
+  });
+
+  test('a batch holding only requests approved for signed-in people starts on anonymous use, each marked', async function (assert) {
+    serveShareBatch(
+      { interactive: true, anonymous: false, dailyBudget: 500 },
+      { signedInOnly: true },
+    );
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert.dom('[data-test-approve-anonymous-tick]').isChecked();
+    assert
+      .dom(
+        '[data-test-approve-operation="listTeamPRs"] [data-test-approve-signed-in-only]',
+      )
+      .hasText('Approved for signed-in people');
+    await click('[data-test-approve-anonymous-tick]');
+    assert
+      .dom('[data-test-approve-operation="listTeamPRs"]')
+      .doesNotExist('unticked, it needs nothing approved');
   });
 
   test('a batch only personal keys fill offers no anonymous use', async function (assert) {

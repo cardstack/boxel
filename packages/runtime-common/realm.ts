@@ -7392,6 +7392,9 @@ export class Realm {
           ? { writesDeclinedOutright: true as const }
           : {}),
         ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+        ...(writeCaller?.rateLimitKey
+          ? { callApiAnonymous: { address: writeCaller.rateLimitKey } }
+          : {}),
       };
     }
     return {

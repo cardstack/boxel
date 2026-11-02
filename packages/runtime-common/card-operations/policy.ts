@@ -163,6 +163,10 @@ export interface CompiledAnonymousGrant {
   id: string;
   // Whether the grant's operation writes.
   writes: boolean;
+  // Set where the grant's operation is a `callApi`, which sends a request
+  // outside the realm and so travels in the write lane, as a write does,
+  // without writing anything.
+  sendsOutside?: true;
   // For a grant on a write: who such a caller's writes are made as. Settled
   // for each write, once the target is known. A write grant without one admits
   // no write by such a caller.
@@ -1495,6 +1499,9 @@ async function compileDocument(
             ]) ?? '',
           ),
           writes: isWrite(granted.base),
+          ...(granted.base === 'callApi'
+            ? { sendsOutside: true as const }
+            : {}),
           ...(isWrite(granted.base) && expressions.actingUser
             ? { actingUser: expressions.actingUser }
             : {}),
