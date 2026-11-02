@@ -1,5 +1,5 @@
-import { contains, field } from 'https://cardstack.com/base/card-api';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+import { contains, field } from '@cardstack/base/card-api';
+import DateTimeField from '@cardstack/base/datetime';
 
 import { Post } from './post';
 

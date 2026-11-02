@@ -3,9 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:js": "eslint . --ext .ts,.gts --cache",
+    "lint:js:fix": "eslint . --ext .ts,.gts --fix"
+  },
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
-    "@cardstack/runtime-common": "workspace:*"
+    "@cardstack/runtime-common": "workspace:*",
+    "@typescript-eslint/parser": "catalog:",
+    "concurrently": "catalog:",
+    "ember-eslint-parser": "catalog:",
+    "eslint": "catalog:"
   }
 }

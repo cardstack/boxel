@@ -1,5 +1,5 @@
-import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, CardDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 import SillyNumberField from './silly-number';
 
