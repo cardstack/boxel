@@ -189,7 +189,8 @@ evidence, whether each holds. Then score:
   (the field exists but is not shown, the edit landed but broke another view)
   counts as failed.
 - **0**: the verdict is `model-failure`, or no card of the asked-for kind exists
-  in the test workspace. A pass with the wrong card (a placeholder, an
+  in the test workspace (an evaluation with `expectsNoWrites` asks for no
+  card). A pass with the wrong card (a placeholder, an
   unrelated card, only the pre-copied card untouched) is also 0.
 - An evaluation whose notes name a **known gap** is scored the same way, but
   the analysis says which failed criteria are the gap and which are the model.

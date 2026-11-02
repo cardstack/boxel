@@ -46,7 +46,10 @@ endpoint is the URL.
   `initialCards`, its `operation`, and `keyFrom`: `own-key` for the eval
   user's own key, or `share` for a key `EVAL_SHARE_OWNER` shares into the test
   workspace; the assistant's invocation of the operation is then refused
-  "Interactive use not approved"), and a query-backed `sessionReports` list.
+  "Interactive use not approved"), `expectsNoWrites` marking a
+  conversation-only evaluation (the run passes when every prompt was sent and
+  nothing was written, with no card to render, and any write fails it), and a
+  query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
   calls, notes, the screenshot, the skills the room had). A judge fills

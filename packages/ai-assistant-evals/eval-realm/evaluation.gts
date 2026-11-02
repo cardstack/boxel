@@ -178,6 +178,11 @@ export class EvaluationCard extends CardDef {
   // only, for an evaluation of what the assistant does when an operation is
   // refused "Interactive use not approved".
   @field pipelineApprovals = containsMany(PipelineApprovalField);
+  // A conversation-only evaluation, graded on what the assistant says and
+  // which tools it calls: the run passes when every prompt was sent and
+  // nothing was written, and no card has to render. Writing anything fails
+  // it.
+  @field expectsNoWrites = contains(BooleanField);
 
   @field sessionReports = linksToMany(() => EvaluationReportCard, {
     query: {

@@ -38,6 +38,9 @@ export interface Evaluation {
   secondsPerPrompt?: number;
   // Operations approved for scheduled pipelines only before the first prompt.
   pipelineApprovals: PipelineApproval[];
+  // A conversation-only evaluation: the run passes when every prompt was sent
+  // and nothing was written, with no card to render.
+  expectsNoWrites: boolean;
   adoptsFrom: { module: string; name: string };
 }
 
@@ -163,6 +166,7 @@ export async function loadEvaluation(
         ? attributes.secondsPerPrompt
         : undefined,
     pipelineApprovals,
+    expectsNoWrites: attributes.expectsNoWrites === true,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
@@ -363,11 +367,20 @@ export function pipelineApprovalTargets(
       ) as CardDocument;
       let adoptsFrom = doc.data.meta.adoptsFrom;
       let copy = testRealm.fileURL(path);
+      // A relative module was copied beside the card, so it resolves against
+      // the copy. Any other reference (a URL, or a registered prefix such as
+      // `@cardstack/catalog/…`) names a module outside the test workspace and
+      // is passed on as it is, for the realm server to resolve.
+      let relative =
+        adoptsFrom.module.startsWith('.') || adoptsFrom.module.startsWith('/');
       return {
         realm: testRealmUrl,
-        module: new URL(adoptsFrom.module, copy).href.replace(/\.gts$/, ''),
+        module: relative
+          ? new URL(adoptsFrom.module, copy).href.replace(/\.gts$/, '')
+          : adoptsFrom.module,
         name: adoptsFrom.name,
         operation,
+        instance: copy.href.replace(/\.json$/, ''),
         keyFrom,
       };
     },

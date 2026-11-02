@@ -10,7 +10,7 @@
 // through the realm server's key API exactly as the CLI's calls do.
 //
 // Env: EVAL_PG_CONTAINER (default `boxel-pg`), EVAL_PG_DATABASE (default
-// `boxel`), EVAL_REALM_SECRET_SEED (default the local stack's seed),
+// PGDATABASE, then `boxel`), EVAL_REALM_SECRET_SEED (default the local stack's seed),
 // EVAL_SHARE_OWNER (default `ai-assistant-eval-key-sharer`).
 
 import { execFile } from 'node:child_process';
@@ -28,7 +28,10 @@ import type { KeyFrom } from './eval-card.ts';
 const run = promisify(execFile);
 
 const PG_CONTAINER = process.env.EVAL_PG_CONTAINER ?? 'boxel-pg';
-const PG_DATABASE = process.env.EVAL_PG_DATABASE ?? 'boxel';
+// A stack in env mode keeps its database under its own name, which `mise
+// exec` puts in PGDATABASE.
+const PG_DATABASE =
+  process.env.EVAL_PG_DATABASE ?? process.env.PGDATABASE ?? 'boxel';
 const REALM_SECRET_SEED =
   process.env.EVAL_REALM_SECRET_SEED ?? "shhh! it's a secret";
 
@@ -49,6 +52,8 @@ export interface PipelineApprovalTarget {
   module: string;
   name: string;
   operation: string;
+  // The copied card, which an operation approved per instance names.
+  instance: string;
   keyFrom: KeyFrom;
 }
 
@@ -158,6 +163,7 @@ async function approveForPipelines(
     await keyRequest(token, `_key-bindings/preview?${query}`, 'GET')
   ).data.attributes as {
     destination: string;
+    perInstance: boolean;
     slots: { slot: string; fingerprint: string }[];
   };
   await keyRequest(token, '_key-bindings', 'POST', {
@@ -169,6 +175,7 @@ async function approveForPipelines(
           {
             codeRef: { module: target.module, name: target.name },
             operation: target.operation,
+            ...(preview.perInstance ? { instance: target.instance } : {}),
             expectedDestination: preview.destination,
             slots: Object.fromEntries(
               preview.slots.map((s) => [

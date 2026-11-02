@@ -220,6 +220,9 @@ Verdicts:
 
 - `pass` — a card from the new workspace rendered with no error boundary, and at
   least one applied run-realm-code or other writing tool call.
+  For an evaluation with `expectsNoWrites` (conversation-only, such as the
+  secure-window and "Interactive use not approved" evaluations), `pass` is
+  every prompt sent and nothing written; a write is the failure.
 - `model-failure` — the model did not get there: no write, or no card. Reasons are listed.
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be

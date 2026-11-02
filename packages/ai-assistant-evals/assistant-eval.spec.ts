@@ -1033,6 +1033,7 @@ function classify(
   analysis: RunResult['analysis'] & object,
   promptsSent: number,
   promptsTotal: number,
+  expectsNoWrites = false,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
   // A run the runner cut short is a failure whatever is on screen when it
@@ -1091,6 +1092,25 @@ function classify(
     return { verdict: 'host-failure', reasons };
   }
   let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  // A conversation-only evaluation is about what the assistant says and which
+  // tools it calls; its criteria forbid writing anything, so a write is the
+  // failure and no card needs to render.
+  if (expectsNoWrites) {
+    if (writes > 0) {
+      reasons.push(
+        `the evaluation expects no writes, but ${writes} file write(s) were applied`,
+      );
+    }
+    if (promptsSent < promptsTotal) {
+      reasons.push(
+        `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+      );
+    }
+    return {
+      verdict: reasons.length === 0 ? 'pass' : 'model-failure',
+      reasons,
+    };
+  }
   if (writes === 0) {
     reasons.push(
       'no file was written (no applied run-realm-code or other writing tool call)',
@@ -1414,6 +1434,7 @@ async function runModel(
       result.analysis,
       result.promptsSent,
       prompts.length,
+      evaluation?.expectsNoWrites ?? false,
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
