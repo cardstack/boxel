@@ -51,7 +51,7 @@ import {
   type ChoreoProvider,
   setChoreoHost,
 } from './registry.ts';
-import { type ChoreoRun, execute } from './run.ts';
+import { type ChoreoRun, execute, type LoopPhases } from './run.ts';
 import {
   Aim,
   Attach,
@@ -459,6 +459,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private snapshots = new Map<ChoreoNode, Snapshot>();
   /** participants with no layout box before this pass (display: none) */
   private unrendered = new Set<ChoreoNode>();
+  /** the whole region had no layout box before this pass (hidden by an ancestor) */
+  private covered = false;
+  /** where the run stopped by a cover had its loops: the next run carries them on */
+  private coveredLoops?: LoopPhases;
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
@@ -508,6 +512,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.viewObserver?.disconnect();
       this.snapshots.clear();
       this.unrendered.clear();
+      this.coveredLoops = undefined;
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -723,9 +728,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private snapshot() {
     this.snapshots.clear();
     this.unrendered.clear();
-    if (this.element && !isRendered(this.element)) {
+    this.covered = !!this.element && !isRendered(this.element);
+    if (this.covered) {
       // the whole region is hidden (a buried stack card): nothing in it has
-      // a box, and its pass is declined
+      // a box. If it is still hidden when the pass measures, the pass is
+      // declined; if it is shown by then, the pass measures it then.
       return;
     }
     this.rootSnapshot = this.element?.getBoundingClientRect();
@@ -750,22 +757,35 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /**
    * A pass on a region hidden by an ancestor plays nothing: arrivals were
    * never seen arriving, and leavers go now. A <Presence>-managed leaver
-   * belongs to its Presence, as on any pass with nothing to play.
+   * belongs to its Presence, as on any pass with nothing to play, unless
+   * the run that played its exit is stopped here.
+   *
+   * The run in flight is stopped too. Nobody can see it, and a run left
+   * going under the cover keeps its clock ticking and writing every frame
+   * (a standing tether redraws its wire on each one). Its loops' phases
+   * are kept, so the run that follows the cover carries them on.
    */
   private declineUnseen() {
+    const run = this.run;
+    if (run) {
+      this.coveredLoops = run.loopPhases();
+      run.cancel();
+      this.run = undefined;
+      this.unquiet();
+    }
     this.arrived.clear();
     this.snapshots.clear();
     this.unrendered.clear();
-    for (const node of [...this.claimed]) {
+    for (const node of [...this.claimed, ...this.orphans]) {
       this.drop(node);
     }
     for (const node of this.participants) {
       if (
         !node.isPresent &&
-        !node.presenceManaged &&
-        !this.leaving.has(node) &&
-        !this.orphans.has(node)
+        (!node.presenceManaged || (run && this.leaving.has(node)))
       ) {
+        // a leaver whose exit the stopped run was playing completes it now
+        this.leaving.delete(node);
         node.exitComplete();
       }
     }
@@ -784,6 +804,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // region is shown again, as on waking (@idle).
       this.declineUnseen();
       return undefined;
+    }
+    if (this.covered) {
+      // shown again since the snapshot: nothing moved while nobody could
+      // see it, so each participant starts the pass where it now is
+      this.snapshot();
     }
     // THE FAST PATH: a volatile re-pass that cannot change the run. On a
     // busy page every app render replays every region's pass, and the full
@@ -1215,7 +1240,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // an ambient loop outlives its run's end, so a done run's loops are
     // still going round: the replacement carries each on from where it is
     // rather than sending it back to the top — read before cancel stops them
-    const loops = prior?.loopPhases();
+    const loops = prior?.loopPhases() ?? this.coveredLoops;
+    this.coveredLoops = undefined;
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
