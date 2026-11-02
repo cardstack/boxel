@@ -126,6 +126,13 @@ export function assertInstanceOperation(
     operationsModule.operations as (target: unknown) => OperationsBucket
   )(card);
   let base = baseOf(name, declarations);
+  // A declared query is not offered here either, but it gets its own refusal
+  // that says where its results are read instead.
+  if (declarations[name] && base === 'query') {
+    throw new Error(
+      `"${name}" is a query operation: it answers a live set of search results, not a value. Search with realm.cards.search or realm.entries.search instead.`,
+    );
+  }
   if (
     name === BATCH_MEMBER ||
     typeof bucket[name] !== 'function' ||
@@ -138,11 +145,6 @@ export function assertInstanceOperation(
           ? `It declares: ${names.join(', ')}`
           : 'It declares none'
       }`,
-    );
-  }
-  if (base === 'query') {
-    throw new Error(
-      `"${name}" is a query operation: it answers a live set of search results, not a value. Search with realm.cards.search or realm.entries.search instead.`,
     );
   }
   return base;

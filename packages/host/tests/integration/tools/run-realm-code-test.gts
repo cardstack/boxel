@@ -3806,6 +3806,11 @@ const PATIENT_MODULE = `
       params: { ward: StringField },
       set: { ward: params('ward') },
     };
+
+    @operation static northWard = {
+      base: 'query',
+      query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
+    };
   }
 `;
 
@@ -5602,6 +5607,26 @@ try {
       assert.strictEqual(
         JSON.parse(result.scriptResult!),
         '"discharge" is not an operation Patient declares. It declares: recordVitals, transferTo',
+      );
+    });
+
+    test('a query the type declares is refused with where to search instead', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke('Patient/ana', 'northWard');
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      let message = JSON.parse(result.scriptResult!) as string;
+      assert.true(
+        message.startsWith('"northWard" is a query operation'),
+        `the refusal says what the name is: ${message}`,
+      );
+      assert.true(
+        message.includes('realm.cards.search'),
+        `and where results are read instead: ${message}`,
       );
     });
   },
