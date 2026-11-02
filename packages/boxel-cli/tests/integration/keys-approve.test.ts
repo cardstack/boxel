@@ -121,7 +121,7 @@ function serviceSource(
         base: 'callApi',
         label: 'Read from the other host',
         url: '${elsewhereURL}/echo',
-        headers: { authorization: 'Bearer {{userKey}}' },
+        headers: { authorization: '${edited ? 'Token' : 'Bearer'} {{userKey}}' },
       };
     }
   `;
@@ -525,6 +525,32 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     let opened = windows[windows.length - 1]!;
     expect(opened.fragment.get('interactive')).toBe('1');
     expect(result.approved.map((b) => [b.operation, b.interactive])).toEqual([
+      ['other', true],
+    ]);
+
+    // Its request changes. Approving it again without --interactive would
+    // quietly return it to pipelines only, so that is refused, naming what
+    // to do instead, and --interactive approves it in the terminal.
+    await testRealm.write(
+      'service.gts',
+      serviceSource(vendor.url, { elsewhereURL: vendor.alternateUrl }),
+    );
+    let refused = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      yes: true,
+    }).catch((e) => e);
+    expect(String(refused?.message)).toContain('Pass --interactive to keep');
+    let again = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      interactive: true,
+      yes: true,
+    });
+    expect(again.via).toBe('cli');
+    expect(again.approved.map((b) => [b.operation, b.interactive])).toEqual([
       ['other', true],
     ]);
   });

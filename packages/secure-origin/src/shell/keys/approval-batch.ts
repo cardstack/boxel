@@ -328,22 +328,34 @@ export function batchFor(
   };
 }
 
-// Where the choice starts: on pipelines only, unless what the batch holds is
-// already approved for interactive use (so approving it again keeps that), or
-// can only be approved for it, or the CLI asked for it.
+// Where the choice starts: on pipelines only, unless the CLI asked for
+// interactive use, or the batch holds nothing to approve for pipelines (only
+// operations approved for pipelines already), or every slot that needs
+// approving was last approved for interactive use, so approving it again
+// keeps that. One interactive slot among new ones doesn't count: starting on
+// interactive use would widen the new ones with a single click.
 export function initialUse(
   batch: ApprovalBatch,
   { cliInteractive = false }: { cliInteractive?: boolean } = {},
 ): ApprovalUse {
-  let slots = allSlots(batch);
+  let needed = allSlots(batchFor(batch, 'pipelines'));
   if (
     cliInteractive ||
-    slots.some((s) => s.approved?.interactive) ||
-    batchFor(batch, 'pipelines').groups.length === 0
+    needed.length === 0 ||
+    needed.every((s) => s.approved?.interactive)
   ) {
     return 'interactive';
   }
   return 'pipelines';
+}
+
+// How many more requests need approving after these, for the choice made:
+// those approved for pipelines only count only for interactive use.
+export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
+  return (
+    batch.remaining +
+    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
+  );
 }
 
 // Which confirmations the ticked operations need: one for the user's own keys

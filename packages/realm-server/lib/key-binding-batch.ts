@@ -140,6 +140,10 @@ export interface ApprovalBatch {
   // How many more operations need approving than one confirmation can take:
   // they are asked for again once these are approved.
   remaining: number;
+  // How many more operations approved for pipelines only were left out, in a
+  // batch asked with `interactive`. They take only the room the operations
+  // that need approving leave, so they never hold one back.
+  remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }
@@ -316,7 +320,10 @@ export async function approvalBatch(
       (a, b) => a.label.localeCompare(b.label) || a.name.localeCompare(b.name),
     );
   }
-  let { kept, remaining } = withinSlotLimit(sorted, MAX_BATCH_SLOTS);
+  let { kept, remaining, remainingPipelinesOnly } = withinSlotLimit(
+    sorted,
+    MAX_BATCH_SLOTS,
+  );
   sorted = kept;
   let destinations = sorted.map((g) => g.destination.href);
   let coveredBy = (grants: string[]) =>
@@ -339,6 +346,7 @@ export async function approvalBatch(
     review,
     groups: sorted,
     remaining,
+    remainingPipelinesOnly,
     keys: needsUserKey
       ? (await slotKeys(dbAdapter, user)).map(({ grants, ...key }) => ({
           ...key,
@@ -355,29 +363,44 @@ export async function approvalBatch(
 }
 
 // The operations one confirmation can approve, at most `max` slots in all, in
-// the order the window shows them; an operation is never split. Answers how
-// many operations were left out, for the window to say they come next.
+// the order the window shows them; an operation is never split. Operations
+// that need approving (`new`, `changed`) come first; ones approved for
+// pipelines only fill what room is left, so a card with more of those than
+// one confirmation holds can't keep the ones that need approving out of every
+// batch. Answers how many of each were left out, for the window to say they
+// come next.
 export function withinSlotLimit(
   groups: BatchGroup[],
   max: number,
-): { kept: BatchGroup[]; remaining: number } {
+): { kept: BatchGroup[]; remaining: number; remainingPipelinesOnly: number } {
   let slots = 0;
-  let remaining = 0;
-  let kept: BatchGroup[] = [];
-  for (let group of groups) {
-    let operations = group.operations.filter((operation) => {
-      if (remaining === 0 && slots + operation.slots.length <= max) {
-        slots += operation.slots.length;
-        return true;
+  let keep = new Set<BatchOperation>();
+  let take = (pipelinesOnly: boolean) => {
+    let left = 0;
+    for (let group of groups) {
+      for (let operation of group.operations) {
+        if ((operation.status === 'pipelines-only') !== pipelinesOnly) {
+          continue;
+        }
+        if (left === 0 && slots + operation.slots.length <= max) {
+          slots += operation.slots.length;
+          keep.add(operation);
+        } else {
+          left++;
+        }
       }
-      remaining++;
-      return false;
-    });
-    if (operations.length > 0) {
-      kept.push({ ...group, operations });
     }
-  }
-  return { kept, remaining };
+    return left;
+  };
+  let remaining = take(false);
+  let remainingPipelinesOnly = take(true);
+  let kept = groups
+    .map((group) => ({
+      ...group,
+      operations: group.operations.filter((o) => keep.has(o)),
+    }))
+    .filter((group) => group.operations.length > 0);
+  return { kept, remaining, remainingPipelinesOnly };
 }
 
 // What the key page names each of the owner's bindings by, as the approval

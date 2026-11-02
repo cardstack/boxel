@@ -104,6 +104,9 @@ export interface ApprovalBatch {
   review: boolean;
   groups: BatchGroup[];
   remaining: number;
+  // Operations approved for pipelines only that didn't fit either, in a batch
+  // asked with `interactive`.
+  remainingPipelinesOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }

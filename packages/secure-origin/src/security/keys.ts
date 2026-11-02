@@ -605,6 +605,9 @@ export interface ApprovalBatch {
   // Operations left for after this confirmation, which takes at most so many
   // slots.
   remaining: number;
+  // Operations approved for pipelines only that didn't fit either, in a batch
+  // asked with `interactive`.
+  remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }

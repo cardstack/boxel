@@ -961,8 +961,9 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(approval.operations.length, 4);
   });
 
-  test('a batch holding only requests approved for pipelines starts on interactive use, and so does one already approved for it', async function (assert) {
-    let alone = (op: ReturnType<typeof pipelinesOnly>) => ({
+  // A batch of one group holding `operations`.
+  function batchOf(operations: unknown[]) {
+    return {
       groups: [
         {
           destination: {
@@ -971,24 +972,74 @@ module('Integration | approve pages', function (hooks) {
             path: '/graphql/',
             registrableDomain: 'github.com',
           },
-          operations: [op],
+          operations,
         },
       ],
-    });
+    };
+  }
+
+  // An operation whose request changed since it was last approved, and that
+  // approval allowed interactive use.
+  function changedInteractive(name: string, label: string) {
+    let base = operation(name, label);
+    return {
+      ...base,
+      status: 'changed',
+      slots: base.slots.map((s) => ({
+        ...s,
+        status: 'changed',
+        approved: {
+          snapshot: s.snapshot,
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: true,
+        },
+      })),
+    };
+  }
+
+  async function openWith(operations: unknown[]) {
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
           data: {
             type: 'key-binding-batch',
-            attributes: batch(alone(pipelinesOnly('listPRs', 'List PRs'))),
+            attributes: batch(batchOf(operations)),
           },
         }),
     });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+  }
+
+  test('a batch holding only requests approved for pipelines starts on interactive use, each marked', async function (assert) {
+    await openWith([pipelinesOnly('listPRs', 'List PRs')]);
     assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    assert.dom('[data-test-approve-operation="listPRs"]').exists();
+    assert
+      .dom(
+        '[data-test-approve-operation="listPRs"] [data-test-approve-pipelines-only]',
+      )
+      .hasText('Approved for pipelines');
+  });
+
+  test('a batch whose every request was last approved for interactive use starts on it, so approving again keeps it', async function (assert) {
+    await openWith([changedInteractive('listPRs', 'List PRs')]);
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+  });
+
+  test('one request approved for interactive use among new ones starts on pipelines only', async function (assert) {
+    await openWith([
+      changedInteractive('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+      pipelinesOnly('listComments', 'List comments'),
+    ]);
+    assert
+      .dom('[data-test-radio-choice="pipelines"] input')
+      .isChecked('the new request is not widened by default');
+    assert
+      .dom('[data-test-approve-operation="listComments"]')
+      .doesNotExist('one approved for pipelines needs nothing for pipelines');
   });
 
   test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
@@ -1046,6 +1097,9 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-budget="Team GitHub"] input')
       .hasValue('2400');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"]')
+      .hasTagName('label', 'the field names its input');
 
     await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
     assert

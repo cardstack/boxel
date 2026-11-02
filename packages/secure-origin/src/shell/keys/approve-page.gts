@@ -76,6 +76,7 @@ import {
   operationKey,
   parseDailyBudget,
   placementPhrase,
+  remainingFor,
   requestChanges,
   requestFields,
   slotChoices,
@@ -303,6 +304,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             class='changed'
                             data-test-approve-changed
                           >Changed</span>
+                        {{else if (eq operation.status 'pipelines-only')}}
+                          <span
+                            class='pipelines-only'
+                            data-test-approve-pipelines-only
+                          >Approved for pipelines</span>
                         {{/if}}
                       </label>
                       <details class='request'>
@@ -349,11 +355,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </section>
             {{/each}}
 
-            {{#if this.choosing.batch.remaining}}
+            {{#if this.remaining}}
               <p class='more' data-test-approve-remaining>
-                {{this.choosing.batch.remaining}}
+                {{this.remaining}}
                 more
-                {{if (eq this.choosing.batch.remaining 1) 'request' 'requests'}}
+                {{if (eq this.remaining 1) 'request' 'requests'}}
                 on this card need approving. They’re shown once these are
                 approved: open this window from the card again.
               </p>
@@ -372,6 +378,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </div>
               {{#each this.budgetShares as |share|}}
                 <FieldContainer
+                  @tag='label'
                   @label='Daily budget for {{share.label}}'
                   @icon={{KeyRound}}
                   data-test-approve-budget={{share.label}}
@@ -389,10 +396,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     inputmode='numeric'
                     data-test-approve-budget-input
                   />
-                  <p class='note'>Calls a day this share serves, across everyone
-                    who opens a card with it. It’s the first time this share is
-                    allowed in open cards, so set it to what your plan with the
-                    service allows.</p>
+                  <span class='note budget-note'>Calls a day this share serves,
+                    across everyone who opens a card with it. It’s the first
+                    time this share is allowed in open cards, so set it to what
+                    your plan with the service allows.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -471,6 +478,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
       }
+      .budget-note {
+        display: block;
+      }
       .add-key {
         width: fit-content;
       }
@@ -516,6 +526,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         border-radius: var(--boxel-border-radius-xs);
         background-color: var(--warning);
         color: var(--warning-foreground);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+      }
+      .pipelines-only {
+        padding: 0 var(--boxel-sp-4xs);
+        border-radius: var(--boxel-border-radius-xs);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
@@ -721,6 +739,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
   private get interactive() {
     return this.form.use === 'interactive';
+  }
+
+  private get remaining() {
+    return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
   }
 
   private get choices(): SlotChoice[] {

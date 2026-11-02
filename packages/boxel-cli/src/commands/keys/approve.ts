@@ -354,11 +354,13 @@ function printBatch(
       `  ${DIM}Calls from open cards count against each key's limits.${RESET}`,
     );
   }
-  if (batch.remaining > 0) {
+  let remaining =
+    batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
+  if (remaining > 0) {
     say(ctx, '');
     say(
       ctx,
-      `  ${DIM}${batch.remaining} more need approving after these; run it again for them.${RESET}`,
+      `  ${DIM}${remaining} more need approving after these; run it again for them.${RESET}`,
     );
   }
   say(ctx, '');
@@ -538,6 +540,42 @@ export async function keysApprove(
         )} is confirmed in the secure window, which approves every slot of an operation. Approve without --slot, or once the key has been approved for ${[...new Set(newGrants(planned).map((g) => g.host))].join(', ')}`,
     );
   }
+  // Approving again sets where a request runs, so an approval made without
+  // --interactive would quietly return a live card's requests to pipelines
+  // only. Asked for in so many words instead.
+  let live = planned.filter((p) =>
+    p.operation.slots.some(
+      (s) => p.fills.some((f) => f.slot === s.slot) && s.approved?.interactive,
+    ),
+  );
+  if (!interactive && live.length > 0) {
+    throw new Error(
+      `${live.map((p) => p.operation.label).join(', ')} ${live.length === 1 ? 'is' : 'are'} approved for use in open cards. Pass --interactive to keep that; to run ${live.length === 1 ? 'it' : 'them'} in pipelines only, revoke ${live.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
+    );
+  }
+  // The shares this approval allows interactive use of for the first time,
+  // whose daily budget it names.
+  let firstInteractive = interactive
+    ? batch.shares.filter(
+        (share) =>
+          !share.interactive &&
+          planned.some((p) =>
+            p.fills.some((f) => f.kind === 'apiKey' && f.id === share.id),
+          ),
+      )
+    : [];
+  if (dailyBudget !== undefined) {
+    if (newGrants(planned).length > 0 && !options.anonymous) {
+      throw new Error(
+        '--daily-budget is asked for in the secure window for this approval, since it sends a key somewhere new. Leave it off',
+      );
+    }
+    if (firstInteractive.length === 0) {
+      throw new Error(
+        "--daily-budget names the daily budget of a share allowed in open cards for the first time, and this approval has none. A share's limits are changed by its owner from the key's page",
+      );
+    }
+  }
   printBatch(ctx, batch, planned, { interactive });
   if (!options.yes) {
     if (!(await confirm(ctx, 'Approve? [y/N] '))) {
@@ -549,17 +587,6 @@ export async function keysApprove(
   let operations = planned.map((p) =>
     approvalOf(p, { module: batch.card.module, name: batch.card.exportName }),
   );
-  // The shares this approval allows interactive use of for the first time.
-  let firstInteractive = interactive
-    ? batch.shares.filter(
-        (share) =>
-          !share.interactive &&
-          planned.some((p) =>
-            p.fills.some((f) => f.kind === 'apiKey' && f.id === share.id),
-          ),
-      )
-    : [];
-
   // Anonymous use is the realm server's to refuse, which it does before
   // anything is approved, so it is asked here, whatever grants the approval
   // needs.
@@ -574,16 +601,10 @@ export async function keysApprove(
       operations,
       interactive,
       anonymous: Boolean(options.anonymous),
-      ...(interactive && dailyBudget !== undefined
+      ...(dailyBudget !== undefined
         ? {
             dailyBudgets: Object.fromEntries(
-              [
-                ...new Set(
-                  planned.flatMap((p) =>
-                    p.fills.filter((f) => f.kind === 'apiKey').map((f) => f.id),
-                  ),
-                ),
-              ].map((id) => [id, dailyBudget]),
+              firstInteractive.map((share) => [share.id, dailyBudget]),
             ),
           }
         : {}),
