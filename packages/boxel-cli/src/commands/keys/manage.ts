@@ -983,12 +983,18 @@ export async function keysLimits(
   return limits;
 }
 
-// The realm server names a caller only to someone who may see them: a call
-// with no session, and one by someone the reader can't see in the realm,
-// both come without a name.
-function callerName(ctx: Context, caller: string | null): string {
+// The realm server names a caller only to someone who may see them in the
+// realm: one the reader can't see comes `withheld`, without a name, and a
+// call with no session comes without a name too.
+function callerName(
+  ctx: Context,
+  { caller, withheld }: { caller: string | null; withheld?: boolean },
+): string {
+  if (withheld) {
+    return "someone you can't see in the realm";
+  }
   return caller === null
-    ? 'a caller not named to you'
+    ? 'anonymous'
     : caller === ctx.matrixUserId
       ? 'you'
       : caller;
@@ -1006,17 +1012,17 @@ function printUsage(ctx: Context, what: string, usage: KeyUsage): void {
   printBudget('this month', usage.budgets.month);
   console.log(`  calls since ${usage.since}: ${usage.calls}`);
   if (usage.lastUse) {
-    let { at, caller, operation, outcome } = usage.lastUse;
+    let { at, operation, outcome } = usage.lastUse;
     console.log(
-      `  last use: ${at}, ${operation} by ${callerName(ctx, caller)} (${outcome})`,
+      `  last use: ${at}, ${operation} by ${callerName(ctx, usage.lastUse)} (${outcome})`,
     );
   } else {
     console.log('  last use: never');
   }
   if (usage.topCallers.length > 0) {
     console.log('  top callers:');
-    for (let { caller, calls } of usage.topCallers) {
-      console.log(`    ${callerName(ctx, caller)}: ${calls}`);
+    for (let entry of usage.topCallers) {
+      console.log(`    ${callerName(ctx, entry)}: ${entry.calls}`);
     }
   }
   if (usage.refusals.length > 0) {

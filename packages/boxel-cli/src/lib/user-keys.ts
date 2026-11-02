@@ -169,8 +169,12 @@ export interface KeyUsage {
     caller: string | null;
     operation: string;
     outcome: 'sent' | 'refused' | 'failed';
+    // Set when the caller is someone the reader can't see in the realm.
+    withheld?: boolean;
   } | null;
-  topCallers: { caller: string | null; calls: number }[];
+  // A null caller is a call with no session; one marked `withheld` is every
+  // caller the reader can't see in the realm, counted together.
+  topCallers: { caller: string | null; calls: number; withheld?: boolean }[];
   refusals: { code: string; count: number }[];
   vendorOutcomes: { status: number; count: number; outcome?: string }[];
   grants: {
