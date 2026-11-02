@@ -167,10 +167,15 @@ call nothing.
 ## Usage
 
 Each `callApi` invocation whose binding resolved to a share or a personal key
-is one row in `key_uses`, against that share (`share_id`) or key (`key_id`),
+is recorded in `key_uses`, against that share (`share_id`) or key (`key_id`),
 interactive and pipeline alike (`mode`), whether the vendor answered
 (`outcome` `sent`, with its `status` and `host`) or the call was refused
-(`refused`, with its `code`). A refusal raised while the slots were being
+(`refused`, with its `code`). A sent call is one row. Refusals are collapsed:
+those of one UTC minute (`refusal_window`) that match in share or key, realm,
+operation, caller, mode, code, status and host are one row, whose `count` is
+how many there were and whose `created_at` is the latest. A caller who keeps
+calling past a limit adds a row a minute, so read uses with `SUM(count)`,
+never `COUNT(*)`. A refusal raised while the slots were being
 filled is recorded against the one share or key that refused it; one raised
 before any binding was found (`binding-not-approved`) names no key and is only
 on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
@@ -190,7 +195,7 @@ into one entry, `withheld: true`.
 
 ```sql
 -- A share's refusals this month, by code.
-SELECT code, COUNT(*) FROM key_uses
+SELECT code, SUM(count) FROM key_uses
 WHERE share_id = '<share-id>' AND outcome = 'refused'
   AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
 GROUP BY code;

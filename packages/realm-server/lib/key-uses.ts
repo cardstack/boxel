@@ -27,8 +27,13 @@ import { UserKeyError } from './user-keys.ts';
 //
 // A use is one `callApi` invocation whose binding resolved to the share or
 // key: from a browser, the AI assistant, the CLI or a pipeline, whether the
-// vendor answered or the call was refused. One row is written for each share
-// and key the call's slots were filled from (`key_uses`). A refusal raised
+// vendor answered or the call was refused. Each share and key the call's
+// slots were filled from records it (`key_uses`). A call that was sent, or
+// failed, is a row of its own. A refusal is collapsed into the row of the
+// same refusal in the same minute (same share or key, realm, operation,
+// caller, mode, code, status and host), whose `count` it adds one to, so a
+// caller who keeps calling past a limit adds a row a minute, not a row a
+// call. Every count below sums `count`. A refusal raised
 // while the slots were being filled is written against the one share or key
 // that refused it (`lib/key-use-subject.ts`); one that came before any
 // binding was found, such as `binding-not-approved`, names no key, and is
@@ -70,8 +75,12 @@ function hostOf(url: string | null): string | null {
   }
 }
 
-// Writes one row for each share and key the use counts against, and sweeps
-// the uses past the retention window when one is due. A refusal of
+// Records the use against each share and key it counts against, and sweeps
+// the uses past the retention window when one is due. A refusal adds one to
+// its minute's row (`refusal_window`, the start of that UTC minute, by the
+// database's clock) and moves the row's `created_at` to it, so the row reads
+// as its latest refusal; the unique index on the row's identity makes that
+// atomic however many refusals arrive at once. A refusal of
 // `credential-rejected` made once the request was built is the vendor's 401
 // (a rejection known beforehand refuses before any URL exists), so it is
 // recorded with that status among the vendor's answers.
@@ -84,7 +93,7 @@ export async function recordKeyUses(
     (use.code === 'credential-rejected' && use.url ? 401 : undefined);
   for (let subject of use.countsAgainst) {
     await query(dbAdapter, [
-      `INSERT INTO key_uses (share_id, key_id, realm_url, operation, caller, mode, outcome, code, status, host) VALUES (`,
+      `INSERT INTO key_uses (share_id, key_id, realm_url, operation, caller, mode, outcome, code, status, host, refusal_window) VALUES (`,
       param(subject.kind === 'share' ? subject.id : null),
       `, `,
       param(subject.kind === 'key' ? subject.id : null),
@@ -104,7 +113,11 @@ export async function recordKeyUses(
       param(status ?? null),
       `, `,
       param(hostOf(use.url)),
-      `)`,
+      ...(use.outcome === 'refused'
+        ? [
+            `, date_trunc('minute', NOW())) ON CONFLICT (share_id, key_id, realm_url, operation, caller, mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL DO UPDATE SET count = key_uses.count + 1, created_at = EXCLUDED.created_at`,
+          ]
+        : [`, NULL)`]),
     ]);
   }
   let now = Date.now();
@@ -258,7 +271,7 @@ async function usageOf(
     param(since),
   ];
   let [count] = await query(dbAdapter, [
-    `SELECT COUNT(*) AS calls`,
+    `SELECT COALESCE(SUM(count), 0) AS calls`,
     ...where(),
   ]);
   let [last] = await query(dbAdapter, [
@@ -267,7 +280,7 @@ async function usageOf(
     ` ORDER BY created_at DESC, id DESC LIMIT 1`,
   ]);
   let callers = await query(dbAdapter, [
-    `SELECT caller, COUNT(*) AS calls`,
+    `SELECT caller, SUM(count) AS calls`,
     ...where(),
     ` GROUP BY caller`,
   ]);
@@ -283,12 +296,12 @@ async function usageOf(
   let isWithheld = (caller: string | null) =>
     caller !== null && !isShown(caller);
   let refusals = await query(dbAdapter, [
-    `SELECT code, COUNT(*) AS count`,
+    `SELECT code, SUM(count) AS count`,
     ...where(),
     ` AND outcome = 'refused' AND code IS NOT NULL GROUP BY code ORDER BY count DESC, code`,
   ]);
   let outcomes = await query(dbAdapter, [
-    `SELECT status, COUNT(*) AS count`,
+    `SELECT status, SUM(count) AS count`,
     ...where(),
     ` AND status IS NOT NULL GROUP BY status ORDER BY status`,
   ]);

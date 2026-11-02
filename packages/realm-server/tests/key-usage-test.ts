@@ -492,6 +492,77 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a caller refused over and over adds a row a minute, and every refusal is still counted', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    for (let i = 0; i < LIMITS.rateBurst; i++) {
+      assert.strictEqual((await call('shared', OWNER)).status, 200);
+    }
+    // The limiter's clock stands still, so the caller's bucket never refills.
+    // Ten at a time, so refusals of one minute race for its row.
+    let refusals = 1000;
+    let codes = new Set<string | undefined>();
+    let minutes = new Set<number>();
+    for (let sent = 0; sent < refusals; sent += 10) {
+      minutes.add(Math.floor(Date.now() / 60_000));
+      let batch = await Promise.all(
+        Array.from({ length: 10 }, () => call('shared', OWNER)),
+      );
+      batch.forEach((refused) => codes.add(refused.code));
+      minutes.add(Math.floor(Date.now() / 60_000));
+    }
+    assert.deepEqual([...codes], ['rate-limited'], 'every call was refused');
+    assert.strictEqual(
+      (await call('shared', WRITER)).status,
+      200,
+      'another caller’s bucket is their own',
+    );
+
+    let rows = (await dbAdapter.execute(
+      `SELECT caller, outcome, code, count FROM key_uses WHERE share_id = $1 AND outcome = 'refused' ORDER BY id`,
+      { bind: [shared.id] },
+    )) as { caller: string; outcome: string; code: string; count: number }[];
+    assert.true(
+      rows.length <= minutes.size,
+      `${rows.length} rows for refusals over ${minutes.size} minute(s)`,
+    );
+    assert.strictEqual(
+      rows.reduce((sum, row) => sum + Number(row.count), 0),
+      refusals,
+      'the rows count every refusal',
+    );
+    assert.strictEqual(
+      (await useRows()).length,
+      LIMITS.rateBurst + rows.length + 1,
+      'each sent call is a row of its own',
+    );
+
+    let { attributes } = (await shareUsage(shared.id)).body.data;
+    assert.deepEqual(attributes.refusals, [
+      { code: 'rate-limited', count: refusals },
+    ]);
+    assert.strictEqual(attributes.calls, LIMITS.rateBurst + refusals + 1);
+    assert.deepEqual(attributes.topCallers, [
+      { caller: OWNER, calls: LIMITS.rateBurst + refusals },
+      { caller: WRITER, calls: 1 },
+    ]);
+    assert.deepEqual(
+      [attributes.lastUse.caller, attributes.lastUse.outcome],
+      [WRITER, 'sent'],
+    );
+
+    assert.strictEqual((await call('shared', OWNER)).code, 'rate-limited');
+    let latest = (await shareUsage(shared.id)).body.data.attributes.lastUse;
+    assert.deepEqual(
+      [latest.caller, latest.outcome],
+      [OWNER, 'refused'],
+      'a refusal counted on an earlier row is the last use',
+    );
+  });
+
   test('a call refused before any binding names a key is recorded against nothing', async function (assert) {
     let key = await addKey();
     let refused = await call('check');
