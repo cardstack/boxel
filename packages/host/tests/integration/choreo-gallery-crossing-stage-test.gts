@@ -127,7 +127,7 @@ module('Integration | Choreo gallery | crossing stage', function (hooks) {
     assert.strictEqual(root.dataset.phase, 'crossing', 'a cut arms the flight');
     assert.strictEqual(root.dataset.slide, '1', 'Ember is the destination');
     const leavingTitle = document.querySelector(
-      '[data-choreo-orphans] [data-test-title]',
+      '[data-choreo-orphans] [data-test-title-memory]',
     ) as HTMLElement | null;
     assert.ok(
       leavingTitle,
@@ -139,25 +139,25 @@ module('Integration | Choreo gallery | crossing stage', function (hooks) {
       `the flying Tide title stays a word (${leavingTitleWidth.toFixed(0)} in ${stage().width.toFixed(0)})`,
     );
     assert.ok(
-      document.querySelector('[data-choreo-orphans] [data-test-chip]'),
+      document.querySelector('[data-choreo-orphans] [data-test-chip-memory]'),
       'the leaving chip rides the flight as a skin',
     );
     assert.ok(
-      document.querySelector('[data-choreo-orphans] [data-test-kicker]'),
+      document.querySelector('[data-choreo-orphans] [data-test-kicker-memory]'),
       'the leaving kicker rides the flight as a skin',
     );
     assert.ok(
-      document.querySelector('[data-choreo-orphans] [data-test-inset]'),
+      document.querySelector('[data-choreo-orphans] [data-test-inset-memory]'),
       'the inset caption is a counterpart inside the plate — it orphans, the plate does not',
     );
     assert.strictEqual(
-      document.querySelectorAll('[data-choreo-orphans] [data-test-hero]')
+      document.querySelectorAll('[data-choreo-orphans] [data-test-hero-memory]')
         .length,
       0,
       'the beige plate is the same node — it moves, it is not a counterpart skin',
     );
     assert.strictEqual(
-      document.querySelectorAll('[data-choreo-orphans] [data-test-rule]')
+      document.querySelectorAll('[data-choreo-orphans] [data-test-rule-memory]')
         .length,
       0,
       'the hairline is kept — it Moves, it is not a skin',
@@ -175,7 +175,7 @@ module('Integration | Choreo gallery | crossing stage', function (hooks) {
       .dom('[data-test-hero] [data-test-mark]')
       .exists('the spinning mark stays inside the flying plate');
     assert.strictEqual(
-      document.querySelectorAll('[data-choreo-orphans] [data-test-cast]')
+      document.querySelectorAll('[data-choreo-orphans] [data-test-cast-memory]')
         .length,
       0,
       'shadow casters ride inside the kept plate — they dissolve, they do not orphan',

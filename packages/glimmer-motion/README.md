@@ -53,7 +53,7 @@ rather than from a React translation table.
 - **Layout** — `layout` FLIP animation with scale correction, `layoutId` shared-element transitions and
   crossfade, `<LayoutGroup>`, nested/relative projection, portals, `layoutChange()` / `instantLayoutTransition()`
 - **Presence** — `<Presence>` with `sync` / `wait` / `popLayout`, `@initial={{false}}`, `@custom`,
-  nested `@propagate`, tracked `h.isPresent`
+  nested `@propagate`, tracked `h.isPresent`; plus `snapshot`, this package's own mode (see below)
 - **Drag** — Motion's pan/drag session: axis lock, direction lock, constraints (object / element / ref,
   re-measured on resize), elastic, momentum, snap to origin, `createDragControls()`, `whileDrag`,
   drag + layout, scroll-while-drag, `correctParentTransform()` / `transformViewBoxPoint()`
@@ -83,6 +83,7 @@ rather than from a React translation table.
 | `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
 | `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
 | `registerBusyProbe`, `BusyProbe`                                                                               | count a host's own in-flight work as motion (below)                                                              |
+| `keepAsMemory`, `readAnimations`, `trackScrolls`, `MEMORY_ATTRIBUTE`                                           | keep a removed element on screen as a memory while it exits (below)                                              |
 | `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
@@ -166,6 +167,31 @@ const stage = new Stage();
   remover: a probe over one host instance's state is removed in that instance's destructor, and a probe over
   module-global state may stay registered for the life of the page.
 
+### Memories
+
+A memory is an element that has left, kept on screen for as long as its exit plays. `<Presence
+@mode="snapshot">` keeps a copy of its leaver as one, and a host that parks removed elements itself
+(`<Choreo>`'s orphan layer) keeps each element it parks as one, so a leaver looks and behaves the
+same whichever layer let it go. A memory shows the frame its element last showed, and nothing in it
+acts:
+
+- Its CSS animations hold still: each one the element was showing pauses where it was, and any other
+  jumps to its end, so an entrance does not play again on a leaver. Animations on a scroll timeline
+  follow the restored scroll offsets.
+- Its scroll offsets are restored, its backdrop filters are off, and it is composited as one texture.
+- It is inert and `aria-hidden`. Its HTML elements carry no ids, `autofocus` or form-control names;
+  its SVG elements keep their ids, which its own fills, clips and masks resolve through. Its iframes
+  are blank, and its media neither plays nor loads.
+- Its test hooks carry a suffix: `data-test-title` becomes `data-test-title-memory`, with its value. A
+  test's selector finds only the live element, and a test that means the leaver names it with the
+  suffix. It carries `data-motion-memory`, and `live()` / `liveAll()` in `glimmer-motion/test-support`
+  skip it for any other selector.
+
+A host makes one with `keepAsMemory(element, shown, insert)`, where `insert` puts the element back in
+the document, and `shown` is what the element showed before the render that removed it: its CSS
+animations, from `readAnimations(root)` read before that render, and its scroll offsets, from
+`trackScrolls(root)`, which records them as they change because a removed element has lost its own.
+
 ### The engine's imperative surface
 
 A few of the engine's own functions are exported from `glimmer-motion` directly, for code that drives motion
@@ -232,6 +258,17 @@ re-runs from live tracked state for as long as the leaver is on screen. Anything
 symbol the panel was showing, the rect the modal flew from) has to ride on the item `<Presence>`
 yields, not be read back out of state that has already moved on.
 
+Where it can't, because the leaver renders blocks or state you don't own, use
+`<Presence @mode="snapshot">`. The leaver's block is torn down in the render that removes it, and a
+static copy of the element given the handle plays that element's `exit`. The copy shows the
+element's last frame, lifted out of flow at its seat (`@anchorX` / `@anchorY` apply). It is kept as a
+[memory](#memories): inert, held at that frame, with no ids or form-control names, and with its test
+hooks suffixed (`data-test-title-memory`). It also takes the canvas pixels the element showed and the
+values its script animations and transitions had reached. An item that comes back replaces its copy
+at once, and with no `exit` or with animations skipped nothing is copied. A copy is a picture: motion
+elements nested inside it don't play their own exits, and custom elements inside it are constructed
+again.
+
 **3. Declare what you want tweened, because a value in the stylesheet is invisible to the engine.**
 A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and
 `boxShadow` against the scale in force, but only for values it holds. A radius that lives in CSS
@@ -263,14 +300,15 @@ module('the card', function (hooks) {
 });
 ```
 
-| export                                            | what it is for                                                                                                                                                                 |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop |
-| `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                  |
-| `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                  |
-| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                              |
-| `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                        |
-| `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                              |
+| export                                            | what it is for                                                                                                                                                                                                       |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop                                       |
+| `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                                                        |
+| `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                                                        |
+| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                                                                    |
+| `live(selector)` / `liveAll(selector)`            | `querySelector` that skips [memories](#memories), the leavers kept on screen while they exit, for selectors other than test hooks (a memory's are suffixed); a person never clicks one, so a selector mustn't either |
+| `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                                                              |
+| `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                                                                    |
 
 `animationsSettled()` is explicit rather than a test waiter on purpose. A test that clicks again
 while something is still in flight is testing interruption, and a waiter would silently turn that

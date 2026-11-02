@@ -1,4 +1,4 @@
-import { registerDestructor } from '@ember/destroyable';
+import { isDestroying, registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -8,6 +8,7 @@ import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
 import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
+import { captureExit, type ExitCopy } from './snapshot.ts';
 
 /**
  * AnimatePresence for Glimmer — the same algorithm as Motion's
@@ -21,6 +22,14 @@ import { postRender } from './scheduler.ts';
  *
  * Motion elements nested deeper inside a child inherit its presence through
  * their parent VisualElement, as React's PresenceContext would provide it.
+ *
+ * `@mode="snapshot"` is this package's own: a leaver's block is torn down in
+ * the render that removes it, and a static copy of the element the handle was
+ * passed to plays that element's exit, lifted out of flow at its seat. Use it
+ * where a leaver's content comes from state that moves on as it leaves, such
+ * as a component's blocks: a live leaver would re-render from that state, and
+ * stay focusable, with its ids and form controls, beside its replacement. The
+ * copy is kept as a memory (see memory.ts). See snapshot.ts.
  */
 interface Signature<T> {
   Args: {
@@ -30,7 +39,7 @@ interface Signature<T> {
     initial?: boolean;
     items: T[];
     key: (item: T) => string;
-    mode?: 'sync' | 'wait' | 'popLayout';
+    mode?: 'sync' | 'wait' | 'popLayout' | 'snapshot';
     onExitComplete?: () => void;
     parent?: PresenceHandle;
     /** nested presence: exit with the parent handle when it leaves */
@@ -49,7 +58,7 @@ class Entry<T> implements PresenceHandle {
   readonly id = `presence-${presenceId++}`;
   private children = new Map<string | number, boolean>();
   private subscribers = new Set<() => void>();
-  /** popLayout: the direct children, so they can be measured before the DOM changes */
+  /** popLayout and snapshot: the direct children, so they can be read before the DOM changes */
   private popCandidates = new Set<PopMeasurable>();
   subscribe(refresh: () => void) {
     this.subscribers.add(refresh);
@@ -60,6 +69,18 @@ class Entry<T> implements PresenceHandle {
     return () => {
       this.popCandidates.delete(node);
     };
+  }
+  /** snapshot: static copies of the direct children, taken before the render that removes them */
+  copiesForExit(): ExitCopy[] {
+    const copies: ExitCopy[] = [];
+    this.popCandidates.forEach((node) => {
+      const source = node.exitForCopy();
+      const copy = source && captureExit(source);
+      if (copy) {
+        copies.push(copy);
+      }
+    });
+    return copies;
   }
   readonly key: string;
   private owner: Presence<T>;
@@ -175,11 +196,17 @@ export class Presence<T> extends Component<Signature<T>> {
   private pendingItems: T[] = [];
   private registeredWithParent?: () => void;
   private readonly selfId = `presence:${presenceId++}`;
+  /** snapshot: copies still playing an exit, by the key of the item they copied */
+  private copies = new Map<ExitCopy, string>();
   @tracked private version = 0;
 
   constructor(owner: Owner, args: Signature<T>['Args']) {
     super(owner, args);
-    registerDestructor(this, () => this.registeredWithParent?.());
+    registerDestructor(this, () => {
+      this.registeredWithParent?.();
+      this.copies.forEach((_, copy) => copy.cut());
+      this.copies.clear();
+    });
   }
 
   get parentPresent() {
@@ -226,27 +253,47 @@ export class Presence<T> extends Component<Signature<T>> {
       this.pendingItems = items;
       const presentKeys = this.presentKeys;
       const blockInitial = this.firstRender && this.args.initial === false;
+      const snapshot = this.args.mode === 'snapshot';
       items.forEach((item) => {
         const k = this.args.key(item);
         const e = this.entries.get(k);
         if (e) {
           e.item = item;
         } else {
+          // a static copy cannot be retargeted: an item that comes back
+          // replaces the copy of it still leaving
+          this.cutCopies(k);
           this.entries.set(k, new Entry(k, item, this, blockInitial));
         }
       });
       // diff rendered vs present, keeping leavers in their slots (AnimatePresence's splice loop)
       const exitingKeys: string[] = [];
+      const copied: ExitCopy[] = [];
+      let snapshotLeft = false;
       let next = parentPresent ? [...presentKeys] : [];
       let insertionIndex = 0;
       for (const k of this.order) {
         const presentIndex = presentKeys.indexOf(k);
-        if (presentIndex === -1) {
+        if (presentIndex === -1 && snapshot) {
+          // copied now, while the DOM still shows the last render; the block
+          // itself leaves with this render
+          snapshotLeft = true;
+          for (const copy of this.entries.get(k)?.copiesForExit() ?? []) {
+            this.copies.set(copy, k);
+            copied.push(copy);
+          }
+          this.entries.delete(k);
+          this.exitComplete.delete(k);
+          this.exiting.delete(k);
+        } else if (presentIndex === -1) {
           next.splice(insertionIndex++, 0, k);
           exitingKeys.push(k);
         } else {
           insertionIndex = presentIndex + exitingKeys.length + 1;
         }
+      }
+      if (snapshotLeft) {
+        postRender(() => this.startCopies(copied));
       }
       if ((this.args.mode ?? 'sync') === 'wait' && exitingKeys.length) {
         next = exitingKeys;
@@ -316,6 +363,46 @@ export class Presence<T> extends Component<Signature<T>> {
 
   private safeToRemove() {
     this.args.parent?.context.onExitComplete?.(this.selfId);
+  }
+
+  /** snapshot: after the render that removed their items, the copies go back in and play their exits */
+  private startCopies(copies: ExitCopy[]) {
+    const placement = {
+      anchorX: this.args.anchorX ?? 'left',
+      anchorY: this.args.anchorY ?? 'top',
+      custom: this.args.custom,
+    } as const;
+    for (const copy of copies) {
+      if (this.copies.has(copy)) {
+        copy.start(placement, () => this.copyLeft(copy));
+      }
+    }
+    // each copy reports its own end; a pass that copied nothing reports here
+    if (!copies.length) {
+      this.checkCopiesLeft();
+    }
+  }
+
+  private copyLeft(copy: ExitCopy) {
+    this.copies.delete(copy);
+    this.checkCopiesLeft();
+  }
+
+  /** every copy has finished its exit, and no live leaver is still playing one */
+  private checkCopiesLeft() {
+    if (this.copies.size || this.exitComplete.size || isDestroying(this)) {
+      return;
+    }
+    this.args.onExitComplete?.();
+  }
+
+  private cutCopies(key: string) {
+    this.copies.forEach((k, copy) => {
+      if (k === key) {
+        this.copies.delete(copy);
+        copy.cut();
+      }
+    });
   }
 
   <template>
