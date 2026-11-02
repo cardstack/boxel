@@ -27,13 +27,29 @@
 //
 // `update` runs on main only. It adds this run to the main samples, and the
 // pull request runs finished since the last update to the pull request
-// samples. A main run over the threshold is recorded as flagged and left out
-// of the main baseline, so a regression keeps failing the check until it is
-// fixed rather than becoming the new normal after a few runs. To accept a
-// slowdown on purpose, delete the `main` entries from the baseline file in the
-// same PR; the next main runs rebuild it.
+// samples. A run over the threshold is recorded as flagged and left out of
+// its baseline, so a regression keeps failing the check until it is fixed
+// rather than becoming the new normal after a few runs. This also applies to
+// pull request runs, which carry a regression from main once their branches
+// merge it. To accept a slowdown on purpose, delete the `main` and
+// `pullRequest` entries from the baseline file in the same PR; the next runs
+// rebuild it.
+//
+// A shard that was cancelled after its test step started hit the job timeout:
+// the job only runs when the run itself was not cancelled, and the shards
+// don't fail fast. `check` reports such a run as slower, since the worst
+// slowdowns are the ones that push a shard past its timeout.
 
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  api,
+  mapLimit,
+  median,
+  newest,
+  opt,
+  publish,
+  readBaseline,
+  writeBaseline,
+} from './host-baseline-check.mjs';
 
 const THRESHOLD = 1.4;
 // The median of this many recent runs is the baseline.
@@ -44,6 +60,8 @@ const MIN_RUNS = 10;
 // Pull request samples older than this are not used: a runner kind that has
 // been out of use for a while would otherwise be compared with stale values.
 const PR_MAX_AGE_DAYS = 7;
+// Pull request runs whose jobs are fetched at a time.
+const FETCH_CONCURRENCY = 8;
 // Entries kept in the file, enough for the windows above.
 const MAIN_KEEP = 40;
 const PR_KEEP = 300;
@@ -52,10 +70,6 @@ const PR_KEEP = 300;
 const SHARD_WARN_MINUTES = 25;
 
 const [command, baselinePath, ...rest] = process.argv.slice(2);
-const opt = (name) => {
-  let i = rest.indexOf(`--${name}`);
-  return i === -1 ? undefined : rest[i + 1];
-};
 
 if (!['check', 'update'].includes(command) || !baselinePath) {
   console.error(
@@ -73,24 +87,9 @@ if (!GITHUB_TOKEN || !GITHUB_REPOSITORY || !GITHUB_RUN_ID) {
   process.exit(2);
 }
 
-async function api(path) {
-  let response = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPOSITORY}/${path}`,
-    {
-      headers: {
-        authorization: `Bearer ${GITHUB_TOKEN}`,
-        accept: 'application/vnd.github+json',
-      },
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`GET ${path}: ${response.status} ${await response.text()}`);
-  }
-  return response.json();
-}
-
-// The run's test-step time, or undefined when a shard was cancelled or skipped
-// or did not finish its test step, since its total would not be comparable.
+// The run's test-step time, or undefined when a shard was skipped or did not
+// finish its test step, since its total would not be comparable. A run with a
+// shard that timed out in its test step gives `{ timedOut, shards }` only.
 // Also undefined when the shards disagree on the runner kind or on whether they
 // imported the index cache, as after a re-run of failed jobs under different
 // settings: the total would mix two scales.
@@ -100,6 +99,16 @@ async function measureRun(runId) {
   );
   let shards = jobs.filter((j) => j.name.startsWith('Host Tests ('));
   if (shards.length === 0) return undefined;
+  let timedOut = shards
+    .filter(
+      (j) =>
+        j.conclusion === 'cancelled' &&
+        j.steps?.some(
+          (s) => s.name.startsWith('host test suite') && s.started_at,
+        ),
+    )
+    .map((j) => j.name);
+  if (timedOut.length > 0) return { timedOut, shards: shards.length };
   let stepMinutes = [];
   let importedCache = [];
   for (let job of shards) {
@@ -133,21 +142,6 @@ async function measureRun(runId) {
 
 const round = (n) => Math.round(n * 10) / 10;
 
-function median(values) {
-  let sorted = [...values].sort((a, b) => a - b);
-  let mid = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function readBaseline() {
-  try {
-    let baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
-    return { main: [], pullRequest: [], ...baseline };
-  } catch {
-    return { main: [], pullRequest: [] };
-  }
-}
-
 // The samples a run is compared with: the same event, runner kind, index cache
 // use and shard count, newest last.
 function comparable(baseline, event, run, now) {
@@ -167,6 +161,7 @@ function comparable(baseline, event, run, now) {
     .filter(
       (r) =>
         r.minutes != null &&
+        !r.flagged &&
         r.runsOn === run.runsOn &&
         r.indexCache === run.indexCache &&
         r.shards === run.shards &&
@@ -190,15 +185,23 @@ const runner = (run) =>
 
 async function check() {
   let event = GITHUB_EVENT_NAME === 'push' ? 'push' : 'pull_request';
-  let baseline = readBaseline();
+  let baseline = readBaseline(baselinePath, { main: [], pullRequest: [] });
   let run = await measureRun(GITHUB_RUN_ID);
   let lines = ['### Host Test Time', ''];
   let slower = false;
 
   if (!run) {
     lines.push(
-      'Not measured: a shard was cancelled or skipped or did not finish its test step, ' +
+      'Not measured: a shard was skipped or did not finish its test step, ' +
         'or the shards differ in runner kind or index cache use.',
+    );
+  } else if (run.timedOut) {
+    slower = true;
+    lines.push(
+      `⚠️ ${run.timedOut.join(', ')} hit the job's 35-minute timeout during the test step. ` +
+        'A slowdown this size usually comes from a leak (retained apps or timers make garbage ' +
+        'collection slower between tests): compare the end-of-shard heap in the logs of the ' +
+        'shards that finished with a recent run.',
     );
   } else {
     let result = compare(baseline, event, run, Date.now());
@@ -240,26 +243,19 @@ async function check() {
     }
   }
 
-  let summary = lines.join('\n') + '\n';
-  console.log(summary);
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
-  }
-  let slot = opt('slot');
-  if (slot) writeFileSync(slot, summary);
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `slower=${slower}\n`);
-  }
+  publish(lines, { slot: opt(rest, 'slot'), output: 'slower', value: slower });
 }
 
 async function update() {
-  let baseline = readBaseline();
+  let baseline = readBaseline(baselinePath, { main: [], pullRequest: [] });
   let now = Date.now();
 
   let current = await api(`actions/runs/${GITHUB_RUN_ID}`);
   if (!baseline.main.some((r) => r.run === current.id)) {
     let run = await measureRun(current.id);
-    if (run) {
+    if (run?.timedOut) {
+      console.log('A shard timed out; main samples unchanged.');
+    } else if (run) {
       let { slower } = compare(baseline, 'push', run, now);
       baseline.main.push({
         run: current.id,
@@ -275,13 +271,17 @@ async function update() {
     }
   }
 
-  // Pull request runs that finished since the newest recorded one. Each is
-  // recorded once, also when it is not measurable (as `minutes: null`), so a
-  // later update doesn't fetch its jobs again.
+  // Pull request runs that finished since the newest recorded one, as far back
+  // as samples are used. Each is recorded once, also when it is not
+  // measurable (as `minutes: null`), so a later update doesn't fetch its jobs
+  // again.
   let known = new Set(baseline.pullRequest.map((r) => r.run));
-  let newest = baseline.pullRequest.at(-1)?.at;
+  let newestAt = baseline.pullRequest.at(-1)?.at;
   let since = new Date(
-    Math.max(newest ? Date.parse(newest) - 6 * 3600e3 : 0, now - 2 * 864e5),
+    Math.max(
+      newestAt ? Date.parse(newestAt) - 6 * 3600e3 : 0,
+      now - PR_MAX_AGE_DAYS * 864e5,
+    ),
   ).toISOString();
   let candidates = [];
   for (let page = 1; page <= 5; page++) {
@@ -292,30 +292,43 @@ async function update() {
     candidates.push(...workflow_runs);
     if (workflow_runs.length < 100) break;
   }
-  let added = 0;
-  for (let r of candidates.sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  )) {
-    if (known.has(r.id) || !['success', 'failure'].includes(r.conclusion)) {
-      continue;
+  let fresh = candidates
+    .filter(
+      (r) => !known.has(r.id) && ['success', 'failure'].includes(r.conclusion),
+    )
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  let measured = await mapLimit(fresh, FETCH_CONCURRENCY, (r) =>
+    measureRun(r.id),
+  );
+  // In creation order, so that each run is compared with the runs before it.
+  let flagged = 0;
+  fresh.forEach((r, i) => {
+    let run = measured[i];
+    if (!run || run.timedOut) {
+      baseline.pullRequest.push({ run: r.id, at: r.created_at, minutes: null });
+      return;
     }
-    let run = await measureRun(r.id);
+    let { slower } = compare(
+      baseline,
+      'pull_request',
+      run,
+      Date.parse(r.created_at),
+    );
+    if (slower) flagged++;
     baseline.pullRequest.push({
       run: r.id,
       at: r.created_at,
-      ...(run ?? { minutes: null }),
+      ...run,
+      ...(slower ? { flagged: true } : {}),
     });
-    added++;
-  }
-  console.log(`Recorded ${added} pull request run(s).`);
+  });
+  console.log(
+    `Recorded ${fresh.length} pull request run(s), ${flagged} flagged as slower.`,
+  );
 
-  baseline.main = baseline.main
-    .sort((a, b) => a.at.localeCompare(b.at))
-    .slice(-MAIN_KEEP);
-  baseline.pullRequest = baseline.pullRequest
-    .sort((a, b) => a.at.localeCompare(b.at))
-    .slice(-PR_KEEP);
-  writeFileSync(baselinePath, JSON.stringify(baseline, null, 2) + '\n');
+  baseline.main = newest(baseline.main, MAIN_KEEP);
+  baseline.pullRequest = newest(baseline.pullRequest, PR_KEEP);
+  writeBaseline(baselinePath, baseline);
 }
 
 await (command === 'check' ? check() : update());

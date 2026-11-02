@@ -8,7 +8,8 @@
 //   node host-peak-heap.mjs update <reports-dir> <baseline-json>
 //
 // <reports-dir> holds the shards' memory-report-N.json files. Reads
-// GITHUB_RUN_ID and GITHUB_EVENT_NAME.
+// GITHUB_RUN_ID and GITHUB_EVENT_NAME; `update` also reads GITHUB_TOKEN and
+// GITHUB_REPOSITORY, to record when the run was created.
 //
 // The measure is the median across shards of each shard's highest used heap.
 // A leak that retains the app, its cards or its timers between tests makes
@@ -29,14 +30,24 @@
 // keeps failing the check until it is fixed rather than becoming the new
 // normal after a few runs. To accept a higher heap on purpose, delete the
 // entries from the baseline file in the same PR; the next main runs rebuild it.
+//
+// A shard that times out uploads no memory report, and a bad leak is what
+// pushes a shard past its timeout. So a run with fewer shards than the latest
+// main run is still compared, by the median of the shards that left a report,
+// and the report names how many are missing.
+
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
-  appendFileSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
-import { join } from 'node:path';
+  api,
+  median,
+  newest,
+  opt,
+  publish,
+  readBaseline,
+  writeBaseline,
+} from './host-baseline-check.mjs';
 
 const THRESHOLD = 2;
 // The median of this many recent main runs is the baseline.
@@ -47,10 +58,6 @@ const MIN_RUNS = 10;
 const KEEP = 40;
 
 const [command, reportsDir, baselinePath, ...rest] = process.argv.slice(2);
-const opt = (name) => {
-  let i = rest.indexOf(`--${name}`);
-  return i === -1 ? undefined : rest[i + 1];
-};
 
 if (!['check', 'update'].includes(command) || !reportsDir || !baselinePath) {
   console.error(
@@ -84,37 +91,34 @@ function measureRun() {
   };
 }
 
-function median(values) {
-  let sorted = [...values].sort((a, b) => a - b);
-  let mid = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function readBaseline() {
-  try {
-    let baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
-    return { main: [], ...baseline };
-  } catch {
-    return { main: [] };
-  }
-}
-
-// A shard count other than the baseline's means a shard left no report, or the
-// suite was split differently; either changes what the median shard holds.
+// Samples are main runs split into as many shards as this run, since the
+// split changes what the median shard holds. A run with fewer shards than the
+// latest main run is taken to have lost reports, not to be split differently,
+// and is compared with runs of the latest main run's shard count.
 function compare(baseline, run) {
+  let expected = baseline.main.at(-1)?.shards;
+  let shards = expected && run.shards < expected ? expected : run.shards;
   let samples = baseline.main
-    .filter((r) => !r.flagged && r.shards === run.shards && r.run !== run.runId)
+    .filter((r) => !r.flagged && r.shards === shards && r.run !== run.runId)
     .slice(-WINDOW);
+  let missing = shards - run.shards;
   if (samples.length < MIN_RUNS) {
-    return { count: samples.length };
+    return { count: samples.length, shards, missing };
   }
   let base = median(samples.map((r) => r.peakMb));
   let ratio = run.peakMb / base;
-  return { count: samples.length, base, ratio, higher: ratio > THRESHOLD };
+  return {
+    count: samples.length,
+    shards,
+    missing,
+    base,
+    ratio,
+    higher: ratio > THRESHOLD,
+  };
 }
 
 function check() {
-  let baseline = readBaseline();
+  let baseline = readBaseline(baselinePath, { main: [] });
   let run = measureRun();
   let lines = ['### Host Peak Heap', ''];
   let higher = false;
@@ -126,7 +130,7 @@ function check() {
     if (result.ratio == null) {
       lines.push(
         `The median shard peaked at **${run.peakMb} MB** of used heap across ${run.shards} shards. ` +
-          `Not compared: only ${result.count} recent main runs with ${run.shards} shards are recorded.`,
+          `Not compared: only ${result.count} recent main runs with ${result.shards} shards are recorded.`,
       );
     } else {
       higher = result.higher;
@@ -151,22 +155,22 @@ function check() {
         }
       }
     }
+    if (result.missing > 0) {
+      let message =
+        `${result.missing} of ${result.shards} shards left no memory report, as a shard that times out does. ` +
+        `The median is of the ${run.shards} that did.`;
+      lines.push('', `⚠️ ${message}`);
+      console.log(
+        `::warning title=Host shard memory reports missing::${message}`,
+      );
+    }
   }
 
-  let summary = lines.join('\n') + '\n';
-  console.log(summary);
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
-  }
-  let slot = opt('slot');
-  if (slot) writeFileSync(slot, summary);
-  if (process.env.GITHUB_OUTPUT) {
-    appendFileSync(process.env.GITHUB_OUTPUT, `higher=${higher}\n`);
-  }
+  publish(lines, { slot: opt(rest, 'slot'), output: 'higher', value: higher });
 }
 
-function update() {
-  let baseline = readBaseline();
+async function update() {
+  let baseline = readBaseline(baselinePath, { main: [] });
   let runId = Number(GITHUB_RUN_ID);
   if (baseline.main.some((r) => r.run === runId)) {
     console.log('This run is already recorded.');
@@ -177,20 +181,25 @@ function update() {
     console.log('This run left no memory reports; samples unchanged.');
     return;
   }
-  let { higher } = compare(baseline, { ...run, runId });
+  let { higher, missing } = compare(baseline, { ...run, runId });
+  if (missing > 0) {
+    console.log(
+      `${missing} shard(s) left no memory report; samples unchanged.`,
+    );
+    return;
+  }
+  let { created_at } = await api(`actions/runs/${runId}`);
   baseline.main.push({
     run: runId,
-    at: new Date().toISOString(),
+    at: created_at,
     ...run,
     ...(higher ? { flagged: true } : {}),
   });
   console.log(
     `Recorded this run: ${run.peakMb} MB${higher ? ', flagged as higher' : ''}.`,
   );
-  baseline.main = baseline.main
-    .sort((a, b) => a.at.localeCompare(b.at))
-    .slice(-KEEP);
-  writeFileSync(baselinePath, JSON.stringify(baseline, null, 2) + '\n');
+  baseline.main = newest(baseline.main, KEEP);
+  writeBaseline(baselinePath, baseline);
 }
 
-command === 'check' ? check() : update();
+await (command === 'check' ? check() : update());

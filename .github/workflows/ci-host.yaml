@@ -1619,7 +1619,7 @@ jobs:
     name: Host Test Time
     if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') && github.event_name != 'workflow_dispatch' }}
     concurrency:
-      group: host-test-time-${{ github.head_ref || github.run_id }}
+      group: host-test-time-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: true
     needs: host-test
     # Follows host-test onto RunsOn; see host-test. It only reads the jobs API,
@@ -1681,7 +1681,7 @@ jobs:
     name: Host Peak Heap
     if: ${{ !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
     concurrency:
-      group: host-peak-heap-${{ github.head_ref || github.run_id }}
+      group: host-peak-heap-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: true
     needs: host-test
     # Follows host-test onto RunsOn; see host-test. It only reads the shards'
