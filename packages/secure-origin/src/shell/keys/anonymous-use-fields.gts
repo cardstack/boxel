@@ -108,10 +108,11 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
   </FieldContainer>
   {{#if @anonymous}}
     <FieldContainer
-      @tag='label'
+      @tag='div'
       @label='Anonymous cap (optional)'
       @icon={{KeyRound}}
       data-test-anonymous-cap
+      as |labelId|
     >
       <BoxelInput
         @type='text'
@@ -121,12 +122,14 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         @onInput={{@onCap}}
         @state={{capState @anonymous @cap}}
         @errorMessage={{capError @anonymous @cap}}
+        @describedBy='anonymous-cap-note'
         inputmode='numeric'
+        aria-labelledby={{labelId}}
         data-test-anonymous-cap-input
       />
-      <span class='note cap-note'>How many calls people who aren’t signed in can
-        make with this key each day, all together, in every workspace it’s
-        shared into. Leave it empty for no cap.</span>
+      <span id='anonymous-cap-note' class='note cap-note'>How many calls people
+        who aren’t signed in can make with this key each day, all together, in
+        every workspace it’s shared into. Leave it empty for no cap.</span>
     </FieldContainer>
   {{/if}}
 

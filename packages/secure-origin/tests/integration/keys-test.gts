@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   render,
   settled,
   triggerEvent,
@@ -750,6 +751,22 @@ module('Integration | key pages', function (hooks) {
         .hasText('Allow people who aren’t signed in to use this key');
       assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
       await click('[data-test-anonymous-use-input]');
+      let capInput = find('[data-test-anonymous-cap-input]')!;
+      let capName = capInput
+        .getAttribute('aria-labelledby')!
+        .split(' ')
+        .map((id) => document.getElementById(id)?.textContent?.trim())
+        .join(' ');
+      assert.strictEqual(
+        capName,
+        'Anonymous cap (optional)',
+        'the cap is named by its label alone',
+      );
+      assert
+        .dom(
+          document.getElementById(capInput.getAttribute('aria-describedby')!),
+        )
+        .includesText('Leave it empty for no cap', 'its note describes it');
       await fillIn('[data-test-anonymous-cap-input]', '0');
       assert
         .dom('[data-test-key-anonymous-use-save]')
