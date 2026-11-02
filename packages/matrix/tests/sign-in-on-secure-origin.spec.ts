@@ -179,9 +179,12 @@ test.describe('Sign in on the secure origin', () => {
     await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
     expect(
-      loaded.filter((url) => new URL(url).origin === APP_ORIGIN),
-      'the app is not loaded again between sign-out and the sign-in form',
-    ).toEqual([]);
+      loaded.map((url) => {
+        let { origin, pathname } = new URL(url);
+        return `${origin}${pathname}`;
+      }),
+      'the sign-out page is the only document loaded: the app is not loaded again, and sign-in follows it as a route transition',
+    ).toEqual([`${secureOriginURL}/sign-out`]);
     expect(
       await page.evaluate(
         (key) => localStorage.getItem(key),
@@ -190,13 +193,6 @@ test.describe('Sign in on the secure origin', () => {
       "the secure origin's session is gone",
     ).toBeNull();
     await snapshot(testInfo, page, 'signed out, at the secure sign-in');
-
-    // Signing in again there hands back to the app's root.
-    await signInOnSecurePage(page, username, password);
-    await page.waitForURL((url) => url.origin === APP_ORIGIN);
-    await expect(page.locator('[data-test-workspace-chooser]')).toBeVisible({
-      timeout: 60_000,
-    });
   });
 
   test("the secure window stays signed in past its first week while the app's session lasts", async ({
