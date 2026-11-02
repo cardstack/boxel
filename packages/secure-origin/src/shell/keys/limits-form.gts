@@ -9,7 +9,7 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import Button from '../../components/button.gts';
-import Input from '../../components/input.gts';
+import BoxelInput from '../../components/input.gts';
 import type { KeyLimitChanges, KeyLimits } from '../../security/keys.ts';
 
 interface Signature {
@@ -61,7 +61,7 @@ export default class LimitsForm extends Component<Signature> {
       {{#each this.fields as |field|}}
         <label class='field' data-test-key-limit={{field.name}}>
           <span class='label'>{{field.label}}</span>
-          <Input
+          <BoxelInput
             @value={{field.value}}
             @onInput={{field.onInput}}
             inputmode={{if field.whole 'numeric' 'decimal'}}
