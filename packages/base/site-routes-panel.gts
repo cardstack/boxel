@@ -417,6 +417,16 @@ const PageTypeRoutes: TemplateOnlyComponent<PageTypeSignature> = <template>
         <span class='count'>{{@report.total}} cards</span>
       {{/if}}
     </div>
+    {{#if @report.pageType.params.length}}
+      <dl class='derived' data-test-site-routes-params>
+        {{#each @report.pageType.params as |param|}}
+          <div data-test-site-routes-param={{param.name}}>
+            <dt><code>:{{param.name}}</code></dt>
+            <dd><code>{{param.expression}}</code></dd>
+          </div>
+        {{/each}}
+      </dl>
+    {{/if}}
     {{#if @report.loading}}
       <LoadingIndicator />
     {{else if @report.examples.length}}
@@ -437,7 +447,7 @@ const PageTypeRoutes: TemplateOnlyComponent<PageTypeSignature> = <template>
           {{@report.withoutAddress}}
           of the first
           {{@report.looked}}
-          cards have no address: a field the path names is empty.
+          cards have no address: a segment of the path is empty for them.
         </p>
       {{/if}}
       {{#each @report.shared as |entry|}}
@@ -493,6 +503,25 @@ const PageTypeRoutes: TemplateOnlyComponent<PageTypeSignature> = <template>
     }
     .count {
       font-size: var(--boxel-font-size-xs);
+    }
+    .derived {
+      display: grid;
+      gap: var(--boxel-sp-5xs);
+      margin: 0;
+    }
+    .derived > div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--boxel-sp-xs);
+      align-items: baseline;
+      min-width: 0;
+    }
+    .derived dt {
+      color: var(--muted-foreground);
+    }
+    .derived dd {
+      margin: 0;
+      min-width: 0;
     }
     .examples {
       display: grid;

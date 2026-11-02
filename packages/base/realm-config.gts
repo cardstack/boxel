@@ -33,6 +33,7 @@ import {
   PermissionsContextName,
   cardDefComputedFields,
   chooseCard,
+  compileSegmentExpression,
   DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
   findRedirectCycles,
@@ -424,6 +425,290 @@ export class RoutingRuleField extends FieldDef {
 // fields declared here, and validates them on every read
 // (`readSiteSettings` in runtime-common).
 
+// The refusal for an expression the `route` profile won't run, or undefined
+// when it compiles. Empty text is not a refusal: the row is still being filled.
+function segmentExpressionError(expression: string): string | undefined {
+  if (!expression.trim()) {
+    return undefined;
+  }
+  let compiled = compileSegmentExpression(expression);
+  return compiled.ok ? undefined : compiled.error;
+}
+
+// One row of the segments editor while the author is in it. As with the
+// realm settings editor, the map is rebuilt from the rows each time it is
+// written, so renaming a segment never carries a value across to another.
+interface SegmentRow {
+  id: number;
+  name: string;
+  expression: string;
+}
+
+class SiteSegmentParamsEdit extends Component<typeof SiteSegmentParamsField> {
+  @tracked private rows: SegmentRow[] = Object.entries(
+    this.args.model ?? {},
+  ).map(([name, expression], index) => ({
+    id: index,
+    name,
+    expression: typeof expression === 'string' ? expression : '',
+  }));
+
+  private nextId = this.rows.length;
+
+  // A segment name is written once the author finishes it, not a character
+  // at a time, so `:ye` is never briefly a segment of the site.
+  private namePending = false;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      if (this.namePending) {
+        this.commit();
+      }
+    });
+  }
+
+  private get displayRows() {
+    return this.rows.map((row, index) => ({
+      ...row,
+      index,
+      error: segmentExpressionError(row.expression),
+    }));
+  }
+
+  @action private setName(index: number, name: string) {
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, name } : row,
+    );
+    this.namePending = true;
+  }
+
+  @action private commitNames() {
+    if (this.namePending) {
+      this.commit();
+    }
+  }
+
+  @action private setExpression(index: number, expression: string) {
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, expression } : row,
+    );
+    this.commit();
+  }
+
+  @action private add() {
+    this.rows = [...this.rows, { id: this.nextId++, name: '', expression: '' }];
+  }
+
+  @action private remove(index: number) {
+    this.rows = this.rows.filter((_row, at) => at !== index);
+    this.commit();
+  }
+
+  // A row with no name is not a segment yet, and is left out. A leading colon
+  // is dropped, since authors copy the name from the path.
+  private commit() {
+    this.namePending = false;
+    let params: Record<string, string> = Object.create(null);
+    for (let row of this.rows) {
+      let name = row.name.trim().replace(/^:/, '');
+      if (name) {
+        params[name] = row.expression;
+      }
+    }
+    this.args.set(Object.keys(params).length ? params : undefined);
+  }
+
+  <template>
+    <div class='segment-params-edit' data-test-segment-params-edit>
+      {{#if this.displayRows.length}}
+        <table class='segments'>
+          <thead>
+            <tr>
+              <th scope='col'>Segment</th>
+              <th scope='col'>BXL over the card</th>
+              {{#if @canEdit}}
+                <th scope='col'><span class='visually-hidden'>Remove</span></th>
+              {{/if}}
+            </tr>
+          </thead>
+          <tbody>
+            {{#each this.displayRows key='id' as |row|}}
+              <tr data-test-segment-param-row={{row.index}}>
+                <td class='name-cell'>
+                  <BoxelInput
+                    @value={{row.name}}
+                    @onInput={{fn this.setName row.index}}
+                    @onChange={{this.commitNames}}
+                    @disabled={{not @canEdit}}
+                    @placeholder='slug'
+                    data-test-segment-param-name={{row.index}}
+                  />
+                </td>
+                <td class='expression-cell'>
+                  <BoxelInput
+                    @value={{row.expression}}
+                    @onInput={{fn this.setExpression row.index}}
+                    @disabled={{not @canEdit}}
+                    @placeholder='.title | slugify'
+                    data-test-segment-param-expression={{row.index}}
+                  />
+                  {{#if row.error}}
+                    <span
+                      class='error-note'
+                      data-test-segment-param-error={{row.index}}
+                    >{{row.error}}</span>
+                  {{/if}}
+                </td>
+                {{#if @canEdit}}
+                  <td class='remove-cell'>
+                    <IconButton
+                      @icon={{IconTrash}}
+                      @width='18px'
+                      @height='18px'
+                      {{on 'click' (fn this.remove row.index)}}
+                      aria-label='Remove segment'
+                      data-test-remove-segment-param={{row.index}}
+                    />
+                  </td>
+                {{/if}}
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class='empty' data-test-segment-params-empty>
+          Every :name segment reads the card's field of that name.
+        </p>
+      {{/if}}
+      {{#if @canEdit}}
+        <Button
+          @kind='secondary'
+          @size='small'
+          {{on 'click' this.add}}
+          data-test-add-segment-param
+        >
+          <IconPlus width='12px' height='12px' role='presentation' />
+          Derive a segment
+        </Button>
+      {{/if}}
+    </div>
+    <style scoped>
+      .segment-params-edit {
+        display: grid;
+        justify-items: start;
+        gap: var(--boxel-sp-xs);
+      }
+      .segments {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        padding-bottom: var(--boxel-sp-xxs);
+      }
+      td {
+        vertical-align: top;
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs) 0;
+      }
+      .name-cell {
+        width: 28%;
+      }
+      .remove-cell {
+        width: var(--boxel-icon-med);
+        padding-right: 0;
+      }
+      .segments :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
+        min-width: 0;
+      }
+      .error-note {
+        display: block;
+        padding-top: var(--boxel-sp-5xs);
+        padding-left: var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--destructive, var(--boxel-error-100));
+        overflow-wrap: break-word;
+      }
+      .empty {
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        color: var(--muted-foreground);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 0.0625rem;
+        height: 0.0625rem;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    </style>
+  </template>
+}
+
+class SiteSegmentParamsEmbedded extends Component<
+  typeof SiteSegmentParamsField
+> {
+  private get entries() {
+    return Object.entries(this.args.model ?? {}).map(([name, expression]) => ({
+      name,
+      expression: typeof expression === 'string' ? expression : '',
+    }));
+  }
+
+  <template>
+    {{#if this.entries.length}}
+      <dl class='segments' data-test-segment-params>
+        {{#each this.entries key='name' as |entry|}}
+          <div class='segment' data-test-segment-param={{entry.name}}>
+            <dt>:{{entry.name}}</dt>
+            <dd>{{entry.expression}}</dd>
+          </div>
+        {{/each}}
+      </dl>
+    {{else}}
+      <p class='empty' data-test-segment-params-empty>
+        Every :name segment reads the card's field of that name.
+      </p>
+    {{/if}}
+    <style scoped>
+      .segments {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+        margin: 0;
+      }
+      .segment {
+        display: grid;
+        grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
+        gap: var(--boxel-sp-xs);
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      dt {
+        font-weight: 600;
+      }
+      dd {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: break-word;
+      }
+      .empty {
+        color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
 // A page type's derived segments, as a map from segment name to the BXL that
 // gives its value (ADR site-routing §1.2). Unlike JsonField it is in the
 // search doc, because host mode reads site settings from there; only string
@@ -431,6 +716,9 @@ export class RoutingRuleField extends FieldDef {
 export class SiteSegmentParamsField extends FieldDef {
   static displayName = 'Site Path Segments';
   static [primitive]: Record<string, string>;
+  static embedded = SiteSegmentParamsEmbedded;
+  static atom = SiteSegmentParamsEmbedded;
+  static edit = SiteSegmentParamsEdit;
   static [queryableValue](value: unknown): Record<string, string> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null;
@@ -494,13 +782,18 @@ export class SitePageTypeField extends FieldDef {
   });
 }
 
-// A redirect. `from` may be a path template (`/old/{slug}`) whose variables
-// `to` reuses.
+// A redirect. `from` may be a path pattern (`/old/:slug`) whose `:name`
+// segments `to` reuses.
 export class SiteRedirectField extends FieldDef {
   static displayName = 'Site Redirect';
 
-  @field from = contains(StringField);
-  @field to = contains(StringField);
+  @field from = contains(StringField, {
+    description: 'The old address, as a path pattern: /u/:handle',
+  });
+  @field to = contains(StringField, {
+    description:
+      'Where it goes, reusing the :name segments of from: /people/:handle',
+  });
   @field statusCode = contains(NumberField, {
     description: '301 (permanent, the default) or 302 (temporary)',
   });
