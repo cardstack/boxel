@@ -521,7 +521,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(refused.code, 'interactive-use-not-approved');
   });
 
-  test('anonymous use is still refused, and nothing is approved', async function (assert) {
+  test('anonymous use of a personal key is refused, and nothing is approved', async function (assert) {
     let key = await addKey();
     let response = await approve(
       OWNER,
@@ -530,7 +530,7 @@ module(basename(import.meta.filename), function (hooks) {
       { keyId: key.id },
       { interactive: true, anonymous: true },
     );
-    assert.strictEqual(response.status, 403, JSON.stringify(response.body));
+    assert.strictEqual(response.status, 400, JSON.stringify(response.body));
     let rows = await dbAdapter.execute(
       `SELECT id FROM key_bindings WHERE realm_url = $1`,
       { bind: [realmURL.href] },

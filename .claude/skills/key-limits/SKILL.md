@@ -32,6 +32,27 @@ read). The counters are the shared rate-limit store (see the
 These are call budgets, not money budgets: the platform can count calls, not
 what a vendor charges for one.
 
+## People who aren't signed in
+
+A share approved for anonymous use (see the `key-bindings` skill) limits such
+callers two ways, alongside the share's own budgets, which their calls spend
+too:
+
+- **Per address**: a bucket for each client address the realm admitted them
+  from (the anonymous limiter's `rateLimitKey`: the IPv4 address, or an IPv6
+  caller's /64), at the share's per-person rate. It is keyed apart from any
+  signed-in caller's: `["key-limit","share","<id>","anonymous","<address>"]`.
+- **The anonymous cap**: a daily budget of calls (`key_shares.anonymous_daily_cap`)
+  every such caller shares, `["key-limit","share","<id>","anonymous"]`. Its
+  owner names it on the share's first anonymous approval, at most the share's
+  daily budget, so that people who are signed in keep the rest of that budget.
+  Reaching it refuses only callers who aren't signed in, `over-budget` with a
+  detail saying so; it sends no notice of its own. The share's budgets notify
+  as always.
+
+Refusals for them log `"caller":"anonymous"` and never the address; a cap's
+`limit` carries `"anonymousCap": true`.
+
 ## Defaults
 
 A null column is the platform's default, so a share or key nobody set limits

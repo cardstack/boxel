@@ -475,10 +475,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     @value={{this.capText share}}
                     @onInput={{fn this.setCap share.id}}
                     @state={{if (this.capShown share) 'none' 'invalid'}}
-                    @errorMessage={{if
-                      (not (this.capShown share))
-                      (this.capError share)
-                    }}
+                    @errorMessage={{this.capError share}}
                     inputmode='numeric'
                     data-test-approve-cap-input
                   />
@@ -956,8 +953,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private capShown = (share: { id: string; dailyBudget: number }) =>
     this.capText(share).trim() === '' || this.capValid(share);
 
-  private capError = (share: { dailyBudget: number }) =>
-    `A whole number of calls, from 1 to the daily budget of ${share.dailyBudget}`;
+  private capError = (share: { id: string; dailyBudget: number }) =>
+    this.capShown(share)
+      ? undefined
+      : `A whole number of calls, from 1 to the daily budget of ${share.dailyBudget}`;
 
   private setCap = (shareId: string, value: string) => {
     this.form.caps = { ...this.form.caps, [shareId]: value };

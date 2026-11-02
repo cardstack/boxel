@@ -1,6 +1,6 @@
 ---
 name: key-bindings
-description: How a `callApi` operation's credential slots are filled from bindings — a key owner's approval of one operation in one realm, naming the key (or share) for each slot — and how to diagnose a binding refusal. Covers the `key_bindings`, `key_binding_approvals` and `key_binding_notices` tables, the `/_key-bindings` routes and who may call them, how approving creates or reuses a grant, the fingerprint and exactly which parts of a declaration it covers, `needs-reapproval` and its one notice, per-instance bindings, pipelines versus interactive invocation (`Realm.handlePipeline`, `pipelineAdmission`), what removing a grant, deleting a key, suspending a share and swapping a key into a share do to bindings, and each refusal (`binding-not-approved`, `share-suspended`, `binding-needs-reapproval`, `interactive-use-not-approved`). Use when a `callApi` is refused with one of those codes, when reading or querying the binding tables as an operator, or when changing `lib/key-bindings.ts`, `lib/key-binding-revocation.ts`, `handlers/handle-key-bindings.ts`, the slot filling in `card-operations/call-api.ts`, or anything that removes grants, keys or shares.
+description: How a `callApi` operation's credential slots are filled from bindings — a key owner's approval of one operation in one realm, naming the key (or share) for each slot — and how to diagnose a binding refusal. Covers the `key_bindings`, `key_binding_approvals` and `key_binding_notices` tables, the `/_key-bindings` routes and who may call them, how approving creates or reuses a grant, the fingerprint and exactly which parts of a declaration it covers, `needs-reapproval` and its one notice, per-instance bindings, pipelines versus interactive invocation (`Realm.handlePipeline`, `pipelineAdmission`), anonymous use of a share by people who aren't signed in, what removing a grant, deleting a key, suspending a share and swapping a key into a share do to bindings, and each refusal (`binding-not-approved`, `share-suspended`, `binding-needs-reapproval`, `interactive-use-not-approved`, `anonymous-use-not-approved`). Use when a `callApi` is refused with one of those codes, when reading or querying the binding tables as an operator, or when changing `lib/key-bindings.ts`, `lib/key-binding-revocation.ts`, `handlers/handle-key-bindings.ts`, the slot filling in `card-operations/call-api.ts`, or anything that removes grants, keys or shares.
 ---
 
 # Key bindings
@@ -53,8 +53,9 @@ One row of `key_bindings` per slot:
   opened in the browser, the AI assistant, the CLI) as well as pipelines.
   Each approval sets it for every slot it writes, so approving again without
   it returns a binding to pipelines only. A swap keeps it.
-- `anonymous` — always false: anonymous use isn't offered, and approving it
-  is refused 403.
+- `anonymous` — whether the owner also allowed use by people who aren't
+  signed in. Only a share's binding, and only an `interactive` one, can be
+  (`key_bindings_anonymous_check`). See _Anonymous use_ below.
 - `fingerprint`, `approval_id`, `state` (`active`, `needs-reapproval`,
   `suspended`).
 
@@ -104,8 +105,12 @@ yet) is spent by every reader of its realm, so that approval names its daily
 budget, `"dailyBudgets": {"<share id>": <calls>}`, which is set on the share
 in the same transaction (see the `key-limits` skill). Without one it is
 refused 400. A later interactive approval may name one; a budget is refused
-for a share the approval doesn't fill, or without `interactive`. For each
-operation, in order:
+for a share the approval doesn't fill, or without `interactive`. Likewise
+`"anonymous": true` (with `interactive`) sets `anonymous` on every share slot
+the approval fills, and a share's first anonymous approval names its
+anonymous cap, `"anonymousCaps": {"<share id>": <calls>}`, at most the share's
+daily budget as the approval leaves it. An anonymous approval that fills no
+share slot is refused 400. For each operation, in order:
 
 1. The operation is read from the realm's definition cache (the caller must
    be able to read the realm and the module's realm, as for a grant). Its
@@ -125,7 +130,9 @@ the CLI's), whose
 `attributes.target` names a card or a card type in its realm as the window's
 context does, with `review` for review-changes, and `interactive` to also
 answer slots approved for pipelines only (status `pipelines-only`), which
-the window shows only once the user allows interactive use. Within the batch's slot cap, the slots that need approving come first and
+the window shows only once the user allows interactive use, and `anonymous`
+to also answer share slots approved for signed-in people only (status
+`signed-in-only`), shown only while anonymous use is ticked. Within the batch's slot cap, the slots that need approving come first and
 pipelines-only ones take what room is left, so they never hold one back;
 `remainingPipelinesOnly` counts those left out. It answers every `callApi`
 operation on that card definition, in that realm, that needs the caller's
@@ -139,8 +146,9 @@ batch only when the target is a card. Operations come grouped by normalized
 destination, with the caller's keys a slot can take and their shares in the
 realm, each with the batch's destinations its grants already cover. A share
 also says whether any binding of it is `interactive` yet, and its
-`dailyBudget` in force; each slot's `approved` says whether its last approval
-was `interactive`. A batch
+`dailyBudget` in force, and whether any is `anonymous` yet, and its
+`anonymousDailyCap`; each slot's `approved` says whether its last approval
+was `interactive` and `anonymous`. A batch
 never spans card definitions or realms: approving one card's batch says
 nothing about another card calling the same host, which gets its own batch
 and reuses the grant.
@@ -184,7 +192,13 @@ grant.
   in the window, the page starts on interactive use (`#interactive=1`) and
   asks for the budget itself. Re-approving a slot last approved `interactive`
   without `--interactive` is refused in the terminal rather than returning
-  it to pipelines only. `--anonymous` is refused 403.
+  it to pipelines only. `--anonymous` (with `--interactive`) approves anonymous
+  use of the shares the approval fills; a share's first anonymous approval in
+  the terminal needs `--anonymous-cap <calls>`, and the window
+  (`#anonymous=1`) asks for the cap itself. It is refused in the terminal for
+  an approval that fills no share slot, and re-approving a slot last approved
+  `anonymous` without it is refused rather than returning it to signed-in
+  people only.
 - `boxel keys revoke` (same shape) lists the user's matching bindings with
   the same filters and deletes them.
 - `boxel keys pending` lists bindings that won't send as approved:
@@ -238,6 +252,7 @@ the request. `fillSlots` checks, per slot, in this order:
 | Its share, if any, is `active`                                                       | `share-suspended`              | 409    |
 | `state` isn't `needs-reapproval` and the fingerprint matches                         | `binding-needs-reapproval`     | 409    |
 | Interactive invocation needs `interactive`                                           | `interactive-use-not-approved` | 403    |
+| A caller who isn't signed in needs `anonymous`                                       | `anonymous-use-not-approved`   | 401    |
 | A grant is set, opens, and belongs to the binding's key (or the share's current key) | `binding-not-approved`         | 409    |
 | The grant isn't `rejected`, unless this call claims its probe                        | `credential-rejected`          | 424    |
 | Its service-account key isn't `rejected`, unless this call claims the key's probe    | `credential-rejected`          | 424    |
@@ -279,6 +294,44 @@ operation, instance?, payer})` answers the refusal the call would get (or
 nothing), without opening any key, so a missing or changed approval stops the
 run up front.
 
+## Anonymous use
+
+A share's owner can let people who aren't signed in use it, for a public card
+such as a weather widget. Three things must all hold before such a caller's
+`callApi` sends anything:
+
+1. **The realm's policy admits them to the operation**: a grant whose `where`
+   names `"anonymous"`. Policy compilation opens a `callApi` to them only when
+   every credential slot is a share slot (`{{apiKey}}`); a grant on one with a
+   `{{userKey}}` slot is kept for signed-in callers and recorded as
+   `anonymous-grant-user-key` (a warning). The grant's own blocklist and rate
+   limit apply as for any anonymous grant (the `realm-auth` skill).
+2. **Every slot's binding is `anonymous`**, or the call is refused
+   `anonymous-use-not-approved` (401: signing in is what serves them). A
+   `{{userKey}}` slot never fills for them: `callApiOperation` refuses it
+   `actor-required` before any binding is read.
+3. **The share's limits for them** (see the `key-limits` skill): a bucket per
+   client address at the share's per-person rate, and the share's anonymous
+   cap, a daily budget of calls all of them share, inside the share's daily
+   budget. Their calls spend the share's daily and monthly budgets too.
+
+The realm passes the caller's address (the anonymous limiter's `rateLimitKey`,
+an IPv6 caller's /64) as `callApiAnonymous` on the invocation; the lookup's
+`caller` is then `"anonymous"` and `anonymous.address` says where from. A
+caller the realm couldn't place has no address and is refused
+`actor-required`. A swap keeps `anonymous`, as it keeps `interactive`.
+
+```sql
+-- The shares that serve people who aren't signed in, and their caps.
+SELECT s.id, s.label, s.realm_url, s.daily_budget, s.anonymous_daily_cap
+FROM key_shares s
+WHERE EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.anonymous);
+```
+
+To stop anonymous use of a share at once, a realm writer suspends the share;
+its owner approves again without anonymous use, or the policy's anonymous
+grant is removed.
+
 ## Readiness
 
 `@context.keyReadiness(operation, target)` asks, through a `_capabilities`
@@ -291,7 +344,10 @@ covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
 to anyone but the share key's owner; a grant the vendor rejected, with no
 probe due → `credential-rejected` (to everyone, since the call says the
-same); nobody signed in → `needs-sign-in`. It
+same); nobody signed in → `needs-sign-in`, unless every slot is a share's
+and the realm admitted them from an address, when a binding not approved
+`anonymous` answers `needs-sign-in` and an approved one is asked about the
+anonymous limits (`rate-limited`, `over-budget`). It
 opens no key and writes nothing: a changed fingerprint is reported, not moved
 to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or
@@ -354,6 +410,10 @@ SELECT created_at, owner FROM key_binding_notices WHERE binding_id = '<id>';
   `key-shares` skill). For `key-deleted`, the binding's `grant_id` is null
   too, since its grants went with the key: a direct writer swaps a key in,
   which grants it the binding's destination again.
+- **`anonymous-use-not-approved`**: a caller who isn't signed in reached a
+  share binding approved for signed-in people only. Its share's owner approves
+  it again with anonymous use (and the policy must open the operation to
+  them); readiness answers `needs-sign-in`.
 - **`interactive-use-not-approved`**: the binding is approved for pipelines
   only (`interactive` false). Its owner approves it again allowing
   interactive use; readiness answers `needs-approval`, whose button opens the
@@ -381,6 +441,12 @@ the application role.
   pipelines-only binding refuses it; approving again without it; anonymous
   refused; the batch's `pipelines-only` slots; a share's first interactive
   approval and its daily budget; a swap keeping `interactive`.
+- `packages/realm-server/tests/anonymous-key-use-test.ts` — anonymous use
+  through a policy in another realm: the policy opening only a share-only
+  `callApi` (and warning about a `userKey` one), refused until both the
+  binding and the policy grant are there and then served, the per-address
+  rate, the anonymous cap exhausting without touching signed-in readers, a
+  personal key refusing them `actor-required`, and readiness for each.
 - `packages/realm-server/tests/key-binding-batch-test.ts` — the batch: six
   operations approved as one with one grant, an unticked one left
   unapproved, an edited one alone in the review batch with its approved
