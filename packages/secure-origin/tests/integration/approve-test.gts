@@ -1,4 +1,10 @@
-import { click, render, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -459,6 +465,193 @@ module('Integration | approve pages', function (hooks) {
         [],
         'the window goes to the CLI instead of closing',
       );
+
+      await click('[data-test-keys-close]');
+      assert.strictEqual(
+        submitted.length,
+        1,
+        'closing once the approval is made tells the CLI nothing more',
+      );
+    } finally {
+      HTMLFormElement.prototype.submit = submit;
+    }
+  });
+
+  module('opened by the CLI, ended before approving', function (hooks) {
+    let submitted: { action: string; fields: [string, string][] }[];
+    let submit = HTMLFormElement.prototype.submit;
+    const CLI_STATE = 'c'.repeat(32);
+    const CANCELLED = [
+      {
+        action: 'http://127.0.0.1:51234/callback',
+        fields: [
+          ['state', CLI_STATE],
+          ['window_outcome', 'cancelled'],
+        ] as [string, string][],
+      },
+    ];
+
+    hooks.beforeEach(function () {
+      submitted = [];
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      visitShell(
+        `approve#${new URLSearchParams({
+          module: MODULE,
+          name: 'Inbox',
+          realm: REALM,
+          operation: 'upload',
+          key: 'key-other',
+          operations: 'upload',
+          cli_port: '51234',
+          cli_state: CLI_STATE,
+        })}`,
+      );
+    });
+
+    hooks.afterEach(function () {
+      HTMLFormElement.prototype.submit = submit;
+    });
+
+    test('Cancel tells the CLI the approval was cancelled, and approves nothing', async function (assert) {
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-cancel]');
+      assert.deepEqual(submitted, CANCELLED);
+      assert.deepEqual(approvals(), [], 'nothing is approved');
+      assert.deepEqual(
+        navigations,
+        [],
+        'the window goes to the CLI instead of closing',
+      );
+
+      await click('[data-test-keys-close]');
+      assert.strictEqual(submitted.length, 1, 'the CLI is told once');
+    });
+
+    test('closing while the approval is being saved waits, and tells the CLI only that it was made', async function (assert) {
+      let release!: () => void;
+      let held = new Promise<void>((resolve) => (release = resolve));
+      serve({
+        'POST _key-bindings': async () => {
+          await held;
+          return json(201, { data: [], meta: { batchId: 'b' } });
+        },
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      click('[data-test-approve-save]');
+      await waitUntil(() => approvals().length === 1);
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, [], 'nothing is told while the save runs');
+      release();
+      await settled();
+      assert.deepEqual(submitted, [
+        {
+          ...CANCELLED[0]!,
+          fields: [
+            ['state', CLI_STATE],
+            ['window_outcome', 'done'],
+          ],
+        },
+      ]);
+      assert.deepEqual(navigations, [], 'the window goes to the CLI');
+    });
+
+    test('closing while an approval that then fails is being saved tells the CLI it was cancelled', async function (assert) {
+      let release!: () => void;
+      let held = new Promise<void>((resolve) => (release = resolve));
+      serve({
+        'POST _key-bindings': async () => {
+          await held;
+          return refusal(500, 'Something broke');
+        },
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      click('[data-test-approve-save]');
+      await waitUntil(() => approvals().length === 1);
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, [], 'nothing is told while the save runs');
+      release();
+      await settled();
+      assert.deepEqual(submitted, CANCELLED);
+    });
+
+    test('with nothing to approve, the CLI is told at once', async function (assert) {
+      serve({
+        'POST _key-bindings/batch': () =>
+          json(200, {
+            data: {
+              type: 'key-binding-batch',
+              attributes: batch({ groups: [] }),
+            },
+          }),
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(submitted, [
+        {
+          ...CANCELLED[0]!,
+          fields: [
+            ['state', CLI_STATE],
+            ['window_outcome', 'done'],
+          ],
+        },
+      ]);
+    });
+
+    test('the review-changes page tells the CLI too', async function (assert) {
+      visitShell(`review-changes${window.location.hash}`);
+      await render(<template><ReviewChangesPage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
+    });
+
+    test('closing the window tells the CLI the approval was cancelled', async function (assert) {
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
+      assert.deepEqual(approvals(), [], 'nothing is approved');
+    });
+
+    test('closing a window that has no session tells the CLI the approval was cancelled', async function (assert) {
+      forgetSession();
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-signed-out]');
+      await click('[data-test-keys-signed-out-close]');
+      assert.deepEqual(submitted, CANCELLED);
+    });
+
+    test('closing a window that couldn’t load the batch tells the CLI the approval was cancelled', async function (assert) {
+      serve({
+        'POST _key-bindings/batch': () => refusal(500, 'Something broke'),
+      });
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-keys-load-failed]');
+      await click('[data-test-keys-close]');
+      assert.deepEqual(submitted, CANCELLED);
+    });
+  });
+
+  test('opened without the CLI, the page offers no Cancel, and Close closes the window', async function (assert) {
+    let submit = HTMLFormElement.prototype.submit;
+    let submitted = 0;
+    HTMLFormElement.prototype.submit = () => submitted++;
+    try {
+      visitShell(opened);
+      await render(<template><ApprovePage /></template>);
+      await waitFor('[data-test-approve-form]');
+      assert.dom('[data-test-keys-cancel]').doesNotExist();
+      await click('[data-test-keys-close]');
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+      assert.strictEqual(submitted, 0, 'nothing is handed anywhere');
     } finally {
       HTMLFormElement.prototype.submit = submit;
     }
