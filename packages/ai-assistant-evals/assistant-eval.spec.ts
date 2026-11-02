@@ -17,10 +17,12 @@ import {
 } from './realm-api.ts';
 import {
   expectedChangedSeeds,
+  pipelineApprovalTargets,
   promptCardIds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
+import { seedPipelineApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -1235,6 +1237,18 @@ async function runModel(
             `${seed.path} does not read back as its seed after the copy, so a change to it could not be told apart`,
           );
         }
+      }
+      if (evaluation.pipelineApprovals?.length) {
+        setStep('approve operations for pipelines only');
+        await seedPipelineApprovals(
+          pipelineApprovalTargets(evaluation, realmUrl),
+          {
+            user: credentials.userId,
+            owner: client,
+            password: PASSWORD,
+            log: (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+          },
+        );
       }
     }
     setStep('open room');

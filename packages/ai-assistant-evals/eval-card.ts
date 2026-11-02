@@ -13,6 +13,8 @@ import {
   type RealmClient,
 } from './realm-api.ts';
 
+import type { PipelineApprovalTarget } from './key-seed.ts';
+
 export interface Evaluation {
   url: string;
   realmUrl: string;
@@ -34,7 +36,21 @@ export interface Evaluation {
   skillFeatures: string[];
   // Overrides the GOOD grade's default time budget per prompt.
   secondsPerPrompt?: number;
+  // Operations approved for scheduled pipelines only before the first prompt.
+  pipelineApprovals: PipelineApproval[];
   adoptsFrom: { module: string; name: string };
+}
+
+// Whose key fills the approved slots: the eval user's own key, or a share
+// another user puts into the test workspace.
+export type KeyFrom = 'own-key' | 'share';
+
+export interface PipelineApproval {
+  // One of `initialCards`, without its `.json` suffix; its card type is what
+  // is approved.
+  card: string;
+  operation: string;
+  keyFrom: KeyFrom;
 }
 
 export interface BundledFile {
@@ -113,6 +129,14 @@ export async function loadEvaluation(
       );
     }
   }
+  let pipelineApprovals = pipelineApprovalsOf(doc, id, cardUrl);
+  for (let { card } of pipelineApprovals) {
+    if (!initialCards.some((seed) => cardIdOf(seed) === card)) {
+      throw new Error(
+        `${cardUrl} approves an operation of ${card}, but does not seed it in initialCards`,
+      );
+    }
+  }
   return {
     url: id,
     realmUrl: ensureTrailingSlash(doc.data.meta.realmURL ?? realmUrl),
@@ -138,8 +162,38 @@ export async function loadEvaluation(
       attributes.secondsPerPrompt > 0
         ? attributes.secondsPerPrompt
         : undefined,
+    pipelineApprovals,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
+}
+
+// `pipelineApprovals` is a containsMany of a field whose card is a link, so
+// each entry's attributes are at its position in the attribute array and its
+// card is the relationship `pipelineApprovals.<position>.card`.
+function pipelineApprovalsOf(
+  doc: CardDocument,
+  id: string,
+  cardUrl: string,
+): PipelineApproval[] {
+  let entries: unknown = doc.data.attributes?.pipelineApprovals;
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries.map((entry, position) => {
+    let { operation, keyFrom } = (entry ?? {}) as Record<string, unknown>;
+    let [card] = linkedIds(doc, `pipelineApprovals.${position}.card`, id);
+    if (!card || typeof operation !== 'string' || !operation.trim()) {
+      throw new Error(
+        `${cardUrl} pipelineApprovals[${position}] names no card or no operation`,
+      );
+    }
+    if (keyFrom !== 'own-key' && keyFrom !== 'share') {
+      throw new Error(
+        `${cardUrl} pipelineApprovals[${position}] has keyFrom ${JSON.stringify(keyFrom)}; it is "own-key" or "share"`,
+      );
+    }
+    return { card: cardIdOf(card), operation: operation.trim(), keyFrom };
+  });
 }
 
 // A card's id: its instance URL without the `.json` suffix.
@@ -285,6 +339,38 @@ export function promptCardIds(
   let testRealm = new RealmPaths(new URL(testRealmUrl));
   return (bundle.promptCards ?? []).map(
     (id) => testRealm.fileURL(localPath(id, bundle.realmUrl)).href,
+  );
+}
+
+// Each pipeline approval as the test workspace names it: the card type of the
+// copied card, read from the seed's `adoptsFrom`, which a relative module
+// reference resolves against the copy's own URL.
+export function pipelineApprovalTargets(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): PipelineApprovalTarget[] {
+  testRealmUrl = ensureTrailingSlash(testRealmUrl);
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return (bundle.pipelineApprovals ?? []).map(
+    ({ card, operation, keyFrom }) => {
+      let path = `${localPath(card, bundle.realmUrl)}.json`;
+      let file = bundle.files.find((f) => f.path === path);
+      if (!file) {
+        throw new Error(`the bundle has no seed for ${path}`);
+      }
+      let doc = JSON.parse(
+        Buffer.from(file.content, 'base64').toString('utf8'),
+      ) as CardDocument;
+      let adoptsFrom = doc.data.meta.adoptsFrom;
+      let copy = testRealm.fileURL(path);
+      return {
+        realm: testRealmUrl,
+        module: new URL(adoptsFrom.module, copy).href.replace(/\.gts$/, ''),
+        name: adoptsFrom.name,
+        operation,
+        keyFrom,
+      };
+    },
   );
 }
 

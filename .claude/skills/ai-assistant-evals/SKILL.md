@@ -54,6 +54,13 @@ evidence.
   browser action of a paid run. For evaluations, `pnpm eval:setup` has created the
   AI Assistant Evaluations workspace of the writer user (`user` locally), at
   the endpoint `evals`, and pushed the cards.
+- An evaluation with `pipelineApprovals` (the "Interactive use not approved"
+  evaluations in `Evaluation/interactive-use-*.json`) also needs
+  `ai-assistant-eval-key-sharer` (`EVAL_SHARE_OWNER`), which `pnpm eval:users`
+  registers, and the `boxel-pg` container: the runner seeds each approval
+  through the realm server's key API with a secure-origin session it writes
+  into the local database, since signing in on the secure origin otherwise
+  takes a person at the window.
 - Every model you name has a ModelConfiguration card in the SystemCard the host
   uses (`packages/catalog/contents/SystemCard/default.json`), or the picker
   will not offer it.

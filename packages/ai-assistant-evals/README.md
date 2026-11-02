@@ -41,7 +41,12 @@ endpoint is the URL.
   runner brings it to the top of the stack before that prompt, since only a
   stack's top card goes into the message context),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
-  and a query-backed `sessionReports` list.
+  `pipelineApprovals` naming operations of seeded cards to approve for
+  scheduled pipelines only before the first prompt (each with `card`, one of
+  `initialCards`, its `operation`, and `keyFrom`: `own-key` for the eval
+  user's own key, or `share` for a key `EVAL_SHARE_OWNER` shares into the test
+  workspace; the assistant's invocation of the operation is then refused
+  "Interactive use not approved"), and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
   calls, notes, the screenshot, the skills the room had). A judge fills
@@ -163,6 +168,14 @@ every model as a tab of one headed browser and runs them at once.
   state, so two browsers signed in as one account race over it and a prompt
   can land in the other model's room. A run that puts more models than users
   on screen at once stops before it opens a browser.
+- `EVAL_SHARE_OWNER` — the local matrix user whose share fills a
+  `pipelineApprovals` entry with `keyFrom: share`, made a writer of the test
+  workspace to share into it. Default `ai-assistant-eval-key-sharer`;
+  `pnpm eval:users` registers it with the eval users.
+- `EVAL_PG_CONTAINER`, `EVAL_PG_DATABASE`, `EVAL_REALM_SECRET_SEED` — where
+  the runner writes the secure-origin session it seeds `pipelineApprovals`
+  with, and the seed it signs that session's token with. Default `boxel-pg`,
+  `boxel`, and the local stack's seed.
 - `EVAL_HOST_URL`, `EVAL_MATRIX_URL` — default `https://localhost:4200`,
   `http://localhost:8008`.
 - `EVAL_MAX_MINUTES` (default 15) is a safety net only: a run still going after
