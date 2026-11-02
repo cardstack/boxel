@@ -1568,7 +1568,7 @@ export default class StoreService extends Service implements StoreInterface {
     // rather than fan out to every realm.
     let searchRealms = opts?.cardInitiated
       ? this.normalizeRealmPaths(realms)
-      : this.normalizeSearchRealms(realms);
+      : this.searchRealmsFor(realms);
     if (searchRealms.length === 0) {
       return { instances: [], meta: { page: { total: 0 } } };
     }
@@ -1626,7 +1626,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<SearchEntryResults> {
     let searchRealms = opts?.cardInitiated
       ? this.normalizeRealmPaths(realms)
-      : this.normalizeSearchRealms(realms);
+      : this.searchRealmsFor(realms);
     if (searchRealms.length === 0) {
       return { data: [], meta: { page: { total: 0 } } };
     }
@@ -1677,9 +1677,9 @@ export default class StoreService extends Service implements StoreInterface {
     return dedupeRealmsByIdentity(this.network.virtualNetwork, realms ?? []);
   }
 
-  // The host default: an absent/empty realm list means every realm the user can
-  // see.
-  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+  // The realms a host search is sent to: the list as the caller spelled it,
+  // or every realm the user can see when it is absent or empty.
+  searchRealmsFor(realms: string[] | undefined): string[] {
     let normalizedRealms = this.normalizeRealmPaths(realms);
     return normalizedRealms.length > 0
       ? normalizedRealms
