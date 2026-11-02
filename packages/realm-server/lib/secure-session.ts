@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import {
   fetchSessionRoom,
+  getMatrixServerName,
   logger,
   param,
   query,
@@ -251,7 +252,8 @@ export async function matrixServerName(
   deps: Pick<SecureSessionDeps, 'matrixClient'>,
 ): Promise<string> {
   await ensureLoggedIn(deps.matrixClient);
-  let serverName = deps.matrixClient.getUserId()?.split(':').slice(1).join(':');
+  let userId = deps.matrixClient.getUserId();
+  let serverName = userId ? getMatrixServerName(userId) : undefined;
   if (!serverName) {
     throw new Error(`the realm server's Matrix user id names no server`);
   }
@@ -287,8 +289,8 @@ async function resolveMatrixUser(
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    let match = /^@[^:\s]+:(\S+)$/.exec(name);
-    return match && match[1] === (await matrixServerName(deps))
+    return /^@[^:\s]+:\S+$/.test(name) &&
+      getMatrixServerName(name) === (await matrixServerName(deps))
       ? name
       : undefined;
   }
