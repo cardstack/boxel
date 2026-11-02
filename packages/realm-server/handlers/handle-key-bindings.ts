@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   fetchRealmPermissions,
   rri,
+  trimExecutableExtension,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
@@ -11,6 +12,7 @@ import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import {
   approveBindings,
+  canonicalInstance,
   listOwnBindings,
   previewBindings,
   revokeBinding,
@@ -229,9 +231,55 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-// The bindings the signed-in user approved, in every realm, each with what the
-// key page names it by: its operation's label and its card's display name
-// (`bindingNames`).
+// Which of the user's bindings `?realm=&module=&name=&operation=&instance=`
+// asks for. Each is optional, and each may be named in prefix form or as a
+// URL: it is resolved here, as a binding is keyed, so a caller needn't know
+// how the server spells a realm or a module. An instance is named within the
+// realm, so it is asked for with `realm`.
+function bindingFilter(
+  network: VirtualNetwork,
+  query: Koa.Context['query'],
+): (binding: KeyBinding) => boolean {
+  let one = (name: string) => {
+    let value = query[name];
+    if (value === undefined) {
+      return undefined;
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new UserKeyError(400, `${name} is given once, as text`);
+    }
+    return value;
+  };
+  let realm = one('realm');
+  let module = one('module');
+  let name = one('name');
+  let operation = one('operation');
+  let instance = one('instance');
+  let realmURL = realm ? normalizeRealmURL(resolved(network, realm)) : null;
+  if (realm && !realmURL) {
+    throw new UserKeyError(400, 'realm is a realm');
+  }
+  if (instance && !realmURL) {
+    throw new UserKeyError(400, 'an instance is asked for with its realm');
+  }
+  let moduleURL = module
+    ? trimExecutableExtension(resolved(network, module))
+    : undefined;
+  let instanceURL =
+    instance && realmURL
+      ? canonicalInstance(realmURL, resolved(network, instance))
+      : undefined;
+  return (binding) =>
+    (!realmURL || binding.realm === realmURL.href) &&
+    (!moduleURL || binding.type.module === moduleURL) &&
+    (!name || binding.type.name === name) &&
+    (!operation || binding.operation === operation) &&
+    (!instanceURL || binding.instance === instanceURL);
+}
+
+// The bindings the signed-in user approved, in every realm, or those
+// `bindingFilter` asks for, each with what the key page names it by: its
+// operation's label and its card's display name (`bindingNames`).
 export function handleListKeyBindings({
   dbAdapter,
   definitionLookup,
@@ -241,7 +289,8 @@ export function handleListKeyBindings({
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    let bindings = await listOwnBindings(dbAdapter, owner);
+    let wanted = bindingFilter(virtualNetwork, ctxt.query);
+    let bindings = (await listOwnBindings(dbAdapter, owner)).filter(wanted);
     let names = await bindingNames(
       {
         dbAdapter,
@@ -309,8 +358,8 @@ const BATCH_ATTRIBUTES = new Set(['target', 'review']);
 // where `target` names a card or a card type in its realm as the window's
 // context does. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
-// shares a slot can take. Asked with the window's own session, as every
-// request the window makes is.
+// shares a slot can take. Asked with a session signed in on the secure
+// origin: the window's own, or the CLI's (`boxel keys approve`).
 export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork, realms, reconciler } =
     args;
@@ -324,7 +373,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
     ) {
       throw new UserKeyError(
         403,
-        'the secure window asks this with its own session',
+        'a batch is asked for only by a session signed in on the secure origin',
       );
     }
     let body = await readJSON(ctxt);

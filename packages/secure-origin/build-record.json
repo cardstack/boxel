@@ -898,7 +898,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 288920,
+      "bytes": 289492,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1073,7 +1073,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
-          "size": 2918
+          "size": 2975
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1108,7 +1108,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 22981
+          "size": 23286
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1213,7 +1213,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/opened-for.ts",
-          "size": 2060
+          "size": 2499
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1253,7 +1253,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 9200
+          "size": 9286
         },
         {
           "package": "@cardstack/secure-origin",
