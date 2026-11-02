@@ -40,7 +40,7 @@ export function statusText(status: number, outcome?: string): string {
     return `${status} Forbidden`;
   }
   if (status === 401) {
-    return `${status} Key rejected`;
+    return `${status} Unauthorized`;
   }
   if (status === 429) {
     return `${status} Rate limited by the service`;
@@ -77,6 +77,13 @@ function capped(used: number, budget: number): number {
 // Who called, by Matrix id. Someone the user isn't shown, since no
 // permission row in the realm names both of them, reads as someone else, and
 // in the list of callers all of them are counted together as others.
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function callerText(caller: string | null, withheld?: boolean): string {
   if (withheld) {
     return 'Others';
@@ -93,131 +100,126 @@ function lastCallerText(caller: string | null, withheld?: boolean): string {
 
 export default class UsageSummary extends Component<Signature> {
   <template>
-    <div class='usage' data-test-key-usage ...attributes>
-      <dl class='budgets'>
-        <div class='budget' data-test-key-usage-budget='day'>
-          <dt>Today</dt>
-          <dd>
-            <span class='used'>{{count @usage.budgets.day.used}}</span>
+    <section class='usage' aria-label='Usage' data-test-key-usage ...attributes>
+      <div class='meters'>
+        <div class='meter' data-test-key-usage-budget='day'>
+          <span class='meter-label'>Today</span>
+          <span class='meter-value'><strong>{{count
+                @usage.budgets.day.used
+              }}</strong>
             of
-            {{calls @usage.budgets.day.budget}}
-            <progress
-              class='meter'
-              max={{@usage.budgets.day.budget}}
-              value={{capped @usage.budgets.day.used @usage.budgets.day.budget}}
-              aria-label='Today: {{count @usage.budgets.day.used}} of {{calls
-                @usage.budgets.day.budget
-              }}'
-            ></progress>
-          </dd>
+            {{calls @usage.budgets.day.budget}}</span>
+          <progress
+            class='meter-bar'
+            max={{@usage.budgets.day.budget}}
+            value={{capped @usage.budgets.day.used @usage.budgets.day.budget}}
+            aria-label='Calls today'
+          ></progress>
         </div>
-        <div class='budget' data-test-key-usage-budget='month'>
-          <dt>This month</dt>
-          <dd>
-            <span class='used'>{{count @usage.budgets.month.used}}</span>
+        <div class='meter' data-test-key-usage-budget='month'>
+          <span class='meter-label'>This month</span>
+          <span class='meter-value'><strong>{{count
+                @usage.budgets.month.used
+              }}</strong>
             of
-            {{calls @usage.budgets.month.budget}}
-            <progress
-              class='meter'
-              max={{@usage.budgets.month.budget}}
-              value={{capped
-                @usage.budgets.month.used
-                @usage.budgets.month.budget
-              }}
-              aria-label='This month: {{count
-                @usage.budgets.month.used
-              }} of {{calls @usage.budgets.month.budget}}'
-            ></progress>
-          </dd>
+            {{calls @usage.budgets.month.budget}}</span>
+          <progress
+            class='meter-bar'
+            max={{@usage.budgets.month.budget}}
+            value={{capped
+              @usage.budgets.month.used
+              @usage.budgets.month.budget
+            }}
+            aria-label='Calls this month'
+          ></progress>
         </div>
-      </dl>
-      <p class='note'>Budgets count calls from cards, the AI assistant and the
-        CLI. Scheduled runs count against none.</p>
-
-      <p class='line' data-test-key-usage-last>
+      </div>
+      <p class='note' data-test-key-usage-last>
         {{#if @usage.lastUse}}
           Last used
           {{when @usage.lastUse.at}}
           by
-          <strong>{{lastCallerText
-              @usage.lastUse.caller
-              @usage.lastUse.withheld
-            }}</strong>{{#if (eq @usage.lastUse.outcome 'refused')}}, refused{{/if}}.
+          {{lastCallerText @usage.lastUse.caller @usage.lastUse.withheld}}{{#if
+            (eq @usage.lastUse.outcome 'refused')
+          }}, refused{{/if}}.
         {{else}}
           Not used yet.
         {{/if}}
+        Budgets count calls from cards, the AI assistant and the CLI, not
+        scheduled runs.
       </p>
-
-      {{#if @usage.topCallers.length}}
-        <section class='group' data-test-key-usage-callers>
-          <h4>Most calls this month</h4>
-          <ul>
-            {{#each @usage.topCallers as |entry|}}
-              <li data-test-key-usage-caller={{entry.caller}}>
-                <span class='name'>{{callerText
-                    entry.caller
-                    entry.withheld
-                  }}</span>
-                <span class='n'>{{count entry.calls}}</span>
-              </li>
-            {{/each}}
-          </ul>
-        </section>
-      {{/if}}
-
-      {{#if @usage.refusals.length}}
-        <section class='group' data-test-key-usage-refusals>
-          <h4>Refused this month</h4>
-          <ul>
-            {{#each @usage.refusals as |entry|}}
-              <li data-test-key-usage-refusal={{entry.code}}>
-                <span class='name'>{{refusalText entry.code}}</span>
-                <span class='n'>{{count entry.count}}</span>
-              </li>
-            {{/each}}
-          </ul>
-        </section>
-      {{/if}}
-
-      {{#if @usage.vendorOutcomes.length}}
-        <section class='group' data-test-key-usage-outcomes>
-          <h4>How the service answered</h4>
-          <ul>
-            {{#each @usage.vendorOutcomes as |entry|}}
-              <li data-test-key-usage-outcome={{entry.status}}>
-                <span class='name'>{{statusText
-                    entry.status
-                    entry.outcome
-                  }}</span>
-                <span class='n'>{{count entry.count}}</span>
-              </li>
-            {{/each}}
-          </ul>
-        </section>
-      {{/if}}
-
-      {{#if @usage.grants.length}}
-        <section class='group' data-test-key-usage-grants>
-          <h4>Sent to</h4>
-          <ul>
-            {{#each @usage.grants as |grant|}}
-              <li
-                data-test-key-usage-grant={{grant.host}}
-                data-test-key-usage-grant-state={{grant.state}}
-              >
-                <span class='name'>{{grant.host}}</span>
-                {{#if (eq grant.state 'rejected')}}
-                  <span class='flag'>Rejected by the service</span>
-                {{else if grant.lastForbiddenAt}}
-                  <span class='flag muted'>Last refused
-                    {{when grant.lastForbiddenAt}}</span>
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
-        </section>
-      {{/if}}
-    </div>
+      <details class='details' data-test-key-usage-details>
+        <summary class='details-summary'>Details this month</summary>
+        <div class='detail-grid'>
+          {{#if @usage.topCallers.length}}
+            <div class='group' data-test-key-usage-callers>
+              <h4 class='group-title'>Most calls</h4>
+              <ul class='counts'>
+                {{#each @usage.topCallers as |entry|}}
+                  <li data-test-key-usage-caller={{entry.caller}}>
+                    <span class='name'>{{callerText
+                        entry.caller
+                        entry.withheld
+                      }}</span>
+                    <span class='n'>{{count entry.calls}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if @usage.refusals.length}}
+            <div class='group' data-test-key-usage-refusals>
+              <h4 class='group-title'>Refused</h4>
+              <ul class='counts'>
+                {{#each @usage.refusals as |entry|}}
+                  <li data-test-key-usage-refusal={{entry.code}}>
+                    <span class='name'>{{refusalText entry.code}}</span>
+                    <span class='n'>{{count entry.count}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if @usage.vendorOutcomes.length}}
+            <div class='group' data-test-key-usage-outcomes>
+              <h4 class='group-title'>Service answers</h4>
+              <ul class='counts'>
+                {{#each @usage.vendorOutcomes as |entry|}}
+                  <li data-test-key-usage-outcome={{entry.status}}>
+                    <span class='name'>{{statusText
+                        entry.status
+                        entry.outcome
+                      }}</span>
+                    <span class='n'>{{count entry.count}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if @usage.grants.length}}
+            <div class='group' data-test-key-usage-grants>
+              <h4 class='group-title'>Sent to</h4>
+              <ul class='counts'>
+                {{#each @usage.grants as |grant|}}
+                  <li
+                    data-test-key-usage-grant={{grant.host}}
+                    data-test-key-usage-grant-state={{grant.state}}
+                  >
+                    <span class='name'>{{grant.host}}</span>
+                    {{#if (eq grant.state 'rejected')}}
+                      <span class='flag rejected'>Rejected</span>
+                    {{else if grant.lastForbiddenAt}}
+                      <span class='flag'>Last refused
+                        {{shortDate grant.lastForbiddenAt}}</span>
+                    {{/if}}
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+        </div>
+      </details>
+    </section>
     <style scoped>
       .usage {
         display: grid;
@@ -225,70 +227,78 @@ export default class UsageSummary extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
       }
-      .budgets {
+      .meters {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp-xs);
-        margin: 0;
-      }
-      .budget {
-        padding: var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      dt {
-        color: var(--muted-foreground);
-      }
-      dd {
-        margin: 0;
-      }
-      .used {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--boxel-sp-sm);
       }
       .meter {
-        display: block;
-        width: 100%;
-        margin-top: var(--boxel-sp-4xs);
-        height: 4px;
-        appearance: none;
-        border: none;
-        border-radius: 2px;
-        background: var(--muted, var(--boxel-200));
-        overflow: hidden;
+        display: grid;
+        gap: var(--boxel-sp-5xs);
       }
-      .meter::-webkit-progress-bar {
-        background: var(--muted, var(--boxel-200));
-      }
-      .meter::-webkit-progress-value {
-        background: var(--primary, var(--boxel-highlight));
-      }
-      .meter::-moz-progress-bar {
-        background: var(--primary, var(--boxel-highlight));
-      }
-      .note,
-      .line {
-        margin: 0;
-      }
-      .note {
+      .meter-label {
         color: var(--muted-foreground);
       }
-      .group h4 {
-        margin: 0 0 var(--boxel-sp-4xs);
+      .meter-value strong {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .meter-bar {
+        width: 100%;
+        height: 6px;
+        appearance: none;
+        border: none;
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--muted, var(--boxel-200));
+      }
+      .meter-bar::-webkit-progress-bar {
+        background: var(--muted, var(--boxel-200));
+      }
+      .meter-bar::-webkit-progress-value {
+        background: var(--primary, var(--boxel-highlight));
+      }
+      .meter-bar::-moz-progress-bar {
+        background: var(--primary, var(--boxel-highlight));
+      }
+      .note {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+      .details-summary {
+        cursor: pointer;
+        width: fit-content;
+        font-weight: 600;
+      }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+        gap: var(--boxel-sp-sm);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .group {
+        display: grid;
+        align-content: start;
+        gap: var(--boxel-sp-5xs);
+      }
+      .group-title {
+        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }
-      ul {
+      .counts {
         list-style: none;
         margin: 0;
         padding: 0;
         display: grid;
         gap: var(--boxel-sp-5xs);
       }
-      li {
+      .counts li {
         display: flex;
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
+      }
+      .name {
+        min-width: 0;
         overflow-wrap: anywhere;
       }
       .n {
@@ -296,13 +306,12 @@ export default class UsageSummary extends Component<Signature> {
         font-weight: 600;
       }
       .flag {
-        color: var(--destructive-ink, var(--boxel-danger));
-        font-weight: 500;
         flex-shrink: 0;
-      }
-      .flag.muted {
         color: var(--muted-foreground);
-        font-weight: 400;
+      }
+      .flag.rejected {
+        color: var(--destructive-ink, var(--boxel-danger));
+        font-weight: 600;
       }
     </style>
   </template>

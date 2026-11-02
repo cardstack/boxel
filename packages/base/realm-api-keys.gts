@@ -84,7 +84,7 @@ function statusText(status: string | undefined, outcome?: string): string {
     return `${status} Forbidden`;
   }
   if (code === 401) {
-    return `${status} Key rejected`;
+    return `${status} Unauthorized`;
   }
   if (code === 429) {
     return `${status} Rate limited by the service`;
@@ -117,6 +117,21 @@ function when(iso: string | undefined): string {
 // Who called, by Matrix id. Someone the user isn't shown, since no
 // permission row in the realm names both of them, reads as someone else, and
 // in the list of callers all of them are counted together as others.
+// A count past a budget lowered after it was spent fills the meter, and no
+// more.
+function capped(used: number | undefined, budget: number | undefined): number {
+  return Math.min(used ?? 0, budget ?? 0);
+}
+
+function shortDate(iso: string | undefined): string {
+  return iso
+    ? new Date(iso).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : '';
+}
+
 function callerText(caller: string | undefined, withheld?: boolean): string {
   if (withheld) {
     return 'Others';
@@ -264,16 +279,20 @@ interface ShareUsageSignature {
     // Opens the secure window where the owner of the share's key changes its
     // limits.
     onEditLimits: (share: RealmKeyShareField) => void;
+    // Changes each time the entry reads its listing again, which reads the
+    // usage again too.
+    refresh: number;
   };
 }
 
-// One share's usage, as the realm's direct writers read it: what it spent
-// today and this month against its budgets, when it was last used and by
-// whom, the callers who used it most this month, the calls refused and why,
-// how the service answered, where its key is sent with any destination whose
-// service rejected it, and its limits. The owner of the key it holds changes
-// the limits in the secure window, since the app's session may not; another
-// writer sees them and, if they think the share is being abused, suspends it.
+// One share's usage, as the realm's direct writers read it. Always shown:
+// what it spent today and this month against its budgets, as meters, when it
+// was last used and by whom, and its limits. Behind a disclosure, for the
+// month: the callers who used it most, the calls refused and why, how the
+// service answered, and where its key is sent, with any destination whose
+// service rejected it. The owner of the key it holds changes the limits in
+// the secure window, since the app's session may not; another writer sees
+// them and, if they think the share is being abused, suspends it.
 class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
   @tracked private usage: KeyShareUsageResult | undefined;
   @tracked private error: string | undefined;
@@ -293,16 +312,20 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
     }
   });
 
-  private follow = modifier((_element, [shareId]: [string | undefined]) => {
-    if (shareId) {
-      this.load.perform(shareId);
-    }
-  });
+  // Read again whenever the entry reads its listing again (`@refresh`); the
+  // usage shown stays until the new one arrives.
+  private follow = modifier(
+    (_element, [shareId]: [string | undefined, number | undefined]) => {
+      if (shareId) {
+        this.load.perform(shareId);
+      }
+    },
+  );
 
   private editLimits = () => this.args.onEditLimits(this.args.share);
 
   <template>
-    <div class='usage' {{this.follow @share.shareId}}>
+    <div class='usage' {{this.follow @share.shareId @refresh}}>
       {{#if this.error}}
         <p
           class='note error'
@@ -313,21 +336,41 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
           {{this.error}}
         </p>
       {{else if this.usage.visible}}
-        <div class='usage-body' data-test-realm-key-share-usage>
-          <dl class='budgets'>
-            <div class='budget' data-test-realm-key-share-budget='day'>
-              <dt>Today</dt>
-              <dd><strong>{{count this.usage.day.used}}</strong>
+        <section
+          class='usage-body'
+          aria-label='Usage'
+          data-test-realm-key-share-usage
+        >
+          <div class='meters'>
+            <div class='meter' data-test-realm-key-share-budget='day'>
+              <span class='meter-label'>Today</span>
+              <span class='meter-value'><strong>{{count
+                    this.usage.day.used
+                  }}</strong>
                 of
-                {{calls this.usage.day.budget}}</dd>
+                {{calls this.usage.day.budget}}</span>
+              <progress
+                class='meter-bar'
+                max={{this.usage.day.budget}}
+                value={{capped this.usage.day.used this.usage.day.budget}}
+                aria-label='Calls today'
+              ></progress>
             </div>
-            <div class='budget' data-test-realm-key-share-budget='month'>
-              <dt>This month</dt>
-              <dd><strong>{{count this.usage.month.used}}</strong>
+            <div class='meter' data-test-realm-key-share-budget='month'>
+              <span class='meter-label'>This month</span>
+              <span class='meter-value'><strong>{{count
+                    this.usage.month.used
+                  }}</strong>
                 of
-                {{calls this.usage.month.budget}}</dd>
+                {{calls this.usage.month.budget}}</span>
+              <progress
+                class='meter-bar'
+                max={{this.usage.month.budget}}
+                value={{capped this.usage.month.used this.usage.month.budget}}
+                aria-label='Calls this month'
+              ></progress>
             </div>
-          </dl>
+          </div>
           <p class='note' data-test-realm-key-share-last-use>
             {{#if this.usage.lastUseAt}}
               Last used
@@ -341,78 +384,23 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
               Not used yet.
             {{/if}}
           </p>
-          {{#if this.usage.topCallers.length}}
-            <div class='group' data-test-realm-key-share-callers>
-              <p class='note'>Most calls this month</p>
-              <ul class='counts'>
-                {{#each this.usage.topCallers as |entry|}}
-                  <li data-test-realm-key-share-caller={{entry.name}}>
-                    <span>{{callerText entry.name entry.withheld}}</span>
-                    <span class='n'>{{count entry.count}}</span>
-                  </li>
-                {{/each}}
-              </ul>
-            </div>
-          {{/if}}
-          {{#if this.usage.refusals.length}}
-            <div class='group' data-test-realm-key-share-refusals>
-              <p class='note'>Refused this month</p>
-              <ul class='counts'>
-                {{#each this.usage.refusals as |entry|}}
-                  <li data-test-realm-key-share-refusal={{entry.name}}>
-                    <span>{{refusalText entry.name}}</span>
-                    <span class='n'>{{count entry.count}}</span>
-                  </li>
-                {{/each}}
-              </ul>
-            </div>
-          {{/if}}
-          {{#if this.usage.vendorOutcomes.length}}
-            <div class='group' data-test-realm-key-share-outcomes>
-              <p class='note'>How the service answered</p>
-              <ul class='counts'>
-                {{#each this.usage.vendorOutcomes as |entry|}}
-                  <li data-test-realm-key-share-outcome={{entry.name}}>
-                    <span>{{statusText entry.name entry.outcome}}</span>
-                    <span class='n'>{{count entry.count}}</span>
-                  </li>
-                {{/each}}
-              </ul>
-            </div>
-          {{/if}}
-          {{#if this.usage.grants.length}}
-            <div class='group' data-test-realm-key-share-grants>
-              <p class='note'>Sent to</p>
-              <ul class='counts'>
-                {{#each this.usage.grants as |grant|}}
-                  <li
-                    data-test-realm-key-share-grant={{grant.host}}
-                    data-test-realm-key-share-grant-state={{grant.state}}
-                  >
-                    <span class='host'>{{grant.host}}</span>
-                    {{#if (eq grant.state 'rejected')}}
-                      <Chip @tone='danger' @label='Rejected by the service' />
-                    {{else if grant.lastForbiddenAt}}
-                      <span class='note'>Last refused
-                        {{when grant.lastForbiddenAt}}</span>
-                    {{/if}}
-                  </li>
-                {{/each}}
-              </ul>
-            </div>
-          {{/if}}
           <div class='limits' data-test-realm-key-share-limits>
-            <p class='note'>
-              Limits:
-              {{count this.usage.rateBurst}}
-              calls at once per caller, refilling
-              {{count this.usage.rateRefillPerMinute}}
-              a minute;
-              {{calls this.usage.dailyBudget}}
-              a day and
-              {{calls this.usage.monthlyBudget}}
-              a month.
-            </p>
+            <dl class='limit-list'>
+              <div data-test-realm-key-share-limit='rate'>
+                <dt>Each person</dt>
+                <dd>{{calls this.usage.rateBurst}}
+                  at once, then
+                  {{count this.usage.rateRefillPerMinute}}
+                  a minute</dd>
+              </div>
+              <div data-test-realm-key-share-limit='budget'>
+                <dt>The key, in total across everyone</dt>
+                <dd>{{calls this.usage.dailyBudget}}
+                  a day,
+                  {{count this.usage.monthlyBudget}}
+                  a month</dd>
+              </div>
+            </dl>
             {{#if this.usage.canEditLimits}}
               <Button
                 @tone='neutral'
@@ -425,35 +413,169 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
               </Button>
             {{/if}}
           </div>
-        </div>
+          <details class='details' data-test-realm-key-share-usage-details>
+            <summary class='details-summary'>
+              Details this month
+            </summary>
+            <div class='detail-grid'>
+              {{#if this.usage.topCallers.length}}
+                <div class='group' data-test-realm-key-share-callers>
+                  <h3 class='group-title'>Most calls</h3>
+                  <ul class='counts'>
+                    {{#each this.usage.topCallers as |entry|}}
+                      <li data-test-realm-key-share-caller={{entry.name}}>
+                        <span class='name'>{{callerText
+                            entry.name
+                            entry.withheld
+                          }}</span>
+                        <span class='n'>{{count entry.count}}</span>
+                      </li>
+                    {{/each}}
+                  </ul>
+                </div>
+              {{/if}}
+              {{#if this.usage.refusals.length}}
+                <div class='group' data-test-realm-key-share-refusals>
+                  <h3 class='group-title'>Refused</h3>
+                  <ul class='counts'>
+                    {{#each this.usage.refusals as |entry|}}
+                      <li data-test-realm-key-share-refusal={{entry.name}}>
+                        <span class='name'>{{refusalText entry.name}}</span>
+                        <span class='n'>{{count entry.count}}</span>
+                      </li>
+                    {{/each}}
+                  </ul>
+                </div>
+              {{/if}}
+              {{#if this.usage.vendorOutcomes.length}}
+                <div class='group' data-test-realm-key-share-outcomes>
+                  <h3 class='group-title'>Service answers</h3>
+                  <ul class='counts'>
+                    {{#each this.usage.vendorOutcomes as |entry|}}
+                      <li data-test-realm-key-share-outcome={{entry.name}}>
+                        <span class='name'>{{statusText
+                            entry.name
+                            entry.outcome
+                          }}</span>
+                        <span class='n'>{{count entry.count}}</span>
+                      </li>
+                    {{/each}}
+                  </ul>
+                </div>
+              {{/if}}
+              {{#if this.usage.grants.length}}
+                <div class='group' data-test-realm-key-share-grants>
+                  <h3 class='group-title'>Sent to</h3>
+                  <ul class='counts'>
+                    {{#each this.usage.grants as |grant|}}
+                      <li
+                        data-test-realm-key-share-grant={{grant.host}}
+                        data-test-realm-key-share-grant-state={{grant.state}}
+                      >
+                        <span class='name host'>{{grant.host}}</span>
+                        {{#if (eq grant.state 'rejected')}}
+                          <Chip @tone='danger' @label='Rejected' />
+                        {{else if grant.lastForbiddenAt}}
+                          <span
+                            class='flag'
+                            title='Last refused {{when grant.lastForbiddenAt}}'
+                          >Last refused
+                            {{shortDate grant.lastForbiddenAt}}</span>
+                        {{/if}}
+                      </li>
+                    {{/each}}
+                  </ul>
+                </div>
+              {{/if}}
+            </div>
+          </details>
+        </section>
       {{/if}}
     </div>
     <style scoped>
       .usage-body {
         display: grid;
         gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-xs);
+        border-top: 1px solid var(--border);
       }
-      .budgets {
+      .meters {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--boxel-sp-xs);
-        margin: 0;
       }
-      .budget {
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background: var(--muted, var(--boxel-100));
+      .meter {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
         font-size: var(--boxel-font-size-xs);
       }
-      dt {
+      .meter-label {
         color: var(--muted-foreground);
       }
-      dd {
+      .meter-value strong {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .meter-bar {
+        width: 100%;
+        height: 6px;
+        appearance: none;
+        border: none;
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--muted);
+      }
+      .meter-bar::-webkit-progress-bar {
+        background: var(--muted);
+      }
+      .meter-bar::-webkit-progress-value {
+        background: var(--primary);
+      }
+      .meter-bar::-moz-progress-bar {
+        background: var(--primary);
+      }
+      .limits {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        flex-wrap: wrap;
+      }
+      .limit-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs) var(--boxel-sp-sm);
         margin: 0;
+        font-size: var(--boxel-font-size-xs);
+      }
+      .limit-list dt {
+        color: var(--muted-foreground);
+      }
+      .limit-list dd {
+        margin: 0;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .details-summary {
+        cursor: pointer;
+        width: fit-content;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+      }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+        gap: var(--boxel-sp-sm);
+        margin-top: var(--boxel-sp-xs);
       }
       .group {
         display: grid;
+        align-content: start;
         gap: var(--boxel-sp-5xs);
+      }
+      .group-title {
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
       }
       .counts {
         list-style: none;
@@ -468,6 +590,9 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
+      }
+      .name {
+        min-width: 0;
         overflow-wrap: anywhere;
       }
       .n {
@@ -477,12 +602,9 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
       .host {
         font-family: var(--font-mono);
       }
-      .limits {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
+      .flag {
+        flex-shrink: 0;
+        color: var(--muted-foreground);
       }
       .note {
         margin: 0;
@@ -530,6 +652,8 @@ interface RealmApiKeysSignature {
 export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature> {
   @tracked private visible = false;
   @tracked private shares: RealmKeyShareField[] = [];
+  // How many times the listing was read, which each share's usage follows.
+  @tracked private loads = 0;
   @tracked private loadError: string | undefined;
   @tracked private pending: PendingChange | undefined;
   @tracked private changeError: string | undefined;
@@ -571,6 +695,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
       });
       this.visible = Boolean(result.visible);
       this.shares = [...(result.shares ?? [])];
+      this.loads++;
       this.loadError = undefined;
     } catch (err) {
       // A listing that failed for any reason but the user not being a direct
@@ -699,7 +824,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
               </p>
             {{else if this.shares.length}}
               <ul class='shares'>
-                {{#each this.shares as |share|}}
+                {{#each this.shares key='shareId' as |share|}}
                   <li
                     class='share'
                     data-test-realm-key-share={{share.label}}
@@ -809,6 +934,7 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
                       @share={{share}}
                       @context={{@context}}
                       @onEditLimits={{this.editLimits}}
+                      @refresh={{this.loads}}
                     />
                     <div class='actions'>
                       {{#if (eq share.state 'suspended')}}

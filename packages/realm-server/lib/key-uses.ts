@@ -17,6 +17,7 @@ import {
   limitsOf,
   type KeyLimits,
 } from './key-limit-settings.ts';
+import { isUUID, namedToViewer } from './named-users.ts';
 import { subjectOfRefusal } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
@@ -46,12 +47,13 @@ const log = logger('key-uses');
 // whatever the day, with the previous one for comparison.
 export const KEY_USE_RETENTION_DAYS = 62;
 
-const MS_PER_DAY = 86_400_000;
+// How often a realm-server process sweeps the uses past the retention window,
+// whichever shares and keys they belong to. A share or key nobody uses any
+// more is swept the same as one in use.
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 // How many of the callers who used a share or key most the view lists.
 const TOP_CALLERS = 5;
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function subjectColumn(subject: CallApiUseSubject): string {
   return subject.kind === 'share' ? 'share_id' : 'key_id';
@@ -68,8 +70,8 @@ function hostOf(url: string | null): string | null {
   }
 }
 
-// Writes one row for each share and key the use counts against, and removes
-// that share's or key's rows older than the retention window. A refusal of
+// Writes one row for each share and key the use counts against, and sweeps
+// the uses past the retention window when one is due. A refusal of
 // `credential-rejected` made once the request was built is the vendor's 401
 // (a rejection known beforehand refuses before any URL exists), so it is
 // recorded with that status among the vendor's answers.
@@ -80,9 +82,6 @@ export async function recordKeyUses(
   let status =
     use.status ??
     (use.code === 'credential-rejected' && use.url ? 401 : undefined);
-  let cutoff = new Date(
-    Date.now() - KEY_USE_RETENTION_DAYS * MS_PER_DAY,
-  ).toISOString();
   for (let subject of use.countsAgainst) {
     await query(dbAdapter, [
       `INSERT INTO key_uses (share_id, key_id, realm_url, operation, caller, mode, outcome, code, status, host) VALUES (`,
@@ -107,13 +106,26 @@ export async function recordKeyUses(
       param(hostOf(use.url)),
       `)`,
     ]);
-    await query(dbAdapter, [
-      `DELETE FROM key_uses WHERE ${subjectColumn(subject)} = `,
-      param(subject.id),
-      ` AND created_at < `,
-      param(cutoff),
-    ]);
   }
+  let now = Date.now();
+  let last = lastSweep.get(dbAdapter);
+  if (last === undefined || now - last >= SWEEP_INTERVAL_MS) {
+    lastSweep.set(dbAdapter, now);
+    await sweepExpiredKeyUses(dbAdapter);
+  }
+}
+
+// When each database's uses were last swept, by this process.
+const lastSweep = new WeakMap<DBAdapter, number>();
+
+// Removes every use past the retention window, by the database's clock, the
+// same clock that stamped it.
+export async function sweepExpiredKeyUses(dbAdapter: DBAdapter): Promise<void> {
+  await query(dbAdapter, [
+    `DELETE FROM key_uses WHERE created_at < NOW() - make_interval(days => `,
+    param(KEY_USE_RETENTION_DAYS),
+    `)`,
+  ]);
 }
 
 // Records a refusal raised while a call's slots were being filled, against
@@ -193,51 +205,27 @@ function iso(value: unknown): string | null {
   return new Date(value as string).toISOString();
 }
 
-function startOfMonth(now = new Date()): string {
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  ).toISOString();
-}
-
-// Which callers the viewer may be shown. A person's Matrix id is shown only
-// to people who share a realm with them (ADR 011 §1.1): a share's callers
-// include readers admitted by a `*` or `users` row, or a policy grant, none of
-// which names anyone. So a share's caller is shown when it is the viewer, or
-// when a permission row in the share's realm names both the viewer and them,
-// the rule the share listings follow. A personal key serves only its owner's
-// calls, so only the owner, who is the viewer, is ever shown.
+// Which callers the viewer may be shown. A share's callers include readers
+// admitted by a `*` or `users` row, or a policy grant, none of which names
+// anyone, so a share's caller is shown only as the share listings show its
+// owner (`namedToViewer`, ADR 011 §1.1). A personal key serves only its
+// owner's calls, so only the owner, who is the viewer, is ever shown.
 async function namedCallers(
   dbAdapter: DBAdapter,
   viewer: string,
   realmURL: string | undefined,
   callers: string[],
-): Promise<Set<string>> {
-  let shown = new Set([viewer]);
-  let others = callers.filter((caller) => caller !== viewer);
-  if (!realmURL || others.length === 0) {
-    return shown;
+): Promise<(caller: string) => boolean> {
+  if (!realmURL) {
+    return (caller) => caller === viewer;
   }
-  let list = (values: string[]) =>
-    values.flatMap((value, i) => [...(i > 0 ? [', '] : []), param(value)]);
-  let named = new Set(
-    (
-      await query(dbAdapter, [
-        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
-        param(realmURL),
-        ` AND username IN (`,
-        ...list([viewer, ...others]),
-        `)`,
-      ])
-    ).map((row) => row.username as string),
+  let isNamed = await namedToViewer(
+    (expression) => query(dbAdapter, expression),
+    viewer,
+    [realmURL],
+    callers,
   );
-  if (named.has(viewer)) {
-    for (let caller of others) {
-      if (named.has(caller)) {
-        shown.add(caller);
-      }
-    }
-  }
-  return shown;
+  return (caller) => isNamed(realmURL, caller);
 }
 
 async function usageOf(
@@ -258,7 +246,11 @@ async function usageOf(
     canEditLimits: boolean;
   },
 ): Promise<KeyUsage> {
-  let since = startOfMonth();
+  // The month is the database's, the clock that stamps every use.
+  let [month] = await query(dbAdapter, [
+    `SELECT date_trunc('month', NOW() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS since`,
+  ]);
+  let since = iso(month.since)!;
   let where = () => [
     ` FROM key_uses WHERE ${subjectColumn(subject)} = `,
     param(subject.id),
@@ -279,7 +271,7 @@ async function usageOf(
     ...where(),
     ` GROUP BY caller`,
   ]);
-  let shown = await namedCallers(
+  let isShown = await namedCallers(
     dbAdapter,
     viewer,
     realmURL,
@@ -289,7 +281,7 @@ async function usageOf(
     ].filter((caller): caller is string => typeof caller === 'string'),
   );
   let isWithheld = (caller: string | null) =>
-    caller !== null && !shown.has(caller);
+    caller !== null && !isShown(caller);
   let refusals = await query(dbAdapter, [
     `SELECT code, COUNT(*) AS count`,
     ...where(),
@@ -397,7 +389,7 @@ export async function shareUsage(
   { user, shareId }: { user: string; shareId: string },
 ): Promise<KeyUsage> {
   let noSuchShare = () => new UserKeyError(404, 'no such share');
-  if (!UUID.test(shareId)) {
+  if (!isUUID(shareId)) {
     throw noSuchShare();
   }
   let [share] = await query(dbAdapter, [
@@ -435,7 +427,7 @@ export async function userKeyUsage(
   { owner, keyId }: { owner: string; keyId: string },
 ): Promise<KeyUsage> {
   let noSuchKey = () => new UserKeyError(404, 'no such key');
-  if (!UUID.test(keyId)) {
+  if (!isUUID(keyId)) {
     throw noSuchKey();
   }
   let [key] = await query(dbAdapter, [

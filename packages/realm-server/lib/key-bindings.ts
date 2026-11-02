@@ -62,7 +62,7 @@ import {
   probeDue,
 } from './key-grant-rejection.ts';
 import { chargeInteractiveCall, type LimitSubject } from './key-limits.ts';
-import { refusedFrom } from './key-use-subject.ts';
+import { refusedFrom, subjectOfRefusal } from './key-use-subject.ts';
 import { recordFillRefusal } from './key-uses.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
@@ -1515,85 +1515,99 @@ async function fillCheckedSlots(
   { probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS }: { probeIntervalMs?: number },
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
-  for (let { slot, binding, probe, keyProbe } of await checkedBindings(
-    dbAdapter,
-    lookup,
-    {
-      probeIntervalMs,
-      claimProbe: true,
-    },
-  )) {
-    let opened: Awaited<ReturnType<typeof openGrantForSending>>;
-    let ring = keyring();
+  for (let checked of await checkedBindings(dbAdapter, lookup, {
+    probeIntervalMs,
+    claimProbe: true,
+  })) {
+    // A refusal filling this slot, from an unusable grant or a credential
+    // whose token can't be minted, is this binding's share's or key's.
     try {
-      opened = await openGrantForSending(dbAdapter, ring, {
-        owner: binding.approved_by,
-        grantId: binding.grant_id!,
-      });
+      filled.push(await fillCheckedSlot(dbAdapter, keyring, lookup, checked));
     } catch (error) {
-      // A grant that is gone, or whose copy doesn't open, fills nothing: the
-      // binding is as good as unapproved. Anything else is a fault, not a
-      // refusal.
-      let unusable =
-        (error instanceof UserKeyError && error.status === 404) ||
-        error instanceof SecretDecryptionError;
-      log.warn(
-        `binding ${binding.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
-      );
-      if (!unusable) {
-        throw error;
+      if (error instanceof OperationFailure && !subjectOfRefusal(error)) {
+        refusedFrom(limitSubjectOf(checked.binding), error);
       }
-      throw new OperationFailure(
-        notApproved(lookup.operation, lookup.request, lookup.realmURL),
-      );
+      throw error;
     }
-    let bindingKey = binding.key_id ?? binding.share_key_id;
-    if (opened.keyId !== bindingKey) {
-      throw new OperationFailure(
-        notApproved(lookup.operation, lookup.request, lookup.realmURL),
-      );
-    }
-    // A key that mints its access tokens sends the one it mints now; its
-    // grant's marker has only proved the grant real.
-    let mints = MINTING_KINDS.has(opened.kind);
-    let secret = mints
-      ? await mintedToken(dbAdapter, ring, opened, slot, {
-          operation: lookup.operation,
-          grantId: binding.grant_id!,
-          realmURL: lookup.realmURL,
-          shareId: binding.share_id ?? undefined,
-          keyProbe,
-        })
-      : opened.value;
-    let value =
-      slot.transform === 'basic'
-        ? Buffer.from(secret, 'utf8').toString('base64')
-        : secret;
-    filled.push({
-      name: slot.name,
-      value,
-      ...(value !== secret ? { raw: secret } : {}),
-      destination: opened.destination,
-      countsAgainst: limitSubjectOf(binding),
-      // A vendor's 401 to a stored key rejects the grant it was sent under. A
-      // minted token's refusal is its connection's to judge when it next
-      // refreshes, so a 401 to one is only the vendor's answer.
-      ...(mints
-        ? {}
-        : {
-            grant: {
-              id: binding.grant_id!,
-              destination: opened.destination,
-              slot: { name: slot.name, key: slot.key },
-              realmURL: lookup.realmURL,
-              ...(binding.share_id ? { shareId: binding.share_id } : {}),
-              copy: opened.copy,
-              probe,
-            },
-          }),
-    });
   }
   return filled;
+}
+
+async function fillCheckedSlot(
+  dbAdapter: DBAdapter,
+  keyring: () => SecretsKeyring,
+  lookup: CallApiSlotLookup,
+  { slot, binding, probe, keyProbe }: CheckedBinding,
+): Promise<CallApiFilledSlot> {
+  let opened: Awaited<ReturnType<typeof openGrantForSending>>;
+  let ring = keyring();
+  try {
+    opened = await openGrantForSending(dbAdapter, ring, {
+      owner: binding.approved_by,
+      grantId: binding.grant_id!,
+    });
+  } catch (error) {
+    // A grant that is gone, or whose copy doesn't open, fills nothing: the
+    // binding is as good as unapproved. Anything else is a fault, not a
+    // refusal.
+    let unusable =
+      (error instanceof UserKeyError && error.status === 404) ||
+      error instanceof SecretDecryptionError;
+    log.warn(
+      `binding ${binding.id} can't fill slot "${slot.name}": its grant ${unusable ? 'is unusable' : 'failed to open'} (${error instanceof Error ? error.name : 'unknown error'})`,
+    );
+    if (!unusable) {
+      throw error;
+    }
+    throw new OperationFailure(
+      notApproved(lookup.operation, lookup.request, lookup.realmURL),
+    );
+  }
+  let bindingKey = binding.key_id ?? binding.share_key_id;
+  if (opened.keyId !== bindingKey) {
+    throw new OperationFailure(
+      notApproved(lookup.operation, lookup.request, lookup.realmURL),
+    );
+  }
+  // A key that mints its access tokens sends the one it mints now; its
+  // grant's marker has only proved the grant real.
+  let mints = MINTING_KINDS.has(opened.kind);
+  let secret = mints
+    ? await mintedToken(dbAdapter, ring, opened, slot, {
+        operation: lookup.operation,
+        grantId: binding.grant_id!,
+        realmURL: lookup.realmURL,
+        shareId: binding.share_id ?? undefined,
+        keyProbe,
+      })
+    : opened.value;
+  let value =
+    slot.transform === 'basic'
+      ? Buffer.from(secret, 'utf8').toString('base64')
+      : secret;
+  return {
+    name: slot.name,
+    value,
+    ...(value !== secret ? { raw: secret } : {}),
+    destination: opened.destination,
+    countsAgainst: limitSubjectOf(binding),
+    // A vendor's 401 to a stored key rejects the grant it was sent under. A
+    // minted token's refusal is its connection's to judge when it next
+    // refreshes, so a 401 to one is only the vendor's answer.
+    ...(mints
+      ? {}
+      : {
+          grant: {
+            id: binding.grant_id!,
+            destination: opened.destination,
+            slot: { name: slot.name, key: slot.key },
+            realmURL: lookup.realmURL,
+            ...(binding.share_id ? { shareId: binding.share_id } : {}),
+            copy: opened.copy,
+            probe,
+          },
+        }),
+  };
 }
 
 const MINTING_REFUSALS: Record<OAuthTokenFailure, string> = {

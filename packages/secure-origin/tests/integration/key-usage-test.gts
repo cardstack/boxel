@@ -223,6 +223,12 @@ module('Integration | key usage and limits', function (hooks) {
       await click('[data-test-key-usage-toggle]');
       await waitFor('[data-test-key-usage]');
       assert
+        .dom('[data-test-key-usage-details]')
+        .doesNotHaveAttribute('open', 'the detailed counts start closed');
+      assert
+        .dom('[data-test-key-usage-budget="day"] progress')
+        .hasAttribute('value', '12', 'the meter shows the day’s use');
+      assert
         .dom('[data-test-key-usage-budget="day"]')
         .includesText('12 of 2,400 calls');
       assert
@@ -247,10 +253,17 @@ module('Integration | key usage and limits', function (hooks) {
         .dom(
           '[data-test-key-usage-grant="api.openweathermap.org"][data-test-key-usage-grant-state="rejected"]',
         )
-        .includesText('Rejected by the service');
+        .includesText('Rejected');
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
         .hasValue('2400', 'the limits in force fill the form');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll('[data-test-key-limit-group] legend'),
+        ].map((el) => el.textContent!.trim()),
+        ['How fast', 'How many'],
+        'a personal key’s limits don’t speak of other people',
+      );
     });
 
     test('changes a key’s limits in place, sending only what changed', async function (assert) {
@@ -258,10 +271,15 @@ module('Integration | key usage and limits', function (hooks) {
       serve({
         'GET _user-keys/key-1/usage': () => usageResource('key-1', current),
         'PUT _user-keys/key-1/limits': ({ body }) => {
-          current = {
-            ...current,
-            limits: { ...LIMITS, ...body.data.attributes },
-          };
+          let set = { ...current.limits, ...body.data.attributes };
+          // A limit set to null goes back to the platform's default.
+          for (let [name, value] of Object.entries(set)) {
+            if (value === null) {
+              set[name as keyof typeof set] =
+                LIMITS[name as keyof typeof LIMITS];
+            }
+          }
+          current = { ...current, limits: set };
           return json(200, {
             data: {
               type: 'key-limits',
@@ -290,8 +308,46 @@ module('Integration | key usage and limits', function (hooks) {
         },
       });
       assert
+        .dom('[data-test-key-limit-input="rateBurst"]')
+        .hasValue('25', 'an emptied field shows the default it went back to');
+      assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
+      assert
         .dom('[data-test-key-usage-budget="day"]')
         .exists('the usage is still shown');
+
+      await click('[data-test-key-limits-save]');
+      assert.strictEqual(
+        requests.filter((r) => r.method === 'PUT').length,
+        1,
+        'saving again with nothing changed sends nothing',
+      );
+    });
+
+    test('limits that saved stay saved when the usage can’t be read again', async function (assert) {
+      let reads = 0;
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          ++reads === 1
+            ? usageResource('key-1', usage())
+            : refusal(500, 'Internal server error'),
+        'PUT _user-keys/key-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: { ...LIMITS, ...body.data.attributes },
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '900');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      assert.dom('[data-test-key-limits-error]').doesNotExist();
+      assert.dom('[data-test-key-usage]').exists('the usage stays shown');
     });
 
     test('a limit that isn’t one is refused before anything is sent', async function (assert) {
@@ -306,7 +362,7 @@ module('Integration | key usage and limits', function (hooks) {
       await click('[data-test-key-limits-save]');
       assert
         .dom('[data-test-key-limits-error]')
-        .hasText('Calls per month must be a whole number of at least 1.');
+        .hasText('Calls a month must be a whole number of at least 1.');
       assert.false(requests.some((r) => r.method === 'PUT'));
     });
 
@@ -385,6 +441,13 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom('[data-test-share-limits]')
         .includesText('Limits for Team weather');
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll('[data-test-key-limit-group] legend'),
+        ].map((el) => el.textContent!.trim()),
+        ['Each person', 'The key, in total across everyone'],
+        'each of a share’s limits says whom it applies to',
+      );
       assert
         .dom('[data-test-key-usage-budget="day"]')
         .includesText('12 of 2,400 calls');
