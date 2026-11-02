@@ -116,10 +116,15 @@ export class Reactions extends Component<ReactionsSignature> {
         }
         .pretui-reaction[data-mine],
         .pretui-reaction[aria-pressed='true'] {
-          background-color: color-mix(
-            in oklch,
-            var(--primary) 14%,
-            var(--pretui-reaction-surface, var(--card))
+          /* knob: a surface that wants the reader's own reaction flat
+             sets this; unset, it takes a primary tint */
+          background-color: var(
+            --pretui-reaction-mine-surface,
+            color-mix(
+              in oklch,
+              var(--primary) 14%,
+              var(--pretui-reaction-surface, var(--card))
+            )
           );
           box-shadow: inset 0 0 0 1px
             color-mix(in oklch, var(--primary) 45%, transparent);

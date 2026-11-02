@@ -3467,6 +3467,7 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-call-reactions {
         --pretui-reaction-surface: var(--card, var(--boxel-ai-purple));
+        --pretui-reaction-mine-surface: var(--card, var(--boxel-ai-purple));
       }
       /* what a check found: lines in the body, the rows' own 4px apart */
       .check-outcome {
