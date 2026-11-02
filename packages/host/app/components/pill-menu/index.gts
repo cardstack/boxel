@@ -1,16 +1,11 @@
-import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import { buildWaiter, type Token } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Button, Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
-
-const waiter = buildWaiter('pill-menu:collapse-animation-waiter');
 
 export type PillMenuItem = {
   cardId: string;
@@ -33,16 +28,27 @@ interface Signature {
   };
 }
 
+/**
+ * A pill that expands into a menu and collapses back to the pill.
+ *
+ * Expanding and collapsing are state changes (ADR 007 §1.1): `isExpanded`
+ * flips and `@onExpand` / `@onCollapse` fire in the click handler, and the
+ * other face renders in the same pass. The expand animation is CSS on the
+ * menu root, so no state tracks whether it is playing.
+ *
+ * The menu has no exit animation. Its header and content are the caller's
+ * blocks, rendered from the caller's own state, which `@onCollapse` has
+ * already moved on: a copy of the menu kept in the DOM while it fades would
+ * re-render as the collapsed face, and would carry the caller's
+ * `...attributes` and test hooks beside the live pill. A faithful exit needs
+ * a snapshot the motion engine owns (ADR 007 §1.2), not a live block.
+ */
 export default class PillMenu extends Component<Signature> {
   <template>
     {{#if this.isExpanded}}
       <div
         class='pill-menu
-          {{if (has-block "contentActions") "has-content-actions"}}
-          {{if this.isExpanding "is-expanding"}}
-          {{if this.isCollapsing "is-collapsing"}}'
-        {{on 'animationend' this.handleMenuAnimationEnd}}
-        {{on 'animationcancel' this.handleMenuAnimationEnd}}
+          {{if (has-block "contentActions") "has-content-actions"}}'
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
@@ -92,6 +98,7 @@ export default class PillMenu extends Component<Signature> {
         {{on 'click' this.expandMenu}}
         class='pill-menu-button'
         data-test-pill-menu-button
+        data-test-pill-menu-collapsed
         ...attributes
       >
         {{yield to='headerIcon'}}
@@ -125,30 +132,29 @@ export default class PillMenu extends Component<Signature> {
       }
       @media (prefers-reduced-motion: no-preference) {
         .pill-menu {
-          /* The collapsed pill row's height, so the swap between button and
-             menu lands exactly where the height animation starts/ends. */
+          /* The collapsed pill row's height, so the menu grows out of the
+             place the pill occupied. */
           --pill-menu-collapsed-height: 2.5rem;
 
-          /* Lets the height keyframe interpolate to its auto endpoint. */
+          /* Lets the height keyframe interpolate to its auto endpoint.
+             --pill-menu-expand-duration is a knob a caller may set (the LLM
+             menu does), so it is only ever read, with the same fallback here
+             and on the scroll region below. */
           interpolate-size: allow-keywords;
           overflow: hidden;
           animation: pill-menu-expand var(--pill-menu-expand-duration, 0.2s)
             ease-out;
         }
-        .pill-menu.is-collapsing {
-          /* A separately named animation: only an animation-name change
-             restarts the animation and re-arms its animationend event. */
-          animation: pill-menu-collapse
-            var(--pill-menu-collapse-duration, 0.15s) ease-in forwards;
-        }
 
         /* While the menu height is animating, the squeezed content region
-           would briefly become scrollable and flash a scrollbar; suppress it
-           for the duration. hidden (not clip) keeps the region
-           programmatically scrollable for the scroll-into-view modifier. */
-        .pill-menu.is-expanding .menu-content-scroll,
-        .pill-menu.is-collapsing .menu-content-scroll {
-          overflow-y: hidden;
+           would briefly become scrollable and flash a scrollbar. An animation
+           of the same length holds overflow hidden for exactly that time, so
+           no state has to know when the expand ends. hidden (not clip) keeps
+           the region programmatically scrollable for the scroll-into-view
+           modifier. */
+        .pill-menu .menu-content-scroll {
+          animation: pill-menu-settle-scroll
+            var(--pill-menu-expand-duration, 0.2s);
         }
       }
       .pill-menu-button {
@@ -308,14 +314,10 @@ export default class PillMenu extends Component<Signature> {
         }
       }
 
-      @keyframes pill-menu-collapse {
-        from {
-          height: auto;
-          min-height: 0;
-        }
+      @keyframes pill-menu-settle-scroll {
+        from,
         to {
-          height: var(--pill-menu-collapsed-height);
-          min-height: 0;
+          overflow-y: hidden;
         }
       }
 
@@ -334,76 +336,20 @@ export default class PillMenu extends Component<Signature> {
   </template>
 
   @tracked isExpanded = false;
-  @tracked private isExpanding = false;
-  @tracked private isCollapsing = false;
-  private collapseWaiterToken: Token | undefined;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    registerDestructor(this, () => this.releaseCollapseWaiter());
-  }
-
-  private get prefersReducedMotion() {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  }
 
   @action expandMenu() {
-    this.isCollapsing = false;
-    this.releaseCollapseWaiter();
+    if (this.isExpanded) {
+      return;
+    }
     this.isExpanded = true;
-    // Mirrors the expand animation's lifetime; with reduced motion no
-    // animation (and no animationend to clear this) runs.
-    this.isExpanding = !this.prefersReducedMotion;
     this.args.onExpand?.();
   }
 
   @action collapseMenu() {
-    if (this.isCollapsing) {
+    if (!this.isExpanded) {
       return;
     }
-    if (this.prefersReducedMotion) {
-      // No exit animation will run, so there is no animationend to wait for.
-      this.finishCollapse();
-      return;
-    }
-    this.isCollapsing = true;
-    this.collapseWaiterToken = waiter.beginAsync();
-  }
-
-  // The menu stays in the DOM while the collapse animation plays; removal
-  // happens here, once that animation on the menu root itself completes.
-  // Animation names are matched by prefix: scoped CSS appends a suffix to
-  // keyframe names.
-  @action private handleMenuAnimationEnd(event: Event) {
-    if (
-      !(event instanceof AnimationEvent) ||
-      event.target !== event.currentTarget
-    ) {
-      return;
-    }
-    if (event.animationName.startsWith('pill-menu-expand')) {
-      this.isExpanding = false;
-      return;
-    }
-    if (
-      this.isCollapsing &&
-      event.animationName.startsWith('pill-menu-collapse')
-    ) {
-      this.finishCollapse();
-    }
-  }
-
-  private finishCollapse() {
-    this.isCollapsing = false;
-    this.releaseCollapseWaiter();
     this.isExpanded = false;
     this.args.onCollapse?.();
-  }
-
-  private releaseCollapseWaiter() {
-    if (this.collapseWaiterToken) {
-      waiter.endAsync(this.collapseWaiterToken);
-      this.collapseWaiterToken = undefined;
-    }
   }
 }
