@@ -30,7 +30,7 @@ const realmServerDir = resolve(
   join(import.meta.dirname, '..', '..', 'realm-server'),
 );
 const skillsRealmDir = resolve(
-  join(import.meta.dirname, '..', '..', 'skills-realm', 'contents'),
+  join(import.meta.dirname, '..', '..', 'skills-realm', 'contents', 'skills'),
 );
 const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(import.meta.dirname, '..'));
