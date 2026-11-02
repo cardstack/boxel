@@ -387,6 +387,29 @@ export function pipelineApprovalTargets(
   );
 }
 
+// The seed of every card instance the bundle copies in, `initialCards` and
+// card `.json` files in `initialFiles` alike: for an evaluation that expects
+// no writes, each one must still hold its seed data after the run.
+export function seededCardSeeds(
+  bundle: EvaluationBundle,
+  testRealmUrl: string,
+): { cardId: string; path: string; content: Buffer }[] {
+  let testRealm = new RealmPaths(new URL(testRealmUrl));
+  return bundle.files.flatMap((file) => {
+    let content = Buffer.from(file.content, 'base64');
+    if (!file.isCard && !isCardInstance(file.path, content)) {
+      return [];
+    }
+    return [
+      {
+        cardId: cardIdOf(testRealm.fileURL(file.path).href),
+        path: file.path,
+        content,
+      },
+    ];
+  });
+}
+
 // The seed of each card the evaluation expects the assistant to change: its
 // card id in the test workspace and the bytes it started with.
 export function expectedChangedSeeds(

@@ -19,6 +19,7 @@ import {
   expectedChangedSeeds,
   pipelineApprovalTargets,
   promptCardIds,
+  seededCardSeeds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
@@ -1094,8 +1095,11 @@ function classify(
   let writes = analysis.realmCodeWrites + analysis.toolWrites;
   // A conversation-only evaluation is about what the assistant says and which
   // tools it calls; its criteria forbid writing anything, so a write is the
-  // failure and no card needs to render.
+  // failure and no card needs to render. `cardReasons` then holds any seeded
+  // card that no longer matches its seed, which catches a change made by a
+  // tool the write counts don't know.
   if (expectsNoWrites) {
+    reasons.push(...cardReasons);
     if (writes > 0) {
       reasons.push(
         `the evaluation expects no writes, but ${writes} file write(s) were applied`,
@@ -1395,14 +1399,33 @@ async function runModel(
           ? [`${seed.path} is expected to change but no longer exists`]
           : [],
     );
+    // A conversation-only evaluation fails on any change to a seeded card,
+    // whichever tool made it, not only on the writes the room analysis counts.
+    if (evaluation?.expectsNoWrites) {
+      let seeds = await Promise.all(
+        seededCardSeeds(evaluation, checkRealmUrl).map((seed) =>
+          seedState(checkClient, checkRealmUrl, seed, 'data'),
+        ),
+      );
+      for (let { seed, state } of seeds) {
+        if (state !== 'same') {
+          cardReasons.push(
+            `${seed.path} was ${state === 'missing' ? 'removed' : 'changed'}, and the evaluation expects no writes`,
+          );
+        }
+      }
+    }
     let indexProblems = await Promise.all(
       changed.map((state) =>
         waitForIndexedChange(checkClient, checkRealmUrl, state),
       ),
     );
     cardReasons.push(...indexProblems.filter((p): p is string => !!p));
-    let rendered =
-      expected.length === 0
+    // A conversation-only evaluation renders no card of its own, so there is
+    // nothing to wait for.
+    let rendered = evaluation?.expectsNoWrites
+      ? { cardId: undefined, reasons: [], where: undefined }
+      : expected.length === 0
         ? await findRenderedCard(page, result.realmUrl, {
             seeded: seededCards,
           })
