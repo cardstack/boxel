@@ -75,10 +75,10 @@ function hostOf(url: string | null): string | null {
   }
 }
 
-// Records the use against each share and key it counts against, and sweeps
-// the uses past the retention window when one is due. A refusal adds one to
-// its minute's row (`refusal_window`, the start of that UTC minute, by the
-// database's clock) and moves the row's `created_at` forward to it, never
+// Records the use against each share and key it counts against, and starts a
+// sweep of the uses past the retention window when one is due. A refusal adds
+// one to its minute's row (`refusal_window`, the start of that UTC minute, by
+// the database's clock) and moves the row's `created_at` forward to it, never
 // back, so the row reads as its latest refusal even when an earlier statement
 // takes the row's lock after a later one. The unique index on the row's
 // identity (the migration that adds `refusal_window`) makes that atomic
@@ -127,7 +127,14 @@ export async function recordKeyUses(
   let last = lastSweep.get(dbAdapter);
   if (last === undefined || now - last >= SWEEP_INTERVAL_MS) {
     lastSweep.set(dbAdapter, now);
-    await sweepExpiredKeyUses(dbAdapter);
+    // Not awaited: the call that happens to be due for a sweep doesn't wait
+    // on a table-wide delete, and a sweep that fails is its own warning, not
+    // a use that failed to record.
+    void sweepExpiredKeyUses(dbAdapter).catch((error) =>
+      log.warn(
+        `sweeping expired key uses failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
   }
 }
 
