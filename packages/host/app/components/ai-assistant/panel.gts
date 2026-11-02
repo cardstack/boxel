@@ -446,8 +446,10 @@ export default class AiAssistantPanel extends Component<Signature> {
            fallback banner take pointer events */
         pointer-events: none;
       }
-      .panel-header > *,
-      .panel-header-container > :not(.panel-header) {
+      /* :deep, because the header's controls and the banner are other
+         components' roots, which this template's scoped selectors miss */
+      .panel-header > :deep(*),
+      .panel-header-container > :deep(:not(.panel-header)) {
         pointer-events: auto;
       }
 
