@@ -886,10 +886,18 @@ export class ToolGroup extends Component<ToolGroupSignature> {
           margin-inline-start: var(--boxel-sp);
           box-shadow: inset 1px 0 0 var(--border);
         }
-        /* rows inside a group are one step quieter than rows on their own */
-        .pretui-toolgroup-rows > :deep(.pretui-toolrow .pretui-toolrow-header) {
-          min-height: 1.75rem;
-          padding-block: 0.3125rem;
+        /* rows inside a group are one step quieter than rows on their own:
+           the group sets ToolRow's header knobs from its own, which a
+           container sets to retune grouped rows */
+        .pretui-toolgroup-rows {
+          --pretui-toolrow-header-min-h: var(
+            --pretui-toolgroup-header-min-h,
+            1.75rem
+          );
+          --pretui-toolrow-header-pad-block: var(
+            --pretui-toolgroup-header-pad-block,
+            0.3125rem
+          );
         }
         .pretui-toolgroup-merged {
           margin: 0;

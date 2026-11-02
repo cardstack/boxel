@@ -5,11 +5,11 @@ NodeCanvas and PageScaffold can import them by relative path. Only
 host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
 `ember-modifier`, `@floating-ui/dom`) stay external.
 
-| Directory  | Package                  | Version         | Built (manifest)         | Used by      |
-| ---------- | ------------------------ | --------------- | ------------------------ | ------------ |
-| `canvas/`  | `@cardstack/boxel-canvas` | 0.1.0-alpha.0  | 2026-05-14T22:19:52.706Z | NodeCanvas   |
-| `layout/`  | `@cardstack/boxel-layout` | 0.1.0-alpha.0  | 2026-05-14T22:19:53.000Z | PageScaffold |
-| `grid/`    | `@cardstack/boxel-grid`   | 0.1.0-alpha.0  | 2026-05-14T22:19:52.862Z | Sheet        |
+| Directory | Package                   | Version       | Built (manifest)         | Used by      |
+| --------- | ------------------------- | ------------- | ------------------------ | ------------ |
+| `canvas/` | `@cardstack/boxel-canvas` | 0.1.0-alpha.0 | 2026-05-14T22:19:52.706Z | NodeCanvas   |
+| `layout/` | `@cardstack/boxel-layout` | 0.1.0-alpha.0 | 2026-05-14T22:19:53.000Z | PageScaffold |
+| `grid/`   | `@cardstack/boxel-grid`   | 0.1.0-alpha.0 | 2026-05-14T22:19:52.862Z | Sheet        |
 
 ## Licences
 
@@ -35,3 +35,7 @@ host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
 - The canvas stylesheet is not imported from the bundle. A side-effect CSS
   import fails at realm indexing, so `../surfaces-canvas-css.ts` carries it as
   a string, and `../internal/surfaces-canvas.gts` injects it.
+- Each bundle has a hand-written `index.d.ts` beside it. Inside this package
+  `allowJs` infers the bundles' types, but a host or catalog card reaches them
+  through `node_modules`, where TypeScript reads no JS, so without the
+  declaration the import fails with TS7016.
