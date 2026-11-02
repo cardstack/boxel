@@ -258,6 +258,8 @@ export default class Room extends Component<Signature> {
                   @inLatestTurn={{this.isInLatestTurn i}}
                   @retryAction={{this.maybeRetryAction i message}}
                   @foldedTools={{this.foldedToolsFor i}}
+                  @isFoldOpen={{this.isFoldOpen}}
+                  @setFoldOpen={{this.setFoldOpen}}
                   @turnFold={{this.turnFoldFor i}}
                   @answerFooter={{this.answerFooterFor i}}
                   @turnHead={{this.turnHeadFor i}}
@@ -3367,6 +3369,21 @@ export default class Room extends Component<Signature> {
   };
 
   private foldedToolsFor = (index: number) => this.toolRuns.calls.get(index);
+
+  // The folded runs the reader opened, by the run's first call. A run moves
+  // to its newest message each time a call of it finishes, so its group is
+  // drawn again by another message; kept here, it stays open.
+  private openFolds = new TrackedSet<string>();
+
+  private isFoldOpen = (key: string) => this.openFolds.has(key);
+
+  private setFoldOpen = (key: string, open: boolean) => {
+    if (open) {
+      this.openFolds.add(key);
+    } else {
+      this.openFolds.delete(key);
+    }
+  };
 
   // The calls whose open question or approval is on screen right now, read
   // from the rows themselves (`data-gate-open`). The dock leaves those out,

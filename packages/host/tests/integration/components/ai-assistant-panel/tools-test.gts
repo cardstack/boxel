@@ -4227,8 +4227,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('opening a fold of messages that each ran the same tool shows every call', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    // four replies, each holding nothing but one finished call to one tool
-    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+    // a reply holding nothing but one finished call to one tool
+    let renameTo = (name: string) => {
       let requestId = `rename-${name}`;
       simulateRemoteMessage(roomId, '@aibot:localhost', {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -4264,6 +4264,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
         { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
       );
+    };
+    for (let name of ['Ada', 'Bea', 'Cy', 'Dee']) {
+      renameTo(name);
     }
 
     await waitFor('[data-test-message-idx="3"] [data-test-tool-run-group="4"]');
@@ -4289,6 +4292,15 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         .dom('[data-test-message-idx="3"] [data-test-tool-run-group]')
         .containsText(`to ${name}`, `the call renaming to ${name} shows`);
     }
+
+    // the next call of the run folds the open group into a newer message
+    renameTo('Eve');
+    await waitFor('[data-test-message-idx="4"] [data-test-tool-run-group="5"]');
+    assert
+      .dom(
+        '[data-test-message-idx="4"] [data-test-tool-run-group] [data-test-tool-call-apply="applied"]',
+      )
+      .exists({ count: 5 }, 'the fold stays open as the run grows');
   });
 
   // A tool call the bot already ran, and the result card it stored in the

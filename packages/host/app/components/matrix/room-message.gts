@@ -53,6 +53,8 @@ interface ToolRun {
   summary?: string;
   // some calls in the group are still running
   pending?: boolean;
+  // a folded run's group: open while the room says so, see foldOpen
+  folded?: boolean;
 }
 
 interface Signature {
@@ -77,6 +79,11 @@ interface Signature {
     // this message stands for a run of messages, each with one finished call
     // to the same tool, folded into it: every call of the run, its own last
     foldedTools?: MessageTool[];
+    // Whether the reader opened a folded run's group, by the group's key, and
+    // how to record it. The room keeps it: when the next call of the run
+    // finishes, this message folds away and a newer one draws the group.
+    isFoldOpen?: (key: string) => boolean;
+    setFoldOpen?: (key: string, open: boolean) => void;
     // the settled turn this message belongs to folds its tool rows
     turnFold?: TurnFold;
     turnHead?: TurnHead;
@@ -236,6 +243,18 @@ export default class RoomMessage extends Component<Signature> {
       (tool, index) => (tool.id ?? run.parts?.[index]?.id) === id,
     );
 
+  // A folded run's group is open while the room records it open; any other
+  // group keeps its own disclosure (undefined leaves ToolGroup uncontrolled).
+  private foldOpen = (run: ToolRun) =>
+    run.folded && this.args.isFoldOpen && this.args.setFoldOpen
+      ? this.args.isFoldOpen(run.key)
+      : undefined;
+
+  private onFoldOpenChange = (run: ToolRun) =>
+    run.folded && this.args.isFoldOpen && this.args.setFoldOpen
+      ? (open: boolean) => this.args.setFoldOpen!(run.key, open)
+      : undefined;
+
   // one ToolGroup row for consecutive finished calls to one tool
   private groupRun(
     group: MessageTool[],
@@ -275,7 +294,10 @@ export default class RoomMessage extends Component<Signature> {
     let folded = this.args.foldedTools;
     if (folded && folded.length > 1) {
       return [
-        this.groupRun(folded, (k) => folded[k]!.id ?? `folded-call-${k}`),
+        {
+          ...this.groupRun(folded, (k) => folded[k]!.id ?? `folded-call-${k}`),
+          folded: true,
+        },
       ];
     }
     let tools = this.message.tools ?? [];
@@ -567,6 +589,8 @@ export default class RoomMessage extends Component<Signature> {
               @merge='none'
               @pending={{run.pending}}
               @summary={{run.summary}}
+              @open={{this.foldOpen run}}
+              @onOpenChange={{this.onFoldOpenChange run}}
               data-test-tool-run-group={{run.count}}
             >
               <:tool as |entry|>
