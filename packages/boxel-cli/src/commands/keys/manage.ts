@@ -59,15 +59,14 @@ import { finishInSecureWindow, windowTimeout } from './approve.ts';
 // put them into realms. Keys belong to the user, so only the share commands
 // name a realm.
 //
-// Reading (`list`, `show`, `shares`, `clients`, `usage`, `limits` without a
-// change)
-// and unsharing use the profile's ordinary realm-server session. A change
-// that stores or hands out a key (`add`, `replace`, `delete`, `share`,
-// `swap`, `connect`) takes a key write ticket for that change, which only a
-// session signed in on the secure origin can mint, so those commands first
-// make sure the profile holds one, opening the secure window's sign-in in the
-// browser when it doesn't. Changing a key's limits takes that session too,
-// with no ticket.
+// Reading (`list`, `show`, `shares`, `clients`, `usage`, and `limits` with
+// nothing to change) and unsharing use the profile's ordinary realm-server
+// session. A change that stores or hands out a key (`add`, `replace`,
+// `delete`, `share`, `swap`, `connect`) takes a key write ticket for that
+// change, which only a session signed in on the secure origin can mint, so
+// those commands first make sure the profile holds one, opening the secure
+// window's sign-in in the browser when it doesn't. Changing a key's limits
+// takes that session too, with no ticket.
 //
 // A key's value is typed at a masked prompt or read with `--stdin` or
 // `--key-file`, never taken as an argument, and nothing prints one. A refusal
