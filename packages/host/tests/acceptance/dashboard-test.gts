@@ -2658,6 +2658,13 @@ module('Acceptance | dashboard', function (hooks) {
     module('get started', function () {
       const GET_STARTED = '[data-test-get-started]';
 
+      // As `hasText` reads it: the count's markup breaks across lines.
+      function countText() {
+        return (find('[data-test-get-started-count]')?.textContent ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       function stepDone(id: string) {
         return find(`[data-test-get-started-step="${id}"]`)?.getAttribute(
           'data-test-get-started-step-done',
@@ -2750,11 +2757,7 @@ module('Acceptance | dashboard', function (hooks) {
         );
 
         sendMessage(roomId);
-        await waitUntil(() =>
-          find('[data-test-get-started-count]')?.textContent?.includes(
-            '1 of 4 done',
-          ),
-        );
+        await waitUntil(() => countText().startsWith('1 of 4 done'));
 
         assert
           .dom('[data-test-get-started-count]')
@@ -2765,11 +2768,7 @@ module('Acceptance | dashboard', function (hooks) {
         await visitAsNewUser();
 
         sendMessage(await openBoxelAiSession());
-        await waitUntil(() =>
-          find('[data-test-get-started-count]')?.textContent?.includes(
-            '1 of 4 done',
-          ),
-        );
+        await waitUntil(() => countText().startsWith('1 of 4 done'));
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         markHosted(realmURL);
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
