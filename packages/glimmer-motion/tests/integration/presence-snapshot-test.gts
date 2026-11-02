@@ -108,6 +108,86 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     );
   });
 
+  test('the copy stands where the last frame showed its element, though content before the <Presence> moved it in the same render', async function (assert) {
+    const s = new State();
+    await render(
+      <template>
+        <div
+          style='position:relative;display:flex;gap:8px;width:300px;height:60px'
+        >
+          {{#unless s.open}}
+            <span data-test-pill style='flex:none;width:80px'>pill</span>
+          {{/unless}}
+          <Presence
+            @items={{s.items}}
+            @key={{keyOf}}
+            @mode='snapshot'
+            as |it h|
+          >
+            <div
+              data-test-panel
+              style='flex:1;height:60px'
+              {{motion presence=h exit=FADE transition=SLOW}}
+            >menu</div>
+          </Presence>
+        </div>
+      </template>,
+    );
+    await nextFrame();
+    const panel = find('[data-test-panel]') as HTMLElement;
+    const seat = { left: panel.offsetLeft, width: panel.offsetWidth };
+
+    s.close();
+    await settled();
+
+    assert
+      .dom('[data-test-pill]')
+      .exists('the pill came in with the render that removed the panel');
+    const [copy] = copies();
+    assert.deepEqual(
+      { left: copy!.offsetLeft, width: copy!.offsetWidth },
+      seat,
+      'the copy keeps the seat the last frame showed, not the one the pill left the panel in',
+    );
+  });
+
+  test("the copy's seat follows a resize that no render made", async function (assert) {
+    const s = new State();
+    await render(
+      <template>
+        <div data-test-box style='position:relative;width:300px;height:100px'>
+          <Presence
+            @items={{s.items}}
+            @key={{keyOf}}
+            @mode='snapshot'
+            as |it h|
+          >
+            <div
+              data-test-panel
+              style='height:60px'
+              {{motion presence=h exit=FADE transition=SLOW}}
+            >menu</div>
+          </Presence>
+        </div>
+      </template>,
+    );
+    await nextFrame();
+    (find('[data-test-box]') as HTMLElement).style.width = '240px';
+    // the resize is observed after the frame that lays it out runs its callbacks
+    await nextFrame();
+    await nextFrame();
+
+    s.close();
+    await settled();
+
+    const [copy] = copies();
+    assert.strictEqual(
+      copy!.offsetWidth,
+      240,
+      'the copy is as wide as its element was in the last frame',
+    );
+  });
+
   test('the copy plays the exit its element declared', async function (assert) {
     const s = new State();
     await render(

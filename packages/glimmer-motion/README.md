@@ -70,21 +70,21 @@ rather than from a React translation table.
 
 ## API
 
-| export                                                                                                         | what                                                                                                             |
-| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `motion`                                                                                                       | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
-| `Presence`                                                                                                     | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
-| `LayoutGroup`                                                                                                  | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
-| `ReorderGroup`, `ReorderItem`                                                                                  | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
-| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)`       | layout pipeline                                                                                                  |
-| `retime(root)`                                                                                                 | restart running motion under an element on its current transition, keeping loop phase (for tuning tools)         |
-| `createDragControls()`, `DragControls`                                                                         | `useDragControls`                                                                                                |
-| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                           | `transformPagePoint` helpers                                                                                     |
-| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
-| `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
-| `registerBusyProbe`, `BusyProbe`                                                                               | count a host's own in-flight work as motion (below)                                                              |
-| `keepAsMemory`, `readAnimations`, `trackScrolls`, `MEMORY_ATTRIBUTE`                                           | keep a removed element on screen as a memory while it exits (below)                                              |
-| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
+| export                                                                                                                                  | what                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `motion`                                                                                                                                | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
+| `Presence`                                                                                                                              | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
+| `LayoutGroup`                                                                                                                           | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
+| `ReorderGroup`, `ReorderItem`                                                                                                           | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
+| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)`                                | layout pipeline                                                                                                  |
+| `retime(root)`                                                                                                                          | restart running motion under an element on its current transition, keeping loop phase (for tuning tools)         |
+| `createDragControls()`, `DragControls`                                                                                                  | `useDragControls`                                                                                                |
+| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                                                    | `transformPagePoint` helpers                                                                                     |
+| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                                                       | for re-hosting on another Glimmer runtime                                                                        |
+| `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant`                          | the participant-host extension point (below)                                                                     |
+| `registerBusyProbe`, `BusyProbe`                                                                                                        | count a host's own in-flight work as motion (below)                                                              |
+| `keepAsMemory`, `readAnimations`, `trackScrolls`, `MEMORY_ATTRIBUTE`, `MEMORY_HOOK_SUFFIX`, `Shown`, `ShownAnimation`, `ScrollPosition` | keep a removed element on screen as a memory while it exits (below)                                              |
+| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                                                       | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
 same modules.
@@ -186,6 +186,10 @@ acts:
   test's selector finds only the live element, and a test that means the leaver names it with the
   suffix. It carries `data-motion-memory`, and `live()` / `liveAll()` in `glimmer-motion/test-support`
   skip it for any other selector.
+- Its classes and its other attributes stay, so it looks as its element did. A memory put back in its
+  parent (a `<Presence @mode="snapshot">` copy) still matches structural selectors that read the live
+  scene (`:has()`, `+`, `~`, `:nth-child()`, `:empty`). A rule that should see only live content
+  excludes it: `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
 
 A host makes one with `keepAsMemory(element, shown, insert)`, where `insert` puts the element back in
 the document, and `shown` is what the element showed before the render that removed it: its CSS
@@ -261,7 +265,11 @@ yields, not be read back out of state that has already moved on.
 Where it can't, because the leaver renders blocks or state you don't own, use
 `<Presence @mode="snapshot">`. The leaver's block is torn down in the render that removes it, and a
 static copy of the element given the handle plays that element's `exit`. The copy shows the
-element's last frame, lifted out of flow at its seat (`@anchorX` / `@anchorY` apply). It is kept as a
+element's last frame, lifted out of flow at the seat that frame showed it in. That seat is read after
+every render and on resize, because content earlier in the template is patched before `<Presence>`
+diffs, and may already have moved the leaver. `@anchorX` / `@anchorY` pin the copy to edges of its
+containing block; pick the ones that hold still as the render lands (`@anchorY="bottom"` in a
+container that grows upward from its bottom edge). It is kept as a
 [memory](#memories): inert, held at that frame, with no ids or form-control names, and with its test
 hooks suffixed (`data-test-title-memory`). It also takes the canvas pixels the element showed and the
 values its script animations and transitions had reached. An item that comes back replaces its copy

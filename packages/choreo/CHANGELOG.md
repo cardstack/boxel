@@ -22,6 +22,19 @@ versions may change behavior until `1.0.0`.
   development-mode check for an ungrouped `layout` or `layoutId` element that the elements inside a
   region are measured.
 
+### Changed
+
+- **A parked leaver is kept as a memory** (see glimmer-motion's `keepAsMemory`). An element in a
+  region's orphan layer is inert and `aria-hidden`, holds its stylesheet animations at the frame it
+  showed, and keeps its scroll offsets. Its HTML elements lose their `id`, `autofocus` and
+  form-control `name`, and its `data-test-*` hooks are renamed with a `-memory` suffix:
+  `data-test-id` becomes `data-test-id-memory`, with its value. CSS or a test that finds a parked
+  leaver by `#id` or by its test hook needs the suffixed hook instead. The memory treatment replaces
+  the orphan stylesheet, which set `animation: none` on everything in the layer.
+- **`live()` and `liveAll()` come from `glimmer-motion/test-support`**, and
+  `@cardstack/choreo/test-support` re-exports them. They skip every memory, a parked leaver or a
+  `<Presence @mode="snapshot">` copy, for selectors other than test hooks.
+
 ### Fixed
 
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`

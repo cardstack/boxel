@@ -5,10 +5,17 @@
  * A Glimmer block re-runs from live state for as long as it is rendered, so a
  * leaver kept on screen for its exit shows state that has already moved on.
  * In snapshot mode the leaver's block is torn down in the render that removes
- * it, as if no <Presence> were there. Before that render patches the DOM, the
- * element is copied as it stands. After it, the copy goes back where the
- * element stood, lifted out of flow, plays the element's exit, and is
- * removed.
+ * it, as if no <Presence> were there. Before that render patches the
+ * leaver's block, the element is copied as it stands. After it, the copy goes
+ * back where the element stood, lifted out of flow at the seat the last frame
+ * showed it in, plays the element's exit, and is removed.
+ *
+ * The seat is read in every frame that follows a render, and whenever the
+ * element or the box it is pinned inside resizes, not at the diff: Glimmer
+ * patches the DOM in template order, so by the time <Presence> diffs, content
+ * earlier in the template has already been patched for the render, and may
+ * have moved or resized the element. Its content is still the last frame's;
+ * its box may not be.
  *
  * The copy is kept as a memory (see memory.ts): it shows the element's last
  * frame, and nothing in it acts. A clone does not carry everything the
@@ -98,15 +105,18 @@ function copyCanvas(live: HTMLCanvasElement, copy: HTMLCanvasElement) {
 
 /**
  * Copies an element that is about to be removed, as it stands. Called from
- * <Presence>'s diff, while the DOM still shows the last render.
+ * <Presence>'s diff, before the render patches the element's block. `seat` is
+ * where the last frame showed it; an element that is leaving before any frame
+ * has shown it is pinned where it stands now.
  */
 export function captureExit(source: {
   element: MotionEl;
   props: MotionProps;
+  seat: PopSeat | undefined;
 }): ExitCopy | undefined {
   const { element, props } = source;
   const parent = element.parentNode;
-  const seat = seatOf(element);
+  const seat = source.seat ?? seatOf(element);
   if (!parent || !seat) {
     return undefined;
   }

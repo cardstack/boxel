@@ -2,7 +2,8 @@ import { isDestroying, registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import type { PresenceContextProps } from 'motion-dom';
+import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
+import { frame, type PresenceContextProps } from 'motion-dom';
 
 import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
@@ -25,11 +26,12 @@ import { captureExit, type ExitCopy } from './snapshot.ts';
  *
  * `@mode="snapshot"` is this package's own: a leaver's block is torn down in
  * the render that removes it, and a static copy of the element the handle was
- * passed to plays that element's exit, lifted out of flow at its seat. Use it
- * where a leaver's content comes from state that moves on as it leaves, such
- * as a component's blocks: a live leaver would re-render from that state, and
- * stay focusable, with its ids and form controls, beside its replacement. The
- * copy is kept as a memory (see memory.ts). See snapshot.ts.
+ * passed to plays that element's exit, lifted out of flow at the seat the last
+ * frame showed the element in. Use it where a leaver's content comes from
+ * state that moves on as it leaves, such as a component's blocks: a live
+ * leaver would re-render from that state, and stay focusable, with its ids
+ * and form controls, beside its replacement. The copy is kept as a memory
+ * (see memory.ts). See snapshot.ts.
  */
 interface Signature<T> {
   Args: {
@@ -69,6 +71,12 @@ class Entry<T> implements PresenceHandle {
     return () => {
       this.popCandidates.delete(node);
     };
+  }
+  /** snapshot: each direct child reads its seat now; returns the elements those seats depend on */
+  recordSeats(): Element[] {
+    const watched: Element[] = [];
+    this.popCandidates.forEach((node) => watched.push(...node.recordSeat()));
+    return watched;
   }
   /** snapshot: static copies of the direct children, taken before the render that removes them */
   copiesForExit(): ExitCopy[] {
@@ -144,9 +152,13 @@ class Entry<T> implements PresenceHandle {
     if (!present && this.mode === 'popLayout') {
       // React's PopChildMeasure measures in getSnapshotBeforeUpdate — BEFORE
       // the DOM is patched. That timing is the whole of it. This runs from the
-      // diff in `rendered`, which is Glimmer's equivalent slot: the newcomers
-      // for this pass have not been inserted yet, so the leaver's offsetTop is
-      // still the seat it actually occupies.
+      // diff in `rendered`, the nearest slot Glimmer has: this <Presence>'s
+      // newcomers for the pass have not been inserted yet, so the container
+      // they would grow or re-centre has not moved. Content earlier in the
+      // template than this <Presence> has already been patched for the pass,
+      // though, and a leaver it moves is measured where it was moved to.
+      // (Snapshot mode pins its copies to the seat the last frame showed
+      // instead; see `seatWatch`.)
       //
       // Measure it afterwards and you read a layout that already contains the
       // arrivals: the container has grown, a centred one has re-centred, and
@@ -198,6 +210,11 @@ export class Presence<T> extends Component<Signature<T>> {
   private readonly selfId = `presence:${presenceId++}`;
   /** snapshot: copies still playing an exit, by the key of the item they copied */
   private copies = new Map<ExitCopy, string>();
+  /** snapshot: a read of the children's seats is booked for the next frame */
+  private seatReadBooked = false;
+  /** snapshot: re-reads the seats when a child, or the box it is pinned inside, resizes */
+  private resizes?: ResizeObserver;
+  private watched = new Set<Element>();
   @tracked private version = 0;
 
   constructor(owner: Owner, args: Signature<T>['Args']) {
@@ -206,6 +223,7 @@ export class Presence<T> extends Component<Signature<T>> {
       this.registeredWithParent?.();
       this.copies.forEach((_, copy) => copy.cut());
       this.copies.clear();
+      this.stopWatchingSeats();
     });
   }
 
@@ -220,6 +238,73 @@ export class Presence<T> extends Component<Signature<T>> {
   }
   isKeyPresent(key: string) {
     return this.presentKeys.includes(key);
+  }
+
+  /* eslint-disable ember/no-side-effects -- a render detector (see LayoutGroup): re-evaluated in every
+     render pass, it books a read of the seats the pass leaves the children in */
+  /**
+   * Snapshot: a leaver's copy is pinned to the seat the last frame showed its
+   * element in. Each direct child reads its seat in the frame after every
+   * render, and again whenever it or the box it is pinned inside resizes (see
+   * MotionNode.recordSeat). The diff cannot read it: Glimmer patches the DOM
+   * in template order, so content earlier in the template than this
+   * <Presence> has been patched by the time it diffs, and may have moved or
+   * resized the leaver.
+   */
+  get seatWatch(): undefined {
+    if (this.args.mode !== 'snapshot') {
+      this.stopWatchingSeats();
+      return undefined;
+    }
+    consumeTag(VOLATILE_TAG);
+    if (!this.seatReadBooked) {
+      this.seatReadBooked = true;
+      frame.read(() => {
+        this.seatReadBooked = false;
+        this.readSeats();
+      });
+    }
+    return undefined;
+  }
+  /* eslint-enable ember/no-side-effects */
+
+  /**
+   * Reads every child's seat. After a render it also moves the resize watch
+   * onto the elements those seats depend on now; a read from the watch itself
+   * leaves it alone, since a target observed inside a resize callback can be
+   * left undelivered, which the browser reports as an error.
+   */
+  private readSeats(rewatch = true) {
+    if (isDestroying(this) || this.args.mode !== 'snapshot') {
+      return;
+    }
+    const watched = new Set<Element>();
+    this.entries.forEach((e) =>
+      e.recordSeats().forEach((el) => watched.add(el)),
+    );
+    if (!rewatch) {
+      return;
+    }
+    const resizes = (this.resizes ??= new ResizeObserver(() =>
+      this.readSeats(false),
+    ));
+    this.watched.forEach((el) => {
+      if (!watched.has(el)) {
+        resizes.unobserve(el);
+      }
+    });
+    watched.forEach((el) => {
+      if (!this.watched.has(el)) {
+        resizes.observe(el);
+      }
+    });
+    this.watched = watched;
+  }
+
+  private stopWatchingSeats() {
+    this.resizes?.disconnect();
+    this.resizes = undefined;
+    this.watched.clear();
   }
 
   /* eslint-disable ember/no-side-effects -- AnimatePresence's diff of present vs rendered children runs
@@ -275,8 +360,10 @@ export class Presence<T> extends Component<Signature<T>> {
       for (const k of this.order) {
         const presentIndex = presentKeys.indexOf(k);
         if (presentIndex === -1 && snapshot) {
-          // copied now, while the DOM still shows the last render; the block
-          // itself leaves with this render
+          // copied now, before this render patches the block, so the copy
+          // shows the last frame's content (and is pinned to the seat that
+          // frame showed; see `seatWatch`); the block itself leaves with
+          // this render
           snapshotLeft = true;
           for (const copy of this.entries.get(k)?.copiesForExit() ?? []) {
             this.copies.set(copy, k);
@@ -406,6 +493,7 @@ export class Presence<T> extends Component<Signature<T>> {
   }
 
   <template>
+    {{this.seatWatch}}
     {{#each this.rendered key='key' as |e|}}
       {{yield e.item e}}
     {{/each}}

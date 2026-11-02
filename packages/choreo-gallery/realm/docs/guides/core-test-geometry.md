@@ -7,11 +7,15 @@ A moving interface can reach the correct endpoint while stretching its text, fla
 `bounds(element)` returns the element's rectangle relative to the test container. A raw viewport rectangle includes QUnit's own placement, which can change as the runner executes. `shape(element)` composes the linear transform through ancestors, and `boundsAndShape()` combines both views.
 
 ```ts title="Component logic excerpt"
-import { live } from '@cardstack/choreo/test-support';
-import { animationsSettled, bounds, shape } from 'glimmer-motion/test-support';
+import {
+  animationsSettled,
+  bounds,
+  live,
+  shape,
+} from 'glimmer-motion/test-support';
 
 await animationsSettled();
-const card = live('[data-test-card]');
+const card = live('[role="article"]');
 assert.ok(card);
 assert.strictEqual(bounds(card!).width, 240);
 assert.deepEqual(shape(card!), { a: 1, b: 0, c: 0, d: 1 });
@@ -21,7 +25,7 @@ Use expected dimensions appropriate to the fixture. A shape assertion is useful 
 
 ## Selecting the Live Representation
 
-During a crossing, a departing counterpart can share an identity with the arriving live element. `live()` and `liveAll()`, from `@cardstack/choreo/test-support`, exclude elements in orphan layers. A bare querySelector may find the departing skin first, which can no longer respond to the click the test sends.
+While an exit plays, a leaver can stay on screen as a memory: the copy a `<Presence @mode="snapshot">` fades, or a departing skin in a Choreo orphan layer, which can share an identity with the arriving live element. A memory is inert, so a click the test sends it does nothing, and its box is where the old scene stood. Its test hooks carry a suffix, so a selector made of test hooks, such as `[data-test-card]`, finds only the live element, and a test that means the leaver names it as `[data-test-card-memory]`. Any other selector, such as a class, a role or a tag, can match the memory too, and a bare querySelector may answer with it first. `live()` and `liveAll()`, from `glimmer-motion/test-support` and re-exported by `@cardstack/choreo/test-support`, skip memories for those selectors.
 
 A raised participant is still live and should remain eligible. This is why excluding every element outside its original DOM position would be incorrect. Test the interaction through the same usable representation a person should see.
 
@@ -37,7 +41,7 @@ Include an external scale and a clipped parent in fixtures for spatial or elevat
 
 ## API Coverage
 
-**glimmer-motion/test-support**: `Box`, `bounds`, `shape`, `boundsAndShape`, `velocityOf`.
+**glimmer-motion/test-support**: `Box`, `bounds`, `shape`, `boundsAndShape`, `live`, `liveAll`, `velocityOf`.
 
 **@cardstack/choreo/test-support**: `orphanCount`, `live`, `liveAll`, `strandedTransforms`.
 

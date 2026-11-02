@@ -33,6 +33,12 @@
  *   live element, which is what replaced the leaver or nothing, and a test that
  *   means the leaver names it with the suffix. `live()` and `liveAll()` in
  *   `glimmer-motion/test-support` skip memories for every other selector.
+ * - Its classes and its other attributes stay, so it looks as its element
+ *   did. A memory put back in its parent (a `<Presence @mode="snapshot">`
+ *   copy) therefore still matches structural selectors that read the live
+ *   scene: `:has()`, `+`, `~`, `:nth-child()`, `:empty`. A rule that should
+ *   see only live content excludes it, as in
+ *   `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
  *
  * Custom elements in a memory are connected again, and run their
  * `connectedCallback`.

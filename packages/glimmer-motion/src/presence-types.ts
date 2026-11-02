@@ -1,16 +1,20 @@
 import type { PresenceContextProps } from 'motion-dom';
 
-import type { MotionEl, MotionProps } from './node.ts';
+import type { MotionEl, MotionProps, PopSeat } from './node.ts';
 
 /**
  * A direct child of a <Presence>, which has to be read before the render
  * that removes it: popLayout measures its seat (React's PopChildMeasure does
  * this in getSnapshotBeforeUpdate; see MotionNode.measureForPop), and
- * snapshot copies it (see MotionNode.exitForCopy).
+ * snapshot copies it (see MotionNode.exitForCopy), pinning the copy to the
+ * seat the last frame showed (see MotionNode.recordSeat).
  */
 export interface PopMeasurable {
-  exitForCopy(): { element: MotionEl; props: MotionProps } | undefined;
+  exitForCopy():
+    | { element: MotionEl; props: MotionProps; seat: PopSeat | undefined }
+    | undefined;
   measureForPop(): void;
+  recordSeat(): Element[];
 }
 
 /** what one item inside <Presence> hands to its {{motion}} element */

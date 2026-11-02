@@ -24,6 +24,13 @@ export type PillMenuItem = {
 interface Signature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
+    /**
+     * The edge of the menu's containing block that holds still when the menu
+     * collapses: the menu's fading copy is pinned to it. `bottom` in a
+     * container that is anchored at its bottom and grows upward, such as the
+     * AI assistant's composer. Default `top`.
+     */
+    anchorY?: 'top' | 'bottom';
     title?: string;
     onExpand?: () => void;
     onCollapse?: () => void;
@@ -91,6 +98,7 @@ export default class PillMenu extends Component<Signature> {
       @items={{this.menuFaces}}
       @key={{faceKey}}
       @mode='snapshot'
+      @anchorY={{@anchorY}}
       as |_face h|
     >
       <div

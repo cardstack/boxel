@@ -654,6 +654,8 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   private popStyle?: HTMLStyleElement;
   /** the seat measured before the render that removed this element */
   private popSeat?: PopSeat;
+  /** snapshot: the seat this element had in the last frame (see recordSeat) */
+  private shownSeat?: PopSeat;
   private unregisterPop?: () => void;
   /** participant identity: a participant host above selects this element by these */
   id: string | null = null;
@@ -1363,9 +1365,32 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   }
 
   /**
+   * `<Presence @mode="snapshot">`: reads the seat this element has now, for
+   * the copy of it to be pinned to if it leaves. <Presence> calls this in each
+   * frame that follows a render, and whenever this element or the box it is
+   * pinned inside resizes, so the seat is the one the last frame showed.
+   * Returns the elements the seat depends on, for <Presence> to watch for
+   * resizes.
+   */
+  recordSeat(): Element[] {
+    const el = this.element;
+    if (this.destroyed || !el?.isConnected) {
+      return [];
+    }
+    this.shownSeat = seatOf(el);
+    const parent = (el as HTMLElement).offsetParent;
+    return parent ? [el, parent] : [el];
+  }
+
+  /**
    * `<Presence @mode="snapshot">`: what a static copy of this element needs to
    * play the exit this element would have played. <Presence> reads it from
    * its diff, before the render that removes the element.
+   *
+   * `seat` is where the last frame showed the element (see recordSeat). By the
+   * time the diff runs, content earlier in the template has already been
+   * patched for this render, and may have moved the element somewhere no
+   * frame showed it.
    *
    * The copy starts from every value this element shows now. The browser
    * plays some of them (opacity, clip-path, filter, a whole transform), and a
@@ -1376,7 +1401,9 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
    * Undefined when there is no exit to play: the element declares no `exit`
    * of its own, has not mounted, or animations are skipped.
    */
-  exitForCopy(): { element: MotionEl; props: MotionProps } | undefined {
+  exitForCopy():
+    | { element: MotionEl; props: MotionProps; seat: PopSeat | undefined }
+    | undefined {
     const { element, ve, latest } = this;
     if (this.destroyed || !element?.isConnected || !ve?.current || !latest) {
       return undefined;
@@ -1403,6 +1430,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     });
     return {
       element,
+      seat: this.shownSeat,
       props: {
         initial,
         exit: props.exit,
