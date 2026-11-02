@@ -4,7 +4,8 @@
 // ESLint runs here for one thing: a base-realm module is imported by its
 // `@cardstack/base/` prefix, never the `https://cardstack.com/base/` alias. The
 // config is `root` so the repository's style rules stay out of a fixture realm
-// that has never been formatted to them.
+// that has never been formatted to them. The realm's JSON is checked by the
+// `lint:card-json` script.
 module.exports = {
   root: true,
   plugins: ['@cardstack/boxel'],

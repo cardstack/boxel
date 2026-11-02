@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:card-json": "node ../../scripts/check-card-json-base-alias.mjs contents",
     "lint:js": "eslint . --ext .ts,.gts --cache",
     "lint:js:fix": "eslint . --ext .ts,.gts --fix"
   },
