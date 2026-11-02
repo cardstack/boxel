@@ -89,17 +89,20 @@
   }
 
   button,
-  input {
+  input,
+  textarea {
     font: inherit;
     letter-spacing: inherit;
   }
 
-  input:focus:not(:focus-visible) {
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
     outline-color: transparent;
   }
 
-  input:focus-visible {
-    outline-color: var(--boxel-highlight);
+  input:focus-visible,
+  textarea:focus-visible {
+    outline-color: var(--ring, var(--boxel-highlight));
   }
 
   /* The app's operator-mode container, while it shows the sign-in screens. */

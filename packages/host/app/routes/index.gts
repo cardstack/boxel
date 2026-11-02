@@ -173,7 +173,8 @@ export default class Card extends Route {
     // days-old session may be revoked server-side, and booting it first would
     // fail, drop the unregistered token in logout()'s transition, and skip the
     // switch entirely. When there is no stored session the browser is logged
-    // out, so <Login> consumes the token instead; we don't handle that here.
+    // out, so <SecureSignIn> consumes the token instead; we don't handle that
+    // here.
     let loginToken = peekLoginToken();
     if (loginToken) {
       // `persistedUserId` reads the storage handle that `loadState` assigns

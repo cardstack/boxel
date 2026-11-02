@@ -26,7 +26,11 @@ import {
   sendJSON,
 } from './handle-user-keys.ts';
 import { codeRefOf, secureClientOf } from './handle-user-key-grants.ts';
-import { approvalBatch } from '../lib/key-binding-batch.ts';
+import {
+  approvalBatch,
+  bindingNames,
+  type BindingNames,
+} from '../lib/key-binding-batch.ts';
 import { findRealm } from '../lib/realm-routing.ts';
 import { isSecureSession } from '../lib/secure-session.ts';
 import { validateContextRequest } from '../lib/secure-window.ts';
@@ -65,7 +69,11 @@ function resolved(network: VirtualNetwork, identifier: string): string {
     : identifier;
 }
 
-function serializeBinding(network: VirtualNetwork, binding: KeyBinding) {
+function serializeBinding(
+  network: VirtualNetwork,
+  binding: KeyBinding,
+  names?: BindingNames,
+) {
   let { id, realm, type, instance, ...attributes } = binding;
   return {
     type: 'key-binding',
@@ -75,6 +83,7 @@ function serializeBinding(network: VirtualNetwork, binding: KeyBinding) {
       type: { ...type, module: network.unresolveURL(type.module) },
       instance: instance === null ? null : network.unresolveURL(instance),
       ...attributes,
+      ...names,
     },
   };
 }
@@ -220,16 +229,33 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-// The bindings the signed-in user approved, in every realm.
+// The bindings the signed-in user approved, in every realm, each with what the
+// key page names it by: its operation's label and its card's display name
+// (`bindingNames`).
 export function handleListKeyBindings({
   dbAdapter,
+  definitionLookup,
   virtualNetwork,
+  realms,
+  reconciler,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let bindings = await listOwnBindings(dbAdapter, owner);
+    let names = await bindingNames(
+      {
+        dbAdapter,
+        findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
+        definitionLookup,
+        virtualNetwork,
+      },
+      owner,
+      bindings,
+    );
     await sendJSON(ctxt, 200, {
-      data: bindings.map((b) => serializeBinding(virtualNetwork, b)),
+      data: bindings.map((b, i) =>
+        serializeBinding(virtualNetwork, b, names[i]),
+      ),
     });
   });
 }

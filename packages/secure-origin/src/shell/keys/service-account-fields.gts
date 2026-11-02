@@ -125,7 +125,7 @@ export default class ServiceAccountFields extends Component<Signature> {
     >
       <div class='with-hint'>
         <BoxelInput
-          @type='text'
+          @type='textarea'
           @autocomplete='off'
           @placeholder='https://www.googleapis.com/auth/spreadsheets'
           @value={{@entry.scopes}}
@@ -134,7 +134,8 @@ export default class ServiceAccountFields extends Component<Signature> {
           spellcheck='false'
           data-test-service-account-scopes
         />
-        <p class='hint'>What its tokens may do, separated by spaces.</p>
+        <p class='hint'>What its tokens may do, one per line, or separated by
+          spaces.</p>
       </div>
     </FieldContainer>
     {{#if this.accountChange}}

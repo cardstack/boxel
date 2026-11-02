@@ -1,7 +1,7 @@
-import { expect, test } from './fixtures.ts';
+import { test } from './fixtures.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
-  credentialFields,
+  signInOnSecureOrigin,
   openRoot,
   assertLoggedIn,
   createSubscribedUser,
@@ -28,16 +28,7 @@ test.describe('Login using email', () => {
   test('Login using email', async ({ page }) => {
     await openRoot(page, appURL);
 
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await credentialFields(page)
-      .locator('[data-test-username-field]')
-      .fill(userEmail);
-    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
-    await credentialFields(page)
-      .locator('[data-test-password-field]')
-      .fill(user.password);
-    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
-    await page.locator('[data-test-login-btn]').click();
+    await signInOnSecureOrigin(page, userEmail, user.password);
     await assertLoggedIn(page, {
       email: userEmail,
       userId: user.credentials.userId,

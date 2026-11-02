@@ -16,7 +16,7 @@ export interface Utils {
   ): Promise<string>;
   // Rejects with `SessionUserNotFoundError` for a Matrix user with no Boxel
   // account.
-  ensureSessionRoom(user: string, registrationToken?: string): Promise<string>;
+  ensureSessionRoom(user: string): Promise<string>;
 }
 
 // A Matrix user with no Boxel account on this realm server, which is made when
@@ -53,9 +53,8 @@ export class MatrixBackendAuthentication {
         JSON.stringify({ errors: [`Request body is not valid JSON`] }),
       );
     }
-    let { access_token, registration_token, lifetime } = json as {
+    let { access_token, lifetime } = json as {
       access_token?: string;
-      registration_token?: string;
       lifetime?: string;
     };
     if (!access_token) {
@@ -74,14 +73,13 @@ export class MatrixBackendAuthentication {
         }),
       );
     }
-    return await this.verifyToken(access_token, registration_token, {
+    return await this.verifyToken(access_token, {
       extendedLifetime: lifetime === 'extended',
     });
   }
 
   private async verifyToken(
     openIdToken: string,
-    registrationToken?: string,
     opts?: { extendedLifetime?: boolean },
   ) {
     // Check openID token using the federation endpoint
@@ -99,7 +97,7 @@ export class MatrixBackendAuthentication {
     // and these are used just for direct messaging.
     if (this.matrixClient.getUserId() !== user) {
       try {
-        roomId = await this.utils.ensureSessionRoom(user, registrationToken);
+        roomId = await this.utils.ensureSessionRoom(user);
       } catch (e) {
         if (e instanceof SessionUserNotFoundError) {
           return this.utils.createResponse(
