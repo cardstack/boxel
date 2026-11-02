@@ -77,6 +77,11 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function checkFailure(target: CheckTarget, error: unknown): string {
+  let message = error instanceof Error ? error.message : String(error);
+  return `${target.ref}: the correctness check could not run: ${message}`;
+}
+
 export default class CheckCorrectnessTool extends HostBaseTool<
   typeof BaseToolModule.CheckCorrectnessInput,
   typeof BaseToolModule.CorrectnessResultCard
@@ -194,13 +199,23 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   // Each target is first resolved to what checking it takes, then every
   // target's index invalidation is waited for at once, so the reply's
   // indexing is waited out once rather than once per card. Only then are the
-  // modules prerendered and the cards reloaded, a few at a time.
+  // modules prerendered and the cards reloaded, a few at a time. A target
+  // whose check throws gets the error as its own, and the others are still
+  // checked.
   private async checkTargets(
     targets: CheckTarget[],
     roomId: string,
   ): Promise<TargetOutcome[]> {
-    let plans = await mapWithConcurrency(targets, CARD_CHECK_CONCURRENCY, (t) =>
-      this.planCheck(t),
+    let plans = await mapWithConcurrency(
+      targets,
+      CARD_CHECK_CONCURRENCY,
+      async (target): Promise<CheckPlan> => {
+        try {
+          return await this.planCheck(target);
+        } catch (error) {
+          return { kind: 'done', errors: [checkFailure(target, error)] };
+        }
+      },
     );
     await Promise.all(
       plans.map((plan) =>
@@ -223,13 +238,17 @@ export default class CheckCorrectnessTool extends HostBaseTool<
         outcomes[index] = { target, errors: plan.errors, warnings: [] };
         return;
       }
-      if (plan.kind === 'module') {
-        errors = await this.collectModuleErrors(plan);
-      } else {
-        ({ errors, warnings } = await this.collectCardErrors(
-          plan.cardId,
-          plan.cardSource,
-        ));
+      try {
+        if (plan.kind === 'module') {
+          errors = await this.collectModuleErrors(plan);
+        } else {
+          ({ errors, warnings } = await this.collectCardErrors(
+            plan.cardId,
+            plan.cardSource,
+          ));
+        }
+      } catch (error) {
+        errors = [checkFailure(target, error)];
       }
       outcomes[index] = {
         target,

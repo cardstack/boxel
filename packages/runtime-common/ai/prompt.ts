@@ -81,6 +81,10 @@ import {
   SYSTEM_MESSAGE,
 } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
+import {
+  describeCheckTargetCount,
+  isCardCheckTarget,
+} from './correctness-targets.ts';
 import { humanReadable } from '../code-ref.ts';
 import { readStopState } from './stop.ts';
 import {
@@ -1761,10 +1765,7 @@ function buildCheckCorrectnessResultContent(
 // A card can be written as its .json file, so that counts too.
 function isCardCorrectnessTarget(request?: ToolRequest): boolean {
   let { targetType, targetRef } = extractCheckCorrectnessTargetParts(request);
-  return (
-    targetType === 'card' ||
-    (typeof targetRef === 'string' && targetRef.endsWith('.json'))
-  );
+  return isCardCheckTarget({ type: targetType, ref: targetRef });
 }
 
 function describeCheckCorrectnessTarget(request?: ToolRequest) {
@@ -1773,7 +1774,7 @@ function describeCheckCorrectnessTarget(request?: ToolRequest) {
   }
   let batchTargets = batchTargetsOf(request);
   if (batchTargets) {
-    return describeTargetCount(batchTargets);
+    return describeCheckTargetCount(batchTargets);
   }
   let attributes =
     (((request.arguments as Record<string, any>) ?? {}).attributes as
@@ -2045,21 +2046,6 @@ function checkedTargetsOf(
   ];
 }
 
-function isCardTargetType(type: string, ref: string): boolean {
-  return type === 'card' || ref.endsWith('.json');
-}
-
-function describeTargetCount(targets: { type: string }[]): string {
-  let cards = targets.filter((target) => target.type === 'card').length;
-  let files = targets.length - cards;
-  return [
-    cards ? `${cards} ${cards === 1 ? 'card' : 'cards'}` : undefined,
-    files ? `${files} ${files === 1 ? 'file' : 'files'}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' and ');
-}
-
 // Added to the fix instruction when some failing targets are under the
 // attempt limit and others are at it. The checks will not run on the ones at
 // the limit again, so an edit to them would never be confirmed.
@@ -2087,7 +2073,7 @@ function batchCheckCorrectnessResultContent(
     (target) =>
       !resultFor(target)?.errors.length && resultFor(target)?.warnings.length,
   );
-  let description = describeTargetCount(targets);
+  let description = describeCheckTargetCount(targets);
   let sections: string[] = [];
   if (status !== 'applied') {
     sections.push(
@@ -2155,7 +2141,7 @@ function batchCheckCorrectnessResultContent(
   if (
     warned.some(
       (target) =>
-        isCardTargetType(target.type, target.ref) &&
+        isCardCheckTarget(target) &&
         attemptOf(target) < MAX_CORRECTNESS_FIX_ATTEMPTS,
     )
   ) {
@@ -2776,8 +2762,8 @@ function resolveCodeEdits(
 // sending stopped partway, or the user retried a failed edit and it landed.
 // So the targets the group already asked for are left out, and so are the
 // targets past the attempt limit. Once anything else is said in the room the
-// group is complete, as a reply's checks were before groups had more than one
-// event, and nothing more is sent for it. Undefined when nothing is left.
+// group is complete, and nothing more is sent for it. Undefined when nothing
+// is left.
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   { content, relevantTools, toolResults }: ResolvedCodeEdits,

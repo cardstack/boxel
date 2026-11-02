@@ -178,6 +178,26 @@ class Room {
     });
   }
 
+  // A check that failed before it could produce a result card, as a tab
+  // that predates batched checks answers one.
+  failedResult(checkEventId: string, failureReason: string) {
+    this.push({
+      type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+      event_id: `${checkEventId}-result`,
+      sender: '@user:localhost',
+      content: {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId: `${checkEventId}-request`,
+        failureReason,
+        'm.relates_to': {
+          event_id: checkEventId,
+          key: 'failed',
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        },
+      },
+    });
+  }
+
   // The host's answer to a correctness event's check.
   result(
     checkEventId: string,
@@ -261,6 +281,7 @@ const FIX = 'Fix the errors above';
 const LIMIT = 'Automated correctness fixes have already been attempted';
 const AT_LIMIT_NOTE = 'Leave the targets marked as at the attempt limit';
 const SUCCESS = 'The write above passed its checks.';
+const UNRESOLVED = 'at least one did not come back clean';
 
 module('correctness groups', () => {
   test('the model is prompted only once every event of a group has a result, in any order', async function () {
@@ -304,6 +325,23 @@ module('correctness groups', () => {
       parts.pendingCodePatchCorrectnessChecks?.targetEventId,
       'reply-1',
       'it joins the same group',
+    );
+  });
+
+  test('an event sent after an earlier one already has its result is waited for', async function () {
+    let room = new Room();
+    room.userMessage('user-1');
+    room.reply('reply-1', [card(1), card(2)]);
+    room.check('check-1', 'reply-1', [{ ref: card(1) }]);
+    room.result('check-1');
+    room.check('check-2', 'reply-1', [{ ref: card(2) }]);
+
+    let parts = await promptParts(room);
+    assert.false(parts.shouldRespond, 'the second event has no result yet');
+    assert.strictEqual(
+      parts.pendingCodePatchCorrectnessChecks,
+      undefined,
+      'every target was asked for, so nothing more is sent',
     );
   });
 
@@ -445,6 +483,51 @@ module('correctness groups', () => {
     let parts = await promptParts(room);
     assert.strictEqual(attemptOf(parts, 'fix-1', card(1)), 2);
     assert.strictEqual(attemptOf(parts, 'fix-1', card(2)), 2);
+  });
+
+  test('a part an older tab could not run leaves its cards unresolved, not passed', async function () {
+    let room = new Room();
+    room.userMessage('user-1');
+    room.reply('reply-1', [card(1), card(2), card(3)]);
+    room.check('check-1', 'reply-1', [{ ref: card(1) }, { ref: card(2) }]);
+    room.check('check-2', 'reply-1', [{ ref: card(3) }]);
+    room.result('check-1');
+    room.failedResult(
+      'check-2',
+      'Target type and reference are required for correctness checks.',
+    );
+
+    let parts = await promptParts(room);
+    assert.true(parts.shouldRespond, 'the whole group is in');
+    let messages = parts.messages ?? [];
+    let toolMessages = messages.filter((m) => m.role === 'tool').map(text);
+    assert.true(
+      toolMessages.some((m) =>
+        m.includes('Check correctness was marked as failed for 1 card'),
+      ),
+      'the model is told the second part did not run',
+    );
+    assert.false(
+      messages.some((m) => text(m).includes(SUCCESS)),
+      'the group is not reported as passing',
+    );
+    assert.false(
+      messages.some((m) => text(m).includes(FIX)),
+      'there is no error to fix',
+    );
+    assert.true(
+      messages.some((m) => text(m).includes(UNRESOLVED)),
+      'the model notes that a check did not come back clean',
+    );
+
+    room.reply('fix-1', [card(1), card(3)]);
+    parts = await promptParts(room);
+    assert.strictEqual(attemptOf(parts, 'fix-1', card(1)), 1, 'card 1 passed');
+    assert.strictEqual(
+      attemptOf(parts, 'fix-1', card(3)),
+      2,
+      'the check that did not run counts against card 3',
+    );
   });
 
   test('cards at the attempt limit are marked, and the fix instruction says to leave them', async function () {

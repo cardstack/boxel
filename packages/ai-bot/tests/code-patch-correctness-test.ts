@@ -3,6 +3,7 @@ const { module, test, assert } = QUnit;
 
 import { publishCodePatchCorrectnessMessage } from '../lib/code-patch-correctness.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
+import { errorReporter } from '../lib/sentry.ts';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
@@ -24,6 +25,34 @@ function targetsOf(content: Record<string, any>) {
   return requestsOf(content).flatMap(
     (request) => request.arguments?.attributes?.targets ?? [],
   );
+}
+
+// Fails every send after the first `succeed` ones.
+class FailingSendClient extends FakeMatrixClient {
+  private succeed: number;
+  constructor(succeed: number) {
+    super();
+    this.succeed = succeed;
+  }
+  async sendEvent(...args: any[]): Promise<{ event_id: string }> {
+    if (this.getSentEvents().length >= this.succeed) {
+      throw new Error('send failed');
+    }
+    return (super.sendEvent as (...a: any[]) => Promise<{ event_id: string }>)(
+      ...args,
+    );
+  }
+}
+
+function bulkSummary(count: number): PendingCodePatchCorrectnessCheck {
+  return {
+    targetEventId: 'ai-message',
+    roomId: '!room:localhost',
+    files: [],
+    cards: Array.from({ length: count }, (_, n) => ({
+      cardId: `http://localhost/cards/Product/${n}`,
+    })),
+  };
 }
 
 module('code patch correctness helpers', () => {
@@ -154,6 +183,69 @@ module('code patch correctness helpers', () => {
       ['http://localhost/files/product.gts', ...cards.map((c) => c.cardId)],
       'Every target is checked once, the module in the first event',
     );
+  });
+
+  test('every event fits the budget, whatever the budget', async function () {
+    let summary: PendingCodePatchCorrectnessCheck = {
+      targetEventId: 'ai-message',
+      roomId: '!room:localhost',
+      files: Array.from({ length: 30 }, (_, n) => ({
+        sourceUrl: `http://localhost/files/${'nested/'.repeat(n % 4)}item-${n}.json`,
+        displayName: `item-${n}.json`,
+      })),
+      cards: Array.from({ length: 400 }, (_, n) => ({
+        cardId: `http://localhost:4201/experiments/catalog/Product/${'x'.repeat(n % 9)}${n}`,
+      })),
+    };
+    for (
+      let maxContentBytes = 1500;
+      maxContentBytes <= 9000;
+      maxContentBytes += 7
+    ) {
+      let client = new FakeMatrixClient();
+      await publishCodePatchCorrectnessMessage(
+        summary,
+        client,
+        maxContentBytes,
+      );
+      let sizes = client
+        .getSentEvents()
+        .map(({ content }) => Buffer.byteLength(JSON.stringify(content)));
+      let over = sizes.filter((size) => size > maxContentBytes);
+      assert.deepEqual(over, [], `every event fits ${maxContentBytes} bytes`);
+    }
+  });
+
+  test('an event after the first that fails to send is reported, and the events sent stay', async function () {
+    let reported: unknown[] = [];
+    let originalCaptureException = errorReporter.captureException;
+    errorReporter.captureException = (...args: any[]) => {
+      reported.push(args[0]);
+      return '';
+    };
+    try {
+      let client = new FailingSendClient(1);
+      await publishCodePatchCorrectnessMessage(bulkSummary(60), client, 2000);
+      assert.strictEqual(
+        client.getSentEvents().length,
+        1,
+        'The first event was sent',
+      );
+      assert.strictEqual(reported.length, 1, 'The failure is reported');
+    } finally {
+      errorReporter.captureException = originalCaptureException;
+    }
+  });
+
+  test('a first event that fails to send throws', async function () {
+    let client = new FailingSendClient(0);
+    let error: unknown;
+    try {
+      await publishCodePatchCorrectnessMessage(bulkSummary(60), client, 2000);
+    } catch (e) {
+      error = e;
+    }
+    assert.strictEqual((error as Error | undefined)?.message, 'send failed');
   });
 
   test('a target too large for an event of its own keeps the lint issues that fit', async function () {

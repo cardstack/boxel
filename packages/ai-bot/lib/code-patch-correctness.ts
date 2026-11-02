@@ -1,7 +1,8 @@
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events.js';
 
-import { uuidv4 } from '@cardstack/runtime-common';
+import { logger, uuidv4 } from '@cardstack/runtime-common';
+import { describeCheckTargetCount } from '@cardstack/runtime-common/ai/correctness-targets';
 import type { PendingCodePatchCorrectnessCheck } from '@cardstack/runtime-common/ai/types';
 import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
@@ -13,6 +14,10 @@ import {
   encodeToolRequests,
   type ToolRequest,
 } from '@cardstack/runtime-common/commands';
+
+import { errorReporter } from './sentry.ts';
+
+let log = logger('ai-bot');
 
 export const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
 
@@ -32,19 +37,42 @@ type CorrectnessEventContent = RoomMessageEventContent &
 // Matrix's size limit, each holding one check request for its share of the
 // targets, so a bulk edit is checked in full however many cards it changed.
 // The events all relate to the reply, and the first holds the modules.
+// When an event after the first fails to send, the error is reported and not
+// thrown: the error message the caller would post would end the group, while
+// the result of an event already sent brings the bot back to send the rest.
 export async function publishCodePatchCorrectnessMessage(
   summary: PendingCodePatchCorrectnessCheck,
   client: MatrixClient,
   maxContentBytes = MAX_MATRIX_EVENT_CONTENT_BYTES,
 ) {
-  for (let content of buildCodePatchCorrectnessEvents(
-    summary,
-    maxContentBytes,
-  )) {
-    await client.sendEvent(summary.roomId, 'm.room.message', content);
+  let events = buildCodePatchCorrectnessEvents(summary, maxContentBytes);
+  for (let [index, content] of events.entries()) {
+    try {
+      await client.sendEvent(summary.roomId, 'm.room.message', content);
+    } catch (error) {
+      if (index === 0) {
+        throw error;
+      }
+      log.error(
+        `Sent ${index} of ${events.length} correctness events for ${summary.targetEventId}; the rest are sent once a result comes back`,
+        error,
+      );
+      errorReporter.captureException(error, {
+        extra: {
+          roomId: summary.roomId,
+          targetEventId: summary.targetEventId,
+          sentEvents: index,
+          totalEvents: events.length,
+        },
+      });
+      return;
+    }
   }
 }
 
+// Each part's size is counted from the size of an event with no targets and
+// the description of all of them, which is at least as long as any part's,
+// so every event fits the budget.
 export function buildCodePatchCorrectnessEvents(
   summary: PendingCodePatchCorrectnessCheck,
   maxContentBytes = MAX_MATRIX_EVENT_CONTENT_BYTES,
@@ -52,8 +80,11 @@ export function buildCodePatchCorrectnessEvents(
   let events: CorrectnessEventContent[] = [];
   let part: CheckCorrectnessTarget[] = [];
   let partBytes = 0;
-  let emptyBytes = contentBytes(buildEventContent(summary, []));
-  for (let target of buildCheckCorrectnessTargets(summary)) {
+  let targets = buildCheckCorrectnessTargets(summary);
+  let emptyBytes = contentBytes(
+    buildEventContent(summary, [], describeTargets(targets)),
+  );
+  for (let target of targets) {
     let fitted = fitTarget(target, maxContentBytes - emptyBytes);
     let bytes = targetBytes(fitted);
     if (part.length && emptyBytes + partBytes + bytes > maxContentBytes) {
@@ -108,6 +139,7 @@ export function buildCheckCorrectnessTargets(
 function buildEventContent(
   summary: PendingCodePatchCorrectnessCheck,
   targets: CheckCorrectnessTarget[],
+  description = describeTargets(targets),
 ): CorrectnessEventContent {
   let content = {
     body: '',
@@ -130,7 +162,7 @@ function buildEventContent(
     id: `check-${uuidv4()}`,
     name: CHECK_CORRECTNESS_TOOL_NAME,
     arguments: {
-      description: describeTargets(targets),
+      description,
       attributes: { targets },
     },
   };
@@ -139,13 +171,7 @@ function buildEventContent(
 }
 
 function describeTargets(targets: CheckCorrectnessTarget[]): string {
-  let cards = targets.filter((target) => target.type === 'card').length;
-  let files = targets.length - cards;
-  let counts = [
-    cards ? `${cards} ${cards === 1 ? 'card' : 'cards'}` : undefined,
-    files ? `${files} ${files === 1 ? 'file' : 'files'}` : undefined,
-  ].filter(Boolean);
-  return `Check ${counts.join(' and ')}`;
+  return `Check ${describeCheckTargetCount(targets)}`;
 }
 
 function contentBytes(content: CorrectnessEventContent): number {
@@ -153,7 +179,8 @@ function contentBytes(content: CorrectnessEventContent): number {
 }
 
 // What a target adds to the content: its JSON, escaped into the request's
-// arguments string, and the comma before it.
+// arguments string, and the comma before it (the first target has none, so
+// this is never short).
 function targetBytes(target: CheckCorrectnessTarget): number {
   return Buffer.byteLength(JSON.stringify(JSON.stringify(target))) - 2 + 1;
 }

@@ -56,6 +56,7 @@ import {
   isCardInstance,
 } from '@cardstack/runtime-common';
 
+import { describeCheckTargetCount } from '@cardstack/runtime-common/ai/correctness-targets';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import { isAskUserTool } from '@cardstack/host/lib/ask-user';
@@ -166,18 +167,6 @@ const whenChanged = modifier(
 
 // A failure's message as one line: its first sentence or line, with a
 // runner's repeated step prefix ("Step 1 of 3 · Step 1 of 3") said once.
-// "3 cards", "1 file", "3 cards and 1 file", for the targets of a check.
-function describeTargetCount(targets: { type?: unknown }[]): string {
-  let cards = targets.filter((target) => target.type === 'card').length;
-  let files = targets.length - cards;
-  return [
-    cards ? `${cards} ${cards === 1 ? 'card' : 'cards'}` : undefined,
-    files ? `${files} ${files === 1 ? 'file' : 'files'}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' and ');
-}
-
 function failureHeadline(message: string): string {
   let first = message.split('\n', 1)[0]!.trim();
   let sentence = first.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? first;
@@ -785,7 +774,7 @@ export default class RoomMessageTool extends Component<Signature> {
       );
       if (passed.length) {
         lines.push({
-          text: `No errors in ${failedRefs.size ? 'the other ' : ''}${describeTargetCount(passed)}`,
+          text: `No errors in ${failedRefs.size ? 'the other ' : ''}${describeCheckTargetCount(passed)}`,
           tone: 'done',
           glyph: 'done',
         });
@@ -964,7 +953,7 @@ export default class RoomMessageTool extends Component<Signature> {
       let attributes = this.args.messageTool.arguments?.attributes;
       let target = attributes?.targetRef;
       let file = Array.isArray(attributes?.targets)
-        ? describeTargetCount(attributes.targets)
+        ? describeCheckTargetCount(attributes.targets)
         : typeof target === 'string'
           ? target.split('/').pop()
           : undefined;
