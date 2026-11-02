@@ -323,16 +323,18 @@ async function selectModel(page: Page, requested: string) {
 // tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
+// The toggle is a radio group whose radio inputs are visually hidden, so the
+// click goes to the option's label text.
 async function ensureActMode(page: Page, requestedModel: string) {
-  let act = page.locator('[data-test-llm-mode-option="act"]');
-  await act.waitFor({ state: 'visible', timeout: 60_000 });
-  if (!(await act.evaluate((el) => el.classList.contains('selected')))) {
-    await act.click();
+  let toggle = page.locator('[data-test-llm-mode-toggle]');
+  await toggle.waitFor({ state: 'visible', timeout: 60_000 });
+  let act = toggle.getByRole('radio', { name: 'Act', exact: true });
+  if (!(await act.isChecked())) {
+    await toggle.getByText('Act', { exact: true }).click();
   }
-  await expect(act, `${requestedModel}: room is in Act mode`).toHaveClass(
-    /selected/,
-    { timeout: 30_000 },
-  );
+  await expect(act, `${requestedModel}: room is in Act mode`).toBeChecked({
+    timeout: 30_000,
+  });
   console.log(`[eval] ${requestedModel}: mode toggle shows act`);
 }
 
