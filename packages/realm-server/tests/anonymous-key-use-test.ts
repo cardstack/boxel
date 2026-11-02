@@ -40,6 +40,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey, swapKeyIntoShare } from '../lib/key-shares.ts';
+import { opensSharedKeysToAnonymous } from '../lib/anonymous-key-use.ts';
 import { setShareLimits } from '../lib/key-limits.ts';
 
 // ============================================================================
@@ -514,6 +515,59 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(agreed.status, 201, agreed.text);
     assert.true(agreed.body.data.attributes.anonymous);
     assert.strictEqual(agreed.body.data.attributes.anonymousDailyCap, 100);
+  });
+
+  test('only a grant on a call that sends a shared key asks a key owner to agree; one on a keyless call does not', async function (assert) {
+    let policy = (await team.getCompiledPolicy())!;
+    let only = (operation: string) => ({
+      getCompiledPolicy: async () => ({
+        ...policy,
+        rules: policy.rules.map((rule) => ({
+          ...rule,
+          grants: rule.grants.filter(
+            (grant) => grant.anonymous && grant.operation === operation,
+          ),
+        })),
+      }),
+    });
+    assert.true(await opensSharedKeysToAnonymous(only('forecast')));
+    assert.false(
+      await opensSharedKeysToAnonymous(only('status')),
+      'a keyless call opened to visitors sends no key, so sharing needs no agreement for it',
+    );
+
+    // A share's operations are in its owner's batch.
+    let shared = await share({ anonymous: true });
+    assert.strictEqual(shared.status, 201, shared.text);
+    let batch = await request
+      .post('/_key-bindings/batch')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'key-binding-batch',
+          attributes: {
+            target: { kind: 'type', ...WEATHER, realm: TEAM },
+            interactive: true,
+          },
+        },
+      });
+    assert.strictEqual(batch.status, 200, batch.text);
+    let open = Object.fromEntries(
+      (
+        batch.body.data.attributes.groups as {
+          operations: { name: string; openToAnonymous: boolean }[];
+        }[]
+      )
+        .flatMap((group) => group.operations)
+        .map((operation) => [operation.name, operation.openToAnonymous]),
+    );
+    assert.deepEqual(
+      open,
+      { alerts: false, forecast: true, myStations: false },
+      'the window is told which of the card’s calls visitors can make',
+    );
   });
 
   test('a visitor who is not signed in is served through a share whose owner allows it, for the operations the policy opens to them', async function (assert) {

@@ -105,8 +105,9 @@ interactive bindings only while the share's `anonymous` is true (see the
 - **When it is required.** Where the realm's policy already opens a call that
   sends a shared key to people who aren't signed in
   (`opensSharedKeysToAnonymous` in `lib/anonymous-key-use.ts`: some compiled
-  grant has `anonymous.sendsOutside`, which the policy compiles only for a
-  `callApi` whose every slot takes a shared key), sharing without
+  grant has `anonymous.sendsSharedKey`, which the policy compiles only for a
+  `callApi` with a shared-key slot, every slot taking one; a grant on a
+  keyless `callApi` doesn't count), sharing without
   `anonymous: true` is refused 400 with a message pointing to
   `boxel keys share --anonymous`. Elsewhere it is the owner's choice ahead of
   time, for when the policy opens such a call.

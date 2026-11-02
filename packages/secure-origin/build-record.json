@@ -898,7 +898,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 305897,
+      "bytes": 306036,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1108,12 +1108,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 7866
+          "size": 7905
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 31736
+          "size": 31704
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1253,7 +1253,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 16465
+          "size": 16633
         },
         {
           "package": "@cardstack/secure-origin",

@@ -708,6 +708,7 @@ module(basename(import.meta.filename), function (hooks) {
           {} as BatchGroup['operations'][number]['slots'][number]['snapshot'],
         fingerprint: `${name}-${i}`,
       })),
+      openToAnonymous: false,
     });
     let destination = (host: string) => ({
       href: `https://${host}/`,

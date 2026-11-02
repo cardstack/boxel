@@ -639,8 +639,9 @@ export type PolicyIssueCode =
 // is the exception: it runs a stored query on the search lane, and stays a
 // contract for signed-in callers. A `callApi` may be opened too, where it
 // sends no key or only keys shared with the realm (`{{apiKey}}`): a shared key
-// serves such a caller only where its share's owner allowed anonymous use, and
-// counts them by address against the share's anonymous cap. One that sends no
+// serves such a caller only where its owner agreed to anonymous use when
+// sharing it, and counts them by address against the share's per-person rate,
+// and against its anonymous cap where one is set. One that sends no
 // key is limited only by the grant's own rate limit and blocklist, as any
 // other operation opened to them is, and goes through the outbound guard as
 // every `callApi` does.
@@ -1725,9 +1726,9 @@ export type OperationErrorCode =
   // A `callApi` invoked interactively — from a browser, the AI assistant or
   // the CLI — whose binding was approved for pipelines only. Nothing was sent.
   | 'interactive-use-not-approved'
-  // A `callApi` invoked by a caller who isn't signed in, whose share binding
-  // wasn't approved for anonymous use. Carries a 401: signing in is what
-  // serves the caller. Nothing was sent.
+  // A `callApi` invoked by a caller who isn't signed in, filled from a share
+  // whose owner didn't agree to anonymous use when sharing it. Carries a 401:
+  // signing in is what serves the caller. Nothing was sent.
   | 'anonymous-use-not-approved'
   // A `callApi` slot has no usable credential: its key was rejected, or it
   // mints its access token and minting failed. Carries a 424 and

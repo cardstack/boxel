@@ -193,7 +193,9 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-share-label
               />
             </FieldContainer>
-            {{#if this.opensToAnonymous}}
+            {{#if this.policyUnknown}}
+              {{! Asked of the workspace just chosen: which reading applies. }}
+            {{else if this.opensToAnonymous}}
               <FieldContainer
                 @tag='label'
                 @label='People who aren’t signed in'
@@ -452,11 +454,20 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     return this.opensToAnonymous || this.form.anonymous;
   }
 
+  // Neither reading is drawn until the chosen workspace says which applies,
+  // so no choice is made against one and then dropped by the other.
+  private get policyUnknown() {
+    return Boolean(this.form.realm) && this.form.opensToAnonymous === undefined;
+  }
+
   // Where the workspace already lets such people use a shared key, the owner
-  // agrees afresh; elsewhere the choice starts on signed-in people only.
+  // ticks the agreement for it, so a choice made for another workspace isn't
+  // taken as one. Elsewhere a choice already made stands.
   private setOpensToAnonymous(opens: boolean) {
     this.form.opensToAnonymous = opens;
-    this.form.anonymous = false;
+    if (opens) {
+      this.form.anonymous = false;
+    }
   }
 
   private chooseWho = (value: string) => {

@@ -1863,6 +1863,48 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('from the key page, a workspace picked that lets people who aren’t signed in use its shared keys asks for the agreement', async function (assert) {
+      serve({
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: OTHER_REALM,
+                attributes: { name: 'Dashboard' },
+              },
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
+          }),
+        'POST _secure-window/context': chosenWorkspace(true),
+        'POST _key-shares': shares(),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      await click('[data-test-radio-choice="anyone"] input');
+      await click('[data-test-workspace-dropdown-trigger]');
+      await click('[data-test-workspace-option="Team Workspace"]');
+      assert
+        .dom('[data-test-share-key-agree-input]')
+        .isNotChecked(
+          'a choice made before the workspace was known isn’t taken as agreement',
+        );
+      assert.dom('[data-test-radio-choices="share-who"]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isDisabled();
+      await click('[data-test-share-key-agree-input]');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.true(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes.anonymous,
+      );
+    });
+
     test('two workspaces with the same name are told apart by their addresses', async function (assert) {
       const OTHER = 'https://realm-server.test/someone/another/';
       const DASHBOARD = 'https://realm-server.test/someone/dashboard/';

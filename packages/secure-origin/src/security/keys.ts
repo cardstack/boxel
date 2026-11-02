@@ -606,6 +606,9 @@ export interface BatchOperation {
   instance: string | null;
   status: BatchSlotStatus;
   slots: BatchSlot[];
+  // Whether the realm's policy opens it to people who aren't signed in, who
+  // are then served through a share whose owner agreed to it.
+  openToAnonymous: boolean;
 }
 
 // A key a slot can take, or a share of the user's in the realm, with the
@@ -637,9 +640,7 @@ export interface BatchShare {
 // Every operation on one card definition, in one realm, that needs the user's
 // approval, grouped by where it sends, as the realm server reads them now.
 export interface ApprovalBatch {
-  // `opensToAnonymous`: whether the realm's policy lets people who aren't
-  // signed in make a call that sends a shared key.
-  realm: { url: string; name: string; opensToAnonymous: boolean };
+  realm: { url: string; name: string };
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;

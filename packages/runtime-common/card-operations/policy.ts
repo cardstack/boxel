@@ -167,6 +167,9 @@ export interface CompiledAnonymousGrant {
   // outside the realm and so travels in the write lane, as a write does,
   // without writing anything.
   sendsOutside?: true;
+  // Set where that `callApi` sends a key shared with the realm: such a
+  // caller is served only through a share whose owner agreed to it.
+  sendsSharedKey?: true;
   // For a grant on a write: who such a caller's writes are made as. Settled
   // for each write, once the target is known. A write grant without one admits
   // no write by such a caller.
@@ -1502,6 +1505,7 @@ async function compileDocument(
           ...(granted.base === 'callApi'
             ? { sendsOutside: true as const }
             : {}),
+          ...(granted.sendsSharedKey ? { sendsSharedKey: true as const } : {}),
           ...(isWrite(granted.base) && expressions.actingUser
             ? { actingUser: expressions.actingUser }
             : {}),
@@ -1877,6 +1881,8 @@ function grantedOperation(
       readsActor: boolean;
       // A `callApi` with a credential slot for the invoking user's own key.
       sendsUserKey: boolean;
+      // A `callApi` with a credential slot for a key shared with the realm.
+      sendsSharedKey: boolean;
     }
   | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
@@ -1890,6 +1896,8 @@ function grantedOperation(
       readsActor: declared.readsActor === true,
       sendsUserKey:
         declared.callApi?.slots.some(({ key }) => key === 'userKey') ?? false,
+      sendsSharedKey:
+        declared.callApi?.slots.some(({ key }) => key !== 'userKey') ?? false,
     };
   }
   return carriesBuiltIn(definition.type, name)
@@ -1899,6 +1907,7 @@ function grantedOperation(
         invalid: false,
         readsActor: false,
         sendsUserKey: false,
+        sendsSharedKey: false,
       }
     : undefined;
 }

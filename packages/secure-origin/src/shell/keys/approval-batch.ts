@@ -407,20 +407,21 @@ export function chosenShares(
 }
 
 // Who besides signed-in people the operations serve once approved for
-// interactive use, by the shares they send: where the realm's policy opens a
-// call that sends a shared key to people who aren't signed in, `anyone` are
-// the shares whose owners agreed to that when sharing them, and
+// interactive use, by the shares they send. Of the operations the realm's
+// policy opens to people who aren't signed in (`openToAnonymous`), `anyone`
+// are the shares whose owners agreed to that when sharing them, and
 // `signedInOnly` the ones whose owners didn't, which such people are asked to
-// sign in for. Both are empty where the policy opens nothing to them.
+// sign in for. Both are empty where the policy opens none of them.
 export function sharesForVisitors(
   batch: ApprovalBatch,
   operations: BatchOperation[],
   chosen: Record<string, string | undefined>,
 ): { anyone: ApprovalBatch['shares']; signedInOnly: ApprovalBatch['shares'] } {
-  if (!batch.realm.opensToAnonymous) {
+  let open = operations.filter((o) => o.openToAnonymous);
+  if (open.length === 0) {
     return { anyone: [], signedInOnly: [] };
   }
-  let shares = chosenShares(batch, operations, chosen);
+  let shares = chosenShares(batch, open, chosen);
   return {
     anyone: shares.filter((share) => share.anonymous),
     signedInOnly: shares.filter((share) => !share.anonymous),

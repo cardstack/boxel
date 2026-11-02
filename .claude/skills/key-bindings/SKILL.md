@@ -144,9 +144,11 @@ realm, each with the batch's destinations its grants already cover. A share
 also says whether any binding of it is `interactive` yet, its
 `dailyBudget` in force, and whether its owner allowed people who aren't signed
 in to use it when sharing it (`anonymous`, with its `anonymousDailyCap`); each
-slot's `approved` says whether its last approval was `interactive`. The
-batch's `realm.opensToAnonymous` says whether the realm's policy opens a call
-that sends a shared key to people who aren't signed in (see _Anonymous use_).
+slot's `approved` says whether its last approval was `interactive`. Each
+operation's `openToAnonymous` says whether the realm's policy opens it to
+people who aren't signed in through a shared key, for the card's type or one
+it descends from (`Realm.sharedKeyOperationsOpenToAnonymous`; see
+_Anonymous use_).
 A batch
 never spans card definitions or realms: approving one card's batch says
 nothing about another card calling the same host, which gets its own batch
@@ -333,9 +335,10 @@ sends the caller's own key is told readiness `needs-sign-in`.
 
 Whether a realm's policy opens such a call at all is
 `opensSharedKeysToAnonymous` (`lib/anonymous-key-use.ts`): some compiled
-grant has `anonymous.sendsOutside`, which compilation sets only for a
-`callApi` whose every slot takes a shared key. The secure window's context
-and the approval batch carry it as `realm.opensToAnonymous`, and sharing a
+grant has `anonymous.sendsSharedKey`, which compilation sets only for a
+`callApi` with a shared-key slot whose every slot takes a shared key (a grant
+on a keyless `callApi` doesn't count). The secure window's context carries it
+as `realm.opensToAnonymous`, and sharing a
 key into such a realm needs the owner's `anonymous: true` (see the
 `key-shares` skill), so a visitor the policy admits isn't refused for want of
 it. A share made while the policy opened nothing to visitors keeps

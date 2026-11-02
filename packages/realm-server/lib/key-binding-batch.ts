@@ -1,4 +1,3 @@
-import { opensSharedKeysToAnonymous } from './anonymous-key-use.ts';
 import {
   logger,
   param,
@@ -101,6 +100,10 @@ export interface BatchOperation {
   instance: string | null;
   status: BatchSlotStatus;
   slots: BatchSlot[];
+  // Whether the realm's policy opens it to people who aren't signed in, who
+  // are then served through a share whose owner agreed to it
+  // (`Realm.sharedKeyOperationsOpenToAnonymous`).
+  openToAnonymous: boolean;
 }
 
 export interface BatchGroup {
@@ -137,10 +140,7 @@ export interface BatchShare {
 }
 
 export interface ApprovalBatch {
-  // `opensToAnonymous`: whether the realm's policy lets people who aren't
-  // signed in make a call that sends a shared key (`anonymous-key-use.ts`).
-  // Such a call of the batch serves them through a share that allows it.
-  realm: { url: string; name: string; opensToAnonymous: boolean };
+  realm: { url: string; name: string };
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;
@@ -244,6 +244,9 @@ export async function approvalBatch(
     : null;
 
   let rows = await bindingRows(dbAdapter, realmURL.href, type, user);
+  let openToAnonymous = new Set(
+    await realm.sharedKeyOperationsOpenToAnonymous(resolvedType),
+  );
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
 
   let groups = new Map<string, BatchGroup>();
@@ -317,6 +320,7 @@ export async function approvalBatch(
           ? 'new'
           : 'pipelines-only',
       slots,
+      openToAnonymous: openToAnonymous.has(name),
     });
   }
 
@@ -344,11 +348,7 @@ export async function approvalBatch(
     g.operations.some((o) => o.slots.some((s) => s.key !== 'userKey')),
   );
   return {
-    realm: {
-      url: realm.url,
-      name: realmName,
-      opensToAnonymous: await opensSharedKeysToAnonymous(realm),
-    },
+    realm: { url: realm.url, name: realmName },
     card: {
       name: definition.displayName ?? codeRef.name,
       module: codeRef.module,

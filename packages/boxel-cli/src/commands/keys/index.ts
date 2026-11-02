@@ -281,7 +281,7 @@ export function registerKeysCommand(program: Command): void {
     )
     .option(
       '--anonymous',
-      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: anonymous use is not offered)',
+      "Not offered, and refused by the realm server: whether people who aren't signed in can use a shared key is its owner's choice when sharing it (boxel keys share --anonymous)",
     )
     .option(
       '--timeout <seconds>',

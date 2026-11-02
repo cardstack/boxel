@@ -80,6 +80,7 @@ function operation(
     path: '/graphql',
     instance: null,
     status: 'new',
+    openToAnonymous: false,
     slots: [
       {
         slot: 'userKey',
@@ -95,7 +96,7 @@ function operation(
 
 function batch(attributes: Record<string, unknown> = {}) {
   return {
-    realm: { url: REALM, name: 'Team Workspace', opensToAnonymous: false },
+    realm: { url: REALM, name: 'Team Workspace' },
     card: { name: 'PR Inbox', module: MODULE, exportName: 'Inbox' },
     instance: null,
     review: false,
@@ -1314,8 +1315,9 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
   });
 
-  // Serves a batch of one operation a share fills, in a realm whose policy
-  // does or doesn't open a shared key to people who aren't signed in.
+  // Serves a batch of two operations a share fills, in a realm whose policy
+  // does or doesn't open the first to people who aren't signed in; it never
+  // opens the second.
   function serveShareBatch({
     opensToAnonymous,
     share,
@@ -1323,14 +1325,16 @@ module('Integration | approve pages', function (hooks) {
     opensToAnonymous: boolean;
     share: Record<string, unknown>;
   }) {
-    let shared = operation('listTeamPRs', 'List the team’s pull requests');
+    let asShared = (o: ReturnType<typeof operation>) => ({
+      ...o,
+      slots: o.slots.map((s) => ({ ...s, slot: 'apiKey', key: 'apiKey' })),
+    });
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
           data: {
             type: 'key-binding-batch',
             attributes: batch({
-              realm: { url: REALM, name: 'Team Workspace', opensToAnonymous },
               groups: [
                 {
                   destination: {
@@ -1340,14 +1344,18 @@ module('Integration | approve pages', function (hooks) {
                     registrableDomain: 'github.com',
                   },
                   operations: [
-                    {
-                      ...shared,
-                      slots: shared.slots.map((s) => ({
-                        ...s,
-                        slot: 'apiKey',
-                        key: 'apiKey',
-                      })),
-                    },
+                    asShared(
+                      operation('listTeamIssues', 'List the team’s issues'),
+                    ),
+                    asShared(
+                      operation(
+                        'listTeamPRs',
+                        'List the team’s pull requests',
+                        {
+                          openToAnonymous: opensToAnonymous,
+                        },
+                      ),
+                    ),
                   ],
                 },
               ],
@@ -1408,6 +1416,15 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-budget="Team GitHub"]')
       .includesText('at least the 100 allowed people who aren’t signed in');
+
+    await click('[data-test-approve-tick="listTeamPRs"]');
+    assert
+      .dom('[data-test-approve-anonymous-note]')
+      .doesNotExist(
+        'the operation left ticked is one the policy keeps for signed-in people',
+      );
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
+    await click('[data-test-approve-tick="listTeamPRs"]');
     await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
     await click('[data-test-approve-save]');
     await settled();

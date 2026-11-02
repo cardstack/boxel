@@ -408,7 +408,11 @@ export async function secureWindowContext(
         new URL(realm.url),
         user,
       ),
-      opensToAnonymous: await opensSharedKeysToAnonymous(realm),
+      // A policy that can't be read says nothing; the page reads as signed-in
+      // only, and a share made then serves signed-in people only.
+      opensToAnonymous: await opensSharedKeysToAnonymous(realm).catch(
+        () => false,
+      ),
     },
   };
   if (!target) {

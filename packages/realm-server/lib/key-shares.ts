@@ -12,6 +12,7 @@ import { moveShareBindingsIn } from './key-bindings.ts';
 import {
   KEY_LIMIT_COLUMNS,
   limitsOf,
+  MAX_KEY_LIMIT,
   type KeyLimits,
 } from './key-limit-settings.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
@@ -241,10 +242,15 @@ function validateAnonymousCap(cap: unknown, anonymous: boolean): number | null {
       'an anonymous cap is set on a share that allows anonymous use',
     );
   }
-  if (typeof cap !== 'number' || !Number.isSafeInteger(cap) || cap < 1) {
+  if (
+    typeof cap !== 'number' ||
+    !Number.isInteger(cap) ||
+    cap < 1 ||
+    cap > MAX_KEY_LIMIT
+  ) {
     throw new UserKeyError(
       400,
-      'the anonymous cap is a whole number of calls, at least 1',
+      `the anonymous cap is a whole number of calls, from 1 to ${MAX_KEY_LIMIT}`,
     );
   }
   return cap;
@@ -396,7 +402,10 @@ async function lockVisibleShare(
 // `opensToAnonymous`, read from the realm's policy by the caller, says whether
 // the realm already opens a call that sends a shared key to such people; the
 // key is then shared only with that agreement, so a visitor the policy admits
-// is never refused for want of it.
+// when the key is shared is never refused for want of it. It is asked only
+// once the ticket and the owner's direct write are checked, so nobody else
+// learns from the answer what the realm's policy opens. A policy that changes
+// later is a matter for its own audit.
 export async function shareKey(
   dbAdapter: DBAdapter,
   {
@@ -426,12 +435,6 @@ export async function shareKey(
     throw new UserKeyError(400, 'anonymous is true or false');
   }
   let cap = validateAnonymousCap(anonymousDailyCap, anonymous === true);
-  if (anonymous !== true && (await opensToAnonymous(realmURL))) {
-    throw new UserKeyError(
-      400,
-      "this realm's policy lets people who aren't signed in make calls that send a shared key, so a key is shared into it only when its owner agrees to their using it (anonymous: true, or `boxel keys share --anonymous`)",
-    );
-  }
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a share names the key it holds');
   }
@@ -450,6 +453,13 @@ export async function shareKey(
       throw new UserKeyError(
         403,
         'a key is shared only into a realm its owner is a direct writer of',
+      );
+    }
+    // Refusing rolls the transaction back, so the ticket isn't spent.
+    if (anonymous !== true && (await opensToAnonymous(realmURL))) {
+      throw new UserKeyError(
+        400,
+        "this realm's policy lets people who aren't signed in make calls that send a shared key, so a key is shared into it only when its owner agrees to their using it (anonymous: true, or `boxel keys share --anonymous`)",
       );
     }
     await lockOwnKey(txQuery, owner, keyId);

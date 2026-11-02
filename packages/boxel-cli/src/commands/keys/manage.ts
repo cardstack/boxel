@@ -743,8 +743,14 @@ export async function keysShare(
       throw new Error('--anonymous-cap is given with --anonymous');
     }
     anonymousDailyCap = Number(options.anonymousCap);
-    if (!Number.isSafeInteger(anonymousDailyCap) || anonymousDailyCap < 1) {
-      throw new Error('--anonymous-cap is a whole number of calls, at least 1');
+    if (
+      !/^\d+$/.test(options.anonymousCap.trim()) ||
+      anonymousDailyCap < 1 ||
+      anonymousDailyCap > 2_147_483_647
+    ) {
+      throw new Error(
+        '--anonymous-cap is a whole number of calls, from 1 to 2147483647',
+      );
     }
   }
   let ctx = context(options.json, options);

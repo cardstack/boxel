@@ -27,8 +27,8 @@
 // interactive use when the batch is already approved for it, or holds nothing
 // else.
 //
-// Who may make the calls is not chosen here. Where the realm's policy opens a
-// call that sends a shared key to people who aren't signed in, interactive
+// Who may make the calls is not chosen here. Where the realm's policy opens an
+// operation to people who aren't signed in (`openToAnonymous`), interactive
 // use of a share whose owner agreed to that when sharing it serves them too:
 // each group it sends to says "including people who aren't signed in", and
 // the confirmation adds a line for it. A share whose owner didn't agree is
@@ -305,8 +305,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{/if}}
                   {{#each visitors.signedInOnly as |share|}}
                     <p class='note' data-test-approve-signed-in-only-note>
-                      This workspace lets people who aren’t signed in open cards
-                      that call a service with a shared key, but
+                      This workspace lets people who aren’t signed in make these
+                      calls, but
                       <strong>{{share.label}}</strong>
                       is shared for signed-in people only, so they’re asked to
                       sign in.
