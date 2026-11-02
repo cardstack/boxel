@@ -62,6 +62,8 @@ import {
   probeDue,
 } from './key-grant-rejection.ts';
 import { chargeInteractiveCall, type LimitSubject } from './key-limits.ts';
+import { refusedFrom } from './key-use-subject.ts';
+import { recordFillRefusal } from './key-uses.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -1206,10 +1208,13 @@ async function checkedBindings(
   // The rejected grants and keys this call would probe, claimed only once
   // every slot has passed its other checks, so a call refused for another
   // reason uses up no probe.
-  let rejected = new Map<string, { slot: CallApiSlot; destination: string }>();
+  let rejected = new Map<
+    string,
+    { slot: CallApiSlot; destination: string; subject: LimitSubject }
+  >();
   let rejectedKeys = new Map<
     string,
-    { slot: CallApiSlot; destination: string }
+    { slot: CallApiSlot; destination: string; subject: LimitSubject }
   >();
   for (let check of await checkSlots(
     dbAdapter,
@@ -1228,12 +1233,15 @@ async function checkedBindings(
         }
         throw refuseNotApproved();
       case 'share-suspended':
-        throw refusal(
-          409,
-          'share-suspended',
-          'Share suspended',
-          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            409,
+            'share-suspended',
+            'Share suspended',
+            `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a share this realm suspended`,
+            slot,
+          ),
         );
       case 'binding-needs-reapproval':
         await markNeedsReapproval(
@@ -1241,32 +1249,44 @@ async function checkedBindings(
           check.binding.id,
           check.binding.approval_id,
         );
-        throw refusal(
-          409,
-          'binding-needs-reapproval',
-          'Binding needs re-approval',
-          `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            409,
+            'binding-needs-reapproval',
+            'Binding needs re-approval',
+            `operation "${lookup.operation}" sends another request than the one approved for the credential slot "${slot.name}", so nothing is sent until its key's owner approves it again`,
+            slot,
+          ),
         );
       case 'interactive-use-not-approved':
-        throw refusal(
-          403,
-          'interactive-use-not-approved',
-          'Interactive use not approved',
-          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            403,
+            'interactive-use-not-approved',
+            'Interactive use not approved',
+            `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
+            slot,
+          ),
         );
       case 'credential-rejected':
-        throw credentialRejected(
-          lookup.operation,
-          slot,
-          check.binding.grant_destination!,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          credentialRejected(
+            lookup.operation,
+            slot,
+            check.binding.grant_destination!,
+          ),
         );
       case 'key-rejected':
-        throw serviceAccountRejected(
-          lookup.operation,
-          slot,
-          check.binding.grant_destination!,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          serviceAccountRejected(
+            lookup.operation,
+            slot,
+            check.binding.grant_destination!,
+          ),
         );
     }
     let { probe, keyProbe } = check;
@@ -1274,12 +1294,14 @@ async function checkedBindings(
       rejected.set(check.binding.grant_id!, {
         slot,
         destination: check.binding.grant_destination!,
+        subject: limitSubjectOf(check.binding),
       });
     }
     if (keyProbe) {
       rejectedKeys.set(check.binding.grant_key_id!, {
         slot,
         destination: check.binding.grant_destination!,
+        subject: limitSubjectOf(check.binding),
       });
     }
     checked.push({ slot, binding: check.binding, probe, keyProbe });
@@ -1298,14 +1320,20 @@ async function checkedBindings(
     // in one statement, so of calls arriving together only one probes. The
     // claims are one transaction: a call refused at any of them claims none.
     await dbAdapter.withTransaction(async (txQuery) => {
-      for (let [grantId, { slot, destination }] of rejected) {
+      for (let [grantId, { slot, destination, subject }] of rejected) {
         if (!(await claimProbe(txQuery, grantId, rejection.probeIntervalMs))) {
-          throw credentialRejected(lookup.operation, slot, destination);
+          throw refusedFrom(
+            subject,
+            credentialRejected(lookup.operation, slot, destination),
+          );
         }
       }
-      for (let [keyId, { slot, destination }] of rejectedKeys) {
+      for (let [keyId, { slot, destination, subject }] of rejectedKeys) {
         if (!(await claimKeyProbe(txQuery, keyId, rejection.probeIntervalMs))) {
-          throw serviceAccountRejected(lookup.operation, slot, destination);
+          throw refusedFrom(
+            subject,
+            serviceAccountRejected(lookup.operation, slot, destination),
+          );
         }
       }
     });
@@ -1465,9 +1493,26 @@ export async function fillSlots(
   // refused without the keyring.
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
-  {
-    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
-  }: { probeIntervalMs?: number } = {},
+  options: { probeIntervalMs?: number } = {},
+): Promise<CallApiFilledSlot[]> {
+  // A refusal raised here is recorded against the share or key that raised
+  // it; one raised once the slots are filled is the executor's to report
+  // (`recordUse`), against every share and key filling them.
+  try {
+    return await fillCheckedSlots(dbAdapter, keyring, lookup, options);
+  } catch (error) {
+    if (error instanceof OperationFailure) {
+      await recordFillRefusal(dbAdapter, lookup, error);
+    }
+    throw error;
+  }
+}
+
+async function fillCheckedSlots(
+  dbAdapter: DBAdapter,
+  keyring: () => SecretsKeyring,
+  lookup: CallApiSlotLookup,
+  { probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS }: { probeIntervalMs?: number },
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
   for (let { slot, binding, probe, keyProbe } of await checkedBindings(
@@ -1529,6 +1574,7 @@ export async function fillSlots(
       value,
       ...(value !== secret ? { raw: secret } : {}),
       destination: opened.destination,
+      countsAgainst: limitSubjectOf(binding),
       // A vendor's 401 to a stored key rejects the grant it was sent under. A
       // minted token's refusal is its connection's to judge when it next
       // refreshes, so a 401 to one is only the vendor's answer.

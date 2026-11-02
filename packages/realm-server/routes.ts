@@ -169,6 +169,10 @@ import {
   handleSetUserKeyLimits,
 } from './handlers/handle-key-limits.ts';
 import {
+  handleKeyShareUsage,
+  handleUserKeyUsage,
+} from './handlers/handle-key-usage.ts';
+import {
   handleSecureWindowContext,
   handleSecureWindowRealms,
   handleSecureWindowCards,
@@ -421,6 +425,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSetUserKeyLimits(args),
   );
+  router.get(
+    `${USER_KEYS_PATH}/:keyId/usage`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUserKeyUsage(args),
+  );
   router.post(
     USER_KEY_GRANTS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -490,6 +499,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${KEY_SHARES_PATH}/:shareId/limits`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSetKeyShareLimits(args),
+  );
+  router.get(
+    `${KEY_SHARES_PATH}/:shareId/usage`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleKeyShareUsage(args),
   );
   router.get(
     KEY_SHARE_NOTICES_PATH,
