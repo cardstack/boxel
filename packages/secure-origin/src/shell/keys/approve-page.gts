@@ -25,7 +25,9 @@
 // for interactive use for the first time. An operation approved for pipelines
 // only is in the batch only for that second choice. The choice starts on
 // interactive use when the batch is already approved for it, or holds nothing
-// else.
+// else. An operation last approved for interactive use is marked, and
+// approving it for pipelines only says that it then stops running when a card
+// is opened.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
@@ -67,6 +69,8 @@ import { pageURL } from '../urls.js';
 
 import {
   approvalOf,
+  approvalScope,
+  approvedForOpenCards,
   batchFor,
   confirmationsFor,
   firstInteractiveShares,
@@ -168,13 +172,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               This card changed these calls since you approved them. Boxel won’t
               make them until you approve them again.
             {{else}}
-              This card calls another service with your key. You approve these
-              calls once,
-              {{#if this.forOneCard}}
-                for this card.
+              This card calls another service with your key.
+              {{#if (eq this.scope 'card')}}
+                You approve these calls once, for this card.
+              {{else if (eq this.scope 'mixed')}}
+                You approve these calls once. Some cover only this card, and the
+                rest cover every card of this kind in the workspace.
               {{else}}
-                and the approval covers every card of this kind in the
-                workspace.
+                You approve these calls once, and the approval covers every card
+                of this kind in the workspace.
               {{/if}}
               After that, Boxel makes them exactly as shown below without asking
               you again. If the card changes a call, Boxel asks you to approve
@@ -319,6 +325,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             data-test-approve-pipelines-only
                           >Approved for the schedule</span>
                         {{/if}}
+                        {{#if (approvedForOpenCards operation)}}
+                          <span
+                            class='pipelines-only'
+                            data-test-approve-open-cards
+                          >Approved for open cards</span>
+                        {{/if}}
                       </label>
                       <details class='request'>
                         <summary class='summary' data-test-approve-summary>
@@ -374,6 +386,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 again to see the rest.
               </p>
             {{/if}}
+            {{#if this.demoted}}
+              <p class='more' data-test-approve-demoted>
+                Approving with “On a schedule only” stops the calls marked
+                “Approved for open cards” from running when the card is opened.
+              </p>
+            {{/if}}
             {{#if this.interactive}}
               <div class='interactive' data-test-approve-interactive>
                 <Warning class='new-grant-icon' aria-hidden='true' />
@@ -385,10 +403,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               </div>
               {{#each this.budgetShares as |share|}}
                 <FieldContainer
-                  @tag='label'
+                  @tag='div'
                   @label='Daily budget for {{share.label}}'
                   @icon={{KeyRound}}
                   data-test-approve-budget={{share.label}}
+                  as |labelId|
                 >
                   <BoxelInput
                     @type='text'
@@ -400,13 +419,18 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       (this.budgetValid share)
                       'A whole number of calls, at least one'
                     }}
+                    @describedBy='budget-note-{{share.id}}'
                     inputmode='numeric'
+                    aria-labelledby={{labelId}}
                     data-test-approve-budget-input
                   />
-                  <span class='note budget-note'>The most calls this share makes
-                    in a day, in total across everyone who opens a card that
-                    uses it. This is the first time opened cards can use this
-                    share, so set it to what your plan with the service allows.</span>
+                  <span
+                    id='budget-note-{{share.id}}'
+                    class='note budget-note'
+                  >The most calls this share makes in a day, in total across
+                    everyone who opens a card that uses it. This is the first
+                    time opened cards can use this share, so set it to what your
+                    plan with the service allows.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -760,11 +784,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return this.form.use === 'interactive';
   }
 
-  // Whether what is shown is approved for one card (an operation approved
-  // per instance) rather than for every card of its kind.
-  private get forOneCard() {
-    return (this.batch?.groups ?? []).some((g) =>
-      g.operations.some((o) => o.instance !== null),
+  private get scope() {
+    return approvalScope(this.batch);
+  }
+
+  // Whether approving for pipelines only takes ticked calls last approved for
+  // interactive use back to the schedule.
+  private get demoted() {
+    return (
+      !this.interactive && this.tickedOperations.some(approvedForOpenCards)
     );
   }
 

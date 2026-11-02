@@ -1,6 +1,7 @@
 import {
   click,
   fillIn,
+  find,
   render,
   settled,
   waitFor,
@@ -1236,6 +1237,65 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
   });
 
+  test('approving a request last approved for interactive use for pipelines only says it stops running when the card is opened', async function (assert) {
+    await openWith([
+      changedInteractive('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert
+      .dom(
+        '[data-test-approve-operation="listPRs"] [data-test-approve-open-cards]',
+      )
+      .hasText('Approved for open cards');
+    assert
+      .dom(
+        '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
+      )
+      .doesNotExist();
+    assert
+      .dom('[data-test-approve-demoted]')
+      .includesText('stops the calls marked “Approved for open cards”');
+
+    await click('[data-test-approve-tick="listPRs"]');
+    assert
+      .dom('[data-test-approve-demoted]')
+      .doesNotExist('an unticked call is not approved, so keeps its use');
+    await click('[data-test-approve-tick="listPRs"]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-demoted]')
+      .doesNotExist('interactive use keeps it');
+
+    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.strictEqual(approval.interactive, undefined);
+    assert.strictEqual(approval.operations.length, 2);
+  });
+
+  test('the intro says which cards the approval covers', async function (assert) {
+    await openWith([operation('listPRs', 'List PRs')]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText('the approval covers every card of this kind');
+
+    await openWith([
+      operation('listPRs', 'List PRs', { instance: CARD }),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'Some cover only this card, and the rest cover every card of this kind',
+      );
+
+    await openWith([operation('listPRs', 'List PRs', { instance: CARD })]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText('You approve these calls once, for this card.');
+  });
+
   test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
     serve({
@@ -1291,9 +1351,20 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-budget="Team GitHub"] input')
       .hasValue('2400');
+    let input = find('[data-test-approve-budget="Team GitHub"] input')!;
+    let name = input
+      .getAttribute('aria-labelledby')!
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .join(' ');
+    assert.strictEqual(
+      name,
+      'Daily budget for Team GitHub',
+      'the field is named by its label alone',
+    );
     assert
-      .dom('[data-test-approve-budget="Team GitHub"]')
-      .hasTagName('label', 'the field names its input');
+      .dom(document.getElementById(input.getAttribute('aria-describedby')!))
+      .includesText('in total across everyone', 'its note describes it');
 
     await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
     assert
