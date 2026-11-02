@@ -14,6 +14,9 @@ import {
   type OperationTemplate,
 } from './types.ts';
 import { emitKeyUse, type KeyUseOutcome } from './telemetry.ts';
+import { destinationCovers } from './destination-covers.ts';
+
+export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
@@ -534,34 +537,6 @@ function lowerUrlTemplate(
   destination.search = '';
   destination.hash = '';
   return { names, url: normalized, destination: destination.href };
-}
-
-// Whether a request to `url` goes where `destination` says. Both are compared
-// as the URL parser serializes them, and a destination's path ends with `/`, so
-// a match always ends at a `/`: `https://api.example.com/` does not cover
-// `https://api.example.com.evil.net/`, and `https://api.example.com/v1/` does
-// not cover `https://api.example.com/v1beta`. This is the one rule for that
-// question: the send-time check asks it of every request, and an approval of a
-// key for a destination is judged by it too.
-export function destinationCovers(destination: string, url: string): boolean {
-  let parsedDestination: URL;
-  let parsedURL: URL;
-  try {
-    parsedDestination = new URL(destination);
-    parsedURL = new URL(url);
-  } catch {
-    return false;
-  }
-  if (
-    parsedDestination.username ||
-    parsedDestination.password ||
-    parsedDestination.search ||
-    parsedDestination.hash ||
-    !parsedDestination.pathname.endsWith('/')
-  ) {
-    return false;
-  }
-  return parsedURL.href.startsWith(parsedDestination.href);
 }
 
 function lowerGraphql(

@@ -21,6 +21,12 @@ import {
   runKeysCommand,
   signInToManageKeys,
 } from './manage.ts';
+import {
+  keysApprove,
+  keysPending,
+  keysRevoke,
+  keysUngrant,
+} from './approve.ts';
 
 // `boxel keys`: the signed-in user's own keys. Changing a key needs a session
 // signed in on the secure origin, which the CLI gets through the browser
@@ -221,12 +227,91 @@ export function registerKeysCommand(program: Command): void {
     .argument('<label>', 'The share')
     .requiredOption('--realm <url>', 'The realm')
     .requiredOption('--key <name>', 'Your key')
+    .option(
+      '--timeout <seconds>',
+      'How long to wait for the secure window, when the swap is confirmed there',
+    )
     .option('--json', 'Output JSON')
     .action(
       (
         label: string,
-        options: { realm: string; key: string; json?: boolean },
+        options: {
+          realm: string;
+          key: string;
+          timeout?: string;
+          json?: boolean;
+        },
       ) => runKeysCommand(options.json, () => keysSwap(label, options)),
+    );
+
+  approvalOptions(
+    keys
+      .command('approve')
+      .description(
+        "Approve a card's operations to send one of your keys, or your share in the realm, from its pipelines. Without .<operation>, every operation on the class that needs your approval is approved as one batch. Every request is printed before you confirm; one that sends a key somewhere it has never been sent is confirmed in the secure window",
+      )
+      .argument(
+        '<name>',
+        'Your key, or the label of your share in the realm, that fills the slots',
+      ),
+  )
+    .option(
+      '--interactive',
+      'Also approve use from a card, the AI assistant and the CLI, not only pipelines (the realm server refuses it: it offers pipeline use only)',
+    )
+    .option(
+      '--anonymous',
+      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: it offers pipeline use only)',
+    )
+    .option(
+      '--timeout <seconds>',
+      'How long to wait for the secure window, when the approval is confirmed there',
+    )
+    .action((name: string, options: Parameters<typeof keysApprove>[1]) =>
+      runKeysCommand(options.json, () => keysApprove(name, options)),
+    );
+
+  approvalOptions(
+    keys
+      .command('revoke')
+      .description(
+        "Revoke your approvals of a card's operations that send one of your keys, or your share in the realm. The key keeps its grants",
+      )
+      .argument(
+        '<name>',
+        'Your key, or the label of your share in the realm, the approvals send',
+      ),
+  ).action((name: string, options: Parameters<typeof keysRevoke>[1]) =>
+    runKeysCommand(options.json, () => keysRevoke(name, options)),
+  );
+
+  keys
+    .command('pending')
+    .description(
+      'List your approvals that need approving again: a request that changed since you approved it, or an operation that can no longer be read',
+    )
+    .option('--json', 'Output JSON')
+    .action((options: { json?: boolean }) =>
+      runKeysCommand(options.json, () => keysPending(options)),
+    );
+
+  keys
+    .command('ungrant')
+    .description(
+      'Stop a key being sent to a destination: remove its grant there, after listing the approvals that revokes',
+    )
+    .argument('<name>', 'The key')
+    .requiredOption(
+      '--destination <url>',
+      'The grant’s destination, as `boxel keys show` lists it',
+    )
+    .option('--yes', "Don't ask to confirm")
+    .option('--json', 'Output JSON')
+    .action(
+      (
+        name: string,
+        options: { destination: string; yes?: boolean; json?: boolean },
+      ) => runKeysCommand(options.json, () => keysUngrant(name, options)),
     );
 
   keys
@@ -276,6 +361,27 @@ export function registerKeysCommand(program: Command): void {
         },
       ) => runKeysCommand(options.json, () => keysConnect(name, options)),
     );
+}
+
+// What `approve` and `revoke` name: the operations, the realm they are
+// approved in, and optionally one slot and one card.
+function approvalOptions(command: Command): Command {
+  return command
+    .requiredOption(
+      '--operation <operation>',
+      '<module>#<Class> for every operation on the class, or <module>#<Class>.<operation> for one. The module is a URL, or a path relative to --realm',
+    )
+    .requiredOption('--realm <url>', 'The realm the operations run in')
+    .option(
+      '--slot <slot>',
+      'Only this credential slot, as written in the declaration: userKey, apiKey or apiKey:<name>',
+    )
+    .option(
+      '--instance <url>',
+      'The card, for an operation approved for each card on its own',
+    )
+    .option('--yes', "Don't ask to confirm")
+    .option('--json', 'Output JSON');
 }
 
 interface ValueCommandOptions {

@@ -143,7 +143,11 @@ its requests with the profile's secure session, signing in through the
 browser first when the profile has none, and mints a ticket for that one
 change. It prints a refusal as `Refused (HTTP <status>):
 <reason>`, and under `--json` passes the response's `errors` through
-unchanged, so a user's report carries the server's own words.
+unchanged, so a user's report carries the server's own words. `approve`,
+`revoke`, `pending` and `ungrant` (`commands/keys/approve.ts`) manage the
+bindings and grants (see the `key-bindings` skill, _From the terminal_): an
+approval or a swap that would give a key a destination none of its grants
+covers is confirmed in the secure window, never created from the terminal.
 
 | Status | Means                                                                                                                                                                                  |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

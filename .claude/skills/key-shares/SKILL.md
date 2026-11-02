@@ -89,7 +89,8 @@ no route sets it.
 - A realm's direct writers see its shares with owner and state, without the
   key of a share they don't own, each with the operations it is approved for
   there (`operations`: one per binding, with its type, operation, instance,
-  slot and state; see the `key-bindings` skill) (`GET /_key-shares?realm=<url>`), and its
+  slot, state and the destination it was last approved for, which a swap
+  grants the new key; see the `key-bindings` skill) (`GET /_key-shares?realm=<url>`), and its
   notices, newest first, at most 100 (`GET /_key-share-notices?realm=<url>`).
   An owner who loses write stops seeing the realm's shares and notices, and
   still sees their own.
