@@ -261,6 +261,34 @@ describe('boxel keys: managing keys and shares (integration)', () => {
     await keysUnshare('weather', { ...deps, realm });
   });
 
+  it("shares a key for people who aren't signed in too, with an optional cap", async () => {
+    await expect(
+      keysShare('weather', { ...deps, realm, as: 'capped', anonymousCap: '5' }),
+    ).rejects.toThrow('--anonymous-cap is given with --anonymous');
+    await expect(
+      keysShare('weather', {
+        ...deps,
+        realm,
+        as: 'capped',
+        anonymous: true,
+        anonymousCap: 'lots',
+      }),
+    ).rejects.toThrow('--anonymous-cap is a whole number of calls');
+    let share = await keysShare('weather', {
+      ...deps,
+      realm,
+      as: 'for-anyone',
+      anonymous: true,
+      anonymousCap: '50',
+    });
+    expect(share).toMatchObject({ anonymous: true, anonymousDailyCap: 50 });
+    let [listed] = (await keysShares({ ...deps, realm })).filter(
+      (s) => s.label === 'for-anyone',
+    );
+    expect(listed).toMatchObject({ anonymous: true, anonymousDailyCap: 50 });
+    await keysUnshare('for-anyone', { ...deps, realm });
+  });
+
   it('spends a ticket only on the change it was minted for', async () => {
     let token = pm.getSecureSession()!.token;
     let [backup] = await keysList({ profileManager: pm });

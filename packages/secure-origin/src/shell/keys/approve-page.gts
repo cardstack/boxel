@@ -27,14 +27,13 @@
 // interactive use when the batch is already approved for it, or holds nothing
 // else.
 //
-// Under that second choice, for a batch a workspace's share fills, the user
-// also chooses who can use the share: only people who are signed in (where
-// the choice starts), or anyone, including people who aren't. Choosing anyone
-// adds its confirmation to the batch's, says in each group that anyone can
-// use the key there, and asks for the anonymous cap of a share allowed it for
-// the first time: the calls a day everyone who isn't signed in makes with it,
-// together. A personal key is never offered for it. An operation approved for
-// signed-in people only is in the batch only while anyone is chosen.
+// Who may make the calls is not chosen here. Where the realm's policy opens a
+// call that sends a shared key to people who aren't signed in, interactive
+// use of a share whose owner agreed to that when sharing it serves them too:
+// each group it sends to says "including people who aren't signed in", and
+// the confirmation adds a line for it. A share whose owner didn't agree is
+// said to serve signed-in people only. A share's anonymous cap sits inside
+// its daily budget, so a first daily budget is at least that cap.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
@@ -42,8 +41,7 @@
 // Opened by `boxel keys approve` (`#cli_port=…&cli_state=…`), for an approval
 // that grants a key a destination it has none for, the operations the CLI
 // listed (`#operations=<name>,…`) start ticked and the others unticked, the
-// choice starts on interactive use for `--interactive` (`#interactive=1`),
-// anyone is chosen for `--anonymous` (`#anonymous=1`), and
+// choice starts on interactive use for `--interactive` (`#interactive=1`), and
 // the page tells the CLI's listener when the approval is made, or that it was
 // cancelled when the user cancels or closes the window first (`KeysWindow`).
 // It hands over nothing but that: the CLI reads the approval from the realm
@@ -68,7 +66,6 @@ import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Globe from '../../components/icons/globe.gts';
-import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import RadioTile from '../../components/radio-tile.gts';
@@ -77,25 +74,22 @@ import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
 import {
-  ANONYMOUS_CONFIRMATION,
+  anonymousConfirmation,
   approvalOf,
   batchFor,
   confirmationsFor,
-  firstAnonymousShares,
   firstInteractiveShares,
-  initialAnonymous,
   initialChoice,
   initialUse,
   INTERACTIVE_CONFIRMATION,
   newGrants,
-  offersAnonymous,
   operationKey,
-  parseAnonymousCap,
   parseDailyBudget,
   placementPhrase,
   remainingFor,
   requestChanges,
   requestFields,
+  sharesForVisitors,
   slotChoices,
   type ApprovalUse,
   type NewGrant,
@@ -127,7 +121,8 @@ type State =
       card: string;
       realm: string;
       interactive: boolean;
-      anonymous: boolean;
+      // Whether the approval serves people who aren't signed in too.
+      anonymous?: boolean;
     };
 type ChoosingState = Extract<State, { name: 'choosing' }>;
 
@@ -171,8 +166,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           {{if (eq this.done.count 1) 'call' 'calls'}}
           with your key
           {{#if this.done.anonymous}}
-            on its schedule and whenever it’s opened, by anyone, without asking
-            you again.
+            on its schedule and whenever anyone opens it,
+            <strong data-test-approve-done-anonymous>including people who aren’t
+              signed in</strong>, without asking you again.
           {{else if this.done.interactive}}
             on its schedule and whenever it’s opened, without asking you again.
           {{else}}
@@ -216,16 +212,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               @selected={{this.form.use}}
               @onSelect={{this.chooseUse}}
             />
-            {{#if this.offersAnonymousNow}}
-              <RadioChoices
-                @label='Who can use it'
-                @icon={{Users}}
-                @name='approve-who'
-                @choices={{this.whoChoices}}
-                @selected={{if this.form.anonymous 'anyone' 'signed-in'}}
-                @onSelect={{this.chooseWho}}
-              />
-            {{/if}}
             {{#each this.choices as |choice|}}
               <FieldContainer
                 @tag='div'
@@ -308,6 +294,25 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   <p class='note' data-test-approve-whole-host>Boxel can send
                     the key with any call to this host.</p>
                 {{/if}}
+                {{#let (this.visitorsAt group) as |visitors|}}
+                  {{#if visitors.anyone.length}}
+                    <p class='note' data-test-approve-anonymous-note>
+                      Anyone can use it for requests to
+                      {{group.destination.registrableDomain}}
+                      ({{group.destination.host}}{{group.destination.path}}),
+                      <strong>including people who aren’t signed in</strong>.
+                    </p>
+                  {{/if}}
+                  {{#each visitors.signedInOnly as |share|}}
+                    <p class='note' data-test-approve-signed-in-only-note>
+                      This workspace lets people who aren’t signed in open cards
+                      that call a service with a shared key, but
+                      <strong>{{share.label}}</strong>
+                      is shared for signed-in people only, so they’re asked to
+                      sign in.
+                    </p>
+                  {{/each}}
+                {{/let}}
                 {{#each (this.newGrantsAt group.destination.href) as |grant|}}
                   <p
                     class='new-grant'
@@ -323,14 +328,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       there.</span>
                   </p>
                 {{/each}}
-                {{#if (this.anonymousAt group)}}
-                  <p class='note' data-test-approve-anonymous-note>
-                    Anyone can use it for requests to
-                    {{group.destination.registrableDomain}}
-                    ({{group.destination.host}}{{group.destination.path}}),
-                    <strong>including people who aren’t signed in</strong>.
-                  </p>
-                {{/if}}
                 <ul class='operations'>
                   {{#each group.operations as |operation|}}
                     <li
@@ -356,11 +353,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             class='pipelines-only'
                             data-test-approve-pipelines-only
                           >Approved for the schedule</span>
-                        {{else if (eq operation.status 'signed-in-only')}}
-                          <span
-                            class='pipelines-only'
-                            data-test-approve-signed-in-only
-                          >Now for signed-in people only</span>
                         {{/if}}
                       </label>
                       <details class='request'>
@@ -439,40 +431,19 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     @value={{this.budgetText share}}
                     @onInput={{fn this.setBudget share.id}}
                     @state={{if (this.budgetValid share) 'none' 'invalid'}}
-                    @errorMessage={{unless
-                      (this.budgetValid share)
-                      'A whole number of calls, at least one'
-                    }}
+                    @errorMessage={{this.budgetError share}}
                     inputmode='numeric'
                     data-test-approve-budget-input
                   />
                   <span class='note budget-note'>The most calls this share makes
                     in a day, in total across everyone who opens a card that
                     uses it. This is the first time opened cards can use this
-                    share, so set it to what your plan with the service allows.</span>
-                </FieldContainer>
-              {{/each}}
-              {{#each this.capShares as |share|}}
-                <FieldContainer
-                  @tag='label'
-                  @label='Anonymous cap for {{share.label}}'
-                  @icon={{KeyRound}}
-                  data-test-approve-cap={{share.label}}
-                >
-                  <BoxelInput
-                    @type='text'
-                    @autocomplete='off'
-                    @value={{this.capText share}}
-                    @onInput={{fn this.setCap share.id}}
-                    @state={{if (this.capShown share) 'none' 'invalid'}}
-                    @errorMessage={{this.capError share}}
-                    inputmode='numeric'
-                    data-test-approve-cap-input
-                  />
-                  <span class='note budget-note'>How many calls people who
-                    aren’t signed in can make with this share each day, all
-                    together. Set it below the daily budget: the rest of that
-                    budget is kept for people who are signed in.</span>
+                    share, so set it to what your plan with the service allows.
+                    {{#if share.anonymousDailyCap}}
+                      It holds the
+                      {{share.anonymousDailyCap}}
+                      calls a day you allowed people who aren’t signed in.
+                    {{/if}}</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -764,13 +735,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
     use: 'pipelines' as ApprovalUse,
-    // Whether people who aren't signed in may use the shares it fills, while
-    // the use is interactive.
-    anonymous: false,
     // A share's daily budget as typed, by share id.
     budgets: {} as Record<string, string>,
-    // A share's anonymous cap as typed, by share id.
-    caps: {} as Record<string, string>,
     saving: false,
     error: undefined as string | undefined,
   });
@@ -785,19 +751,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       value: 'interactive',
       label: 'On a schedule and when the card is opened',
       hint: 'The card’s pipelines make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
-    },
-  ];
-
-  private whoChoices: RadioChoice[] = [
-    {
-      value: 'signed-in',
-      label: 'Only people who are signed in',
-      hint: 'People with access to this workspace.',
-    },
-    {
-      value: 'anyone',
-      label: 'Anyone, including people who aren’t signed in',
-      hint: 'Anyone who can open the card can make these calls with the workspace’s shared key. Your own keys are never used for them.',
     },
   ];
 
@@ -833,57 +786,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return { ...context, operation };
   }
 
-  // The batch as shown for the choice of where requests run, and by whom.
+  // The batch as shown for the choice of where requests run.
   private get batch(): ApprovalBatch | undefined {
     return this.choosing
-      ? batchFor(this.choosing.batch, this.form.use, this.form.anonymous)
+      ? batchFor(this.choosing.batch, this.form.use)
       : undefined;
   }
 
   private get interactive() {
     return this.form.use === 'interactive';
   }
-
-  // Whether the batch has anything a share fills, which is all anonymous use
-  // can be offered for.
-  private get offersAnonymous() {
-    return this.choosing
-      ? offersAnonymous(
-          batchFor(this.choosing.batch, 'interactive', true).groups.flatMap(
-            (g) => g.operations,
-          ),
-        )
-      : false;
-  }
-
-  // Whether this approval lets people who aren't signed in use the shares it
-  // fills.
-  private get anonymous() {
-    return (
-      this.interactive &&
-      this.form.anonymous &&
-      offersAnonymous(this.tickedOperations)
-    );
-  }
-
-  // Who can use the shares is asked only while calls run when the card is
-  // opened: a scheduled pipeline has no visitor.
-  private get offersAnonymousNow() {
-    return this.interactive && this.offersAnonymous;
-  }
-
-  private chooseWho = (value: string) => {
-    this.form.anonymous = value === 'anyone';
-    this.form.error = undefined;
-  };
-
-  // A group says anyone can use the key there when a ticked operation in it
-  // sends a share's key for people who aren't signed in.
-  private anonymousAt = (group: { operations: BatchOperation[] }) =>
-    this.anonymous &&
-    offersAnonymous(
-      group.operations.filter((o) => this.form.ticked.has(operationKey(o))),
-    );
 
   // Whether what is shown is approved for one card (an operation approved
   // per instance) rather than for every card of its kind.
@@ -894,9 +806,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get remaining() {
-    return this.choosing
-      ? remainingFor(this.choosing.batch, this.form.use, this.form.anonymous)
-      : 0;
+    return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
   }
 
   private get choices(): SlotChoice[] {
@@ -910,49 +820,32 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get confirmations(): string[] {
+    let anyone = this.visitors.anyone;
     return [
       ...confirmationsFor(this.tickedOperations).map(
         (kind) => INTERACTIVE_CONFIRMATION[kind],
       ),
-      ...(this.anonymous ? [ANONYMOUS_CONFIRMATION] : []),
+      ...(anyone.length > 0 ? [anonymousConfirmation(anyone)] : []),
     ];
   }
 
-  // The shares this approval allows for people who aren't signed in for the
-  // first time, each with the daily budget it will have.
-  private get capShares() {
-    return this.batch && this.anonymous
-      ? firstAnonymousShares(
-          this.batch,
-          this.tickedOperations,
-          this.form.chosen,
-        ).map((share) => ({
-          ...share,
-          dailyBudget: this.budgetShares.some((b) => b.id === share.id)
-            ? (parseDailyBudget(this.budgetText(share)) ?? share.dailyBudget)
-            : share.dailyBudget,
-        }))
-      : [];
+  // Who besides signed-in people the ticked operations serve once approved
+  // for opened cards: the realm's policy and each share's owner decide that,
+  // and the page only says so.
+  private get visitors() {
+    return this.batch && this.interactive
+      ? sharesForVisitors(this.batch, this.tickedOperations, this.form.chosen)
+      : { anyone: [], signedInOnly: [] };
   }
 
-  private capText = (share: { id: string }) => this.form.caps[share.id] ?? '';
-
-  private capValid = (share: { id: string; dailyBudget: number }) =>
-    parseAnonymousCap(this.capText(share), share.dailyBudget) !== undefined;
-
-  // An empty cap is waiting to be typed, not wrong yet.
-  private capShown = (share: { id: string; dailyBudget: number }) =>
-    this.capText(share).trim() === '' || this.capValid(share);
-
-  private capError = (share: { id: string; dailyBudget: number }) =>
-    this.capShown(share)
-      ? undefined
-      : `A whole number of calls, from 1 to the daily budget of ${share.dailyBudget}`;
-
-  private setCap = (shareId: string, value: string) => {
-    this.form.caps = { ...this.form.caps, [shareId]: value };
-    this.form.error = undefined;
-  };
+  private visitorsAt = (group: { operations: BatchOperation[] }) =>
+    this.batch && this.interactive
+      ? sharesForVisitors(
+          this.batch,
+          group.operations.filter((o) => this.form.ticked.has(operationKey(o))),
+          this.form.chosen,
+        )
+      : { anyone: [], signedInOnly: [] };
 
   // The shares this approval allows in open cards for the first time.
   private get budgetShares() {
@@ -968,8 +861,24 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private budgetText = (share: { id: string; dailyBudget: number }) =>
     this.form.budgets[share.id] ?? String(share.dailyBudget);
 
-  private budgetValid = (share: { id: string; dailyBudget: number }) =>
-    parseDailyBudget(this.budgetText(share)) !== undefined;
+  private budgetValid = (share: {
+    id: string;
+    dailyBudget: number;
+    anonymousDailyCap: number | null;
+  }) =>
+    parseDailyBudget(this.budgetText(share), share.anonymousDailyCap ?? 1) !==
+    undefined;
+
+  private budgetError = (share: {
+    id: string;
+    dailyBudget: number;
+    anonymousDailyCap: number | null;
+  }) =>
+    this.budgetValid(share)
+      ? undefined
+      : share.anonymousDailyCap
+        ? `A whole number of calls, at least the ${share.anonymousDailyCap} allowed people who aren’t signed in`
+        : 'A whole number of calls, at least one';
 
   private setBudget = (shareId: string, value: string) => {
     this.form.budgets = { ...this.form.budgets, [shareId]: value };
@@ -1017,8 +926,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       this.form.saving ||
       ticked.length === 0 ||
       ticked.some((o) => o.slots.some((s) => !this.form.chosen[s.slot])) ||
-      this.budgetShares.some((share) => !this.budgetValid(share)) ||
-      this.capShares.some((share) => !this.capValid(share))
+      this.budgetShares.some((share) => !this.budgetValid(share))
     );
   }
 
@@ -1074,7 +982,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           target: this.opened.target,
           review: this.args.review,
           interactive: true,
-          anonymous: true,
         }),
       ]);
       let operations = batch.groups.flatMap((g) => g.operations);
@@ -1085,7 +992,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           card: batch.card.name,
           realm: batch.realm.name,
           interactive: false,
-          anonymous: false,
         };
         this.args.api.visit.loaded();
         this.args.api.tellCliDone();
@@ -1106,9 +1012,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       if (!keep) {
         this.form.use = initialUse(batch, {
           cliInteractive: this.fromCli.interactive,
-        });
-        this.form.anonymous = initialAnonymous(batch, {
-          cliAnonymous: this.fromCli.anonymous,
         });
       }
       let keys = operations.map(operationKey);
@@ -1168,7 +1071,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private approve = async (state: ChoosingState) => {
     try {
       let interactive = this.interactive;
-      let anonymous = this.anonymous;
+      let anonymous = this.visitors.anyone.length > 0;
       let operations = approvalOf(
         this.batch!,
         this.choices,
@@ -1178,22 +1081,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       let dailyBudgets = Object.fromEntries(
         this.budgetShares.map((share) => [
           share.id,
-          parseDailyBudget(this.budgetText(share))!,
-        ]),
-      );
-      let anonymousCaps = Object.fromEntries(
-        this.capShares.map((share) => [
-          share.id,
-          parseAnonymousCap(this.capText(share), share.dailyBudget)!,
+          parseDailyBudget(
+            this.budgetText(share),
+            share.anonymousDailyCap ?? 1,
+          )!,
         ]),
       );
       await approveOperations(this.args.api.config, {
         realm: state.batch.realm.url,
         operations,
         interactive,
-        anonymous,
         dailyBudgets,
-        anonymousCaps,
       });
       this.page.state = {
         name: 'done',

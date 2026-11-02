@@ -83,6 +83,13 @@ export interface KeyShare {
   // settings with the platform's defaults filled in. Seen only by the share's
   // owner and the realm's direct writers, as every share is.
   limits: KeyLimits;
+  // Whether people who aren't signed in may use the key, where the realm's
+  // policy opens a call that sends it to them. Its owner agrees to it when
+  // sharing the key, and must when the policy already opens such a call.
+  anonymous: boolean;
+  // The optional cap on calls a UTC day across everyone who isn't signed in,
+  // inside the share's daily budget. Null where none is set.
+  anonymousDailyCap: number | null;
   // In a realm's listing: the operations the share is approved for there,
   // one per binding, so the realm's writers see what each share is used by.
   operations?: KeyShareOperation[];
@@ -116,7 +123,7 @@ export interface KeyShareNotice {
 // The most notices a realm's listing returns, newest first.
 export const MAX_KEY_SHARE_NOTICES = 100;
 
-const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at, ${KEY_LIMIT_COLUMNS}`;
+const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at, anonymous, anonymous_daily_cap, ${KEY_LIMIT_COLUMNS}`;
 
 function iso(value: unknown): string | null {
   return value == null ? null : new Date(value as string).toISOString();
@@ -140,6 +147,9 @@ function toShare(
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
     limits: limitsOf(row),
+    anonymous: Boolean(row.anonymous),
+    anonymousDailyCap:
+      row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
   };
 }
 
@@ -217,6 +227,27 @@ function notADirectWriter() {
     403,
     'only a direct writer of the realm can do this to its shares',
   );
+}
+
+// A share's anonymous cap, as its owner names it: a whole number of calls, at
+// least one. Given only with anonymous use; null for none.
+function validateAnonymousCap(cap: unknown, anonymous: boolean): number | null {
+  if (cap === undefined || cap === null) {
+    return null;
+  }
+  if (!anonymous) {
+    throw new UserKeyError(
+      400,
+      'an anonymous cap is set on a share that allows anonymous use',
+    );
+  }
+  if (typeof cap !== 'number' || !Number.isSafeInteger(cap) || cap < 1) {
+    throw new UserKeyError(
+      400,
+      'the anonymous cap is a whole number of calls, at least 1',
+    );
+  }
+  return cap;
 }
 
 export function validateRealm(realm: unknown): URL {
@@ -360,6 +391,12 @@ async function lockVisibleShare(
   }
 }
 
+// Shares a key. `anonymous` is the owner's agreement that people who aren't
+// signed in may use it, with an optional cap on their calls a day.
+// `opensToAnonymous`, read from the realm's policy by the caller, says whether
+// the realm already opens a call that sends a shared key to such people; the
+// key is then shared only with that agreement, so a visitor the policy admits
+// is never refused for want of it.
 export async function shareKey(
   dbAdapter: DBAdapter,
   {
@@ -367,17 +404,34 @@ export async function shareKey(
     realm,
     keyId,
     label,
+    anonymous,
+    anonymousDailyCap,
+    opensToAnonymous = async () => false,
     ticket,
   }: {
     owner: string;
     realm: unknown;
     keyId: unknown;
     label: unknown;
+    anonymous?: unknown;
+    anonymousDailyCap?: unknown;
+    // Absent where the caller knows the realm opens nothing to such people.
+    opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
     ticket: unknown;
   },
 ): Promise<KeyShare> {
   let realmURL = validateRealm(realm);
   let validLabel = validateShareLabel(label);
+  if (anonymous !== undefined && typeof anonymous !== 'boolean') {
+    throw new UserKeyError(400, 'anonymous is true or false');
+  }
+  let cap = validateAnonymousCap(anonymousDailyCap, anonymous === true);
+  if (anonymous !== true && (await opensToAnonymous(realmURL))) {
+    throw new UserKeyError(
+      400,
+      "this realm's policy lets people who aren't signed in make calls that send a shared key, so a key is shared into it only when its owner agrees to their using it (anonymous: true, or `boxel keys share --anonymous`)",
+    );
+  }
   if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a share names the key it holds');
   }
@@ -400,7 +454,7 @@ export async function shareKey(
     }
     await lockOwnKey(txQuery, owner, keyId);
     let [row] = await txQuery([
-      `INSERT INTO key_shares (id, realm_url, label, owner, key_id, state) VALUES (`,
+      `INSERT INTO key_shares (id, realm_url, label, owner, key_id, state, anonymous, anonymous_daily_cap) VALUES (`,
       param(id),
       `, `,
       param(realmURL.href),
@@ -410,7 +464,11 @@ export async function shareKey(
       param(owner),
       `, `,
       param(keyId),
-      `, 'active') ON CONFLICT (realm_url, label) DO NOTHING RETURNING ${SHARE_COLUMNS}`,
+      `, 'active', `,
+      param(anonymous === true),
+      `, `,
+      param(cap),
+      `) ON CONFLICT (realm_url, label) DO NOTHING RETURNING ${SHARE_COLUMNS}`,
     ]);
     if (!row) {
       throw new UserKeyError(
@@ -562,7 +620,10 @@ export async function swapKeyIntoShare(
     // Limits are the key owner's to set, so a share taken over by another
     // writer starts from the platform's defaults rather than spending the new
     // owner's key under limits someone else chose. A writer swapping another
-    // of their own keys into their own share keeps the limits they set.
+    // of their own keys into their own share keeps the limits they set. So
+    // too for people who aren't signed in: only a key's owner agrees to their
+    // using it, so a share taken over serves signed-in people only, with no
+    // anonymous cap.
     let [updated] = await txQuery([
       `UPDATE key_shares SET `,
       ...[
@@ -570,11 +631,15 @@ export async function swapKeyIntoShare(
         'rate_refill_per_minute',
         'daily_budget',
         'monthly_budget',
+        'anonymous_daily_cap',
       ].flatMap((column, index) => [
         `${index === 0 ? '' : ', '}${column} = CASE WHEN owner = `,
         param(user),
         ` THEN ${column} END`,
       ]),
+      `, anonymous = (owner = `,
+      param(user),
+      ` AND anonymous)`,
       `, owner = `,
       param(user),
       `, key_id = `,

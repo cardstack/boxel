@@ -126,7 +126,12 @@ function context(attributes: Record<string, unknown>) {
   });
 }
 
-const WORKSPACE = { url: REALM, name: 'Team Workspace', directWriter: true };
+const WORKSPACE = {
+  url: REALM,
+  name: 'Team Workspace',
+  directWriter: true,
+  opensToAnonymous: false,
+};
 
 // A Google service account's JSON key file, as Google issues it. The page
 // only reads its type and email; the key itself is a placeholder.
@@ -1748,7 +1753,24 @@ module('Integration | key pages', function (hooks) {
           data: {
             type: 'key-share',
             id: 'share-9',
-            attributes: { ...body.data.attributes, state: 'active' },
+            attributes: {
+              anonymous: false,
+              anonymousDailyCap: null,
+              ...body.data.attributes,
+              state: 'active',
+            },
+          },
+        });
+    }
+
+    // The context of a workspace chosen on the page, by its address.
+    function chosenWorkspace(opensToAnonymous = false) {
+      return ({ body }: { body: any }) =>
+        context({
+          realm: {
+            ...WORKSPACE,
+            url: body.data.attributes.realm,
+            opensToAnonymous,
           },
         });
     }
@@ -1770,6 +1792,7 @@ module('Integration | key pages', function (hooks) {
               },
             ],
           }),
+        'POST _secure-window/context': chosenWorkspace(),
         'POST _key-shares': shares(),
       });
       visitShell('keys/key-2/share');
@@ -1856,6 +1879,7 @@ module('Integration | key pages', function (hooks) {
               attributes: { name },
             })),
           }),
+        'POST _secure-window/context': chosenWorkspace(),
         'POST _key-shares': shares(),
       });
       visitShell('keys/key-2/share');
@@ -1929,6 +1953,83 @@ module('Integration | key pages', function (hooks) {
         'and so is the share',
       );
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a workspace that lets only signed-in people use its shared keys says so, and lets the owner allow people who aren’t signed in ahead of time', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'POST _key-shares': shares(),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"] strong')
+        .hasText('Only signed-in people');
+      assert.dom('[data-test-share-key-agree]').doesNotExist();
+      assert
+        .dom('[data-test-radio-choice="signed-in"] input')
+        .isChecked('it starts on signed-in people only');
+      assert.dom('[data-test-share-key-cap]').doesNotExist();
+
+      await click('[data-test-radio-choice="anyone"] input');
+      assert
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText(
+          'and so can people who aren’t signed in',
+          'the intro tells of them once they can use it',
+        );
+      assert.dom('[data-test-share-key-cap-input]').hasValue('');
+      await fillIn('[data-test-share-key-cap-input]', 'lots');
+      assert
+        .dom('[data-test-share-key-save]')
+        .isDisabled('a cap is a whole number of calls');
+      await fillIn('[data-test-share-key-cap-input]', '');
+      await click('[data-test-key-choice="Maps"] input');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let { attributes } = requests.find(
+        (r) => r.method === 'POST' && r.path === '_key-shares',
+      )!.body.data;
+      assert.true(attributes.anonymous);
+      assert.strictEqual(
+        attributes.anonymousDailyCap,
+        undefined,
+        'the cap is optional',
+      );
+      assert
+        .dom('[data-test-share-key-done-anonymous]')
+        .hasText('People who aren’t signed in can use it too');
+    });
+
+    test('a workspace that lets people who aren’t signed in use its shared keys bolds that, and shares a key only once its owner agrees', async function (assert) {
+      serve({
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, opensToAnonymous: true } }),
+        'POST _key-shares': shares(),
+      });
+      visitShell(`share-key#realm=${encodeURIComponent(REALM)}`);
+      await render(SharePage);
+      await waitFor('[data-test-share-key-form]');
+      assert
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText('and so can people who aren’t signed in');
+      assert
+        .dom('[data-test-radio-choices="share-who"]')
+        .doesNotExist('there is no choosing signed-in people only here');
+      await click('[data-test-key-choice="Maps"] input');
+      assert
+        .dom('[data-test-share-key-save]')
+        .isDisabled('the owner agrees first');
+      await click('[data-test-share-key-agree-input]');
+      await fillIn('[data-test-share-key-cap-input]', '50');
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let { attributes } = requests.find(
+        (r) => r.method === 'POST' && r.path === '_key-shares',
+      )!.body.data;
+      assert.true(attributes.anonymous);
+      assert.strictEqual(attributes.anonymousDailyCap, 50);
     });
 
     test('with no keys, says to add one on the key page first', async function (assert) {

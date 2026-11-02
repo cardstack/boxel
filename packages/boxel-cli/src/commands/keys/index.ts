@@ -203,10 +203,26 @@ export function registerKeysCommand(program: Command): void {
     .argument('<name>', 'The key')
     .requiredOption('--realm <url>', 'The realm')
     .option('--as <label>', 'The label the realm knows it by (default: <name>)')
+    .option(
+      '--anonymous',
+      "Let people who aren't signed in use it too, where the realm's policy opens a call that sends it to them. Required when the realm's policy already does",
+    )
+    .option(
+      '--anonymous-cap <calls>',
+      "With --anonymous, the most calls a day people who aren't signed in make with it, all together. The rest of its daily budget stays for signed-in people",
+    )
     .option('--json', 'Output JSON')
     .action(
-      (name: string, options: { realm: string; as?: string; json?: boolean }) =>
-        runKeysCommand(options.json, () => keysShare(name, options)),
+      (
+        name: string,
+        options: {
+          realm: string;
+          as?: string;
+          anonymous?: boolean;
+          anonymousCap?: string;
+          json?: boolean;
+        },
+      ) => runKeysCommand(options.json, () => keysShare(name, options)),
     );
 
   keys
@@ -265,11 +281,7 @@ export function registerKeysCommand(program: Command): void {
     )
     .option(
       '--anonymous',
-      "With --interactive, also let people who aren't signed in use your shares this approval fills, where the realm's policy opens the operation to them. Never a personal key",
-    )
-    .option(
-      '--anonymous-cap <calls>',
-      "With --anonymous, the anonymous cap of a share allowed for people who aren't signed in for the first time: calls a day across all of them together, at most the share's daily budget. In the secure window it's asked for there",
+      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: anonymous use is not offered)',
     )
     .option(
       '--timeout <seconds>',

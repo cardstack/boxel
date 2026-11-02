@@ -503,11 +503,7 @@ module(basename(import.meta.filename), function (hooks) {
       [approval('list', { userKey: { keyId: key.id } })],
       { attributes: { interactive: true, anonymous: true } },
     );
-    assert.strictEqual(
-      anonymous.status,
-      400,
-      'anonymous use is approved only for a shared key, never a personal one',
-    );
+    assert.strictEqual(anonymous.status, 403, 'anonymous use is not offered');
   });
 
   test('approving takes a session signed in on the secure origin, never the app session', async function (assert) {

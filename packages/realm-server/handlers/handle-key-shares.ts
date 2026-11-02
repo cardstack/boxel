@@ -15,6 +15,7 @@ import {
   type KeyShareNotice,
 } from '../lib/key-shares.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
+import { realmOpensSharedKeysToAnonymous } from '../lib/anonymous-key-use.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { secureSessionClient } from '../lib/secure-session.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
@@ -88,7 +89,13 @@ async function readShareBody(
   return { attributes, ticket: ticketOf(body) };
 }
 
-const SHARE_ATTRIBUTES = new Set(['realm', 'keyId', 'label']);
+const SHARE_ATTRIBUTES = new Set([
+  'realm',
+  'keyId',
+  'label',
+  'anonymous',
+  'anonymousDailyCap',
+]);
 const SWAP_ATTRIBUTES = new Set(['keyId']);
 
 // `GET /_key-shares` lists the user's own shares, in every realm; with
@@ -134,7 +141,8 @@ export function handleListKeyShareNotices({
   });
 }
 
-export function handleShareKey({ dbAdapter }: CreateRoutesArgs): Handler {
+export function handleShareKey(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SHARE_ATTRIBUTES);
@@ -143,6 +151,9 @@ export function handleShareKey({ dbAdapter }: CreateRoutesArgs): Handler {
       realm: attributes.realm,
       keyId: attributes.keyId,
       label: attributes.label,
+      anonymous: attributes.anonymous,
+      anonymousDailyCap: attributes.anonymousDailyCap,
+      opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
     await sendJSON(ctxt, 201, { data: serialize(share) });

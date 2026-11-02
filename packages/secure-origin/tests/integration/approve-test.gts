@@ -95,7 +95,7 @@ function operation(
 
 function batch(attributes: Record<string, unknown> = {}) {
   return {
-    realm: { url: REALM, name: 'Team Workspace' },
+    realm: { url: REALM, name: 'Team Workspace', opensToAnonymous: false },
     card: { name: 'PR Inbox', module: MODULE, exportName: 'Inbox' },
     instance: null,
     review: false,
@@ -163,7 +163,12 @@ function context() {
     data: {
       type: 'secure-window-context',
       attributes: {
-        realm: { url: REALM, name: 'Team Workspace', directWriter: true },
+        realm: {
+          url: REALM,
+          name: 'Team Workspace',
+          directWriter: true,
+          opensToAnonymous: false,
+        },
         card: { name: 'PR Inbox', module: MODULE, exportName: 'Inbox' },
         operation: {
           name: 'listPRs',
@@ -286,7 +291,6 @@ module('Integration | approve pages', function (hooks) {
         target: { kind: 'instance', url: CARD },
         review: false,
         interactive: true,
-        anonymous: true,
       },
       'the page asks for the batch of the card it was opened for, never naming its operations',
     );
@@ -1237,28 +1241,8 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
   });
 
-  // A batch whose one operation a workspace's share fills.
-  function serveShareBatch(
-    share: Record<string, unknown> = {},
-    {
-      signedInOnly = false,
-      changedAnonymous = false,
-    }: { signedInOnly?: boolean; changedAnonymous?: boolean } = {},
-  ) {
+  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
-    let approved =
-      signedInOnly || changedAnonymous
-        ? {
-            status: signedInOnly ? 'signed-in-only' : 'changed',
-            approved: {
-              snapshot: shared.slots[0]!.snapshot,
-              keyId: null,
-              shareId: 'share-team',
-              interactive: true,
-              anonymous: changedAnonymous,
-            },
-          }
-        : {};
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
@@ -1276,13 +1260,92 @@ module('Integration | approve pages', function (hooks) {
                   operations: [
                     {
                       ...shared,
-                      ...(signedInOnly ? { status: 'signed-in-only' } : {}),
-                      ...(changedAnonymous ? { status: 'changed' } : {}),
                       slots: shared.slots.map((s) => ({
                         ...s,
                         slot: 'apiKey',
                         key: 'apiKey',
-                        ...approved,
+                      })),
+                    },
+                  ],
+                },
+              ],
+              keys: [],
+              shares: [
+                {
+                  id: 'share-team',
+                  label: 'Team GitHub',
+                  keyId: 'key-gh',
+                  keyName: 'GitHub token',
+                  covers: [GRAPHQL],
+                  interactive: false,
+                  dailyBudget: 2400,
+                  anonymous: false,
+                  anonymousDailyCap: null,
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 1 })
+      .includesText('Any card a reader of this realm opens, from any realm');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('2400');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"]')
+      .hasTagName('label', 'the field names its input');
+
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
+    assert
+      .dom('[data-test-approve-save]')
+      .isDisabled('a budget that is not a whole number is not sent');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
+  });
+
+  // Serves a batch of one operation a share fills, in a realm whose policy
+  // does or doesn't open a shared key to people who aren't signed in.
+  function serveShareBatch({
+    opensToAnonymous,
+    share,
+  }: {
+    opensToAnonymous: boolean;
+    share: Record<string, unknown>;
+  }) {
+    let shared = operation('listTeamPRs', 'List the team’s pull requests');
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              realm: { url: REALM, name: 'Team Workspace', opensToAnonymous },
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    {
+                      ...shared,
+                      slots: shared.slots.map((s) => ({
+                        ...s,
+                        slot: 'apiKey',
+                        key: 'apiKey',
                       })),
                     },
                   ],
@@ -1309,58 +1372,18 @@ module('Integration | approve pages', function (hooks) {
     });
   }
 
-  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
-    serveShareBatch();
-    visitShell(opened);
-    await render(<template><ApprovePage /></template>);
-    await waitFor('[data-test-approve-form]');
-    await click('[data-test-radio-choice="interactive"] input');
-    assert
-      .dom('[data-test-approve-confirmation]')
-      .exists({ count: 1 })
-      .includesText('Any card a reader of this realm opens, from any realm');
-    assert
-      .dom('[data-test-approve-budget="Team GitHub"] input')
-      .hasValue('2400');
-    assert
-      .dom('[data-test-approve-budget="Team GitHub"]')
-      .hasTagName('label', 'the field names its input');
-
-    await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
-    assert
-      .dom('[data-test-approve-save]')
-      .isDisabled('a budget that is not a whole number is not sent');
-    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
-    await click('[data-test-approve-save]');
-    await settled();
-    let [approval] = approvals();
-    assert.true(approval.interactive);
-    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
-    assert.strictEqual(approval.anonymous, undefined);
-  });
-
-  test("letting people who aren't signed in use a share is a choice of who can use it under interactive use, with its own confirmation and the share's anonymous cap", async function (assert) {
-    serveShareBatch({ interactive: true, dailyBudget: 500 });
+  test('where the workspace lets people who aren’t signed in use a shared key, a share its owner allowed for them says so, and its daily budget holds its anonymous cap', async function (assert) {
+    serveShareBatch({
+      opensToAnonymous: true,
+      share: { anonymous: true, anonymousDailyCap: 100 },
+    });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert
-      .dom('[data-test-radio-choices="approve-who"]')
-      .doesNotExist('it applies only to calls made when the card is opened');
+      .dom('[data-test-approve-anonymous-note]')
+      .doesNotExist('a pipeline serves nobody who opens the card');
     await click('[data-test-radio-choice="interactive"] input');
-    assert.dom('[data-test-radio-choice="signed-in"] input').isChecked();
-    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
-    assert.dom('[data-test-approve-cap]').doesNotExist();
-
-    await click('[data-test-radio-choice="anyone"] input');
-    assert
-      .dom('[data-test-approve-confirmation]')
-      .exists({ count: 2 }, 'it joins the batch’s confirmation');
-    assert
-      .dom('[data-test-approve-interactive]')
-      .includesText(
-        'Anyone on the internet who opens this card can make these calls with this key, up to the anonymous cap.',
-      );
     assert
       .dom('[data-test-approve-anonymous-note]')
       .hasText(
@@ -1369,86 +1392,59 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-anonymous-note] strong')
       .hasText('including people who aren’t signed in');
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 2 });
     assert
-      .dom('[data-test-approve-cap="Team GitHub"]')
-      .hasTagName('label')
-      .includesText('can make with this share each day, all together');
-    assert.dom('[data-test-approve-cap="Team GitHub"] input').hasValue('');
+      .dom('[data-test-approve-interactive]')
+      .includesText(
+        'Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with this key, up to 100 calls a day all together.',
+      );
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"]')
+      .includesText('It holds the 100 calls a day');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '50');
     assert
       .dom('[data-test-approve-save]')
-      .isDisabled('the owner names the cap');
-    await fillIn('[data-test-approve-cap="Team GitHub"] input', '501');
+      .isDisabled('a daily budget below the anonymous cap is not sent');
     assert
-      .dom('[data-test-approve-save]')
-      .isDisabled('the cap is at most the share’s daily budget');
-    assert
-      .dom('[data-test-approve-cap="Team GitHub"]')
-      .includesText('from 1 to the daily budget of 500');
-    await fillIn('[data-test-approve-cap="Team GitHub"] input', '100');
+      .dom('[data-test-approve-budget="Team GitHub"]')
+      .includesText('at least the 100 allowed people who aren’t signed in');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
     assert.true(approval.interactive);
-    assert.true(approval.anonymous);
-    assert.deepEqual(approval.anonymousCaps, { 'share-team': 100 });
+    assert.strictEqual(
+      approval.anonymous,
+      undefined,
+      'the approval itself never asks for anonymous use',
+    );
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
   });
 
-  test('a share already allowed for people who are not signed in asks for no cap again', async function (assert) {
+  test('where the workspace lets people who aren’t signed in use a shared key, a share its owner kept for signed-in people says they’re asked to sign in', async function (assert) {
+    serveShareBatch({ opensToAnonymous: true, share: {} });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
+    assert
+      .dom('[data-test-approve-signed-in-only-note]')
+      .includesText('Team GitHub is shared for signed-in people only');
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
+  });
+
+  test('where the workspace lets nobody who isn’t signed in use a shared key, nothing is said of them', async function (assert) {
     serveShareBatch({
-      interactive: true,
-      anonymous: true,
-      anonymousDailyCap: 100,
+      opensToAnonymous: false,
+      share: { anonymous: true, anonymousDailyCap: null },
     });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     await click('[data-test-radio-choice="interactive"] input');
-    await click('[data-test-radio-choice="anyone"] input');
-    assert.dom('[data-test-approve-anonymous-note]').exists();
-    assert.dom('[data-test-approve-cap]').doesNotExist();
-    await click('[data-test-approve-save]');
-    await settled();
-    let [approval] = approvals();
-    assert.true(approval.anonymous);
-    assert.strictEqual(approval.anonymousCaps, undefined);
-  });
-
-  test('a batch holding only requests approved for signed-in people starts on anyone using it, each marked', async function (assert) {
-    serveShareBatch(
-      { interactive: true, anonymous: false, dailyBudget: 500 },
-      { signedInOnly: true },
-    );
-    visitShell(opened);
-    await render(<template><ApprovePage /></template>);
-    await waitFor('[data-test-approve-form]');
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    assert.dom('[data-test-radio-choice="anyone"] input').isChecked();
-    assert
-      .dom(
-        '[data-test-approve-operation="listTeamPRs"] [data-test-approve-signed-in-only]',
-      )
-      .hasText('Now for signed-in people only');
-    await click('[data-test-radio-choice="signed-in"] input');
-    assert
-      .dom('[data-test-approve-operation="listTeamPRs"]')
-      .doesNotExist('for signed-in people only, it needs nothing approved');
-  });
-
-  test('a request last approved for people who are not signed in starts on anyone using it, so approving it again keeps it', async function (assert) {
-    serveShareBatch(
-      { interactive: true, anonymous: true, anonymousDailyCap: 100 },
-      { changedAnonymous: true },
-    );
-    visitShell(opened);
-    await render(<template><ApprovePage /></template>);
-    await waitFor('[data-test-approve-form]');
-    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    assert.dom('[data-test-radio-choice="anyone"] input').isChecked();
-  });
-
-  test('a batch only personal keys fill offers no anonymous use', async function (assert) {
-    await openWith([operation('listPRs', 'List PRs')]);
-    await click('[data-test-radio-choice="interactive"] input');
-    assert.dom('[data-test-radio-choices="approve-who"]').doesNotExist();
+    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
+    assert.dom('[data-test-approve-signed-in-only-note]').doesNotExist();
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
   });
 });

@@ -227,7 +227,10 @@ function describeShare(share: KeyShare, keyNames: Map<string, string>): string {
       : share.keyId === null
         ? ', no key'
         : `, key ${keyNames.get(share.keyId) ?? share.keyId}`;
-  return `${share.label} in ${share.realm}: ${state}${key}`;
+  let anonymous = share.anonymous
+    ? `, also for people who aren't signed in${share.anonymousDailyCap != null ? ` (up to ${share.anonymousDailyCap} calls a day)` : ''}`
+    : '';
+  return `${share.label} in ${share.realm}: ${state}${key}${anonymous}`;
 }
 
 function printKey(key: UserKeyMetadata): void {
@@ -721,10 +724,29 @@ export async function keysDelete(
   return result;
 }
 
+// `--anonymous` is the owner's agreement that people who aren't signed in may
+// use the key, which the realm server requires where the realm's policy
+// already opens a call that sends a shared key to them.
 export async function keysShare(
   name: string,
-  options: { realm: string; as?: string; json?: boolean } & KeysCommandDeps,
+  options: {
+    realm: string;
+    as?: string;
+    anonymous?: boolean;
+    anonymousCap?: string;
+    json?: boolean;
+  } & KeysCommandDeps,
 ): Promise<KeyShare> {
+  let anonymousDailyCap: number | undefined;
+  if (options.anonymousCap !== undefined) {
+    if (!options.anonymous) {
+      throw new Error('--anonymous-cap is given with --anonymous');
+    }
+    anonymousDailyCap = Number(options.anonymousCap);
+    if (!Number.isSafeInteger(anonymousDailyCap) || anonymousDailyCap < 1) {
+      throw new Error('--anonymous-cap is a whole number of calls, at least 1');
+    }
+  }
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
@@ -732,11 +754,18 @@ export async function keysShare(
     keyId: key.id,
     realm: options.realm,
     label: options.as ?? name,
+    ...(options.anonymous ? { anonymous: true } : {}),
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
   });
   emit(ctx, share, () => {
     console.log(
       `${FG_GREEN}Shared ${name} into ${share.realm} as ${share.label}.${RESET}`,
     );
+    if (share.anonymous) {
+      console.log(
+        `People who aren't signed in can use it too, where the realm's policy opens a call that sends it to them${share.anonymousDailyCap != null ? `, up to ${share.anonymousDailyCap} calls a day together` : ''}.`,
+      );
+    }
   });
   return share;
 }

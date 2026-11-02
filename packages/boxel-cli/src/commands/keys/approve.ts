@@ -63,10 +63,7 @@ import {
 // prints what interactive use allows before asking. A share approved for
 // interactive use for the first time needs its daily budget, from
 // `--daily-budget` in the terminal or asked for in the window. `--anonymous`
-// also allows use by people who aren't signed in, for the shares the approval
-// fills (never a personal key); a share approved for it for the first time
-// needs its anonymous cap, from `--anonymous-cap` or asked for in the
-// window.
+// the realm server refuses: it isn't offered.
 
 // How long the CLI waits for the secure window.
 const WINDOW_TIMEOUT_MS = 10 * 60 * 1000;
@@ -124,7 +121,6 @@ interface ApproveOptions {
   interactive?: boolean;
   anonymous?: boolean;
   dailyBudget?: string;
-  anonymousCap?: string;
   yes?: boolean;
   timeout?: string;
   json?: boolean;
@@ -140,25 +136,16 @@ export const INTERACTIVE_CONFIRMATION = {
     "Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren't private, and that the service limits to reading.",
 } as const;
 
-// What anonymous use allows, printed once before the confirmation. The secure
-// window's approve page says the same.
-export const ANONYMOUS_CONFIRMATION =
-  'Anyone on the internet who opens this card can make these calls with this key, up to the anonymous cap.';
-
-// `--daily-budget` and `--anonymous-cap`: a whole number of calls, at least
-// one.
-function callsOption(
-  flag: '--daily-budget' | '--anonymous-cap',
-  value: string | undefined,
-): number | undefined {
+// `--daily-budget`: a whole number of calls, at least one.
+function dailyBudgetOption(value: string | undefined): number | undefined {
   if (value === undefined) {
     return undefined;
   }
-  let calls = /^\d+$/.test(value.trim()) ? Number(value.trim()) : NaN;
-  if (!Number.isSafeInteger(calls) || calls < 1) {
-    throw new Error(`${flag} is a whole number of calls, at least one`);
+  let budget = /^\d+$/.test(value.trim()) ? Number(value.trim()) : NaN;
+  if (!Number.isSafeInteger(budget) || budget < 1) {
+    throw new Error('--daily-budget is a whole number of calls, at least one');
   }
-  return calls;
+  return budget;
 }
 
 // Where a slot's key goes, as a person reads it.
@@ -302,7 +289,7 @@ function printBatch(
   ctx: Context,
   batch: ApprovalBatch,
   planned: Planned[],
-  { interactive, anonymous }: { interactive: boolean; anonymous: boolean },
+  { interactive }: { interactive: boolean },
 ): void {
   say(
     ctx,
@@ -321,7 +308,7 @@ function printBatch(
     for (let p of group) {
       say(
         ctx,
-        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : p.operation.status === 'pipelines-only' ? ` ${DIM}(approved for pipelines only)${RESET}` : p.operation.status === 'signed-in-only' ? ` ${DIM}(approved for signed-in people only)${RESET}` : ''}`,
+        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : p.operation.status === 'pipelines-only' ? ` ${DIM}(approved for pipelines only)${RESET}` : ''}`,
       );
       say(ctx, `      ${p.operation.method} ${p.operation.path}`);
       if (p.operation.instance) {
@@ -365,16 +352,8 @@ function printBatch(
       }
     }
   }
-  if (anonymous) {
-    say(
-      ctx,
-      `  ${FG_YELLOW}With --anonymous, for your shares: ${ANONYMOUS_CONFIRMATION}${RESET}`,
-    );
-  }
   let remaining =
-    batch.remaining +
-    (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0) +
-    (anonymous ? (batch.remainingSignedInOnly ?? 0) : 0);
+    batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
   if (remaining > 0) {
     say(ctx, '');
     say(
@@ -492,13 +471,9 @@ export async function keysApprove(
   if (options.anonymous && !options.interactive) {
     throw new Error('--anonymous is given with --interactive');
   }
-  let dailyBudget = callsOption('--daily-budget', options.dailyBudget);
+  let dailyBudget = dailyBudgetOption(options.dailyBudget);
   if (dailyBudget !== undefined && !options.interactive) {
     throw new Error('--daily-budget is given with --interactive');
-  }
-  let anonymousCap = callsOption('--anonymous-cap', options.anonymousCap);
-  if (anonymousCap !== undefined && !options.anonymous) {
-    throw new Error('--anonymous-cap is given with --anonymous');
   }
   let timeoutMs = windowTimeout(options.timeout);
   let parsed = parseOperationArgument(options.operation, options.realm);
@@ -515,7 +490,6 @@ export async function keysApprove(
   let batch = await approvalBatch(ctx.realmServerUrl, token, {
     target,
     interactive: Boolean(options.interactive),
-    anonymous: Boolean(options.anonymous),
   });
   // A card is named by its own URL, so the type --operation names is checked
   // against the one the card adopts from. Both are asked of the realm server,
@@ -580,36 +554,6 @@ export async function keysApprove(
       `${live.map((p) => p.operation.label).join(', ')} ${live.length === 1 ? 'is' : 'are'} approved for use in open cards. Pass --interactive to keep that; to run ${live.length === 1 ? 'it' : 'them'} in pipelines only, revoke ${live.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
     );
   }
-  let anonymous = Boolean(options.anonymous);
-  // Likewise, an approval made without --anonymous would quietly stop serving
-  // people who aren't signed in.
-  let open = planned.filter((p) =>
-    p.operation.slots.some(
-      (s) => p.fills.some((f) => f.slot === s.slot) && s.approved?.anonymous,
-    ),
-  );
-  if (!anonymous && open.length > 0) {
-    throw new Error(
-      `${open.map((p) => p.operation.label).join(', ')} ${open.length === 1 ? 'is' : 'are'} approved for people who aren't signed in. Pass --anonymous to keep that; to serve signed-in people only, revoke ${open.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
-    );
-  }
-  // Anonymous use is a share's: a person who isn't signed in has no key of
-  // their own.
-  let filledShares = batch.shares.filter((share) =>
-    planned.some((p) =>
-      p.fills.some((f) => f.kind === 'apiKey' && f.id === share.id),
-    ),
-  );
-  if (anonymous && filledShares.length === 0) {
-    throw new Error(
-      "--anonymous allows use of a share by people who aren't signed in, and this approval fills no slot with a share: such a person has no key of their own",
-    );
-  }
-  // The shares this approval allows anonymous use of for the first time,
-  // whose anonymous cap it names.
-  let firstAnonymous = anonymous
-    ? filledShares.filter((share) => !share.anonymous)
-    : [];
   // The shares this approval allows interactive use of for the first time,
   // whose daily budget it names.
   let firstInteractive = interactive
@@ -622,7 +566,7 @@ export async function keysApprove(
       )
     : [];
   if (dailyBudget !== undefined) {
-    if (newGrants(planned).length > 0) {
+    if (newGrants(planned).length > 0 && !options.anonymous) {
       throw new Error(
         '--daily-budget is asked for in the secure window for this approval, since it sends a key somewhere new. Leave it off',
       );
@@ -633,19 +577,7 @@ export async function keysApprove(
       );
     }
   }
-  if (anonymousCap !== undefined) {
-    if (newGrants(planned).length > 0) {
-      throw new Error(
-        '--anonymous-cap is asked for in the secure window for this approval, since it sends a key somewhere new. Leave it off',
-      );
-    }
-    if (firstAnonymous.length === 0) {
-      throw new Error(
-        "--anonymous-cap names the anonymous cap of a share allowed for people who aren't signed in for the first time, and this approval has none",
-      );
-    }
-  }
-  printBatch(ctx, batch, planned, { interactive, anonymous });
+  printBatch(ctx, batch, planned, { interactive });
   if (!options.yes) {
     if (!(await confirm(ctx, 'Approve? [y/N] '))) {
       throw new Error('Not approved');
@@ -656,33 +588,24 @@ export async function keysApprove(
   let operations = planned.map((p) =>
     approvalOf(p, { module: batch.card.module, name: batch.card.exportName }),
   );
-  if (grants.length === 0) {
+  // Anonymous use is the realm server's to refuse, which it does before
+  // anything is approved, so it is asked here, whatever grants the approval
+  // needs.
+  if (grants.length === 0 || options.anonymous) {
     if (firstInteractive.length > 0 && dailyBudget === undefined) {
       throw new Error(
         `${firstInteractive.map((s) => s.label).join(', ')} ${firstInteractive.length === 1 ? 'is' : 'are'} allowed in open cards for the first time, so name the daily budget with --daily-budget <calls> (it is ${firstInteractive.map((s) => s.dailyBudget).join(', ')} now)`,
-      );
-    }
-    if (firstAnonymous.length > 0 && anonymousCap === undefined) {
-      throw new Error(
-        `${firstAnonymous.map((s) => s.label).join(', ')} ${firstAnonymous.length === 1 ? 'is' : 'are'} allowed for people who aren't signed in for the first time, so name the anonymous cap with --anonymous-cap <calls>: the most calls a day all of them together make with the share, at most its daily budget`,
       );
     }
     let { approved } = await approveOperations(ctx.realmServerUrl, token, {
       realm: batch.realm.url,
       operations,
       interactive,
-      anonymous,
+      anonymous: Boolean(options.anonymous),
       ...(dailyBudget !== undefined
         ? {
             dailyBudgets: Object.fromEntries(
               firstInteractive.map((share) => [share.id, dailyBudget]),
-            ),
-          }
-        : {}),
-      ...(anonymousCap !== undefined
-        ? {
-            anonymousCaps: Object.fromEntries(
-              firstAnonymous.map((share) => [share.id, anonymousCap]),
             ),
           }
         : {}),
@@ -726,7 +649,6 @@ export async function keysApprove(
       key: fill.id,
       operations: planned.map((p) => p.operation.name).join(','),
       ...(interactive ? { interactive: '1' } : {}),
-      ...(anonymous ? { anonymous: '1' } : {}),
       reason: `Approve ${batch.card.name}'s requests from the Boxel CLI`,
     },
     what: `sending ${grants.map((g) => `${g.name} to ${g.host}`).join(', ')}`,

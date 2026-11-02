@@ -1,3 +1,4 @@
+import { opensSharedKeysToAnonymous } from './anonymous-key-use.ts';
 import { getDomain } from 'tldts';
 import {
   codeRefWithAbsoluteIdentifier,
@@ -93,7 +94,15 @@ export interface SlotBound {
 }
 
 export interface SecureWindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    // Whether the realm's policy lets people who aren't signed in make a call
+    // that sends a shared key (`anonymous-key-use.ts`): sharing a key into it
+    // then takes its owner's agreement to their using it.
+    opensToAnonymous: boolean;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: SecureWindowOperation;
 }
@@ -399,6 +408,7 @@ export async function secureWindowContext(
         new URL(realm.url),
         user,
       ),
+      opensToAnonymous: await opensSharedKeysToAnonymous(realm),
     },
   };
   if (!target) {

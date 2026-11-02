@@ -1,6 +1,6 @@
 ---
 name: key-shares
-description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `handlers/handle-key-shares.ts` or the triggers.
+description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, a share's consent to use by people who aren't signed in (`anonymous`, `anonymous_daily_cap`), who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `handlers/handle-key-shares.ts` or the triggers.
 ---
 
 # Key shares (operators)
@@ -83,6 +83,41 @@ changed by its owner only, from a secure session (`PUT
 /_key-shares/:id/limits`); a direct writer who isn't the owner is refused 403
 and suspends the share instead. See the `key-limits` skill.
 
+## People who aren't signed in
+
+Whether people who aren't signed in may use a share is its owner's choice
+when sharing the key, kept on the share: `key_shares.anonymous` (false by
+default) and `key_shares.anonymous_daily_cap`, an optional cap on their calls
+a UTC day all together, at least 1 and set only with `anonymous`
+(`key_shares_anonymous_daily_cap_check`). A binding never carries this
+consent; a visitor the realm's policy admits is served by a share's
+interactive bindings only while the share's `anonymous` is true (see the
+`key-bindings` skill), within its per-address rate and the cap (see the
+`key-limits` skill).
+
+- **Setting it.** `POST /_key-shares` takes `attributes.anonymous` (a
+  boolean) and `attributes.anonymousDailyCap` (a whole number, only with
+  `anonymous: true`); from the terminal, `boxel keys share <name> --realm
+<url> [--anonymous] [--anonymous-cap <calls>]`; in the secure window, the
+  `share-key` page (see the `secure-origin` skill). The share's attributes in
+  every listing carry `anonymous` and `anonymousDailyCap`, and the CLI's
+  listing says "also for people who aren't signed in" with the cap.
+- **When it is required.** Where the realm's policy already opens a call that
+  sends a shared key to people who aren't signed in
+  (`opensSharedKeysToAnonymous` in `lib/anonymous-key-use.ts`: some compiled
+  grant has `anonymous.sendsOutside`, which the policy compiles only for a
+  `callApi` whose every slot takes a shared key), sharing without
+  `anonymous: true` is refused 400 with a message pointing to
+  `boxel keys share --anonymous`. Elsewhere it is the owner's choice ahead of
+  time, for when the policy opens such a call.
+- **After sharing.** A share made while the policy opened nothing to visitors
+  keeps `anonymous` false when the policy changes, and changing it after
+  sharing isn't offered: the owner unshares and shares again. A writer
+  swapping their own key into another's suspended share takes it over
+  serving signed-in people only, with no cap, since only a key's owner agrees
+  to anonymous use; swapping another of one's own keys into one's own share
+  keeps both.
+
 ## Visibility
 
 - A share's owner sees every share they own, in every realm, with its key
@@ -155,20 +190,20 @@ with `attributes.{action: 'share', keyId, realm}`,
 `attributes.{action: 'resume', shareId}`. The request log keeps only the
 method and path of these routes.
 
-| Route                                 | Does                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------ |
-| `GET /_key-shares`                    | The user's own shares; `?key=<id>` for one key's; `?realm=<url>` for a realm's |
-| `POST /_key-shares`                   | Share: `attributes.{realm, keyId, label}`, `meta.{ticket}`                     |
-| `DELETE /_key-shares/:id`             | Unshare                                                                        |
-| `POST /_key-shares/:id/suspend`       | Suspend an active share                                                        |
-| `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
-| `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
-| `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
-| `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
+| Route                                 | Does                                                                                       |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /_key-shares`                    | The user's own shares; `?key=<id>` for one key's; `?realm=<url>` for a realm's             |
+| `POST /_key-shares`                   | Share: `attributes.{realm, keyId, label, anonymous?, anonymousDailyCap?}`, `meta.{ticket}` |
+| `DELETE /_key-shares/:id`             | Unshare                                                                                    |
+| `POST /_key-shares/:id/suspend`       | Suspend an active share                                                                    |
+| `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                                |
+| `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                                       |
+| `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                               |
+| `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)                          |
 
-| Status | Means                                                                                                                                                                                                                 |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set                                                                                               |
-| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer |
-| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                   |
-| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                        |
+| Status | Means                                                                                                                                                                                                                                                                                                           |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set; an anonymous cap without `anonymous: true` or below 1; sharing without `anonymous: true` into a realm whose policy opens a call that sends a shared key to people who aren't signed in |
+| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer                                                                                           |
+| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                                                                                                             |
+| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                                                                                                                  |

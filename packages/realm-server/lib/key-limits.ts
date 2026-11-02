@@ -52,12 +52,13 @@ import { UserKeyError } from './user-keys.ts';
 //   writers each get one notice for that period (`key_limit_notices`).
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
-// - **Callers who aren't signed in**, served by a share its owner approved for
+// - **Callers who aren't signed in**, served by a share whose owner allows
 //   anonymous use, have a bucket per address (the rate the share sets for each
-//   person, counted for each address instead), and draw together from the
-//   share's anonymous cap: a daily budget of calls inside the share's own, so
-//   they can't use up what signed-in readers rely on. Their calls spend the
-//   share's daily and monthly budgets as well.
+//   person, counted for each address instead), and spend the share's daily
+//   and monthly budgets as everyone does. Where the owner set the share's
+//   optional anonymous cap, they also draw together from it: a daily budget
+//   of calls inside the share's own, so they can't use up what signed-in
+//   readers rely on.
 //
 // Only the key's owner changes a share's or a key's limits, from the secure
 // window or the CLI. A realm's other direct writers can't raise them; they
@@ -79,7 +80,7 @@ interface LimitedSubject {
   subject: LimitSubject;
   limits: KeyLimits;
   // A share's anonymous cap: calls a UTC day across everyone who isn't
-  // signed in. Null where its owner never allowed anonymous use.
+  // signed in. Null where its owner set none.
   anonymousDailyCap: number | null;
   owner: string;
   label: string;
@@ -213,8 +214,8 @@ interface CountedBudget {
 }
 
 // The budgets a call spends: the share's or key's daily and monthly budgets,
-// and for a caller who isn't signed in, the share's anonymous cap too. A share
-// with no cap serves no such caller, which the binding check already refused.
+// and for a caller who isn't signed in, the share's anonymous cap too, where
+// it has one.
 function budgetsOf(
   limited: LimitedSubject,
   anonymous?: AnonymousCallApiCaller,
@@ -224,18 +225,14 @@ function budgetsOf(
     { key, period: 'day', limit: limited.limits.dailyBudget },
     { key, period: 'month', limit: limited.limits.monthlyBudget },
   ];
-  if (anonymous) {
+  if (anonymous && limited.anonymousDailyCap != null) {
     budgets.push({
       key: anonymousCapKey(limited.subject),
       period: 'day',
-      // An approval for anonymous use always sets the cap, and no daily
-      // budget below it is accepted, so it fits inside the budget. A share
-      // that has none counts such a caller against a cap of one call, and a
-      // platform default lowered under a share's cap holds the cap to it.
-      limit: Math.min(
-        limited.anonymousDailyCap ?? 1,
-        limited.limits.dailyBudget,
-      ),
+      // No daily budget below the cap is accepted, so it fits inside the
+      // budget; a platform default lowered under a share's cap holds the cap
+      // to it.
+      limit: Math.min(limited.anonymousDailyCap, limited.limits.dailyBudget),
       anonymousCap: true,
     });
   }
@@ -711,7 +708,7 @@ export function assertBudgetHoldsCap(cap: unknown, dailyBudget: number): void {
   if (cap != null && Number(cap) > dailyBudget) {
     throw new UserKeyError(
       400,
-      `the daily budget is at least the share's anonymous cap of ${Number(cap)} calls, which people who aren't signed in share; to go lower, approve its anonymous use again with a lower cap first`,
+      `the daily budget is at least the share's anonymous cap of ${Number(cap)} calls, which people who aren't signed in share`,
     );
   }
 }

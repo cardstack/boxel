@@ -48,6 +48,7 @@ import {
 } from '../../src/commands/keys/approve.ts';
 import { invokeOperation } from '../../src/commands/operations.ts';
 import { listOwnBindings } from '../../src/lib/key-bindings.ts';
+import { SecureSessionRequestError } from '../../src/lib/secure-session.ts';
 
 // ============================================================================
 // Approving a card's operations from the terminal, against the stub vendor:
@@ -390,8 +391,8 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
   });
 
-  it('refuses --anonymous for an approval that fills no slot with a share, and --anonymous-cap without --anonymous', async () => {
-    let personal = await keysApprove('my key', {
+  it('asks the realm server for anonymous use, which it refuses, even when the approval needs a new grant', async () => {
+    let refused = await keysApprove('my key', {
       ...deps,
       operation: 'service#Elsewhere.other',
       realm,
@@ -399,19 +400,9 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       anonymous: true,
       yes: true,
     }).catch((e) => e);
-    expect(String(personal?.message)).toContain('no key of their own');
-    let capOnly = await keysApprove('my key', {
-      ...deps,
-      operation: 'service#Elsewhere.other',
-      realm,
-      interactive: true,
-      anonymousCap: '10',
-      yes: true,
-    }).catch((e) => e);
-    expect(String(capOnly?.message)).toContain(
-      '--anonymous-cap is given with --anonymous',
-    );
-    expect(windows, 'no window is opened for either').toHaveLength(1);
+    expect(refused).toBeInstanceOf(SecureSessionRequestError);
+    expect(refused.status).toBe(403);
+    expect(windows, 'no window is opened for it').toHaveLength(1);
     expect(await bindingCount()).toBe(1);
   });
 

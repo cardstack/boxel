@@ -115,6 +115,11 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // Whether people who aren't signed in may use the key, where the realm's
+  // policy opens a call that sends it to them, and the optional cap on their
+  // calls a day together.
+  anonymous?: boolean;
+  anonymousDailyCap?: number | null;
   // In a realm's listing: the operations the share is approved for there,
   // each with where it sends, as last approved.
   operations?: KeyShareOperation[];
@@ -375,8 +380,17 @@ export async function shareUserKey(
     keyId,
     realm,
     label,
+    anonymous,
+    anonymousDailyCap,
     ticket,
-  }: { keyId: string; realm: string; label: string; ticket?: string },
+  }: {
+    keyId: string;
+    realm: string;
+    label: string;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+    ticket?: string;
+  },
   fetchFn: FetchFn = fetch,
 ): Promise<KeyShare> {
   let canonical = canonicalRealmUrl(realm);
@@ -393,7 +407,13 @@ export async function shareUserKey(
     body: {
       data: {
         type: 'key-share',
-        attributes: { realm: canonical, keyId, label },
+        attributes: {
+          realm: canonical,
+          keyId,
+          label,
+          ...(anonymous ? { anonymous } : {}),
+          ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+        },
       },
       meta: { ticket },
     },

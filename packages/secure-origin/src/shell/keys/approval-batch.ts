@@ -305,94 +305,27 @@ export const INTERACTIVE_CONFIRMATION = {
     'Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren’t private, and that the service limits to reading.',
 } as const;
 
-// What the user confirms, once for the batch, when they also let people who
-// aren't signed in use a workspace's share.
-export const ANONYMOUS_CONFIRMATION =
-  'Anyone on the internet who opens this card can make these calls with this key, up to the anonymous cap.';
-
-// The batch as the page shows it for `use`, and for whether people who aren't
-// signed in may use a share. An operation approved for pipelines only needs
-// approving only for interactive use, and one approved for signed-in people
-// only needs approving only for anonymous use, so otherwise each is left out.
+// The batch as the page shows it for `use`. An operation approved for
+// pipelines only needs approving only for interactive use, so for pipelines
+// it is left out.
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
-  anonymous = false,
 ): ApprovalBatch {
-  let shown = (o: BatchOperation) =>
-    o.status === 'pipelines-only'
-      ? use === 'interactive'
-      : o.status === 'signed-in-only'
-        ? use === 'interactive' && anonymous
-        : true;
+  if (use === 'interactive') {
+    return batch;
+  }
   return {
     ...batch,
     groups: batch.groups
       .map((group) => ({
         ...group,
-        operations: group.operations.filter(shown),
+        operations: group.operations.filter(
+          (o) => o.status !== 'pipelines-only',
+        ),
       }))
       .filter((group) => group.operations.length > 0),
   };
-}
-
-// Whether anonymous use can be offered for these operations: only a
-// workspace's share can serve someone who isn't signed in, so only operations
-// a share fills.
-export function offersAnonymous(operations: BatchOperation[]): boolean {
-  return operations.some((o) => o.slots.some((s) => s.key === 'apiKey'));
-}
-
-// Whether anyone starts chosen to use the shares: for the CLI's `--anonymous`, where the
-// batch holds nothing but share operations approved for signed-in people
-// only, or where any share slot in the batch was last approved for it, so
-// approving the batch again never quietly stops a card serving visitors.
-export function initialAnonymous(
-  batch: ApprovalBatch,
-  { cliAnonymous = false }: { cliAnonymous?: boolean } = {},
-): boolean {
-  return (
-    cliAnonymous ||
-    (allSlots(batch).length > 0 &&
-      allSlots(batchFor(batch, 'interactive')).length === 0) ||
-    allSlots(batch).some((s) => s.key === 'apiKey' && s.approved?.anonymous)
-  );
-}
-
-// The shares the ticked operations would approve for anonymous use for the
-// first time: each needs its anonymous cap named.
-export function firstAnonymousShares(
-  batch: ApprovalBatch,
-  operations: BatchOperation[],
-  chosen: Record<string, string | undefined>,
-): { id: string; label: string; dailyBudget: number }[] {
-  let ids = chosenShares(operations, chosen);
-  return batch.shares
-    .filter((share) => ids.has(share.id) && !share.anonymous)
-    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
-}
-
-function chosenShares(
-  operations: BatchOperation[],
-  chosen: Record<string, string | undefined>,
-): Set<string> {
-  return new Set(
-    operations.flatMap((o) =>
-      o.slots
-        .filter((s) => s.key === 'apiKey')
-        .flatMap((s) => chosen[s.slot] ?? []),
-    ),
-  );
-}
-
-// An anonymous cap as typed: a whole number of calls, at least one and at
-// most the share's daily budget, since it counts toward that too.
-export function parseAnonymousCap(
-  value: string | undefined,
-  dailyBudget: number,
-): number | undefined {
-  let cap = parseDailyBudget(value);
-  return cap !== undefined && cap <= dailyBudget ? cap : undefined;
 }
 
 // Where the choice starts: on pipelines only, unless the CLI asked for
@@ -417,18 +350,11 @@ export function initialUse(
 }
 
 // How many more requests need approving after these, for the choice made:
-// those approved for pipelines only count only for interactive use, and those
-// approved for signed-in people only only while anyone is chosen to use the shares too.
-export function remainingFor(
-  batch: ApprovalBatch,
-  use: ApprovalUse,
-  anonymous = false,
-): number {
-  let interactive = use === 'interactive';
+// those approved for pipelines only count only for interactive use.
+export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
   return (
     batch.remaining +
-    (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0) +
-    (interactive && anonymous ? (batch.remainingSignedInOnly ?? 0) : 0)
+    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
   );
 }
 
@@ -448,21 +374,86 @@ export function firstInteractiveShares(
   batch: ApprovalBatch,
   operations: BatchOperation[],
   chosen: Record<string, string | undefined>,
-): { id: string; label: string; dailyBudget: number }[] {
-  let ids = chosenShares(operations, chosen);
-  return batch.shares
-    .filter((share) => ids.has(share.id) && !share.interactive)
-    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
+): {
+  id: string;
+  label: string;
+  dailyBudget: number;
+  anonymousDailyCap: number | null;
+}[] {
+  return chosenShares(batch, operations, chosen)
+    .filter((share) => !share.interactive)
+    .map(({ id, label, dailyBudget, anonymousDailyCap }) => ({
+      id,
+      label,
+      dailyBudget,
+      anonymousDailyCap,
+    }));
 }
 
-// A daily budget as typed: a whole number of calls, at least one.
+// The shares the operations send, as chosen for their slots.
+export function chosenShares(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): ApprovalBatch['shares'] {
+  let ids = new Set(
+    operations.flatMap((o) =>
+      o.slots
+        .filter((s) => s.key === 'apiKey')
+        .flatMap((s) => chosen[s.slot] ?? []),
+    ),
+  );
+  return batch.shares.filter((share) => ids.has(share.id));
+}
+
+// Who besides signed-in people the operations serve once approved for
+// interactive use, by the shares they send: where the realm's policy opens a
+// call that sends a shared key to people who aren't signed in, `anyone` are
+// the shares whose owners agreed to that when sharing them, and
+// `signedInOnly` the ones whose owners didn't, which such people are asked to
+// sign in for. Both are empty where the policy opens nothing to them.
+export function sharesForVisitors(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): { anyone: ApprovalBatch['shares']; signedInOnly: ApprovalBatch['shares'] } {
+  if (!batch.realm.opensToAnonymous) {
+    return { anyone: [], signedInOnly: [] };
+  }
+  let shares = chosenShares(batch, operations, chosen);
+  return {
+    anyone: shares.filter((share) => share.anonymous),
+    signedInOnly: shares.filter((share) => !share.anonymous),
+  };
+}
+
+// What the user confirms besides `INTERACTIVE_CONFIRMATION` when the shares
+// they approve serve people who aren't signed in, with each share's cap.
+export function anonymousConfirmation(
+  shares: { label: string; anonymousDailyCap: number | null }[],
+): string {
+  let capped = shares.filter((share) => share.anonymousDailyCap !== null);
+  let caps =
+    capped.length === 0
+      ? ''
+      : shares.length === 1
+        ? `, up to ${capped[0].anonymousDailyCap} calls a day all together`
+        : `, up to each key’s anonymous cap (${capped.map((s) => `${s.label}: ${s.anonymousDailyCap} a day`).join(', ')})`;
+  return `Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
+}
+
+// A daily budget as typed: a whole number of calls, at least one, and at
+// least `atLeast`: the share's anonymous cap, which sits inside it.
 export function parseDailyBudget(
   value: string | undefined,
+  atLeast = 1,
 ): number | undefined {
   let trimmed = (value ?? '').trim();
   if (!/^\d+$/.test(trimmed)) {
     return undefined;
   }
   let budget = Number(trimmed);
-  return budget >= 1 && budget <= 2_147_483_647 ? budget : undefined;
+  return budget >= Math.max(1, atLeast) && budget <= 2_147_483_647
+    ? budget
+    : undefined;
 }

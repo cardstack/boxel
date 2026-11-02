@@ -1,0 +1,41 @@
+import type { Realm } from '@cardstack/runtime-common';
+import { findRealm } from './realm-routing.ts';
+import type { CreateRoutesArgs } from '../routes.ts';
+
+// Whether a realm's policy opens a call that sends a shared key to people who
+// aren't signed in: some live grant names `"anonymous"` on a `callApi`. The
+// policy compiles such a grant only for an operation whose every credential
+// slot takes a shared key (`{{apiKey}}`), so this is exactly whether a share
+// in the realm could be asked to serve such a caller.
+//
+// A key's owner agrees to that use when sharing a key into the realm
+// (`key-shares.ts`); the secure window reads this to say so, and sharing
+// requires the agreement where it is true.
+export async function opensSharedKeysToAnonymous(
+  realm: Pick<Realm, 'getCompiledPolicy'>,
+): Promise<boolean> {
+  let policy = await realm.getCompiledPolicy();
+  if (!policy?.anonymous) {
+    return false;
+  }
+  return policy.rules.some((rule) =>
+    rule.grants.some((grant) => grant.anonymous?.sendsOutside === true),
+  );
+}
+
+// The same, for the realm a URL names among those this server serves,
+// mounting it. False for a realm it doesn't serve or can't mount.
+export function realmOpensSharedKeysToAnonymous({
+  dbAdapter,
+  realms,
+  reconciler,
+}: Pick<CreateRoutesArgs, 'dbAdapter' | 'realms' | 'reconciler'>) {
+  return async (realmURL: URL): Promise<boolean> => {
+    let served = await findRealm(realmURL, { realms, reconciler, dbAdapter });
+    if (!served || served.url !== realmURL.href) {
+      return false;
+    }
+    let realm = await served.mount();
+    return realm ? await opensSharedKeysToAnonymous(realm) : false;
+  };
+}

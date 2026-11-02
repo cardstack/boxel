@@ -19,7 +19,15 @@ export interface DestinationDisplay {
 
 // The realm server's description of what a key page was opened for.
 export interface WindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  // `opensToAnonymous`: whether the realm's policy lets people who aren't
+  // signed in make a call that sends a shared key. A key is shared into such
+  // a realm only with its owner's agreement to their using it.
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    opensToAnonymous: boolean;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: {
     name: string;
@@ -167,6 +175,10 @@ export interface KeyShare {
   keyId?: string | null;
   state: 'active' | 'suspended';
   suspensionReason: string | null;
+  // Whether people who aren't signed in may use the key, and the optional
+  // cap on their calls a day, all together.
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
 }
 
 type Config = ReturnType<typeof import('./session.js').readConfig>;
@@ -361,9 +373,24 @@ export async function realmShares(
   );
 }
 
+// `anonymous` is the owner's agreement that people who aren't signed in may
+// use the key, where the realm's policy opens a call that sends it to them;
+// `anonymousDailyCap` optionally caps their calls a day, all together.
 export async function shareKey(
   config: Config,
-  { keyId, realm, label }: { keyId: string; realm: string; label: string },
+  {
+    keyId,
+    realm,
+    label,
+    anonymous = false,
+    anonymousDailyCap,
+  }: {
+    keyId: string;
+    realm: string;
+    label: string;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+  },
 ): Promise<KeyShare> {
   let { ticket } = await mintKeyWriteTicket(config, {
     action: 'share',
@@ -373,7 +400,16 @@ export async function shareKey(
   return resource<KeyShare>(
     await authorizedRequest(config, '_key-shares', {
       body: {
-        data: { type: 'key-share', attributes: { realm, keyId, label } },
+        data: {
+          type: 'key-share',
+          attributes: {
+            realm,
+            keyId,
+            label,
+            ...(anonymous ? { anonymous: true } : {}),
+            ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+          },
+        },
         meta: { ticket },
       },
     }),
@@ -542,14 +578,8 @@ export interface RequestSnapshot {
 // Why a slot needs approving: `new`, never approved or no longer usable;
 // `changed`, its request changed since it was approved; `pipelines-only`,
 // approved and unchanged, but for pipelines only (answered only when the
-// batch is asked for with `interactive`); `signed-in-only`, a share's slot
-// approved and unchanged for interactive use, but for signed-in people only
-// (answered only when the batch is asked for with `anonymous`).
-export type BatchSlotStatus =
-  | 'new'
-  | 'changed'
-  | 'pipelines-only'
-  | 'signed-in-only';
+// batch is asked for with `interactive`).
+export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
 
 // One credential slot of an operation in a batch: why it needs approving, the
 // request it would approve and its fingerprint, and what it was last approved
@@ -565,7 +595,6 @@ export interface BatchSlot {
     keyId: string | null;
     shareId: string | null;
     interactive: boolean;
-    anonymous: boolean;
   };
 }
 
@@ -590,8 +619,7 @@ export interface BatchKey {
 }
 // A share also says whether any of its bindings allows interactive use yet,
 // and the daily budget in force: a share's first interactive approval names
-// its daily budget. Likewise for anonymous use and its anonymous cap: calls a
-// day across everyone who isn't signed in, null until it is first allowed.
+// its daily budget.
 export interface BatchShare {
   id: string;
   label: string;
@@ -600,6 +628,8 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
+  // Whether its owner let people who aren't signed in use it, and the
+  // optional cap on their calls a day, which a daily budget must hold.
   anonymous: boolean;
   anonymousDailyCap: number | null;
 }
@@ -607,7 +637,9 @@ export interface BatchShare {
 // Every operation on one card definition, in one realm, that needs the user's
 // approval, grouped by where it sends, as the realm server reads them now.
 export interface ApprovalBatch {
-  realm: { url: string; name: string };
+  // `opensToAnonymous`: whether the realm's policy lets people who aren't
+  // signed in make a call that sends a shared key.
+  realm: { url: string; name: string; opensToAnonymous: boolean };
   card: { name: string; module: string; exportName: string };
   instance: string | null;
   review: boolean;
@@ -618,9 +650,6 @@ export interface ApprovalBatch {
   // Operations approved for pipelines only that didn't fit either, in a batch
   // asked with `interactive`.
   remainingPipelinesOnly: number;
-  // Share operations approved for signed-in people only that didn't fit
-  // either, in a batch asked with `anonymous`.
-  remainingSignedInOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }
@@ -632,8 +661,6 @@ export async function approvalBatch(
     review: boolean;
     // Also answer operations approved for pipelines only.
     interactive?: boolean;
-    // Also answer a share's operations approved for signed-in people only.
-    anonymous?: boolean;
   },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
@@ -661,26 +688,19 @@ export interface OperationApproval {
 // ticket: approving takes the window's own session. With `interactive`, the
 // bindings also serve a card opened in the browser, the AI assistant and the
 // CLI; `dailyBudgets` sets the daily budget of each share named, which a
-// share's first interactive approval must. With `anonymous`, the share
-// bindings also serve people who aren't signed in; `anonymousCaps` sets the
-// anonymous cap of each share named, which a share's first anonymous approval
-// must.
+// share's first interactive approval must.
 export async function approveOperations(
   config: Config,
   {
     realm,
     operations,
     interactive = false,
-    anonymous = false,
     dailyBudgets,
-    anonymousCaps,
   }: {
     realm: string;
     operations: OperationApproval[];
     interactive?: boolean;
-    anonymous?: boolean;
     dailyBudgets?: Record<string, number>;
-    anonymousCaps?: Record<string, number>;
   },
 ): Promise<void> {
   await authorizedRequest(config, '_key-bindings', {
@@ -691,12 +711,8 @@ export async function approveOperations(
           realm,
           operations,
           ...(interactive ? { interactive: true } : {}),
-          ...(anonymous ? { anonymous: true } : {}),
           ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
             ? { dailyBudgets }
-            : {}),
-          ...(anonymousCaps && Object.keys(anonymousCaps).length > 0
-            ? { anonymousCaps }
             : {}),
         },
       },
