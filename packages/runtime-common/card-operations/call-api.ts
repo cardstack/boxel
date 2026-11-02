@@ -850,7 +850,9 @@ export interface CallApiFilledSlot {
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
 // `binding-needs-reapproval`, `interactive-use-not-approved` or
-// `credential-rejected`. `send` sends the request through the guarded
+// `credential-rejected`; an interactive call over its key's limits with
+// `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
+// couldn't be counted. `send` sends the request through the guarded
 // outbound client and answers with the vendor's response, its credentials
 // removed; a refusal or a failure to get any response at all is thrown as an
 // `OperationFailure` carrying `guard-refused`, `upstream-timeout` or

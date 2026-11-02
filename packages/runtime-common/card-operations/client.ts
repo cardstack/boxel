@@ -279,7 +279,8 @@ export interface SearchEntry {
 // wrong — which is why this carries that error's members rather than a list.
 // `entry` is the position the realm labelled it with: an index at the top
 // level of the batch, or a path (`[2].boxel:operations[0]`) to a member of a
-// group.
+// group. `retryAfterSeconds` is how long to wait before asking again, for a
+// refusal that says (`rate-limited`, `over-budget`, `rate-limit-unavailable`).
 export class OperationsError extends Error {
   readonly status: number;
   readonly code: string | undefined;
@@ -287,6 +288,7 @@ export class OperationsError extends Error {
   readonly detail: string | undefined;
   readonly entry: number | string | undefined;
   readonly id: string | undefined;
+  readonly retryAfterSeconds: number | undefined;
 
   constructor(args: {
     status: number;
@@ -295,6 +297,7 @@ export class OperationsError extends Error {
     detail?: string;
     entry?: number | string;
     id?: string;
+    retryAfterSeconds?: number;
   }) {
     super(
       [args.title, args.detail].filter(Boolean).join(': ') ||
@@ -307,6 +310,7 @@ export class OperationsError extends Error {
     this.detail = args.detail;
     this.entry = args.entry;
     this.id = args.id;
+    this.retryAfterSeconds = args.retryAfterSeconds;
   }
 }
 

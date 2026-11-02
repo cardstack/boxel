@@ -6480,10 +6480,17 @@ export class Realm {
       // a program failing there answers 400 over a batch that landed. The
       // status is the same and what it says about the realm is not.
       let error = this.#refusalSeenBy(err.error, requestContext);
+      let retryAfterSeconds = error.meta?.retryAfterSeconds;
       return this.#operationsResponse(
         errorsDocument(error),
         error.status,
         requestContext,
+        // A refusal for a limit says when to come back, as the header a
+        // client's backoff reads as well as in `meta`.
+        (error.status === 429 || error.status === 503) &&
+          typeof retryAfterSeconds === 'number'
+          ? { 'Retry-After': String(retryAfterSeconds) }
+          : undefined,
       );
     }
   }
@@ -7200,6 +7207,7 @@ export class Realm {
     body: unknown,
     status: number,
     requestContext: RequestContext,
+    headers?: Record<string, string>,
   ): Response {
     return createResponse({
       body: JSON.stringify(body, null, 2),
@@ -7208,6 +7216,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.BoxelOperations,
           'cache-control': 'no-store',
+          ...headers,
         },
       },
       requestContext,
