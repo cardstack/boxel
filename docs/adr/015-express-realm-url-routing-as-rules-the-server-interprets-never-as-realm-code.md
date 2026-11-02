@@ -1,6 +1,6 @@
 ---
 status: superseded
-superseded-by: '021'
+superseded-by: site-routing
 date: 2026-10-29
 scope:
   - packages/base/realm-config.gts
@@ -103,4 +103,4 @@ validates it for that reason.
 
 ## 4. Remediation
 
-Superseded by ADR 021. Its known gaps moved to [remediation/021.md](remediation/021.md).
+Superseded by ADR site-routing. Its known gaps moved to [remediation/site-routing.md](remediation/site-routing.md).

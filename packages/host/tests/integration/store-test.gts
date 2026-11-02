@@ -4744,7 +4744,7 @@ module('Integration | Store', function (hooks) {
   test('a reload an event names a revision for reads the card at that revision', async function (assert) {
     // A public feed event names the revision a visitor re-reads a card at, so
     // every visitor asks for the same URL and a shared cache can answer it
-    // (ADR 023 §1.4).
+    // (ADR event-feed §1.4).
     let url = `${testRealmURL}Person/revisioned`;
     let events = interceptRealmEvents();
     let cardService = getService('card-service') as any;

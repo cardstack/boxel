@@ -21,20 +21,20 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // Realm events for a session that has no Matrix to hear them through: a
 // visitor of a published site who isn't signed in. Each realm the page starts
-// watching gets the realm's event feed (ADR 023), and each change is
+// watching gets the realm's event feed (ADR event-feed), and each change is
 // relayed through MessageService as the incremental index event Matrix would
 // have delivered, so the store, live searches and resources stay current with
-// no second mechanism (ADR 023 §1.5).
+// no second mechanism (ADR event-feed §1.5).
 //
 // The feed is a stream where the realm offers one, and the realm's cacheable
 // poll where it doesn't or the stream won't connect.
 //
-// A refresh request (ADR 023 §1.8) is not relayed: the page is offered it as
+// A refresh request (ADR event-feed §1.8) is not relayed: the page is offered it as
 // a cancelable `boxel-refresh-requested` event, and reloads when nothing on
 // it takes the event.
 //
 // A browser holds one connection per feed however many of its tabs show the
-// site (ADR 023 §1.5). The tabs elect a leader with a Web Lock: the tab that
+// site (ADR event-feed §1.5). The tabs elect a leader with a Web Lock: the tab that
 // holds the lock opens the feeds, for the realms every tab watches, and passes
 // each event to the other tabs over a BroadcastChannel. The lock is released
 // when its tab closes, the next tab waiting on it becomes the leader, and it
@@ -75,7 +75,7 @@ function retryAfterMs(response: Response): number | undefined {
 const RELAY_SPREAD_MS = 250;
 
 // The longest a page waits before it reloads on a refresh request nothing on
-// it took, so a room of screens doesn't reload at once (ADR 023 §1.8).
+// it took, so a room of screens doesn't reload at once (ADR event-feed §1.8).
 const REFRESH_SPREAD_MS = 5_000;
 
 // Per origin, which is all the Web Locks and BroadcastChannel APIs can see.
@@ -156,7 +156,7 @@ export default class EventFeedService extends Service {
   // The cards on the page that take refresh requests themselves.
   private refreshTakers = new Set<(notice: RefreshNotice) => void>();
 
-  // Lets a card take the page's refresh requests (ADR 023 §1.8): while any
+  // Lets a card take the page's refresh requests (ADR event-feed §1.8): while any
   // card does, the page doesn't reload on its own, and the card calls
   // `notice.reload()` when it suits its visitors. Returns a function that
   // stops taking them.
@@ -182,7 +182,7 @@ export default class EventFeedService extends Service {
   private cursors = new Map<string, string>();
   private feeds = new Map<string, { stop: () => void }>();
 
-  // The card channels this tab follows (ADR 023 §1.6), by card URL.
+  // The card channels this tab follows (ADR event-feed §1.6), by card URL.
   private channels = new Map<
     string,
     {
@@ -233,7 +233,7 @@ export default class EventFeedService extends Service {
       let deliver = (event: FeedEvent) => {
         // The card is gone, or its visitors may no longer read it: the
         // realm ends the channel's stream, and following it further would
-        // only be refused (ADR 023 §1.6).
+        // only be refused (ADR event-feed §1.6).
         if (
           (event.kind === 'removed' || event.kind === 'withdrawn') &&
           event.path === path
@@ -303,7 +303,7 @@ export default class EventFeedService extends Service {
     try {
       this.joinTabs();
       this.messageService.onFirstSubscription((realm) => this.watch(realm));
-      // The site's own realm, followed for its refresh requests (ADR 023
+      // The site's own realm, followed for its refresh requests (ADR event-feed
       // §1.8) though nothing on the page reads from it.
       let site = this.siteRealm();
       if (site) {
@@ -444,7 +444,7 @@ export default class EventFeedService extends Service {
       this.receive(realm, event, id);
     };
     // Where to start: where the tabs already are, or else the earliest
-    // position among what this page read from the realm (ADR 023 §1.1).
+    // position among what this page read from the realm (ADR event-feed §1.1).
     let resumeFrom = this.cursors.get(realm) ?? earliestFeedPosition(base.href);
     let feed =
       typeof EventSource === 'function'
@@ -490,7 +490,7 @@ export default class EventFeedService extends Service {
       }
     };
     // A reset has every visitor revalidate everything, so it is spread over
-    // the time the realm sized to its audience (ADR 023 §1.3).
+    // the time the realm sized to its audience (ADR event-feed §1.3).
     let spread =
       event.kind === 'reset' && this.relaySpreadMs > 0
         ? Math.max(this.relaySpreadMs, event.spread ?? 0)
@@ -505,7 +505,7 @@ export default class EventFeedService extends Service {
 
   // Offers the page the refresh request, and reloads it when nothing took it.
   // Offers the request to the cards on the page that take refresh requests,
-  // and reloads it when none does (ADR 023 §1.8). A page honours a request
+  // and reloads it when none does (ADR event-feed §1.8). A page honours a request
   // only from the realm that owns its site, so a writer of a realm many sites
   // draw on can't reload them all.
   private refreshRequested(realm: string) {
@@ -552,7 +552,7 @@ export default class EventFeedService extends Service {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [card],
-        // The re-read asks for the card at this revision (ADR 023 §1.4).
+        // The re-read asks for the card at this revision (ADR event-feed §1.4).
         ...(event.rev ? { revisions: { [card]: event.rev } } : {}),
         realmURL: realm,
       };
@@ -612,7 +612,7 @@ function streamFeed(
   let interim: { stop: () => void } | undefined;
   // Each event once, whether the stream or the interim poll brought it.
   let pass = (event: FeedEvent, id?: string) => {
-    // Presence has no position (ADR 023 §1.6). The stream sends it without an
+    // Presence has no position (ADR event-feed §1.6). The stream sends it without an
     // id, which leaves the last id in place, so it would read as a repeat.
     if (event.unordered) {
       deliver(event, undefined);
@@ -672,7 +672,7 @@ function streamFeed(
       }
       // It streamed before, so it should again. Until it does the page
       // polls from where the stream left off, which a shared cache absorbs
-      // (ADR 023 §1.3), and the stream is tried again, waiting longer after
+      // (ADR event-feed §1.3), and the stream is tried again, waiting longer after
       // each failure.
       interim ??= pollFeed(url, lastId, pass, timing);
       failures++;
@@ -698,7 +698,7 @@ function pollFeed(
   timing: FeedTiming,
   // For a card's channel: a first answer with nothing to resume from delivers
   // the messages in the window, the latest per key, rather than starting
-  // after them (ADR 023 §1.6).
+  // after them (ADR event-feed §1.6).
   { fromWindow = false }: { fromWindow?: boolean } = {},
 ): { stop: () => void } {
   // Resuming from another tab's last id compares the first answer against it

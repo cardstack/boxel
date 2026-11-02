@@ -442,7 +442,7 @@ export function siteBoundary(
     // `X-Boxel-Site` header as much as on its URL, so a shared cache must
     // key on the header too: otherwise it could hand one site's aliased
     // document to another site, or the realm's own document, which names its
-    // address, to a site's visitor (ADR 022 §1.1).
+    // address, to a site's visitor (ADR site-boundary §1.1).
     ctxt.vary(SITE_HEADER);
 
     // Outbound.

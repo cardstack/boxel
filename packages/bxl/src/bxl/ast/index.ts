@@ -674,7 +674,7 @@ function isPredicatePipe(node: BxlBinaryNode): boolean {
   );
 }
 
-// A route expression turns one card into a path (ADR 021 §1.1): only the
+// A route expression turns one card into a path (ADR site-routing §1.1): only the
 // calls the route profile allows, and no variables or bindings, so it reads
 // nothing but the card it is handed. `split` is allowed only with one
 // argument; its two-argument form splits on a regular expression.

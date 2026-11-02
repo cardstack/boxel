@@ -416,7 +416,7 @@ export class RoutingRuleField extends FieldDef {
 }
 
 // A site's settings, held in realm.json so the server reads them with the
-// routing rules (ADR 021 §1.1). These are the contract host mode reads. A
+// routing rules (ADR site-routing §1.1). These are the contract host mode reads. A
 // site realm gives them a richer editor by subclassing these fields in a
 // RealmConfig subclass that its realm.json adopts; host mode reads only the
 // fields declared here, and validates them on every read
@@ -2236,7 +2236,7 @@ export class RealmConfig extends CardDef {
 
   // Whether a host routing rule may serve a card another realm holds, as
   // that realm prerendered it. Host mode serves such a card only when a
-  // visitor who isn't signed in may read it (ADR 021 §1.6).
+  // visitor who isn't signed in may read it (ADR site-routing §1.6).
   // The realm's published site, as host mode reads it (see SiteSettingsField).
   @field site = contains(SiteSettingsField);
 

@@ -1,7 +1,6 @@
 ---
 status: proposed
 date: 2026-11-01
-supersedes: '020'
 scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/event-feed.ts
@@ -18,7 +17,7 @@ scope:
   - packages/host/app/lib/live-card-context.ts
 ---
 
-# 023. Push realm changes to visitors as policy-filtered, cacheable HTTP invalidations
+# Push realm changes to visitors as policy-filtered, cacheable HTTP invalidations
 
 A visitor who isn't signed in has no Matrix account, so the realm events that
 keep a signed-in host live never reach them. Each realm gives that audience an
@@ -86,7 +85,7 @@ per address MUST be marked private and is then never shared-cached.
 
 The host MUST hold at most one feed connection per site in a browser, shared
 by its tabs, following every realm a site draws on over one stream at the
-site's mount (`{site}/_live?realm=<alias>`, ADR 022), and MUST stop following
+site's mount (`{site}/_live?realm=<alias>`, ADR site-boundary), and MUST stop following
 a realm nothing on the page watches.
 It MUST deliver events through `MessageService`, the path Matrix realm events
 take. Signed-in sessions MUST keep realm events on Matrix; every page MUST
@@ -225,6 +224,16 @@ can't be filtered once, so it can't be broadcast.
 - **Reloading on every code change:** a module change already rebuilds in
   place.
 
-## 4. Remediation
+## 4. Sources
 
-Known gaps are listed in [remediation/023.md](remediation/023.md).
+- One draft that never reached main is folded in here, and the file was
+  removed: "Push realm changes as cacheable HTTP invalidations, filtered by
+  policy", proposed in 0147d4d53e. Its last text is at b00efcf485. Later
+  commits on it: 83c65f5911 (the feed), 17075efa64 (refresh requests, now
+  §1.8), 2a705ce29a (what a live pub quiz taught it), 0c1dab64da (filtered by
+  policy, not a public feed) and 5946caf38e (the protocol review). Its §1.11
+  became §1.9 here.
+
+## 5. Remediation
+
+Known gaps are listed in [remediation/event-feed.md](remediation/event-feed.md).

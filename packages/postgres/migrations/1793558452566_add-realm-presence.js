@@ -1,4 +1,4 @@
-// Who is on a card's live channel now (ADR 023 §1.6): the latest unordered
+// Who is on a card's live channel now (ADR event-feed §1.6): the latest unordered
 // message for each key, until it expires. A write is one upsert that contends
 // only with the same key, never with the channel's ordered appends. Excluded
 // from the SQLite schema dump with the feed tables: a realm the host runs in

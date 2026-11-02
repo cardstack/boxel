@@ -869,7 +869,7 @@ function lowerCollect(
 const MAX_PRESENCE_SECONDS = 3600;
 const DEFAULT_PRESENCE_SECONDS = 60;
 
-// An emit's `ordered: false` and `expiresAfter` (ADR 023 §1.6). The decorator
+// An emit's `ordered: false` and `expiresAfter` (ADR event-feed §1.6). The decorator
 // refuses a malformed pair; a stored entry is held to the same rule here, and
 // an emit whose presence can't be applied stays ordered.
 function lowerPresence(

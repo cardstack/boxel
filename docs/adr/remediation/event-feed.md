@@ -1,7 +1,7 @@
-# ADR 023 remediation
+# ADR event-feed remediation
 
 Places where the code does not meet
-[ADR 023](../023-push-realm-changes-to-visitors-as-policy-filtered-cacheable-http-invalidations.md)
+[ADR event-feed](../event-feed.md)
 yet (ADR 001 §1.6). Each entry names a file by its path from the repository
 root, in backticks, and the requirement it breaks.
 

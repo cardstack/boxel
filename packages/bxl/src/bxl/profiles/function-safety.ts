@@ -344,7 +344,7 @@ export const BXL_PREDICATE_LOWERABLE_CALLS = names([
  * choosing between values. It is an allowlist, so a function added to the
  * engine is refused here until someone adds it. Nothing on it compiles an
  * authored pattern to a regular expression or reads anything but its input
- * (ADR 021 §1.1); `split` is checked for its one-argument form by the
+ * (ADR site-routing §1.1); `split` is checked for its one-argument form by the
  * validator, since the two-argument form takes a regular expression.
  */
 export const BXL_ROUTE_CALLS = names([

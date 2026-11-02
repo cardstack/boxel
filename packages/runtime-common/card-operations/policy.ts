@@ -396,7 +396,7 @@ export class RealmPolicyCache {
   // held it, so it changes whenever the policy does. Undefined before a
   // compile, and for a realm that names no policy. A card's validator carries
   // it, so a read the policy admitted is re-read when the policy changes
-  // (ADR 023 §1.4).
+  // (ADR event-feed §1.4).
   get fingerprint(): string | undefined {
     let current = this.#current;
     return current ? `${current.compiled.card}@${current.row}` : undefined;

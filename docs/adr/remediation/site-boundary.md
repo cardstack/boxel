@@ -1,7 +1,7 @@
-# ADR 022 remediation
+# ADR site-boundary remediation
 
 Places where the code does not meet
-[ADR 022](../022-present-a-sites-pages-through-one-boundary-and-base-contracts.md)
+[ADR site-boundary](../site-boundary.md)
 yet (ADR 001 §1.6). Each entry names a file by its path from the repository
 root, in backticks, and the requirement it breaks.
 

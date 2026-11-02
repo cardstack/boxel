@@ -1,7 +1,7 @@
 ---
 status: proposed
 date: 2026-11-01
-supersedes: ['015', '016', '017']
+supersedes: '015'
 scope:
   - packages/base/realm-config.gts
   - packages/base/site-routes-panel.gts
@@ -22,7 +22,7 @@ scope:
   - packages/host/app/routes/index.gts
 ---
 
-# 021. Route a site's paths with data the server interprets and the index answers
+# Route a site's paths with data the server interprets and the index answers
 
 A site maps its paths to cards: fixed pages and redirects in
 `realm.json`, and page types whose address is a path template over a card's
@@ -89,7 +89,7 @@ as a site.
 
 A served card MUST have one address; every other address or spelling of it
 MUST redirect permanently to it. A page's canonical link MUST name its
-address on the site's canonical host URL (ADR 022 §1.6), and a not-found or
+address on the site's canonical host URL (ADR site-boundary §1.6), and a not-found or
 error page MUST carry none. Where two cards share an address, the first in the
 page type's sort MUST be served. A page whose card failed to render MUST be
 served as the site's error card, with status 500. The site's editor SHOULD
@@ -165,6 +165,17 @@ prerendered HTML of rows the policy admits.
   its back office too. **Filling content in after boot** hides it from
   crawlers and link previews.
 
-## 4. Remediation
+## 4. Sources
 
-Known gaps are listed in [remediation/021.md](remediation/021.md).
+- ADR 015 (`015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md`),
+  which this ADR supersedes, is the origin of §1.1.
+- Two drafts that never reached main are folded in here, and the files were
+  removed: "Let a realm route to another realm's card, served as that realm
+  prerendered it" (proposed in 42c150072a, now §1.6) and "Address a site's
+  cards with path templates resolved against the index" (proposed in
+  9c6748342f, now §1.2–§1.5). Their last text is at b00efcf485.
+- What a live pub quiz taught site routing: 2a705ce29a.
+
+## 5. Remediation
+
+Known gaps are listed in [remediation/site-routing.md](remediation/site-routing.md).

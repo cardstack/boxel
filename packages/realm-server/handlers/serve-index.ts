@@ -72,7 +72,7 @@ import type {
 // The frame card a site shows its pages inside, as prerendered: its isolated
 // HTML and scoped CSS. None when the page being served is the frame itself,
 // when the frame has no prerendered HTML yet, or when it is another realm's
-// card and the site doesn't opt in to serving those (ADR 021 §1.6).
+// card and the site doesn't opt in to serving those (ADR site-routing §1.6).
 function escapeAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }

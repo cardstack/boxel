@@ -1,7 +1,7 @@
-# ADR 021 remediation
+# ADR site-routing remediation
 
 Places where the code does not meet
-[ADR 021](../021-route-a-sites-paths-with-data-the-server-interprets-and-the-index-answers.md)
+[ADR site-routing](../site-routing.md)
 yet (ADR 001 §1.6). Each entry names a file by its path from the repository
 root, in backticks, and the requirement it breaks.
 

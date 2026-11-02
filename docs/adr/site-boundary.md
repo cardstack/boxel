@@ -1,7 +1,6 @@
 ---
 status: proposed
 date: 2026-11-01
-supersedes: ['018', '019']
 scope:
   - packages/realm-server/lib/site-boundary.ts
   - packages/realm-server/lib/site-rewrite.ts
@@ -26,7 +25,7 @@ scope:
   - packages/base/card-api.gts
 ---
 
-# 022. Present a site's pages through one boundary and base contracts
+# Present a site's pages through one boundary and base contracts
 
 A site is a realm served live at one or more host URLs, under the realm's own
 permissions and policy. The same card can be shown on a site, in the app, in
@@ -106,9 +105,9 @@ prerendered is decided per request.
 
 A host URL MUST serve the realm itself, live, with no copy, so every save
 shows on the site once it is indexed, within the brief life of the shared
-caches ADR 023 §1.4 allows. Every request through it MUST be judged by the
+caches ADR event-feed §1.4 allows. Every request through it MUST be judged by the
 realm's own permissions and policy, which a host URL neither widens nor
-narrows; ADR 021 §1.4 alone limits whether a realm routes. The server MUST
+narrows; ADR site-routing §1.4 alone limits whether a realm routes. The server MUST
 NOT make a new published copy. A copy published before host URLs MAY keep
 serving read-only until its owner switches it to a host URL or removes it. Until host origins have sessions (Boxel Connect), every visitor MUST
 be treated as a caller who isn't signed in. A host URL MUST offer no editing;
@@ -131,7 +130,7 @@ publish job the owner waits on, and must strip the policy so a grant can't
 admit writes into a public copy. Serving the realm itself removes all of it,
 and makes access on a site the same as in the app, which is what a site that
 takes writes or serves members needs. The cost is that a half-finished edit is
-public at once; the error card (ADR 021 §1.5) and the owner's routes panel
+public at once; the error card (ADR site-routing §1.5) and the owner's routes panel
 are the guard. One function computes mounts so the host URL mapping changes
 one place.
 
@@ -147,10 +146,10 @@ in one card, whole on first paint and unflashing across navigation.
   Card proof of concept): a frozen copy can't take writes or serve members,
   and a second settings state means the site the owner sees isn't the one
   visitors get. An invalid setting keeps its last valid version instead
-  (ADR 021 §1.1).
+  (ADR site-routing §1.1).
 - **Unlisted links:** with the realm live at its own URL, its permissions, not
   an unguessable slug, decide who gets in.
-- **An alias per card:** needs a stored table (ADR 021 §1.3).
+- **An alias per card:** needs a stored table (ADR site-routing §1.3).
 - **Encrypting the realm URL into the alias:** it would decode to any realm,
   where a derived alias resolves only against the site's own sources.
 - **Cards build links from `@context.sitePath`:** the Fairway storefront's
@@ -158,11 +157,19 @@ in one card, whole on first paint and unflashing across navigation.
   one site.
 - **Click handlers without anchors:** crawlers and copied links see nothing.
 - **Chrome in each page type's template, or a layout as realm code:**
-  templates drift; realm code can't decide what to serve (ADR 021 §1.1).
+  templates drift; realm code can't decide what to serve (ADR site-routing §1.1).
 
 Still visible by design: paths inside a realm, and realm names written into
 content.
 
-## 4. Remediation
+## 4. Sources
 
-Known gaps are listed in [remediation/022.md](remediation/022.md).
+- Two drafts that never reached main are folded in here, and the files were
+  removed: "Serve the realms a site draws on under aliases through one
+  boundary" (now §1.1–§1.2) and "Link and frame a site's pages through base
+  contracts, not card code" (now §1.3–§1.5), both proposed in 9c6748342f.
+  Their last text is at b00efcf485.
+
+## 5. Remediation
+
+Known gaps are listed in [remediation/site-boundary.md](remediation/site-boundary.md).

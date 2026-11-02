@@ -1351,7 +1351,7 @@ export default class StoreService extends Service implements StoreInterface {
     // A site page reads its cards without holding references, and names a
     // realm the site draws on by the site's alias, which realm lookup doesn't
     // know. So in host mode a card read follows the realm the card itself
-    // names, through that realm's event feed (ADR 023).
+    // names, through that realm's event feed (ADR event-feed).
     if (
       this.hostModeService.isActive &&
       this.eventFeed.listening &&
@@ -5039,7 +5039,7 @@ export default class StoreService extends Service implements StoreInterface {
       let pinnedAtRead = this.#pinnedFields(instance);
       // A re-read a event feed event started names the card's revision, so
       // every visitor re-reading it asks for one URL a shared cache can answer
-      // (ADR 023 §1.4). The document carries its own id either way.
+      // (ADR event-feed §1.4). The document carries its own id either way.
       let readURL: string = instance.id;
       if (revision) {
         let url = this.network.virtualNetwork.toURL(instance.id);
@@ -5162,7 +5162,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private subscribeToRealm(url: RealmResourceIdentifier | URL) {
     // A host-mode visitor hears realm events only through the realms' public
-    // feeds (ADR 023), so the store subscribes there once those are listening.
+    // feeds (ADR event-feed), so the store subscribes there once those are listening.
     if (this.hostModeService.isActive && !this.eventFeed.listening) {
       return;
     }

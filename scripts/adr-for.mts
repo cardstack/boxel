@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Lists the ADRs in docs/adr/ whose `scope` globs match the given paths, and
-// the known gaps their remediation files (docs/adr/remediation/<number>.md)
-// list for those paths. With no paths, lists every ADR with its scope and its
+// the known gaps their remediation files (docs/adr/remediation/<key>.md)
+// list for those paths. An ADR's key is its number, or its slug for a draft
+// not yet submitted to main (`docs/adr/<slug>.md`, ADR 001 §1.2). With no paths, lists every ADR with its scope and its
 // remediation file.
 //
 // A relative path is matched both as relative to the working directory and as
@@ -35,6 +36,11 @@ interface Gap {
   lead: string[];
   paths: string[];
   children: { lines: string[]; paths: string[] }[];
+}
+
+// A numbered ADR's key is its number; a draft's is its whole slug.
+function keyOf(file: string): string {
+  return file.match(/^(\d+)-/)?.[1] ?? file.replace(/\.md$/, '');
 }
 
 function parseAdr(file: string): Adr {
@@ -74,7 +80,7 @@ function parseAdr(file: string): Adr {
     )
     .filter(Boolean);
 
-  let remediation = join('remediation', `${file.slice(0, 3)}.md`);
+  let remediation = join('remediation', `${keyOf(file)}.md`);
   return {
     file,
     status: field('status') ?? 'unknown',
@@ -162,10 +168,16 @@ function gapsFor(gaps: Gap[], paths: string[]): string[] {
   return out;
 }
 
-let adrs = readdirSync(adrDir)
-  .filter((file) => /^\d+-.*\.md$/.test(file))
-  .sort()
-  .map(parseAdr);
+// Numbered ADRs first, then drafts. README.md and template.md aren't ADRs,
+// and remediation/ is a directory, so it never ends in .md.
+let adrFiles = readdirSync(adrDir).filter(
+  (file) =>
+    file.endsWith('.md') && !['README.md', 'template.md'].includes(file),
+);
+let adrs = [
+  ...adrFiles.filter((file) => /^\d+-/.test(file)).sort(),
+  ...adrFiles.filter((file) => !/^\d+-/.test(file)).sort(),
+].map(parseAdr);
 
 let paths = process.argv.slice(2).map((arg) => {
   let fromCwd = relative(repoRoot, resolve(arg));
@@ -188,7 +200,7 @@ for (let adr of adrs) {
   if (!adr.remediation) {
     if (adr.status === 'proposed') {
       console.error(
-        `  warning: no remediation file docs/adr/remediation/${adr.file.slice(0, 3)}.md (ADR 001 §1.6)`,
+        `  warning: no remediation file docs/adr/remediation/${keyOf(adr.file)}.md (ADR 001 §1.6)`,
       );
     }
     continue;

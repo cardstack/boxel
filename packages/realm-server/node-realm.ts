@@ -465,7 +465,7 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  // A long-lived response body for the realm's public change feed (ADR 023).
+  // A long-lived response body for the realm's public change feed (ADR event-feed).
   // Koa pipes it to the client and destroys it when the client goes away,
   // which is when the realm stops writing to it.
   openEventStream(): RealmEventStream {
