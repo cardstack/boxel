@@ -34,6 +34,7 @@ import { shareKey } from '../lib/key-shares.ts';
 import { setKeyLimitStore } from '../lib/key-limits.ts';
 import {
   KEY_USE_RETENTION_DAYS,
+  recordKeyUses,
   sweepExpiredKeyUses,
 } from '../lib/key-uses.ts';
 import { setKeyLimitDefaults } from '../lib/key-limit-settings.ts';
@@ -560,6 +561,37 @@ module(basename(import.meta.filename), function (hooks) {
       [latest.caller, latest.outcome],
       [OWNER, 'refused'],
       'a refusal counted on an earlier row is the last use',
+    );
+  });
+
+  test('a refusal of an operation with a very long name is still recorded and collapsed', async function (assert) {
+    let key = await addKey();
+    // Longer than a B-tree index row may be, were the name indexed as is.
+    let operation = 'o'.repeat(4000);
+    let refusal = {
+      realmURL: `${realmURL.href}${'r'.repeat(4000)}/`,
+      operation,
+      caller: `@${'c'.repeat(4000)}:localhost`,
+      mode: 'interactive' as const,
+      url: null,
+      outcome: 'refused' as const,
+      code: 'rate-limited',
+      countsAgainst: [{ kind: 'key' as const, id: key.id }],
+    };
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, { ...refusal, caller: null });
+    let rows = (await dbAdapter.execute(
+      `SELECT caller, count FROM key_uses WHERE key_id = $1 ORDER BY id`,
+      { bind: [key.id] },
+    )) as { caller: string | null; count: number }[];
+    assert.deepEqual(
+      rows.map((row) => [row.caller === null, Number(row.count)]),
+      [
+        [false, 2],
+        [true, 1],
+      ],
+      'the two identical refusals share a row; the anonymous one has its own',
     );
   });
 

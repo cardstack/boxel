@@ -179,8 +179,8 @@ never `COUNT(*)`. A refusal raised while the slots were being
 filled is recorded against the one share or key that refused it; one raised
 before any binding was found (`binding-not-approved`) names no key and is only
 on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
-the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each write
-removes its subject's older rows. The code is `lib/key-uses.ts`. Like the other
+the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each
+realm-server process removes every older row, at most hourly, on a write. The code is `lib/key-uses.ts`. Like the other
 key tables, it's withheld from `readonly_role` and from the SQLite dump.
 
 `GET /_key-shares/:id/usage` (the share's realm's direct writers) and
