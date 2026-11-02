@@ -154,7 +154,7 @@ them uses the profile's secure session (`boxel keys sign-in`), reading them
 the ordinary one. A share is looked up among the user's own shares, then in
 the realm's listing, so a writer who doesn't own it gets the realm server's
 403, not a local "no such share". `boxel keys usage`, with the same
-arguments, reads what the share or key has served.
+arguments, reads what the share or key has served (see [Usage](#usage)).
 
 ## Notices
 
