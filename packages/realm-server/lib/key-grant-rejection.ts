@@ -74,6 +74,10 @@ export type KeyGrantEvent =
   | {
       event: 'grant-rejected';
       grant: string;
+      // The key the grant holds a copy of. One key can hold several grants at
+      // one host (one per destination path), so counting keys, not grants,
+      // is what tells one revoked key from a vendor refusing every key.
+      key: string;
       host: string;
       realm: string;
       share: string | null;
@@ -216,6 +220,7 @@ export async function markGrantRejected(
   emitKeyGrantEvent({
     event: 'grant-rejected',
     grant: grantId,
+    key: moved.key_id as string,
     host: hostOf(moved.destination as string),
     realm: realmURL,
     share: shareId ?? null,
