@@ -25,12 +25,14 @@ scope:
 # Route a site's paths with data the server interprets and the index answers
 
 A site maps its paths to cards: fixed pages and redirects in
-`realm.json`, and page types whose address is a path template over a card's
-fields (`/shop/{handle}`). One realm-server process serves every realm, so
+`realm.json`, and page types whose address is a path pattern of named
+segments (`/shop/:handle`). Each segment's value is a card field or a BXL
+expression over the card. One realm-server process serves every realm, so
 routing is data it interprets, never code a realm's author wrote. No table of
-addresses is stored: a path becomes an index search, and a card's address is
-its template filled in. Whatever a site shows or does in another realm, it
-does as a visitor who isn't signed in.
+addresses is stored: the indexer keeps each card's segment values on its index
+entry, a path becomes an index search on them, and a card's address is its
+pattern filled in from them. Whatever a site shows or does in another realm,
+it does as a visitor who isn't signed in.
 
 ## 1. Decision
 
@@ -47,22 +49,33 @@ compile nothing authored into a backtracking regular expression. The server
 SHOULD cap what it reads from one realm (20 page types, 500 redirects). Every
 host URL of a realm MUST share its one set of settings.
 
-### 1.2. Path templates
+### 1.2. Path patterns
 
-A page type's address MUST be an RFC 6570 Level 1 path template over the
-card's fields (a dot reads a linked card's field), each variable one whole
-segment, matched segment by segment. A template MUST NOT transform a value; a
-derived key is a computed field. A redirect's source and target MAY be
-templates.
+A page type's address MUST be a path pattern of literal segments and named
+segments (`:name`), each named segment one whole segment with no modifier,
+regular expression or wildcard. A named segment's value MUST be the card's
+field of that name (a dot reads a linked card's field), or the BXL
+derive-profile expression the page type's `params` gives it. An expression
+MUST read only the card's fields and the fields of linked cards marked
+`searchable`, and MUST NOT read the clock, the caller or the request. A value
+MUST be non-empty text without `/`; a card whose value isn't has no address
+under that page type, and the problem MUST be recorded for the site's editor
+(§1.5). A redirect's source and target MAY be patterns.
 
 ### 1.3. The index is the route table
 
-The realm server MUST NOT store a table of a site's addresses. It MUST find a
-path's card by an index search per matching template, built by the server
-from the page type's source realm, card type, filter and sort and one `eq` per
-variable, and run as the visitor (their credentials, or none, and their client
-address). It MUST derive a card's address by
-expanding its template.
+The realm server MUST NOT store a table of a site's addresses. When it
+indexes a card a page type covers, the indexer MUST evaluate the page type's
+named-segment values and store them as text in the card's search document,
+under a key naming the site and the page type. The server MUST find a path's
+card by an index search per matching pattern, built from the page type's
+source realm, card type, filter and sort and one `eq` per named segment on
+those stored values, and run as the visitor (their credentials, or none, and
+their client address). It MUST derive a card's address by filling the pattern
+from the same stored values. A change to a page type's pattern or `params`
+MUST re-index the cards it covers. The server SHOULD remember a card's
+earlier values for a page type and answer them as its other addresses
+(§1.5).
 
 ### 1.4. One resolver
 
@@ -128,9 +141,15 @@ The Fairway golf store showed the cost of exact rules alone: its storefront
 needed 14 generated routing rules and a page card per path, regenerated and
 republished whenever a product was added. A stored address table is a second
 copy of the index, two million rows for a
-two-million-item catalog, rebuilt and reconciled on every change. A template
-inverts, and the path's `eq` search takes about a millisecond on 3.3 million
-rows. Two resolvers drift, as an exact rule and a page type once did between
+two-million-item catalog, rebuilt and reconciled on every change. Keeping a
+card's segment values on its own index entry makes a pattern run both ways
+without that table, and without running BXL backwards: a path is an `eq` on
+the stored text, which the GIN index on the search document serves as a
+containment match (about a millisecond on 3.3 million rows), and a link reads
+the same values. The values are stored as text because containment is
+type-sensitive, so a number would miss the index. An expression a page type
+owns lets two sites address one card differently, where a computed field
+would put one site's addresses into the card type. Two resolvers drift, as an exact rule and a page type once did between
 server and app. In a live pub quiz, a room of phones behind one address spent
 the anonymous rate limit, and the refused searches read as "no card": every
 phone showed the not-found page for a game that was running. A page a crowd
@@ -147,15 +166,28 @@ prerendered HTML of rows the policy admits.
 
 ## 3. Considered options
 
-- **Rules as data, templates over fields, the index as the table (chosen).**
+- **Rules as data, named-segment patterns whose values the indexer stores,
+  the index as the table (chosen).**
 - **Routing functions in card code**, in the server or the prerender: unsafe
   or slow, as above.
-- **Authored regular expressions or path-to-regexp:** one slow pattern stalls
-  every realm (ReDoS).
-- **`:name` segments with a BXL query, under a `route` BXL profile** (the
-  Dynamic Routes draft): a card's address can't be derived from the card, so
-  links need a stored table again, which is that draft's open question 1.
-  BXL address expressions fail the same way.
+- **Authored regular expressions or path-to-regexp modifiers:** one slow
+  pattern stalls every realm (ReDoS). A plain `:name` segment compiles to no
+  authored pattern, so `URLPattern` may match it.
+- **`:name` segments with a BXL query from the segments to the cards, under a
+  `route` BXL profile** (the Dynamic Routes draft): the expression runs from
+  path to query, so a card's address can't be derived from the card, and
+  links need a stored table again (that draft's open question 1). Here BXL
+  runs from the card to each segment's value, and the index answers the
+  other direction.
+- **An invertible subset of BXL:** covers copying a field and nothing more; a
+  slug made from a title has no inverse.
+- **A forward and a backward expression, both authored:** the two drift, and
+  nothing can check that they agree.
+- **A computed field on the card for each derived key** (this ADR's earlier
+  rule): puts one site's addresses into the card type.
+- **RFC 6570 templates (`/shop/{handle}`)** (this ADR's earlier syntax): the
+  same thing for plain segments; `:name` is the convention Rails, Ember and
+  `URLPattern` share.
 - **The route table injected into every page:** it grows with the site and
   tells every visitor every address; a page carries only its own.
 - **Searching as the server:** routes to cards the policy denies the visitor.
@@ -175,6 +207,9 @@ prerendered HTML of rows the policy admits.
   cards with path templates resolved against the index" (proposed in
   9c6748342f, now §1.2–§1.5). Their last text is at b00efcf485.
 - What a live pub quiz taught site routing: 2a705ce29a.
+- Chris Tse, 2026-11-02: page-type addresses run both ways with BXL, segment
+  values stored at indexing and looked up through the index, written as
+  `:name` segments.
 
 ## 5. Remediation
 
