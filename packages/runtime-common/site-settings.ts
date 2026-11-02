@@ -232,13 +232,22 @@ function readPageType(
       tpl ? templateVariables(tpl) : [],
     ),
   );
+  // `params` maps a segment's name to the BXL that gives its value:
+  // `{ "year": ".publishedOn | split(\"-\") | .[0]" }`.
   let params: SegmentParam[] = [];
-  for (let entry of list(t.params)) {
-    let param = record(entry);
-    let paramName = str(param?.name)?.replace(/^:/, '');
-    let expression = str(param?.expression);
+  let authoredParams = record(t.params);
+  if (t.params != null && !authoredParams) {
+    problems.push(
+      `${label}: params maps a segment's name to its expression, e.g. { "slug": ".title | slugify" }`,
+    );
+  }
+  for (let [rawName, rawExpression] of Object.entries(authoredParams ?? {})) {
+    let paramName = rawName.replace(/^:/, '');
+    let expression = str(rawExpression);
     if (!paramName || !expression) {
-      problems.push(`${label}: a param needs a name and an expression`);
+      problems.push(
+        `${label}: param "${rawName}" needs a BXL expression as its value`,
+      );
       continue;
     }
     if (!segmentNames.has(paramName)) {

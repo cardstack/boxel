@@ -55,7 +55,8 @@ A page type's address MUST be a path pattern of literal segments and named
 segments (`:name`), each named segment one whole segment with no modifier,
 regular expression or wildcard. A named segment's value MUST be the card's
 field of that name (a dot reads a linked card's field), or the BXL
-expression the page type's `params` gives it, checked against the `route`
+expression the page type's `params` gives it (a map from segment name to
+expression: `{ "slug": ".title | slugify" }`), checked against the `route`
 profile and run with its limits. An expression MUST read only the card's
 fields and the fields of linked cards marked `searchable`, MUST NOT read the
 clock, the caller or the request, and MUST NOT build a regular expression

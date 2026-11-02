@@ -130,6 +130,75 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.strictEqual(problems.length, 2, problems.join('\n'));
   },
 
+  'readSiteSettings: params map a segment to its expression': async (
+    assert,
+  ) => {
+    let { pageTypes, problems } = readSiteSettings(
+      {
+        pageTypes: [
+          pageType({
+            path: '/journal/:year/:slug',
+            aliases: ['/j/:id'],
+            params: {
+              year: '.publishedOn | split("-") | .[0]',
+              id: '.id | split("/") | .[-1]',
+            },
+          }),
+        ],
+      },
+      REALM,
+    );
+    assert.deepEqual(problems, []);
+    assert.deepEqual(
+      pageTypes[0].params?.map((p) => [p.name, p.expression]),
+      [
+        ['year', '.publishedOn | split("-") | .[0]'],
+        ['id', '.id | split("/") | .[-1]'],
+      ],
+    );
+    assert.true(
+      pageTypes[0].params!.every((p) => /^k[0-9a-f]{8}$/.test(p.key)),
+    );
+  },
+
+  'readSiteSettings: params that are not a map, or name no segment, are reported':
+    async (assert) => {
+      let asList = readSiteSettings(
+        {
+          pageTypes: [
+            pageType({
+              path: '/help/:slug',
+              params: [{ name: 'slug', expression: '.title | slugify' }],
+            }),
+          ],
+        },
+        REALM,
+      );
+      assert.strictEqual(asList.pageTypes[0].params, undefined);
+      assert.strictEqual(asList.problems.length, 1, asList.problems.join('\n'));
+
+      let { pageTypes, problems } = readSiteSettings(
+        {
+          pageTypes: [
+            pageType({
+              path: '/help/:slug',
+              params: {
+                slug: '.title | slugify',
+                nope: '.title',
+                bad: '.title | gsub("a"; "b")',
+              },
+            }),
+          ],
+        },
+        REALM,
+      );
+      assert.deepEqual(
+        pageTypes[0].params?.map((p) => p.name),
+        ['slug'],
+      );
+      assert.strictEqual(problems.length, 2, problems.join('\n'));
+    },
+
   'readSiteSettings: a page type keeps a sort array and drops one that is not':
     async (assert) => {
       let { pageTypes, problems } = readSiteSettings(

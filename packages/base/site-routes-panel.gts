@@ -71,8 +71,6 @@ function siteData(site: SiteValue): unknown {
   };
 }
 
-// A card's value for a path variable: a field, or a linked card's field
-// through a dot (`category.slug`).
 // A segment's value as the site computes it: a page type's derived segment
 // runs its BXL over the card's attributes, anything else reads the field.
 function readSegmentOf(
@@ -91,6 +89,8 @@ function readSegmentOf(
   return evaluateSegment(param.expression, { ...attributes, id: card.id });
 }
 
+// A card's value for a path variable: a field, or a linked card's field
+// through a dot (`category.slug`).
 function readVariable(card: CardDef, variable: string): unknown {
   if (variable === 'id') {
     return card.id;
