@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Papua New Guinea Western Highlands Anaerobic",
+      "category": "coffee",
+      "origin": "Western Highlands, Papua New Guinea",
+      "variants": [
+        {
+          "sku": "CF-148-250",
+          "size": "250 g",
+          "price": 14.79
+        },
+        {
+          "sku": "CF-148-500",
+          "size": "500 g",
+          "price": 28.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

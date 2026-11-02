@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Peru Cusco Anaerobic",
+      "category": "coffee",
+      "origin": "Cusco, Peru",
+      "variants": [
+        {
+          "sku": "CF-152-250",
+          "size": "250 g",
+          "price": 16.2
+        },
+        {
+          "sku": "CF-152-500",
+          "size": "500 g",
+          "price": 30.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

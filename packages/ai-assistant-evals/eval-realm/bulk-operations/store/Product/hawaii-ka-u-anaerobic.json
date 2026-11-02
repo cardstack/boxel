@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Hawaii Ka u Anaerobic",
+      "category": "coffee",
+      "origin": "Ka u, Hawaii",
+      "variants": [
+        {
+          "sku": "CF-127-250",
+          "size": "250 g",
+          "price": 17.19
+        },
+        {
+          "sku": "CF-127-500",
+          "size": "500 g",
+          "price": 31.4
+        },
+        {
+          "sku": "CF-127-1KG",
+          "size": "1 kg",
+          "price": 57.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

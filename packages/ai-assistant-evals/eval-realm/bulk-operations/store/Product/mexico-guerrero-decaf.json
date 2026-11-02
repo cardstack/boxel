@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Mexico Guerrero Decaf",
+      "category": "coffee",
+      "origin": "Guerrero, Mexico",
+      "variants": [
+        {
+          "sku": "CF-140-250",
+          "size": "250 g",
+          "price": 13.3
+        },
+        {
+          "sku": "CF-140-500",
+          "size": "500 g",
+          "price": 24.59
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

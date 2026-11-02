@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Jamaica Blue Mountain Decaf",
+      "category": "coffee",
+      "origin": "Blue Mountain, Jamaica",
+      "variants": [
+        {
+          "sku": "CF-134-250",
+          "size": "250 g",
+          "price": 19.49
+        },
+        {
+          "sku": "CF-134-500",
+          "size": "500 g",
+          "price": 37.59
+        },
+        {
+          "sku": "CF-134-1KG",
+          "size": "1 kg",
+          "price": 66.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

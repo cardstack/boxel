@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Peru Cusco Honey",
+      "category": "coffee",
+      "origin": "Cusco, Peru",
+      "variants": [
+        {
+          "sku": "CF-153-250",
+          "size": "250 g",
+          "price": 13.2
+        },
+        {
+          "sku": "CF-153-500",
+          "size": "500 g",
+          "price": 25.79
+        },
+        {
+          "sku": "CF-153-1KG",
+          "size": "1 kg",
+          "price": 46.3
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

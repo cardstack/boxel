@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "India Chikmagalur Honey",
+      "category": "coffee",
+      "origin": "Chikmagalur, India",
+      "variants": [
+        {
+          "sku": "CF-131-250",
+          "size": "250 g",
+          "price": 16.4
+        },
+        {
+          "sku": "CF-131-500",
+          "size": "500 g",
+          "price": 30.9
+        },
+        {
+          "sku": "CF-131-1KG",
+          "size": "1 kg",
+          "price": 59.69
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

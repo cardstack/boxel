@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Costa Rica Orosi Decaf",
+      "category": "coffee",
+      "origin": "Orosi, Costa Rica",
+      "variants": [
+        {
+          "sku": "CF-119-250",
+          "size": "250 g",
+          "price": 15.0
+        },
+        {
+          "sku": "CF-119-500",
+          "size": "500 g",
+          "price": 28.29
+        },
+        {
+          "sku": "CF-119-1KG",
+          "size": "1 kg",
+          "price": 52.09
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

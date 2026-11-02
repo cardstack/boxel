@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Nicaragua Matagalpa Washed",
+      "category": "coffee",
+      "origin": "Matagalpa, Nicaragua",
+      "variants": [
+        {
+          "sku": "CF-145-250",
+          "size": "250 g",
+          "price": 20.19
+        },
+        {
+          "sku": "CF-145-500",
+          "size": "500 g",
+          "price": 39.39
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Guatemala Atitlan Decaf",
+      "category": "coffee",
+      "origin": "Atitlan, Guatemala",
+      "variants": [
+        {
+          "sku": "CF-123-250",
+          "size": "250 g",
+          "price": 19.79
+        },
+        {
+          "sku": "CF-123-500",
+          "size": "500 g",
+          "price": 38.69
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

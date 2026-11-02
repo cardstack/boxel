@@ -376,14 +376,21 @@ function allCheckCorrectnessToolsHaveResults(
     return true;
   }
 
-  let checkToolRequests = getCheckCorrectnessToolRequests(
+  // The checks of one reply's edits can span several events, and the host
+  // runs them in any order, so every check in the group needs its result,
+  // looked for from the group's first event on.
+  let group = correctnessGroupOf(
     lastEventWithCheckCorrectnessRequests,
+    history,
+  );
+  let checkToolRequests = group.flatMap((event) =>
+    getCheckCorrectnessToolRequests(event),
   );
   if (checkToolRequests.length === 0) {
     return true;
   }
 
-  let startIndex = history.indexOf(lastEventWithCheckCorrectnessRequests);
+  let startIndex = history.indexOf(group[0]);
   let subsequentEvents = history.slice(startIndex + 1);
   return checkToolRequests.every((request) => {
     return subsequentEvents.some((event) =>
@@ -405,7 +412,9 @@ function shouldPromptCheckCorrectnessSummary(
   if (!batch) {
     return false;
   }
-  let followUps = followUpsByMessage.get(history[batch.sourceIndex].event_id);
+  let followUps = followUpsByMessage.get(
+    correctnessGroupKey(history[batch.sourceIndex]),
+  );
   if (!followUps || !needsCheckCorrectnessSummary(followUps)) {
     return false;
   }
@@ -1447,13 +1456,6 @@ function getToolResults(
   return toolResultEvents;
 }
 
-function isCheckCorrectnessToolResultEvent(
-  toolResultEvent: ToolResultEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  return checkCorrectnessBatchFor(toolResultEvent, history) !== undefined;
-}
-
 // The latest result that is a call's outcome. A request can accumulate
 // several result events — a 'failed' from a first attempt and an 'applied'
 // from a later retry — and an approval is not an outcome at all.
@@ -1557,15 +1559,18 @@ function toToolCalls(
   );
 }
 
-// The prompt messages for a bot message's tool results, and the follow-up
-// each of its correctness checks produced (empty when it asked for none).
+// The prompt messages for a bot message's tool results, the follow-up each
+// of its correctness checks produced (empty when it asked for none), and the
+// instructions those checks call for, which correctnessFollowUpMessages
+// narrows once the whole correctness group is in.
 async function toResultMessages(
   event: CardMessageEvent,
   toolResults: ToolResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
 ): Promise<{
-  messages: OpenAIPromptMessage[];
+  toolMessages: OpenAIPromptMessage[];
+  followUpMessages: OpenAIPromptMessage[];
   correctnessFollowUps: CorrectnessFollowUp[];
 }> {
   let toolResultEntries = await Promise.all(
@@ -1648,30 +1653,33 @@ async function toResultMessages(
   let correctnessFollowUps = toolResultEntries
     .map((entry) => entry?.correctnessFollowUp)
     .filter((followUp): followUp is CorrectnessFollowUp => Boolean(followUp));
-  // The checks one message asked for get one instruction for the batch. If
-  // any of them did not pass, the success note is left out: it would tell the
-  // model the write passed and to finish, next to the instruction to fix it.
-  // A request to fix warnings displaces it the same way. Checks that end the
-  // same way share one note, so the model reads the same instruction once,
-  // not once per file.
+  let followUpMessages = toolResultEntries
+    .map((entry) => entry?.followUpMessage)
+    .filter((message): message is OpenAIPromptMessage => Boolean(message));
+  return { toolMessages, followUpMessages, correctnessFollowUps };
+}
+
+// The checks of one correctness group get one instruction for the batch. If
+// any of them did not pass, the success note is left out: it would tell the
+// model the write passed and to finish, next to the instruction to fix it.
+// A request to fix warnings displaces it the same way. Checks that end the
+// same way share one note, so the model reads the same instruction once,
+// not once per file.
+function correctnessFollowUpMessages(
+  followUpMessages: OpenAIPromptMessage[],
+  correctnessFollowUps: CorrectnessFollowUp[],
+): OpenAIPromptMessage[] {
   let anyCheckNotPassed = correctnessFollowUps.some(
     (followUp) => followUp !== 'success' && followUp !== 'pending',
   );
-  let followUpMessages = uniqBy(
-    toolResultEntries
-      .map((entry) => entry?.followUpMessage)
-      .filter((message): message is OpenAIPromptMessage => Boolean(message))
-      .filter(
-        (message) =>
-          !anyCheckNotPassed ||
-          message.content !== CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
-      ) ?? [],
+  return uniqBy(
+    followUpMessages.filter(
+      (message) =>
+        !anyCheckNotPassed ||
+        message.content !== CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+    ),
     (message) => message.content,
   );
-  return {
-    messages: [...toolMessages, ...followUpMessages],
-    correctnessFollowUps,
-  };
 }
 
 function buildCheckCorrectnessResultContent(
@@ -1687,6 +1695,22 @@ function buildCheckCorrectnessResultContent(
   }
   let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
   let read = readCorrectnessResult(toolResult);
+  let batchTargets = batchTargetsOf(request);
+  if (batchTargets && read.kind === 'card') {
+    return batchCheckCorrectnessResultContent(
+      batchTargets,
+      read.summary,
+      status,
+    );
+  }
+  if (batchTargets && read.kind === 'no-card' && status === 'applied') {
+    // A check of several targets always answers with a result card; without
+    // one, nothing says which targets passed.
+    return {
+      toolMessage: `The correctness result for ${targetDescription} could not be read.`,
+      followUp: 'unresolved',
+    };
+  }
   if (read.kind === 'card') {
     let formattedSummary = formatCorrectnessResultSummary(
       targetDescription,
@@ -1747,6 +1771,10 @@ function describeCheckCorrectnessTarget(request?: ToolRequest) {
   if (!request) {
     return 'the requested target';
   }
+  let batchTargets = batchTargetsOf(request);
+  if (batchTargets) {
+    return describeTargetCount(batchTargets);
+  }
   let attributes =
     (((request.arguments as Record<string, any>) ?? {}).attributes as
       | Record<string, any>
@@ -1761,6 +1789,15 @@ function describeCheckCorrectnessTarget(request?: ToolRequest) {
 
 type CorrectnessResultSummary = {
   correct: boolean;
+  errors: string[];
+  warnings: string[];
+  // A check of several targets: one entry per target that failed or warned.
+  targetResults?: CorrectnessTargetResult[];
+};
+
+type CorrectnessTargetResult = {
+  targetType?: string;
+  targetRef?: string;
   errors: string[];
   warnings: string[];
 };
@@ -1818,7 +1855,7 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
   'The write above passed its checks, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool. If none are mistakes, note the warnings in at most one line and finish your answer to the user. Do not mention correctness, automated checks or tool calls.';
 
-const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
+const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the errors above remain. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 // Rides the trailing context message after a batch with a check that did
 // not come back clean and no instruction to act on: a card that says it is
@@ -1860,6 +1897,7 @@ function readCorrectnessResult(
             correct?: boolean;
             errors?: string[];
             warnings?: string[];
+            targetResults?: Partial<CorrectnessTargetResult>[];
           };
         };
       }
@@ -1880,8 +1918,27 @@ function readCorrectnessResult(
       correct: Boolean(attributes.correct),
       errors: Array.isArray(attributes.errors) ? attributes.errors : [],
       warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+      ...(Array.isArray(attributes.targetResults)
+        ? {
+            targetResults: attributes.targetResults.map((result) => ({
+              targetType: result?.targetType,
+              targetRef: result?.targetRef,
+              errors: nonEmptyLines(result?.errors),
+              warnings: nonEmptyLines(result?.warnings),
+            })),
+          }
+        : {}),
     },
   };
+}
+
+function nonEmptyLines(entries: unknown): string[] {
+  return Array.isArray(entries)
+    ? entries.filter(
+        (entry): entry is string =>
+          typeof entry === 'string' && entry.trim().length > 0,
+      )
+    : [];
 }
 
 function correctnessErrorLines(summary: CorrectnessResultSummary): string[] {
@@ -1919,6 +1976,202 @@ function correctnessCheckHasWarnings(toolResult: ToolResultEvent): boolean {
   );
 }
 
+// One file or card a correctness check covers, from either request shape:
+// one target per request (`targetType` and `targetRef`, the shape older rooms
+// carry) or several (`targets`). `replyEventId` is the reply whose edits the
+// check covers. `attempt` is 0 when a one-target request doesn't say; a
+// target of several without one is on its first round.
+interface CheckedTarget {
+  type: string;
+  ref: string;
+  attempt: number;
+  replyEventId?: string;
+}
+
+function checkCorrectnessAttributes(
+  request?: Partial<ToolRequest>,
+): Record<string, any> {
+  return (
+    (((request?.arguments as Record<string, any>) ?? {}).attributes as
+      | Record<string, any>
+      | undefined) ?? {}
+  );
+}
+
+// The targets of a check of several targets, or undefined for a request in
+// the one-target shape. A target's attempt is left out on its first round.
+function batchTargetsOf(
+  request?: Partial<ToolRequest>,
+  sourceEvent?: DiscreteMatrixEvent,
+): CheckedTarget[] | undefined {
+  let { targets } = checkCorrectnessAttributes(request);
+  if (!Array.isArray(targets)) {
+    return undefined;
+  }
+  let replyEventId = correctnessReplyEventId(sourceEvent);
+  return targets
+    .filter((target) => typeof target?.ref === 'string' && target.ref)
+    .map((target) => ({
+      type: typeof target.type === 'string' ? target.type : 'target',
+      ref: target.ref,
+      attempt:
+        typeof target.attempt === 'number' && Number.isFinite(target.attempt)
+          ? target.attempt
+          : 1,
+      replyEventId,
+    }));
+}
+
+function checkedTargetsOf(
+  request: Partial<ToolRequest>,
+  sourceEvent: DiscreteMatrixEvent,
+): CheckedTarget[] {
+  let batchTargets = batchTargetsOf(request, sourceEvent);
+  if (batchTargets) {
+    return batchTargets;
+  }
+  let { targetRef, targetType, targetEventId } =
+    extractCheckCorrectnessTargetParts(request as ToolRequest);
+  if (!targetRef) {
+    return [];
+  }
+  return [
+    {
+      type: targetType ?? 'target',
+      ref: String(targetRef),
+      attempt: getCorrectnessCheckAttemptFromRequest(request as ToolRequest),
+      replyEventId: targetEventId,
+    },
+  ];
+}
+
+function isCardTargetType(type: string, ref: string): boolean {
+  return type === 'card' || ref.endsWith('.json');
+}
+
+function describeTargetCount(targets: { type: string }[]): string {
+  let cards = targets.filter((target) => target.type === 'card').length;
+  let files = targets.length - cards;
+  return [
+    cards ? `${cards} ${cards === 1 ? 'card' : 'cards'}` : undefined,
+    files ? `${files} ${files === 1 ? 'file' : 'files'}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+}
+
+// Added to the fix instruction when some failing targets are under the
+// attempt limit and others are at it. The checks will not run on the ones at
+// the limit again, so an edit to them would never be confirmed.
+const CORRECTNESS_AT_LIMIT_NOTE =
+  'Leave the targets marked as at the attempt limit unchanged: report their remaining errors to the user instead.';
+
+// The result of a check of several targets: each failing target with its
+// errors and its attempt, the warnings, and how many passed. The instruction
+// that follows is decided across the targets: fix while any failing target
+// has attempts left, stop at the limit when none has.
+function batchCheckCorrectnessResultContent(
+  targets: CheckedTarget[],
+  summary: CorrectnessResultSummary,
+  status: string,
+): CheckCorrectnessResultContent {
+  let results = summary.targetResults ?? [];
+  let resultFor = (target: CheckedTarget) =>
+    results.find(
+      (result) =>
+        result.targetRef === target.ref && result.targetType === target.type,
+    );
+  let attemptOf = (target: CheckedTarget) => Math.max(1, target.attempt);
+  let failing = targets.filter((target) => resultFor(target)?.errors.length);
+  let warned = targets.filter(
+    (target) =>
+      !resultFor(target)?.errors.length && resultFor(target)?.warnings.length,
+  );
+  let description = describeTargetCount(targets);
+  let sections: string[] = [];
+  if (status !== 'applied') {
+    sections.push(
+      `Check correctness was marked as ${status} for ${description}.`,
+    );
+  } else if (failing.length) {
+    sections.push(
+      `Check correctness found errors in ${failing.length} of ${description}; the other ${targets.length - failing.length} passed.`,
+    );
+  } else if (!summary.correct) {
+    sections.push(`Check correctness was marked as failed for ${description}.`);
+  } else {
+    sections.push(`Check correctness passed for ${description}.`);
+  }
+  if (failing.length) {
+    sections.push(
+      `Errors:\n${failing
+        .map((target) => {
+          let attempt = attemptOf(target);
+          let attemptNote = `automated fix attempts so far: ${Math.min(attempt, MAX_CORRECTNESS_FIX_ATTEMPTS)} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}`;
+          if (attempt >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
+            attemptNote = `${attemptNote}, at the attempt limit`;
+          }
+          return [
+            `- ${target.type} "${target.ref}" (${attemptNote}):`,
+            ...resultFor(target)!.errors.map((line) => `  - ${line}`),
+          ].join('\n');
+        })
+        .join('\n')}`,
+    );
+  }
+  let warningLines = targets.flatMap(
+    (target) => resultFor(target)?.warnings ?? [],
+  );
+  if (warningLines.length) {
+    sections.push(
+      `Warnings:\n${warningLines.map((line) => `- ${line}`).join('\n')}`,
+    );
+  }
+  let toolMessage = sections.join('\n\n');
+
+  if (failing.length) {
+    let withAttemptsLeft = failing.filter(
+      (target) => attemptOf(target) < MAX_CORRECTNESS_FIX_ATTEMPTS,
+    );
+    if (!withAttemptsLeft.length) {
+      return {
+        toolMessage,
+        followUpUserMessage: CORRECTNESS_FAILURE_LIMIT_INSTRUCTION,
+        followUp: 'limit',
+      };
+    }
+    return {
+      toolMessage,
+      followUpUserMessage:
+        withAttemptsLeft.length < failing.length
+          ? `${CODE_FIX_INSTRUCTION}\n3. ${CORRECTNESS_AT_LIMIT_NOTE}`
+          : CODE_FIX_INSTRUCTION,
+      followUp: 'fix',
+    };
+  }
+  if (status !== 'applied' || !summary.correct) {
+    return { toolMessage, followUp: 'unresolved' };
+  }
+  if (
+    warned.some(
+      (target) =>
+        isCardTargetType(target.type, target.ref) &&
+        attemptOf(target) < MAX_CORRECTNESS_FIX_ATTEMPTS,
+    )
+  ) {
+    return {
+      toolMessage,
+      followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+      followUp: 'warnings',
+    };
+  }
+  return {
+    toolMessage,
+    followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+    followUp: 'success',
+  };
+}
+
 function formatCorrectnessResultSummary(
   targetDescription: string,
   result: CorrectnessResultSummary,
@@ -1950,20 +2203,6 @@ function formatCorrectnessResultSummary(
     hasErrors: errorLines.length > 0,
     hasWarnings: warningLines.length > 0,
   };
-}
-
-function findCheckCorrectnessToolRequest(
-  history: DiscreteMatrixEvent[],
-  commandRequestId: string,
-): ToolRequest | undefined {
-  for (let event of history) {
-    let requests = getCheckCorrectnessToolRequests(event);
-    let match = requests.find((request) => request.id === commandRequestId);
-    if (match) {
-      return match;
-    }
-  }
-  return undefined;
 }
 
 function formatCorrectnessTargetKeyWithEvent(
@@ -2004,22 +2243,6 @@ function extractCheckCorrectnessTargetParts(
   return { targetRef, targetType, targetEventId };
 }
 
-function getCheckCorrectnessTargetKey(
-  request?: ToolRequest,
-  { withEvent = true }: { withEvent?: boolean } = {},
-): string | undefined {
-  let { targetRef, targetType, targetEventId } =
-    extractCheckCorrectnessTargetParts(request);
-  if (!targetRef) {
-    return undefined;
-  }
-  return formatCorrectnessTargetKeyWithEvent(
-    targetType,
-    targetRef,
-    withEvent ? targetEventId : undefined,
-  );
-}
-
 function getCorrectnessCheckAttemptFromRequest(request?: ToolRequest): number {
   if (!request) {
     return 0;
@@ -2035,58 +2258,90 @@ function getCorrectnessCheckAttemptFromRequest(request?: ToolRequest): number {
   return 0;
 }
 
-type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
+// One target's outcome in one check result, in history order.
+interface CorrectnessCheckRecord {
+  type: string;
+  ref: string;
+  replyEventId?: string;
+  attempt: number;
+  succeeded: boolean;
+  historyIndex: number;
+}
 
-function getLatestCorrectnessCheckAttemptInfo(
+// Every target outcome of the check results in the history, read once so
+// the attempts of a bulk edit's hundreds of targets are each a lookup.
+function collectCorrectnessCheckRecords(
   history: DiscreteMatrixEvent[],
-  targetKey: string,
-  opts: {
-    // match on the target alone, across the patch events that wrote it
-    ignoreEvent?: boolean;
-    // stop looking back at (and don't look past) an event matching this
-    stopAt?: (event: DiscreteMatrixEvent) => boolean;
-  } = {},
-): CorrectnessCheckAttemptInfo | undefined {
-  for (let index = history.length - 1; index >= 0; index--) {
-    let event = history[index];
-    if (opts.stopAt?.(event)) {
-      return undefined;
+): CorrectnessCheckRecord[] {
+  let requestsById = new Map<
+    string,
+    { request: ToolRequest; event: DiscreteMatrixEvent }
+  >();
+  for (let event of history) {
+    for (let request of getCheckCorrectnessToolRequests(event)) {
+      if (!requestsById.has(request.id)) {
+        requestsById.set(request.id, { request, event });
+      }
     }
+  }
+  let records: CorrectnessCheckRecord[] = [];
+  history.forEach((event, historyIndex) => {
     if (!isToolResultEventType(event.type)) {
-      continue;
+      return;
     }
     let toolResult = event as ToolResultEvent;
-    if (!isCheckCorrectnessToolResultEvent(toolResult, history)) {
-      continue;
-    }
-    let sourceRequest = findCheckCorrectnessToolRequest(
-      history,
-      toolResult.content.commandRequestId,
-    );
-    if (!sourceRequest) {
-      continue;
-    }
+    let source = requestsById.get(toolResult.content.commandRequestId);
     if (
-      getCheckCorrectnessTargetKey(sourceRequest, {
-        withEvent: !opts.ignoreEvent,
-      }) !== targetKey
+      !source ||
+      toolResult.content['m.relates_to']?.event_id !== source.event.event_id
     ) {
-      continue;
+      return;
     }
-    let attempt = Math.max(
-      1,
-      getCorrectnessCheckAttemptFromRequest(sourceRequest),
-    );
-    // A pass that still carries warnings asks for a fix, so it keeps the
-    // attempt count running rather than resetting it.
-    return {
-      attempt,
-      succeeded:
-        correctnessCheckPassed(toolResult) &&
-        !correctnessCheckHasWarnings(toolResult),
-    };
+    let isBatch = batchTargetsOf(source.request) !== undefined;
+    for (let target of checkedTargetsOf(source.request, source.event)) {
+      records.push({
+        ...target,
+        attempt: Math.max(1, target.attempt),
+        succeeded: isBatch
+          ? batchTargetSucceeded(toolResult, target)
+          : // A pass that still carries warnings asks for a fix, so it keeps
+            // the attempt count running rather than resetting it.
+            correctnessCheckPassed(toolResult) &&
+            !correctnessCheckHasWarnings(toolResult),
+        historyIndex,
+      });
+    }
+  });
+  return records;
+}
+
+// A target of a check of several targets passed clean when the check ran and
+// its result names no error or warning for it. A check that failed, timed
+// out, was canceled or can't be read says nothing about any of its targets.
+function batchTargetSucceeded(
+  toolResult: ToolResultEvent,
+  target: CheckedTarget,
+): boolean {
+  if (toolResult.content['m.relates_to']?.key !== 'applied') {
+    return false;
   }
-  return undefined;
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind !== 'card') {
+    return false;
+  }
+  let results = read.summary.targetResults ?? [];
+  let result = results.find(
+    (candidate) =>
+      candidate.targetRef === target.ref &&
+      candidate.targetType === target.type,
+  );
+  if (result) {
+    return !result.errors.length && !result.warnings.length;
+  }
+  // Not named: it passed, unless the check failed without naming a target.
+  return (
+    read.summary.correct || results.some((candidate) => candidate.errors.length)
+  );
 }
 
 // Attempts count consecutive automated rounds on one target. Each fix the AI
@@ -2094,26 +2349,30 @@ function getLatestCorrectnessCheckAttemptInfo(
 // patch event continues the count from its last check under an earlier
 // event — unless the user has spoken since, which starts a fresh run.
 function getNextCorrectnessCheckAttempt(
-  history: DiscreteMatrixEvent[],
-  targetKey: string,
-  targetKeyWithoutEvent: string | undefined,
-  aiBotUserId: string,
+  records: CorrectnessCheckRecord[],
+  { type, ref }: { type: string; ref: string },
+  replyEventId: string | undefined,
+  lastUserMessageIndex: number,
 ): number {
+  let sameTarget = (record: CorrectnessCheckRecord) =>
+    record.type === type && record.ref === ref;
   let latest =
-    getLatestCorrectnessCheckAttemptInfo(history, targetKey) ??
-    (targetKeyWithoutEvent
-      ? getLatestCorrectnessCheckAttemptInfo(history, targetKeyWithoutEvent, {
-          ignoreEvent: true,
-          stopAt: (event) => isUserChatMessage(event, aiBotUserId),
-        })
-      : undefined);
-  if (!latest) {
+    (replyEventId
+      ? findLast(
+          records,
+          (record) =>
+            sameTarget(record) && record.replyEventId === replyEventId,
+        )
+      : undefined) ??
+    findLast(
+      records,
+      (record) =>
+        sameTarget(record) && record.historyIndex > lastUserMessageIndex,
+    );
+  if (!latest || latest.succeeded) {
     return 1;
   }
-  if (latest.succeeded) {
-    return 1;
-  }
-  return Math.max(1, latest.attempt + 1);
+  return latest.attempt + 1;
 }
 
 function toCheckCorrectnessResultContent(
@@ -2187,13 +2446,21 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  // The follow-up each correctness check produced, by the bot message that
-  // asked for the checks, so the trailing note is decided from the same
+  // The follow-up each correctness check produced, by correctness group
+  // (correctnessGroupKey), so the trailing note is decided from the same
   // results the history carries.
   let correctnessFollowUpsByMessage = new Map<string, CorrectnessFollowUp[]>();
+  // The instructions a group's checks called for so far. A group's events
+  // each carry their own results, and the group's one instruction follows
+  // the results of its last event.
+  let groupFollowUps = new Map<
+    string,
+    { messages: OpenAIPromptMessage[]; followUps: CorrectnessFollowUp[] }
+  >();
   // History through the compaction's cut point is replaced by its summary,
   // which leads the history. Single messages are never shortened or edited.
-  for (let event of historyAfterCompaction(history, compaction)) {
+  let visibleHistory = historyAfterCompaction(history, compaction);
+  for (let event of visibleHistory) {
     // Tool results have their own event types, so this also skips them;
     // they ride in with the tool calls they answer.
     if (event.type !== 'm.room.message') {
@@ -2225,16 +2492,37 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      let { messages: resultMessages, correctnessFollowUps } =
+      let { toolMessages, followUpMessages, correctnessFollowUps } =
         await toResultMessages(
           event as CardMessageEvent,
           toolResults,
           client,
           history,
         );
-      historicalMessages.push(...resultMessages);
-      if (correctnessFollowUps.length) {
-        correctnessFollowUpsByMessage.set(event.event_id, correctnessFollowUps);
+      historicalMessages.push(...toolMessages);
+      let groupKey = correctnessGroupKey(event);
+      if (followUpMessages.length || correctnessFollowUps.length) {
+        let collected = groupFollowUps.get(groupKey) ?? {
+          messages: [],
+          followUps: [],
+        };
+        collected.messages.push(...followUpMessages);
+        collected.followUps.push(...correctnessFollowUps);
+        groupFollowUps.set(groupKey, collected);
+      }
+      let group = correctnessGroupOf(event, visibleHistory);
+      let collected = groupFollowUps.get(groupKey);
+      if (collected && group[group.length - 1] === event) {
+        historicalMessages.push(
+          ...correctnessFollowUpMessages(
+            collected.messages,
+            collected.followUps,
+          ),
+        );
+        if (collected.followUps.length) {
+          correctnessFollowUpsByMessage.set(groupKey, collected.followUps);
+        }
+        groupFollowUps.delete(groupKey);
       }
     }
     if (
@@ -2482,26 +2770,46 @@ function resolveCodeEdits(
   };
 }
 
+// The checks still to send for a reply's edits. A reply's checks go out as a
+// correctness group, in one event or, when they don't fit, several. A group
+// that is still the latest thing in the room may be missing targets: the
+// sending stopped partway, or the user retried a failed edit and it landed.
+// So the targets the group already asked for are left out, and so are the
+// targets past the attempt limit. Once anything else is said in the room the
+// group is complete, as a reply's checks were before groups had more than one
+// event, and nothing more is sent for it. Undefined when nothing is left.
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
-  if (
-    history.some((event) =>
-      isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
-    )
-  ) {
-    return undefined;
+  let group = history.filter((event) =>
+    isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
+  );
+  let requested = new Set<string>();
+  if (group.length) {
+    let lastNonResultEvent = findLast(history, (event) => !isToolResult(event));
+    if (!lastNonResultEvent || !group.includes(lastNonResultEvent)) {
+      return undefined;
+    }
+    for (let event of group) {
+      for (let request of getCheckCorrectnessToolRequests(event)) {
+        for (let target of checkedTargetsOf(request, event)) {
+          requested.add(`${target.type}:${target.ref}`);
+        }
+      }
+    }
   }
+  let notRequested = (type: string, ref: string) =>
+    !requested.has(`${type}:${ref}`);
 
-  let files = gatherPatchedFiles(relevantTools, toolResults);
-  let cards = gatherPatchedCards(relevantTools, toolResults);
-
-  if (files.length === 0 && cards.length === 0) {
-    return undefined;
-  }
+  let files = gatherPatchedFiles(relevantTools, toolResults).filter((file) =>
+    notRequested('file', file.sourceUrl || file.displayName),
+  );
+  let cards = gatherPatchedCards(relevantTools, toolResults).filter((card) =>
+    notRequested('card', card.cardId),
+  );
 
   let attemptsByTargetKey = buildCorrectnessCheckAttemptMap(
     history,
@@ -2510,6 +2818,18 @@ function buildCodePatchCorrectnessMessage(
     aiBotUserId,
     messageEvent.event_id,
   );
+  let withinLimit = (type: string, ref: string) =>
+    (attemptsByTargetKey[
+      formatCorrectnessTargetKeyWithEvent(type, ref, messageEvent.event_id)!
+    ] ?? 1) <= MAX_CORRECTNESS_FIX_ATTEMPTS;
+  files = files.filter((file) =>
+    withinLimit('file', file.sourceUrl || file.displayName),
+  );
+  cards = cards.filter((card) => withinLimit('card', card.cardId));
+
+  if (files.length === 0 && cards.length === 0) {
+    return undefined;
+  }
 
   return {
     targetEventId: messageEvent.event_id!,
@@ -2616,6 +2936,10 @@ function buildCorrectnessCheckAttemptMap(
   targetEventId?: string,
 ): Record<string, number> {
   let attempts: Record<string, number> = {};
+  let records = collectCorrectnessCheckRecords(history);
+  let lastUserMessageIndex = findLastIndex(history, (event) =>
+    isUserChatMessage(event, aiBotUserId),
+  );
   let targets = [
     ...files.map((file) => ({
       type: 'file',
@@ -2633,10 +2957,10 @@ function buildCorrectnessCheckAttemptMap(
       continue;
     }
     attempts[targetKey] = getNextCorrectnessCheckAttempt(
-      history,
-      targetKey,
-      formatCorrectnessTargetKeyWithEvent(type, ref),
-      aiBotUserId,
+      records,
+      { type, ref },
+      targetEventId,
+      lastUserMessageIndex,
     );
   }
   return attempts;
@@ -2676,20 +3000,47 @@ function isCodePatchCorrectnessEventForMessage(
   event: DiscreteMatrixEvent,
   targetEventId: string,
 ) {
+  return correctnessReplyEventId(event) === targetEventId;
+}
+
+// The reply whose edits a correctness event checks; undefined for any other
+// event.
+function correctnessReplyEventId(
+  event: DiscreteMatrixEvent | undefined,
+): string | undefined {
   if (
-    event.type !== 'm.room.message' ||
+    event?.type !== 'm.room.message' ||
     event.content?.msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
   ) {
-    return false;
+    return undefined;
   }
   let relatesTo = event.content?.['m.relates_to'];
-  if (!relatesTo) {
-    return false;
+  if (relatesTo?.rel_type !== APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE) {
+    return undefined;
   }
-  return (
-    relatesTo.rel_type === APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE &&
-    relatesTo.event_id === targetEventId
+  return relatesTo.event_id;
+}
+
+// A correctness group: the events that check one reply's edits, in history
+// order. They are one event unless the checks did not fit in one. Any other
+// event is a group of its own.
+function correctnessGroupOf(
+  event: DiscreteMatrixEvent,
+  history: DiscreteMatrixEvent[],
+): DiscreteMatrixEvent[] {
+  let replyEventId = correctnessReplyEventId(event);
+  if (!replyEventId) {
+    return [event];
+  }
+  return history.filter((candidate) =>
+    isCodePatchCorrectnessEventForMessage(candidate, replyEventId),
   );
+}
+
+// Correctness follow-ups are collected per group: by the reply a group
+// checks, or by the event itself for any other event.
+function correctnessGroupKey(event: DiscreteMatrixEvent): string {
+  return correctnessReplyEventId(event) ?? event.event_id;
 }
 
 function formatFileDisplayName(identifier?: string) {

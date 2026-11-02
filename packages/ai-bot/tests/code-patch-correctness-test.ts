@@ -14,25 +14,48 @@ import {
   type ToolRequest,
 } from '@cardstack/runtime-common/commands';
 
+function requestsOf(content: Record<string, any>): Partial<ToolRequest>[] {
+  return (content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? []).map((request: any) =>
+    decodeToolRequest(request),
+  );
+}
+
+function targetsOf(content: Record<string, any>) {
+  return requestsOf(content).flatMap(
+    (request) => request.arguments?.attributes?.targets ?? [],
+  );
+}
+
 module('code patch correctness helpers', () => {
-  test('publishCodePatchCorrectnessMessage emits check correctness requests for files and cards', async function () {
+  test('publishCodePatchCorrectnessMessage checks every changed file and card in one request', async function () {
     let client = new FakeMatrixClient();
     let summary: PendingCodePatchCorrectnessCheck = {
       targetEventId: 'ai-message',
       roomId: '!room:localhost',
       context: {
+        agentId: 'agent-1',
         realmUrl: 'http://localhost:4201/test',
         submode: 'code',
-        tools: [],
+        tools: [{ type: 'function', function: { name: 'big-tool' } }],
         functions: [],
       } as any,
       files: [
+        {
+          sourceUrl: 'http://localhost/files/notes.md',
+          displayName: 'files/notes.md',
+        },
         {
           sourceUrl: 'http://localhost/files/src/components/button.gts',
           displayName: 'files/src/components/button.gts',
         },
       ],
-      cards: [{ cardId: 'http://localhost/cards/Profile/1' }],
+      cards: [
+        { cardId: 'http://localhost/cards/Profile/1' },
+        { cardId: 'http://localhost/cards/Profile/2' },
+      ],
+      attemptsByTargetKey: {
+        'card:http://localhost/cards/Profile/2|event:ai-message': 2,
+      },
     };
 
     await publishCodePatchCorrectnessMessage(summary, client);
@@ -40,16 +63,11 @@ module('code patch correctness helpers', () => {
     let sentEvents = client.getSentEvents();
     assert.strictEqual(sentEvents.length, 1, 'Should send one message');
     let [event] = sentEvents;
-    assert.strictEqual(
-      event.eventType,
-      'm.room.message',
-      'Should send a room message',
-    );
+    assert.strictEqual(event.eventType, 'm.room.message');
     let content = event.content;
     assert.strictEqual(
       content.msgtype,
       APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
-      'Message type should be code patch correctness',
     );
     assert.deepEqual(
       content['m.relates_to'],
@@ -59,158 +77,120 @@ module('code patch correctness helpers', () => {
       },
       'Correctness message should reference the patched event',
     );
-    assert.strictEqual(
-      content.body,
-      '',
-      'Correctness message should not include a body',
-    );
+    assert.strictEqual(content.body, '');
     assert.true(content.isStreamingFinished, 'Message should be finalized');
     assert.deepEqual(
       content.data,
-      { context: summary.context },
-      'Should forward the context with the message',
+      { context: { agentId: 'agent-1' } },
+      'Only the agent id of the context rides along',
     );
 
-    let encodedRequests = content[APP_BOXEL_TOOL_REQUESTS_KEY];
+    let requests = requestsOf(content);
+    assert.strictEqual(requests.length, 1, 'One request covers every target');
+    assert.strictEqual(requests[0].name, 'checkCorrectness');
+    assert.deepEqual(
+      requests[0].arguments,
+      {
+        description: 'Check 2 cards and 2 files',
+        attributes: {
+          targets: [
+            {
+              type: 'file',
+              ref: 'http://localhost/files/src/components/button.gts',
+            },
+            { type: 'file', ref: 'http://localhost/files/notes.md' },
+            { type: 'card', ref: 'http://localhost/cards/Profile/1' },
+            {
+              type: 'card',
+              ref: 'http://localhost/cards/Profile/2',
+              attempt: 2,
+            },
+          ],
+        },
+      },
+      'Modules come first, and an attempt is named only past the first',
+    );
+  });
+
+  test('publishCodePatchCorrectnessMessage splits targets that do not fit one event across several', async function () {
+    let client = new FakeMatrixClient();
+    let cards = Array.from({ length: 60 }, (_, n) => ({
+      cardId: `http://localhost/cards/Product/${n}`,
+    }));
+    let summary: PendingCodePatchCorrectnessCheck = {
+      targetEventId: 'ai-message',
+      roomId: '!room:localhost',
+      files: [
+        {
+          sourceUrl: 'http://localhost/files/product.gts',
+          displayName: 'files/product.gts',
+        },
+      ],
+      cards,
+    };
+    let maxContentBytes = 2000;
+
+    await publishCodePatchCorrectnessMessage(summary, client, maxContentBytes);
+
+    let sentEvents = client.getSentEvents();
+    assert.true(sentEvents.length > 1, 'Should send several events');
+    for (let { content } of sentEvents) {
+      assert.true(
+        Buffer.byteLength(JSON.stringify(content)) <= maxContentBytes,
+        'Each event fits the budget',
+      );
+      assert.strictEqual(
+        content['m.relates_to']?.event_id,
+        'ai-message',
+        'Each event relates to the reply',
+      );
+      assert.strictEqual(requestsOf(content).length, 1);
+    }
+    let allRefs = sentEvents.flatMap(({ content }) =>
+      targetsOf(content).map((target: any) => target.ref),
+    );
+    assert.deepEqual(
+      allRefs,
+      ['http://localhost/files/product.gts', ...cards.map((c) => c.cardId)],
+      'Every target is checked once, the module in the first event',
+    );
+  });
+
+  test('a target too large for an event of its own keeps the lint issues that fit', async function () {
+    let client = new FakeMatrixClient();
+    let lintIssues = Array.from(
+      { length: 500 },
+      (_, n) => `line ${n}: unexpected token`,
+    );
+    let summary: PendingCodePatchCorrectnessCheck = {
+      targetEventId: 'ai-message',
+      roomId: '!room:localhost',
+      files: [
+        {
+          sourceUrl: 'http://localhost/files/product.gts',
+          displayName: 'files/product.gts',
+          lintIssues,
+        },
+      ],
+      cards: [],
+    };
+    let maxContentBytes = 4000;
+
+    await publishCodePatchCorrectnessMessage(summary, client, maxContentBytes);
+
+    let [event, ...rest] = client.getSentEvents();
+    assert.strictEqual(rest.length, 0, 'Should send one event');
     assert.true(
-      Array.isArray(encodedRequests),
-      'Command requests should be present',
+      Buffer.byteLength(JSON.stringify(event.content)) <= maxContentBytes,
+      'It fits the budget',
     );
+    let [target] = targetsOf(event.content);
+    let kept: string[] = target.lintIssues;
+    assert.true(kept.length > 1 && kept.length < lintIssues.length);
     assert.strictEqual(
-      encodedRequests.length,
-      2,
-      'Should request correctness checks for each file and card',
-    );
-    let decodedRequests = encodedRequests.map((request: any) =>
-      decodeToolRequest(request),
-    );
-    let fileRequest = decodedRequests.find(
-      (request: Partial<ToolRequest>) =>
-        request.arguments?.attributes?.targetType === 'file',
-    );
-    assert.ok(fileRequest, 'Should include a file correctness request');
-    assert.strictEqual(
-      fileRequest?.name,
-      'checkCorrectness',
-      'File request should use the check correctness command',
-    );
-    assert.deepEqual(
-      fileRequest?.arguments,
-      {
-        description: 'Check correctness of files/src/components/button.gts',
-        attributes: {
-          targetType: 'file',
-          targetRef: summary.files[0].sourceUrl,
-          roomId: summary.roomId,
-          targetEventId: summary.targetEventId,
-          correctnessCheckAttempt: 1,
-        },
-      },
-      'File correctness check request should describe the file that changed',
-    );
-    let cardRequest = decodedRequests.find(
-      (request: Partial<ToolRequest>) =>
-        request.arguments?.attributes?.targetType === 'card',
-    );
-    assert.ok(cardRequest, 'Should include a card correctness request');
-    assert.deepEqual(
-      cardRequest?.arguments,
-      {
-        description: 'Check correctness of http://localhost/cards/Profile/1',
-        attributes: {
-          targetType: 'card',
-          targetRef: 'http://localhost/cards/Profile/1',
-          roomId: summary.roomId,
-          targetEventId: summary.targetEventId,
-          correctnessCheckAttempt: 1,
-        },
-      },
-      'Card correctness check request should describe the card that changed',
-    );
-  });
-
-  test('publishCodePatchCorrectnessMessage uses attempts scoped to the patch event', async function () {
-    let client = new FakeMatrixClient();
-    let summary: PendingCodePatchCorrectnessCheck = {
-      targetEventId: 'ai-message-123',
-      roomId: '!room:localhost',
-      files: [
-        {
-          sourceUrl: 'http://localhost/files/src/components/button.gts',
-          displayName: 'files/src/components/button.gts',
-        },
-      ],
-      cards: [{ cardId: 'http://localhost/cards/Profile/1' }],
-      attemptsByTargetKey: {
-        'file:http://localhost/files/src/components/button.gts|event:ai-message-123': 2,
-        'card:http://localhost/cards/Profile/1|event:ai-message-123': 3,
-      },
-    };
-
-    await publishCodePatchCorrectnessMessage(summary, client);
-
-    let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
-    let decodedRequests = encodedRequests.map((request: any) =>
-      decodeToolRequest(request),
-    );
-
-    let fileRequest = decodedRequests.find(
-      (request: Partial<ToolRequest>) =>
-        request.arguments?.attributes?.targetType === 'file',
-    );
-    assert.strictEqual(
-      fileRequest?.arguments?.attributes?.correctnessCheckAttempt,
-      2,
-      'File attempt should come from the scoped attempts map',
-    );
-    assert.strictEqual(
-      fileRequest?.arguments?.attributes?.targetEventId,
-      summary.targetEventId,
-      'File request should include the patch event id',
-    );
-
-    let cardRequest = decodedRequests.find(
-      (request: Partial<ToolRequest>) =>
-        request.arguments?.attributes?.targetType === 'card',
-    );
-    assert.strictEqual(
-      cardRequest?.arguments?.attributes?.correctnessCheckAttempt,
-      3,
-      'Card attempt should come from the scoped attempts map',
-    );
-    assert.strictEqual(
-      cardRequest?.arguments?.attributes?.targetEventId,
-      summary.targetEventId,
-      'Card request should include the patch event id',
-    );
-  });
-
-  test('publishCodePatchCorrectnessMessage skips targets that exceed max attempts', async function () {
-    let client = new FakeMatrixClient();
-    let summary: PendingCodePatchCorrectnessCheck = {
-      targetEventId: 'ai-message-max',
-      roomId: '!room:localhost',
-      files: [
-        {
-          sourceUrl: 'http://localhost/files/src/components/button.gts',
-          displayName: 'files/src/components/button.gts',
-        },
-      ],
-      cards: [{ cardId: 'http://localhost/cards/Profile/1' }],
-      attemptsByTargetKey: {
-        'file:http://localhost/files/src/components/button.gts|event:ai-message-max': 4,
-        'card:http://localhost/cards/Profile/1|event:ai-message-max': 5,
-      },
-    };
-
-    await publishCodePatchCorrectnessMessage(summary, client);
-
-    let [event] = client.getSentEvents();
-    let encodedRequests = event.content[APP_BOXEL_TOOL_REQUESTS_KEY];
-    assert.notOk(
-      encodedRequests,
-      'Targets beyond the attempt limit should not emit correctness requests',
+      kept.at(-1),
+      `…and ${lintIssues.length - (kept.length - 1)} more lint issues`,
+      'The last line counts the issues left out',
     );
   });
 });

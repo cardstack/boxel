@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Papua New Guinea Eastern Highlands Natural",
+      "category": "coffee",
+      "origin": "Eastern Highlands, Papua New Guinea",
+      "variants": [
+        {
+          "sku": "CF-147-250",
+          "size": "250 g",
+          "price": 15.29
+        },
+        {
+          "sku": "CF-147-500",
+          "size": "500 g",
+          "price": 29.7
+        },
+        {
+          "sku": "CF-147-1KG",
+          "size": "1 kg",
+          "price": 54.1
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

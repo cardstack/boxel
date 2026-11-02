@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Rwanda Huye Decaf",
+      "category": "coffee",
+      "origin": "Huye, Rwanda",
+      "variants": [
+        {
+          "sku": "CF-155-250",
+          "size": "250 g",
+          "price": 14.6
+        },
+        {
+          "sku": "CF-155-500",
+          "size": "500 g",
+          "price": 27.7
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

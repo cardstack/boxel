@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Colombia Santander Honey",
+      "category": "coffee",
+      "origin": "Santander, Colombia",
+      "variants": [
+        {
+          "sku": "CF-115-250",
+          "size": "250 g",
+          "price": 18.89
+        },
+        {
+          "sku": "CF-115-500",
+          "size": "500 g",
+          "price": 35.2
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

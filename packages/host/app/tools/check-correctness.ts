@@ -26,6 +26,57 @@ import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
+// How many targets are checked at once. A module check is a prerender on the
+// realm server, so fewer of those run together than card reloads.
+const CARD_CHECK_CONCURRENCY = 8;
+const MODULE_CHECK_CONCURRENCY = 2;
+
+interface CheckTarget {
+  type: string;
+  ref: string;
+  lintIssues: string[];
+}
+
+interface TargetOutcome {
+  target: CheckTarget;
+  errors: string[];
+  warnings: string[];
+}
+
+interface ModuleCheckPlan {
+  kind: 'module';
+  targetRef: string;
+  moduleURL: URL;
+  realmURL: string;
+  fileURL: URL;
+}
+
+// What checking a target takes: prerendering its module, reloading its card,
+// or nothing more (the outcome was settled without waiting for indexing).
+type CheckPlan =
+  | ModuleCheckPlan
+  | { kind: 'card'; cardId: string; cardSource?: string }
+  | { kind: 'done'; errors: string[] };
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  let results: R[] = new Array(items.length);
+  let next = 0;
+  let worker = async () => {
+    while (next < items.length) {
+      let index = next++;
+      results[index] = await fn(items[index]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker),
+  );
+  return results;
+}
+
 export default class CheckCorrectnessTool extends HostBaseTool<
   typeof BaseToolModule.CheckCorrectnessInput,
   typeof BaseToolModule.CorrectnessResultCard
@@ -38,110 +89,227 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   @service declare private network: NetworkService;
 
   description =
-    'Run post-change correctness checks for a specific file or card instance.';
+    'Run post-change correctness checks for changed files and card instances.';
   static actionVerb = 'Check';
+  // The room is the one the check was requested in, so a check of several
+  // targets doesn't need to name it.
+  static bindsToInvokingRoom = true;
+
+  // The tool service's execute timeout covers one round of checks. A check of
+  // more targets than one round runs at once gets a render timeout for each
+  // further round.
+  static extraExecuteTimeMsFor(
+    attributes: Record<string, unknown> | undefined,
+  ): number {
+    let targets = Array.isArray(attributes?.targets) ? attributes.targets : [];
+    let modules = targets.filter(
+      (target) =>
+        typeof target?.ref === 'string' &&
+        target.type !== 'card' &&
+        target.ref.endsWith('.gts'),
+    ).length;
+    let rounds =
+      Math.ceil(modules / MODULE_CHECK_CONCURRENCY) +
+      Math.ceil((targets.length - modules) / CARD_CHECK_CONCURRENCY);
+    return Math.max(0, rounds - 1) * cardIndexingTimeout;
+  }
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
     return commandModule.CheckCorrectnessInput;
   }
 
-  requireInputFields = ['targetType', 'targetRef', 'roomId'];
-
   protected async run(
     input: BaseToolModule.CheckCorrectnessInput,
   ): Promise<BaseToolModule.CorrectnessResultCard> {
-    if (!input.targetType || !input.targetRef) {
-      throw new Error(
-        'Target type and reference are required to run correctness checks.',
-      );
-    }
     let roomId = input.roomId;
     if (!roomId) {
       throw new Error('Room id is required to run correctness checks.');
     }
+    let isBatch = (input.targets?.length ?? 0) > 0;
+    let targets: CheckTarget[] = isBatch
+      ? input.targets.map((target) => {
+          if (!target.type || !target.ref) {
+            throw new Error(
+              'Each target needs a type and a reference to run correctness checks.',
+            );
+          }
+          return {
+            type: target.type,
+            ref: target.ref,
+            lintIssues: target.lintIssues ?? [],
+          };
+        })
+      : [];
+    if (!isBatch) {
+      if (!input.targetType || !input.targetRef) {
+        throw new Error(
+          'Target type and reference are required to run correctness checks.',
+        );
+      }
+      targets = [
+        {
+          type: input.targetType,
+          ref: input.targetRef,
+          lintIssues: input.lintIssues ?? [],
+        },
+      ];
+    }
 
-    let targetType = input.targetType;
-    let cardId = targetType === 'card' ? input.targetRef : undefined;
+    let outcomes = await this.checkTargets(targets, roomId);
+
+    let commandModule = await this.loadToolModule();
+    const { CorrectnessResultCard, CorrectnessTargetResultField } =
+      commandModule;
+    let errors = outcomes.flatMap((outcome) => outcome.errors);
+    let warnings = outcomes.flatMap((outcome) => outcome.warnings);
+    if (!isBatch) {
+      return new CorrectnessResultCard({
+        correct: errors.length === 0,
+        errors,
+        warnings,
+      });
+    }
+    return new CorrectnessResultCard({
+      correct: errors.length === 0,
+      errors,
+      warnings,
+      targetResults: outcomes
+        .filter((outcome) => outcome.errors.length || outcome.warnings.length)
+        .map(
+          (outcome) =>
+            new CorrectnessTargetResultField({
+              targetType: outcome.target.type,
+              targetRef: outcome.target.ref,
+              errors: outcome.errors,
+              warnings: outcome.warnings,
+            }),
+        ),
+      checkedCount: outcomes.length,
+      passedCount: outcomes.filter((outcome) => outcome.errors.length === 0)
+        .length,
+    });
+  }
+
+  // Each target is first resolved to what checking it takes, then every
+  // target's index invalidation is waited for at once, so the reply's
+  // indexing is waited out once rather than once per card. Only then are the
+  // modules prerendered and the cards reloaded, a few at a time.
+  private async checkTargets(
+    targets: CheckTarget[],
+    roomId: string,
+  ): Promise<TargetOutcome[]> {
+    let plans = await mapWithConcurrency(targets, CARD_CHECK_CONCURRENCY, (t) =>
+      this.planCheck(t),
+    );
+    await Promise.all(
+      plans.map((plan) =>
+        plan.kind === 'done'
+          ? undefined
+          : this.toolService.waitForInvalidationAfterAIAssistantRequest(
+              roomId,
+              plan.kind === 'module' ? plan.fileURL.href : plan.cardId,
+              cardIndexingTimeout,
+            ),
+      ),
+    );
+    let outcomes: TargetOutcome[] = new Array(plans.length);
+    let finish = async (index: number) => {
+      let plan = plans[index]!;
+      let target = targets[index]!;
+      let errors: string[] = [];
+      let warnings: string[] = [];
+      if (plan.kind === 'done') {
+        outcomes[index] = { target, errors: plan.errors, warnings: [] };
+        return;
+      }
+      if (plan.kind === 'module') {
+        errors = await this.collectModuleErrors(plan);
+      } else {
+        ({ errors, warnings } = await this.collectCardErrors(
+          plan.cardId,
+          plan.cardSource,
+        ));
+      }
+      outcomes[index] = {
+        target,
+        errors: errors.concat(target.lintIssues),
+        warnings,
+      };
+    };
+    let indexes = plans.map((_, index) => index);
+    await Promise.all([
+      mapWithConcurrency(
+        indexes.filter((index) => plans[index]!.kind === 'module'),
+        MODULE_CHECK_CONCURRENCY,
+        finish,
+      ),
+      mapWithConcurrency(
+        indexes.filter((index) => plans[index]!.kind !== 'module'),
+        CARD_CHECK_CONCURRENCY,
+        finish,
+      ),
+    ]);
+    return outcomes;
+  }
+
+  private async planCheck(target: CheckTarget): Promise<CheckPlan> {
+    let targetType = target.type;
+    let cardId = targetType === 'card' ? target.ref : undefined;
     // Sometimes AI will write cards directly as files so we need to check
     // whether the file is actually a card instance
 
     let nonCardJsonError: string | undefined;
     let cardSource: string | undefined;
-    if (targetType !== 'card' && input.targetRef.endsWith('.json')) {
-      let inferred = await this.checkIfFileIsACardInstance(input.targetRef);
+    if (targetType !== 'card' && target.ref.endsWith('.json')) {
+      let inferred = await this.checkIfFileIsACardInstance(target.ref);
       if (inferred) {
         targetType = 'card';
         cardId = inferred.cardId;
         cardSource = inferred.content;
       } else {
-        nonCardJsonError = await this.describeNonCardJson(input.targetRef);
+        nonCardJsonError = await this.describeNonCardJson(target.ref);
       }
     }
 
-    let commandModule = await this.loadToolModule();
-    const { CorrectnessResultCard } = commandModule;
-    let errors: string[] = [];
-    let warnings: string[] = [];
-    let lintIssues: string[] = input.lintIssues ?? [];
-
-    let sizeLimitError = this.cardService.getSizeLimitError(input.targetRef);
+    let sizeLimitError = this.cardService.getSizeLimitError(target.ref);
     if (sizeLimitError) {
-      return new CorrectnessResultCard({
-        correct: false,
-        errors: [sizeLimitError.message],
-        warnings: [],
-      });
+      return { kind: 'done', errors: [sizeLimitError.message] };
     }
 
-    if (
-      targetType === 'file' &&
-      (await this.isEmptyFileContent(input.targetRef))
-    ) {
-      return new CorrectnessResultCard({
-        correct: true,
-        errors: [],
-        warnings: [],
-      });
+    if (targetType === 'file' && (await this.isEmptyFileContent(target.ref))) {
+      return { kind: 'done', errors: [] };
     }
 
     if (nonCardJsonError) {
-      errors = [nonCardJsonError];
-    } else if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
-      errors = await this.collectModuleErrors(input.targetRef, roomId);
-    } else if (targetType === 'card') {
-      if (!cardId) {
-        throw new Error('Card correctness checks require a targetRef.');
+      return {
+        kind: 'done',
+        errors: [nonCardJsonError, ...target.lintIssues],
+      };
+    }
+    if (targetType === 'file' && target.ref.endsWith('.gts')) {
+      let moduleInfo = this.moduleInfoFromFile(target.ref);
+      if (!moduleInfo) {
+        return {
+          kind: 'done',
+          errors: [
+            `${target.ref}: Unable to determine module URL or realm for correctness check`,
+            ...target.lintIssues,
+          ],
+        };
       }
-      ({ errors, warnings } = await this.collectCardErrors(
-        cardId,
-        roomId,
-        cardSource,
-      ));
+      return { kind: 'module', targetRef: target.ref, ...moduleInfo };
     }
-
-    if (lintIssues.length) {
-      errors = errors.concat(lintIssues);
+    if (targetType === 'card' && cardId) {
+      return { kind: 'card', cardId, cardSource };
     }
-
-    return new CorrectnessResultCard({
-      correct: errors.length === 0,
-      errors,
-      warnings,
-    });
+    return { kind: 'done', errors: [...target.lintIssues] };
   }
 
   private async collectCardErrors(
     cardId: string,
-    roomId: string,
     cardSource?: string,
   ): Promise<{ errors: string[]; warnings: string[] }> {
-    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
-      roomId,
-      cardId,
-      cardIndexingTimeout,
-    );
-
     let { error, instance } = await this.refreshCard(cardId);
 
     if (!error) {
@@ -230,25 +398,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return {};
   }
 
-  private async collectModuleErrors(
-    targetRef: string,
-    roomId: string,
-  ): Promise<string[]> {
-    let moduleInfo = this.moduleInfoFromFile(targetRef);
-    if (!moduleInfo) {
-      return [
-        `${targetRef}: Unable to determine module URL or realm for correctness check`,
-      ];
-    }
-
-    let { moduleURL, realmURL, fileURL } = moduleInfo;
-
-    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
-      roomId,
-      fileURL.href,
-      cardIndexingTimeout,
-    );
-
+  private async collectModuleErrors({
+    targetRef,
+    moduleURL,
+    realmURL,
+  }: ModuleCheckPlan): Promise<string[]> {
     if (await this.isEmptyFileContent(targetRef)) {
       return [];
     }

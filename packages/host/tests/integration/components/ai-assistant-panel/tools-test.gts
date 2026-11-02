@@ -4232,10 +4232,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       requestId,
       toolName,
       resultDoc,
+      args = {},
     }: {
       requestId: string;
       toolName: string;
       resultDoc: LooseSingleCardDocument;
+      args?: Record<string, unknown>;
     },
   ) {
     let resultUrl = `mxc://mock-server/${requestId}-result`;
@@ -4254,7 +4256,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-        { id: requestId, name: toolName, arguments: '{}' },
+        { id: requestId, name: toolName, arguments: JSON.stringify(args) },
       ],
     });
     simulateRemoteMessage(
@@ -4360,6 +4362,66 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-result-container]')
       .doesNotExist('the correctness result card is not rendered');
+  });
+
+  test('a check of several targets lists its errors and counts the rest', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let target = (n: number) => `${testRealmURL}Product/${n}`;
+
+    simulateToolResult(roomId, {
+      requestId: 'batched-correctness-check',
+      toolName: 'checkCorrectness',
+      args: {
+        description: 'Check 3 cards and 1 file',
+        attributes: {
+          targets: [
+            { type: 'file', ref: `${testRealmURL}product.gts` },
+            { type: 'card', ref: target(1) },
+            { type: 'card', ref: target(2) },
+            { type: 'card', ref: target(3) },
+          ],
+        },
+      },
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: false,
+        errors: [`${target(2)}: price must be a number`],
+        warnings: [],
+        targetResults: [
+          {
+            targetType: 'card',
+            targetRef: target(2),
+            errors: [`${target(2)}: price must be a number`],
+            warnings: [],
+          },
+        ],
+        checkedCount: 4,
+        passedCount: 3,
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-tool-call-apply="applied-with-error"]',
+    );
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row-toggle]',
+    );
+    await waitFor('[data-test-message-idx="0"] [data-test-check-outcome]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-pretui-tool-row-title]')
+      .hasText(
+        'Checked 3 cards and 1 file · errors',
+        'the row counts what it checked',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-check-outcome]')
+      .containsText(
+        `${target(2)}: price must be a number`,
+        'the error is listed',
+      )
+      .containsText(
+        'No errors in the other 2 cards and 1 file',
+        'the passing targets are counted',
+      );
   });
 
   test('a view-visually result shows the image the assistant looked at', async function (assert) {

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Jamaica Blue Mountain Natural",
+      "category": "coffee",
+      "origin": "Blue Mountain, Jamaica",
+      "variants": [
+        {
+          "sku": "CF-135-250",
+          "size": "250 g",
+          "price": 18.49
+        },
+        {
+          "sku": "CF-135-500",
+          "size": "500 g",
+          "price": 33.19
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

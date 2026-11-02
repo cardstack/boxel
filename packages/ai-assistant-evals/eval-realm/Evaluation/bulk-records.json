@@ -6,11 +6,11 @@
       "followUpPrompts": [
         "Sam Rivera is leaving the team. Reassign all of his open tickets to Priya Shah."
       ],
-      "successCriteria": "**A: raise every Coffee product's variant prices by 10% (prompt 1)**\nA1. In all 60 Products with `category` `coffee`, every variant's `price` is its seed price times 1.1, rounded to the cent. For example `Product/ethiopia-yirgacheffe-washed`: 14.79 → 16.27, 28.49 → 31.34, 48.0 → 52.8.\nA2. Each of those products keeps every variant's `sku` and `size`, the same number of variants in the same order, and its `name`, `category` and `origin`.\nA3. The 15 tea and equipment products are byte-identical to the seed.\nA4. Each coffee price went up exactly once and none was missed. There are 60 coffee products, more than the 50 a search returns when it names no page size, so a run that stops after the first page or repeats a page fails here.\nA5. The reply to prompt 1 says how many products (60) or variants (142) it changed, and that number matches the snapshot.\n\n**B: reassign Sam Rivera's open tickets to Priya Shah (prompt 2)**\nB1. These 12 open tickets now have `assignee` linked to `Agent/priya-shah`: ticket-5101, ticket-5107, ticket-5116, ticket-5134, ticket-5137, ticket-5155, ticket-5158, ticket-5164, ticket-5167, ticket-5170, ticket-5173, ticket-5182.\nB2. Sam's 4 closed tickets still link to `Agent/sam-rivera`: ticket-5104, ticket-5113, ticket-5125, ticket-5179.\nB3. On the 12 reassigned tickets, every attribute (`subject`, `requester`, `status`, `openedOn`) matches the seed, and every other ticket is byte-identical to the seed.\nB4. Every Agent card is byte-identical to the seed, and every `assignee` link resolves to an existing Agent.\nB5. The reply to prompt 2 says it reassigned 12 tickets, and the snapshot agrees.\n\n**All tasks**\nZ1. `Product/ethiopia-yirgacheffe-washed` and `Agent/sam-rivera` stay open and render with no error boundary at the end of the run.\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.\nZ3. The definition modules (`store/product.gts`, `helpdesk/support-ticket.gts`) are byte-identical to the seed, every change was made in place, and no card was added or deleted.",
+      "successCriteria": "**A: raise every Coffee product's variant prices by 10% (prompt 1)**\nA1. In all 110 Products with `category` `coffee`, every variant's `price` is its seed price times 1.1, rounded to the cent. For example `Product/ethiopia-yirgacheffe-washed`: 14.79 → 16.27, 28.49 → 31.34, 48.0 → 52.8.\nA2. Each of those products keeps every variant's `sku` and `size`, the same number of variants in the same order, and its `name`, `category` and `origin`.\nA3. The 15 tea and equipment products are byte-identical to the seed.\nA4. Each coffee price went up exactly once and none was missed. There are 110 coffee products, more than two pages of the 50 a search returns when it names no page size, so a run that stops before the last page or repeats a page fails here.\nA5. The reply to prompt 1 says how many products (110) or variants (260) it changed, and that number matches the snapshot.\n\n**B: reassign Sam Rivera's open tickets to Priya Shah (prompt 2)**\nB1. These 12 open tickets now have `assignee` linked to `Agent/priya-shah`: ticket-5101, ticket-5107, ticket-5116, ticket-5134, ticket-5137, ticket-5155, ticket-5158, ticket-5164, ticket-5167, ticket-5170, ticket-5173, ticket-5182.\nB2. Sam's 4 closed tickets still link to `Agent/sam-rivera`: ticket-5104, ticket-5113, ticket-5125, ticket-5179.\nB3. On the 12 reassigned tickets, every attribute (`subject`, `requester`, `status`, `openedOn`) matches the seed, and every other ticket is byte-identical to the seed.\nB4. Every Agent card is byte-identical to the seed, and every `assignee` link resolves to an existing Agent.\nB5. The reply to prompt 2 says it reassigned 12 tickets, and the snapshot agrees.\n\n**All tasks**\nZ1. `Product/ethiopia-yirgacheffe-washed` and `Agent/sam-rivera` stay open and render with no error boundary at the end of the run.\nZ2. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting after any prompt.\nZ3. The definition modules (`store/product.gts`, `helpdesk/support-ticket.gts`) are byte-identical to the seed, every change was made in place, and no card was added or deleted.",
       "cardInfo": {
         "name": "Bulk operations: prices and reassignments",
-        "summary": "A shop workspace holds 75 products, 60 of them coffee with 2 or 3 variants each, and a helpdesk holds 30 tickets assigned to 4 agents. Two prompts in one session ask to raise every coffee variant price by 10% and to move a leaving agent's open tickets to a colleague. This eval tests a change computed per card across more cards than one default search page holds, kept inside a list field without losing the other fields of each item, and a link change that `realm.cards.update` cannot make.",
-        "notes": "Use case: bulk operations. Each prompt goes out as its own message in one session, and each task is judged on its own cards. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot, and read the room for how the work was done. `expectedChangedCards` lists a sample of each task's targets, chosen at the edges of the set; the runner fails the render check unless every card in it changed and one of them is shown in the stack or the preview panel, so the rest of each set is judged from the snapshot. The bulk path the skills give (`source-code-editing`) is one `run-realm-code` script that searches, updates and reports, paging until `truncated` is false, within 200 `realm.cards.update` calls, 20 files and 55 seconds per run; `realm.cards.update` changes attributes only, so a link or `adoptsFrom` change goes through `realm.fs.replace`, which counts toward the 20 files.\n\nA (prices): seed `bulk-operations/store/` holds 75 Product cards: 60 coffee (2 or 3 variants each, 142 variants in all), 10 tea and 5 equipment. `category` is an enum that stores `coffee` and shows `Coffee`, so a filter on `Coffee` finds nothing. No raised price falls exactly on a half cent, so rounding has no tie: each expected price is the seed price times 1.1, rounded to two decimals. The trap criteria are A2 (`realm.cards.update` replaces a whole array, so a `variants` value with only the new prices drops `sku` and `size`) and A4 (a search returns 50 cards when it names no page size, so a script that does not page misses some products). The set stays at 60 because each card a run changes adds a correctness check to one Matrix event, and about 100 changed cards take that event past the 64 KB limit.\n\nB (tickets): seed `bulk-operations/helpdesk/` holds 4 Agent cards and 30 SupportTicket cards: Sam Rivera has 12 open and 4 closed, and Priya Shah, Diego Alvarez and Hana Kim have the other 14. `Agent/sam-rivera` is open for prompt 2. The trap criteria are B1 and B2: `assignee` is a link, which `realm.cards.update` cannot set, so a correct run rewrites each of the 12 files with `realm.fs.replace` (12 files fit in one run), and a run that reassigns every ticket of Sam's also moves the closed ones.",
+        "summary": "A shop workspace holds 125 products, 110 of them coffee with 2 or 3 variants each, and a helpdesk holds 30 tickets assigned to 4 agents. Two prompts in one session ask to raise every coffee variant price by 10% and to move a leaving agent's open tickets to a colleague. This eval tests a change computed per card across more cards than two default search pages hold, kept inside a list field without losing the other fields of each item, and a link change that `realm.cards.update` cannot make.",
+        "notes": "Use case: bulk operations. Each prompt goes out as its own message in one session, and each task is judged on its own cards. The runner brings each task's card (`promptCards`) to the top of the stack before its prompt. Judge each criterion by comparing a card's seed (base64 under `files[].content` in the run's `evaluation.json`) with its file under `files` and its indexed document under `cards` in the workspace snapshot, and read the room for how the work was done. `expectedChangedCards` lists a sample of each task's targets, chosen at the edges of the set; the runner fails the render check unless every card in it changed and one of them is shown in the stack or the preview panel, so the rest of each set is judged from the snapshot. The bulk path the skills give (`source-code-editing`) is one `run-realm-code` script that searches, updates and reports, paging until `truncated` is false, within 200 `realm.cards.update` calls, 20 files and 55 seconds per run; `realm.cards.update` changes attributes only, so a link or `adoptsFrom` change goes through `realm.fs.replace`, which counts toward the 20 files.\n\nA (prices): seed `bulk-operations/store/` holds 125 Product cards: 110 coffee (2 or 3 variants each, 260 variants in all), 10 tea and 5 equipment. `category` is an enum that stores `coffee` and shows `Coffee`, so a filter on `Coffee` finds nothing. No raised price falls exactly on a half cent, so rounding has no tie: each expected price is the seed price times 1.1, rounded to two decimals. The trap criteria are A2 (`realm.cards.update` replaces a whole array, so a `variants` value with only the new prices drops `sku` and `size`) and A4 (a search returns 50 cards when it names no page size, so a script that does not page misses some products). The set is past 100 cards, so a run also shows that a bulk edit that size is still checked in full.\n\nB (tickets): seed `bulk-operations/helpdesk/` holds 4 Agent cards and 30 SupportTicket cards: Sam Rivera has 12 open and 4 closed, and Priya Shah, Diego Alvarez and Hana Kim have the other 14. `Agent/sam-rivera` is open for prompt 2. The trap criteria are B1 and B2: `assignee` is a link, which `realm.cards.update` cannot set, so a correct run rewrites each of the 12 files with `realm.fs.replace` (12 files fit in one run), and a run that reassigns every ticket of Sam's also moves the closed ones.",
         "cardThumbnailURL": null
       },
       "skillFeatures": [],
@@ -59,520 +59,770 @@
       },
       "initialFiles.5": {
         "links": {
-          "self": "../bulk-operations/store/Product/brazil-cerrado-mineiro-washed.json"
+          "self": "../bulk-operations/store/Product/bolivia-yungas-washed.json"
         }
       },
       "initialFiles.6": {
         "links": {
-          "self": "../bulk-operations/store/Product/brazil-mogiana-natural.json"
+          "self": "../bulk-operations/store/Product/brazil-cerrado-mineiro-washed.json"
         }
       },
       "initialFiles.7": {
         "links": {
-          "self": "../bulk-operations/store/Product/brazil-mogiana-washed.json"
+          "self": "../bulk-operations/store/Product/brazil-chapada-diamantina-anaerobic.json"
         }
       },
       "initialFiles.8": {
         "links": {
-          "self": "../bulk-operations/store/Product/burr-hand-grinder.json"
+          "self": "../bulk-operations/store/Product/brazil-mogiana-natural.json"
         }
       },
       "initialFiles.9": {
         "links": {
-          "self": "../bulk-operations/store/Product/burundi-ngozi-anaerobic.json"
+          "self": "../bulk-operations/store/Product/brazil-mogiana-washed.json"
         }
       },
       "initialFiles.10": {
         "links": {
-          "self": "../bulk-operations/store/Product/burundi-ngozi-honey.json"
+          "self": "../bulk-operations/store/Product/burr-hand-grinder.json"
         }
       },
       "initialFiles.11": {
         "links": {
-          "self": "../bulk-operations/store/Product/ceramic-pour-over-dripper.json"
+          "self": "../bulk-operations/store/Product/burundi-ngozi-anaerobic.json"
         }
       },
       "initialFiles.12": {
         "links": {
-          "self": "../bulk-operations/store/Product/ceylon-uva.json"
+          "self": "../bulk-operations/store/Product/burundi-ngozi-honey.json"
         }
       },
       "initialFiles.13": {
         "links": {
-          "self": "../bulk-operations/store/Product/colombia-antioquia-anaerobic.json"
+          "self": "../bulk-operations/store/Product/ceramic-pour-over-dripper.json"
         }
       },
       "initialFiles.14": {
         "links": {
-          "self": "../bulk-operations/store/Product/colombia-cauca-natural.json"
+          "self": "../bulk-operations/store/Product/ceylon-uva.json"
         }
       },
       "initialFiles.15": {
         "links": {
-          "self": "../bulk-operations/store/Product/colombia-huila-natural.json"
+          "self": "../bulk-operations/store/Product/china-baoshan-natural.json"
         }
       },
       "initialFiles.16": {
         "links": {
-          "self": "../bulk-operations/store/Product/colombia-narino-decaf.json"
+          "self": "../bulk-operations/store/Product/colombia-antioquia-anaerobic.json"
         }
       },
       "initialFiles.17": {
         "links": {
-          "self": "../bulk-operations/store/Product/colombia-tolima-washed.json"
+          "self": "../bulk-operations/store/Product/colombia-cauca-natural.json"
         }
       },
       "initialFiles.18": {
         "links": {
-          "self": "../bulk-operations/store/Product/costa-rica-central-valley-natural.json"
+          "self": "../bulk-operations/store/Product/colombia-huila-natural.json"
         }
       },
       "initialFiles.19": {
         "links": {
-          "self": "../bulk-operations/store/Product/costa-rica-tarrazu-decaf.json"
+          "self": "../bulk-operations/store/Product/colombia-narino-decaf.json"
         }
       },
       "initialFiles.20": {
         "links": {
-          "self": "../bulk-operations/store/Product/costa-rica-tarrazu-natural.json"
+          "self": "../bulk-operations/store/Product/colombia-santander-decaf.json"
         }
       },
       "initialFiles.21": {
         "links": {
-          "self": "../bulk-operations/store/Product/costa-rica-west-valley-natural.json"
+          "self": "../bulk-operations/store/Product/colombia-santander-honey.json"
         }
       },
       "initialFiles.22": {
         "links": {
-          "self": "../bulk-operations/store/Product/darjeeling-first-flush.json"
+          "self": "../bulk-operations/store/Product/colombia-santander-washed.json"
         }
       },
       "initialFiles.23": {
         "links": {
-          "self": "../bulk-operations/store/Product/earl-grey-bergamot.json"
+          "self": "../bulk-operations/store/Product/colombia-tolima-washed.json"
         }
       },
       "initialFiles.24": {
         "links": {
-          "self": "../bulk-operations/store/Product/ecuador-loja-decaf.json"
+          "self": "../bulk-operations/store/Product/costa-rica-brunca-natural.json"
         }
       },
       "initialFiles.25": {
         "links": {
-          "self": "../bulk-operations/store/Product/ecuador-loja-honey.json"
+          "self": "../bulk-operations/store/Product/costa-rica-brunca-washed.json"
         }
       },
       "initialFiles.26": {
         "links": {
-          "self": "../bulk-operations/store/Product/ecuador-pichincha-honey.json"
+          "self": "../bulk-operations/store/Product/costa-rica-central-valley-natural.json"
         }
       },
       "initialFiles.27": {
         "links": {
-          "self": "../bulk-operations/store/Product/el-salvador-santa-ana-anaerobic.json"
+          "self": "../bulk-operations/store/Product/costa-rica-orosi-decaf.json"
         }
       },
       "initialFiles.28": {
         "links": {
-          "self": "../bulk-operations/store/Product/el-salvador-santa-ana-washed.json"
+          "self": "../bulk-operations/store/Product/costa-rica-tarrazu-decaf.json"
         }
       },
       "initialFiles.29": {
         "links": {
-          "self": "../bulk-operations/store/Product/ethiopia-limu-honey.json"
+          "self": "../bulk-operations/store/Product/costa-rica-tarrazu-natural.json"
         }
       },
       "initialFiles.30": {
         "links": {
-          "self": "../bulk-operations/store/Product/ethiopia-sidamo-natural.json"
+          "self": "../bulk-operations/store/Product/costa-rica-west-valley-natural.json"
         }
       },
       "initialFiles.31": {
         "links": {
-          "self": "../bulk-operations/store/Product/ethiopia-yirgacheffe-anaerobic.json"
+          "self": "../bulk-operations/store/Product/darjeeling-first-flush.json"
         }
       },
       "initialFiles.32": {
         "links": {
-          "self": "../bulk-operations/store/Product/glass-carafe-600-ml.json"
+          "self": "../bulk-operations/store/Product/earl-grey-bergamot.json"
         }
       },
       "initialFiles.33": {
         "links": {
-          "self": "../bulk-operations/store/Product/gooseneck-kettle.json"
+          "self": "../bulk-operations/store/Product/ecuador-loja-decaf.json"
         }
       },
       "initialFiles.34": {
         "links": {
-          "self": "../bulk-operations/store/Product/guatemala-antigua-decaf.json"
+          "self": "../bulk-operations/store/Product/ecuador-loja-honey.json"
         }
       },
       "initialFiles.35": {
         "links": {
-          "self": "../bulk-operations/store/Product/guatemala-antigua-natural.json"
+          "self": "../bulk-operations/store/Product/ecuador-pichincha-honey.json"
         }
       },
       "initialFiles.36": {
         "links": {
-          "self": "../bulk-operations/store/Product/guatemala-coban-anaerobic.json"
+          "self": "../bulk-operations/store/Product/el-salvador-santa-ana-anaerobic.json"
         }
       },
       "initialFiles.37": {
         "links": {
-          "self": "../bulk-operations/store/Product/guatemala-coban-natural.json"
+          "self": "../bulk-operations/store/Product/el-salvador-santa-ana-washed.json"
         }
       },
       "initialFiles.38": {
         "links": {
-          "self": "../bulk-operations/store/Product/guatemala-huehuetenango-decaf.json"
+          "self": "../bulk-operations/store/Product/ethiopia-guji-decaf.json"
         }
       },
       "initialFiles.39": {
         "links": {
-          "self": "../bulk-operations/store/Product/gyokuro-yame.json"
+          "self": "../bulk-operations/store/Product/ethiopia-guji-natural.json"
         }
       },
       "initialFiles.40": {
         "links": {
-          "self": "../bulk-operations/store/Product/honduras-copan-anaerobic.json"
+          "self": "../bulk-operations/store/Product/ethiopia-guji-washed.json"
         }
       },
       "initialFiles.41": {
         "links": {
-          "self": "../bulk-operations/store/Product/honduras-copan-natural.json"
+          "self": "../bulk-operations/store/Product/ethiopia-limu-honey.json"
         }
       },
       "initialFiles.42": {
         "links": {
-          "self": "../bulk-operations/store/Product/honduras-marcala-anaerobic.json"
+          "self": "../bulk-operations/store/Product/ethiopia-sidamo-natural.json"
         }
       },
       "initialFiles.43": {
         "links": {
-          "self": "../bulk-operations/store/Product/honduras-marcala-washed.json"
+          "self": "../bulk-operations/store/Product/ethiopia-yirgacheffe-anaerobic.json"
         }
       },
       "initialFiles.44": {
         "links": {
-          "self": "../bulk-operations/store/Product/honduras-santa-barbara-honey.json"
+          "self": "../bulk-operations/store/Product/glass-carafe-600-ml.json"
         }
       },
       "initialFiles.45": {
         "links": {
-          "self": "../bulk-operations/store/Product/indonesia-aceh-gayo-washed.json"
+          "self": "../bulk-operations/store/Product/gooseneck-kettle.json"
         }
       },
       "initialFiles.46": {
         "links": {
-          "self": "../bulk-operations/store/Product/indonesia-flores-honey.json"
+          "self": "../bulk-operations/store/Product/guatemala-antigua-decaf.json"
         }
       },
       "initialFiles.47": {
         "links": {
-          "self": "../bulk-operations/store/Product/indonesia-toraja-anaerobic.json"
+          "self": "../bulk-operations/store/Product/guatemala-antigua-natural.json"
         }
       },
       "initialFiles.48": {
         "links": {
-          "self": "../bulk-operations/store/Product/indonesia-toraja-natural.json"
+          "self": "../bulk-operations/store/Product/guatemala-atitlan-decaf.json"
         }
       },
       "initialFiles.49": {
         "links": {
-          "self": "../bulk-operations/store/Product/jasmine-silver-needle.json"
+          "self": "../bulk-operations/store/Product/guatemala-coban-anaerobic.json"
         }
       },
       "initialFiles.50": {
         "links": {
-          "self": "../bulk-operations/store/Product/kenya-muranga-honey.json"
+          "self": "../bulk-operations/store/Product/guatemala-coban-natural.json"
         }
       },
       "initialFiles.51": {
         "links": {
-          "self": "../bulk-operations/store/Product/kenya-nyeri-anaerobic.json"
+          "self": "../bulk-operations/store/Product/guatemala-fraijanes-anaerobic.json"
         }
       },
       "initialFiles.52": {
         "links": {
-          "self": "../bulk-operations/store/Product/kenya-nyeri-natural.json"
+          "self": "../bulk-operations/store/Product/guatemala-fraijanes-natural.json"
         }
       },
       "initialFiles.53": {
         "links": {
-          "self": "../bulk-operations/store/Product/mexico-chiapas-anaerobic.json"
+          "self": "../bulk-operations/store/Product/guatemala-fraijanes-washed.json"
         }
       },
       "initialFiles.54": {
         "links": {
-          "self": "../bulk-operations/store/Product/mexico-chiapas-honey.json"
+          "self": "../bulk-operations/store/Product/guatemala-huehuetenango-decaf.json"
         }
       },
       "initialFiles.55": {
         "links": {
-          "self": "../bulk-operations/store/Product/mexico-oaxaca-honey.json"
+          "self": "../bulk-operations/store/Product/gyokuro-yame.json"
         }
       },
       "initialFiles.56": {
         "links": {
-          "self": "../bulk-operations/store/Product/mexico-veracruz-natural.json"
+          "self": "../bulk-operations/store/Product/hawaii-ka-u-anaerobic.json"
         }
       },
       "initialFiles.57": {
         "links": {
-          "self": "../bulk-operations/store/Product/nicaragua-jinotega-honey.json"
+          "self": "../bulk-operations/store/Product/hawaii-ka-u-decaf.json"
         }
       },
       "initialFiles.58": {
         "links": {
-          "self": "../bulk-operations/store/Product/nicaragua-nueva-segovia-anaerobic.json"
+          "self": "../bulk-operations/store/Product/hawaii-ka-u-honey.json"
         }
       },
       "initialFiles.59": {
         "links": {
-          "self": "../bulk-operations/store/Product/oolong-tieguanyin.json"
+          "self": "../bulk-operations/store/Product/honduras-copan-anaerobic.json"
         }
       },
       "initialFiles.60": {
         "links": {
-          "self": "../bulk-operations/store/Product/panama-boquete-anaerobic.json"
+          "self": "../bulk-operations/store/Product/honduras-copan-natural.json"
         }
       },
       "initialFiles.61": {
         "links": {
-          "self": "../bulk-operations/store/Product/panama-boquete-washed.json"
+          "self": "../bulk-operations/store/Product/honduras-marcala-anaerobic.json"
         }
       },
       "initialFiles.62": {
         "links": {
-          "self": "../bulk-operations/store/Product/panama-volcan-washed.json"
+          "self": "../bulk-operations/store/Product/honduras-marcala-washed.json"
         }
       },
       "initialFiles.63": {
         "links": {
-          "self": "../bulk-operations/store/Product/paper-filters-100.json"
+          "self": "../bulk-operations/store/Product/honduras-santa-barbara-honey.json"
         }
       },
       "initialFiles.64": {
         "links": {
-          "self": "../bulk-operations/store/Product/peru-puno-decaf.json"
+          "self": "../bulk-operations/store/Product/india-araku-anaerobic.json"
         }
       },
       "initialFiles.65": {
         "links": {
-          "self": "../bulk-operations/store/Product/pu-erh-menghai.json"
+          "self": "../bulk-operations/store/Product/india-chikmagalur-honey.json"
         }
       },
       "initialFiles.66": {
         "links": {
-          "self": "../bulk-operations/store/Product/rooibos-vanilla.json"
+          "self": "../bulk-operations/store/Product/indonesia-aceh-gayo-washed.json"
         }
       },
       "initialFiles.67": {
         "links": {
-          "self": "../bulk-operations/store/Product/rwanda-gakenke-washed.json"
+          "self": "../bulk-operations/store/Product/indonesia-bali-kintamani-natural.json"
         }
       },
       "initialFiles.68": {
         "links": {
-          "self": "../bulk-operations/store/Product/rwanda-nyamasheke-honey.json"
+          "self": "../bulk-operations/store/Product/indonesia-flores-honey.json"
         }
       },
       "initialFiles.69": {
         "links": {
-          "self": "../bulk-operations/store/Product/sencha-asahi.json"
+          "self": "../bulk-operations/store/Product/indonesia-java-ijen-natural.json"
         }
       },
       "initialFiles.70": {
         "links": {
-          "self": "../bulk-operations/store/Product/tanzania-kilimanjaro-honey.json"
+          "self": "../bulk-operations/store/Product/indonesia-toraja-anaerobic.json"
         }
       },
       "initialFiles.71": {
         "links": {
-          "self": "../bulk-operations/store/Product/tanzania-kilimanjaro-washed.json"
+          "self": "../bulk-operations/store/Product/indonesia-toraja-natural.json"
         }
       },
       "initialFiles.72": {
         "links": {
-          "self": "../bulk-operations/store/Product/uganda-mount-elgon-honey.json"
+          "self": "../bulk-operations/store/Product/jamaica-blue-mountain-decaf.json"
         }
       },
       "initialFiles.73": {
         "links": {
-          "self": "../bulk-operations/store/Product/uganda-rwenzori-anaerobic.json"
+          "self": "../bulk-operations/store/Product/jamaica-blue-mountain-natural.json"
         }
       },
       "initialFiles.74": {
         "links": {
-          "self": "../bulk-operations/store/Product/yemen-haraz-decaf.json"
+          "self": "../bulk-operations/store/Product/jasmine-silver-needle.json"
         }
       },
       "initialFiles.75": {
         "links": {
-          "self": "../bulk-operations/store/Product/yemen-haraz-washed.json"
+          "self": "../bulk-operations/store/Product/kenya-embu-decaf.json"
         }
       },
       "initialFiles.76": {
         "links": {
-          "self": "../bulk-operations/helpdesk/Agent/diego-alvarez.json"
+          "self": "../bulk-operations/store/Product/kenya-embu-natural.json"
         }
       },
       "initialFiles.77": {
         "links": {
-          "self": "../bulk-operations/helpdesk/Agent/hana-kim.json"
+          "self": "../bulk-operations/store/Product/kenya-kirinyaga-anaerobic.json"
         }
       },
       "initialFiles.78": {
         "links": {
-          "self": "../bulk-operations/helpdesk/Agent/priya-shah.json"
+          "self": "../bulk-operations/store/Product/kenya-kirinyaga-decaf.json"
         }
       },
       "initialFiles.79": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5101.json"
+          "self": "../bulk-operations/store/Product/kenya-muranga-honey.json"
         }
       },
       "initialFiles.80": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5104.json"
+          "self": "../bulk-operations/store/Product/kenya-nyeri-anaerobic.json"
         }
       },
       "initialFiles.81": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5107.json"
+          "self": "../bulk-operations/store/Product/kenya-nyeri-natural.json"
         }
       },
       "initialFiles.82": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5110.json"
+          "self": "../bulk-operations/store/Product/mexico-chiapas-anaerobic.json"
         }
       },
       "initialFiles.83": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5113.json"
+          "self": "../bulk-operations/store/Product/mexico-chiapas-honey.json"
         }
       },
       "initialFiles.84": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5116.json"
+          "self": "../bulk-operations/store/Product/mexico-guerrero-decaf.json"
         }
       },
       "initialFiles.85": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5119.json"
+          "self": "../bulk-operations/store/Product/mexico-oaxaca-honey.json"
         }
       },
       "initialFiles.86": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5122.json"
+          "self": "../bulk-operations/store/Product/mexico-puebla-anaerobic.json"
         }
       },
       "initialFiles.87": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5125.json"
+          "self": "../bulk-operations/store/Product/mexico-puebla-honey.json"
         }
       },
       "initialFiles.88": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5128.json"
+          "self": "../bulk-operations/store/Product/mexico-veracruz-natural.json"
         }
       },
       "initialFiles.89": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5131.json"
+          "self": "../bulk-operations/store/Product/nicaragua-jinotega-honey.json"
         }
       },
       "initialFiles.90": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5134.json"
+          "self": "../bulk-operations/store/Product/nicaragua-matagalpa-honey.json"
         }
       },
       "initialFiles.91": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5137.json"
+          "self": "../bulk-operations/store/Product/nicaragua-matagalpa-natural.json"
         }
       },
       "initialFiles.92": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5140.json"
+          "self": "../bulk-operations/store/Product/nicaragua-matagalpa-washed.json"
         }
       },
       "initialFiles.93": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5143.json"
+          "self": "../bulk-operations/store/Product/nicaragua-nueva-segovia-anaerobic.json"
         }
       },
       "initialFiles.94": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5146.json"
+          "self": "../bulk-operations/store/Product/oolong-tieguanyin.json"
         }
       },
       "initialFiles.95": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5149.json"
+          "self": "../bulk-operations/store/Product/panama-boquete-anaerobic.json"
         }
       },
       "initialFiles.96": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5152.json"
+          "self": "../bulk-operations/store/Product/panama-boquete-washed.json"
         }
       },
       "initialFiles.97": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5155.json"
+          "self": "../bulk-operations/store/Product/panama-volcan-washed.json"
         }
       },
       "initialFiles.98": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5158.json"
+          "self": "../bulk-operations/store/Product/paper-filters-100.json"
         }
       },
       "initialFiles.99": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5161.json"
+          "self": "../bulk-operations/store/Product/papua-new-guinea-eastern-highlands-honey.json"
         }
       },
       "initialFiles.100": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5164.json"
+          "self": "../bulk-operations/store/Product/papua-new-guinea-eastern-highlands-natural.json"
         }
       },
       "initialFiles.101": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5167.json"
+          "self": "../bulk-operations/store/Product/papua-new-guinea-western-highlands-anaerobic.json"
         }
       },
       "initialFiles.102": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5170.json"
+          "self": "../bulk-operations/store/Product/papua-new-guinea-western-highlands-decaf.json"
         }
       },
       "initialFiles.103": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5173.json"
+          "self": "../bulk-operations/store/Product/papua-new-guinea-western-highlands-natural.json"
         }
       },
       "initialFiles.104": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5176.json"
+          "self": "../bulk-operations/store/Product/peru-cajamarca-anaerobic.json"
         }
       },
       "initialFiles.105": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5179.json"
+          "self": "../bulk-operations/store/Product/peru-cusco-anaerobic.json"
         }
       },
       "initialFiles.106": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5182.json"
+          "self": "../bulk-operations/store/Product/peru-cusco-honey.json"
         }
       },
       "initialFiles.107": {
         "links": {
-          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5185.json"
+          "self": "../bulk-operations/store/Product/peru-cusco-natural.json"
         }
       },
       "initialFiles.108": {
+        "links": {
+          "self": "../bulk-operations/store/Product/peru-puno-decaf.json"
+        }
+      },
+      "initialFiles.109": {
+        "links": {
+          "self": "../bulk-operations/store/Product/pu-erh-menghai.json"
+        }
+      },
+      "initialFiles.110": {
+        "links": {
+          "self": "../bulk-operations/store/Product/rooibos-vanilla.json"
+        }
+      },
+      "initialFiles.111": {
+        "links": {
+          "self": "../bulk-operations/store/Product/rwanda-gakenke-washed.json"
+        }
+      },
+      "initialFiles.112": {
+        "links": {
+          "self": "../bulk-operations/store/Product/rwanda-huye-decaf.json"
+        }
+      },
+      "initialFiles.113": {
+        "links": {
+          "self": "../bulk-operations/store/Product/rwanda-huye-washed.json"
+        }
+      },
+      "initialFiles.114": {
+        "links": {
+          "self": "../bulk-operations/store/Product/rwanda-nyamasheke-honey.json"
+        }
+      },
+      "initialFiles.115": {
+        "links": {
+          "self": "../bulk-operations/store/Product/sencha-asahi.json"
+        }
+      },
+      "initialFiles.116": {
+        "links": {
+          "self": "../bulk-operations/store/Product/tanzania-kilimanjaro-honey.json"
+        }
+      },
+      "initialFiles.117": {
+        "links": {
+          "self": "../bulk-operations/store/Product/tanzania-kilimanjaro-washed.json"
+        }
+      },
+      "initialFiles.118": {
+        "links": {
+          "self": "../bulk-operations/store/Product/uganda-mount-elgon-honey.json"
+        }
+      },
+      "initialFiles.119": {
+        "links": {
+          "self": "../bulk-operations/store/Product/uganda-rwenzori-anaerobic.json"
+        }
+      },
+      "initialFiles.120": {
+        "links": {
+          "self": "../bulk-operations/store/Product/vietnam-da-lat-decaf.json"
+        }
+      },
+      "initialFiles.121": {
+        "links": {
+          "self": "../bulk-operations/store/Product/vietnam-son-la-decaf.json"
+        }
+      },
+      "initialFiles.122": {
+        "links": {
+          "self": "../bulk-operations/store/Product/vietnam-son-la-washed.json"
+        }
+      },
+      "initialFiles.123": {
+        "links": {
+          "self": "../bulk-operations/store/Product/yemen-haraz-decaf.json"
+        }
+      },
+      "initialFiles.124": {
+        "links": {
+          "self": "../bulk-operations/store/Product/yemen-haraz-washed.json"
+        }
+      },
+      "initialFiles.125": {
+        "links": {
+          "self": "../bulk-operations/store/Product/zambia-muchinga-honey.json"
+        }
+      },
+      "initialFiles.126": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/Agent/diego-alvarez.json"
+        }
+      },
+      "initialFiles.127": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/Agent/hana-kim.json"
+        }
+      },
+      "initialFiles.128": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/Agent/priya-shah.json"
+        }
+      },
+      "initialFiles.129": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5101.json"
+        }
+      },
+      "initialFiles.130": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5104.json"
+        }
+      },
+      "initialFiles.131": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5107.json"
+        }
+      },
+      "initialFiles.132": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5110.json"
+        }
+      },
+      "initialFiles.133": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5113.json"
+        }
+      },
+      "initialFiles.134": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5116.json"
+        }
+      },
+      "initialFiles.135": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5119.json"
+        }
+      },
+      "initialFiles.136": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5122.json"
+        }
+      },
+      "initialFiles.137": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5125.json"
+        }
+      },
+      "initialFiles.138": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5128.json"
+        }
+      },
+      "initialFiles.139": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5131.json"
+        }
+      },
+      "initialFiles.140": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5134.json"
+        }
+      },
+      "initialFiles.141": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5137.json"
+        }
+      },
+      "initialFiles.142": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5140.json"
+        }
+      },
+      "initialFiles.143": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5143.json"
+        }
+      },
+      "initialFiles.144": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5146.json"
+        }
+      },
+      "initialFiles.145": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5149.json"
+        }
+      },
+      "initialFiles.146": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5152.json"
+        }
+      },
+      "initialFiles.147": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5155.json"
+        }
+      },
+      "initialFiles.148": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5158.json"
+        }
+      },
+      "initialFiles.149": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5161.json"
+        }
+      },
+      "initialFiles.150": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5164.json"
+        }
+      },
+      "initialFiles.151": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5167.json"
+        }
+      },
+      "initialFiles.152": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5170.json"
+        }
+      },
+      "initialFiles.153": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5173.json"
+        }
+      },
+      "initialFiles.154": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5176.json"
+        }
+      },
+      "initialFiles.155": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5179.json"
+        }
+      },
+      "initialFiles.156": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5182.json"
+        }
+      },
+      "initialFiles.157": {
+        "links": {
+          "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5185.json"
+        }
+      },
+      "initialFiles.158": {
         "links": {
           "self": "../bulk-operations/helpdesk/SupportTicket/ticket-5188.json"
         }
@@ -594,7 +844,7 @@
       },
       "expectedChangedCards.3": {
         "links": {
-          "self": "../bulk-operations/store/Product/yemen-haraz-washed"
+          "self": "../bulk-operations/store/Product/zambia-muchinga-honey"
         }
       },
       "expectedChangedCards.4": {

@@ -6,6 +6,7 @@ import './response-event-data-test.ts';
 import './history-construction-test.ts';
 import './prompt-construction-test.ts';
 import './code-patch-correctness-test.ts';
+import './correctness-group-test.ts';
 import './chat-titling-test.ts';
 import './responding-test.ts';
 import './matrix-util-test.ts';

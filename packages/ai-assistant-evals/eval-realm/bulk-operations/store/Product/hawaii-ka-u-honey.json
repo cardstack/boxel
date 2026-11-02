@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Hawaii Ka u Honey",
+      "category": "coffee",
+      "origin": "Ka u, Hawaii",
+      "variants": [
+        {
+          "sku": "CF-129-250",
+          "size": "250 g",
+          "price": 15.19
+        },
+        {
+          "sku": "CF-129-500",
+          "size": "500 g",
+          "price": 29.79
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
