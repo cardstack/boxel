@@ -5,6 +5,7 @@
   "concurrent-save-read-your-writes.spec.ts": 20.7,
   "correctness-checks.spec.ts": 143.1,
   "create-realm.spec.ts": 23.5,
+  "dashboard.spec.ts": 23.7,
   "download-realm.spec.ts": 9.5,
   "glimmer-scoped-css.spec.ts": 87.3,
   "head-tags.spec.ts": 88.9,
@@ -28,6 +29,5 @@
   "skills.spec.ts": 100.1,
   "synapse-container-networking.spec.ts": 0.1,
   "synapse-templates.spec.ts": 0,
-  "tools.spec.ts": 95.7,
-  "workspace-chooser.spec.ts": 23.7
+  "tools.spec.ts": 95.7
 }
