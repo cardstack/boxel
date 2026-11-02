@@ -32,7 +32,10 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
 import { setKeyLimitStore } from '../lib/key-limits.ts';
-import { KEY_USE_RETENTION_DAYS } from '../lib/key-uses.ts';
+import {
+  KEY_USE_RETENTION_DAYS,
+  sweepExpiredKeyUses,
+} from '../lib/key-uses.ts';
 import { setKeyLimitDefaults } from '../lib/key-limit-settings.ts';
 
 // ============================================================================
@@ -94,6 +97,24 @@ const inboxModule = `
       url: '${VENDOR}/status/{code}',
       path: { code: params('code') },
       headers: { authorization: 'Bearer {{apiKey}}' },
+    };
+
+    @operation static slow = {
+      base: 'callApi',
+      url: '${VENDOR}/slow',
+      query: { ms: '3000' },
+      headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
+    @operation static twice = {
+      base: 'callApi',
+      params: { code: StringField },
+      url: '${VENDOR}/status/{code}',
+      path: { code: params('code') },
+      headers: {
+        authorization: 'Bearer {{apiKey:first}}',
+        'x-second-key': '{{apiKey:second}}',
+      },
     };
 
     @operation static both = {
@@ -594,24 +615,105 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await keyUsage('not-a-key', OWNER)).status, 404);
   });
 
-  test('a use older than the retention window is removed when its key is next used', async function (assert) {
+  test('uses past the retention window are swept, also for a key nobody uses any more', async function (assert) {
+    let key = await addKey();
+    let insert = async (daysAgo: number) =>
+      await dbAdapter.execute(
+        `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, created_at) VALUES ($1, $2, 'check', $3, 'interactive', 'sent', NOW() - make_interval(days => $4))`,
+        { bind: [key.id, realmURL.href, OWNER, daysAgo] },
+      );
+    await insert(KEY_USE_RETENTION_DAYS + 1);
+    await insert(KEY_USE_RETENTION_DAYS - 1);
+    await sweepExpiredKeyUses(dbAdapter);
+    assert.strictEqual(
+      (await useRows()).length,
+      1,
+      'only the use inside the window is kept',
+    );
+  });
+
+  test('a refusal filling a slot is recorded against its key, after its budget was spent', async function (assert) {
     let key = await addKey();
     await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    // The grant's sealed copy no longer opens, so the binding fills nothing.
     await dbAdapter.execute(
-      `INSERT INTO key_uses (key_id, realm_url, operation, caller, mode, outcome, created_at) VALUES ($1, $2, 'check', $3, 'interactive', 'sent', $4)`,
-      {
-        bind: [
-          key.id,
-          realmURL.href,
-          OWNER,
-          new Date(
-            Date.now() - (KEY_USE_RETENTION_DAYS + 1) * 86_400_000,
-          ).toISOString(),
-        ],
-      },
+      `UPDATE user_key_grants SET value_tag = value_nonce WHERE key_id = $1`,
+      { bind: [key.id] },
     );
-    assert.strictEqual((await call('check')).status, 200);
-    assert.strictEqual((await useRows()).length, 1, 'only the new use is kept');
+    assert.strictEqual((await call('check')).code, 'binding-not-approved');
+    let { attributes } = (await keyUsage(key.id)).body.data;
+    assert.deepEqual(attributes.refusals, [
+      { code: 'binding-not-approved', count: 1 },
+    ]);
+    assert.strictEqual(
+      attributes.budgets.day.used,
+      1,
+      'the budget it spent is explained by the refusal it shows',
+    );
+  });
+
+  test('refusals once the slots are filled are recorded against the key, with the host', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await approveInteractive(OWNER, 'slow', { userKey: { keyId: key.id } });
+
+    // Plain http to a host the guard doesn't allowlist is refused unsent.
+    configureOutbound({ devAllowlist: ['localhost'] });
+    assert.strictEqual((await call('check')).code, 'guard-refused');
+    configureOutbound({
+      devAllowlist: ['127.0.0.1', 'localhost'],
+      totalTimeoutMs: 500,
+    });
+    assert.strictEqual((await call('slow')).code, 'upstream-timeout');
+
+    let { attributes } = (await keyUsage(key.id)).body.data;
+    assert.deepEqual(attributes.refusals, [
+      { code: 'guard-refused', count: 1 },
+      { code: 'upstream-timeout', count: 1 },
+    ]);
+    assert.deepEqual(
+      (await useRows()).map((row) => [row.outcome, row.code, row.host]),
+      [
+        ['refused', 'guard-refused', `127.0.0.1:${VENDOR_PORT}`],
+        ['refused', 'upstream-timeout', `127.0.0.1:${VENDOR_PORT}`],
+      ],
+    );
+  });
+
+  test('two slots filled from one share are one use of it', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'twice', {
+      'apiKey:first': { shareId: shared.id },
+      'apiKey:second': { shareId: shared.id },
+    });
+    assert.strictEqual((await call('twice')).status, 200);
+    let { attributes } = (await shareUsage(shared.id)).body.data;
+    assert.strictEqual(attributes.calls, 1);
+    assert.strictEqual(attributes.budgets.day.used, 1);
+  });
+
+  test('a use that can’t be recorded leaves the caller’s answer as it was', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await dbAdapter.execute(`ALTER TABLE key_uses RENAME TO key_uses_away`);
+    try {
+      assert.strictEqual(
+        (await call('check')).status,
+        200,
+        'a sent call still answers',
+      );
+      for (let i = 1; i < LIMITS.rateBurst; i++) {
+        await call('check');
+      }
+      assert.strictEqual(
+        (await call('check')).code,
+        'rate-limited',
+        'a refused call still refuses with its own code',
+      );
+    } finally {
+      await dbAdapter.execute(`ALTER TABLE key_uses_away RENAME TO key_uses`);
+    }
   });
 
   test('changing a share’s limits shows in its usage', async function (assert) {

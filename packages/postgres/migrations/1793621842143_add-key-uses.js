@@ -11,9 +11,9 @@
 // vendor answered; `code` for a refusal. No value, request or response is
 // kept, and no URL beyond the destination's host.
 //
-// Rows are kept for two months (`KEY_USE_RETENTION` in the realm server),
-// enough to cover the current calendar month whatever the day; each write
-// removes its subject's older rows.
+// Rows are kept for two months (`KEY_USE_RETENTION_DAYS` in the realm
+// server), enough to cover the current calendar month whatever the day; each
+// realm-server process sweeps older rows hourly, by `created_at`.
 //
 // The table holds no secret, but like the other key tables it is withheld
 // from the read-only role and from every role that reads with its privileges,
@@ -51,6 +51,10 @@ exports.up = (pgm) => {
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS key_uses_key_idx
       ON key_uses (key_id, created_at) WHERE key_id IS NOT NULL
+  `);
+  pgm.sql(`
+    CREATE INDEX IF NOT EXISTS key_uses_created_at_idx
+      ON key_uses (created_at)
   `);
 
   pgm.sql(`

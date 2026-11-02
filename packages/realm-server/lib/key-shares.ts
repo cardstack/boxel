@@ -9,6 +9,9 @@ import type { Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
+import { isUUID, namedToViewer } from './named-users.ts';
+
+export { isUUID };
 import {
   KEY_LIMIT_COLUMNS,
   limitsOf,
@@ -140,64 +143,34 @@ function toShare(
 }
 
 // Share or notice rows as `viewer` may see them: `owner` and `suspended_by`
-// are null except for the viewer's own id and the ids of people who, with the
-// viewer, are named by a permission row in the row's realm. A person's Matrix
-// id is shown only to people who share a realm with them (ADR 011 §1.1, §1.2),
-// and a share and its notices outlive their owner's and their suspender's
-// rows. A `*` or `users` row, or a policy grant, names no one; a row granting
-// nothing is deleted, so any row names its user.
+// are null except for the ids `namedToViewer` lets the viewer see in the
+// row's realm. A share and its notices outlive their owner's and their
+// suspender's rows.
 async function withholdUnnamed(
   txQuery: Querier,
   viewer: string,
   rows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
-  let realms = [...new Set(rows.map((row) => row.realm_url as string))];
-  let ids = [
-    ...new Set([
-      viewer,
-      ...rows.flatMap((row) =>
-        [row.owner, row.suspended_by].filter(
-          (id): id is string => typeof id === 'string',
-        ),
+  let isNamed = await namedToViewer(
+    txQuery,
+    viewer,
+    rows.map((row) => row.realm_url as string),
+    rows.flatMap((row) =>
+      [row.owner, row.suspended_by].filter(
+        (id): id is string => typeof id === 'string',
       ),
-    ]),
-  ];
-  if (ids.length === 1) {
-    return rows;
-  }
-  let list = (values: string[]) =>
-    values.flatMap((value, i) => [...(i > 0 ? [', '] : []), param(value)]);
-  let named = new Set(
-    (
-      await txQuery([
-        `SELECT realm_url, username FROM realm_user_permissions WHERE realm_url IN (`,
-        ...list(realms),
-        `) AND username IN (`,
-        ...list(ids),
-        `)`,
-      ])
-    ).map((row) => `${row.realm_url}\n${row.username}`),
+    ),
   );
   return rows.map((row) => {
     let realm = row.realm_url as string;
     let shown = (id: unknown) =>
-      typeof id === 'string' &&
-      (id === viewer ||
-        (named.has(`${realm}\n${viewer}`) && named.has(`${realm}\n${id}`)))
-        ? id
-        : null;
+      typeof id === 'string' && isNamed(realm, id) ? id : null;
     return {
       ...row,
       owner: shown(row.owner),
       suspended_by: shown(row.suspended_by),
     };
   });
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUUID(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
 }
 
 function noSuchShare() {
