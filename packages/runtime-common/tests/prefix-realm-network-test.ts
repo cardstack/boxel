@@ -368,6 +368,20 @@ const tests = Object.freeze({
       ),
     );
   },
+
+  'says the server predates the endpoint when it answers 404': async (
+    assert,
+  ) => {
+    let olderServerFetch = (async () =>
+      new Response('Not Found', { status: 404 })) as typeof globalThis.fetch;
+    await assert.rejects(
+      fetchPrefixRealmURLs('https://realms.example.test/', olderServerFetch),
+      new RegExp(
+        'Could not read the prefix realm map from https://realms\\.example\\.test/_prefix-realms: ' +
+          'HTTP 404 \\(this realm server predates /_prefix-realms\\)',
+      ),
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;

@@ -57,5 +57,9 @@ module(basename(import.meta.filename), function () {
     test('names the server, and the cause, when the request fails', async function (assert) {
       await runSharedTest(prefixRealmNetworkTests, assert, {});
     });
+
+    test('says the server predates the endpoint when it answers 404', async function (assert) {
+      await runSharedTest(prefixRealmNetworkTests, assert, {});
+    });
   });
 });

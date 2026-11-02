@@ -297,6 +297,13 @@ export async function fetchPrefixRealmURLs(
   } catch (error: unknown) {
     throw failure(error);
   }
+  // A realm server older than this client has no such endpoint. Say so, so
+  // whoever sees the error updates the server rather than the client.
+  if (response.status === 404) {
+    throw failure(
+      `HTTP 404 (this realm server predates /${PREFIX_REALMS_ENDPOINT})`,
+    );
+  }
   if (!response.ok) {
     throw failure(`HTTP ${response.status}`);
   }
