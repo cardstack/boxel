@@ -266,10 +266,37 @@ describe('boxel keys limits (integration)', () => {
       await vendor?.close();
       resetOutbound();
       resetSecretsAtRest();
-      fs.rmSync(configDir, { recursive: true, force: true });
-      fs.rmSync(writerConfigDir, { recursive: true, force: true });
+      for (let dir of [configDir, writerConfigDir]) {
+        if (dir) {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      }
     }
   }, 600_000);
+
+  it("holds the next invoke to a personal key's daily budget, and default puts it back", async () => {
+    expect((await invoke('mine')).status).toBe(200);
+    // One call is spent today; a daily budget of one leaves none.
+    let limits = await keysLimits('my key', { ...deps, daily: '1' });
+    expect(limits.dailyBudget).toBe(1);
+    let sentBefore = vendor.requests.length;
+    let refused = await invoke('mine');
+    expect(refused.status).toBe(429);
+    expect(codeOf(refused)).toBe('over-budget');
+    expect(vendor.requests.length, 'the refused call sent nothing').toBe(
+      sentBefore,
+    );
+
+    let shown = await keysLimits('my key', deps);
+    expect(shown.dailyBudget).toBe(1);
+    expect(shown.monthlyBudget, 'the monthly budget follows the daily').toBe(
+      30,
+    );
+
+    let restored = await keysLimits('my key', { ...deps, daily: 'default' });
+    expect(restored.dailyBudget).toBeGreaterThan(1);
+    expect((await invoke('mine')).status).toBe(200);
+  });
 
   it("holds the next invokes to a personal key's rate", async () => {
     let limits = await keysLimits('my key', { ...deps, rate: '2/0.001' });
@@ -284,28 +311,6 @@ describe('boxel keys limits (integration)', () => {
     expect(vendor.requests.length, 'the refused call sent nothing').toBe(
       sentBefore + 2,
     );
-  });
-
-  it("holds the next invoke to a personal key's daily budget, and default puts the limits back", async () => {
-    // Two calls are spent today; a daily budget of two leaves none.
-    await keysLimits('my key', {
-      ...deps,
-      rate: 'default/default',
-      daily: '2',
-    });
-    let refused = await invoke('mine');
-    expect(refused.status).toBe(429);
-    expect(codeOf(refused)).toBe('over-budget');
-
-    let shown = await keysLimits('my key', deps);
-    expect(shown.dailyBudget).toBe(2);
-    expect(shown.monthlyBudget, 'the monthly budget follows the daily').toBe(
-      60,
-    );
-
-    let restored = await keysLimits('my key', { ...deps, daily: 'default' });
-    expect(restored.dailyBudget).toBeGreaterThan(2);
-    expect((await invoke('mine')).status).toBe(200);
   });
 
   it("holds the next invokes to a share's limits, set with --realm", async () => {
@@ -353,15 +358,18 @@ describe('boxel keys limits (integration)', () => {
 
   it("passes the realm server's refusal through under --json", async () => {
     let output: string[] = [];
-    let log = vi
-      .spyOn(console, 'log')
-      .mockImplementation((line: string) => void output.push(line));
+    let write = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        output.push(String(chunk));
+        return true;
+      });
     try {
       await runKeysCommand(true, () =>
         keysLimits('my key', { ...deps, json: true, daily: '0' }),
       );
     } finally {
-      log.mockImplementation(() => {});
+      write.mockRestore();
       process.exitCode = undefined;
     }
     let { error } = JSON.parse(output.join('\n'));
