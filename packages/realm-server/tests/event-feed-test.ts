@@ -42,7 +42,7 @@ import {
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
-// ADR 020: a realm's event feed. A newsroom nobody may read without
+// ADR event-feed: a realm's event feed. A newsroom nobody may read without
 // signing in opens published articles to callers who aren't signed in; a
 // library opens nothing to them.
 const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
@@ -479,7 +479,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a signed-out read the policy admits may be held by a shared cache, and a signed-in one may not', async function (assert) {
     // Every caller who isn't signed in is the same caller to the policy, so
-    // they all get the same document (ADR 020 §1.5).
+    // they all get the same document (ADR event-feed §1.4).
     let anonymous = await readCard('articles/published');
     assert.strictEqual(anonymous.status, 200, anonymous.text);
     assert.strictEqual(

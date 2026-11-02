@@ -979,7 +979,7 @@ export class RealmServer {
           // outcome is legible to a browser caller (host DevTools, client
           // telemetry), not just to server-side supertest/curl.
           // Boxel-Feed-Position is what a page opens the event feed from
-          // (ADR 020 §1.3).
+          // (ADR event-feed §1.1).
           exposeHeaders:
             'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, Boxel-Feed-Position',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',

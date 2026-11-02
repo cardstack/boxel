@@ -1,6 +1,6 @@
 import { FEED_POSITION_HEADER } from '@cardstack/runtime-common';
 
-// The feed positions the page's reads carried (ADR 020 §1.3), so a realm's
+// The feed positions the page's reads carried (ADR event-feed §1.1), so a realm's
 // feed opens from the earliest of what the page holds: a change made between
 // a read and the feed opening is then replayed rather than missed.
 //

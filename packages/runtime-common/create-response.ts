@@ -74,7 +74,7 @@ export function createResponse({
       // a served capture's save-as filename, which a host download control
       // reads off a cross-origin capture response.
       // Boxel-Feed-Position is where a page opens a realm's event feed from
-      // (ADR 020 §1.3).
+      // (ADR event-feed §1.1).
       'Access-Control-Expose-Headers':
         'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition,Boxel-Feed-Position',
     },

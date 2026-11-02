@@ -21,7 +21,7 @@ import type {
 // never transforms a value, since a transform can't be read back; a card
 // that needs a derived key computes it as a field. Matching compares
 // segments one by one, linear in the path, with no regular expression built
-// from the template (ADR 015 §1.3).
+// from the template (ADR site-routing §1.2).
 
 export type PathSegment = { literal: string } | { variable: string };
 

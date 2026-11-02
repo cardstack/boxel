@@ -544,7 +544,7 @@ export interface IncrementalIndexEventContent {
   // `invalidations` uses. Never sent by a realm over Matrix: the host's public
   // feed relay sets it from the feed's events, so a visitor's re-read asks for
   // the URL every other reader of that revision asks for and a shared cache
-  // can answer it (ADR 020 §1.5). A card with no entry is re-read as usual.
+  // can answer it (ADR event-feed §1.4). A card with no entry is re-read as usual.
   revisions?: Record<string, string>;
   // Every publish the pass indexed, when it indexed more than one. The realm
   // folds publishes that arrive while a pass is still queued into that pass,

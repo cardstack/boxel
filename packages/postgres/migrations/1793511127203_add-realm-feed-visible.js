@@ -1,5 +1,5 @@
 // The cards a realm's event feed has announced as readable by its audience
-// and not since as removed or withdrawn (ADR 020 §1.2). Every process serving
+// and not since as removed or withdrawn (ADR event-feed §1.2). Every process serving
 // the realm records them as it appends to the feed, so a removal is announced
 // for a card a visitor could have seen whichever process announced it, and
 // after a restart. Excluded from the SQLite schema dump with the other feed

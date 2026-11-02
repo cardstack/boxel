@@ -326,7 +326,7 @@ export interface OperationDefinition {
   // refusal says.
   guard?: { program: OperationProgram; message?: string };
   // An unordered `emit` (`ordered: false`): presence, the latest message per
-  // key until it expires, with no position on the channel (ADR 020 §1.8).
+  // key until it expires, with no position on the channel (ADR event-feed §1.6).
   unordered?: { expiresAfterMs: number };
   // The collected params whose emit is unordered, which a transform reads
   // from the unexpired presence rather than from the channel's sequence.
@@ -1598,8 +1598,8 @@ export interface EmitMessageArgs {
   unordered?: { expiresAfterMs: number };
 }
 
-// Delivers an `emit`'s message on the card's live channel (ADR 020 §1.8,
-// §1.10), answering the position it took there. Supplied by the realm, which
+// Delivers an `emit`'s message on the card's live channel (ADR event-feed §1.6,
+// §1.7), answering the position it took there. Supplied by the realm, which
 // owns the channel.
 export type EmitMessage = (
   args: EmitMessageArgs,

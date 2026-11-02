@@ -1140,7 +1140,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   });
   await indexUpdatedListener.start();
 
-  // The event feed's cross-process delivery (ADR 020 §1.3): a peer's append
+  // The event feed's cross-process delivery (ADR event-feed §1.1): a peer's append
   // reaches the clients connected to this process.
   feedEventsListener = new RealmFeedEventsListener({
     dbAdapter,

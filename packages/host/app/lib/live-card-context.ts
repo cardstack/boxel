@@ -4,7 +4,7 @@ import type EventFeedService from '../services/event-feed';
 import type RealmService from '../services/realm';
 import type { CardContext, CardDef } from '@cardstack/base/card-api';
 
-// The card-context functions that keep a page live (ADR 020 §1.7, §1.8),
+// The card-context functions that keep a page live (ADR event-feed §1.6, §1.8),
 // built in one place for every context the host provides, so no context
 // offers one of them and not the other.
 export function liveCardContext(

@@ -171,7 +171,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.toolService.toolContext;
   }
 
-  // Following a card's channel and taking refresh requests (ADR 020).
+  // Following a card's channel and taking refresh requests (ADR event-feed).
   // Matrix carries the realm's events here, but never a channel's messages.
   @cached
   private get live() {

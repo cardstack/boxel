@@ -1,6 +1,6 @@
 ---
 name: live-public-sites
-description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the realm's event feed, ADR 020), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_live`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
+description: Building a live, crowd-facing public site on Boxel host mode, where many signed-out visitors watch one thing change and act on it at the same moment — a pub quiz, a ticket on-sale, a waiting-room queue, a live vote. Covers how changes reach visitors (the realm's event feed, ADR event-feed), why a room shares one address and runs into the anonymous rate limit, keeping hot state off the card everyone watches, server-stamped fairness (queue positions, lock times, admission windows), operation conflicts and the retries the app owes, stale visitor code and refresh requests, fixed pages instead of page-type searches, screens nobody touches (TV, projector, kiosk audio), and rehearsing with a probe before the event. Use when designing, building or debugging such a site, especially one that works for a single tester and stalls with a room. Triggers on `_live`, `anonymousRateLimit`, `preceding-operation-failed`, `boxel-refresh-requested`, "on-sale", "ticket sale", "queue", "waiting room", "live event", "stalls with a crowd".
 ---
 
 # Live public sites
@@ -11,7 +11,7 @@ every one of them at once. This skill is what a pub quiz (a TV, a
 quizmaster's desk, a table of phones, all signed out but the desk) taught,
 written for the next one: a ticket on-sale with a queue.
 
-Cite rules as ADR 020 §x.y (the realm's event feed) and ADR 017 §x.y (site
+Cite rules as ADR event-feed §x.y (the realm's event feed) and ADR site-routing §x.y (site
 addresses) rather than restating them. The `realm-policy-authoring` skill
 covers opening operations to visitors who aren't signed in (`anonymous: true`)
 and the realm's `anonymousRateLimit`; `card-operations-authoring` covers
@@ -26,16 +26,16 @@ declaring the operations.
   room, not the person. The quiz needed it raised far past the default.
 - **Every change sends every screen back for the card.** The feed carries an
   invalidation, and each page re-reads the card it names. Ten screens and one
-  write is ten reads; until ADR 020 §1.5's exemption for revision reads lands
-  (see `docs/adr/remediation/020.md`), each one counts against the room's
+  write is ten reads; until ADR event-feed §1.4's exemption for revision reads lands
+  (see `docs/adr/remediation/event-feed.md`), each one counts against the room's
   limit.
 - **A refused lookup looks like a missing page.** A page-type path is resolved
   by a search run as the visitor. When the limit refuses it, the site serves
-  its not-found card with a 404 (ADR 017 §1.7 says it must not; the remediation
+  its not-found card with a 404 (ADR site-routing §1.4 says it must not; the remediation
   lists it). Under load, a 404 on a page you know exists is a rate limit until
   proven otherwise.
 - **An open page keeps the code it loaded.** The feed doesn't announce module
-  changes yet (ADR 020 §1.1 remediation), so a fix you push reaches signed-in
+  changes yet (ADR event-feed §1.1 remediation), so a fix you push reaches signed-in
   pages and not the visitors' screens. After a code push, send a refresh
   request (§5).
 
@@ -100,13 +100,13 @@ params("n"))] + [...]`. `NOW()` is a spreadsheet serial: format it with
 - **Serve the event page as a fixed page.** A host routing rule that maps
   `/play/LAMB` straight to the game card costs one card read per load; a
   page-type path costs a search as the visitor, from the room's budget
-  (ADR 017 §2). Keep page types for the long tail, fixed pages for the hot
+  (ADR site-routing §2). Keep page types for the long tail, fixed pages for the hot
   addresses.
 
 ## 5. Changing code during an event
 
 - A realm writer can ask every page following a realm's feed to reload:
-  `POST {realm}/_live/refresh`, at most once a minute (ADR 020 §1.7).
+  `POST {realm}/_live/refresh`, at most once a minute (ADR event-feed §1.8).
 - A page is first offered the request as a cancelable `boxel-refresh-requested`
   window event whose `detail` has `realm` and `reload()`. An app that calls
   `preventDefault()` keeps the page as it is, tells its visitors an update is
@@ -160,7 +160,7 @@ params("n"))] + [...]`. `NOW()` is a spreadsheet serial: format it with
    card once per batch.
 4. An admitted visitor buys with a named operation that asserts admission and
    the deadline and decrements stock on the band's card in the same transform.
-5. Behind a CDN, the feed's cacheable poll (ADR 020 §1.3) and revision reads
-   (§1.5) carry the crowd. Gaps that still matter at that scale are listed in
-   `docs/adr/remediation/020.md`: one sequence per process across replicas,
+5. Behind a CDN, the feed's cacheable poll (ADR event-feed §1.3) and revision reads
+   (§1.4) carry the crowd. Gaps that still matter at that scale are listed in
+   `docs/adr/remediation/event-feed.md`: one sequence per process across replicas,
    revision reads counted against the limit, and modules not announced.

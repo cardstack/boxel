@@ -3,7 +3,7 @@ import { parseBxlAst, prepareBxl, type PreparedBxl } from '@cardstack/bxl';
 // The cards a site routes, as its searches return them, and the BXL a page
 // type uses for how its pages look when shared. Expressions are checked
 // against the `route` profile and run with explicit runtime limits, so one
-// reads only its card and its cost is bounded (ADR 015 §1.4).
+// reads only its card and its cost is bounded (ADR site-routing §1.1).
 
 export interface HostRouteShare {
   title?: string;
