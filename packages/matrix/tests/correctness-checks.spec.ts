@@ -32,6 +32,15 @@ function uniqueRealmName(prefix: string) {
 // hash of its code ref.
 const RUN_REALM_CODE_TOOL_NAME = 'run-realm-code_6b92';
 
+// How long a run-realm-code call may take to reach `applied`. Each write lints
+// before it saves, and the lint runs in a per-worker thread that exits once it
+// has been idle, so a write that lands on a worker whose thread has gone idle
+// loads the lint engines first. That load takes several seconds and, on a busy
+// CI runner, can exceed the default 15 s expect timeout on its own. The budget
+// stays under the tool's own run limit, so a run the tool would still accept
+// is never failed here.
+const RUN_REALM_CODE_APPLY_TIMEOUT_MS = 45_000;
+
 // Attaches a skill that declares run-realm-code without requiring approval.
 // The room's default skill (the skills index) may declare the same tool, and
 // the host resolves a tool request against the first skill that declares it,
@@ -127,6 +136,7 @@ async function runRealmCode({
     ],
   });
 
+  let startedAt = Date.now();
   let toolCall = page.locator(`[data-test-tool-call-id="${toolCallId}"]`);
   // the apply state is a hidden marker on the row, so it is waited for as
   // attached, not visible
@@ -134,18 +144,33 @@ async function runRealmCode({
   await expect(applyState).toHaveAttribute(
     'data-test-tool-call-apply',
     /^(ready|applied)$/,
+    { timeout: RUN_REALM_CODE_APPLY_TIMEOUT_MS },
   );
-  if (
-    (await applyState.getAttribute('data-test-tool-call-apply')) === 'ready'
-  ) {
+  let gate = await applyState.getAttribute('data-test-tool-call-apply');
+  if (gate === 'ready') {
     await toolCall
       .locator('[data-test-pretui-tool-gate-action="apply"]')
       .click();
   }
-  await expect(applyState).toHaveAttribute(
-    'data-test-tool-call-apply',
-    'applied',
-  );
+  try {
+    await expect(applyState).toHaveAttribute(
+      'data-test-tool-call-apply',
+      'applied',
+      { timeout: RUN_REALM_CODE_APPLY_TIMEOUT_MS },
+    );
+  } finally {
+    // One line per call. When the apply runs long, the worker's
+    // `lint-source` lines for the same window show whether its lint thread
+    // started cold, and the realm server's `_lint` line shows the request's
+    // duration.
+    console.log(
+      `[run-realm-code] request=${toolCallId} gate=${gate} elapsedMs=${
+        Date.now() - startedAt
+      } finalState=${await applyState
+        .getAttribute('data-test-tool-call-apply', { timeout: 1_000 })
+        .catch(() => 'unknown')}`,
+    );
+  }
 
   let toolResultEvent: any;
   await expect(async () => {
