@@ -672,9 +672,9 @@ export async function startServer({
       // drives Synapse's admin API with it.
       MATRIX_ADMIN_USERNAME: 'admin',
       MATRIX_ADMIN_PASSWORD: 'adminpass',
-      // The secure window signs in with Google through the same mock
-      // provider Synapse uses, reached on its host port, which the realm
-      // server and the browser can both reach.
+      // The secure origin signs in with Google through the mock OIDC
+      // provider global.setup.ts starts, on its host port, which the realm
+      // server and the browser both reach.
       GOOGLE_OAUTH_CLIENT_ID: 'boxel-secure-window-test',
       GOOGLE_OAUTH_CLIENT_SECRET: 'boxel-secure-window-test-secret',
       GOOGLE_OAUTH_ISSUER: `http://localhost:${MOCK_OAUTH2_HOST_PORT}/default`,
