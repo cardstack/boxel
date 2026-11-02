@@ -22,6 +22,7 @@ import {
   SsoTimeoutError,
   secureOriginPageUrl,
   startLoopbackCallback,
+  type WindowOutcome,
 } from '../../lib/sso-login.ts';
 import {
   findUserKey,
@@ -51,7 +52,8 @@ import {
 // profile's secure session. One that grants a key a destination it has none
 // for is confirmed in the secure window instead: the CLI opens the window's
 // approve page for that batch, with a single-use link to a listener on this
-// machine, and finishes when the window says the approval was made. The
+// machine, and finishes when the window says it ended: the approval made, or
+// cancelled. Either way, what was approved is read from the realm server. The
 // terminal never creates a grant on its own.
 //
 // The CLI counts as interactive: nothing it invokes runs as a pipeline. An
@@ -350,9 +352,11 @@ export function windowTimeout(value: string | undefined): number {
 }
 
 // Opens a page of the secure window for one change, with a single-use link
-// to a listener on this machine, and waits for the page to say the change
-// was made. The window finishes it under its own session; nothing comes back
-// but that it ended, and the caller reads what changed from the realm server.
+// to a listener on this machine, and waits for the page to say how it ended:
+// the change made, or cancelled (the user cancelled or closed the window
+// first). The window finishes it under its own session; nothing comes back
+// but how it ended, and the caller reads what changed from the realm server
+// whichever it was.
 export async function finishInSecureWindow(
   ctx: Context,
   {
@@ -366,7 +370,7 @@ export async function finishInSecureWindow(
     what: string;
     timeoutMs: number;
   },
-): Promise<void> {
+): Promise<WindowOutcome> {
   let interactive =
     ctx.deps.interactive ??
     (ctx.deps.openBrowserFn ? true : Boolean(process.stderr.isTTY));
@@ -396,7 +400,7 @@ export async function finishInSecureWindow(
     }
     say(
       ctx,
-      'Waiting for the secure window... Closing the window without finishing leaves this waiting; press Ctrl-C to stop.',
+      "Waiting for the secure window... Its Cancel or Close button stops this; closing the browser's own window or tab leaves this waiting, so press Ctrl-C then.",
     );
     let result;
     try {
@@ -412,6 +416,7 @@ export async function finishInSecureWindow(
     if (result.kind !== 'window') {
       throw new Error('The browser returned something other than the window.');
     }
+    return result.outcome;
   } finally {
     listener.close();
   }
@@ -550,7 +555,7 @@ export async function keysApprove(
         name: batch.card.exportName,
         realm: batch.realm.url,
       };
-  await finishInSecureWindow(ctx, {
+  let outcome = await finishInSecureWindow(ctx, {
     page: 'approve',
     fragment: {
       ...fragment,
@@ -585,7 +590,9 @@ export async function keysApprove(
   );
   if (approved.length === 0) {
     throw new Error(
-      `The secure window closed without approving ${batch.card.name}'s requests`,
+      outcome === 'cancelled'
+        ? `Not approved: the secure window was closed without approving ${batch.card.name}'s requests`
+        : `The secure window closed without approving ${batch.card.name}'s requests`,
     );
   }
   let result: ApproveResult = { approved, via: 'window' };

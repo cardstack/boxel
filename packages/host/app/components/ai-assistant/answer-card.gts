@@ -14,12 +14,13 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import CardRenderer from '@cardstack/host/components/card-renderer';
 import { cardMenuEntries } from '@cardstack/host/lib/card-menu-entries';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type ToolService from '@cardstack/host/services/tool-service';
+
+import ReplyCard from './reply-card';
 
 import type { CardDef, Format } from '@cardstack/base/card-api';
 
@@ -27,6 +28,7 @@ interface Signature {
   Args: {
     card: CardDef;
     format: Format;
+    heightless?: boolean;
   };
 }
 
@@ -87,10 +89,10 @@ export default class AnswerCard extends Component<Signature> {
         {{/if}}
       </:actions>
       <:default>
-        <CardRenderer
+        <ReplyCard
           @card={{@card}}
           @format={{@format}}
-          @displayContainer={{false}}
+          @heightless={{@heightless}}
         />
       </:default>
     </CardEmbed>

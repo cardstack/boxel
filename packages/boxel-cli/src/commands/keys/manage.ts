@@ -811,7 +811,7 @@ export async function keysSwap(
       ctx,
       `${label} is approved for requests to ${hosts}, which ${key.name} has no grant for.`,
     );
-    await finishInSecureWindow(ctx, {
+    let outcome = await finishInSecureWindow(ctx, {
       page: 'swap-key',
       fragment: { realm: listed.realm, share: listed.id, key: key.id },
       what: `sending ${key.name} to ${hosts}`,
@@ -822,7 +822,9 @@ export async function keysSwap(
     ).find((s) => s.id === listed.id);
     if (!after || after.state !== 'active' || after.keyId !== key.id) {
       throw new Error(
-        `The secure window closed without putting ${key.name} into ${label}`,
+        outcome === 'cancelled'
+          ? `Not swapped: the secure window was closed without putting ${key.name} into ${label}`
+          : `The secure window closed without putting ${key.name} into ${label}`,
       );
     }
     share = after;
