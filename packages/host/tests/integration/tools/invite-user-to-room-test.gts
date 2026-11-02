@@ -179,6 +179,7 @@ module('Integration | tools | invite-user-to-room', function (hooks) {
       name: 'room-test',
     });
     let matrixService = getService('matrix-service') as MatrixService;
+    await matrixService.ready;
 
     await assert.rejects(
       matrixService.inviteUserToRoom(roomId, '@another-person:localhost'),
