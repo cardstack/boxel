@@ -1,6 +1,6 @@
 // Pretui — the icons the vendored surfaces bundles (`../surfaces/*/index.js`)
-// render in their form alerts, under the names the bundles import. Each is a
-// boxel-icons icon; the bundles' `.bx-form-alert__icon-svg` rule sizes them.
+// render in their form alerts and form-field states, under the names the
+// bundles import. Each is a boxel-icons icon; the bundles' own CSS sizes them.
 export { default as ExclamationCircle } from '@cardstack/boxel-icons/circle-alert';
 export { default as FailureBordered } from '@cardstack/boxel-icons/circle-x';
 export { default as LoadingIndicator } from '@cardstack/boxel-icons/loader-circle';
