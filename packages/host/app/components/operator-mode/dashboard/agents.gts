@@ -8,11 +8,11 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
 import Copy from '@cardstack/boxel-icons/copy';
-import Sparkles from '@cardstack/boxel-icons/sparkles';
 import { Button } from '@cardstack/pretui/components/button';
-import { NativeSelect } from '@cardstack/pretui/components/native-select';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { RadioCard } from '@cardstack/pretui/components/radio-card';
+import { Select } from '@cardstack/pretui/components/select';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -251,6 +251,7 @@ export default class Agents extends Component<Signature> {
       </header>
 
       <RadioCard
+        class='agent-picker'
         @options={{this.agentOptions}}
         @value={{this.kind.id}}
         @onValueChange={{this.pickAgent}}
@@ -308,7 +309,6 @@ export default class Agents extends Component<Signature> {
               {{on 'click' this.describeIt}}
               data-test-agent-describe-it
             >
-              <Sparkles width='16' height='16' aria-hidden='true' />
               Describe it
             </Button>
           {{else}}
@@ -347,21 +347,23 @@ export default class Agents extends Component<Signature> {
                       {{on 'click' (fn this.toggleStep index)}}
                       data-test-agent-step-head
                     >
-                      <span class='step-number' aria-hidden='true'>
-                        {{#if (this.isCopied index)}}
-                          <Check width='14' height='14' />
-                        {{else}}
-                          {{add index 1}}
-                        {{/if}}
-                      </span>
-                      <span class='step-words'>
-                        <span class='step-title'>
-                          {{step.title}}
+                      <span class='step-head-face'>
+                        <span class='step-number' aria-hidden='true'>
                           {{#if (this.isCopied index)}}
-                            <VisuallyHidden>(copied)</VisuallyHidden>
+                            <Check width='12' height='12' />
+                          {{else}}
+                            {{add index 1}}
                           {{/if}}
                         </span>
-                        <span class='step-note'>{{step.note}}</span>
+                        <span class='step-words'>
+                          <span class='step-title'>
+                            {{step.title}}
+                            {{#if (this.isCopied index)}}
+                              <VisuallyHidden>(copied)</VisuallyHidden>
+                            {{/if}}
+                          </span>
+                          <span class='step-note'>{{step.note}}</span>
+                        </span>
                       </span>
                     </Button>
                     {{#if isOpen}}
@@ -371,13 +373,12 @@ export default class Agents extends Component<Signature> {
                       >
                         {{#if step.isWorkspacePick}}
                           {{#if this.workspaceOptions.length}}
-                            <NativeSelect
+                            <Select
                               class='workspace-pick'
                               @options={{this.workspaceOptions}}
                               @value={{this.workspaceURL}}
                               @onValueChange={{this.pickWorkspace}}
                               @label='Workspace to open'
-                              @size='s'
                               data-test-agent-workspace-pick
                             />
                           {{/if}}
@@ -388,12 +389,21 @@ export default class Agents extends Component<Signature> {
                             id={{concat this.stepsId '-' index '-text'}}
                             data-test-agent-step-text
                           >{{step.text}}</code>
-                          <Button
+                          {{! The name stays Copy: the tooltip shows the copy
+                              and the status region below announces it. }}
+                          <IconButton
                             class='copy'
-                            @tone='primary'
-                            @appearance='accent'
-                            @size='s'
-                            @shape='pill'
+                            @label='Copy'
+                            @tooltip={{if
+                              (eq this.copiedStep index)
+                              'Copied'
+                              'Copy'
+                            }}
+                            @appearance='plain'
+                            @size='xs'
+                            @icon={{if (eq this.copiedStep index) Check Copy}}
+                            @iconWidth='14'
+                            @iconHeight='14'
                             aria-describedby={{concat
                               this.stepsId
                               '-'
@@ -405,19 +415,7 @@ export default class Agents extends Component<Signature> {
                               (fn this.copyTask.perform index step.text)
                             }}
                             data-test-agent-copy={{add index 1}}
-                          >
-                            {{#if (eq this.copiedStep index)}}
-                              <Check
-                                width='14'
-                                height='14'
-                                aria-hidden='true'
-                              />
-                              Copied
-                            {{else}}
-                              <Copy width='14' height='14' aria-hidden='true' />
-                              Copy
-                            {{/if}}
-                          </Button>
+                          />
                         </div>
                       </div>
                     {{/if}}
@@ -437,7 +435,11 @@ export default class Agents extends Component<Signature> {
     <style scoped>
       .agents {
         --_agents-panel-max-width: 40rem;
-        --_agents-step-number-size: 1.75rem;
+        --_agents-step-number-size: 1.5rem;
+        --_agents-step-inset: var(--boxel-sp-4xs);
+        /* The code line is at least as tall as its Copy button, the
+           smallest Pret UI button (24px), so the two sit level. */
+        --_agents-code-line-height: 1.5rem;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -493,29 +495,39 @@ export default class Agents extends Component<Signature> {
         color: var(--muted-foreground);
       }
 
+      /* The theme's hover is a translucent white, which on an opaque card
+         reads as the card fading out; this is the next shade up instead. */
+      .agent-picker {
+        --hover: var(--boxel-600);
+      }
+
       .step-list {
         display: flex;
         flex-direction: column;
+        gap: var(--boxel-sp-4xs);
         margin: 0;
         padding: 0;
         list-style: none;
-      }
-      .step + .step {
-        border-top: 1px solid var(--boxel-light-10);
       }
       .step-row {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        padding-block: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--_agents-step-inset);
       }
       .step-head {
-        --pretui-button-h: 3.25rem;
-        --pretui-button-px: var(--boxel-sp-4xs);
+        --pretui-button-h: 3rem;
+        --pretui-button-px: var(--_agents-step-inset);
         justify-content: flex-start;
-        gap: var(--boxel-sp-sm);
         width: 100%;
         text-align: start;
+      }
+      /* Pret UI's label is inline; this lays out the number and words. */
+      .step-head-face {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        width: 100%;
       }
       .step-number {
         display: inline-flex;
@@ -525,31 +537,32 @@ export default class Agents extends Component<Signature> {
         width: var(--_agents-step-number-size);
         height: var(--_agents-step-number-size);
         border-radius: 50%;
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
+        background-color: var(--secondary);
         font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-xs);
         font-weight: 700;
-        color: var(--muted-foreground);
+        color: var(--secondary-foreground);
       }
       .step.is-next .step-number {
         background-color: var(--boxel-highlight);
-        box-shadow: none;
         color: var(--boxel-highlight-foreground);
       }
       .step.is-done .step-number {
+        background-color: transparent;
         box-shadow: inset 0 0 0 1px var(--boxel-highlight);
         color: var(--boxel-highlight);
       }
       .step-words {
         display: flex;
-        white-space: normal;
         flex-direction: column;
         gap: var(--boxel-sp-6xs);
         min-width: 0;
+        white-space: normal;
       }
       .step-title {
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
+        color: var(--foreground);
       }
       .step.is-later .step-title {
         color: var(--muted-foreground);
@@ -564,31 +577,40 @@ export default class Agents extends Component<Signature> {
         flex-direction: column;
         align-items: flex-start;
         gap: var(--boxel-sp-xs);
-        padding: 0 0 var(--boxel-sp-sm)
-          calc(var(--_agents-step-number-size) + var(--boxel-sp-sm));
+        /* Lined up under the step's title, past the head's border, inset
+           and number. */
+        padding: 0 var(--_agents-step-inset) var(--boxel-sp-sm)
+          calc(
+            1px + var(--_agents-step-inset) + var(--_agents-step-number-size) +
+              var(--boxel-sp-sm)
+          );
       }
       .workspace-pick {
-        max-width: 100%;
+        width: min(100%, 20rem);
       }
       .step-text {
         display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
+        align-items: flex-start;
+        gap: var(--boxel-sp-2xs);
         align-self: stretch;
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-4xs) var(--boxel-sp-4xs)
-          var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius-lg);
-        background-color: var(--boxel-800);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
       }
       .step-code {
+        display: flex;
+        align-items: center;
         flex: 1;
         min-width: 0;
-        overflow-wrap: break-word;
+        min-height: var(--_agents-code-line-height);
+        padding: 0.125rem var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
         font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-xs);
+        line-height: 1.5;
       }
       .copy {
+        --pretui-button-h: var(--_agents-code-line-height);
         flex: none;
       }
       .describe-it {

@@ -57,7 +57,8 @@ export const AGENT_KINDS: AgentKind[] = [
     label: 'Codex',
     hint: 'Boxel plugin',
     // Codex doesn't install a plugin's dependencies, so both plugins are
-    // added by hand.
+    // added by hand. Keep in step with the Codex install in
+    // packages/boxel-cli/plugin/README.md.
     setup: [
       CLI_STEP,
       {
