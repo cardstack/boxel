@@ -26,17 +26,16 @@ Genuinely better: the underline is a _shared measured primitive_, not a per-tab 
 
 ## Accessibility
 
-Governing pattern: APG **Tabs**. This is where the component is weakest, and the gaps are structural rather than cosmetic:
+Governing pattern: APG **Tabs**, with automatic activation.
 
-- Present: `role="tablist"` on the strip, `role="tab"` and `aria-selected` (explicitly `'true'`/`'false'`, which is correct — APG requires `false` on the unselected ones) on each trigger, `role="tabpanel"` on the panel.
-- **Missing `aria-controls` on the tabs and `id`/`aria-labelledby` on the panel.** Nothing connects a tab to its panel, so a screen-reader user is told "tab, 2 of 4, selected" and then has to find the panel by reading order.
-- **Missing roving tabindex.** Every tab is a native `<button>` and therefore its own tab stop. APG is explicit that a tab list is _one_ tab stop, with Tab moving from the active tab into the panel.
-- **Missing arrow-key navigation.** Left/Right (with wrapping) is mandatory in the pattern; there is no `keydown` handler at all. Home/End likewise absent.
-- **Missing `tabindex="0"` on the panel** when its content holds nothing focusable — APG's rule, and the one React Aria implements exactly via `useHasTabbableChild`. A panel of plain text here cannot receive focus and cannot be scrolled by keyboard.
-- **No `aria-orientation`**, and no vertical mode, so the horizontal default is at least honest.
-- **Activation is implicitly automatic** (click selects). That matches APG's recommendation for preloaded panels, which is the case here — but with no arrow keys there is no focus-versus-activation distinction to get wrong yet.
+- `role="tablist"` on the strip, `role="tab"` on each trigger with `aria-selected` set explicitly to `'true'` or `'false'`, and `role="tabpanel"` on the panel.
+- **One tab stop.** The active tab is in the tab sequence and the rest are `tabindex="-1"` (the kit's `rovingTabindex`), so Tab moves from the active tab into the panel. When `@value` matches no option, the first tab holds the stop.
+- **Arrow keys, Home and End.** Left and Right move to the previous and next tab, wrapping at the ends, and swap under `dir="rtl"`; Home and End jump to the first and last. Moving selects as well as focuses, which APG recommends when panels render without a fetch, as the single yielded panel does here. A key held with Alt, Ctrl, Meta or Shift is left alone, so Alt+Left still goes Back. When a controlled `@value` refuses the change, focus stays on the selected tab. Enter and Space select through the native `<button>`, as does a plain DOM `click()`.
+- **Tab-to-panel wiring.** When there is a panel, every tab has `aria-controls` pointing at it, and the panel is `aria-labelledby` the active tab. With no block there is no panel, so the tabs carry no `aria-controls`.
+- **The panel is always focusable** (`tabindex="0"`, as Radix sets it), so a panel of plain text can be reached and scrolled from the keyboard. A panel that starts with its own control costs one extra Tab stop; APG drops the panel's stop in that case, and React Aria tracks it with `useHasTabbableChild`.
+- **No `aria-orientation`** and no vertical mode; the strip is horizontal only.
 
-Practically: it is clickable and Tab-reachable, and it is not a conformant tab list. Closing this is the highest-value accessibility work in the controls territory, and it would also fix **SegmentedControl** and **FilterChips**, which share the shape.
+SegmentedControl and FilterChips share the strip's shape but none of this keyboard model.
 
 ## Theming
 
