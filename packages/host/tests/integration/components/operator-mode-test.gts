@@ -24,12 +24,18 @@ import { setupOperatorModeTests } from './operator-mode/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 // Waits for the stack item a create pushes. A timeout reports how far the
-// create got — whether the chooser closed, which items the operator-mode state
-// holds, and how many of them rendered — which separates a slow module load
-// (chooser closed, no new item in state) from an item that was pushed but
-// never rendered. The elapsed time is logged on success too, so passing runs
-// show how much of the timeout a loaded runner uses.
-async function waitForNewStackItem(selector: string) {
+// create got — whether the chooser closed, how many saves the caller's hold
+// has caught, which items the operator-mode state holds, and how many of them
+// rendered. Chooser closed with no save held and no new item means the card's
+// module is still loading; a held save with no new item means the create is
+// waiting on its own save, i.e. it is no longer optimistic; a new item in state
+// that never rendered is a rendering problem. The elapsed time is logged on
+// success too, so passing runs show how much of the timeout a loaded runner
+// uses.
+async function waitForNewStackItem(
+  selector: string,
+  heldSaveCount: () => number,
+) {
   let startedAt = performance.now();
   try {
     await waitFor(selector, { timeout: 10000 });
@@ -40,7 +46,7 @@ async function waitForNewStackItem(selector: string) {
         performance.now() - startedAt,
       )}ms; chooser open: ${Boolean(
         document.querySelector('[data-test-card-chooser-modal]'),
-      )}; stack items in state: ${JSON.stringify(
+      )}; saves held: ${heldSaveCount()}; stack items in state: ${JSON.stringify(
         stacks.map((stack) =>
           stack.map((item) => ({ id: item.id, format: item.format })),
         ),
@@ -552,31 +558,31 @@ module('Integration | operator-mode | basics', function (hooks) {
     // renders. Choosing the spec still loads the card's module before the item
     // is pushed, which on a loaded runner can take seconds; with no save
     // racing it, the wait for the item can be as long as that load needs.
-    await withHeldSave(async () => {
-      // Not awaited: `click` settles, and the held save keeps a test waiter
-      // open until the callback returns.
-      click('[data-test-card-chooser-go-button]');
-      await waitForNewStackItem(
-        '[data-test-stack-card-index="1"] [data-test-field="blogPost"]',
-      );
-      assert
-        .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
-        .exists();
-      assert.strictEqual(
-        savedCards.size,
-        0,
-        'the new card has not been saved yet',
-      );
-    });
+    let heldSaves = 0;
+    await withHeldSave(
+      async () => {
+        // Not awaited: `click` settles, and the held save keeps a test waiter
+        // open until the callback returns.
+        click('[data-test-card-chooser-go-button]');
+        await waitForNewStackItem(
+          '[data-test-stack-card-index="1"] [data-test-field="blogPost"]',
+          () => heldSaves,
+        );
+        assert
+          .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+          .exists();
+        assert.strictEqual(
+          savedCards.size,
+          0,
+          'the new card has not been saved yet',
+        );
+      },
+      { onSaveIssued: () => heldSaves++ },
+    );
 
     await saved.promise;
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
     assert.ok(packetId, 'the new card was saved once the hold was released');
-
-    await click(
-      '[data-test-stack-card-index="1"] [data-test-more-options-button]',
-    );
-    await fillIn(`[data-test-field="cardInfo-name"] input`, 'New Post');
 
     ctx.setCardInOperatorModeState(packetId);
     await waitFor(`[data-test-stack-card="${packetId}"]`);
