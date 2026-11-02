@@ -415,7 +415,7 @@ FROM user_key_grant_notices WHERE grant_id = '<id>' ORDER BY recipient;
 ```
 
 The `boxel:key-grant` log channel carries one JSON line per event:
-`grant-rejected` (`grant`, `host`, `realm`, `share`), `grant-cleared`
+`grant-rejected` (`grant`, `key`, `host`, `realm`, `share`), `grant-cleared`
 (`reason`: `probe` or `key-replaced`), `probe` (`status`, or null when the
 probe got no answer) and `vendor-outcome` (`host`, `status`) for every
 `callApi` the vendor answered. Hosts and ids only, never a path or a value.

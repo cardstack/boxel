@@ -1,17 +1,17 @@
 ---
 name: key-outage-triage
-description: Triage an outage or a complaint involving API keys — callApi calls refused or failing, a vendor answering 401, keys going `rejected`, tokens that won't mint, stored secrets that won't open, Decrypts on the secrets key, guard refusals and the response size cap. Decides first whether it is one key, one vendor, or us, with the Loki and CloudWatch query for each, then reads the Keys dashboard and walks a key that won't substitute through every stage that can stop it. Use when a keys alert fires ("Stored secret failed to open", "Secrets key Decrypt by an unexpected principal", "callApi failures of ours across many realms", "Outbound guard refused a platform destination", "Many grants rejected at one host"), when someone reports that a card's key "stopped working", or when you open the Keys dashboard and need to read it.
+description: Triage an outage or a complaint involving API keys — callApi calls refused or failing, a vendor answering 401, keys going `rejected`, tokens that won't mint, stored secrets that won't open, Decrypts on the secrets key, guard refusals and the response size cap. Decides first whether it is one key, one vendor, or us, with the Loki and CloudWatch query for each, then reads the Keys dashboard and walks a key that won't substitute through every stage that can stop it. Use when a keys alert fires ("Stored secret failed to open", "Secrets key Decrypt by an unexpected principal", "callApi failures of ours across realms or hosts", "Outbound guard refused a platform destination", "Many keys rejected at one host"), when someone reports that a card's key "stopped working", or when you open the Keys dashboard and need to read it.
 ---
 
 # Key outage triage
 
 Every key problem is one of three shapes, and each has a different owner:
 
-| Shape          | What it looks like                                                                                                                                                      | Who acts                                                           |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **One key**    | one grant, one key or one realm refused; the same vendor works for others                                                                                               | the key's owner (replace the key, approve again), or nobody        |
-| **One vendor** | every key at one host refused or failing at once; other hosts fine                                                                                                      | nobody on our side; probes recover the grants when the vendor does |
-| **Us**         | sends failing or refused for reasons of ours across many realms at once, secrets that won't open, guard refusals of our own destinations, Decrypts we can't account for | us                                                                 |
+| Shape          | What it looks like                                                                                                                                                                                 | Who acts                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **One key**    | one grant, one key or one realm refused; the same vendor works for others                                                                                                                          | the key's owner (replace the key, approve again), or nobody        |
+| **One vendor** | every key at one host refused or failing at once; other hosts fine                                                                                                                                 | nobody on our side; probes recover the grants when the vendor does |
+| **Us**         | sends failing for reasons of ours across many realms, or connections failing at many hosts at once, secrets that won't open, guard refusals of our own destinations, Decrypts we can't account for | us                                                                 |
 
 Answer that before anything else. The rest of this skill is how.
 
@@ -70,13 +70,13 @@ What the vendor answered, per host and status:
 sum by (host, status) (count_over_time(<key-grant> | event="vendor-outcome" [5m]))
 ```
 
-Then how many grants it rejected, per host. Each grant is counted once, when its vendor first answers 401, so several at one host in minutes means the vendor refused every key, not one:
+Then how many distinct keys it rejected, per host. Each grant is counted once, when its vendor first answers 401, but one key can hold several grants at one host (one per destination path), so one revoked key can reject several grants at once. Count keys, not grants: several keys at one host in minutes means the vendor refused every key, not one:
 
 ```logql
-sum by (host, event) (count_over_time(<key-grant> | event=~"grant-rejected|key-rejected" [10m]))
+count by (host) (sum by (host, key) (count_over_time(<key-grant> | event=~"grant-rejected|key-rejected" [10m])))
 ```
 
-Several at one host is either the vendor (an outage, a change to its auth) or **our substitution sending the wrong value**. Tell them apart:
+Several keys at one host is either the vendor (an outage, a change to its auth) or **our substitution sending the wrong value**. Tell them apart:
 
 - the vendor's status page, and whether its 401s started at one moment for every realm;
 - whether keys at **other** hosts still answer 2xx in the same window. If every host's grants are being rejected, it is us, not the vendor;
@@ -114,14 +114,20 @@ Any of these is us, whatever the vendors are doing:
   sum by (path, host, reason) (count_over_time(<guard> | destinationSetBy="platform" [15m]))
   ```
 
-- **Sends failing for reasons of ours across many realms at once:**
+- **Sends failing for reasons of ours.** Two shapes. A send that broke without a refusal (`failed`, which the sender raises only for an error it didn't map, so a bug of ours) or `rate-limit-unavailable` (the limit counters' database, the `rate-limit-store` channel), in many realms:
 
   ```logql
-  sum by (code, realm) (count_over_time(<key-use>
-    | outcome="failed" or code=~"internal-error|rate-limit-unavailable|upstream-timeout" [10m]))
+  sum by (code, realm) (count_over_time(<key-use> | outcome="failed" or code="rate-limit-unavailable" [10m]))
   ```
 
-  `failed` is a send that broke without a refusal; `internal-error` the connection broke before an answer; `rate-limit-unavailable` the limit counters' database (the `rate-limit-store` channel); `upstream-timeout` at one host is that vendor, across hosts it is our network. Every other code is a user's, an owner's or a card author's state (approval, re-approval after a declaration changed, suspension, limits, an anonymous caller, bad parameters, a card pointing the guard somewhere it may not), and a card installed in many realms, or one owner's key bound in several, raises it in all of them at once, so a count across realms of those says nothing.
+  And connection failures and timeouts at many hosts at once. `internal-error` is any connection that broke before the destination answered (DNS, refused, TLS) and `upstream-timeout` one that didn't connect or finish in time. At one host that is that destination: a vendor's outage, or a card author's dead destination, however many realms call it. Across many hosts at once it is our network:
+
+  ```logql
+  sum by (code, host) (count_over_time(<key-use> | code=~"internal-error|upstream-timeout" | url!=""
+    | label_format host=`{{ regexReplaceAll "^[a-z]+://([^/]+).*$" .url "${1}" }}` [10m]))
+  ```
+
+  Every other code is a user's, an owner's or a card author's state (approval, re-approval after a declaration changed, suspension, limits, an anonymous caller, bad parameters, a card pointing the guard somewhere it may not), and a card installed in many realms, or one owner's key bound in several, raises it in all of them at once, so a count across realms of those says nothing.
 
 - **A Decrypt on the secrets key we can't account for.** The task roles Decrypt once per data key when a task starts, so their entries line up with deploys. Anything else, or any denied call, is the alert. In CloudWatch Logs Insights, on `/aws/events/<env>-boxel-secrets-decrypts`:
 
@@ -179,7 +185,7 @@ Then by `outcome` and `code`, in the order the realm server checks them for each
 | `rate-limited` / `over-budget`        | the owner's rate limit or budget                                                                                                                                                                                                                                                                                                                              | `retryAfterSeconds`, or the owner raises it (`key-limits`)                                                                                                     |
 | `rate-limit-unavailable`              | the counters couldn't be read                                                                                                                                                                                                                                                                                                                                 | the database (`rate-limit-store`)                                                                                                                              |
 | `guard-refused`                       | the destination isn't https, resolves to a private address, redirects too often, or filling the slot would have changed its origin                                                                                                                                                                                                                            | the card's declaration; a guard bug if the card is right (`outbound-guard`)                                                                                    |
-| `upstream-timeout` / `internal-error` | the vendor didn't connect or answer in time, or the connection broke                                                                                                                                                                                                                                                                                          | the vendor's status page                                                                                                                                       |
+| `upstream-timeout` / `internal-error` | the destination didn't connect or answer in time, or the connection broke before it answered: that host, unless many hosts fail at once (step 2)                                                                                                                                                                                                              | the vendor's status page                                                                                                                                       |
 
 `outcome: "sent"` with a vendor status means substitution worked and the vendor answered. A 403 never changes state: it is recorded on the grant as `vendor-forbidden`, which the owner sees beside the grant (`user-keys`, Rejected grants).
 
@@ -187,13 +193,13 @@ If the line shows nothing wrong but the value sent is wrong, check that the gran
 
 ## The alerts
 
-| Alert                                          | Query                                                                                                                     | Fires at              | Why that threshold                                                                                                                                  |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stored secret failed to open                   | `open-failed` lines in 5 minutes                                                                                          | any                   | a value that won't open is never routine                                                                                                            |
-| Secrets key Decrypt by an unexpected principal | Decrypts in the log group from neither of this environment's task roles in this account, or denied, in 30 minutes         | any                   | only those two roles may Decrypt, and they never fail; another environment's role or a same-named role in another account is unexpected too         |
-| callApi failures of ours across many realms    | realms with a `failed` send or an `internal-error` / `rate-limit-unavailable` / `upstream-timeout` refusal, in 10 minutes | 3 or more realms      | every other code is a user's, owner's or card author's state, which one shared card or key raises in many realms at once                            |
-| Outbound guard refused a platform destination  | `destinationSetBy=platform` guard refusals in 10 minutes                                                                  | any                   | those destinations are ones the platform set; a user-set destination can be refused at will                                                         |
-| Many grants rejected at one host               | `grant-rejected` + `key-rejected` per host in 10 minutes                                                                  | 3 or more at one host | each grant enters the state once, so three distinct grants refused at one host within minutes is the vendor refusing every key, or our substitution |
+| Alert                                           | Query                                                                                                                                              | Fires at                             | Why that threshold                                                                                                                                                                                      |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stored secret failed to open                    | `open-failed` lines in 5 minutes                                                                                                                   | any                                  | a value that won't open is never routine                                                                                                                                                                |
+| Secrets key Decrypt by an unexpected principal  | Decrypts in the log group from neither of this environment's task roles in this account, or denied, in 30 minutes                                  | any                                  | only those two roles may Decrypt, and they never fail; another environment's role or a same-named role in another account is unexpected too                                                             |
+| callApi failures of ours across realms or hosts | realms with a `failed` send or `rate-limit-unavailable`; and, separately, distinct hosts with `internal-error` / `upstream-timeout`; in 10 minutes | 3 or more realms, or 3 or more hosts | those two are ours wherever they happen; a dead destination is one host however many realms call it, so connection failures count by host; every other code is a user's, owner's or card author's state |
+| Outbound guard refused a platform destination   | `destinationSetBy=platform` guard refusals in 10 minutes                                                                                           | any                                  | those destinations are ones the platform set; a user-set destination can be refused at will                                                                                                             |
+| Many keys rejected at one host                  | distinct keys among `grant-rejected` + `key-rejected` per host in 10 minutes                                                                       | 3 or more keys at one host           | one key can hold several grants at one host, so keys are counted; three keys refused at one host within minutes is the vendor refusing every key, or our substitution                                   |
 
 Each Loki rule reads its environment's own Loki, so the rules select no `env`. No series means nothing happened, which is healthy (`noDataState: OK`); a query that fails to run alerts (`execErrState: Alerting`). The Decrypt rule's log group, account and environment come from `SECRETS_DECRYPTS_LOG_GROUP_NAME`, `SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID` and `SECRETS_DECRYPTS_ENV`, which the apply workflows set per environment; it accepts only `arn:aws:iam::<that account>:role/boxel-(realm-server|worker)-<that env>-ecs-task`. The dashboard's panels, which can't carry an account per environment, require the principal's account to equal the event's `recipientAccountId` instead.
 
@@ -204,11 +210,11 @@ The local observability stack (`packages/observability`, `docker compose up -d`)
 ```sh
 now=$(date +%s%N)
 curl -s -H 'content-type: application/json' -X POST http://localhost:3100/loki/api/v1/push --data "$(jq -nc --arg t "$now" \
-  --arg l '{"channel":"boxel:key-grant","event":"grant-rejected","grant":"g1","host":"vendor.example","realm":"http://localhost:4201/r/","share":null}' \
+  --arg l '{"channel":"boxel:key-grant","event":"grant-rejected","grant":"g1","key":"k1","host":"vendor.example","realm":"http://localhost:4201/r/","share":null}' \
   '{streams:[{stream:{service:"realm-server",env:"local"},values:[[$t,$l]]}]}')"
 ```
 
-Three `grant-rejected` lines at one host with distinct `grant`s trip "Many grants rejected at one host" on the next evaluation. Produce the lines by running the emitters rather than by hand where you can: a stub vendor that answers 401 to every request, called through `sendCallApiRequest`, writes the real `outbound` and `boxel:key-grant` lines (with `LOG_LEVELS='*=info'` and `setup-logger.ts` imported first, as `main.ts` does). The Decrypt rule can't evaluate locally (no AWS credentials); on staging, any task start lands a task-role Decrypt in the log group, which the dashboard panel shows and the alert leaves alone.
+Three `grant-rejected` lines at one host with distinct `key`s (and `grant`s) trip "Many keys rejected at one host" on the next evaluation; three grants of one key count once. Produce the lines by running the emitters rather than by hand where you can: a stub vendor that answers 401 to every request, called through `sendCallApiRequest`, writes the real `outbound` and `boxel:key-grant` lines (with `LOG_LEVELS='*=info'` and `setup-logger.ts` imported first, as `main.ts` does). The Decrypt rule can't evaluate locally (no AWS credentials); on staging, any task start lands a task-role Decrypt in the log group, which the dashboard panel shows and the alert leaves alone.
 
 ## Related skills
 

@@ -1077,7 +1077,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Grants a vendor rejected with a 401 (grant-rejected) and minting keys a token endpoint refused (key-rejected), by destination host. Several at one host at once is that vendor's outage or a substitution bug of ours: the alert \"Many grants rejected at one host\".",
+        "description": "Grants a vendor rejected with a 401 (grant-rejected) and minting keys a token endpoint refused (key-rejected), by destination host, with the number of distinct keys behind them. One key can hold several grants at one host, so one revoked key can reject several at once; several keys at one host at once is that vendor's outage or a substitution bug of ours: the alert \"Many keys rejected at one host\".",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1144,6 +1144,17 @@
             "expr": "sum by (host) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=\"grant-cleared\" [$__interval]))",
             "legendFormat": "{{host}} cleared",
             "refId": "B",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "count by (host) (sum by (host, key) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [$__interval])))",
+            "legendFormat": "{{host}} distinct keys",
+            "refId": "C",
             "queryType": "range"
           }
         ],

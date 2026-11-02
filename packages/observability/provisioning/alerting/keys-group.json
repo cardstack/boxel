@@ -207,7 +207,7 @@
         },
         {
           "uid": "keys-refusals-across-realms",
-          "title": "callApi failures of ours across many realms",
+          "title": "callApi failures of ours across realms or hosts",
           "folderUID": "defd2d156sav4d",
           "condition": "C",
           "data": [
@@ -225,7 +225,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "count(sum by (realm) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | outcome=\"failed\" or code=~\"internal-error|rate-limit-unavailable|upstream-timeout\" [10m])))",
+                "expr": "count(sum by (realm) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | outcome=\"failed\" or code=\"rate-limit-unavailable\" [10m]))) or vector(0)",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
@@ -234,6 +234,27 @@
             },
             {
               "refId": "B",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "count(sum by (host) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | code=~\"internal-error|upstream-timeout\" | url!=\"\" | label_format host=`{{ regexReplaceAll \"^[a-z]+://([^/]+).*$\" .url \"${1}\" }}` [10m]))) or vector(0)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "B"
+              }
+            },
+            {
+              "refId": "RA",
               "queryType": "",
               "relativeTimeRange": {
                 "from": 0,
@@ -249,7 +270,32 @@
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "reducer": "last",
-                "refId": "B",
+                "refId": "RA",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "RB",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "RB",
                 "settings": {
                   "mode": "replaceNN",
                   "replaceWithValue": 0
@@ -266,23 +312,15 @@
               },
               "datasourceUid": "__expr__",
               "model": {
-                "conditions": [
-                  {
-                    "evaluator": {
-                      "params": [2],
-                      "type": "gt"
-                    }
-                  }
-                ],
                 "datasource": {
                   "type": "__expr__",
                   "uid": "__expr__"
                 },
-                "expression": "B",
+                "expression": "$RA > 2 || $RB > 2",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "refId": "C",
-                "type": "threshold"
+                "type": "math"
               }
             }
           ],
@@ -290,7 +328,7 @@
           "execErrState": "Alerting",
           "for": "0s",
           "annotations": {
-            "summary": "callApi invocations failed in three or more realms in the last 10 minutes for a reason that is ours or a vendor's: a send that broke (outcome failed), internal-error, rate-limit-unavailable (the limit counters' database) or upstream-timeout. Every other refusal code is a user's, owner's or card author's state, which a card installed in many realms, or one key bound in several, raises in all of them at once, so those are left out; a vendor refusing keys is \"Many grants rejected at one host\". The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which: upstream-timeout at a single host is that vendor, everything else is us.",
+            "summary": "callApi failed for a reason of ours in the last 10 minutes: either a send that broke (outcome failed) or rate-limit-unavailable (the limit counters' database) in three or more realms, or connection failures and timeouts (internal-error, upstream-timeout) at three or more distinct destination hosts. A dead destination or one vendor is one host, whatever number of realms call it, so those count by host; every other refusal code is a user's, owner's or card author's state and is left out. The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which. See the key-outage-triage skill.",
             "runbook": "The key-outage-triage skill, and the Keys dashboard.",
             "dashboard_uid": "boxel-keys"
           },
@@ -397,7 +435,7 @@
         },
         {
           "uid": "keys-many-grants-rejected-one-host",
-          "title": "Many grants rejected at one host",
+          "title": "Many keys rejected at one host",
           "folderUID": "defd2d156sav4d",
           "condition": "C",
           "data": [
@@ -415,7 +453,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max(sum by (host) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [10m])))",
+                "expr": "max(count by (host) (sum by (host, key) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [10m]))))",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
@@ -480,7 +518,7 @@
           "execErrState": "Alerting",
           "for": "0s",
           "annotations": {
-            "summary": "Three or more grants or keys at one destination host entered the rejected state in the last 10 minutes. Each grant is counted once, when its vendor first answers 401, so three at one host at once is that vendor refusing every key (an outage, or a change to its auth) or a substitution bug of ours sending the wrong value. Check the vendor's status page, then whether keys at other hosts still work. Probes return the grants to active on their own once the vendor accepts them again. See the key-outage-triage skill.",
+            "summary": "Grants or keys of three or more distinct keys at one destination host entered the rejected state in the last 10 minutes. Keys are counted, not grants: one key can hold several grants at one host (one per destination path), so one revoked key rejects them all and counts once. Three keys refused at one host at once is that vendor refusing every key (an outage, or a change to its auth) or a substitution bug of ours sending the wrong value. Check the vendor's status page, then whether keys at other hosts still work. Probes return the grants to active on their own once the vendor accepts them again. See the key-outage-triage skill.",
             "runbook": "The key-outage-triage skill, and the Keys dashboard.",
             "dashboard_uid": "boxel-keys"
           },
