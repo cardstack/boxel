@@ -43,11 +43,12 @@ and monthly budgets, which their calls spend as everyone's do:
   from (the anonymous limiter's `rateLimitKey`: the IPv4 address, or an IPv6
   caller's /64), at the share's per-person rate. It is keyed apart from any
   signed-in caller's: `["key-limit","share","<id>","anonymous","<address>"]`.
-- **Their part of each share's daily budget**: all of them together spend
-  at most `anonymousSharePercent` (`KEY_ANONYMOUS_SHARE_PERCENT`, default 50)
-  of the share's daily budget, counted under
-  `["key-limit","share","<id>","anonymous"]` (at least 1 call). Signed-in
-  readers always keep the rest, whatever cap the key's owner set, or none.
+- **Their part of each share's daily and monthly budgets**: all of them
+  together spend at most `anonymousSharePercent` (`KEY_ANONYMOUS_SHARE_PERCENT`,
+  default 50) of the share's daily budget, and of its monthly budget, counted
+  under `["key-limit","share","<id>","anonymous"]` for each period (at least 1
+  call). Signed-in readers always keep the rest of both, whatever cap the
+  key's owner set, or none.
 - **The key's anonymous cap, where its owner set one**: a daily budget of
   calls (`user_keys.anonymous_daily_cap`) every such caller draws from
   together, counted once across every realm the key is shared into, under

@@ -490,10 +490,10 @@ module(basename(import.meta.filename), function (hooks) {
     return response.body?.checks?.[0];
   }
 
-  async function used(key: unknown[]) {
+  async function used(key: unknown[], period: 'day' | 'month' = 'day') {
     let rows = await dbAdapter.execute(
-      `SELECT count FROM rate_limit_budgets WHERE budget_key = $1 AND period = 'day'`,
-      { bind: [JSON.stringify(key)] },
+      `SELECT count FROM rate_limit_budgets WHERE budget_key = $1 AND period = $2`,
+      { bind: [JSON.stringify(key), period] },
     );
     return rows.length === 0 ? 0 : Number(rows[0].count);
   }
@@ -898,6 +898,38 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await invoke('forecast', { user: OWNER })).status, 200);
     assert.strictEqual(
       await used(['key-limit', 'share', shareId, 'anonymous']),
+      2,
+    );
+  });
+
+  test("people who aren't signed in never spend more than their part of a share's monthly budget either", async function (assert) {
+    let { shareId } = await sharedForAnyone(['forecast']);
+    await setShareLimits(dbAdapter, {
+      user: OWNER,
+      shareId,
+      changes: { monthlyBudget: 4 },
+    });
+    assert.strictEqual(
+      (await invoke('forecast', { address: VISITOR })).status,
+      200,
+    );
+    assert.strictEqual(
+      (await invoke('forecast', { address: OTHER_VISITOR })).status,
+      200,
+    );
+    let third = await invoke('forecast', { address: '203.0.113.30' });
+    assert.strictEqual(
+      third.code,
+      'over-budget',
+      'visitors stop at half of the share’s monthly budget, with the day far from used up',
+    );
+    assert.strictEqual(
+      (await invoke('forecast', { user: READER })).status,
+      200,
+      'signed-in readers keep the rest of the month',
+    );
+    assert.strictEqual(
+      await used(['key-limit', 'share', shareId, 'anonymous'], 'month'),
       2,
     );
   });

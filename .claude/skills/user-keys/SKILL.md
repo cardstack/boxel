@@ -190,8 +190,8 @@ The cap is calls a UTC day across everyone who isn't signed in, in every
 realm the key is shared into, counted under
 `["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
 Separately, everyone who isn't signed in spends at most
-`KEY_ANONYMOUS_SHARE_PERCENT` (default 50) of each share's daily budget, so
-signed-in readers keep the rest whatever the cap (see the `key-limits`
+`KEY_ANONYMOUS_SHARE_PERCENT` (default 50) of each share's daily budget and
+of its monthly budget, so signed-in readers keep the rest whatever the cap (see the `key-limits`
 skill).
 
 The owner sets it:

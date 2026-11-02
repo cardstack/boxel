@@ -56,8 +56,8 @@ import { UserKeyError } from './user-keys.ts';
 //   anonymous use, have a bucket per address (the rate the share sets for each
 //   person, counted for each address instead), and spend the share's daily
 //   and monthly budgets as everyone does. All of them together spend at most
-//   `anonymousSharePercent` of the share's daily budget, so signed-in readers
-//   always keep the rest. Where the key's owner set the key's optional
+//   `anonymousSharePercent` of the share's daily budget and of its monthly
+//   budget, so signed-in readers always keep the rest of each. Where the key's owner set the key's optional
 //   anonymous cap, they also draw together from it, across every realm the
 //   key is shared into.
 //
@@ -225,10 +225,11 @@ interface CountedBudget {
 }
 
 // The budgets a call spends: the share's or key's daily and monthly budgets,
-// and for a caller who isn't signed in two more. One is their part of the
-// share's daily budget (`anonymousSharePercent` of it), so signed-in readers
-// always keep the rest. The other is the key's anonymous cap, where its owner
-// set one, counted once across every realm the key is shared into.
+// and for a caller who isn't signed in, more. One is their part of the share's
+// daily budget and of its monthly budget (`anonymousSharePercent` of each), so
+// signed-in readers always keep the rest of both. The other is the key's
+// anonymous cap, where its owner set one, counted once across every realm the
+// key is shared into.
 function budgetsOf(
   limited: LimitedSubject,
   anonymous?: AnonymousCallApiCaller,
@@ -239,19 +240,24 @@ function budgetsOf(
     { key, period: 'month', limit: limited.limits.monthlyBudget },
   ];
   if (anonymous && limited.subject.kind === 'share') {
-    budgets.push({
-      key: anonymousShareKey(limited.subject),
-      period: 'day',
-      limit: Math.max(
-        1,
-        Math.floor(
-          (limited.limits.dailyBudget *
-            keyLimitDefaults().anonymousSharePercent) /
-            100,
-        ),
-      ),
-      anonymousCap: true,
-    });
+    let percent = keyLimitDefaults().anonymousSharePercent;
+    let partOf = (budget: number) =>
+      Math.max(1, Math.floor((budget * percent) / 100));
+    let anonymousKey = anonymousShareKey(limited.subject);
+    budgets.push(
+      {
+        key: anonymousKey,
+        period: 'day',
+        limit: partOf(limited.limits.dailyBudget),
+        anonymousCap: true,
+      },
+      {
+        key: anonymousKey,
+        period: 'month',
+        limit: partOf(limited.limits.monthlyBudget),
+        anonymousCap: true,
+      },
+    );
   }
   if (anonymous && limited.anonymousDailyCap != null && limited.capKeyId) {
     budgets.push({
