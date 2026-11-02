@@ -519,7 +519,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('only a grant on a call that sends a shared key asks a key owner to agree; one on a keyless call does not', async function (assert) {
     let policy = (await team.getCompiledPolicy())!;
-    let only = (operation: string) => ({
+    let opening = (operation: string) => ({
       getCompiledPolicy: async () => ({
         ...policy,
         rules: policy.rules.map((rule) => ({
@@ -530,9 +530,9 @@ module(basename(import.meta.filename), function (hooks) {
         })),
       }),
     });
-    assert.true(await opensSharedKeysToAnonymous(only('forecast')));
+    assert.true(await opensSharedKeysToAnonymous(opening('forecast')));
     assert.false(
-      await opensSharedKeysToAnonymous(only('status')),
+      await opensSharedKeysToAnonymous(opening('status')),
       'a keyless call opened to visitors sends no key, so sharing needs no agreement for it',
     );
 
