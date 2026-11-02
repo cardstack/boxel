@@ -840,8 +840,8 @@ export interface CallApiFilledSlot {
 // The realm server's side of a `callApi`. `fill` finds the binding for every
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
-// `binding-needs-reapproval`, `interactive-use-not-approved` or
-// `credential-rejected`; an interactive call over its key's limits with
+// `binding-needs-reapproval`, `interactive-use-not-approved`,
+// `anonymous-use-not-approved` or `credential-rejected`; an interactive call over its key's limits with
 // `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
 // couldn't be counted. `send` sends the request through the guarded
 // outbound client and answers with the vendor's response, its credentials

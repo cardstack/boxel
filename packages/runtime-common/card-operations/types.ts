@@ -1722,6 +1722,10 @@ export type OperationErrorCode =
   // A `callApi` invoked interactively — from a browser, the AI assistant or
   // the CLI — whose binding was approved for pipelines only. Nothing was sent.
   | 'interactive-use-not-approved'
+  // A `callApi` invoked by a caller who isn't signed in, whose share binding
+  // wasn't approved for anonymous use. Carries a 401: signing in is what
+  // serves the caller. Nothing was sent.
+  | 'anonymous-use-not-approved'
   // A `callApi` slot has no usable credential: its key was rejected, or it
   // mints its access token and minting failed. Carries a 424 and
   // `meta.slot`. For a stored key the vendor answered 401 at the slot's

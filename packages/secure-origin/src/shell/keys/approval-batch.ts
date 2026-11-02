@@ -305,27 +305,94 @@ export const INTERACTIVE_CONFIRMATION = {
     'Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren’t private, and that the service limits to reading.',
 } as const;
 
-// The batch as the page shows it for `use`. An operation approved for
-// pipelines only needs approving only for interactive use, so for pipelines
-// it is left out.
+// What the user confirms, once for the batch, when they also let people who
+// aren't signed in use a workspace's share.
+export const ANONYMOUS_CONFIRMATION =
+  'Anyone on the internet who opens this card can make these calls with this key, up to the anonymous cap.';
+
+// The batch as the page shows it for `use`, and for whether people who aren't
+// signed in may use a share. An operation approved for pipelines only needs
+// approving only for interactive use, and one approved for signed-in people
+// only needs approving only for anonymous use, so otherwise each is left out.
 export function batchFor(
   batch: ApprovalBatch,
   use: ApprovalUse,
+  anonymous = false,
 ): ApprovalBatch {
-  if (use === 'interactive') {
-    return batch;
-  }
+  let shown = (o: BatchOperation) =>
+    o.status === 'pipelines-only'
+      ? use === 'interactive'
+      : o.status === 'signed-in-only'
+        ? use === 'interactive' && anonymous
+        : true;
   return {
     ...batch,
     groups: batch.groups
       .map((group) => ({
         ...group,
-        operations: group.operations.filter(
-          (o) => o.status !== 'pipelines-only',
-        ),
+        operations: group.operations.filter(shown),
       }))
       .filter((group) => group.operations.length > 0),
   };
+}
+
+// Whether anonymous use can be offered for these operations: only a
+// workspace's share can serve someone who isn't signed in, so only operations
+// a share fills.
+export function offersAnonymous(operations: BatchOperation[]): boolean {
+  return operations.some((o) => o.slots.some((s) => s.key === 'apiKey'));
+}
+
+// Whether anonymous use starts ticked: for the CLI's `--anonymous`, or where
+// every share slot in the batch that was approved before was approved for it,
+// so approving it again keeps that.
+export function initialAnonymous(
+  batch: ApprovalBatch,
+  { cliAnonymous = false }: { cliAnonymous?: boolean } = {},
+): boolean {
+  let approved = allSlots(batch).filter(
+    (s) => s.key === 'apiKey' && s.approved,
+  );
+  return (
+    cliAnonymous ||
+    (approved.length > 0 && approved.every((s) => s.approved!.anonymous))
+  );
+}
+
+// The shares the ticked operations would approve for anonymous use for the
+// first time: each needs its anonymous cap named.
+export function firstAnonymousShares(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): { id: string; label: string; dailyBudget: number }[] {
+  let ids = chosenShares(operations, chosen);
+  return batch.shares
+    .filter((share) => ids.has(share.id) && !share.anonymous)
+    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
+}
+
+function chosenShares(
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): Set<string> {
+  return new Set(
+    operations.flatMap((o) =>
+      o.slots
+        .filter((s) => s.key === 'apiKey')
+        .flatMap((s) => chosen[s.slot] ?? []),
+    ),
+  );
+}
+
+// An anonymous cap as typed: a whole number of calls, at least one and at
+// most the share's daily budget, since it counts toward that too.
+export function parseAnonymousCap(
+  value: string | undefined,
+  dailyBudget: number,
+): number | undefined {
+  let cap = parseDailyBudget(value);
+  return cap !== undefined && cap <= dailyBudget ? cap : undefined;
 }
 
 // Where the choice starts: on pipelines only, unless the CLI asked for
@@ -375,13 +442,7 @@ export function firstInteractiveShares(
   operations: BatchOperation[],
   chosen: Record<string, string | undefined>,
 ): { id: string; label: string; dailyBudget: number }[] {
-  let ids = new Set(
-    operations.flatMap((o) =>
-      o.slots
-        .filter((s) => s.key === 'apiKey')
-        .flatMap((s) => chosen[s.slot] ?? []),
-    ),
-  );
+  let ids = chosenShares(operations, chosen);
   return batch.shares
     .filter((share) => ids.has(share.id) && !share.interactive)
     .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));

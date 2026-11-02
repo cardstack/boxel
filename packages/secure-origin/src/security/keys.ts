@@ -542,8 +542,14 @@ export interface RequestSnapshot {
 // Why a slot needs approving: `new`, never approved or no longer usable;
 // `changed`, its request changed since it was approved; `pipelines-only`,
 // approved and unchanged, but for pipelines only (answered only when the
-// batch is asked for with `interactive`).
-export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+// batch is asked for with `interactive`); `signed-in-only`, a share's slot
+// approved and unchanged for interactive use, but for signed-in people only
+// (answered only when the batch is asked for with `anonymous`).
+export type BatchSlotStatus =
+  | 'new'
+  | 'changed'
+  | 'pipelines-only'
+  | 'signed-in-only';
 
 // One credential slot of an operation in a batch: why it needs approving, the
 // request it would approve and its fingerprint, and what it was last approved
@@ -559,6 +565,7 @@ export interface BatchSlot {
     keyId: string | null;
     shareId: string | null;
     interactive: boolean;
+    anonymous: boolean;
   };
 }
 
@@ -583,7 +590,8 @@ export interface BatchKey {
 }
 // A share also says whether any of its bindings allows interactive use yet,
 // and the daily budget in force: a share's first interactive approval names
-// its daily budget.
+// its daily budget. Likewise for anonymous use and its anonymous cap: calls a
+// day across everyone who isn't signed in, null until it is first allowed.
 export interface BatchShare {
   id: string;
   label: string;
@@ -592,6 +600,8 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
 }
 
 // Every operation on one card definition, in one realm, that needs the user's
@@ -619,6 +629,8 @@ export async function approvalBatch(
     review: boolean;
     // Also answer operations approved for pipelines only.
     interactive?: boolean;
+    // Also answer a share's operations approved for signed-in people only.
+    anonymous?: boolean;
   },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
@@ -646,19 +658,26 @@ export interface OperationApproval {
 // ticket: approving takes the window's own session. With `interactive`, the
 // bindings also serve a card opened in the browser, the AI assistant and the
 // CLI; `dailyBudgets` sets the daily budget of each share named, which a
-// share's first interactive approval must.
+// share's first interactive approval must. With `anonymous`, the share
+// bindings also serve people who aren't signed in; `anonymousCaps` sets the
+// anonymous cap of each share named, which a share's first anonymous approval
+// must.
 export async function approveOperations(
   config: Config,
   {
     realm,
     operations,
     interactive = false,
+    anonymous = false,
     dailyBudgets,
+    anonymousCaps,
   }: {
     realm: string;
     operations: OperationApproval[];
     interactive?: boolean;
+    anonymous?: boolean;
     dailyBudgets?: Record<string, number>;
+    anonymousCaps?: Record<string, number>;
   },
 ): Promise<void> {
   await authorizedRequest(config, '_key-bindings', {
@@ -669,8 +688,12 @@ export async function approveOperations(
           realm,
           operations,
           ...(interactive ? { interactive: true } : {}),
+          ...(anonymous ? { anonymous: true } : {}),
           ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
             ? { dailyBudgets }
+            : {}),
+          ...(anonymousCaps && Object.keys(anonymousCaps).length > 0
+            ? { anonymousCaps }
             : {}),
         },
       },

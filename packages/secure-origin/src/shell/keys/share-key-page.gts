@@ -99,10 +99,10 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
           <:intro>People who can access the workspace can use the key in their
             requests. They never see the key itself.
             <strong>Only signed-in people</strong>
-            with access to this workspace can use it. People who aren’t signed
-            in can’t. Requests made by people who have access to this workspace
-            will consume your quota and/or be billed against your account with
-            this service provider.</:intro>
+            with access to this workspace can use it, unless you allow anonymous
+            use for a destination. Requests made by people who have access to
+            this workspace will consume your quota and/or be billed against your
+            account with this service provider.</:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary

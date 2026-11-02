@@ -265,7 +265,11 @@ export function registerKeysCommand(program: Command): void {
     )
     .option(
       '--anonymous',
-      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: anonymous use is not offered)',
+      "With --interactive, also let people who aren't signed in use your shares this approval fills, where the realm's policy opens the operation to them. Never a personal key",
+    )
+    .option(
+      '--anonymous-cap <calls>',
+      "With --anonymous, the anonymous cap of a share allowed for people who aren't signed in for the first time: calls a day across all of them together, at most the share's daily budget. In the secure window it's asked for there",
     )
     .option(
       '--timeout <seconds>',

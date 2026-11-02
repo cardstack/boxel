@@ -171,5 +171,7 @@ export function cliOpenedFor(hash: string = window.location.hash) {
     // It is where the page starts, not what it approves: the user still
     // chooses, and reads the confirmation, before approving.
     interactive: cli !== undefined && fragment.get('interactive') === '1',
+    // `--anonymous` as well: the page starts with anonymous use ticked.
+    anonymous: cli !== undefined && fragment.get('anonymous') === '1',
   };
 }
