@@ -38,6 +38,20 @@ import type { GetMenuItemParams } from '@cardstack/base/card-api';
 let loader: Loader;
 let setCardInOperatorModeState: (leftCards: string[]) => void;
 
+async function copiedBy(selector: string) {
+  let original = navigator.clipboard.writeText;
+  let copied: string | undefined;
+  navigator.clipboard.writeText = async (text: string) => {
+    copied = text;
+  };
+  try {
+    await click(selector);
+  } finally {
+    navigator.clipboard.writeText = original;
+  }
+  return copied;
+}
+
 module('Integration | overlay-menu-items', function (hooks) {
   let noop = () => {};
   setupRenderingTest(hooks);
@@ -325,6 +339,11 @@ module('Integration | overlay-menu-items', function (hooks) {
       .doesNotExist(
         'the card-flavored URL label is suppressed for file targets',
       );
+    assert.strictEqual(
+      await copiedBy('[data-test-boxel-menu-item-text="Copy File URL"]'),
+      getService('network').virtualNetwork.keyForIdentifier(fileURL),
+      'copies the URL the realm serves the file from',
+    );
   });
 
   test('hover type-label tab anchors left while it fits and clamps to the corner radius when it overflows, and stays inside the containing card', async function (assert) {

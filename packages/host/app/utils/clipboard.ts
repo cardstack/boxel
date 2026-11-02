@@ -7,6 +7,6 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 export function copyOpenableURLToClipboard(
   id: string,
   virtualNetwork: VirtualNetwork,
-): Promise<void> {
+): Promise<boolean> {
   return copyCardURLToClipboard(virtualNetwork.keyForIdentifier(id));
 }
