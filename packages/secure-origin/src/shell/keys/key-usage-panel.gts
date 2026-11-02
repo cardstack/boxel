@@ -13,6 +13,7 @@ import {
   keyUsage,
   setKeyLimits,
   type KeyLimitChanges,
+  type KeyLimits,
   type KeyUsage,
   type ListedKey,
 } from '../../security/keys.ts';
@@ -125,27 +126,42 @@ export default class KeyUsagePanel extends Component<Signature> {
     }
   };
 
+  // Saves the limits, then reads the usage again for the budgets they set.
+  // The limits are saved once the change is, whether or not that read
+  // succeeds; a usage that can't be read again keeps what it showed, with
+  // the new limits.
   private saveLimits = async (
     changes: KeyLimitChanges,
-  ): Promise<string | undefined> => {
-    let open = this.open;
+  ): Promise<KeyLimits | string> => {
+    let limits: KeyLimits;
     try {
-      let limits = await setKeyLimits(
+      limits = await setKeyLimits(
         this.args.api.config,
         this.args.key.id,
         changes,
       );
-      if (open) {
-        let usage = await keyUsage(this.args.api.config, this.args.key.id);
-        this.page.state = { name: 'open', usage: { ...usage, limits } };
-      }
-      return undefined;
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-        return undefined;
       }
       return failureMessage(e);
     }
+    let open = this.open;
+    if (open) {
+      try {
+        let usage = await keyUsage(this.args.api.config, this.args.key.id);
+        this.page.state = { name: 'open', usage: { ...usage, limits } };
+      } catch (e) {
+        if (isSignedOut(e)) {
+          this.args.api.signedOut();
+        } else {
+          this.page.state = {
+            name: 'open',
+            usage: { ...open.usage, limits },
+          };
+        }
+      }
+    }
+    return limits;
   };
 }

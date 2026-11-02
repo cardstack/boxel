@@ -15,6 +15,7 @@ import {
   shareUsage,
   windowContext,
   type KeyLimitChanges,
+  type KeyLimits,
   type KeyShare,
   type KeyUsage,
 } from '../../security/keys.ts';
@@ -89,6 +90,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
           />
           <UsageSummary @usage={{this.editing.usage}} />
           <LimitsForm
+            @shared={{true}}
             @limits={{this.editing.usage.limits}}
             @onSave={{this.saveLimits}}
           />
@@ -171,10 +173,10 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   private saveLimits = async (
     changes: KeyLimitChanges,
-  ): Promise<string | undefined> => {
+  ): Promise<KeyLimits | string> => {
     let editing = this.editing;
     if (!editing) {
-      return undefined;
+      return 'This shared key isn’t open for changes.';
     }
     try {
       let limits = await setShareLimits(
@@ -186,11 +188,10 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         ...editing,
         usage: { ...editing.usage, limits },
       };
-      return undefined;
+      return limits;
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
-        return undefined;
       }
       return failureMessage(e);
     }

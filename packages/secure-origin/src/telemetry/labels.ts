@@ -11,8 +11,12 @@
 const REALM_SERVER_ENDPOINTS = [
   '_user-keys',
   '_user-keys/:id',
+  '_user-keys/:id/usage',
+  '_user-keys/:id/limits',
   '_key-shares',
   '_key-shares/:id/swap',
+  '_key-shares/:id/usage',
+  '_key-shares/:id/limits',
   '_key-write-tickets',
   '_key-bindings',
   '_key-bindings/batch',

@@ -15,40 +15,78 @@ import type { KeyLimitChanges, KeyLimits } from '../../security/keys.ts';
 interface Signature {
   Args: {
     limits: KeyLimits;
-    // Saves the changes, answering an error message to show, or undefined
-    // once they are saved.
-    onSave: (changes: KeyLimitChanges) => Promise<string | undefined>;
+    // A share's limits, which speak of each person and of everyone; a
+    // personal key's serve only its owner.
+    shared?: boolean;
+    // Saves the changes, answering the limits in force afterwards, or an
+    // error message to show.
+    onSave: (changes: KeyLimitChanges) => Promise<KeyLimits | string>;
   };
 }
 
 type Field = keyof KeyLimits;
 
-const FIELDS: { name: Field; label: string; hint: string; whole: boolean }[] = [
-  {
-    name: 'rateBurst',
-    label: 'Calls at once, per caller',
-    hint: 'How many calls one person can make in a burst.',
-    whole: true,
-  },
-  {
-    name: 'rateRefillPerMinute',
-    label: 'Calls per minute, per caller',
-    hint: 'How fast a caller’s burst refills.',
-    whole: false,
-  },
-  {
-    name: 'dailyBudget',
-    label: 'Calls per day',
-    hint: 'Across everyone, resetting at midnight UTC. Check your plan’s limit with the service.',
-    whole: true,
-  },
-  {
-    name: 'monthlyBudget',
-    label: 'Calls per month',
-    hint: 'Across everyone, resetting on the first of the month, UTC.',
-    whole: true,
-  },
-];
+function textOf(limits: KeyLimits): Record<Field, string> {
+  return {
+    rateBurst: String(limits.rateBurst),
+    rateRefillPerMinute: String(limits.rateRefillPerMinute),
+    dailyBudget: String(limits.dailyBudget),
+    monthlyBudget: String(limits.monthlyBudget),
+  };
+}
+
+interface FieldSpec {
+  name: Field;
+  label: string;
+  hint: string;
+  whole: boolean;
+}
+
+// The limits in two groups: how fast calls may come, which for a share is
+// each person's own, and how many the key serves in all, across everyone. A
+// personal key serves only its owner, so its groups don't speak of people.
+function groups(shared: boolean): { legend: string; fields: FieldSpec[] }[] {
+  return [
+    {
+      legend: shared ? 'Each person' : 'How fast',
+      fields: [
+        {
+          name: 'rateBurst',
+          label: 'Calls at once',
+          hint: shared
+            ? 'How many calls one person can make in a burst.'
+            : 'How many calls you can make in a burst.',
+          whole: true,
+        },
+        {
+          name: 'rateRefillPerMinute',
+          label: 'Calls a minute after that',
+          hint: 'How fast the burst refills.',
+          whole: false,
+        },
+      ],
+    },
+    {
+      legend: shared ? 'The key, in total across everyone' : 'How many',
+      fields: [
+        {
+          name: 'dailyBudget',
+          label: 'Calls a day',
+          hint: 'Resets at midnight UTC. Check your plan’s limit with the service.',
+          whole: true,
+        },
+        {
+          name: 'monthlyBudget',
+          label: 'Calls a month',
+          hint: 'Resets on the first of the month, UTC.',
+          whole: true,
+        },
+      ],
+    },
+  ];
+}
+
+const FIELDS: FieldSpec[] = groups(false).flatMap((group) => group.fields);
 
 export default class LimitsForm extends Component<Signature> {
   <template>
@@ -58,17 +96,22 @@ export default class LimitsForm extends Component<Signature> {
       {{on 'submit' this.save}}
       data-test-key-limits-form
     >
-      {{#each this.fields as |field|}}
-        <label class='field' data-test-key-limit={{field.name}}>
-          <span class='label'>{{field.label}}</span>
-          <BoxelInput
-            @value={{field.value}}
-            @onInput={{field.onInput}}
-            inputmode={{if field.whole 'numeric' 'decimal'}}
-            data-test-key-limit-input={{field.name}}
-          />
-          <span class='hint'>{{field.hint}}</span>
-        </label>
+      {{#each this.groups as |group|}}
+        <fieldset class='group' data-test-key-limit-group>
+          <legend class='legend'>{{group.legend}}</legend>
+          {{#each group.fields as |field|}}
+            <label class='field' data-test-key-limit={{field.name}}>
+              <span class='label'>{{field.label}}</span>
+              <BoxelInput
+                @value={{field.value}}
+                @onInput={{field.onInput}}
+                inputmode={{if field.whole 'numeric' 'decimal'}}
+                data-test-key-limit-input={{field.name}}
+              />
+              <span class='hint'>{{field.hint}}</span>
+            </label>
+          {{/each}}
+        </fieldset>
       {{/each}}
       {{#if this.state.error}}
         <p class='error' role='alert' data-test-key-limits-error>
@@ -94,6 +137,23 @@ export default class LimitsForm extends Component<Signature> {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+      .group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        grid-column: 1 / -1;
+        margin: 0;
+        padding: 0;
+        border: none;
+      }
+      .legend {
+        grid-column: 1 / -1;
+        padding: 0;
+        margin-bottom: var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--muted-foreground);
       }
       .field {
         display: grid;
@@ -121,19 +181,26 @@ export default class LimitsForm extends Component<Signature> {
         font-weight: 500;
       }
       @media (max-width: 480px) {
-        .limits {
+        .limits,
+        .group {
           grid-template-columns: 1fr;
         }
       }
     </style>
   </template>
 
-  private values = trackedObject<Record<Field, string>>({
-    rateBurst: String(this.args.limits.rateBurst),
-    rateRefillPerMinute: String(this.args.limits.rateRefillPerMinute),
-    dailyBudget: String(this.args.limits.dailyBudget),
-    monthlyBudget: String(this.args.limits.monthlyBudget),
-  });
+  // The limits the fields were last filled from, which a field is compared
+  // against to tell whether it changed.
+  private current: KeyLimits = this.args.limits;
+
+  private values = trackedObject<Record<Field, string>>(
+    textOf(this.args.limits),
+  );
+
+  private fill(limits: KeyLimits) {
+    this.current = limits;
+    Object.assign(this.values, textOf(limits));
+  }
 
   private state = trackedObject({
     saving: false,
@@ -141,15 +208,18 @@ export default class LimitsForm extends Component<Signature> {
     error: undefined as string | undefined,
   });
 
-  private get fields() {
-    return FIELDS.map((field) => ({
-      ...field,
-      value: this.values[field.name],
-      onInput: (value: string) => {
-        this.values[field.name] = value;
-        this.state.saved = false;
-        this.state.error = undefined;
-      },
+  private get groups() {
+    return groups(Boolean(this.args.shared)).map((group) => ({
+      legend: group.legend,
+      fields: group.fields.map((field) => ({
+        ...field,
+        value: this.values[field.name],
+        onInput: (value: string) => {
+          this.values[field.name] = value;
+          this.state.saved = false;
+          this.state.error = undefined;
+        },
+      })),
     }));
   }
 
@@ -170,7 +240,7 @@ export default class LimitsForm extends Component<Signature> {
       if (!valid) {
         return `${field.label} must be ${field.whole ? 'a whole number of at least 1' : 'a number above 0'}.`;
       }
-      if (value !== this.args.limits[field.name]) {
+      if (value !== this.current[field.name]) {
         changes[field.name] = value;
       }
     }
@@ -194,9 +264,14 @@ export default class LimitsForm extends Component<Signature> {
     this.state.saving = true;
     this.state.error = undefined;
     try {
-      let error = await this.args.onSave(changes);
-      this.state.error = error;
-      this.state.saved = !error;
+      let answer = await this.args.onSave(changes);
+      if (typeof answer === 'string') {
+        this.state.error = answer;
+      } else {
+        // A field left empty now shows the default it went back to.
+        this.fill(answer);
+        this.state.saved = true;
+      }
     } finally {
       this.state.saving = false;
     }

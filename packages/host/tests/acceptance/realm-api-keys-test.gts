@@ -620,6 +620,12 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       let usage = `${share('OpenAI')} [data-test-realm-key-share-usage]`;
 
       assert
+        .dom(`${usage} [data-test-realm-key-share-usage-details]`)
+        .doesNotHaveAttribute('open', 'the detailed counts start closed');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-budget="day"] progress`)
+        .hasAttribute('value', '312', 'the meter shows the day’s use');
+      assert
         .dom(`${usage} [data-test-realm-key-share-budget="day"]`)
         .hasText('Today 312 of 2,400 calls');
       assert
@@ -653,14 +659,21 @@ module('Acceptance | realm config | API Keys', function (hooks) {
         .dom(
           `${usage} [data-test-realm-key-share-grant="eu.api.openai.com"][data-test-realm-key-share-grant-state="rejected"]`,
         )
-        .includesText('Rejected by the service');
+        .includesText('Rejected');
       assert
         .dom(`${usage} [data-test-realm-key-share-grant="api.openai.com"]`)
         .includesText('Last refused');
       assert
-        .dom(`${usage} [data-test-realm-key-share-limits]`)
-        .includesText(
-          'Limits: 25 calls at once per caller, refilling 15 a minute; 2,400 calls a day and 72,000 calls a month.',
+        .dom(`${usage} [data-test-realm-key-share-limit="rate"]`)
+        .hasText(
+          'Each person 25 calls at once, then 15 a minute',
+          'the rate is per person',
+        );
+      assert
+        .dom(`${usage} [data-test-realm-key-share-limit="budget"]`)
+        .hasText(
+          'The key, in total across everyone 2,400 calls a day, 72,000 a month',
+          'the budgets are the key’s total',
         );
     });
 
