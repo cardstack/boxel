@@ -125,7 +125,9 @@ the CLI's), whose
 `attributes.target` names a card or a card type in its realm as the window's
 context does, with `review` for review-changes, and `interactive` to also
 answer slots approved for pipelines only (status `pipelines-only`), which
-the window shows only once the user allows interactive use. It answers every `callApi`
+the window shows only once the user allows interactive use. Within the batch's slot cap, the slots that need approving come first and
+pipelines-only ones take what room is left, so they never hold one back;
+`remainingPipelinesOnly` counts those left out. It answers every `callApi`
 operation on that card definition, in that realm, that needs the caller's
 approval: a slot the caller approves (their own key for `userKey`, a share of
 theirs in the realm for `apiKey`; a share slot someone else approved is
@@ -178,7 +180,9 @@ grant.
   interactive use allows, and approves interactively. A share's first
   interactive approval made in the terminal needs `--daily-budget <calls>`;
   in the window, the page starts on interactive use (`#interactive=1`) and
-  asks for the budget itself. `--anonymous` is refused 403.
+  asks for the budget itself. Re-approving a slot last approved `interactive`
+  without `--interactive` is refused in the terminal rather than returning
+  it to pipelines only. `--anonymous` is refused 403.
 - `boxel keys revoke` (same shape) lists the user's matching bindings with
   the same filters and deletes them.
 - `boxel keys pending` lists bindings that won't send as approved:
