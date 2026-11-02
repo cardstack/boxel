@@ -1,4 +1,5 @@
 import { difference } from 'lodash-es';
+import moment from 'moment';
 
 export interface MatrixError {
   data: {
@@ -25,6 +26,23 @@ export function isMatrixError(err: any): err is MatrixError {
     'errcode' in err &&
     typeof err.errcode === 'string'
   );
+}
+
+// The words for a refused Matrix sign-in, after "Sign-in failed. ".
+export function extractMatrixErrorMessage(e: MatrixError) {
+  if (e.httpStatus === 403) {
+    return 'Please check your credentials and try again.';
+  } else if (e.httpStatus === 429) {
+    if (e.data.retry_after_ms) {
+      moment.relativeTimeRounding(Math.ceil);
+      return `Too many failed attempts, try again ${moment
+        .duration(e.data.retry_after_ms)
+        .humanize(true)}.`;
+    }
+    return 'Too many failed attempts, try again later.';
+  } else {
+    return `Unknown error ${e.httpStatus}: ${e.data.error}`;
+  }
 }
 
 export interface InteractiveAuth {

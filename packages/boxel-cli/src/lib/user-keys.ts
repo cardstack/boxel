@@ -115,6 +115,19 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // In a realm's listing: the operations the share is approved for there,
+  // each with where it sends, as last approved.
+  operations?: KeyShareOperation[];
+}
+
+export interface KeyShareOperation {
+  bindingId: string;
+  type: { module: string; name: string };
+  operation: string;
+  instance: string | null;
+  slot: string;
+  state: string;
+  destination?: string;
 }
 
 export interface KeyWriteTarget {

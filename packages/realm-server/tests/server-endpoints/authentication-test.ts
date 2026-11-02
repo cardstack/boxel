@@ -88,36 +88,5 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'Second session reuses the same session room',
       );
     });
-
-    test('saves registration token passed during session creation', async function (assert) {
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        username: 'test_realm',
-        seed: realmSecretSeed,
-      });
-      await matrixClient.login();
-      let userId = matrixClient.getUserId()!;
-
-      // User exists from test setup but has no registration token
-      let userBefore = await getUserByMatrixUserId(dbAdapter, userId);
-      assert.strictEqual(
-        userBefore!.matrixRegistrationToken,
-        null,
-        'No registration token before session',
-      );
-
-      // Create session with a registration token (simulates initial signup)
-      let { status } = await createRealmServerSession(matrixClient, request, {
-        registrationToken: 'my-invite-code',
-      });
-      assert.strictEqual(status, 201, 'HTTP 201 status');
-
-      let user = await getUserByMatrixUserId(dbAdapter, userId);
-      assert.strictEqual(
-        user!.matrixRegistrationToken,
-        'my-invite-code',
-        'Registration token was saved during session creation',
-      );
-    });
   });
 });

@@ -13,9 +13,9 @@ import {
 // test homeserver config enables. A client holding an access token mints a
 // short-lived, single-use login token and hands a session off to the browser
 // via ?loginToken — the pre-authenticated hand-off this repo consumes in the
-// <Login> component (packages/host/app/components/matrix/login.gts) when logged
-// out, and in the index route (packages/host/app/routes/index.gts) to switch
-// accounts when already logged in.
+// <SecureSignIn> component (packages/host/app/components/matrix/secure-sign-in.gts)
+// when logged out, and in the index route (packages/host/app/routes/index.gts)
+// to switch accounts when already logged in.
 //
 // NOTE: Synapse rate-limits get_token to one request per minute per user id
 // (hardcoded in the servlet — no rc_* setting relaxes it), so every test here

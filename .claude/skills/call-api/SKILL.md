@@ -91,6 +91,21 @@ for a stored entry whatever produced it.
 | `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                     |
 | `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
+**Before indexing, `boxel lint` reports the same issues.** The realm's `_lint`
+engine (`tasks/lint-engines.ts`) runs two rules from `tasks/lint-call-api.ts`,
+registered as the `@cardstack/boxel-operations` plugin. Each reads every
+`@operation static … = { base: 'callApi', … }` from source (string and
+template literals, objects, arrays, `params()`/`instance()`/`actor()`/
+`realmConfig()`/`card()`, `bxl`, and `const`s in the file), and hands it to
+`lowerCallApiRequest` in `lowering.ts`, the function lowering itself calls.
+`call-api` (error) reports each issue as `<code>: <message>` and a `label`
+lowering refuses; `call-api-advice` (warning) reports an operation with no
+`label` and a destination that isn't `https:`. A value source doesn't settle
+(an imported constant, another call) stands in as an opaque reference, and a
+request whose URL or whole member is one isn't lowered at all, so the rules
+never guess. A lint check that mirrors lowering belongs in lowering, where
+both pick it up.
+
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
 placement, at}` — so dispatch knows what a request needs without walking it.
@@ -305,6 +320,9 @@ null when the refusal came before a request was built. Tests capture it with
   one test per lowering check, lowered from plain data, and the normalized URL
   and destination.
 - `packages/host/tests/unit/call-api-destination-test.ts`: `destinationCovers`.
+- `packages/boxel-cli/tests/integration/file-lint.test.ts`: the lint rules
+  through the realm's `_lint`, one declaration per lowering issue, the
+  `http:` destination and the missing label.
 - `packages/realm-server/tests/realm-endpoints/call-api-test.ts`: end to end
   through `_operations` against the stub vendor on a fixed port, because the
   vendor URL is written into the card module.

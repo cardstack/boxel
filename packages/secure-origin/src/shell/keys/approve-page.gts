@@ -19,6 +19,12 @@
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
+//
+// Opened by `boxel keys approve` (`#cli_port=…&cli_state=…`), for an approval
+// that grants a key a destination it has none for, the operations the CLI
+// listed (`#operations=<name>,…`) start ticked and the others unticked, and
+// the page tells the CLI's listener when the approval is made. It hands over
+// nothing but that: the CLI reads the approval from the realm server.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -39,7 +45,9 @@ import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
+import { handToCli } from '../../security/cli-handoff.js';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
@@ -68,7 +76,7 @@ import EditPage from './edit-page.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor } from './opened-for.ts';
+import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
 
 type State =
   | { name: 'loading' }
@@ -148,14 +156,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                 <fieldset class='picker'>
                   <legend class='visually-hidden'>{{slotLabel choice}}</legend>
                   {{#each choice.options as |option|}}
-                    <label class='choice' data-test-approve-key={{option.name}}>
-                      <input
-                        type='radio'
-                        name='slot-{{choice.slot}}'
-                        value={{option.id}}
-                        checked={{this.isChosen choice.slot option.id}}
-                        {{on 'change' (fn this.choose choice.slot option.id)}}
-                      />
+                    <RadioTile
+                      @name='slot-{{choice.slot}}'
+                      @value={{option.id}}
+                      @checked={{this.isChosen choice.slot option.id}}
+                      @onChange={{fn this.choose choice.slot option.id}}
+                      data-test-approve-key={{option.name}}
+                    >
                       <span class='option'>
                         <span class='option-name'>{{option.name}}</span>
                         {{#if option.rejected}}
@@ -177,7 +184,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                             {{this.hostsOf option.covers}}</span>
                         {{/if}}
                       </span>
-                    </label>
+                    </RadioTile>
                   {{else}}
                     <p class='empty' data-test-approve-no-keys>
                       {{#if (eq choice.kind 'userKey')}}
@@ -368,33 +375,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .choice {
-        position: relative;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-      }
-      .choice input {
-        position: absolute;
-        opacity: 0;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-      }
-      .choice:has(input:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-      }
-      .choice:has(input:checked) {
-        box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-      }
       .option {
         display: flex;
         flex-direction: column;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         min-width: 0;
         overflow-wrap: anywhere;
       }
@@ -567,6 +551,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   </template>
 
   private opened = openedFor();
+  private fromCli = cliOpenedFor();
   // Reached from a key's "Use with a card" on the key page.
   private fromKeyPage =
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
@@ -744,9 +729,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         }),
       );
       let keys = operations.map(operationKey);
+      let named = this.fromCli.operations;
       this.form.ticked = keep
         ? new Set(keys.filter((k) => keep.ticked.has(k)))
-        : new Set(keys);
+        : named
+          ? new Set(
+              operations.filter((o) => named.has(o.name)).map(operationKey),
+            )
+          : new Set(keys);
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
     } catch (e) {
@@ -771,7 +761,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   };
 
   private finish = () => {
-    if (this.fromKeyPage) {
+    if (this.fromCli.cli) {
+      handToCli(this.fromCli.cli, { window: 'done' });
+    } else if (this.fromKeyPage) {
       navigation.back(pageURL('keys'));
     } else {
       this.args.api.close();
@@ -803,7 +795,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         card: state.batch.card.name,
         realm: state.batch.realm.name,
       };
-      if (!this.fromKeyPage) {
+      if (this.fromCli.cli) {
+        handToCli(this.fromCli.cli, { window: 'done' });
+      } else if (!this.fromKeyPage) {
         this.args.api.close();
       }
     } catch (e) {

@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { signInOnSecureOrigin } from '../lib/secure-sign-in';
 import {
   SECURE_WINDOW_MODES,
   isSecureWindowMode,
@@ -43,14 +42,6 @@ export default class OpenSecureWindowTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.OpenSecureWindowInput,
   ): Promise<BaseToolModule.OpenSecureWindowResult> {
-    // The key pages have no sign-in of their own: their session is the one
-    // Boxel's own sign-in leaves on the secure origin, which only a deployment
-    // that signs users in there has.
-    if (!signInOnSecureOrigin()) {
-      throw new Error(
-        'Keys are managed in the secure window, which this Boxel deployment does not offer.',
-      );
-    }
     let request = secureWindowRequest(input);
     let status = this.secureWindow.open(secureWindowURL(request));
     let commandModule = await this.loadToolModule();

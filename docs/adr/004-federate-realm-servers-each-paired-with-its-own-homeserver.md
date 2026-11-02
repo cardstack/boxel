@@ -35,11 +35,6 @@ recorded, not on its `date`.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. One homeserver per realm server
 
 Each realm server MUST be paired with exactly one Matrix homeserver. The realm
@@ -215,26 +210,4 @@ Beyond the gaps under Remediation, federation needs this work:
 
 ## 7. Remediation
 
-- `packages/runtime-common/matrix-client.ts` (`verifyOpenIdToken`) breaks
-  §1.3. It asks only the paired homeserver and ignores `matrix_server_name`.
-- `packages/runtime-common/matrix-client.ts` (`userIdFromUsername`,
-  `ensureFullMatrixUserId`) breaks §1.2. They derive the server name from the
-  homeserver hostname.
-- `packages/boxel-cli/src/lib/seed-auth.ts` (`deriveHostFromRealmUrl`) breaks
-  §1.2. It derives the server name from the realm hostname.
-- `packages/boxel-cli/src/lib/profile-manager.ts` (`migrateFromEnv`) breaks
-  §1.2. It picks the server name from the Matrix URL.
-- `packages/runtime-common/db-queries/realm-permission-queries.ts`
-  (`fetchAllRealmsWithOwners`, `fetchRealmOwnerUsername`, `isBotAccount`)
-  breaks §1.2. They reduce realm owners to localparts and recognize service
-  accounts by localpart.
-- `packages/runtime-common/realm-permission-checker.ts`
-  (`effectiveRealmPermissions`) breaks §1.4. It applies the `users` row to any
-  user the paired homeserver finds a profile for, which can include users of
-  other homeservers.
-- `packages/realm-server/handlers/handle-delete-realm.ts` breaks §1.2. It
-  matches the caller's localpart against the realm's namespace.
-- `packages/realm-server/handlers/handle-publish-realm.ts` breaks §1.2. It
-  matches the caller's localpart against the owner's published-space domain.
-- `packages/realm-server/handlers/create-realm.ts` breaks §1.5. It builds
-  every realm path from the owner's localpart.
+Known gaps are listed in [remediation/004.md](remediation/004.md).

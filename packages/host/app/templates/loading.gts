@@ -7,10 +7,10 @@ import window from 'ember-window-mock';
 
 class Loading extends Component {
   // Use the dark auth palette only when there is no persisted session: the user
-  // is logged out and will land on the (dark) login page. A `loginToken`
+  // is logged out and will land on the (dark) signed-out page. A `loginToken`
   // alongside a persisted session is an account switch that ends in the
-  // workspace, and the logged-out SSO consume has no persisted session anyway —
-  // so "no session" is the whole condition. A returning user keeps the purple
+  // workspace, and a hand-off to a signed-out app has no persisted session
+  // anyway — so "no session" is the whole condition. A returning user keeps the purple
   // background, which blends into the operator-mode workspace.
   //
   // Read the persisted-session signal straight from localStorage rather than

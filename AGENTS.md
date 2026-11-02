@@ -121,7 +121,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 - Use scalable units such as rem
   - Exception: hairline values stay in px — border widths (`1px`), focus outline widths and offsets (`2px`), box-shadow offsets, blurs and spreads, and similar small strokes. They should stay crisp rather than scale with font size.
-- Use CSS variables from packages/boxel-ui/src/styles/variables.css
+- Use the shared design tokens, never literals: the semantic theme tokens for color (`--background`/`--foreground`, `--card`/`--card-foreground`, `--primary`/`--primary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`, `--border`, `--ring`), and the `--boxel-*` tokens for spacing (`--boxel-sp-*`), type (`--boxel-font-*`, `--boxel-font-size-*`, `--boxel-line-height-*`, `--boxel-lsp-*`), radii (`--boxel-border-radius*`), shadows (`--boxel-box-shadow*`) and motion (`--boxel-transition`). The `gts-component-conventions` skill (§3) says how to choose between them.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -303,8 +303,8 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's Remediation section lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
-- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed under Remediation. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. It also prints the known gaps each proposed ADR lists for those paths. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's remediation file (`docs/adr/remediation/<number>.md`) lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed in its remediation file. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
 
 ## Linear Ticket Process (Reusable)
 

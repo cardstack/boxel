@@ -34,11 +34,6 @@ must meet.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. State never depends on motion
 
 A state change MUST have the same result whether or not an animation plays.
@@ -211,15 +206,7 @@ it cannot, it uses live-DOM motion.
 
 ## 5. Remediation
 
-- `packages/host/app/components/operator-mode/stack.gts` breaks §1.1: it
-  awaits the closing animations before it closes the cards.
-- `packages/host/app/components/operator-mode/stack-item.gts` breaks §1.2: it
-  runs its own animations, tracks which one is playing, and changes its
-  behavior on that.
-- `packages/host/app/components/pill-menu/index.gts` breaks §1.1: the menu
-  collapses only on `animationend`.
-- `packages/pretui/components/toaster.gts` breaks §1.1: a toast is removed on
-  `animationend`, so with motion off it is never removed by its timer.
+Known gaps are listed in [remediation/007.md](remediation/007.md).
 
 ## 6. Sources
 
