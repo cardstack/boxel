@@ -12,8 +12,8 @@ interface Walk {
 }
 
 // The dashboard's keyboard cursor: one item in the walk of workspaces and
-// catalogs. It rests on a workspace, focused, from the moment the dashboard
-// opens, so Enter works at once. Its ring is the keyboard's: Tab or the first
+// catalogs. It rests on an item, focused, from the moment the dashboard opens,
+// so Enter works at once. Its ring is the keyboard's: Tab or the first
 // arrow key shows it without moving it, and a pointer press hides it again.
 // Left and Right step through the walk; Up and Down move to the nearest item
 // in the row above or below, whatever the layout.
