@@ -72,8 +72,12 @@ const reducesMotion = () =>
   typeof matchMedia === 'function' &&
   matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// How small a card starts as it scales in.
-const SCALE_FROM = 0.1;
+// How small a card starts as it scales in. Text and card content should not
+// scale in motion (§1.5), so it starts near its full size and the fade
+// carries the entrance. The slight growth is what says the card arrives on
+// top of the stack, over the cards under it, where a rise would read as
+// arriving from below.
+const SCALE_FROM = 0.96;
 
 const scaleInOnTop: PropSource = (sprite, changeset) =>
   isTopCard(sprite, changeset) ? [SCALE_FROM, 1] : [1, 1];
