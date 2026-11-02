@@ -309,10 +309,15 @@ async function selectModel(page: Page, requested: string) {
   let optionId = await items
     .nth(matches[0].index)
     .getAttribute('data-test-llm-select-item');
+  if (optionId === null) {
+    throw new Error(
+      `picker option "${matches[0].name}" has no data-test-llm-select-item id`,
+    );
+  }
   await items.nth(matches[0].index).locator('button').click();
   await expect(page.locator('[data-test-llm-select-selected]')).toHaveAttribute(
     'data-test-llm-select-selected',
-    optionId ?? '',
+    optionId,
   );
   // The picker closes itself after a choice, with an animation; a click on
   // the pill while it is closing would open it again. It hides the mode
@@ -323,7 +328,9 @@ async function selectModel(page: Page, requested: string) {
     .toHaveCount(0, { timeout: 5_000 })
     .then(() => true)
     .catch(() => false);
-  if (!closed) {
+  // Look once more right before the click: a list that finished closing
+  // after the probe gave up would be opened again by it.
+  if (!closed && (await list.count()) > 0) {
     await page.locator('[data-test-llm-select-selected]').click();
     await expect(list).toHaveCount(0, { timeout: 15_000 });
   }
@@ -334,14 +341,18 @@ async function selectModel(page: Page, requested: string) {
 // tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
-// The toggle is a radio group whose radio inputs are visually hidden, so the
-// click goes to the option's label text.
+// The option is found by its mode value, not its label, so a rename of the
+// label does not break the runner. The toggle is disabled while the room
+// activates a mode, so wait for it to be enabled; the radio input is visually
+// hidden, so the check is forced past the visibility test, and Playwright
+// still confirms that it took.
 async function ensureActMode(page: Page, requestedModel: string) {
   let toggle = page.locator('[data-test-llm-mode-toggle]');
   await toggle.waitFor({ state: 'visible', timeout: 60_000 });
-  let act = toggle.getByRole('radio', { name: 'Act', exact: true });
+  let act = toggle.locator('[data-test-pretui-segmented-option="act"]');
   if (!(await act.isChecked())) {
-    await toggle.getByText('Act', { exact: true }).click();
+    await expect(act).toBeEnabled({ timeout: 30_000 });
+    await act.check({ force: true });
   }
   await expect(act, `${requestedModel}: room is in Act mode`).toBeChecked({
     timeout: 30_000,
