@@ -1,15 +1,14 @@
 import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { decideRoomInvite } from '../lib/room-invite-policy';
 
 import type MatrixService from '../services/matrix-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// Invites the AI bot or the submission bot to a room. It refuses to invite a
-// person: an end user's Matrix id is shown only to users who share a realm
-// with them (ADR 011 §1.5), and `decideRoomInvite` says why the host can't
-// check that for an invite.
+// Invites the AI bot or the submission bot to a room.
+// `MatrixService.inviteUserToRoom` refuses a person: an end user's Matrix id
+// is shown only to users who share a realm with them (ADR 011 §1.5), and
+// `decideRoomInvite` says why the host can't check that for an invite.
 export default class InviteUserToRoomTool extends HostBaseTool<
   typeof BaseToolModule.InviteUserToRoomInput
 > {
@@ -33,12 +32,6 @@ export default class InviteUserToRoomTool extends HostBaseTool<
   ): Promise<undefined> {
     await this.matrixService.ready;
     let userId = this.matrixService.getFullUserId(input.userId);
-    let decision = decideRoomInvite(userId, this.matrixService.userId!);
-    if (!decision.allowed) {
-      throw new Error(
-        `cannot invite ${userId}: ${decision.reason}. This tool invites only the AI bot and the submission bot, because a person's Matrix id is shown only to users who share a realm with them (ADR 011 §1.5).`,
-      );
-    }
     if (await this.matrixService.isUserInRoom(input.roomId, userId)) {
       throw new Error(`user already in room: ${userId}`);
     }

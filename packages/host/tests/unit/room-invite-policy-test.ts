@@ -61,13 +61,17 @@ module('Unit | lib | room-invite-policy', function () {
       );
     });
 
-    test('refuses a bare localpart', function (assert) {
-      assert.false(decideRoomInvite('aibot', inviter).allowed);
-      assert.false(decideRoomInvite('@aibot', inviter).allowed);
-    });
-
-    test('refuses a bot id with an empty server', function (assert) {
-      assert.false(decideRoomInvite('@aibot:', inviter).allowed);
+    test('refuses an id that is not a full Matrix user id', function (assert) {
+      for (let invitee of ['aibot', '@aibot', 'aibot:localhost', '@aibot:']) {
+        let decision = decideRoomInvite(invitee, inviter);
+        assert.false(decision.allowed, `${invitee} is refused`);
+        assert.ok(
+          /is not a full Matrix user id/.test(
+            decision.allowed ? '' : decision.reason,
+          ),
+          `${invitee}: reason names the rule`,
+        );
+      }
     });
   });
 

@@ -38,8 +38,13 @@ export function decideRoomInvite(
   inviterUserId: string,
 ): RoomInviteDecision {
   let inviteeServer = getMatrixServerName(inviteeUserId);
-  let inviterServer = getMatrixServerName(inviterUserId);
-  if (!inviteeServer || inviteeServer !== inviterServer) {
+  if (!inviteeUserId.startsWith('@') || !inviteeServer) {
+    return {
+      allowed: false,
+      reason: `${inviteeUserId} is not a full Matrix user id`,
+    };
+  }
+  if (inviteeServer !== getMatrixServerName(inviterUserId)) {
     return {
       allowed: false,
       reason: `${inviteeUserId} is not on this homeserver`,
