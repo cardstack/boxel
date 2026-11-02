@@ -168,7 +168,7 @@ export interface CompiledAnonymousGrant {
   // without writing anything.
   sendsOutside?: true;
   // Set where that `callApi` sends a key shared with the realm: such a
-  // caller is served only through a share whose owner agreed to it.
+  // caller is served only through a share whose key allows anonymous use.
   sendsSharedKey?: true;
   // For a grant on a write: who such a caller's writes are made as. Settled
   // for each write, once the target is known. A write grant without one admits
@@ -1467,7 +1467,7 @@ async function compileDocument(
           issue(
             'anonymous-grant-user-key',
             `${grantPath}.operation`,
-            `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` sends the invoking user's own key (\`{{userKey}}\`), which a caller who isn't signed in doesn't have, so it never admits one. It still applies to signed-in callers. To open it to anyone, send a key shared with the realm (\`{{apiKey}}\`), whose owner allows anonymous use of it`,
+            `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` sends the invoking user's own key (\`{{userKey}}\`), which a caller who isn't signed in doesn't have, so it never admits one. It still applies to signed-in callers. To open it to anyone, send a key shared with the realm (\`{{apiKey}}\`), from a key whose owner allows anonymous use`,
           );
           opensToAnonymous = false;
           operationRefusesAnonymous = true;

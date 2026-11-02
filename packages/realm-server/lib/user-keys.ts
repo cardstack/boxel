@@ -490,10 +490,11 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
 
 // Whether people who aren't signed in may use a key, as its owner sets it:
 // `anonymous` true or false, and an optional `anonymousDailyCap`, a whole
-// number of calls a day, given only with anonymous use.
+// number of calls a day, given only with anonymous use. `cap` is undefined
+// where none was named, and null where one was cleared.
 export interface AnonymousUse {
   anonymous: boolean;
-  cap: number | null;
+  cap: number | null | undefined;
 }
 
 export function validateAnonymousUse({
@@ -506,7 +507,10 @@ export function validateAnonymousUse({
   if (anonymous !== undefined && typeof anonymous !== 'boolean') {
     throw new UserKeyError(400, 'anonymous is true or false');
   }
-  if (anonymousDailyCap === undefined || anonymousDailyCap === null) {
+  if (anonymousDailyCap === undefined) {
+    return { anonymous: anonymous === true, cap: undefined };
+  }
+  if (anonymousDailyCap === null) {
     return { anonymous: anonymous === true, cap: null };
   }
   if (anonymous !== true) {
@@ -529,19 +533,49 @@ export function validateAnonymousUse({
   return { anonymous: true, cap: anonymousDailyCap };
 }
 
+// Whether a key can serve people who aren't signed in at all: one sent as it
+// is, a Google service account, or an OAuth client that gets its own tokens
+// (`client_credentials`). A sign-in app's calls are each person's own
+// sign-in, and a connection is one person's, so neither ever serves someone
+// who isn't signed in, and neither takes the setting.
+export function servesVisitorsSQL(key: string, client: string): string {
+  return `(${key}.kind NOT IN ('oauth-client', 'oauth-connection') OR (${key}.kind = 'oauth-client' AND ${client}.grant_type = 'client_credentials'))`;
+}
+
 // Writes whether people who aren't signed in may use one of the owner's keys,
-// in the caller's transaction. Turning it off clears the cap.
+// in the caller's transaction. Turning it off clears the cap; turning it on
+// without naming a cap keeps the one the key has.
 export async function writeAnonymousUseIn(
   txQuery: Querier,
   owner: string,
   keyId: string,
   { anonymous, cap }: AnonymousUse,
 ): Promise<UserKeyMetadata> {
+  let [key] = await txQuery([
+    `SELECT ${servesVisitorsSQL('k', 'c')} AS serves_visitors FROM user_keys k LEFT JOIN oauth_clients c ON c.key_id = k.id WHERE k.id = `,
+    param(keyId),
+    ` AND k.owner = `,
+    param(owner),
+    ` FOR UPDATE OF k`,
+  ]);
+  if (!key) {
+    throw notFound();
+  }
+  if (anonymous && !key.serves_visitors) {
+    throw new UserKeyError(
+      400,
+      "a sign-in app or connection is each person's own sign-in, so it never serves people who aren't signed in",
+    );
+  }
   let [row] = await txQuery([
     `UPDATE user_keys SET anonymous = `,
     param(anonymous),
     `, anonymous_daily_cap = `,
-    param(anonymous ? cap : null),
+    ...(!anonymous
+      ? [`NULL`]
+      : cap === undefined
+        ? [`anonymous_daily_cap`]
+        : [param(cap)]),
     ` WHERE id = `,
     param(keyId),
     ` AND owner = `,

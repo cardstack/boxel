@@ -49,7 +49,10 @@ import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
-import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
+import AnonymousUseFields, {
+  anonymousCapOf,
+  servesVisitors,
+} from './anonymous-use-fields.gts';
 import {
   failureMessage,
   isSignedOut,
@@ -116,7 +119,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           @key={{key}}
                           @onUnshare={{this.unshare}}
                           @onChangeAnonymousUse={{if
-                            (this.shareable key)
+                            (this.servesVisitors key)
                             this.startAnonymousUse
                           }}
                         >
@@ -627,7 +630,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   // A key that can be shared: any but a connection, which is its owner's own
   // sign-in.
-  private shareable = (key: ListedKey) => key.kind !== 'oauth-connection';
+
+  private servesVisitors = (key: ListedKey) => servesVisitors(key);
 
   // The panel starts from the key's setting as the listing gives it.
   private startAnonymousUse = (key: ListedKey) => {

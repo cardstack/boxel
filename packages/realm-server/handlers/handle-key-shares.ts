@@ -190,10 +190,8 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
 // destinations, so it needs the session a grant does (see
 // `handle-user-key-grants.ts`); one into a share with none takes the ticket
 // alone. The answer lists the bindings it moved to the new key.
-export function handleSwapKeyIntoShare({
-  dbAdapter,
-  secureOriginURL,
-}: CreateRoutesArgs): Handler {
+export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter, secureOriginURL } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SWAP_ATTRIBUTES);
@@ -212,6 +210,7 @@ export function handleSwapKeyIntoShare({
         keyId: attributes.keyId,
         ticket,
         via,
+        opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       },
     );
     await sendJSON(ctxt, 200, {

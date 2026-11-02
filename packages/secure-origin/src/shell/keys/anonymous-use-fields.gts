@@ -18,6 +18,22 @@ const MAX_CAP = 2_147_483_647;
 
 // The cap as typed: null for none (empty, or anonymous use not allowed), a
 // whole number of calls from one up, or undefined when it is neither.
+// Whether a key can serve people who aren't signed in at all, and so takes
+// the setting and is held to a workspace's rule about them: a sign-in app's
+// calls are each person's own sign-in, and a connection is one person's, so
+// neither ever does. An app that gets its own tokens (`client_credentials`)
+// does.
+export function servesVisitors(key: {
+  kind: string;
+  oauth?: { client?: { grantType: string } };
+}): boolean {
+  return (
+    key.kind !== 'oauth-connection' &&
+    (key.kind !== 'oauth-client' ||
+      key.oauth?.client?.grantType === 'client_credentials')
+  );
+}
+
 export function anonymousCapOf(
   anonymous: boolean,
   text: string,

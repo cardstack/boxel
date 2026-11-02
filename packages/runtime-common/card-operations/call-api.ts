@@ -797,9 +797,9 @@ export interface CallApiSlotLookup {
   // `anonymous` says where they called from.
   caller: string;
   // Set for a caller who isn't signed in, whom the realm's policy admitted.
-  // Only `{{apiKey}}` slots are filled for one, from a share whose owner
-  // allowed anonymous use, and each call counts against the share's limit
-  // for their address and its anonymous cap.
+  // Only `{{apiKey}}` slots are filled for one, from a share whose key allows
+  // anonymous use, and each call counts against the share's limit for their
+  // address, their part of the share's budget, and the key's anonymous cap.
   anonymous?: AnonymousCallApiCaller;
   mode: CallApiMode;
   // The request as the definition cache holds it now, which the binding's

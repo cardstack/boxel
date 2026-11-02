@@ -9,9 +9,10 @@ import type { CreateRoutesArgs } from '../routes.ts';
 // keyless `callApi` sends no key at all, so this is exactly whether a share in
 // the realm could be asked to serve such a caller.
 //
-// A key's owner agrees to that use when sharing a key into the realm
-// (`key-shares.ts`); the secure window reads this to say so, and sharing
-// requires the agreement where it is true.
+// Sharing a key into such a realm means those callers will use it, so only a
+// key whose owner allows anonymous use, on the key itself, is shared or
+// swapped in there (`key-shares.ts`). The secure window and the CLI read this
+// to say so before sharing.
 export async function opensSharedKeysToAnonymous(
   realm: Pick<Realm, 'getCompiledPolicy'>,
 ): Promise<boolean> {
@@ -38,7 +39,8 @@ export function realmOpensSharedKeysToAnonymous({
       return false;
     }
     // A policy that can't be read opens nothing that sharing must wait on: a
-    // share without the agreement serves signed-in people only.
+    // share of a key that doesn't allow anonymous use serves signed-in people
+    // only.
     try {
       let realm = await served.mount();
       return realm ? await opensSharedKeysToAnonymous(realm) : false;

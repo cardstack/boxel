@@ -63,6 +63,7 @@ import {
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
+import { servesVisitors } from './anonymous-use-fields.gts';
 import KeyPicker from './key-picker.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
@@ -418,10 +419,11 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   }
 
   // The intro tells of people who aren't signed in where the policy lets them
-  // use a shared key: the key shared there either allows them already, or is
-  // shared only once its owner agrees.
+  // use a shared key: sharing a key there means they will use it, and only a
+  // key whose owner allows it on the key is shared there.
   private get forAnyone() {
-    return this.opensToAnonymous;
+    let key = this.chosenKey;
+    return this.opensToAnonymous && (!key || servesVisitors(key));
   }
 
   private get chosenKey(): UserKey | undefined {
@@ -431,14 +433,25 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   // Where the policy lets people who aren't signed in use a shared key, and
   // the chosen key allows them.
   private get keyAllowsAnonymous() {
-    return this.opensToAnonymous && this.chosenKey?.anonymous === true;
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      key.anonymous === true
+    );
   }
 
   // Where the policy lets them and the chosen key doesn't: the key can't be
   // shared there until its owner allows them on the key page.
   private get keyRefusesAnonymous() {
     let key = this.chosenKey;
-    return this.opensToAnonymous && key !== undefined && !key.anonymous;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      !key.anonymous
+    );
   }
 
   // Neither reading is drawn until the chosen workspace says which applies.

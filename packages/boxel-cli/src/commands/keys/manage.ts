@@ -610,7 +610,7 @@ export async function keysAdd(
   );
   if (options.anonymous && kind === 'oauth-client') {
     throw new Error(
-      "--anonymous is for a key sent with a call; an OAuth client's people each connect their own account",
+      "--anonymous isn't taken when adding an OAuth client: a sign-in app's people each connect their own account, so it never serves people who aren't signed in. For one that gets its own tokens (client_credentials), allow it after adding: `boxel keys anonymous <name> on`",
     );
   }
   checkAddKind(kind);
@@ -754,18 +754,12 @@ export async function keysShare(
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
-  let realm = canonicalRealmUrl(options.realm);
-  let opens = await realmOpensToAnonymous(ctx.realmServerUrl, token, realm);
-  if (opens && !key.anonymous) {
-    throw new Error(
-      `${realm} lets people who aren't signed in make calls that send a shared key, so sharing ${name} there means they will use it, and ${name} doesn't allow them. To share it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls>)`,
-    );
-  }
-  if (opens) {
-    console.error(
-      `${FG_YELLOW}Warning: sharing ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}.${RESET}`,
-    );
-  }
+  let opens = await warnWhereVisitorsWillUse(ctx, token, {
+    realm: options.realm,
+    key,
+    name,
+    doing: 'sharing',
+  });
   let share = await shareUserKey(ctx.realmServerUrl, token, {
     keyId: key.id,
     realm: options.realm,
@@ -780,6 +774,57 @@ export async function keysShare(
     }
   });
   return share;
+}
+
+// Whether a key can serve people who aren't signed in at all: a sign-in app
+// or a connection is each person's own sign-in, so it never does.
+function servesVisitors(key: UserKeyMetadata): boolean {
+  if (key.kind === 'oauth-connection') {
+    return false;
+  }
+  return (
+    key.kind !== 'oauth-client' ||
+    key.oauth?.client?.grantType === 'client_credentials'
+  );
+}
+
+// Sharing or swapping a key into a realm whose policy lets people who aren't
+// signed in make calls that send a shared key means they will use it, as the
+// secure window's share and swap pages say. This asks the realm, refuses a
+// key that doesn't allow anonymous use there (as the realm server does), and
+// warns before going on. Answers whether the realm opens such calls.
+async function warnWhereVisitorsWillUse(
+  ctx: Context,
+  token: string,
+  {
+    realm: given,
+    key,
+    name,
+    doing,
+  }: {
+    realm: string;
+    key: UserKeyMetadata;
+    name: string;
+    doing: 'sharing' | 'swapping';
+  },
+): Promise<boolean> {
+  if (!servesVisitors(key)) {
+    return false;
+  }
+  let realm = canonicalRealmUrl(given);
+  let opens = await realmOpensToAnonymous(ctx.realmServerUrl, token, realm);
+  if (!opens) {
+    return false;
+  }
+  if (!key.anonymous) {
+    throw new Error(
+      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls>)`,
+    );
+  }
+  console.error(
+    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}.${RESET}`,
+  );
+  return true;
 }
 
 // `--anonymous-cap <calls>`, given only with `--anonymous` (or `on`): a whole
@@ -880,6 +925,12 @@ export async function keysSwap(
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, options.key);
+  await warnWhereVisitorsWillUse(ctx, token, {
+    realm: options.realm,
+    key,
+    name: options.key,
+    doing: 'swapping',
+  });
   let listed = (
     await listRealmShares(ctx.realmServerUrl, token, options.realm)
   ).find((s) => s.label === label);

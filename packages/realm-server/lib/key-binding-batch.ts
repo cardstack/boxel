@@ -101,7 +101,7 @@ export interface BatchOperation {
   status: BatchSlotStatus;
   slots: BatchSlot[];
   // Whether the realm's policy opens it to people who aren't signed in, who
-  // are then served through a share whose owner agreed to it
+  // are then served through a share whose key allows anonymous use
   // (`Realm.sharedKeyOperationsOpenToAnonymous`).
   openToAnonymous: boolean;
 }

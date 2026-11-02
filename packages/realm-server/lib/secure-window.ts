@@ -100,7 +100,7 @@ export interface SecureWindowContext {
     directWriter: boolean;
     // Whether the realm's policy lets people who aren't signed in make a call
     // that sends a shared key (`anonymous-key-use.ts`): sharing a key into it
-    // then takes its owner's agreement to their using it.
+    // means they will use it, so only a key that allows it is shared there.
     opensToAnonymous: boolean;
   };
   card?: { name: string; module: string; exportName: string };

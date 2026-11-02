@@ -187,7 +187,12 @@ grant.
   grant on its own. The window approves every slot of an operation, so a
   `--slot` approval that needs a new grant is refused in the terminal.
   `--interactive` also asks the batch for pipelines-only slots, prints what
-  interactive use allows, and approves interactively. A share's first
+  interactive use allows, and approves interactively. For the operations the
+  policy opens to visitors (`openToAnonymous`) it prints the same lines the
+  approve window shows: "Anyone on the internet who opens this card,
+  including people who aren't signed in, can make … with <share>[, up to N
+  calls a day all together]." where the share's key allows it, and otherwise
+  that they're asked to sign in. A share's first
   interactive approval made in the terminal needs `--daily-budget <calls>`;
   in the window, the page starts on interactive use (`#interactive=1`) and
   asks for the budget itself. Re-approving a slot last approved `interactive`
@@ -314,18 +319,21 @@ Three things must all hold before such a caller's `callApi` sends anything:
    for them: `callApiOperation` refuses it `actor-required` before any
    binding is read.
 3. **There is room in the limits for them** (see the `key-limits` skill): a
-   bucket per client address at the share's per-person rate, and, where the
-   key's owner set one, the key's anonymous cap, a daily budget of calls all
-   of them share in every realm the key is shared into. Their calls spend the
-   share's daily and monthly budgets too, and the share's daily budget still
-   bounds them.
+   bucket per client address at the share's per-person rate; their part of
+   the share's daily budget (`KEY_ANONYMOUS_SHARE_PERCENT`, default 50), so
+   signed-in readers keep the rest; and, where the key's owner set one, the
+   key's anonymous cap, counted once across every realm the key is shared
+   into. Their calls spend the share's daily and monthly budgets too.
 
 The realm passes the caller's address (the anonymous limiter's `rateLimitKey`,
 an IPv6 caller's /64) as `callApiAnonymous` on the invocation; the lookup's
 `caller` is then `"anonymous"` and `anonymous.address` says where from. A
 caller the realm couldn't place has no address and is refused
-`actor-required`. A swap needs nothing of its own here: whether visitors may
-use the share follows the key swapped in, as its owner set it.
+`actor-required`. Whether visitors may use a share follows the key it holds:
+swapping a key into a share in a realm whose policy opens shared-key calls to
+visitors is refused 400 for a key that doesn't allow anonymous use (see the
+`key-shares` skill). A sign-in app or a connection never serves visitors and
+takes no anonymous setting (see the `user-keys` skill).
 
 The gate judges every behavior but a create against a stored card, so a
 visitor invokes a `callApi` on a card instance, never on its type. In a realm

@@ -304,7 +304,7 @@ export function registerKeysCommand(program: Command): void {
     )
     .option(
       '--anonymous',
-      "Not offered, and refused by the realm server: whether people who aren't signed in can use a shared key is its owner's choice when sharing it (boxel keys share --anonymous)",
+      "Not offered, and refused by the realm server: whether people who aren't signed in can use a key is its owner's setting on the key (boxel keys anonymous), and where is the realm's policy's",
     )
     .option(
       '--timeout <seconds>',

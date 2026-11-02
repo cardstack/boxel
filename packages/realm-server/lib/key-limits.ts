@@ -52,13 +52,14 @@ import { UserKeyError } from './user-keys.ts';
 //   writers each get one notice for that period (`key_limit_notices`).
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
-// - **Callers who aren't signed in**, served by a share whose owner allows
+// - **Callers who aren't signed in**, served by a share whose key allows
 //   anonymous use, have a bucket per address (the rate the share sets for each
 //   person, counted for each address instead), and spend the share's daily
-//   and monthly budgets as everyone does. Where the owner set the share's
-//   optional anonymous cap, they also draw together from it: a daily budget
-//   of calls inside the share's own, so they can't use up what signed-in
-//   readers rely on.
+//   and monthly budgets as everyone does. All of them together spend at most
+//   `anonymousSharePercent` of the share's daily budget, so signed-in readers
+//   always keep the rest. Where the key's owner set the key's optional
+//   anonymous cap, they also draw together from it, across every realm the
+//   key is shared into.
 //
 // Only the key's owner changes a share's or a key's limits, from the secure
 // window or the CLI. A realm's other direct writers can't raise them; they
@@ -104,7 +105,8 @@ export type KeyLimitEvent =
       realm: string;
       operation: string;
       // The limit that refused the call; absent when the counters couldn't
-      // be read. `anonymousCap` marks the share's anonymous cap.
+      // be read. `anonymousCap` marks a limit for people who aren't signed
+      // in: the key's anonymous cap, or their part of a share's budget.
       limit?: Limit;
       retryAfterSeconds: number;
     }
@@ -203,6 +205,11 @@ function anonymousCapKey(keyId: string): string {
   return counterKey('key-limit', 'key', keyId, 'anonymous');
 }
 
+// What people who aren't signed in have spent of one share's daily budget.
+function anonymousShareKey(subject: LimitSubject): string {
+  return counterKey('key-limit', subject.kind, subject.id, 'anonymous');
+}
+
 function bucketOf(limits: KeyLimits) {
   return {
     burst: limits.rateBurst,
@@ -218,8 +225,10 @@ interface CountedBudget {
 }
 
 // The budgets a call spends: the share's or key's daily and monthly budgets,
-// and for a caller who isn't signed in, the key's anonymous cap too, where
-// its owner set one.
+// and for a caller who isn't signed in two more. One is their part of the
+// share's daily budget (`anonymousSharePercent` of it), so signed-in readers
+// always keep the rest. The other is the key's anonymous cap, where its owner
+// set one, counted once across every realm the key is shared into.
 function budgetsOf(
   limited: LimitedSubject,
   anonymous?: AnonymousCallApiCaller,
@@ -229,13 +238,26 @@ function budgetsOf(
     { key, period: 'day', limit: limited.limits.dailyBudget },
     { key, period: 'month', limit: limited.limits.monthlyBudget },
   ];
+  if (anonymous && limited.subject.kind === 'share') {
+    budgets.push({
+      key: anonymousShareKey(limited.subject),
+      period: 'day',
+      limit: Math.max(
+        1,
+        Math.floor(
+          (limited.limits.dailyBudget *
+            keyLimitDefaults().anonymousSharePercent) /
+            100,
+        ),
+      ),
+      anonymousCap: true,
+    });
+  }
   if (anonymous && limited.anonymousDailyCap != null && limited.capKeyId) {
     budgets.push({
       key: anonymousCapKey(limited.capKeyId),
       period: 'day',
-      // The share's own daily budget bounds everyone's calls through it, so
-      // a cap above it reaches no further.
-      limit: Math.min(limited.anonymousDailyCap, limited.limits.dailyBudget),
+      limit: limited.anonymousDailyCap,
       anonymousCap: true,
     });
   }
@@ -484,7 +506,7 @@ function refuse(
         title: 'Over budget',
         detail:
           'anonymousCap' in limit
-            ? `operation "${call.operation}" wasn't sent: this realm's limit for its shared key, for people who aren't signed in, is reached. It resets in ${wait}, and signing in may let you use it now.`
+            ? `operation "${call.operation}" wasn't sent: the limit on its shared key for people who aren't signed in is reached. It resets in ${wait}, and signing in may let you use it now.`
             : subject.kind === 'share'
               ? `operation "${call.operation}" wasn't sent: this realm's limit for its shared key is reached. It resets in ${wait}.`
               : `operation "${call.operation}" wasn't sent: the ${(limit as { period: BudgetPeriod }).period === 'day' ? 'daily' : 'monthly'} budget you set for your key is used up. It resets in ${wait}.`,

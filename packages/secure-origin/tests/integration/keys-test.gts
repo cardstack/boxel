@@ -2465,6 +2465,36 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
+    test('in a workspace that lets people who aren’t signed in use shared keys, a key is swapped in only if it allows them, and the page says they will use it', async function (assert) {
+      let allowing = KEYS.map((k) =>
+        k.id === 'key-1' ? { ...k, anonymous: true, anonymousDailyCap: 50 } : k,
+      );
+      serve({
+        'POST _secure-window/context': () =>
+          context({ realm: { ...WORKSPACE, opensToAnonymous: true } }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      await click('[data-test-key-choice="Weather service"] input');
+      assert.dom('[data-test-swap-key-key-refuses]').exists();
+      assert
+        .dom('[data-test-swap-key-save]')
+        .isDisabled('a key that doesn’t allow them isn’t swapped in');
+
+      serve({ 'GET _user-keys': () => json(200, keyResources(allowing)) });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      await click('[data-test-key-choice="Weather service"] input');
+      assert
+        .dom('[data-test-swap-key-key-allows] strong')
+        .hasText('they will use this key');
+      assert.dom('[data-test-swap-key-key-allows]').includesText('up to 50');
+      assert.dom('[data-test-swap-key-save]').isNotDisabled();
+    });
+
     test('opened by the CLI, tells it once the key is in, and only then', async function (assert) {
       let submitted: { action: string; fields: [string, string][] }[] = [];
       let submit = HTMLFormElement.prototype.submit;

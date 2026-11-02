@@ -407,6 +407,7 @@ describe('boxel keys: managing keys', () => {
         'add',
         'replace',
         'delete',
+        'anonymous',
         'share',
         'unshare',
         'swap',
@@ -425,7 +426,12 @@ describe('boxel keys: managing keys', () => {
       '--api-host',
     ];
     for (let [name, kindOption, oauthOption, replaceOption] of [
-      ['add', ['--kind'], oauthOptions, []],
+      [
+        'add',
+        ['--kind'],
+        [...oauthOptions, '--anonymous', '--anonymous-cap'],
+        [],
+      ],
       ['replace', [], [], ['--no-subject']],
     ] as const) {
       let command = keys!.commands.find((c) => c.name() === name)!;

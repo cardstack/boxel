@@ -176,10 +176,23 @@ policy opens the operation to them, the key the share holds allows anonymous
 use, and the limits have room (see the `key-bindings` skill). A personal
 key's `{{userKey}}` slot never fills for them, whatever the setting.
 
+Only a key that can serve people who aren't signed in takes the setting: a
+static key, a Google service account, or an OAuth client whose grant type is
+`client_credentials` (`servesVisitorsSQL`). A sign-in app (an
+`authorization_code` client) and a connection are each person's own sign-in
+and never serve visitors: `anonymous: true` on one is refused 400, the key
+page offers them no Change, and sharing or swapping one has no anonymous
+check. `boxel keys add --anonymous` is refused for any OAuth client; a
+`client_credentials` client is allowed afterwards with
+`boxel keys anonymous <name> on`.
+
 The cap is calls a UTC day across everyone who isn't signed in, in every
 realm the key is shared into, counted under
-`["key-limit","key","<key-id>","anonymous"]`. Each share's own daily budget
-still bounds the calls through that share (see the `key-limits` skill).
+`["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
+Separately, everyone who isn't signed in spends at most
+`KEY_ANONYMOUS_SHARE_PERCENT` (default 50) of each share's daily budget, so
+signed-in readers keep the rest whatever the cap (see the `key-limits`
+skill).
 
 The owner sets it:
 
@@ -193,18 +206,19 @@ The owner sets it:
   answering the key; `boxel keys anonymous <name> on|off [--cap <calls>]`; or
   the key's page in the secure window. Like the limits route, it takes a
   secure session (the window's or the CLI's) and no ticket; the app's session
-  is refused 403, and another user's key answers 404. Turning it off clears
-  the cap. `anonymous` must be true or false, and a cap without
+  is refused 403, and another user's key answers 404. Turning it on without
+  `anonymousDailyCap` (or `boxel keys anonymous <name> on` without `--cap`)
+  keeps the key's current cap; `anonymousDailyCap: null` clears it, and
+  turning it off clears it. `anonymous` must be true or false, and a cap without
   `anonymous: true`, or outside 1 to the limits' maximum, is refused 400
   (`validateAnonymousUse` in `lib/user-keys.ts`).
 
-Sharing never changes it. A key that doesn't allow anonymous use is refused
-sharing into a realm whose policy opens shared-key calls to people who aren't
-signed in, since they would use it there; its owner allows it for the key
-first (see the `key-shares` skill).
+Sharing and swapping never change it. A key that doesn't allow anonymous use
+is refused sharing or swapping into a share in a realm whose policy opens
+shared-key calls to people who aren't signed in, since they would use it
+there; its owner allows it for the key first (see the `key-shares` skill).
 
-The change applies at once in every realm the key is shared into, and a key
-swapped into a share brings its own setting with it.
+The change applies at once in every realm the key is shared into.
 
 ## Google service accounts
 

@@ -62,6 +62,8 @@ export interface BatchOperation {
   instance: string | null;
   status: BatchSlotStatus;
   slots: BatchSlot[];
+  // Whether the realm's policy opens it to people who aren't signed in.
+  openToAnonymous?: boolean;
 }
 
 export interface BatchGroup {
@@ -95,6 +97,9 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
+  // Whether the share's key allows people who aren't signed in, and its cap.
+  anonymous?: boolean;
+  anonymousDailyCap?: number | null;
 }
 
 export interface ApprovalBatch {

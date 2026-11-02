@@ -124,17 +124,30 @@ keyless `callApi` doesn't count. The secure window reads it as
 policy opens such calls it prints a warning that sharing means people who
 aren't signed in will use the key, and refuses a key that doesn't allow it,
 pointing to `boxel keys anonymous <name> on`. The AI assistant warns the user
-before opening `share-key` for such a workspace (`SYSTEM_MESSAGE` in
-`runtime-common/ai/constants.ts`, and the `open-secure-window` tool's
-description).
+before opening `share-key` for such a workspace (`SYSTEM_MESSAGE` in `runtime-common/ai/constants.ts`, and the
+`open-secure-window` tool's description). It tells one by the workspace's
+`realm.json` naming a `policy` card with a grant whose `where` is
+`actor() == "anonymous"` on a `callApi` operation whose every credential slot
+is `{{apiKey}}`.
 
 The policy is asked only once the ticket and the owner's direct write are
 checked, so nobody else learns from the answer what it opens. A key already
 shared into a realm whose policy later opens calls to visitors serves them if
 the key allows anonymous use, and otherwise they are asked to sign in.
 
-A swap needs nothing of its own: whether visitors may use the share follows
-the key swapped in, as its owner set it.
+A swap follows the same rule (`swapKeyIntoShare`, given the policy's
+`opensToAnonymous` too): swapping a key into a share in a realm whose policy
+opens shared-key calls to visitors means they will use it, so a key that
+doesn't allow anonymous use is refused 400, pointing to the key's page or
+`boxel keys anonymous <name> on`. Otherwise the `swap-key` page says in bold
+that "they will use this key", and `boxel keys swap` prints the same warning
+as `boxel keys share`.
+
+Only a key that can serve people who aren't signed in is held to this: a
+static key, a Google service account, or an OAuth client whose grant type is
+`client_credentials` (`servesVisitorsSQL` in `lib/user-keys.ts`). A sign-in
+app (an `authorization_code` client) never serves visitors, so sharing or
+swapping one has no anonymous check.
 
 ## Visibility
 
