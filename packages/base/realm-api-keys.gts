@@ -1,5 +1,5 @@
 import type { CardContext } from './card-api';
-import type { RealmKeyShareField } from './command';
+import type { KeyShareUsageResult, RealmKeyShareField } from './command';
 import { isLiveRender } from './render-context';
 // The edit format's other rows are the card API's field containers, which
 // Pret UI has no counterpart for, so this row is one too.
@@ -9,6 +9,7 @@ import KeyIcon from '@cardstack/boxel-icons/key';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { Popconfirm } from '@cardstack/pretui/components/popconfirm';
+import GetKeyShareUsageTool from '@cardstack/boxel-host/commands/get-key-share-usage';
 import ListRealmKeySharesTool from '@cardstack/boxel-host/commands/list-realm-key-shares';
 import OpenSecureWindowTool from '@cardstack/boxel-host/commands/open-secure-window';
 import SuspendKeyShareTool from '@cardstack/boxel-host/commands/suspend-key-share';
@@ -55,6 +56,83 @@ function errorText(err: unknown): string {
 }
 
 type ChangeKind = 'suspend' | 'unshare';
+
+// Why a call was refused, in the words a realm's writers read. A code with
+// none here is shown as it is.
+const REFUSED_BECAUSE: Record<string, string> = {
+  'rate-limited': 'Over a caller’s rate limit',
+  'over-budget': 'Over budget',
+  'rate-limit-unavailable': 'Use couldn’t be counted',
+  'share-suspended': 'Shared key suspended',
+  'credential-rejected': 'Key rejected by the service',
+  'key-rejected': 'Key rejected by the service',
+  'binding-needs-reapproval': 'Request changed since it was approved',
+  'interactive-use-not-approved': 'Not approved for use from a card',
+  'guard-refused': 'Destination refused',
+  'upstream-timeout': 'Service didn’t answer in time',
+  'response-too-large': 'Response too large',
+};
+
+function refusalText(code: string | undefined): string {
+  return (code && REFUSED_BECAUSE[code]) ?? code ?? '';
+}
+
+// How the service answered, by HTTP status.
+function statusText(status: string | undefined, outcome?: string): string {
+  let code = Number(status);
+  if (outcome === 'vendor-forbidden') {
+    return `${status} Forbidden`;
+  }
+  if (code === 401) {
+    return `${status} Key rejected`;
+  }
+  if (code === 429) {
+    return `${status} Rate limited by the service`;
+  }
+  if (code >= 200 && code < 300) {
+    return `${status} OK`;
+  }
+  return status ?? '';
+}
+
+const COUNT = new Intl.NumberFormat('en-US');
+
+function count(n: number | undefined): string {
+  return COUNT.format(n ?? 0);
+}
+
+function calls(n: number | undefined): string {
+  return `${count(n)} ${n === 1 ? 'call' : 'calls'}`;
+}
+
+function when(iso: string | undefined): string {
+  return iso
+    ? new Date(iso).toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '';
+}
+
+// Who called, by Matrix id. Someone the user isn't shown, since no
+// permission row in the realm names both of them, reads as someone else, and
+// in the list of callers all of them are counted together as others.
+function callerText(caller: string | undefined, withheld?: boolean): string {
+  if (withheld) {
+    return 'Others';
+  }
+  return caller || 'Someone not signed in';
+}
+
+function lastCallerText(
+  caller: string | undefined,
+  withheld?: boolean,
+): string {
+  if (withheld) {
+    return 'someone else';
+  }
+  return caller || 'someone not signed in';
+}
 
 // A change to one share that is asking for confirmation.
 type PendingChange = {
@@ -179,6 +257,245 @@ class ShareChange extends GlimmerComponent<ShareChangeSignature> {
   </template>
 }
 
+interface ShareUsageSignature {
+  Args: {
+    share: RealmKeyShareField;
+    context: CardContext | undefined;
+    // Opens the secure window where the owner of the share's key changes its
+    // limits.
+    onEditLimits: (share: RealmKeyShareField) => void;
+  };
+}
+
+// One share's usage, as the realm's direct writers read it: what it spent
+// today and this month against its budgets, when it was last used and by
+// whom, the callers who used it most this month, the calls refused and why,
+// how the service answered, where its key is sent with any destination whose
+// service rejected it, and its limits. The owner of the key it holds changes
+// the limits in the secure window, since the app's session may not; another
+// writer sees them and, if they think the share is being abused, suspends it.
+class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
+  @tracked private usage: KeyShareUsageResult | undefined;
+  @tracked private error: string | undefined;
+
+  private load = restartableTask(async (shareId: string) => {
+    let toolContext = this.args.context?.toolContext;
+    if (!toolContext) {
+      return;
+    }
+    try {
+      this.usage = await new GetKeyShareUsageTool(toolContext).execute({
+        shareId,
+      });
+      this.error = undefined;
+    } catch (err) {
+      this.error = errorText(err);
+    }
+  });
+
+  private follow = modifier((_element, [shareId]: [string | undefined]) => {
+    if (shareId) {
+      this.load.perform(shareId);
+    }
+  });
+
+  private editLimits = () => this.args.onEditLimits(this.args.share);
+
+  <template>
+    <div class='usage' {{this.follow @share.shareId}}>
+      {{#if this.error}}
+        <p
+          class='note error'
+          role='alert'
+          data-test-realm-key-share-usage-error
+        >
+          This key’s usage couldn’t be loaded:
+          {{this.error}}
+        </p>
+      {{else if this.usage.visible}}
+        <div class='usage-body' data-test-realm-key-share-usage>
+          <dl class='budgets'>
+            <div class='budget' data-test-realm-key-share-budget='day'>
+              <dt>Today</dt>
+              <dd><strong>{{count this.usage.day.used}}</strong>
+                of
+                {{calls this.usage.day.budget}}</dd>
+            </div>
+            <div class='budget' data-test-realm-key-share-budget='month'>
+              <dt>This month</dt>
+              <dd><strong>{{count this.usage.month.used}}</strong>
+                of
+                {{calls this.usage.month.budget}}</dd>
+            </div>
+          </dl>
+          <p class='note' data-test-realm-key-share-last-use>
+            {{#if this.usage.lastUseAt}}
+              Last used
+              {{when this.usage.lastUseAt}}
+              by
+              {{lastCallerText
+                this.usage.lastUseCaller
+                this.usage.lastUseCallerWithheld
+              }}{{#if (eq this.usage.lastUseOutcome 'refused')}}, refused{{/if}}.
+            {{else}}
+              Not used yet.
+            {{/if}}
+          </p>
+          {{#if this.usage.topCallers.length}}
+            <div class='group' data-test-realm-key-share-callers>
+              <p class='note'>Most calls this month</p>
+              <ul class='counts'>
+                {{#each this.usage.topCallers as |entry|}}
+                  <li data-test-realm-key-share-caller={{entry.name}}>
+                    <span>{{callerText entry.name entry.withheld}}</span>
+                    <span class='n'>{{count entry.count}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if this.usage.refusals.length}}
+            <div class='group' data-test-realm-key-share-refusals>
+              <p class='note'>Refused this month</p>
+              <ul class='counts'>
+                {{#each this.usage.refusals as |entry|}}
+                  <li data-test-realm-key-share-refusal={{entry.name}}>
+                    <span>{{refusalText entry.name}}</span>
+                    <span class='n'>{{count entry.count}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if this.usage.vendorOutcomes.length}}
+            <div class='group' data-test-realm-key-share-outcomes>
+              <p class='note'>How the service answered</p>
+              <ul class='counts'>
+                {{#each this.usage.vendorOutcomes as |entry|}}
+                  <li data-test-realm-key-share-outcome={{entry.name}}>
+                    <span>{{statusText entry.name entry.outcome}}</span>
+                    <span class='n'>{{count entry.count}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if this.usage.grants.length}}
+            <div class='group' data-test-realm-key-share-grants>
+              <p class='note'>Sent to</p>
+              <ul class='counts'>
+                {{#each this.usage.grants as |grant|}}
+                  <li
+                    data-test-realm-key-share-grant={{grant.host}}
+                    data-test-realm-key-share-grant-state={{grant.state}}
+                  >
+                    <span class='host'>{{grant.host}}</span>
+                    {{#if (eq grant.state 'rejected')}}
+                      <Chip @tone='danger' @label='Rejected by the service' />
+                    {{else if grant.lastForbiddenAt}}
+                      <span class='note'>Last refused
+                        {{when grant.lastForbiddenAt}}</span>
+                    {{/if}}
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          <div class='limits' data-test-realm-key-share-limits>
+            <p class='note'>
+              Limits:
+              {{count this.usage.rateBurst}}
+              calls at once per caller, refilling
+              {{count this.usage.rateRefillPerMinute}}
+              a minute;
+              {{calls this.usage.dailyBudget}}
+              a day and
+              {{calls this.usage.monthlyBudget}}
+              a month.
+            </p>
+            {{#if this.usage.canEditLimits}}
+              <Button
+                @tone='neutral'
+                @appearance='outlined'
+                @size='s'
+                {{on 'click' this.editLimits}}
+                data-test-realm-key-share-edit-limits
+              >
+                Edit limits
+              </Button>
+            {{/if}}
+          </div>
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      .usage-body {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      .budgets {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-xs);
+        margin: 0;
+      }
+      .budget {
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        background: var(--muted, var(--boxel-100));
+        font-size: var(--boxel-font-size-xs);
+      }
+      dt {
+        color: var(--muted-foreground);
+      }
+      dd {
+        margin: 0;
+      }
+      .group {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .counts {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .counts li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        overflow-wrap: anywhere;
+      }
+      .n {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .host {
+        font-family: var(--font-mono);
+      }
+      .limits {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+      }
+      .note {
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      .error {
+        color: var(--destructive-ink);
+      }
+    </style>
+  </template>
+}
+
 interface RealmApiKeysSignature {
   Args: {
     // The realm this config card configures, or undefined for a config card
@@ -195,8 +512,9 @@ interface RealmApiKeysSignature {
 // for cards there to use, and what a direct writer does with them.
 //
 // The entry shows each share's label, its owner and whether it is in use, why
-// a suspended one is suspended, and the card operations it is approved for in
-// this realm, by type and card as the realm server names them. It never shows or takes a key's value:
+// a suspended one is suspended, the card operations it is approved for in
+// this realm, by type and card as the realm server names them, and its usage
+// and limits (`ShareUsage`). It never shows or takes a key's value:
 // sharing a key, and swapping one into a suspended share, open the secure
 // window, which is the one place a key is chosen, and suspending a share or
 // withdrawing your own needs no key at all. A key is added on the secure
@@ -266,7 +584,11 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
     async (
       request:
         | { mode: 'share-key'; reason: string }
-        | { mode: 'swap-key'; share: string; reason: string },
+        | {
+            mode: 'swap-key' | 'share-limits';
+            share: string;
+            reason: string;
+          },
     ) => {
       let toolContext = this.toolContext;
       let realm = this.args.realm;
@@ -300,6 +622,17 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
       mode: 'swap-key',
       share: share.shareId,
       reason: `Swap one of your keys into “${share.label}”`,
+    });
+  };
+
+  private editLimits = (share: RealmKeyShareField) => {
+    if (!share.shareId) {
+      return;
+    }
+    this.openWindow.perform({
+      mode: 'share-limits',
+      share: share.shareId,
+      reason: `Change the limits of “${share.label}”`,
     });
   };
 
@@ -472,6 +805,11 @@ export default class RealmApiKeys extends GlimmerComponent<RealmApiKeysSignature
                         No operation is approved to use it yet.
                       </p>
                     {{/if}}
+                    <ShareUsage
+                      @share={{share}}
+                      @context={{@context}}
+                      @onEditLimits={{this.editLimits}}
+                    />
                     <div class='actions'>
                       {{#if (eq share.state 'suspended')}}
                         <Button

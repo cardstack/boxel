@@ -99,6 +99,7 @@ const PAGES: Record<string, string> = {
   'enter-key': 'enter-key',
   'share-key': 'share-key',
   'swap-key': 'swap-key',
+  'share-limits': 'share-limits',
   'replace-key': 'replace-key',
   connect: 'connect',
   connected: 'connected',
