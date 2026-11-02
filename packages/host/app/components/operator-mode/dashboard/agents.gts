@@ -67,12 +67,14 @@ export default class Agents extends Component<Signature> {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  // A step the user opened by hand; otherwise the next one to copy is open.
-  // Both are kept with their agent, so a pick made anywhere starts the new
-  // agent at its own next step.
-  @tracked private opened: AgentStep | null = null;
+  // Kept with its agent, so a copy's feedback doesn't carry over to another
+  // agent's steps.
   @tracked private copied: AgentStep | null = null;
   @tracked private pickedWorkspaceURL: string | undefined;
+  // The agent whose finished setup is shown in full: opened with Show steps,
+  // or copied from here, so a last copy doesn't fold the list away under the
+  // user.
+  @tracked private expandedAgent: DashboardAgent | null = null;
 
   private stepsId = `${guidFor(this)}-steps`;
 
@@ -84,10 +86,6 @@ export default class Agents extends Component<Signature> {
 
   private get kind() {
     return agentKindFor(this.matrixService.dashboardAgent);
-  }
-
-  private get openedStep() {
-    return this.opened?.agent === this.kind.id ? this.opened.index : null;
   }
 
   private get copiedStep() {
@@ -150,8 +148,18 @@ export default class Agents extends Component<Signature> {
     return index === null ? '' : `Step ${index + 1} copied`;
   }
 
-  private get openIndex() {
-    return this.openedStep ?? Math.min(this.copiedCount, this.steps.length - 1);
+  // Once every step is copied, the list folds away; the progress bar says
+  // setup is done.
+  private get isSetupDone() {
+    return this.steps.length > 0 && this.copiedCount === this.steps.length;
+  }
+
+  private get showsSteps() {
+    return !this.isSetupDone || this.expandedAgent === this.kind.id;
+  }
+
+  @action private toggleSteps() {
+    this.expandedAgent = this.showsSteps ? null : this.kind.id;
   }
 
   private stepState = (index: number) =>
@@ -179,14 +187,6 @@ export default class Agents extends Component<Signature> {
     this.pickedWorkspaceURL = url;
   }
 
-  // Closing the open step leaves none open (-1) until the user opens one.
-  @action private toggleStep(index: number) {
-    this.opened = {
-      agent: this.kind.id,
-      index: this.openIndex === index ? -1 : index,
-    };
-  }
-
   // The dashboard can't see the terminal or the agent's chat, so copying a
   // step is what counts as doing it. The count is computed from the stored
   // one, so a later step copied in another tab isn't wound back. A copy the
@@ -194,18 +194,13 @@ export default class Agents extends Component<Signature> {
   // step as it was.
   private copyTask = restartableTask(async (index: number, text: string) => {
     let agent = this.kind.id;
-    // The copied step stays open until the feedback ends, though the count
-    // it raises moves the next step to copy.
-    let pin = { agent, index };
-    this.opened = pin;
     let copied = { agent, index };
+    this.expandedAgent = agent;
     try {
       try {
         await navigator.clipboard.writeText(text);
       } catch (error) {
         log.warn(`copying setup step ${index + 1} failed: ${error}`);
-        // The step stays open, as if opened by hand, for another try.
-        this.opened = { agent, index };
         return;
       }
       this.copied = copied;
@@ -215,9 +210,6 @@ export default class Agents extends Component<Signature> {
       // Also when a later copy cancels this one.
       if (this.copied === copied) {
         this.copied = null;
-      }
-      if (this.opened === pin) {
-        this.opened = null;
       }
     }
   });
@@ -289,16 +281,14 @@ export default class Agents extends Component<Signature> {
             <ol class='step-list'>
               {{#each HOW_BOXEL_AI_WORKS as |step index|}}
                 <li class='step is-later'>
-                  <span class='step-row'>
-                    <span class='step-number' aria-hidden='true'>{{add
-                        index
-                        1
-                      }}</span>
-                    <span class='step-words'>
-                      <span class='step-title'>{{step.title}}</span>
-                      <span class='step-note'>{{step.note}}</span>
-                    </span>
-                  </span>
+                  <span class='step-number' aria-hidden='true'>{{add
+                      index
+                      1
+                    }}</span>
+                  <div class='step-content'>
+                    <span class='step-title'>{{step.title}}</span>
+                    <span class='step-note'>{{step.note}}</span>
+                  </div>
                 </li>
               {{/each}}
             </ol>
@@ -324,9 +314,24 @@ export default class Agents extends Component<Signature> {
               @label='Setup'
               data-test-agent-setup-progress
             />
-            <ol class='step-list' id={{this.stepsId}}>
-              {{#each this.steps key='title' as |step index|}}
-                {{#let (eq this.openIndex index) as |isOpen|}}
+            {{#if this.isSetupDone}}
+              <Button
+                class='steps-toggle'
+                @appearance='link'
+                @size='s'
+                aria-expanded={{if this.showsSteps 'true' 'false'}}
+                aria-controls={{if this.showsSteps this.stepsId}}
+                {{on 'click' this.toggleSteps}}
+                data-test-agent-steps-toggle
+              >
+                {{if this.showsSteps 'Hide steps' 'Show steps'}}
+              </Button>
+            {{/if}}
+            {{#if this.showsSteps}}
+              {{! Every step shows its text, so nothing opens or closes and
+                the list never changes height under the reader. }}
+              <ol class='step-list' id={{this.stepsId}}>
+                {{#each this.steps key='title' as |step index|}}
                   <li
                     class={{cn 'step' (this.stepState index)}}
                     data-test-agent-step={{add index 1}}
@@ -336,93 +341,74 @@ export default class Agents extends Component<Signature> {
                       'false'
                     }}
                   >
-                    <Button
-                      class='step-head'
-                      @appearance='plain'
-                      aria-expanded={{if isOpen 'true' 'false'}}
-                      aria-controls={{if
-                        isOpen
-                        (concat this.stepsId '-' index)
-                      }}
-                      {{on 'click' (fn this.toggleStep index)}}
-                      data-test-agent-step-head
-                    >
-                      <span class='step-head-face'>
-                        <span class='step-number' aria-hidden='true'>
-                          {{#if (this.isCopied index)}}
-                            <Check width='12' height='12' />
-                          {{else}}
-                            {{add index 1}}
-                          {{/if}}
-                        </span>
-                        <span class='step-words'>
-                          <span class='step-title'>
-                            {{step.title}}
-                            {{#if (this.isCopied index)}}
-                              <VisuallyHidden>(copied)</VisuallyHidden>
-                            {{/if}}
-                          </span>
-                          <span class='step-note'>{{step.note}}</span>
-                        </span>
-                      </span>
-                    </Button>
-                    {{#if isOpen}}
-                      <div
-                        class='step-body'
-                        id={{concat this.stepsId '-' index}}
-                      >
-                        {{#if step.isWorkspacePick}}
-                          {{#if this.workspaceOptions.length}}
-                            <Select
-                              class='workspace-pick'
-                              @options={{this.workspaceOptions}}
-                              @value={{this.workspaceURL}}
-                              @onValueChange={{this.pickWorkspace}}
-                              @label='Workspace to open'
-                              data-test-agent-workspace-pick
-                            />
-                          {{/if}}
+                    <span class='step-number' aria-hidden='true'>
+                      {{#if (this.isCopied index)}}
+                        <Check width='12' height='12' />
+                      {{else}}
+                        {{add index 1}}
+                      {{/if}}
+                    </span>
+                    <div class='step-content'>
+                      <span class='step-title'>
+                        {{step.title}}
+                        {{#if (this.isCopied index)}}
+                          <VisuallyHidden>(copied)</VisuallyHidden>
                         {{/if}}
-                        <div class='step-text'>
-                          <code
-                            class='step-code'
-                            id={{concat this.stepsId '-' index '-text'}}
-                            data-test-agent-step-text
-                          >{{step.text}}</code>
-                          {{! The name stays Copy: the tooltip shows the copy
-                              and the status region below announces it. }}
-                          <IconButton
-                            class='copy'
-                            @label='Copy'
-                            @tooltip={{if
-                              (eq this.copiedStep index)
-                              'Copied'
-                              'Copy'
-                            }}
-                            @appearance='plain'
-                            @size='xs'
-                            @icon={{if (eq this.copiedStep index) Check Copy}}
-                            @iconWidth='14'
-                            @iconHeight='14'
-                            aria-describedby={{concat
-                              this.stepsId
-                              '-'
-                              index
-                              '-text'
-                            }}
-                            {{on
-                              'click'
-                              (fn this.copyTask.perform index step.text)
-                            }}
-                            data-test-agent-copy={{add index 1}}
+                      </span>
+                      {{#if step.note}}
+                        <span class='step-note'>{{step.note}}</span>
+                      {{/if}}
+                      {{#if step.isWorkspacePick}}
+                        {{#if this.workspaceOptions.length}}
+                          <Select
+                            class='workspace-pick'
+                            @options={{this.workspaceOptions}}
+                            @value={{this.workspaceURL}}
+                            @onValueChange={{this.pickWorkspace}}
+                            @label='Workspace to open'
+                            data-test-agent-workspace-pick
                           />
-                        </div>
+                        {{/if}}
+                      {{/if}}
+                      <div class='step-text'>
+                        <code
+                          class='step-code'
+                          id={{concat this.stepsId '-' index '-text'}}
+                          data-test-agent-step-text
+                        >{{step.text}}</code>
+                        {{! The name stays Copy: the tooltip shows the copy and
+                          the status region below announces it. }}
+                        <IconButton
+                          class='copy'
+                          @label='Copy'
+                          @tooltip={{if
+                            (eq this.copiedStep index)
+                            'Copied'
+                            'Copy'
+                          }}
+                          @appearance='plain'
+                          @size='xs'
+                          @icon={{if (eq this.copiedStep index) Check Copy}}
+                          @iconWidth='14'
+                          @iconHeight='14'
+                          aria-describedby={{concat
+                            this.stepsId
+                            '-'
+                            index
+                            '-text'
+                          }}
+                          {{on
+                            'click'
+                            (fn this.copyTask.perform index step.text)
+                          }}
+                          data-test-agent-copy={{add index 1}}
+                        />
                       </div>
-                    {{/if}}
+                    </div>
                   </li>
-                {{/let}}
-              {{/each}}
-            </ol>
+                {{/each}}
+              </ol>
+            {{/if}}
           {{/if}}
         </section>
       </div>
@@ -436,7 +422,6 @@ export default class Agents extends Component<Signature> {
       .agents {
         --_agents-panel-max-width: 40rem;
         --_agents-step-number-size: 1.5rem;
-        --_agents-step-inset: var(--boxel-sp-4xs);
         /* The code line is at least as tall as its Copy button, the
            smallest Pret UI button (24px), so the two sit level. */
         --_agents-code-line-height: 1.5rem;
@@ -504,30 +489,15 @@ export default class Agents extends Component<Signature> {
       .step-list {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-xs);
         margin: 0;
         padding: 0;
         list-style: none;
       }
-      .step-row {
+      .step {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-xs) var(--_agents-step-inset);
-      }
-      .step-head {
-        --pretui-button-h: 3rem;
-        --pretui-button-px: var(--_agents-step-inset);
-        justify-content: flex-start;
-        width: 100%;
-        text-align: start;
-      }
-      /* Pret UI's label is inline; this lays out the number and words. */
-      .step-head-face {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        width: 100%;
       }
       .step-number {
         display: inline-flex;
@@ -543,21 +513,24 @@ export default class Agents extends Component<Signature> {
         font-weight: 700;
         color: var(--secondary-foreground);
       }
+      /* Done is a filled highlight disc with a check, as in Get started; the
+         next step is ringed in the highlight, not filled. */
       .step.is-next .step-number {
+        background-color: transparent;
+        box-shadow: inset 0 0 0 1.5px var(--boxel-highlight);
+        color: var(--boxel-highlight);
+      }
+      .step.is-done .step-number {
         background-color: var(--boxel-highlight);
         color: var(--boxel-highlight-foreground);
       }
-      .step.is-done .step-number {
-        background-color: transparent;
-        box-shadow: inset 0 0 0 1px var(--boxel-highlight);
-        color: var(--boxel-highlight);
-      }
-      .step-words {
+      .step-content {
         display: flex;
         flex-direction: column;
+        align-items: flex-start;
         gap: var(--boxel-sp-6xs);
+        flex: 1;
         min-width: 0;
-        white-space: normal;
       }
       .step-title {
         font-size: var(--boxel-font-size-sm);
@@ -569,30 +542,18 @@ export default class Agents extends Component<Signature> {
       }
       .step-note {
         font-size: var(--boxel-font-size-xs);
-        font-weight: 400;
         color: var(--muted-foreground);
-      }
-      .step-body {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        /* Lined up under the step's title, past the head's border, inset
-           and number. */
-        padding: 0 var(--_agents-step-inset) var(--boxel-sp-sm)
-          calc(
-            1px + var(--_agents-step-inset) + var(--_agents-step-number-size) +
-              var(--boxel-sp-sm)
-          );
       }
       .workspace-pick {
         width: min(100%, 20rem);
+        margin-top: var(--boxel-sp-4xs);
       }
       .step-text {
         display: flex;
         align-items: flex-start;
         gap: var(--boxel-sp-2xs);
         align-self: stretch;
+        margin-top: var(--boxel-sp-4xs);
       }
       .step-code {
         display: flex;
@@ -612,6 +573,9 @@ export default class Agents extends Component<Signature> {
       .copy {
         --pretui-button-h: var(--_agents-code-line-height);
         flex: none;
+      }
+      .steps-toggle {
+        align-self: flex-start;
       }
       .describe-it {
         align-self: flex-start;

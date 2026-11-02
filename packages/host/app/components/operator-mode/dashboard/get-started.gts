@@ -350,7 +350,8 @@ export default class GetStarted extends Component<Signature> {
       </section>
     {{else if this.isJustDismissed}}
       <div class='get-started-dismissed' data-test-get-started-dismissed>
-        <p class='dismissed-note' id={{this.dismissedNoteId}}>Get started hidden</p>
+        <p class='dismissed-note' id={{this.dismissedNoteId}}>Get started won’t
+          show again</p>
         <Button
           @appearance='link'
           @size='s'

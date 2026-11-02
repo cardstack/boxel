@@ -4,7 +4,8 @@ export type { DashboardAgent };
 
 export interface SetupStep {
   title: string;
-  note: string;
+  // Only where the title leaves out where or how to do it.
+  note?: string;
   // What the user types or runs.
   text: string;
   isWorkspacePick?: boolean;
@@ -47,7 +48,6 @@ export const AGENT_KINDS: AgentKind[] = [
       },
       {
         title: 'Install the Boxel plugin',
-        note: 'Its card-building skills come with it',
         text: '/plugin install boxel-cli@cardstack-boxel',
       },
     ],
@@ -105,7 +105,6 @@ export function setupStepsFor(
     },
     {
       title: 'Ask for a change',
-      note: 'In your own words, like any request',
       text: 'Make me a card for tracking tasks in this workspace',
     },
     {
