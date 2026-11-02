@@ -2677,7 +2677,8 @@ for (
         let store = getService('store');
         let toolService = getService('tool-service');
         let originalValidateTimeoutMs = toolService.validateTimeoutMs;
-        toolService.validateTimeoutMs = 60_000;
+        // CONTROL (do not merge): keep the 3 s test-mode timeout, as before the fix.
+        // toolService.validateTimeoutMs = 60_000;
         let release = new Deferred<void>();
         let heldLoads = 0;
         let originalGet = store.get;
