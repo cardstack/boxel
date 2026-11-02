@@ -1290,6 +1290,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-delete-module-button]');
     assert.dom(`[data-test-delete-modal="${testRealmURL}pet.gts"]`).exists();
+    await waitFor('[data-test-also-delete-cards]');
+    await click('[data-test-also-delete-cards]');
 
     await click('[data-test-confirm-delete-button]');
     assert
@@ -1305,6 +1307,65 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let notFound = await adapter.openFile('pet.gts');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
+  });
+
+  test('deleting a card definition offers to delete the cards that use it', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+
+    await click('[data-test-delete-module-button]');
+    await waitFor('[data-test-cards-using-definition]');
+    assert
+      .dom('[data-test-cards-using-definition]')
+      .includesText('2 cards use this definition and will stop loading:');
+    assert.dom('[data-test-card-using-definition]').exists({ count: 2 });
+    assert.dom('[data-test-card-using-definition]').includesText('Mango');
+    assert.dom('[data-test-also-delete-cards]').isChecked();
+    assert
+      .dom('[data-test-cards-using-definition]')
+      .includesText('Also delete these 2 cards');
+
+    await click('[data-test-confirm-delete-button]');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
+    assert.strictEqual(
+      await adapter.openFile('pet.gts'),
+      undefined,
+      'the definition is deleted',
+    );
+    assert.strictEqual(
+      await adapter.openFile('Pet/mango.json'),
+      undefined,
+      'a card that used it is deleted',
+    );
+    assert.strictEqual(
+      await adapter.openFile('Pet/vangogh.json'),
+      undefined,
+      'the other card that used it is deleted',
+    );
+  });
+
+  test('deleting a module that only re-exports card definitions offers no cards', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}re-export.gts`,
+    });
+
+    await click('[data-test-delete-module-button]');
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}re-export.gts"]`)
+      .exists();
+    assert.dom('[data-test-cards-using-definition]').doesNotExist();
+    assert.dom('[data-test-also-delete-cards]').doesNotExist();
+
+    await click('[data-test-confirm-delete-button]');
+    assert.notStrictEqual(
+      await adapter.openFile('Pet/mango.json'),
+      undefined,
+      'cards of the re-exported definitions are kept',
+    );
   });
 
   test('can delete a card definition with no recent files to fall back on', async function (assert) {

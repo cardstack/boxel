@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -9,7 +10,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -43,6 +44,7 @@ import {
   type getCard,
   type LocalPath,
   CardContextName,
+  hasExecutableExtension,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -59,6 +61,7 @@ import type {
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -66,6 +69,10 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import {
+  cardDefinitionsInModule,
+  cardsUsingDefinitionsQuery,
+} from '@cardstack/host/utils/cards-using-module';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import {
@@ -136,6 +143,16 @@ const defaultPanelHeights: PanelHeights = {
 
 const waiter = buildWaiter('code-submode:waiter');
 
+const CARDS_USING_LIST_LENGTH = 5;
+const CARDS_USING_PAGE_SIZE = 100;
+
+interface CardsUsingDefinition {
+  definitions: ResolvedCodeRef[];
+  realmURL: string;
+  total: number;
+  titles: string[];
+}
+
 function urlToFilename(url: URL) {
   if (url) {
     return decodeURIComponent(url.href?.split('/').pop() ?? '');
@@ -150,6 +167,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service('file-upload') declare private fileUpload: FileUploadService;
+  @service declare private loaderService: LoaderService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
@@ -163,6 +181,8 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private writeError: string | undefined;
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private cardsUsingItemToDelete: CardsUsingDefinition | undefined;
+  @tracked private alsoDeleteCardsUsingItem = true;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private defaultPanelWidths: PanelWidths;
@@ -486,6 +506,97 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private setItemToDelete(item: CardDef | URL | null | undefined) {
     this.itemToDelete = item;
+    this.cardsUsingItemToDelete = undefined;
+    this.alsoDeleteCardsUsingItem = true;
+    if (item instanceof URL && hasExecutableExtension(item.href)) {
+      this.findCardsUsingItemToDelete.perform(item);
+    } else {
+      this.findCardsUsingItemToDelete.cancelAll();
+    }
+  }
+
+  @action private toggleAlsoDeleteCardsUsingItem(event: Event) {
+    this.alsoDeleteCardsUsingItem = (event.target as HTMLInputElement).checked;
+  }
+
+  private findCardsUsingItemToDelete = restartableTask(async (file: URL) => {
+    await this.withTestWaiters(() => this.findCardsUsing(file));
+  });
+
+  private async findCardsUsing(file: URL) {
+    let realmURL = this.operatorModeStateService.realmURL;
+    try {
+      let definitions = await cardDefinitionsInModule(
+        this.loaderService.loader,
+        file,
+      );
+      if (definitions.length === 0) {
+        return;
+      }
+      let { instances, meta } = await this.store.searchWithMeta(
+        cardsUsingDefinitionsQuery(definitions, {
+          number: 0,
+          size: CARDS_USING_LIST_LENGTH,
+        }),
+        [realmURL],
+      );
+      let total = meta.page.total ?? instances.length;
+      if (total > 0) {
+        this.cardsUsingItemToDelete = {
+          definitions,
+          realmURL,
+          total,
+          titles: instances.map((card) => card.cardTitle || 'Untitled card'),
+        };
+      }
+    } catch (error) {
+      // A module that doesn't load has no working cards to offer.
+      console.warn(`Could not find the cards that use ${file.href}`, error);
+    }
+  }
+
+  private async idsOfCardsUsing({
+    definitions,
+    realmURL,
+  }: CardsUsingDefinition) {
+    let ids: string[] = [];
+    for (let number = 0; ; number++) {
+      let cards = await this.store.search(
+        cardsUsingDefinitionsQuery(definitions, {
+          number,
+          size: CARDS_USING_PAGE_SIZE,
+        }),
+        [realmURL],
+      );
+      for (let card of cards) {
+        if (card.id) {
+          ids.push(card.id);
+        }
+      }
+      if (cards.length < CARDS_USING_PAGE_SIZE) {
+        return ids;
+      }
+    }
+  }
+
+  private get cardsUsingSummary() {
+    let total = this.cardsUsingItemToDelete?.total ?? 0;
+    return total === 1
+      ? '1 card uses this definition and will stop loading:'
+      : `${total} cards use this definition and will stop loading:`;
+  }
+
+  private get moreCardsUsingLabel() {
+    let using = this.cardsUsingItemToDelete;
+    let more = using ? using.total - using.titles.length : 0;
+    return more > 0 ? `and ${more} more` : undefined;
+  }
+
+  private get alsoDeleteCardsLabel() {
+    let total = this.cardsUsingItemToDelete?.total ?? 0;
+    return total === 1
+      ? 'Also delete this card'
+      : `Also delete these ${total} cards`;
   }
 
   @action private deleteFileInTree(entryPath: LocalPath) {
@@ -519,7 +630,13 @@ export default class CodeSubmode extends Component<Signature> {
       });
     } else {
       let file = item;
+      let cardsUsing = this.alsoDeleteCardsUsingItem
+        ? this.cardsUsingItemToDelete
+        : undefined;
       await this.withTestWaiters(async () => {
+        if (cardsUsing) {
+          await this.deleteCardsUsing(cardsUsing);
+        }
         // TODO: This is a side effect of the recent-file service making assumptions about
         // what realm we are in. we should refactor that so that callers have to tell
         // it the realm of the file in question
@@ -553,6 +670,17 @@ export default class CodeSubmode extends Component<Signature> {
     await timeout(500); // task running message can be displayed long enough for the user to read it
     this.itemToDelete = undefined;
   });
+
+  private async deleteCardsUsing(cardsUsing: CardsUsingDefinition) {
+    let realmPaths = new RealmPaths(new URL(cardsUsing.realmURL));
+    for (let id of await this.idsOfCardsUsing(cardsUsing)) {
+      await this.operatorModeStateService.deleteCard(id);
+      this.recentFilesService.removeRecentFile(
+        realmPaths.local(new URL(`${id}.json`)),
+      );
+      this.playgroundPanelService.removeSelectionsByCardId(id);
+    }
+  }
 
   // dropTask will ignore any subsequent create file requests until the one in progress is done
   private createFile = dropTask(
@@ -956,6 +1084,28 @@ export default class CodeSubmode extends Component<Signature> {
               {{else}}
                 Delete the file
                 <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?
+                {{#if this.cardsUsingItemToDelete}}
+                  <span class='cards-using' data-test-cards-using-definition>
+                    {{this.cardsUsingSummary}}
+                    <ul class='cards-using-list'>
+                      {{#each this.cardsUsingItemToDelete.titles as |title|}}
+                        <li data-test-card-using-definition>{{title}}</li>
+                      {{/each}}
+                      {{#if this.moreCardsUsingLabel}}
+                        <li>{{this.moreCardsUsingLabel}}</li>
+                      {{/if}}
+                    </ul>
+                    <label class='also-delete-cards'>
+                      <input
+                        type='checkbox'
+                        checked={{this.alsoDeleteCardsUsingItem}}
+                        {{on 'change' this.toggleAlsoDeleteCardsUsingItem}}
+                        data-test-also-delete-cards
+                      />
+                      {{this.alsoDeleteCardsLabel}}
+                    </label>
+                  </span>
+                {{/if}}
               {{/if}}
             </:content>
           </DeleteModal>
@@ -1055,6 +1205,29 @@ export default class CodeSubmode extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: center;
+      }
+
+      .cards-using {
+        display: block;
+        margin-top: var(--boxel-sp-sm);
+        font-weight: 400;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .cards-using-list {
+        margin: var(--boxel-sp-xxs) 0 0;
+        padding: 0;
+        list-style: none;
+        font-weight: 600;
+        overflow-wrap: break-word;
+      }
+      .also-delete-cards {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-sm);
+        min-height: 1.5rem;
+        cursor: pointer;
       }
     </style>
   </template>
