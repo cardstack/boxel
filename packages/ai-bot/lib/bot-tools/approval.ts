@@ -1,16 +1,11 @@
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
-import {
-  approvalReactionsByEvent,
-  declinedByReactionReason,
-} from '@cardstack/runtime-common/ai';
+import { approvalReactionsByEvent } from '@cardstack/runtime-common/ai';
 import type { ApprovalReaction } from '@cardstack/runtime-common/ai';
 import {
   getToolRequests,
   isToolResultEventType,
   latestEventContent,
 } from '@cardstack/runtime-common/matrix-constants';
-import { publishDeclinedResult } from './results.ts';
-import type { BotToolTarget } from './types.ts';
 
 // The approval flow every bot tool shares. A tool's turn may mark a call
 // `approvalRequired` (see BotToolTurn.needsApproval); the bot then holds it, and
@@ -158,44 +153,10 @@ export function claimDeclinedToolCalls(
   aiBotUserId: string,
   toolNames: ReadonlySet<string>,
 ): DeclinedToolCall[] {
-  let declined = declinedToolCalls(history, aiBotUserId, toolNames);
-  let fresh = new Set(
-    claims.claim(history, declined).map((entry) => entry.call.id),
+  return claims.claim(
+    history,
+    declinedToolCalls(history, aiBotUserId, toolNames),
   );
-  return declined.filter((entry) => fresh.has(entry.call.id));
-}
-
-// Posts each declined call's 'invalid' result, naming who declined it by
-// `memberName`, or by their user id when the room does not know them. A call
-// whose result never reached the room is released, so a later run answers
-// it.
-export async function answerDeclinedToolCalls(
-  declined: DeclinedToolCall[],
-  claims: ApprovalClaims,
-  room: Pick<BotToolTarget, 'client' | 'roomId'> & {
-    // the agent of a call whose message names none
-    agentId: string | undefined;
-  },
-  memberName: (userId: string) => string | undefined,
-): Promise<void> {
-  for (let entry of declined) {
-    let outcome = await publishDeclinedResult(
-      entry.call,
-      {
-        client: room.client,
-        roomId: room.roomId,
-        requestEventId: entry.requestEventId,
-        agentId: entry.agentId ?? room.agentId,
-      },
-      declinedByReactionReason(
-        entry.call.function.name,
-        memberName(entry.reaction.sender) ?? entry.reaction.sender,
-      ),
-    );
-    if (!outcome.published) {
-      claims.release(entry.call.id);
-    }
-  }
 }
 
 function approvedByResult(
@@ -306,10 +267,10 @@ export class ApprovalClaims {
 
   // Claims and returns the released calls not already claimed, after
   // dropping claims on calls the history shows settled.
-  claim(
+  claim<T extends ReleasedToolCall>(
     history: DiscreteMatrixEvent[],
-    released: ReleasedToolCall[],
-  ): ReleasedToolCall[] {
+    released: T[],
+  ): T[] {
     let settled = settledToolCallIds(history);
     for (let id of this.#claimed) {
       if (settled.has(id)) {

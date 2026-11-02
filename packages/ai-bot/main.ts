@@ -48,9 +48,11 @@ import {
   type BotToolTurn,
   type ClassifiedToolCalls,
 } from './lib/bot-tools/index.ts';
-import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
   answerDeclinedToolCalls,
+  INTERRUPTED_TOOL_CALL_REASON,
+} from './lib/bot-tools/results.ts';
+import {
   ApprovalClaims,
   claimDeclinedToolCalls,
   handlesRoomEvent,

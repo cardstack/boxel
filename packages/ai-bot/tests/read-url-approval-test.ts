@@ -26,8 +26,8 @@ import {
 } from '../lib/bot-tools/read-url/read.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
+import { answerDeclinedToolCalls } from '../lib/bot-tools/results.ts';
 import {
-  answerDeclinedToolCalls,
   ApprovalClaims,
   claimDeclinedToolCalls,
   declinedToolCalls,
