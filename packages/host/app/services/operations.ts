@@ -666,7 +666,7 @@ export default class OperationsService
 // error and nothing was written — including the entry it names. A response
 // that is not that document at all is reported by status alone rather than
 // read for members it does not carry.
-async function refusal(response: Response): Promise<Error> {
+export async function refusal(response: Response): Promise<Error> {
   let body = await response.text();
   let error: Record<string, unknown> | undefined;
   try {
@@ -681,7 +681,10 @@ async function refusal(response: Response): Promise<Error> {
       detail: body || response.statusText,
     });
   }
-  let meta = (error.meta ?? {}) as { entry?: number | string };
+  let meta = (error.meta ?? {}) as {
+    entry?: number | string;
+    retryAfterSeconds?: unknown;
+  };
   return new OperationsError({
     status: Number(error.status ?? response.status),
     ...(typeof error.code === 'string' ? { code: error.code } : {}),
@@ -689,6 +692,9 @@ async function refusal(response: Response): Promise<Error> {
     ...(typeof error.detail === 'string' ? { detail: error.detail } : {}),
     ...(typeof error.id === 'string' ? { id: error.id } : {}),
     ...(meta.entry === undefined ? {} : { entry: meta.entry }),
+    ...(typeof meta.retryAfterSeconds === 'number'
+      ? { retryAfterSeconds: meta.retryAfterSeconds }
+      : {}),
   });
 }
 

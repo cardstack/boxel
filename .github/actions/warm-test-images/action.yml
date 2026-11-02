@@ -1,7 +1,7 @@
 name: Warm test Docker images
 description: >-
   Pull the test suite's third-party Docker images (synapse, smtp4dev, postgres,
-  mock-oauth2-server, caddy) from this repo's GHCR mirror and retag them to
+  mock-oauth2-server) from this repo's GHCR mirror and retag them to
   their canonical names, so the services start from a local image instead of
   racing an unauthenticated registry pull. Docker Hub rate-limits / connection timeouts
   from the shared runner IP pool are the cause of the recurring "Failed to reach
@@ -54,4 +54,3 @@ runs:
         warm rnwood/smtp4dev:v3.1          smtp4dev:v3.1
         warm postgres:16.3                 postgres:16.3
         warm ghcr.io/navikt/mock-oauth2-server:4.0.1 mock-oauth2-server:4.0.1
-        warm caddy:2.10.2-alpine           caddy:2.10.2-alpine
