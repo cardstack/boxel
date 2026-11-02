@@ -78,8 +78,10 @@ A direct writer is a person whose own permission row grants write
 makes no one a direct writer. Nobody swaps in another user's key: a ticket to
 do so is refused at minting with 404, as for a key that doesn't exist.
 
-Changing a share's `limits` is for its owner only; the column is reserved and
-no route sets it.
+A share's limits (its per-caller rate limit and daily and monthly budgets) are
+changed by its owner only, from a secure session (`PUT
+/_key-shares/:id/limits`); a direct writer who isn't the owner is refused 403
+and suspends the share instead. See the `key-limits` skill.
 
 ## Visibility
 
@@ -161,6 +163,7 @@ method and path of these routes.
 | `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
 | `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
 | `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
+| `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
 
 | Status | Means                                                                                                                                                                                                                 |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
