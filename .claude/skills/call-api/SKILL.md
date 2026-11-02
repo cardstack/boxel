@@ -322,3 +322,5 @@ the `agent-peer-collaboration` skill on serving your own dist.
 - **`operations-diagnosis`** — the `boxel:operations` channel around the call.
 - **`key-bindings`** — the bindings that fill slots, and their refusals.
 - **`secrets-at-rest`** — where a key a binding fills from is stored.
+- **`key-outage-triage`** — reading key-use lines across realms and hosts:
+  one key, one vendor, or us; the Keys dashboard and its alerts.

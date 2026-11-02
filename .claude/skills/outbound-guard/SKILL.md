@@ -276,6 +276,24 @@ To point a local stack at a vendor stub on loopback, start the realm server
 with `OUTBOUND_DEV_ALLOWLIST=localhost,127.0.0.1` and add the stub's
 `http://127.0.0.1:<port>/` to `proxy_endpoints`.
 
+## Reading a refusal
+
+Every request the guard refuses, on either path, logs one line on the
+`outbound` channel at `warn`, naming the host and never the path, which can
+hold a credential:
+
+```
+outbound guard refused: path=system-key host=10.0.0.1 reason=address
+```
+
+`reason` is the refusal's (`invalid-url`, `scheme`, `address`,
+`forbidden-header`, `too-many-redirects`). A `path=system-key` refusal is a
+destination we configured, which the "Outbound guard refused a platform
+destination" alert fires on; a `call-api` one is also on that invocation's
+`boxel:key-use` line as `guard-refused`. The Keys dashboard charts both, and
+its response-size panels read the lines below (see the `key-outage-triage`
+skill).
+
 ## Reading the response size cap (observe mode)
 
 Nothing is refused for size yet. Every response logs its decompressed size
