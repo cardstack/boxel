@@ -227,7 +227,9 @@ module(basename(import.meta.filename), function (hooks) {
       lines
         .filter((line) => line.message.startsWith('outbound guard refused'))
         .map((line) => line.message),
-      ['outbound guard refused: path=call-api host=10.0.0.1 reason=address'],
+      [
+        'outbound guard refused: path=call-api host=10.0.0.1 reason=address destinationSetBy=user',
+      ],
       'the refusal is logged with its path, host and reason',
     );
   });

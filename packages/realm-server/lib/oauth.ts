@@ -1316,6 +1316,9 @@ async function postToTokenEndpoint(
       headers,
       body: body.toString(),
       sizePath: 'system-key',
+      // A user's own or shared OAuth client names a token URL its owner typed.
+      destinationSetBy:
+        client.secretFrom.kind === 'platform' ? 'platform' : 'user',
       scrubber,
       // The body and the Authorization header carry the secrets, so a
       // redirect to another origin is never followed.

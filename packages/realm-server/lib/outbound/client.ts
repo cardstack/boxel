@@ -481,6 +481,11 @@ export interface OutboundRequest {
   // The caller's cancellation, e.g. its client going away.
   signal?: AbortSignal;
   sizePath: ResponseSizePath;
+  // Who chose the destination: the platform (a `proxy_endpoints` row, a
+  // platform OAuth client, a vendor's fixed token endpoint) or a user (a
+  // card's declared request, a user's own OAuth client). A guard refusal of a
+  // platform destination is ours to fix; a user's can be made at will.
+  destinationSetBy: 'platform' | 'user';
   // The credential to attach. A redirect to another origin drops it.
   credential?: OutboundCredential;
   // Values filled into the request where their tokens stand, once the request
@@ -701,7 +706,7 @@ export async function outboundFetch(
       // One line per refusal on every path, so a refusal spike shows whichever
       // caller sent it. The host only: the path can hold a credential.
       log.warn(
-        `outbound guard refused: path=${request.sizePath} host=${refusedHost(request.url)} reason=${final.reason}`,
+        `outbound guard refused: path=${request.sizePath} host=${refusedHost(request.url)} reason=${final.reason} destinationSetBy=${request.destinationSetBy}`,
       );
     }
     throw final;

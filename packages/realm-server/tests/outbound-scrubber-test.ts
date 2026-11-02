@@ -379,6 +379,7 @@ module(basename(import.meta.filename), function () {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(spec),
           sizePath: 'call-api',
+          destinationSetBy: 'platform',
           scrubber: scrubberFor(KEY, ...extra),
         });
         status = response.status;
@@ -526,6 +527,7 @@ module(basename(import.meta.filename), function () {
           chunks: [mention, `data: {"echo":"Bearer ${PREFIXED_KEY}"}\n\n`],
         }),
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential: {
           name: 'stub',
           value: PREFIXED_KEY,

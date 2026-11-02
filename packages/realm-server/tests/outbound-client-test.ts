@@ -26,6 +26,7 @@ import {
 } from '../lib/outbound/client.ts';
 import { scrubError } from '../lib/outbound/scrub-error.ts';
 import { CredentialScrubber, REDACTED } from '../lib/outbound/scrubber.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import {
   startSentryCapture,
@@ -161,6 +162,7 @@ module(basename(import.meta.filename), function () {
         headers: { 'content-type': 'application/json', 'x-vendor': 'one' },
         body: JSON.stringify({ hello: 'world' }),
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       let echoed = await response.json();
       assert.strictEqual(echoed.headers['x-vendor'], 'one');
@@ -169,16 +171,29 @@ module(basename(import.meta.filename), function () {
     });
 
     test('refuses plain HTTP to a host the allowlist does not name', async function (assert) {
-      let error = await refusal(
-        outboundFetch({
-          url: 'http://vendor.example/v1',
-          method: 'GET',
-          headers: {},
-          sizePath: 'system-key',
-        }),
-      );
+      let error: unknown;
+      let lines = await logLinesDuring(['outbound'], async () => {
+        error = await refusal(
+          outboundFetch({
+            url: 'http://vendor.example/v1?key=secret',
+            method: 'GET',
+            headers: {},
+            sizePath: 'system-key',
+            destinationSetBy: 'platform',
+          }),
+        );
+      });
       assert.true(error instanceof OutboundRefusedError);
       assert.strictEqual((error as OutboundRefusedError).reason, 'scheme');
+      assert.deepEqual(
+        lines
+          .map((line) => line.message)
+          .filter((message) => message.startsWith('outbound guard refused')),
+        [
+          'outbound guard refused: path=system-key host=vendor.example reason=scheme destinationSetBy=platform',
+        ],
+        'the refusal is logged with who set the destination, and the host alone',
+      );
     });
 
     test('refuses an IP literal destination that is not public, in both families', async function (assert) {
@@ -195,6 +210,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -221,6 +237,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -238,6 +255,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.true(error instanceof OutboundRefusedError);
@@ -252,6 +270,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -269,6 +288,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual((error as OutboundRefusedError)?.reason, 'scheme');
@@ -285,6 +305,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: {},
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential,
       });
       await sameOrigin.text();
@@ -301,6 +322,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: { 'x-vendor': 'kept' },
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential,
       });
       let echoed = await crossOrigin.json();
@@ -318,6 +340,7 @@ module(basename(import.meta.filename), function () {
         headers: { 'content-type': 'application/json' },
         body: '{"a":1}',
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       let echoed = await response.json();
       assert.strictEqual(echoed.method, 'GET');
@@ -332,6 +355,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual(
@@ -349,6 +373,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.true(error instanceof OutboundTimeoutError, 'a timeout error');
@@ -364,6 +389,7 @@ module(basename(import.meta.filename), function () {
         headers: {},
         signal: controller.signal,
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       controller.abort(new Error('client went away'));
       let error = await refusal(pending);
@@ -378,6 +404,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: { 'X-Boxel-Consuming-Realm': 'http://example/' },
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual(
@@ -393,6 +420,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: {},
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       assert.strictEqual(response.status, 429);
       assert.deepEqual(await response.json(), { status: 429 });
@@ -405,6 +433,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'call-api',
+          destinationSetBy: 'platform',
         });
         await response.text();
       });
@@ -432,6 +461,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         });
         body = await response.text();
       });
@@ -465,6 +495,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         });
         let reader = response.body!.getReader();
         for (;;) {
@@ -612,6 +643,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();
@@ -642,6 +674,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: {
             name: 'stub-vendor-key',
             value,
@@ -681,6 +714,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: {
             name: 'stub-vendor-key',
             value: `\t${key}\nabcdef\r\n`,
@@ -714,6 +748,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         }),
       );
@@ -750,6 +785,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();
@@ -774,6 +810,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();
