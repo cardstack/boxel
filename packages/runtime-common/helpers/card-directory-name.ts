@@ -50,6 +50,9 @@ function directoryNameFromModule(
   );
 }
 
+// Matches a `scheme://authority` prefix for any scheme, in any case.
+// Directory inference needs the root of every URL spelling, not only of the
+// http(s) identifiers that `isAbsoluteIdentifier` accepts.
 const URL_SCHEME_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 function lastMeaningfulSegment(pathname: string): string | undefined {
