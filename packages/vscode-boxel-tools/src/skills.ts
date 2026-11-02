@@ -283,7 +283,6 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
 
   async refresh(): Promise<void> {
     const realmUrls = await this.realmAuth.getRealmUrls();
-    const wellKnownSkillLists = await this.wellKnownSkillLists();
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
@@ -291,6 +290,10 @@ export class SkillsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
         cancellable: false,
       },
       async (progress) => {
+        // Inside the notification: a realm server that never answers holds
+        // this read for its whole timeout, and the view should show it is
+        // waiting.
+        const wellKnownSkillLists = await this.wellKnownSkillLists();
         this.skillLists = [
           ...wellKnownSkillLists,
           ...realmUrls.map((url) => new SkillList(url, url)),
