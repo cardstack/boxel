@@ -543,7 +543,8 @@ principal can create a grant on a key whose policy allows no `CreateGrant`.
 
 ### 3. Who used the key
 
-Every `Decrypt` on the key, allowed or denied, is also copied as it happens
+Every allowed `Decrypt` on the key, and every denied one that names the key or
+carries its encryption context, is also copied as it happens
 into the CloudWatch log group `/aws/events/<env>-boxel-secrets-decrypts` by an
 EventBridge rule in `cardstack/infra:configs/boxel-secrets-kms`. The Keys
 dashboard charts it by principal, and the "Secrets key Decrypt by an
