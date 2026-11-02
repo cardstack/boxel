@@ -84,10 +84,10 @@ function readSegmentOf(
   if (!param) {
     return readVariable(card, variable);
   }
-  let attributes = (serializeCard(card).data.attributes ?? {}) as Record<
-    string,
-    unknown
-  >;
+  let attributes = (serializeCard(card, {
+    includeComputeds: true,
+    includedScope: 'none',
+  }).data.attributes ?? {}) as Record<string, unknown>;
   return evaluateSegment(param.expression, { ...attributes, id: card.id });
 }
 

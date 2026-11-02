@@ -17679,12 +17679,17 @@ export class Realm {
         );
         continue;
       }
+      // No file in the source realm changed, so a pass that compares
+      // modification times would skip every card. Clear them so each card is
+      // re-indexed and picks up the new expression's value, and announce
+      // nothing, since no card's content changed.
       await enqueueReindexRealmJob(
         realmURL,
         getMatrixUsername(owner.username),
         this.#queue,
         this.#dbAdapter,
         0,
+        { clearLastModified: true, realmEvents: false },
       );
       this.#log.info(
         `re-indexing ${realmURL}: site ${this.url} added a derived path segment`,
