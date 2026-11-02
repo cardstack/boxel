@@ -637,10 +637,13 @@ export type PolicyIssueCode =
 // an operation is one invocation of its base, and a write it makes is made as
 // the user the grant's `actingUser` names. A named query
 // is the exception: it runs a stored query on the search lane, and stays a
-// contract for signed-in callers. A `callApi` may be opened too, where every
-// key it sends is one shared with the realm (`{{apiKey}}`): such a caller is
-// served only by a share whose owner allowed anonymous use of it, and counted
-// by address against the share's anonymous cap.
+// contract for signed-in callers. A `callApi` may be opened too, where it
+// sends no key or only keys shared with the realm (`{{apiKey}}`): a shared key
+// serves such a caller only where its share's owner allowed anonymous use, and
+// counts them by address against the share's anonymous cap. One that sends no
+// key is limited only by the grant's own rate limit and blocklist, as any
+// other operation opened to them is, and goes through the outbound guard as
+// every `callApi` does.
 export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'read',
   'readSource',

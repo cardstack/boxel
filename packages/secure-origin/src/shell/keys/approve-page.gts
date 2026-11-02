@@ -216,11 +216,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               as |value|
             >
               {{#if (eq value 'interactive')}}
-                {{#if this.offersAnonymous}}
+                {{#if this.offersAnonymousNow}}
                   <label class='anonymous-use' data-test-approve-anonymous>
                     <Checkbox
                       @checked={{this.form.anonymous}}
-                      @disabled={{if this.interactive false true}}
                       @onChange={{this.toggleAnonymous}}
                       data-test-approve-anonymous-tick
                     />
@@ -575,7 +574,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         display: flex;
         align-items: flex-start;
         gap: var(--boxel-sp-xs);
-        margin-left: calc(0.8125rem + var(--boxel-sp-xs));
+        margin-left: var(--radio-choice-indent);
         cursor: pointer;
       }
       .anonymous-text {
@@ -883,6 +882,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     );
   }
 
+  // The checkbox belongs to interactive use, so it is drawn only while that is
+  // chosen.
+  private get offersAnonymousNow() {
+    return this.interactive && this.offersAnonymous;
+  }
+
   private toggleAnonymous = () => {
     this.form.anonymous = !this.form.anonymous;
     this.form.error = undefined;
@@ -905,7 +910,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get remaining() {
-    return this.choosing ? remainingFor(this.choosing.batch, this.form.use) : 0;
+    return this.choosing
+      ? remainingFor(this.choosing.batch, this.form.use, this.form.anonymous)
+      : 0;
   }
 
   private get choices(): SlotChoice[] {

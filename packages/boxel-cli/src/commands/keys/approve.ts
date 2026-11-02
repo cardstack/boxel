@@ -372,7 +372,9 @@ function printBatch(
     );
   }
   let remaining =
-    batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
+    batch.remaining +
+    (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0) +
+    (anonymous ? (batch.remainingSignedInOnly ?? 0) : 0);
   if (remaining > 0) {
     say(ctx, '');
     say(

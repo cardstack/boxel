@@ -345,20 +345,17 @@ export function offersAnonymous(operations: BatchOperation[]): boolean {
 
 // Whether anonymous use starts ticked: for the CLI's `--anonymous`, where the
 // batch holds nothing but share operations approved for signed-in people
-// only, or where every share slot in the batch that was approved before was
-// approved for it, so approving it again keeps that.
+// only, or where any share slot in the batch was last approved for it, so
+// approving the batch again never quietly stops a card serving visitors.
 export function initialAnonymous(
   batch: ApprovalBatch,
   { cliAnonymous = false }: { cliAnonymous?: boolean } = {},
 ): boolean {
-  let approved = allSlots(batch).filter(
-    (s) => s.key === 'apiKey' && s.approved,
-  );
   return (
     cliAnonymous ||
     (allSlots(batch).length > 0 &&
       allSlots(batchFor(batch, 'interactive')).length === 0) ||
-    (approved.length > 0 && approved.every((s) => s.approved!.anonymous))
+    allSlots(batch).some((s) => s.key === 'apiKey' && s.approved?.anonymous)
   );
 }
 
@@ -420,11 +417,18 @@ export function initialUse(
 }
 
 // How many more requests need approving after these, for the choice made:
-// those approved for pipelines only count only for interactive use.
-export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
+// those approved for pipelines only count only for interactive use, and those
+// approved for signed-in people only only while anonymous use is ticked too.
+export function remainingFor(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+  anonymous = false,
+): number {
+  let interactive = use === 'interactive';
   return (
     batch.remaining +
-    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
+    (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0) +
+    (interactive && anonymous ? (batch.remainingSignedInOnly ?? 0) : 0)
   );
 }
 

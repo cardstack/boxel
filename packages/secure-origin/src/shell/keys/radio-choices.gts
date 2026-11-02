@@ -61,6 +61,12 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
 
   <style scoped>
     .choices {
+      /* Where a choice's text starts, past its radio: a setting the block
+         draws under a choice lines up with that choice's label. */
+      --radio-choice-indent: calc(
+        var(--radio-choice-input-size) + var(--boxel-sp-xs)
+      );
+      --radio-choice-input-size: 0.8125rem;
       margin: 0;
       padding: var(--boxel-sp-4xs) 0 0;
       border: 0;
@@ -83,6 +89,8 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
       cursor: pointer;
     }
     .choice input {
+      width: var(--radio-choice-input-size);
+      height: var(--radio-choice-input-size);
       margin: 0.1875rem 0 0;
       accent-color: var(--primary-ink);
     }

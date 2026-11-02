@@ -63,6 +63,7 @@ import {
 } from './key-grant-rejection.ts';
 import { KEY_LIMIT_COLUMNS, limitsOf } from './key-limit-settings.ts';
 import {
+  assertBudgetHoldsCap,
   chargeInteractiveCall,
   validateLimitChanges,
   type LimitSubject,
@@ -607,6 +608,9 @@ export async function approveBindings(
           txQuery,
           shareId,
           dailyBudgets[shareId],
+          // A cap this approval names is checked against the new budget
+          // below; one it doesn't is the share's current cap.
+          anonymousCaps[shareId] === undefined,
         );
       }
       if (anonymous) {
@@ -722,6 +726,7 @@ async function setFirstInteractiveBudget(
   txQuery: Querier,
   shareId: string,
   dailyBudget: number | undefined,
+  keepsCap: boolean,
 ): Promise<void> {
   if (dailyBudget === undefined) {
     let [already] = await txQuery([
@@ -736,6 +741,13 @@ async function setFirstInteractiveBudget(
       );
     }
     return;
+  }
+  if (keepsCap) {
+    let [share] = await txQuery([
+      `SELECT anonymous_daily_cap FROM key_shares WHERE id = `,
+      param(shareId),
+    ]);
+    assertBudgetHoldsCap(share?.anonymous_daily_cap, dailyBudget);
   }
   await txQuery([
     `UPDATE key_shares SET daily_budget = `,

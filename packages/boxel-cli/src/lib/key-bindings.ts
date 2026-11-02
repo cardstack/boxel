@@ -117,6 +117,7 @@ export interface ApprovalBatch {
   // Operations approved for pipelines only that didn't fit either, in a batch
   // asked with `interactive`.
   remainingPipelinesOnly?: number;
+  remainingSignedInOnly?: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }

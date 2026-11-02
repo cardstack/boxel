@@ -46,6 +46,9 @@ too:
   every such caller shares, `["key-limit","share","<id>","anonymous"]`. Its
   owner names it on the share's first anonymous approval, at most the share's
   daily budget, so that people who are signed in keep the rest of that budget.
+  No daily budget below the cap is accepted afterwards: the limits route and
+  an approval naming a lower `dailyBudgets` without a lower cap are refused 400. Should the platform's default budget drop below a share's cap, the cap
+  is held to the budget.
   Reaching it refuses only callers who aren't signed in, `over-budget` with a
   detail saying so; it sends no notice of its own. The share's budgets notify
   as always.

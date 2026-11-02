@@ -9,6 +9,7 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmAction,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -99,6 +100,13 @@ export class Weather extends CardDef {
     graphql: { document: 'query { viewer { name } }' },
   };
 
+  @operation static status = {
+    base: 'callApi',
+    label: 'Read the service status',
+    url: '${VENDOR}/graphql',
+    graphql: { document: 'query { status }' },
+  };
+
   @operation static myStations = {
     base: 'callApi',
     label: 'List your weather stations',
@@ -132,6 +140,7 @@ const POLICY = JSON.stringify({
             { operation: 'myStations' },
             { operation: 'forecast', where: ANONYMOUS },
             { operation: 'myStations', where: ANONYMOUS },
+            { operation: 'status', where: ANONYMOUS },
           ],
         },
       ],
@@ -356,7 +365,7 @@ module(basename(import.meta.filename), function (hooks) {
       .set('X-Forwarded-For', address);
     if (user) {
       // A session's permissions match the realm's for its user.
-      let permissions =
+      let permissions: RealmAction[] =
         user === OWNER ? ['read', 'write', 'realm-owner'] : ['read', 'write'];
       req = req.set(
         'Authorization',
@@ -414,8 +423,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       policy?.anonymous?.operations,
-      ['forecast'],
-      'only the operation that sends a shared key is open to them',
+      ['forecast', 'status'],
+      'the operation that sends a shared key is open to them, and so is one that sends no key, which only the grant limits',
     );
   });
 
@@ -610,6 +619,66 @@ module(basename(import.meta.filename), function (hooks) {
       await used(['key-limit', 'share', share.id, 'anonymous']),
       1,
       'only the visitor’s call spent the anonymous cap',
+    );
+  });
+
+  test("a share's daily budget never goes below its anonymous cap", async function (assert) {
+    let share = await addShare();
+    await approve(
+      ['forecast'],
+      { shareId: share.id },
+      {
+        interactive: true,
+        dailyBudgets: { [share.id]: 500 },
+        anonymous: true,
+        anonymousCaps: { [share.id]: 200 },
+      },
+    );
+    await assert.rejects(
+      setShareLimits(dbAdapter, {
+        user: OWNER,
+        shareId: share.id,
+        changes: { dailyBudget: 100 },
+      }),
+      /anonymous cap of 200/,
+      'the limits route refuses it',
+    );
+    let lower = await approve(
+      ['forecast'],
+      { shareId: share.id },
+      {
+        interactive: true,
+        anonymous: true,
+        dailyBudgets: { [share.id]: 100 },
+      },
+    );
+    assert.strictEqual(
+      lower.status,
+      400,
+      'so does an approval that names a lower budget and keeps the cap',
+    );
+    let both = await approve(
+      ['forecast'],
+      { shareId: share.id },
+      {
+        interactive: true,
+        anonymous: true,
+        dailyBudgets: { [share.id]: 100 },
+        anonymousCaps: { [share.id]: 50 },
+      },
+    );
+    assert.strictEqual(
+      both.status,
+      201,
+      'one that lowers the cap with it is accepted',
+    );
+    let [row] = await dbAdapter.execute(
+      `SELECT daily_budget, anonymous_daily_cap FROM key_shares WHERE id = $1`,
+      { bind: [share.id] },
+    );
+    assert.deepEqual(
+      [Number(row.daily_budget), Number(row.anonymous_daily_cap)],
+      [100, 50],
     );
   });
 

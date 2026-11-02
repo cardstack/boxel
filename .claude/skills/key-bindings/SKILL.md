@@ -302,7 +302,8 @@ such as a weather widget. Three things must all hold before such a caller's
 
 1. **The realm's policy admits them to the operation**: a grant whose `where`
    names `"anonymous"`. Policy compilation opens a `callApi` to them only when
-   every credential slot is a share slot (`{{apiKey}}`); a grant on one with a
+   it sends no key or only shared ones (`{{apiKey}}`); a keyless one is then
+   limited by the grant's own rate limit and blocklist alone. A grant on one with a
    `{{userKey}}` slot is kept for signed-in callers and recorded as
    `anonymous-grant-user-key` (a warning). The grant's own blocklist and rate
    limit apply as for any anonymous grant (the `realm-auth` skill).

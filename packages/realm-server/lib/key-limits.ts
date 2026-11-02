@@ -228,9 +228,14 @@ function budgetsOf(
     budgets.push({
       key: anonymousCapKey(limited.subject),
       period: 'day',
-      // An approval for anonymous use always sets the cap; a share that has
-      // none counts such a caller against a cap of one call.
-      limit: limited.anonymousDailyCap ?? 1,
+      // An approval for anonymous use always sets the cap, and no daily
+      // budget below it is accepted, so it fits inside the budget. A share
+      // that has none counts such a caller against a cap of one call, and a
+      // platform default lowered under a share's cap holds the cap to it.
+      limit: Math.min(
+        limited.anonymousDailyCap ?? 1,
+        limited.limits.dailyBudget,
+      ),
       anonymousCap: true,
     });
   }
@@ -659,6 +664,20 @@ export async function setShareLimits(
   if (!UUID.test(shareId)) {
     throw noSuchShare();
   }
+  // The anonymous cap sits inside the daily budget, keeping the rest of it
+  // for signed-in readers, so the budget never goes below it.
+  if (changes.dailyBudget !== undefined) {
+    let [share] = await query(dbAdapter, [
+      `SELECT anonymous_daily_cap FROM key_shares WHERE id = `,
+      param(shareId),
+      ` AND owner = `,
+      param(user),
+    ]);
+    assertBudgetHoldsCap(
+      share?.anonymous_daily_cap,
+      changes.dailyBudget ?? keyLimitDefaults().dailyBudget,
+    );
+  }
   let [row] = await query(dbAdapter, [
     `UPDATE key_shares SET `,
     ...assignments(changes),
@@ -685,6 +704,16 @@ export async function setShareLimits(
     );
   }
   throw noSuchShare();
+}
+
+// Refuses a daily budget below the share's anonymous cap.
+export function assertBudgetHoldsCap(cap: unknown, dailyBudget: number): void {
+  if (cap != null && Number(cap) > dailyBudget) {
+    throw new UserKeyError(
+      400,
+      `the daily budget is at least the share's anonymous cap of ${Number(cap)} calls, which people who aren't signed in share; to go lower, approve its anonymous use again with a lower cap first`,
+    );
+  }
 }
 
 // Sets one of the user's own keys' limits. Another user's key answers as one

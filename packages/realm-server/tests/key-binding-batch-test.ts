@@ -767,6 +767,32 @@ module(basename(import.meta.filename), function (hooks) {
       [['approved', 'pending'], ['alsoApproved']],
       'with room for all, they keep the order the window shows',
     );
+
+    let signedInOnly = (name: string, slots: number) => ({
+      ...operation(name, slots),
+      status: 'signed-in-only' as const,
+    });
+    let forVisitors = withinSlotLimit(
+      [
+        {
+          destination: destination('a.example'),
+          operations: [
+            signedInOnly('openToVisitors', 3),
+            pipelinesOnly('scheduled', 2),
+            operation('fresh', 2),
+          ],
+        },
+      ],
+      5,
+    );
+    assert.deepEqual(
+      forVisitors.kept.map((g) => g.operations.map((o) => o.name)),
+      [['scheduled', 'fresh']],
+      'one that needs approving comes first, then one approved for pipelines only; one approved for signed-in people only takes what is left',
+    );
+    assert.strictEqual(forVisitors.remaining, 0);
+    assert.strictEqual(forVisitors.remainingPipelinesOnly, 0);
+    assert.strictEqual(forVisitors.remainingSignedInOnly, 1);
   });
 
   test('the batch is asked with the secure window’s own session, about what the user can read', async function (assert) {

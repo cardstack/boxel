@@ -1240,21 +1240,25 @@ module('Integration | approve pages', function (hooks) {
   // A batch whose one operation a workspace's share fills.
   function serveShareBatch(
     share: Record<string, unknown> = {},
-    { signedInOnly = false }: { signedInOnly?: boolean } = {},
+    {
+      signedInOnly = false,
+      changedAnonymous = false,
+    }: { signedInOnly?: boolean; changedAnonymous?: boolean } = {},
   ) {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
-    let approved = signedInOnly
-      ? {
-          status: 'signed-in-only',
-          approved: {
-            snapshot: shared.slots[0]!.snapshot,
-            keyId: null,
-            shareId: 'share-team',
-            interactive: true,
-            anonymous: false,
-          },
-        }
-      : {};
+    let approved =
+      signedInOnly || changedAnonymous
+        ? {
+            status: signedInOnly ? 'signed-in-only' : 'changed',
+            approved: {
+              snapshot: shared.slots[0]!.snapshot,
+              keyId: null,
+              shareId: 'share-team',
+              interactive: true,
+              anonymous: changedAnonymous,
+            },
+          }
+        : {};
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
@@ -1273,6 +1277,7 @@ module('Integration | approve pages', function (hooks) {
                     {
                       ...shared,
                       ...(signedInOnly ? { status: 'signed-in-only' } : {}),
+                      ...(changedAnonymous ? { status: 'changed' } : {}),
                       slots: shared.slots.map((s) => ({
                         ...s,
                         slot: 'apiKey',
@@ -1340,10 +1345,10 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert
-      .dom('[data-test-approve-anonymous-tick]')
-      .isDisabled('it applies only to calls made when the card is opened');
+      .dom('[data-test-approve-anonymous]')
+      .doesNotExist('it applies only to calls made when the card is opened');
     await click('[data-test-radio-choice="interactive"] input');
-    assert.dom('[data-test-approve-anonymous-tick]').isNotDisabled();
+    assert.dom('[data-test-approve-anonymous-tick]').isNotChecked();
     assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
     assert.dom('[data-test-approve-cap]').doesNotExist();
 
@@ -1427,6 +1432,18 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-operation="listTeamPRs"]')
       .doesNotExist('unticked, it needs nothing approved');
+  });
+
+  test('a request last approved for people who are not signed in starts with anonymous use ticked, so approving it again keeps it', async function (assert) {
+    serveShareBatch(
+      { interactive: true, anonymous: true, anonymousDailyCap: 100 },
+      { changedAnonymous: true },
+    );
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert.dom('[data-test-approve-anonymous-tick]').isChecked();
   });
 
   test('a batch only personal keys fill offers no anonymous use', async function (assert) {
