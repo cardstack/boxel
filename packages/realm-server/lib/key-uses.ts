@@ -70,8 +70,8 @@ function hostOf(url: string | null): string | null {
   }
 }
 
-// Writes one row for each share and key the use counts against, and sweeps
-// the uses past the retention window when one is due. A refusal of
+// Writes one row for each share and key the use counts against, and starts a
+// sweep of the uses past the retention window when one is due. A refusal of
 // `credential-rejected` made once the request was built is the vendor's 401
 // (a rejection known beforehand refuses before any URL exists), so it is
 // recorded with that status among the vendor's answers.
@@ -111,7 +111,14 @@ export async function recordKeyUses(
   let last = lastSweep.get(dbAdapter);
   if (last === undefined || now - last >= SWEEP_INTERVAL_MS) {
     lastSweep.set(dbAdapter, now);
-    await sweepExpiredKeyUses(dbAdapter);
+    // Not awaited: the call that happens to be due for a sweep doesn't wait
+    // on a table-wide delete, and a sweep that fails is its own warning, not
+    // a use that failed to record.
+    void sweepExpiredKeyUses(dbAdapter).catch((error) =>
+      log.warn(
+        `sweeping expired key uses failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
   }
 }
 
