@@ -282,8 +282,6 @@ module(basename(import.meta.filename), function () {
               dailyBudget: 2400,
               monthlyBudget: 72000,
             },
-            anonymous: false,
-            anonymousDailyCap: null,
             operations: [],
           },
         ],

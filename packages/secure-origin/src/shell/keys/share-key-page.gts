@@ -10,16 +10,27 @@
 // of that realm may share into it, and anyone else is told an administrator
 // needs to set it up, with nothing to enter.
 //
-// The page also asks whether people who aren't signed in may use the key, and
-// it reads in one of two ways. Where the workspace's policy opens a call that
-// sends a shared key to such people (`realm.opensToAnonymous` in the window's
-// context), the intro bolds that they can use it, and the key is shared only
-// once the owner ticks that they agree. Elsewhere the intro says only
-// signed-in people can use it, and "Who can use it" lets the owner allow
-// people who aren't signed in ahead of time, for when the policy opens such a
-// call; choosing that switches the intro to the anonymous version. Either
-// way, allowing them asks for an optional anonymous cap: their calls a day,
-// all together, inside the share's daily budget.
+// The page makes no choice about who can use the key. Whether people who
+// aren't signed in may use a key is its owner's decision about the key itself,
+// made when adding it or on the key page; whether they can use it in a
+// workspace is that workspace's policy's to say. They are served only where
+// both allow it, and the page reflects the two, reading one of three ways:
+//
+// - Where the policy lets only signed-in people make a call that sends a
+//   shared key (`realm.opensToAnonymous` false in the window's context), the
+//   intro says only signed-in people can use it, and nothing more is said of
+//   anyone else.
+// - Where the policy lets people who aren't signed in make such a call,
+//   sharing a key there means they will use it, and the intro bolds that they
+//   will. A chosen key that allows them is shared as any other, with a line
+//   saying the key allows it, with its anonymous cap, and that sharing it here
+//   means they will use it.
+// - Where the policy lets them and the chosen key doesn't allow them, the key
+//   can't be shared there: the line says so and points to the key page, where
+//   its owner allows it, and Share key stays disabled. The realm server
+//   refuses such a share too.
+//
+// Choosing another key or workspace reads the page again.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -33,7 +44,6 @@ import {
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
-import Checkbox from '../../components/checkbox.gts';
 import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
@@ -59,7 +69,6 @@ import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import RadioChoices, { type RadioChoice } from './radio-choices.gts';
 import { openedForShare } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
 
@@ -79,7 +88,16 @@ type State =
       key?: UserKey;
       context?: WindowContext;
     }
-  | { name: 'done'; realm: string; share: KeyShare; key: string };
+  // `anonymous` is whether people who aren't signed in will use the key in
+  // the realm, with the key's anonymous cap.
+  | {
+      name: 'done';
+      realm: string;
+      share: KeyShare;
+      key: string;
+      anonymous: boolean;
+      anonymousDailyCap: number | null;
+    };
 
 interface ShareKeyArgs {
   api: KeysWindowAPI;
@@ -106,11 +124,10 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
-        {{#if this.done.share.anonymous}}
+        {{#if this.done.anonymous}}
           <strong data-test-share-key-done-anonymous>People who aren’t signed in
-            can use it too</strong>{{#if this.done.share.anonymousDailyCap}}, up
-            to
-            {{this.done.share.anonymousDailyCap}}
+            will use it too</strong>{{#if this.done.anonymousDailyCap}}, up to
+            {{this.done.anonymousDailyCap}}
             calls a day all together{{/if}}.
         {{/if}}
       </DonePage>
@@ -121,11 +138,11 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
             {{#if this.forAnyone}}
               <span data-test-share-key-intro='anyone'>People who can access the
                 workspace can use the key in their requests,
-                <strong>and so can people who aren’t signed in</strong>,
-                wherever this workspace lets them open its cards. Nobody sees
-                the key itself. Requests made by anyone who opens those cards
-                will consume your quota and/or be billed against your account
-                with this service provider.</span>
+                <strong>and so will people who aren’t signed in</strong>: this
+                workspace lets anyone who opens its cards make calls with a
+                shared key. Nobody sees the key itself. Requests made by anyone
+                who opens those cards will consume your quota and/or be billed
+                against your account with this service provider.</span>
             {{else}}
               <span data-test-share-key-intro='signed-in'>People who can access
                 the workspace can use the key in their requests. They never see
@@ -195,60 +212,39 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
             </FieldContainer>
             {{#if this.policyUnknown}}
               {{! Asked of the workspace just chosen: which reading applies. }}
-            {{else if this.opensToAnonymous}}
+            {{else if this.keyAllowsAnonymous}}
               <FieldContainer
-                @tag='label'
+                @tag='div'
                 @label='People who aren’t signed in'
                 @icon={{Users}}
-                data-test-share-key-agree
+                data-test-share-key-key-allows
               >
-                <span class='agree'>
-                  <Checkbox
-                    @checked={{this.form.anonymous}}
-                    @onChange={{this.toggleAgree}}
-                    data-test-share-key-agree-input
-                  />
-                  <span class='agree-text'>
-                    <span>I agree that people who aren’t signed in can use this
-                      key</span>
-                    <span class='note'>This workspace lets them open cards that
-                      call a service with a shared key, so a key is shared here
-                      only for them too.</span>
-                  </span>
-                </span>
+                <p class='allows' data-test-share-key-key-allows-text>This key
+                  allows it{{#if this.chosenKey.anonymousDailyCap}}, up to
+                    {{this.chosenKey.anonymousDailyCap}}
+                    calls a day all together{{/if}}. Sharing it here means they
+                  will use it.</p>
               </FieldContainer>
-            {{else}}
-              <RadioChoices
-                @label='Who can use it'
-                @icon={{Users}}
-                @name='share-who'
-                @choices={{this.whoChoices}}
-                @selected={{if this.form.anonymous 'anyone' 'signed-in'}}
-                @onSelect={{this.chooseWho}}
-              />
-            {{/if}}
-            {{#if this.form.anonymous}}
+            {{else if this.keyRefusesAnonymous}}
               <FieldContainer
-                @tag='label'
-                @label='Anonymous cap (optional)'
-                @icon={{KeyRound}}
-                data-test-share-key-cap
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-share-key-key-refuses
               >
-                <BoxelInput
-                  @type='text'
-                  @autocomplete='off'
-                  @placeholder='No cap'
-                  @value={{this.form.cap}}
-                  @onInput={{this.setCap}}
-                  @state={{if this.capValid 'none' 'invalid'}}
-                  @errorMessage={{this.capError}}
-                  inputmode='numeric'
-                  data-test-share-key-cap-input
-                />
-                <span class='note cap-note'>How many calls people who aren’t
-                  signed in can make with this key each day, all together. The
-                  rest of its daily budget is kept for people who are signed in.
-                  Leave it empty to let them use the whole budget.</span>
+                <div class='refuses'>
+                  <p class='allows' data-test-share-key-key-refuses-text>This
+                    workspace lets people who aren’t signed in use the keys
+                    shared into it, and this key doesn’t allow them. Allow it on
+                    your key page first.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-share-key-go-to-key
+                    {{on 'click' this.goToKeys}}
+                  >Go to your keys</Button>
+                </div>
               </FieldContainer>
             {{/if}}
             {{#if this.form.error}}
@@ -287,25 +283,15 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
-      .agree {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        cursor: pointer;
-      }
-      .agree-text {
+      .refuses {
         display: grid;
-        min-width: 0;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+      }
+      .allows {
+        margin: 0;
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
-      }
-      .note {
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        color: var(--muted-foreground);
-      }
-      .cap-note {
-        display: block;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
@@ -334,10 +320,6 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     // Whether the chosen realm's policy opens a call that sends a shared key
     // to people who aren't signed in; undefined while it's being asked.
     opensToAnonymous: undefined as boolean | undefined,
-    // The owner's agreement that such people may use the key, and the
-    // optional cap on their calls a day, as typed.
-    anonymous: false,
-    cap: '',
     saving: false,
     error: undefined as string | undefined,
   });
@@ -427,85 +409,45 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       !this.form.realm ||
       !this.form.label.trim() ||
       this.form.opensToAnonymous === undefined ||
-      (this.form.opensToAnonymous && !this.form.anonymous) ||
-      !this.capValid
+      this.keyRefusesAnonymous
     );
   }
-
-  private whoChoices: RadioChoice[] = [
-    {
-      value: 'signed-in',
-      label: 'Only people who are signed in',
-      hint: 'People with access to this workspace.',
-    },
-    {
-      value: 'anyone',
-      label: 'Anyone, including people who aren’t signed in',
-      hint: 'They can use it wherever this workspace lets them open a card that calls a service with a shared key. It lets them open none today.',
-    },
-  ];
 
   private get opensToAnonymous() {
     return this.form.opensToAnonymous === true;
   }
 
-  // The intro tells of people who aren't signed in once they can use the key.
+  // The intro tells of people who aren't signed in where the policy lets them
+  // use a shared key: the key shared there either allows them already, or is
+  // shared only once its owner agrees.
   private get forAnyone() {
-    return this.opensToAnonymous || this.form.anonymous;
+    return this.opensToAnonymous;
   }
 
-  // Neither reading is drawn until the chosen workspace says which applies,
-  // so no choice is made against one and then dropped by the other.
+  private get chosenKey(): UserKey | undefined {
+    return this.form.keys.find((k) => k.id === this.form.key);
+  }
+
+  // Where the policy lets people who aren't signed in use a shared key, and
+  // the chosen key allows them.
+  private get keyAllowsAnonymous() {
+    return this.opensToAnonymous && this.chosenKey?.anonymous === true;
+  }
+
+  // Where the policy lets them and the chosen key doesn't: the key can't be
+  // shared there until its owner allows them on the key page.
+  private get keyRefusesAnonymous() {
+    let key = this.chosenKey;
+    return this.opensToAnonymous && key !== undefined && !key.anonymous;
+  }
+
+  // Neither reading is drawn until the chosen workspace says which applies.
   private get policyUnknown() {
     return Boolean(this.form.realm) && this.form.opensToAnonymous === undefined;
   }
 
-  // Where the workspace already lets such people use a shared key, the owner
-  // ticks the agreement for it, so a choice made for another workspace isn't
-  // taken as one. Elsewhere a choice already made stands.
   private setOpensToAnonymous(opens: boolean) {
     this.form.opensToAnonymous = opens;
-    if (opens) {
-      this.form.anonymous = false;
-    }
-  }
-
-  private chooseWho = (value: string) => {
-    this.form.anonymous = value === 'anyone';
-    this.form.error = undefined;
-  };
-
-  private toggleAgree = () => {
-    this.form.anonymous = !this.form.anonymous;
-    this.form.error = undefined;
-  };
-
-  private setCap = (value: string) => {
-    this.form.cap = value;
-    this.form.error = undefined;
-  };
-
-  // The cap as typed: empty for none, else a whole number of calls, at least
-  // one.
-  private get cap(): number | null | undefined {
-    let trimmed = this.form.cap.trim();
-    if (!this.form.anonymous || trimmed === '') {
-      return null;
-    }
-    let cap = Number(trimmed);
-    return /^\d+$/.test(trimmed) && cap >= 1 && cap <= 2_147_483_647
-      ? cap
-      : undefined;
-  }
-
-  private get capValid() {
-    return this.cap !== undefined;
-  }
-
-  private get capError() {
-    return this.capValid
-      ? undefined
-      : 'A whole number of calls, at least one, or empty for no cap';
   }
 
   private keyName(id: string | undefined): string {
@@ -582,19 +524,23 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
+    // Shared into a workspace that lets people who aren't signed in use it,
+    // the key allows them, so they will.
+    let anonymous = this.opensToAnonymous;
+    let anonymousDailyCap = this.chosenKey?.anonymousDailyCap ?? null;
     try {
       let share = await shareKey(this.args.api.config, {
         keyId: key,
         realm,
         label: this.form.label.trim(),
-        anonymous: this.form.anonymous,
-        ...(this.cap != null ? { anonymousDailyCap: this.cap } : {}),
       });
       this.page.state = {
         name: 'done',
         realm: this.realmName(realm),
         share,
         key: this.keyName(key),
+        anonymous,
+        anonymousDailyCap: anonymous ? anonymousDailyCap : null,
       };
       if (!this.fromKeyPage) {
         this.args.api.close();

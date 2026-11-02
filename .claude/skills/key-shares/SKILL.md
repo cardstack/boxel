@@ -1,6 +1,6 @@
 ---
 name: key-shares
-description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, a share's consent to use by people who aren't signed in (`anonymous`, `anonymous_daily_cap`), who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `handlers/handle-key-shares.ts` or the triggers.
+description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, how sharing follows whether the realm's policy opens shared-key calls to people who aren't signed in and whether the key allows them, who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `handlers/handle-key-shares.ts` or the triggers.
 ---
 
 # Key shares (operators)
@@ -85,39 +85,56 @@ and suspends the share instead. See the `key-limits` skill.
 
 ## People who aren't signed in
 
-Whether people who aren't signed in may use a share is its owner's choice
-when sharing the key, kept on the share: `key_shares.anonymous` (false by
-default) and `key_shares.anonymous_daily_cap`, an optional cap on their calls
-a UTC day all together, at least 1 and set only with `anonymous`
-(`key_shares_anonymous_daily_cap_check`). A binding never carries this
-consent; a visitor the realm's policy admits is served by a share's
-interactive bindings only while the share's `anonymous` is true (see the
-`key-bindings` skill), within its per-address rate and the cap (see the
-`key-limits` skill).
+A share carries nothing about people who aren't signed in: `key_shares` has no
+anonymous columns, and a share resource no anonymous attributes. Whether such
+people may use a key is its owner's decision about the key itself
+(`user_keys.anonymous` and `user_keys.anonymous_daily_cap`; see the
+`user-keys` skill), and whether they can use it in a realm is that realm's
+policy's to say. A visitor the policy admits to an operation is served by a
+share's interactive bindings only while the key the share holds allows
+anonymous use (see the `key-bindings` skill), within the per-address rate and
+the key's anonymous cap (see the `key-limits` skill).
 
-- **Setting it.** `POST /_key-shares` takes `attributes.anonymous` (a
-  boolean) and `attributes.anonymousDailyCap` (a whole number, only with
-  `anonymous: true`); from the terminal, `boxel keys share <name> --realm
-<url> [--anonymous] [--anonymous-cap <calls>]`; in the secure window, the
-  `share-key` page (see the `secure-origin` skill). The share's attributes in
-  every listing carry `anonymous` and `anonymousDailyCap`, and the CLI's
-  listing says "also for people who aren't signed in" with the cap.
-- **When it is required.** Where the realm's policy already opens a call that
-  sends a shared key to people who aren't signed in
-  (`opensSharedKeysToAnonymous` in `lib/anonymous-key-use.ts`: some compiled
-  grant has `anonymous.sendsSharedKey`, which the policy compiles only for a
-  `callApi` with a shared-key slot, every slot taking one; a grant on a
-  keyless `callApi` doesn't count), sharing without
-  `anonymous: true` is refused 400 with a message pointing to
-  `boxel keys share --anonymous`. Elsewhere it is the owner's choice ahead of
-  time, for when the policy opens such a call.
-- **After sharing.** A share made while the policy opened nothing to visitors
-  keeps `anonymous` false when the policy changes, and changing it after
-  sharing isn't offered: the owner unshares and shares again. A writer
-  swapping their own key into another's suspended share takes it over
-  serving signed-in people only, with no cap, since only a key's owner agrees
-  to anonymous use; swapping another of one's own keys into one's own share
-  keeps both.
+Sharing makes no choice about such people: the owner's only decision is on
+the key. Where the realm's policy opens a call that sends a shared key to
+people who aren't signed in, sharing a key there means they will use it. The
+policy opens shared-key calls to visitors when some compiled grant has
+`anonymous.sendsSharedKey` (`opensSharedKeysToAnonymous` in
+`lib/anonymous-key-use.ts`), which compilation sets only for a grant naming
+`"anonymous"` on a `callApi` whose every slot takes a shared key; a grant on a
+keyless `callApi` doesn't count. The secure window reads it as
+`realm.opensToAnonymous`.
+
+- **The policy opens nothing to visitors.** The share is made as any other,
+  and the `share-key` page is the signed-in-only page.
+- **The policy opens such calls and the key allows anonymous use.** The share
+  is made. The page's intro bolds "and so will people who aren't signed in",
+  and a read-only row says the key allows it (with its anonymous cap) and
+  that sharing it here means they will use it.
+- **The policy opens such calls and the key doesn't allow it.** The share is
+  refused 400 (`shareKey`), with a message telling the owner to allow it for
+  the key first: on the key's page, or `boxel keys anonymous <name> on` (see
+  the `user-keys` skill). The page disables Share key, says the key can't be
+  shared here, and links to the key's page to allow it first.
+
+`POST /_key-shares` takes no anonymous attributes: `anonymous` and
+`anonymousDailyCap` are refused 400 as attributes that can't be set.
+`boxel keys share` has no `--anonymous`; it first asks the realm
+(`POST /_secure-window/context` with the CLI's secure session), and where the
+policy opens such calls it prints a warning that sharing means people who
+aren't signed in will use the key, and refuses a key that doesn't allow it,
+pointing to `boxel keys anonymous <name> on`. The AI assistant warns the user
+before opening `share-key` for such a workspace (`SYSTEM_MESSAGE` in
+`runtime-common/ai/constants.ts`, and the `open-secure-window` tool's
+description).
+
+The policy is asked only once the ticket and the owner's direct write are
+checked, so nobody else learns from the answer what it opens. A key already
+shared into a realm whose policy later opens calls to visitors serves them if
+the key allows anonymous use, and otherwise they are asked to sign in.
+
+A swap needs nothing of its own: whether visitors may use the share follows
+the key swapped in, as its owner set it.
 
 ## Visibility
 
@@ -191,20 +208,20 @@ with `attributes.{action: 'share', keyId, realm}`,
 `attributes.{action: 'resume', shareId}`. The request log keeps only the
 method and path of these routes.
 
-| Route                                 | Does                                                                                       |
-| ------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET /_key-shares`                    | The user's own shares; `?key=<id>` for one key's; `?realm=<url>` for a realm's             |
-| `POST /_key-shares`                   | Share: `attributes.{realm, keyId, label, anonymous?, anonymousDailyCap?}`, `meta.{ticket}` |
-| `DELETE /_key-shares/:id`             | Unshare                                                                                    |
-| `POST /_key-shares/:id/suspend`       | Suspend an active share                                                                    |
-| `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                                |
-| `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                                       |
-| `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                               |
-| `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)                          |
+| Route                                 | Does                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /_key-shares`                    | The user's own shares; `?key=<id>` for one key's; `?realm=<url>` for a realm's |
+| `POST /_key-shares`                   | Share: `attributes.{realm, keyId, label}`, `meta.{ticket}`                     |
+| `DELETE /_key-shares/:id`             | Unshare                                                                        |
+| `POST /_key-shares/:id/suspend`       | Suspend an active share                                                        |
+| `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
+| `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
+| `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
+| `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
 
-| Status | Means                                                                                                                                                                                                                                                                                                           |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set; an anonymous cap without `anonymous: true` or below 1; sharing without `anonymous: true` into a realm whose policy opens a call that sends a shared key to people who aren't signed in |
-| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer                                                                                           |
-| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                                                                                                             |
-| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                                                                                                                  |
+| Status | Means                                                                                                                                                                                                                                                                                                                |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set (`anonymous` and `anonymousDailyCap` included); sharing a key that doesn't allow anonymous use into a realm whose policy opens a call that sends a shared key to people who aren't signed in |
+| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer                                                                                                |
+| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                                                                                                                  |
+| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                                                                                                                       |

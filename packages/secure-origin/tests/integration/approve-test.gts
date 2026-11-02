@@ -1380,7 +1380,7 @@ module('Integration | approve pages', function (hooks) {
     });
   }
 
-  test('where the workspace lets people who aren’t signed in use a shared key, a share its owner allowed for them says so, and its daily budget holds its anonymous cap', async function (assert) {
+  test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows them says so, with the key’s anonymous cap', async function (assert) {
     serveShareBatch({
       opensToAnonymous: true,
       share: { anonymous: true, anonymousDailyCap: 100 },
@@ -1408,14 +1408,14 @@ module('Integration | approve pages', function (hooks) {
       );
     assert
       .dom('[data-test-approve-budget="Team GitHub"]')
-      .includesText('It holds the 100 calls a day');
+      .doesNotIncludeText(
+        'people who aren’t signed in',
+        'the cap is the key’s, across every workspace, so the budget isn’t held to it',
+      );
     await fillIn('[data-test-approve-budget="Team GitHub"] input', '50');
     assert
       .dom('[data-test-approve-save]')
-      .isDisabled('a daily budget below the anonymous cap is not sent');
-    assert
-      .dom('[data-test-approve-budget="Team GitHub"]')
-      .includesText('at least the 100 allowed people who aren’t signed in');
+      .isEnabled('a daily budget below the anonymous cap is sent');
 
     await click('[data-test-approve-tick="listTeamPRs"]');
     assert
@@ -1438,7 +1438,7 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
   });
 
-  test('where the workspace lets people who aren’t signed in use a shared key, a share its owner kept for signed-in people says they’re asked to sign in', async function (assert) {
+  test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows signed-in people only says they’re asked to sign in', async function (assert) {
     serveShareBatch({ opensToAnonymous: true, share: {} });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
@@ -1447,7 +1447,9 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
     assert
       .dom('[data-test-approve-signed-in-only-note]')
-      .includesText('Team GitHub is shared for signed-in people only');
+      .hasText(
+        'This workspace lets people who aren’t signed in make these calls, but the key shared as Team GitHub allows signed-in people only, so they’re asked to sign in.',
+      );
     assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
   });
 

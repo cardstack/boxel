@@ -21,7 +21,7 @@ export interface DestinationDisplay {
 export interface WindowContext {
   // `opensToAnonymous`: whether the realm's policy lets people who aren't
   // signed in make a call that sends a shared key. A key is shared into such
-  // a realm only with its owner's agreement to their using it.
+  // a realm only when it allows their using it.
   realm: {
     url: string;
     name: string;
@@ -72,6 +72,21 @@ export type KeyValue =
       subject: string;
       scopes: string[];
     };
+
+// The attributes that let people who aren't signed in use a key, with an
+// optional cap on their calls a day; none when they may not.
+function anonymousAttributes(
+  anonymous: boolean,
+  anonymousDailyCap: number | undefined,
+): Record<string, unknown> {
+  if (!anonymous) {
+    return {};
+  }
+  return {
+    anonymous: true,
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+  };
+}
 
 // The attributes a key's value is sent as.
 function valueAttributes(entered: KeyValue): Record<string, unknown> {
@@ -135,6 +150,12 @@ export interface UserKey {
   state: string;
   createdAt: string;
   updatedAt: string;
+  // Whether its owner lets people who aren't signed in use the key, wherever
+  // a realm it is shared into lets them make a call that sends it, and the
+  // optional cap on their calls a day, all together, across every such
+  // realm. Null where there is no cap.
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
   oauth?: OAuthKeyDescription;
   serviceAccount?: ServiceAccountDetails;
 }
@@ -175,10 +196,6 @@ export interface KeyShare {
   keyId?: string | null;
   state: 'active' | 'suspended';
   suspensionReason: string | null;
-  // Whether people who aren't signed in may use the key, and the optional
-  // cap on their calls a day, all together.
-  anonymous: boolean;
-  anonymousDailyCap: number | null;
 }
 
 type Config = ReturnType<typeof import('./session.js').readConfig>;
@@ -229,9 +246,22 @@ export async function getKey(
   );
 }
 
+// Adds a key. `anonymous` lets people who aren't signed in use it, with an
+// optional cap on their calls a day (`anonymousDailyCap`); without it, only
+// signed-in people can.
 export async function addKey(
   config: Config,
-  { name, entered }: { name: string; entered: KeyValue },
+  {
+    name,
+    entered,
+    anonymous = false,
+    anonymousDailyCap,
+  }: {
+    name: string;
+    entered: KeyValue;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+  },
 ): Promise<UserKey> {
   let { ticket } = await mintKeyWriteTicket(config, { action: 'add' });
   return resource<UserKey>(
@@ -239,7 +269,12 @@ export async function addKey(
       body: {
         data: {
           type: 'user-key',
-          attributes: { name, kind: entered.kind, ...valueAttributes(entered) },
+          attributes: {
+            name,
+            kind: entered.kind,
+            ...valueAttributes(entered),
+            ...anonymousAttributes(anonymous, anonymousDailyCap),
+          },
         },
         meta: { ticket },
       },
@@ -319,6 +354,42 @@ export async function replaceKey(
   );
 }
 
+// Sets whether people who aren't signed in may use one of the user's keys,
+// and the optional cap on their calls a day. It is the key's own setting,
+// whichever realms it is shared into, and needs no ticket: the window's
+// session is its owner's. Turning it off clears the cap. Answers the key.
+export async function setAnonymousUse(
+  config: Config,
+  {
+    keyId,
+    anonymous,
+    anonymousDailyCap = null,
+  }: {
+    keyId: string;
+    anonymous: boolean;
+    anonymousDailyCap?: number | null;
+  },
+): Promise<UserKey> {
+  return resource<UserKey>(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/anonymous-use`,
+      {
+        method: 'PUT',
+        body: {
+          data: {
+            type: 'anonymous-use',
+            attributes: {
+              anonymous,
+              anonymousDailyCap: anonymous ? anonymousDailyCap : null,
+            },
+          },
+        },
+      },
+    ),
+  );
+}
+
 export async function deleteKey(
   config: Config,
   { keyId }: { keyId: string },
@@ -373,24 +444,13 @@ export async function realmShares(
   );
 }
 
-// `anonymous` is the owner's agreement that people who aren't signed in may
-// use the key, where the realm's policy opens a call that sends it to them;
-// `anonymousDailyCap` optionally caps their calls a day, all together.
+// Shares a key into a realm. Who can use it there is the realm's policy's to
+// say, and whether people who aren't signed in may is the key's own setting
+// (`setAnonymousUse`): a realm whose policy lets them make a call that sends a
+// shared key takes only a key that allows them.
 export async function shareKey(
   config: Config,
-  {
-    keyId,
-    realm,
-    label,
-    anonymous = false,
-    anonymousDailyCap,
-  }: {
-    keyId: string;
-    realm: string;
-    label: string;
-    anonymous?: boolean;
-    anonymousDailyCap?: number;
-  },
+  { keyId, realm, label }: { keyId: string; realm: string; label: string },
 ): Promise<KeyShare> {
   let { ticket } = await mintKeyWriteTicket(config, {
     action: 'share',
@@ -402,13 +462,7 @@ export async function shareKey(
       body: {
         data: {
           type: 'key-share',
-          attributes: {
-            realm,
-            keyId,
-            label,
-            ...(anonymous ? { anonymous: true } : {}),
-            ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
-          },
+          attributes: { realm, keyId, label },
         },
         meta: { ticket },
       },
@@ -607,7 +661,7 @@ export interface BatchOperation {
   status: BatchSlotStatus;
   slots: BatchSlot[];
   // Whether the realm's policy opens it to people who aren't signed in, who
-  // are then served through a share whose owner agreed to it.
+  // are then served through a share whose key allows them.
   openToAnonymous: boolean;
 }
 
@@ -631,8 +685,9 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
-  // Whether its owner let people who aren't signed in use it, and the
-  // optional cap on their calls a day, which a daily budget must hold.
+  // Whether the share's key lets people who aren't signed in use it, and the
+  // key's optional cap on their calls a day, counted across every realm the
+  // key is shared into. The share's daily budget bounds them too.
   anonymous: boolean;
   anonymousDailyCap: number | null;
 }

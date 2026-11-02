@@ -63,6 +63,8 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-01T12:00:00.000Z',
     updatedAt: '2026-10-01T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null as number | null,
     usedWith: ['github.com', 'openweathermap.org'],
     sharedInto: [
       {
@@ -96,6 +98,8 @@ const KEYS = [
     state: 'active',
     createdAt: '2026-10-02T12:00:00.000Z',
     updatedAt: '2026-10-02T12:00:00.000Z',
+    anonymous: false,
+    anonymousDailyCap: null as number | null,
     usedWith: [] as string[],
     sharedInto: [] as {
       url: string;
@@ -698,6 +702,103 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
+    test('each key says whether people who aren’t signed in can use it, and changes that with its own request', async function (assert) {
+      let keys = [
+        KEYS[0],
+        { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+      ];
+      serve({
+        'GET _user-keys': () => json(200, keyResources(keys)),
+        'PUT _user-keys/key-1/anonymous-use': ({ body }) => {
+          keys = [{ ...KEYS[0], ...body.data.attributes }, keys[1]];
+          return json(200, {
+            data: { type: 'user-key', id: 'key-1', attributes: keys[0] },
+          });
+        },
+        'PUT _user-keys/key-2/anonymous-use': ({ body }) => {
+          keys = [keys[0], { ...keys[1], ...body.data.attributes }];
+          return json(200, {
+            data: { type: 'user-key', id: 'key-2', attributes: keys[1] },
+          });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      let weather = '[data-test-key-row="Weather service"]';
+      let maps = '[data-test-key-row="Maps"]';
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-summary]`)
+        .hasText('Only people who are signed in can use it');
+      assert
+        .dom(`${maps} [data-test-key-anonymous-use-summary]`)
+        .hasText(
+          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day all together',
+        );
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-change]`)
+        .hasAria(
+          'label',
+          'Change whether people who aren’t signed in can use Weather service',
+        );
+
+      await click(`${weather} [data-test-key-anonymous-use-change]`);
+      assert.dom('[data-test-key-anonymous-use-form]').exists();
+      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert
+        .dom('[data-test-anonymous-use-agreement]')
+        .hasText('Allow people who aren’t signed in to use this key');
+      assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
+      await click('[data-test-anonymous-use-input]');
+      await fillIn('[data-test-anonymous-cap-input]', '0');
+      assert
+        .dom('[data-test-key-anonymous-use-save]')
+        .isDisabled('a cap is at least one call');
+      await fillIn('[data-test-anonymous-cap-input]', '25');
+      await click('[data-test-key-anonymous-use-save]');
+      await waitFor(
+        `${weather} [data-test-key-anonymous-use-summary]:not(:empty)`,
+      );
+      let put = requests.find(
+        (r) =>
+          r.method === 'PUT' && r.path === '_user-keys/key-1/anonymous-use',
+      )!;
+      assert.deepEqual(put.body, {
+        data: {
+          type: 'anonymous-use',
+          attributes: { anonymous: true, anonymousDailyCap: 25 },
+        },
+      });
+      assert.deepEqual(ticketRequests(), [], 'it takes no ticket');
+      assert.dom('[data-test-key-anonymous-use-form]').doesNotExist();
+      assert
+        .dom(`${weather} [data-test-key-anonymous-use-summary]`)
+        .hasText(
+          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day all together',
+          'the list is read again',
+        );
+
+      await click(`${maps} [data-test-key-anonymous-use-change]`);
+      assert
+        .dom('[data-test-anonymous-use-input]')
+        .isChecked('the panel starts from the key’s setting');
+      assert.dom('[data-test-anonymous-cap-input]').hasValue('50');
+      await click('[data-test-anonymous-use-input]');
+      await click('[data-test-key-anonymous-use-save]');
+      await settled();
+      assert.deepEqual(
+        requests.find(
+          (r) =>
+            r.method === 'PUT' && r.path === '_user-keys/key-2/anonymous-use',
+        )!.body.data.attributes,
+        { anonymous: false, anonymousDailyCap: null },
+        'turning it off clears the cap',
+      );
+      assert
+        .dom(`${maps} [data-test-key-anonymous-use-summary]`)
+        .hasText('Only people who are signed in can use it');
+    });
+
     test('unsharing a key from one workspace asks first, then takes out each of its shares there', async function (assert) {
       let listings = 0;
       serve({
@@ -1048,6 +1149,101 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-keys-done-next]')
         .doesNotExist('opened for no card, there is no card to mention');
       assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('a key can let people who aren’t signed in use it, with an optional cap', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: {
+                ...attributesOf(KEYS[0]),
+                name: 'Forecasts',
+                anonymous: true,
+                anonymousDailyCap: 100,
+              },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      assert
+        .dom('[data-test-anonymous-use]')
+        .includesText('People who aren’t signed in');
+      assert
+        .dom('[data-test-anonymous-use-agreement]')
+        .hasText('Allow people who aren’t signed in to use this key');
+      assert
+        .dom('[data-test-anonymous-use-note]')
+        .hasText(
+          'Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.',
+        );
+      assert.dom('[data-test-anonymous-use-input]').isNotChecked();
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .doesNotExist('the cap is asked for only once they are allowed');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-anonymous-use-input]');
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .includesText('Anonymous cap (optional)');
+      assert
+        .dom('[data-test-anonymous-cap]')
+        .includesText(
+          'How many calls people who aren’t signed in can make with this key each day, all together, in every workspace it’s shared into. Leave it empty for no cap.',
+        );
+      assert.dom('[data-test-anonymous-cap-input]').hasValue('');
+      await fillIn('[data-test-anonymous-cap-input]', '1.5');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a cap is a whole number of calls');
+      await fillIn('[data-test-anonymous-cap-input]', '100');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_user-keys')!
+          .body.data.attributes,
+        {
+          name: 'Forecasts',
+          kind: 'static',
+          value: 'sk-forecast',
+          anonymous: true,
+          anonymousDailyCap: 100,
+        },
+      );
+    });
+
+    test('a key that lets people who aren’t signed in use it needs no cap, and a sign-in app isn’t asked', async function (assert) {
+      serve({
+        'POST _user-keys': () =>
+          json(201, {
+            data: {
+              type: 'user-key',
+              id: 'key-3',
+              attributes: { ...attributesOf(KEYS[0]), anonymous: true },
+            },
+          }),
+      });
+      visitShell('enter-key');
+      await render(EnterKeyPage);
+      await waitFor('[data-test-enter-key-form]');
+      await click('[data-test-radio-choice="oauth-client"] input');
+      assert.dom('[data-test-anonymous-use]').doesNotExist();
+      await click('[data-test-radio-choice="static"] input');
+      await fillIn('[data-test-key-name]', 'Forecasts');
+      await fillIn('[data-test-key-value]', 'sk-forecast');
+      await click('[data-test-anonymous-use-input]');
+      await click('[data-test-enter-key-save]');
+      await waitFor('[data-test-keys-done]');
+      let { attributes } = requests.find(
+        (r) => r.method === 'POST' && r.path === '_user-keys',
+      )!.body.data;
+      assert.true(attributes.anonymous);
+      assert.false('anonymousDailyCap' in attributes, 'the cap is optional');
     });
 
     test('opened for an operation, says what it is for, as the server describes it', async function (assert) {
@@ -1753,12 +1949,7 @@ module('Integration | key pages', function (hooks) {
           data: {
             type: 'key-share',
             id: 'share-9',
-            attributes: {
-              anonymous: false,
-              anonymousDailyCap: null,
-              ...body.data.attributes,
-              state: 'active',
-            },
+            attributes: { ...body.data.attributes, state: 'active' },
           },
         });
     }
@@ -1863,7 +2054,7 @@ module('Integration | key pages', function (hooks) {
       );
     });
 
-    test('from the key page, a workspace picked that lets people who aren’t signed in use its shared keys asks for the agreement', async function (assert) {
+    test('from the key page, a workspace picked that lets people who aren’t signed in use its shared keys takes only a key that allows them', async function (assert) {
       serve({
         'GET _secure-window/realms': () =>
           json(200, {
@@ -1886,22 +2077,26 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys/key-2/share');
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
-      await click('[data-test-radio-choice="anyone"] input');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .exists('until a workspace is picked, nothing is said of anyone else');
       await click('[data-test-workspace-dropdown-trigger]');
       await click('[data-test-workspace-option="Team Workspace"]');
       assert
-        .dom('[data-test-share-key-agree-input]')
-        .isNotChecked(
-          'a choice made before the workspace was known isn’t taken as agreement',
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText('and so will people who aren’t signed in');
+      assert
+        .dom('[data-test-share-key-key-refuses-text]')
+        .hasText(
+          'This workspace lets people who aren’t signed in use the keys shared into it, and this key doesn’t allow them. Allow it on your key page first.',
         );
-      assert.dom('[data-test-radio-choices="share-who"]').doesNotExist();
+      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
       assert.dom('[data-test-share-key-save]').isDisabled();
-      await click('[data-test-share-key-agree-input]');
-      await click('[data-test-share-key-save]');
-      await waitFor('[data-test-keys-done]');
-      assert.true(
-        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
-          .body.data.attributes.anonymous,
+      await click('[data-test-share-key-go-to-key]');
+      assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+      assert.false(
+        requests.some((r) => r.path === '_key-shares'),
+        'nothing is shared',
       );
     });
 
@@ -1997,8 +2192,16 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
-    test('a workspace that lets only signed-in people use its shared keys says so, and lets the owner allow people who aren’t signed in ahead of time', async function (assert) {
+    test('a workspace that lets only signed-in people use its shared keys says so, and says nothing of anyone else even for a key that allows them', async function (assert) {
       serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+            ]),
+          ),
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
         'POST _key-shares': shares(),
       });
@@ -2006,46 +2209,39 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .hasText(
+          'People who can access the workspace can use the key in their requests. They never see the key itself. Only signed-in people with access to this workspace can use it. People who aren’t signed in can’t. Requests made by people who have access to this workspace will consume your quota and/or be billed against your account with this service provider.',
+        );
+      assert
         .dom('[data-test-share-key-intro="signed-in"] strong')
         .hasText('Only signed-in people');
-      assert.dom('[data-test-share-key-agree]').doesNotExist();
-      assert
-        .dom('[data-test-radio-choice="signed-in"] input')
-        .isChecked('it starts on signed-in people only');
-      assert.dom('[data-test-share-key-cap]').doesNotExist();
-
-      await click('[data-test-radio-choice="anyone"] input');
-      assert
-        .dom('[data-test-share-key-intro="anyone"] strong')
-        .hasText(
-          'and so can people who aren’t signed in',
-          'the intro tells of them once they can use it',
-        );
-      assert.dom('[data-test-share-key-cap-input]').hasValue('');
-      await fillIn('[data-test-share-key-cap-input]', 'lots');
-      assert
-        .dom('[data-test-share-key-save]')
-        .isDisabled('a cap is a whole number of calls');
-      await fillIn('[data-test-share-key-cap-input]', '');
       await click('[data-test-key-choice="Maps"] input');
+      assert
+        .dom('[data-test-share-key-intro="signed-in"]')
+        .exists('the key allowing them changes nothing here');
+      assert.dom('[data-test-share-key-key-allows]').doesNotExist();
+      assert.dom('[data-test-share-key-key-refuses]').doesNotExist();
+      assert.dom('[data-test-anonymous-use]').doesNotExist();
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
-      let { attributes } = requests.find(
-        (r) => r.method === 'POST' && r.path === '_key-shares',
-      )!.body.data;
-      assert.true(attributes.anonymous);
-      assert.strictEqual(
-        attributes.anonymousDailyCap,
-        undefined,
-        'the cap is optional',
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes,
+        { realm: REALM, keyId: 'key-2', label: 'Maps' },
       );
-      assert
-        .dom('[data-test-share-key-done-anonymous]')
-        .hasText('People who aren’t signed in can use it too');
     });
 
-    test('a workspace that lets people who aren’t signed in use its shared keys bolds that, and shares a key only once its owner agrees', async function (assert) {
+    test('a workspace that lets people who aren’t signed in use its shared keys says they will, shares a key that allows them, and refuses one that doesn’t', async function (assert) {
       serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+            ]),
+          ),
         'POST _secure-window/context': () =>
           context({ realm: { ...WORKSPACE, opensToAnonymous: true } }),
         'POST _key-shares': shares(),
@@ -2054,24 +2250,86 @@ module('Integration | key pages', function (hooks) {
       await render(SharePage);
       await waitFor('[data-test-share-key-form]');
       assert
-        .dom('[data-test-share-key-intro="anyone"] strong')
-        .hasText('and so can people who aren’t signed in');
+        .dom('[data-test-share-key-intro="anyone"]')
+        .hasText(
+          'People who can access the workspace can use the key in their requests, and so will people who aren’t signed in: this workspace lets anyone who opens its cards make calls with a shared key. Nobody sees the key itself. Requests made by anyone who opens those cards will consume your quota and/or be billed against your account with this service provider.',
+        );
       assert
-        .dom('[data-test-radio-choices="share-who"]')
-        .doesNotExist('there is no choosing signed-in people only here');
+        .dom('[data-test-share-key-intro="anyone"] strong')
+        .hasText('and so will people who aren’t signed in');
+
+      await click('[data-test-key-choice="Weather service"] input');
+      assert
+        .dom('[data-test-share-key-key-refuses-text]')
+        .includesText('this key doesn’t allow them');
+      assert.dom('[data-test-share-key-go-to-key]').hasText('Go to your keys');
+      assert.dom('[data-test-share-key-key-allows]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isDisabled();
+
       await click('[data-test-key-choice="Maps"] input');
+      assert.dom('[data-test-share-key-key-refuses]').doesNotExist();
+      assert
+        .dom('[data-test-share-key-key-allows-text]')
+        .hasText(
+          'This key allows it, up to 50 calls a day all together. Sharing it here means they will use it.',
+        );
+      assert.dom('[data-test-anonymous-use-input]').doesNotExist();
+      assert.dom('[data-test-share-key-save]').isEnabled();
+
+      await click('[data-test-key-choice="Weather service"] input');
       assert
         .dom('[data-test-share-key-save]')
-        .isDisabled('the owner agrees first');
-      await click('[data-test-share-key-agree-input]');
-      await fillIn('[data-test-share-key-cap-input]', '50');
+        .isDisabled('switching keys reads the page again');
+      assert.dom('[data-test-share-key-key-refuses]').exists();
+      await click('[data-test-key-choice="Maps"] input');
       await click('[data-test-share-key-save]');
       await waitFor('[data-test-keys-done]');
-      let { attributes } = requests.find(
-        (r) => r.method === 'POST' && r.path === '_key-shares',
-      )!.body.data;
-      assert.true(attributes.anonymous);
-      assert.strictEqual(attributes.anonymousDailyCap, 50);
+      assert.deepEqual(
+        requests.find((r) => r.method === 'POST' && r.path === '_key-shares')!
+          .body.data.attributes,
+        { realm: REALM, keyId: 'key-2', label: 'Maps' },
+        'no anonymous attributes are sent',
+      );
+      assert.deepEqual(navigations, [{ how: 'close' }]);
+    });
+
+    test('from the key page, a key that allows people who aren’t signed in says they will use it once shared into a workspace that lets them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0],
+              { ...KEYS[1], anonymous: true, anonymousDailyCap: null },
+            ]),
+          ),
+        'GET _secure-window/realms': () =>
+          json(200, {
+            data: [
+              {
+                type: 'secure-window-realm',
+                id: REALM,
+                attributes: { name: 'Team Workspace' },
+              },
+            ],
+          }),
+        'POST _secure-window/context': chosenWorkspace(true),
+        'POST _key-shares': shares(),
+      });
+      visitShell('keys/key-2/share');
+      await render(SharePage);
+      await waitFor('[data-test-share-key-key-allows]');
+      assert
+        .dom('[data-test-share-key-key-allows-text]')
+        .hasText(
+          'This key allows it. Sharing it here means they will use it.',
+          'a key with no cap says no cap',
+        );
+      await click('[data-test-share-key-save]');
+      await waitFor('[data-test-keys-done]');
+      assert
+        .dom('[data-test-share-key-done-anonymous]')
+        .hasText('People who aren’t signed in will use it too');
     });
 
     test('with no keys, says to add one on the key page first', async function (assert) {

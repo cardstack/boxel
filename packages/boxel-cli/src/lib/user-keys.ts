@@ -97,6 +97,11 @@ export interface UserKeyMetadata {
   serviceAccount?: ServiceAccountDetails;
   createdAt: string;
   updatedAt: string;
+  // Whether its owner lets people who aren't signed in use it, wherever a
+  // realm's policy lets them make the call, and the optional cap on their
+  // calls a day, all together, in every realm it is shared into.
+  anonymous?: boolean;
+  anonymousDailyCap?: number | null;
 }
 
 export interface KeyShare {
@@ -115,11 +120,6 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  // Whether people who aren't signed in may use the key, where the realm's
-  // policy opens a call that sends it to them, and the optional cap on their
-  // calls a day together.
-  anonymous?: boolean;
-  anonymousDailyCap?: number | null;
   // In a realm's listing: the operations the share is approved for there,
   // each with where it sends, as last approved.
   operations?: KeyShareOperation[];
@@ -244,8 +244,16 @@ export async function addUserKey(
     name,
     kind,
     ticket,
+    anonymous,
+    anonymousDailyCap,
     ...entered
-  }: { name: string; kind?: string; ticket?: string } & EnteredValue,
+  }: {
+    name: string;
+    kind?: string;
+    ticket?: string;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+  } & EnteredValue,
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {
   ticket ??= await mintKeyWriteTicket(
@@ -265,11 +273,73 @@ export async function addUserKey(
           name,
           ...(kind ? { kind } : {}),
           ...valueAttributes(entered),
+          ...(anonymous ? { anonymous: true } : {}),
+          ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
         },
       },
       meta: { ticket },
     },
   });
+  return fromResource<UserKeyMetadata>(json.data);
+}
+
+// Whether a realm's policy lets people who aren't signed in make calls that
+// send a shared key, as the realm server tells the secure window. Takes a
+// secure session.
+export async function realmOpensToAnonymous(
+  realmServerUrl: string,
+  token: string,
+  realm: string,
+  fetchFn: FetchFn = fetch,
+): Promise<boolean> {
+  let json = await realmServerRequest(
+    realmServerUrl,
+    '_secure-window/context',
+    {
+      method: 'POST',
+      token,
+      fetchFn,
+      body: {
+        data: {
+          type: 'secure-window-context',
+          attributes: { realm: canonicalRealmUrl(realm) },
+        },
+      },
+    },
+  );
+  return json?.data?.attributes?.realm?.opensToAnonymous === true;
+}
+
+// Sets whether people who aren't signed in may use one of the user's keys,
+// and the optional cap on their calls a day. Takes a secure session.
+export async function setUserKeyAnonymousUse(
+  realmServerUrl: string,
+  token: string,
+  {
+    keyId,
+    anonymous,
+    anonymousDailyCap,
+  }: { keyId: string; anonymous: boolean; anonymousDailyCap?: number },
+  fetchFn: FetchFn = fetch,
+): Promise<UserKeyMetadata> {
+  let json = await realmServerRequest(
+    realmServerUrl,
+    `_user-keys/${encodeURIComponent(keyId)}/anonymous-use`,
+    {
+      method: 'PUT',
+      token,
+      fetchFn,
+      body: {
+        data: {
+          type: 'anonymous-use',
+          attributes: {
+            anonymous,
+            ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+          },
+        },
+      },
+    },
+  );
   return fromResource<UserKeyMetadata>(json.data);
 }
 
@@ -380,17 +450,8 @@ export async function shareUserKey(
     keyId,
     realm,
     label,
-    anonymous,
-    anonymousDailyCap,
     ticket,
-  }: {
-    keyId: string;
-    realm: string;
-    label: string;
-    anonymous?: boolean;
-    anonymousDailyCap?: number;
-    ticket?: string;
-  },
+  }: { keyId: string; realm: string; label: string; ticket?: string },
   fetchFn: FetchFn = fetch,
 ): Promise<KeyShare> {
   let canonical = canonicalRealmUrl(realm);
@@ -407,13 +468,7 @@ export async function shareUserKey(
     body: {
       data: {
         type: 'key-share',
-        attributes: {
-          realm: canonical,
-          keyId,
-          label,
-          ...(anonymous ? { anonymous } : {}),
-          ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
-        },
+        attributes: { realm: canonical, keyId, label },
       },
       meta: { ticket },
     },

@@ -79,9 +79,11 @@ export type LimitSubject =
 interface LimitedSubject {
   subject: LimitSubject;
   limits: KeyLimits;
-  // A share's anonymous cap: calls a UTC day across everyone who isn't
-  // signed in. Null where its owner set none.
+  // The anonymous cap of the key the share holds, or of the key itself: calls
+  // a UTC day across everyone who isn't signed in, in every realm the key is
+  // shared into. Null where its owner set none. `capKeyId` is that key.
   anonymousDailyCap: number | null;
+  capKeyId: string | null;
   owner: string;
   label: string;
   // The share's realm; absent for a personal key.
@@ -195,8 +197,10 @@ function budgetKey(subject: LimitSubject): string {
   return counterKey('key-limit', subject.kind, subject.id);
 }
 
-function anonymousCapKey(subject: LimitSubject): string {
-  return counterKey('key-limit', subject.kind, subject.id, 'anonymous');
+// The anonymous cap is the key's, so every realm the key is shared into
+// counts against one budget.
+function anonymousCapKey(keyId: string): string {
+  return counterKey('key-limit', 'key', keyId, 'anonymous');
 }
 
 function bucketOf(limits: KeyLimits) {
@@ -214,8 +218,8 @@ interface CountedBudget {
 }
 
 // The budgets a call spends: the share's or key's daily and monthly budgets,
-// and for a caller who isn't signed in, the share's anonymous cap too, where
-// it has one.
+// and for a caller who isn't signed in, the key's anonymous cap too, where
+// its owner set one.
 function budgetsOf(
   limited: LimitedSubject,
   anonymous?: AnonymousCallApiCaller,
@@ -225,13 +229,12 @@ function budgetsOf(
     { key, period: 'day', limit: limited.limits.dailyBudget },
     { key, period: 'month', limit: limited.limits.monthlyBudget },
   ];
-  if (anonymous && limited.anonymousDailyCap != null) {
+  if (anonymous && limited.anonymousDailyCap != null && limited.capKeyId) {
     budgets.push({
-      key: anonymousCapKey(limited.subject),
+      key: anonymousCapKey(limited.capKeyId),
       period: 'day',
-      // No daily budget below the cap is accepted, so it fits inside the
-      // budget; a platform default lowered under a share's cap holds the cap
-      // to it.
+      // The share's own daily budget bounds everyone's calls through it, so
+      // a cap above it reaches no further.
       limit: Math.min(limited.anonymousDailyCap, limited.limits.dailyBudget),
       anonymousCap: true,
     });
@@ -266,11 +269,11 @@ async function limitedSubjects(
       dbAdapter,
       subject.kind === 'share'
         ? [
-            `SELECT owner, label, realm_url, anonymous_daily_cap, ${KEY_LIMIT_COLUMNS} FROM key_shares WHERE id = `,
+            `SELECT s.owner, s.label, s.realm_url, s.key_id AS cap_key_id, k.anonymous_daily_cap, s.rate_burst, s.rate_refill_per_minute, s.daily_budget, s.monthly_budget FROM key_shares s LEFT JOIN user_keys k ON k.id = s.key_id WHERE s.id = `,
             param(subject.id),
           ]
         : [
-            `SELECT owner, name AS label, ${KEY_LIMIT_COLUMNS} FROM user_keys WHERE id = `,
+            `SELECT owner, name AS label, id AS cap_key_id, anonymous_daily_cap, ${KEY_LIMIT_COLUMNS} FROM user_keys WHERE id = `,
             param(subject.id),
           ],
     );
@@ -284,6 +287,7 @@ async function limitedSubjects(
         row.anonymous_daily_cap == null
           ? null
           : Number(row.anonymous_daily_cap),
+      capKeyId: (row.cap_key_id as string | null) ?? null,
       owner: row.owner as string,
       label: row.label as string,
       ...(subject.kind === 'share'
@@ -661,20 +665,6 @@ export async function setShareLimits(
   if (!UUID.test(shareId)) {
     throw noSuchShare();
   }
-  // The anonymous cap sits inside the daily budget, keeping the rest of it
-  // for signed-in readers, so the budget never goes below it.
-  if (changes.dailyBudget !== undefined) {
-    let [share] = await query(dbAdapter, [
-      `SELECT anonymous_daily_cap FROM key_shares WHERE id = `,
-      param(shareId),
-      ` AND owner = `,
-      param(user),
-    ]);
-    assertBudgetHoldsCap(
-      share?.anonymous_daily_cap,
-      changes.dailyBudget ?? keyLimitDefaults().dailyBudget,
-    );
-  }
   let [row] = await query(dbAdapter, [
     `UPDATE key_shares SET `,
     ...assignments(changes),
@@ -701,16 +691,6 @@ export async function setShareLimits(
     );
   }
   throw noSuchShare();
-}
-
-// Refuses a daily budget below the share's anonymous cap.
-export function assertBudgetHoldsCap(cap: unknown, dailyBudget: number): void {
-  if (cap != null && Number(cap) > dailyBudget) {
-    throw new UserKeyError(
-      400,
-      `the daily budget is at least the share's anonymous cap of ${Number(cap)} calls, which people who aren't signed in share`,
-    );
-  }
 }
 
 // Sets one of the user's own keys' limits. Another user's key answers as one

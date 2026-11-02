@@ -89,13 +89,7 @@ async function readShareBody(
   return { attributes, ticket: ticketOf(body) };
 }
 
-const SHARE_ATTRIBUTES = new Set([
-  'realm',
-  'keyId',
-  'label',
-  'anonymous',
-  'anonymousDailyCap',
-]);
+const SHARE_ATTRIBUTES = new Set(['realm', 'keyId', 'label']);
 const SWAP_ATTRIBUTES = new Set(['keyId']);
 
 // `GET /_key-shares` lists the user's own shares, in every realm; with
@@ -151,8 +145,6 @@ export function handleShareKey(args: CreateRoutesArgs): Handler {
       realm: attributes.realm,
       keyId: attributes.keyId,
       label: attributes.label,
-      anonymous: attributes.anonymous,
-      anonymousDailyCap: attributes.anonymousDailyCap,
       opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });

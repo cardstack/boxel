@@ -5,7 +5,7 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import { cliLog } from '../../lib/cli-log.ts';
-import { DIM, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
+import { DIM, FG_GREEN, FG_RED, FG_YELLOW, RESET } from '../../lib/colors.ts';
 import {
   checkKeyValueSource,
   readKeyValue,
@@ -34,7 +34,9 @@ import {
   listOwnShares,
   listRealmShares,
   listUserKeys,
+  realmOpensToAnonymous,
   replaceUserKey,
+  setUserKeyAnonymousUse,
   shareUserKey,
   completeOAuthConnect,
   startOAuthConnect,
@@ -227,10 +229,7 @@ function describeShare(share: KeyShare, keyNames: Map<string, string>): string {
       : share.keyId === null
         ? ', no key'
         : `, key ${keyNames.get(share.keyId) ?? share.keyId}`;
-  let anonymous = share.anonymous
-    ? `, also for people who aren't signed in${share.anonymousDailyCap != null ? ` (up to ${share.anonymousDailyCap} calls a day)` : ''}`
-    : '';
-  return `${share.label} in ${share.realm}: ${state}${key}${anonymous}`;
+  return `${share.label} in ${share.realm}: ${state}${key}`;
 }
 
 function printKey(key: UserKeyMetadata): void {
@@ -239,6 +238,9 @@ function printKey(key: UserKeyMetadata): void {
   console.log(`  kind: ${key.kind}`);
   console.log(`  state: ${key.state}`);
   console.log(`  updated: ${key.updatedAt}`);
+  if (key.anonymous !== undefined) {
+    console.log(`  people who aren't signed in: ${anonymousUseOf(key)}`);
+  }
   let { client, connection } = key.oauth ?? {};
   if (client) {
     console.log(`  client id: ${client.clientId}`);
@@ -591,13 +593,26 @@ function keptByReplace(
 
 export async function keysAdd(
   name: string,
-  options: { json?: boolean } & KeyValueSource &
+  options: {
+    json?: boolean;
+    anonymous?: boolean;
+    anonymousCap?: string;
+  } & KeyValueSource &
     ServiceAccountOptions &
     OAuthClientOptions &
     KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   let kind = options.kind ?? 'static';
+  let anonymousDailyCap = anonymousCapOption(
+    options.anonymous,
+    options.anonymousCap,
+  );
+  if (options.anonymous && kind === 'oauth-client') {
+    throw new Error(
+      "--anonymous is for a key sent with a call; an OAuth client's people each connect their own account",
+    );
+  }
   checkAddKind(kind);
   checkKindOptions(kind, options);
   checkOAuthClientOptions(kind, options);
@@ -611,6 +626,8 @@ export async function keysAdd(
     value,
     ...serviceAccountAttributes(kind, options),
     ...oauthClientSettings(kind, options),
+    ...(options.anonymous ? { anonymous: true } : {}),
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
   });
   emit(ctx, key, () => {
     if (kind === 'oauth-client' && options.grantType !== 'client_credentials') {
@@ -724,56 +741,105 @@ export async function keysDelete(
   return result;
 }
 
-// `--anonymous` is the owner's agreement that people who aren't signed in may
-// use the key, which the realm server requires where the realm's policy
-// already opens a call that sends a shared key to them.
+// Sharing makes no choice about people who aren't signed in: that is the
+// key's own setting (`keys add --anonymous`, `keys anonymous`). The command
+// asks the realm first, as the secure window's share page does. Where the
+// realm's policy lets such people make calls that send a shared key, sharing
+// there means they will use the key: it warns so, and a key that doesn't
+// allow them isn't shared there until its owner allows it for the key.
 export async function keysShare(
   name: string,
-  options: {
-    realm: string;
-    as?: string;
-    anonymous?: boolean;
-    anonymousCap?: string;
-    json?: boolean;
-  } & KeysCommandDeps,
+  options: { realm: string; as?: string; json?: boolean } & KeysCommandDeps,
 ): Promise<KeyShare> {
-  let anonymousDailyCap: number | undefined;
-  if (options.anonymousCap !== undefined) {
-    if (!options.anonymous) {
-      throw new Error('--anonymous-cap is given with --anonymous');
-    }
-    anonymousDailyCap = Number(options.anonymousCap);
-    if (
-      !/^\d+$/.test(options.anonymousCap.trim()) ||
-      anonymousDailyCap < 1 ||
-      anonymousDailyCap > 2_147_483_647
-    ) {
-      throw new Error(
-        '--anonymous-cap is a whole number of calls, from 1 to 2147483647',
-      );
-    }
-  }
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
+  let realm = canonicalRealmUrl(options.realm);
+  let opens = await realmOpensToAnonymous(ctx.realmServerUrl, token, realm);
+  if (opens && !key.anonymous) {
+    throw new Error(
+      `${realm} lets people who aren't signed in make calls that send a shared key, so sharing ${name} there means they will use it, and ${name} doesn't allow them. To share it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls>)`,
+    );
+  }
+  if (opens) {
+    console.error(
+      `${FG_YELLOW}Warning: sharing ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}.${RESET}`,
+    );
+  }
   let share = await shareUserKey(ctx.realmServerUrl, token, {
     keyId: key.id,
     realm: options.realm,
     label: options.as ?? name,
-    ...(options.anonymous ? { anonymous: true } : {}),
-    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
   });
   emit(ctx, share, () => {
     console.log(
       `${FG_GREEN}Shared ${name} into ${share.realm} as ${share.label}.${RESET}`,
     );
-    if (share.anonymous) {
-      console.log(
-        `People who aren't signed in can use it too, where the realm's policy opens a call that sends it to them${share.anonymousDailyCap != null ? `, up to ${share.anonymousDailyCap} calls a day together` : ''}.`,
-      );
+    if (opens) {
+      console.log(`People who aren't signed in will use it there.`);
     }
   });
   return share;
+}
+
+// `--anonymous-cap <calls>`, given only with `--anonymous` (or `on`): a whole
+// number of calls a day, from 1.
+function anonymousCapOption(
+  anonymous: boolean | undefined,
+  cap: string | undefined,
+  { flag = '--anonymous-cap', with: withFlag = '--anonymous' } = {},
+): number | undefined {
+  if (cap === undefined) {
+    return undefined;
+  }
+  if (!anonymous) {
+    throw new Error(`${flag} is given with ${withFlag}`);
+  }
+  let calls = Number(cap);
+  if (!/^\d+$/.test(cap.trim()) || calls < 1 || calls > 2_147_483_647) {
+    throw new Error(`${flag} is a whole number of calls, from 1 to 2147483647`);
+  }
+  return calls;
+}
+
+// How a key's setting for people who aren't signed in reads.
+function anonymousUseOf(key: UserKeyMetadata): string {
+  return key.anonymous
+    ? `allowed${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}, wherever a realm's policy lets them make the call`
+    : 'not allowed';
+}
+
+// Whether people who aren't signed in may use one of the user's keys: its
+// owner's setting for the key itself, which every realm it is shared into
+// follows where that realm's policy lets them make the call. `off` clears the
+// cap.
+export async function keysAnonymous(
+  name: string,
+  setting: string,
+  options: { cap?: string; json?: boolean } & KeysCommandDeps = {},
+): Promise<UserKeyMetadata> {
+  if (setting !== 'on' && setting !== 'off') {
+    throw new Error('say on or off');
+  }
+  let anonymous = setting === 'on';
+  let anonymousDailyCap = anonymousCapOption(anonymous, options.cap, {
+    flag: '--cap',
+    with: 'on',
+  });
+  let ctx = context(options.json, options);
+  let token = await secureToken(ctx);
+  let key = await findUserKey(ctx.realmServerUrl, token, name);
+  let updated = await setUserKeyAnonymousUse(ctx.realmServerUrl, token, {
+    keyId: key.id,
+    anonymous,
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+  });
+  emit(ctx, updated, () => {
+    console.log(
+      `${FG_GREEN}People who aren't signed in: ${anonymousUseOf(updated)} for ${name}.${RESET}`,
+    );
+  });
+  return updated;
 }
 
 export async function keysUnshare(

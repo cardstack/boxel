@@ -46,13 +46,14 @@ import { setShareLimits } from '../lib/key-limits.ts';
 // ============================================================================
 // Anonymous use of a share, end to end against the stub vendor. A realm's
 // policy opens a card's `callApi` operations to callers who aren't signed in,
-// and the owner of the key a share holds agrees, when sharing it, that such
-// callers may use it, optionally with an anonymous cap. Sharing into a realm
-// whose policy already opens such a call takes that agreement. A visitor who
+// and the owner of the key a share holds lets such callers use the key, a
+// setting of the key itself, optionally with an anonymous cap. Sharing a key
+// that doesn't allow it into a realm whose policy already opens such a call
+// takes its owner's agreement, which turns it on for the key. A visitor who
 // isn't signed in is served only when both are present: counted by address
 // against the share's per-person rate, and together with every other such
-// visitor against the anonymous cap where one is set, which sits inside the
-// share's daily budget. A personal key never fills for such a visitor.
+// visitor against the key's anonymous cap where one is set. A personal key
+// never fills for such a visitor.
 // ============================================================================
 
 const TEAM = 'http://127.0.0.1:4444/anonymous-key-use-team/';
@@ -287,20 +288,37 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   let keysAdded = 0;
-  async function addKey(value = VALUE) {
+  // Adds a key of the owner's; `anonymous` and `anonymousDailyCap` are its
+  // owner's setting for people who aren't signed in.
+  async function addKey({
+    value = VALUE,
+    owner = OWNER,
+    ...use
+  }: {
+    value?: string;
+    owner?: string;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+  } = {}) {
     return await addUserKey(dbAdapter, keyring, {
-      owner: OWNER,
+      owner,
       name: `weather-${++keysAdded}`,
       value,
-      ticket: await ticket(OWNER, 'add'),
+      ...use,
+      ticket: await ticket(owner, 'add'),
     });
   }
 
   // Shares a key into the team realm through the route the secure window and
-  // the CLI use, with `attributes` such as `anonymous` and its cap.
-  async function share(attributes: Record<string, unknown> = {}) {
-    let key = await addKey();
-    return await request
+  // the CLI use, with `attributes` such as the owner's agreement to anonymous
+  // use and its cap.
+  async function share(
+    attributes: Record<string, unknown> = {},
+    key?: { id: string },
+  ) {
+    key ??= await addKey();
+    let keyId = key.id;
+    let response = await request
       .post('/_key-shares')
       .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
       .set('Origin', secureOriginURL.origin)
@@ -310,24 +328,40 @@ module(basename(import.meta.filename), function (hooks) {
           type: 'key-share',
           attributes: {
             realm: TEAM,
-            keyId: key.id,
+            keyId,
             label: 'Team weather',
             ...attributes,
           },
         },
         meta: {
-          ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: TEAM }),
+          ticket: await ticket(OWNER, 'share', { keyId, realm: TEAM }),
         },
       });
+    return Object.assign(response, { keyId });
   }
 
-  // A share whose owner agreed to anonymous use, approved for interactive use
-  // of `names` with a daily budget of 500.
-  async function sharedForAnyone(
-    names: string[],
-    attributes: Record<string, unknown> = {},
-  ) {
-    let response = await share({ anonymous: true, ...attributes });
+  async function keyUse(keyId: string) {
+    let [row] = await dbAdapter.execute(
+      `SELECT anonymous, anonymous_daily_cap FROM user_keys WHERE id = $1`,
+      { bind: [keyId] },
+    );
+    return {
+      anonymous: Boolean(row.anonymous),
+      cap:
+        row.anonymous_daily_cap == null
+          ? null
+          : Number(row.anonymous_daily_cap),
+    };
+  }
+
+  // A share of a key its owner lets people who aren't signed in use, with
+  // `cap`, approved for interactive use of `names` with a daily budget of 500.
+  async function sharedForAnyone(names: string[], cap?: number) {
+    let key = await addKey({
+      anonymous: true,
+      ...(cap !== undefined ? { anonymousDailyCap: cap } : {}),
+    });
+    let response = await share({}, key);
     if (response.status !== 201) {
       throw new Error(`could not share: ${response.status} ${response.text}`);
     }
@@ -340,7 +374,7 @@ module(basename(import.meta.filename), function (hooks) {
     if (approved.status !== 201) {
       throw new Error(`could not approve: ${approved.status} ${approved.text}`);
     }
-    return shareId;
+    return { shareId, keyId: key.id };
   }
 
   // Whether the secure window is told the realm opens shared keys to people
@@ -486,7 +520,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("sharing a key into a realm whose policy opens a call that sends it to visitors takes its owner's agreement", async function (assert) {
+  test("a key's owner lets people who aren't signed in use it, on the key itself, and sharing only reflects the realm's policy", async function (assert) {
     assert.true(
       await opensToAnonymous(TEAM, OWNER),
       'the secure window is told the team realm opens a shared key to people who aren’t signed in',
@@ -496,25 +530,98 @@ module(basename(import.meta.filename), function (hooks) {
       'and that a realm with no such grant does not',
     );
 
+    let allowed = await addKey({ anonymous: true, anonymousDailyCap: 100 });
+    assert.true(allowed.anonymous, 'set when the key is added');
+    assert.strictEqual(allowed.anonymousDailyCap, 100);
+    let shared = await share({}, allowed);
+    assert.strictEqual(
+      shared.status,
+      201,
+      'a key that already allows it needs no agreement',
+    );
+
     let refused = await share();
     assert.strictEqual(refused.status, 400, refused.text);
     assert.true(
-      refused.text.includes('--anonymous'),
-      'the refusal says how to agree',
+      refused.text.includes('boxel keys anonymous'),
+      'sharing a key that doesn’t allow it into a realm where visitors will use it is refused, saying where to allow it',
     );
-    let capAlone = await share({ anonymousDailyCap: 100 });
+    assert.false(
+      (await keyUse(refused.keyId)).anonymous,
+      'and sharing changed nothing about the key',
+    );
+    let chosenHere = await share({ anonymous: true });
     assert.strictEqual(
-      capAlone.status,
+      chosenHere.status,
       400,
-      'a cap is set only with anonymous use',
+      'sharing makes no choice about people who aren’t signed in',
     );
-    let zero = await share({ anonymous: true, anonymousDailyCap: 0 });
-    assert.strictEqual(zero.status, 400, 'a cap is at least one call');
 
-    let agreed = await share({ anonymous: true, anonymousDailyCap: 100 });
-    assert.strictEqual(agreed.status, 201, agreed.text);
-    assert.true(agreed.body.data.attributes.anonymous);
-    assert.strictEqual(agreed.body.data.attributes.anonymousDailyCap, 100);
+    let elsewhere = await addKey();
+    let signedInOnly = await shareKey(dbAdapter, {
+      owner: OWNER,
+      realm: TEAM,
+      keyId: elsewhere.id,
+      label: 'Elsewhere',
+      opensToAnonymous: async () => false,
+      ticket: await ticket(OWNER, 'share', {
+        keyId: elsewhere.id,
+        realm: TEAM,
+      }),
+    });
+    assert.strictEqual(
+      signedInOnly.state,
+      'active',
+      'where the policy opens nothing to visitors, any key is shared',
+    );
+  });
+
+  test("a key's owner changes whether people who aren't signed in may use it, from the secure window", async function (assert) {
+    let { keyId } = await sharedForAnyone(['forecast'], 100);
+    assert.strictEqual((await invoke('forecast')).status, 200);
+    let put = (attributes: Record<string, unknown>) =>
+      request
+        .put(`/_user-keys/${keyId}/anonymous-use`)
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({ data: { type: 'anonymous-use', attributes } });
+    let off = await put({ anonymous: false }).set(
+      'Authorization',
+      await secureSessionAuth(dbAdapter, OWNER),
+    );
+    assert.strictEqual(off.status, 200, off.text);
+    assert.false(off.body.data.attributes.anonymous);
+    assert.strictEqual(
+      off.body.data.attributes.anonymousDailyCap,
+      null,
+      'turning it off clears the cap',
+    );
+    let refused = await invoke('forecast');
+    assert.strictEqual(refused.code, 'anonymous-use-not-approved');
+    assert.strictEqual(
+      (await readiness('forecast'))?.readiness,
+      'needs-sign-in',
+    );
+    let someoneElse = await put({ anonymous: true }).set(
+      'Authorization',
+      await secureSessionAuth(dbAdapter, READER),
+    );
+    assert.strictEqual(
+      someoneElse.status,
+      404,
+      'another user’s key answers as one that doesn’t exist',
+    );
+    let on = await put({ anonymous: true, anonymousDailyCap: 5 }).set(
+      'Authorization',
+      await secureSessionAuth(dbAdapter, OWNER),
+    );
+    assert.strictEqual(on.status, 200, on.text);
+    assert.strictEqual(on.body.data.attributes.anonymousDailyCap, 5);
+    assert.strictEqual(
+      (await invoke('forecast')).status,
+      200,
+      'visitors are served again',
+    );
   });
 
   test('only a grant on a call that sends a shared key asks a key owner to agree; one on a keyless call does not', async function (assert) {
@@ -537,7 +644,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     // A share's operations are in its owner's batch.
-    let shared = await share({ anonymous: true });
+    let shared = await share({}, await addKey({ anonymous: true }));
     assert.strictEqual(shared.status, 201, shared.text);
     let batch = await request
       .post('/_key-bindings/batch')
@@ -570,8 +677,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a visitor who is not signed in is served through a share whose owner allows it, for the operations the policy opens to them', async function (assert) {
-    let shareId = await sharedForAnyone(['forecast', 'alerts']);
+  test('a visitor who is not signed in is served through a share whose key allows it, for the operations the policy opens to them', async function (assert) {
+    let { shareId, keyId } = await sharedForAnyone(['forecast', 'alerts']);
     assert.strictEqual((await readiness('forecast'))?.readiness, 'ready');
     let served = await invoke('forecast');
     assert.strictEqual(served.status, 200, JSON.stringify(served.body));
@@ -597,9 +704,9 @@ module(basename(import.meta.filename), function (hooks) {
       'a signed-in reader is served as before',
     );
     assert.strictEqual(
-      await used(['key-limit', 'share', shareId, 'anonymous']),
+      await used(['key-limit', 'key', keyId, 'anonymous']),
       0,
-      'a share with no anonymous cap counts none',
+      'a key with no anonymous cap counts none',
     );
     assert.strictEqual(
       await used(['key-limit', 'share', shareId]),
@@ -608,27 +715,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("a share whose owner didn't allow anonymous use serves signed-in readers only", async function (assert) {
+  test("a share whose key doesn't allow anonymous use serves signed-in readers only", async function (assert) {
     // Shared before the realm's policy opened anything to visitors, which
     // asked for no agreement.
     let key = await addKey();
-    let shared = await shareKey(dbAdapter, {
+    await shareKey(dbAdapter, {
       owner: OWNER,
       realm: TEAM,
       keyId: key.id,
       label: 'Team weather',
       ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: TEAM }),
     });
-    assert.false(shared.anonymous);
+    let [{ id: shareId }] = (await dbAdapter.execute(
+      `SELECT id FROM key_shares WHERE key_id = $1`,
+      { bind: [key.id] },
+    )) as { id: string }[];
     let approved = await approve(
       ['forecast'],
-      { shareId: shared.id },
-      { interactive: true, dailyBudgets: { [shared.id]: 500 } },
+      { shareId },
+      { interactive: true, dailyBudgets: { [shareId]: 500 } },
     );
     assert.strictEqual(approved.status, 201, approved.text);
     let anonymousBinding = await approve(
       ['forecast'],
-      { shareId: shared.id },
+      { shareId },
       { interactive: true, anonymous: true },
     );
     assert.strictEqual(
@@ -651,7 +761,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("a visitor's address is held to the share's rate, and other addresses are not", async function (assert) {
-    let shareId = await sharedForAnyone(['forecast']);
+    let { shareId } = await sharedForAnyone(['forecast']);
     await setShareLimits(dbAdapter, {
       user: OWNER,
       shareId,
@@ -682,10 +792,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(vendor.requests.length, 3);
   });
 
-  test("the anonymous cap is shared by every visitor who isn't signed in, and spending it leaves the share's budget for signed-in readers", async function (assert) {
-    let shareId = await sharedForAnyone(['forecast'], {
-      anonymousDailyCap: 1,
-    });
+  test("the key's anonymous cap is shared by every visitor who isn't signed in, and spending it leaves the share's budget for signed-in readers", async function (assert) {
+    let { shareId, keyId } = await sharedForAnyone(['forecast'], 1);
     let first = await invoke('forecast');
     assert.strictEqual(first.status, 200, JSON.stringify(first.body));
     let capped = await invoke('forecast', { address: OTHER_VISITOR });
@@ -712,77 +820,41 @@ module(basename(import.meta.filename), function (hooks) {
       'both served calls spent the share’s daily budget',
     );
     assert.strictEqual(
-      await used(['key-limit', 'share', shareId, 'anonymous']),
+      await used(['key-limit', 'key', keyId, 'anonymous']),
       1,
-      'only the visitor’s call spent the anonymous cap',
+      'only the visitor’s call spent the key’s anonymous cap',
     );
   });
 
-  test("a share's daily budget never goes below its anonymous cap", async function (assert) {
-    let shared = await share({ anonymous: true, anonymousDailyCap: 200 });
-    assert.strictEqual(shared.status, 201, shared.text);
-    let shareId = shared.body.data.id as string;
-    let lower = await approve(
-      ['forecast'],
-      { shareId },
-      { interactive: true, dailyBudgets: { [shareId]: 100 } },
-    );
-    assert.strictEqual(
-      lower.status,
-      400,
-      'the first interactive approval names a daily budget that holds the cap',
-    );
-    let approved = await approve(
-      ['forecast'],
-      { shareId },
-      { interactive: true, dailyBudgets: { [shareId]: 500 } },
-    );
-    assert.strictEqual(approved.status, 201, approved.text);
-    await assert.rejects(
-      setShareLimits(dbAdapter, {
-        user: OWNER,
-        shareId,
-        changes: { dailyBudget: 100 },
-      }),
-      /anonymous cap of 200/,
-      'the limits route refuses lowering it below the cap',
-    );
-  });
-
-  test("another writer's key swapped into the share serves signed-in people only, until its own owner agrees", async function (assert) {
-    let shareId = await sharedForAnyone(['forecast'], {
-      anonymousDailyCap: 100,
-    });
+  test("a key swapped into the share brings its own owner's setting for people who aren't signed in", async function (assert) {
+    let { shareId } = await sharedForAnyone(['forecast'], 100);
     // The owner leaves, which suspends the share.
     await dbAdapter.execute(
       `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
       { bind: [TEAM, OWNER] },
     );
-    let theirs = await addUserKey(dbAdapter, keyring, {
+    let theirs = await addKey({
       owner: READER,
-      name: 'reader-weather',
       value: 'reader-weather-key-3c90aa',
-      ticket: await ticket(READER, 'add'),
     });
-    let swapped = await swapKeyIntoShare(dbAdapter, keyring, {
+    await swapKeyIntoShare(dbAdapter, keyring, {
       user: READER,
       shareId,
       keyId: theirs.id,
       ticket: await ticket(READER, 'swap', { keyId: theirs.id, shareId }),
       via: 'window',
     });
-    assert.false(
-      swapped.share.anonymous,
-      'only a key’s owner agrees to anonymous use',
-    );
-    assert.strictEqual(swapped.share.anonymousDailyCap, null);
     let refused = await invoke('forecast');
-    assert.strictEqual(refused.code, 'anonymous-use-not-approved');
+    assert.strictEqual(
+      refused.code,
+      'anonymous-use-not-approved',
+      'the new key doesn’t allow anonymous use, so visitors are asked to sign in',
+    );
     assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
   });
 
-  test("a personal key never fills for a visitor who isn't signed in", async function (assert) {
-    let key = await addKey(PERSONAL_VALUE);
+  test("a personal key never fills for a visitor who isn't signed in, even one that allows anonymous use", async function (assert) {
+    let key = await addKey({ value: PERSONAL_VALUE, anonymous: true });
     let approved = await approve(
       ['myStations'],
       { keyId: key.id },

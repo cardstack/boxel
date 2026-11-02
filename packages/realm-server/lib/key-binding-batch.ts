@@ -124,9 +124,8 @@ export interface BatchKey {
 // A share of the caller's in the realm, for an `{{apiKey}}` slot, with
 // whether any binding of it is approved for interactive use yet, and the
 // daily budget in force. The first interactive approval of a share names its
-// daily budget, at least the share's anonymous cap. Whether people who aren't
-// signed in may use the share, and that cap, are its owner's choice when
-// sharing the key.
+// daily budget. Whether people who aren't signed in may use the share, and
+// their cap, are the key's, as its owner set them.
 export interface BatchShare {
   id: string;
   label: string;
@@ -584,7 +583,7 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, s.anonymous, s.anonymous_daily_cap,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -595,7 +594,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, s.anonymous, s.anonymous_daily_cap
+      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({

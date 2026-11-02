@@ -22,6 +22,7 @@ import {
 import { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   keysAdd,
+  keysAnonymous,
   keysDelete,
   keysList,
   keysReplace,
@@ -261,32 +262,40 @@ describe('boxel keys: managing keys and shares (integration)', () => {
     await keysUnshare('weather', { ...deps, realm });
   });
 
-  it("shares a key for people who aren't signed in too, with an optional cap", async () => {
+  it("sets whether people who aren't signed in may use a key on the key itself", async () => {
     await expect(
-      keysShare('weather', { ...deps, realm, as: 'capped', anonymousCap: '5' }),
-    ).rejects.toThrow('--anonymous-cap is given with --anonymous');
-    await expect(
-      keysShare('weather', {
+      keysAdd('anon', {
         ...deps,
-        realm,
-        as: 'capped',
-        anonymous: true,
-        anonymousCap: 'lots',
+        stdin: true,
+        input: stdinWith('sk-anon\n'),
+        anonymousCap: '5',
       }),
-    ).rejects.toThrow('--anonymous-cap is a whole number of calls');
-    let share = await keysShare('weather', {
+    ).rejects.toThrow('--anonymous-cap is given with --anonymous');
+    let added = await keysAdd('anon', {
       ...deps,
-      realm,
-      as: 'for-anyone',
+      stdin: true,
+      input: stdinWith('sk-anon\n'),
       anonymous: true,
       anonymousCap: '50',
     });
-    expect(share).toMatchObject({ anonymous: true, anonymousDailyCap: 50 });
-    let [listed] = (await keysShares({ ...deps, realm })).filter(
-      (s) => s.label === 'for-anyone',
+    expect(added).toMatchObject({ anonymous: true, anonymousDailyCap: 50 });
+    await expect(keysAnonymous('anon', 'maybe', deps)).rejects.toThrow(
+      'say on or off',
     );
-    expect(listed).toMatchObject({ anonymous: true, anonymousDailyCap: 50 });
-    await keysUnshare('for-anyone', { ...deps, realm });
+    await expect(
+      keysAnonymous('anon', 'off', { ...deps, cap: '5' }),
+    ).rejects.toThrow('--cap is given with on');
+    let off = await keysAnonymous('anon', 'off', deps);
+    expect(off).toMatchObject({ anonymous: false, anonymousDailyCap: null });
+    let on = await keysAnonymous('anon', 'on', { ...deps, cap: '10' });
+    expect(on).toMatchObject({ anonymous: true, anonymousDailyCap: 10 });
+
+    // This realm's policy lets only signed-in people make calls with a
+    // shared key, so sharing reflects nothing more.
+    let share = await keysShare('anon', { ...deps, realm, as: 'anon' });
+    expect(share).toMatchObject({ label: 'anon', state: 'active' });
+    await keysUnshare('anon', { ...deps, realm });
+    await keysDelete('anon', { ...deps, yes: true });
   });
 
   it('spends a ticket only on the change it was minted for', async () => {

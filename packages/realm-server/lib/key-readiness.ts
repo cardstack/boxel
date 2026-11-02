@@ -37,10 +37,10 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // used up, `rate-limited` when the caller's bucket is empty.
 //
 // A caller who isn't signed in is asked about only where every slot takes a
-// shared key and the realm admitted them from an address: a share whose
-// owner doesn't allow anonymous use answers `needs-sign-in`, and so does anything
+// shared key and the realm admitted them from an address: a share whose key
+// doesn't allow anonymous use answers `needs-sign-in`, and so does anything
 // with a `{{userKey}}` slot. Their limits are their address's bucket and the
-// share's anonymous cap.
+// key's anonymous cap.
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
@@ -85,7 +85,7 @@ export async function keyReadiness(
   if (request.slots.length === 0) {
     return 'ready';
   }
-  // A caller who isn't signed in is served only by shares whose owners allow
+  // A caller who isn't signed in is served only by shares whose keys allow
   // anonymous use, and only where the realm admitted them from an address it
   // can count. Otherwise the call is refused before any binding is looked at,
   // so signing in is what fixes it, whatever the slot is.

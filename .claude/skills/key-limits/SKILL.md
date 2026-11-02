@@ -34,28 +34,26 @@ what a vendor charges for one.
 
 ## People who aren't signed in
 
-A share whose owner lets people who aren't signed in use it (`key_shares.anonymous`,
-chosen when sharing the key; see the `key-shares` and `key-bindings` skills)
-limits such callers alongside the share's own daily and monthly budgets,
-which their calls spend as everyone's do:
+A share whose key allows anonymous use (`user_keys.anonymous`, its owner's
+setting for the key itself; see the `user-keys`, `key-shares` and
+`key-bindings` skills) limits such callers alongside the share's own daily
+and monthly budgets, which their calls spend as everyone's do:
 
 - **Per address**: a bucket for each client address the realm admitted them
   from (the anonymous limiter's `rateLimitKey`: the IPv4 address, or an IPv6
   caller's /64), at the share's per-person rate. It is keyed apart from any
   signed-in caller's: `["key-limit","share","<id>","anonymous","<address>"]`.
-- **The anonymous cap, where the owner set one**: a daily budget of calls
-  (`key_shares.anonymous_daily_cap`, optional when sharing) every such caller
-  draws from together, `["key-limit","share","<id>","anonymous"]`, so that
-  people who are signed in keep the rest of the share's daily budget. A share
-  with no cap has no separate limit for them beyond the per-address bucket
-  and the share's budgets. No daily budget below the cap is accepted: the
-  limits route (`setShareLimits`, a reset to the default included) and a
-  share's first interactive approval (`setFirstInteractiveBudget`) refuse one
-  400 (`assertBudgetHoldsCap`). Should the platform's default budget drop
-  below a share's cap, the cap is held to the budget.
-  Reaching it refuses only callers who aren't signed in, `over-budget` with a
-  detail saying the limit for people who aren't signed in is reached; it
-  sends no notice of its own. The share's budgets notify as always.
+- **The key's anonymous cap, where its owner set one**: a daily budget of
+  calls (`user_keys.anonymous_daily_cap`) every such caller draws from
+  together, in every realm the key is shared into,
+  `["key-limit","key","<key-id>","anonymous"]`. A key with no cap has no
+  separate limit for them beyond the per-address bucket and each share's
+  budgets. A share's own daily budget still bounds every call through that
+  share, so a cap above it reaches no further there; no rule ties the two
+  together, and either is set without regard to the other.
+  Reaching the cap refuses only callers who aren't signed in, `over-budget`
+  with a detail saying the limit for people who aren't signed in is reached;
+  it sends no notice of its own. The share's budgets notify as always.
 
 Refusals for them log `"caller":"anonymous"` and never the address; a cap's
 `limit` carries `"anonymousCap": true`.
@@ -156,8 +154,7 @@ WHERE bucket_key = '["key-limit","key","<key-id>","@someone:boxel.ai"]';
 
 A share's first interactive approval also sets its daily budget, in the same
 transaction (see the `key-bindings` skill): from then on every reader of the
-realm can spend it, so its owner names the budget as they allow it, at
-least the share's anonymous cap where it has one.
+realm can spend it, so its owner names the budget as they allow it.
 
 Only the key's owner — for a share, the owner of the key it holds — and only
 with a session signed in on the secure origin, from a request whose `Origin`

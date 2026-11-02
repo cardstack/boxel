@@ -167,6 +167,7 @@ import {
 import {
   handleSetKeyShareLimits,
   handleSetUserKeyLimits,
+  handleSetUserKeyAnonymousUse,
 } from './handlers/handle-key-limits.ts';
 import {
   handleSecureWindowContext,
@@ -420,6 +421,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId/limits`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSetUserKeyLimits(args),
+  );
+  router.put(
+    `${USER_KEYS_PATH}/:keyId/anonymous-use`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetUserKeyAnonymousUse(args),
   );
   router.post(
     USER_KEY_GRANTS_PATH,

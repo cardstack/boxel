@@ -29,11 +29,12 @@
 //
 // Who may make the calls is not chosen here. Where the realm's policy opens an
 // operation to people who aren't signed in (`openToAnonymous`), interactive
-// use of a share whose owner agreed to that when sharing it serves them too:
-// each group it sends to says "including people who aren't signed in", and
-// the confirmation adds a line for it. A share whose owner didn't agree is
-// said to serve signed-in people only. A share's anonymous cap sits inside
-// its daily budget, so a first daily budget is at least that cap.
+// use of a share whose key allows them serves them too: each group it sends
+// to says "including people who aren't signed in", and the confirmation adds
+// a line for it, with the key's anonymous cap. A share whose key doesn't allow
+// them is said to serve signed-in people only. The anonymous cap is the
+// key's, counted across every realm it is shared into, and the share's daily
+// budget bounds their calls here too.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
@@ -306,10 +307,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{#each visitors.signedInOnly as |share|}}
                     <p class='note' data-test-approve-signed-in-only-note>
                       This workspace lets people who aren’t signed in make these
-                      calls, but
+                      calls, but the key shared as
                       <strong>{{share.label}}</strong>
-                      is shared for signed-in people only, so they’re asked to
-                      sign in.
+                      allows signed-in people only, so they’re asked to sign in.
                     </p>
                   {{/each}}
                 {{/let}}
@@ -438,12 +438,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   <span class='note budget-note'>The most calls this share makes
                     in a day, in total across everyone who opens a card that
                     uses it. This is the first time opened cards can use this
-                    share, so set it to what your plan with the service allows.
-                    {{#if share.anonymousDailyCap}}
-                      It holds the
-                      {{share.anonymousDailyCap}}
-                      calls a day you allowed people who aren’t signed in.
-                    {{/if}}</span>
+                    share, so set it to what your plan with the service allows.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -861,24 +856,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private budgetText = (share: { id: string; dailyBudget: number }) =>
     this.form.budgets[share.id] ?? String(share.dailyBudget);
 
-  private budgetValid = (share: {
-    id: string;
-    dailyBudget: number;
-    anonymousDailyCap: number | null;
-  }) =>
-    parseDailyBudget(this.budgetText(share), share.anonymousDailyCap ?? 1) !==
-    undefined;
+  private budgetValid = (share: { id: string; dailyBudget: number }) =>
+    parseDailyBudget(this.budgetText(share)) !== undefined;
 
-  private budgetError = (share: {
-    id: string;
-    dailyBudget: number;
-    anonymousDailyCap: number | null;
-  }) =>
+  private budgetError = (share: { id: string; dailyBudget: number }) =>
     this.budgetValid(share)
       ? undefined
-      : share.anonymousDailyCap
-        ? `A whole number of calls, at least the ${share.anonymousDailyCap} allowed people who aren’t signed in`
-        : 'A whole number of calls, at least one';
+      : 'A whole number of calls, at least one';
 
   private setBudget = (shareId: string, value: string) => {
     this.form.budgets = { ...this.form.budgets, [shareId]: value };
@@ -1081,10 +1065,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       let dailyBudgets = Object.fromEntries(
         this.budgetShares.map((share) => [
           share.id,
-          parseDailyBudget(
-            this.budgetText(share),
-            share.anonymousDailyCap ?? 1,
-          )!,
+          parseDailyBudget(this.budgetText(share))!,
         ]),
       );
       await approveOperations(this.args.api.config, {
