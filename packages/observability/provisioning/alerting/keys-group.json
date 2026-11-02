@@ -27,7 +27,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"boxel:secrets-at-rest\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:secrets-at-rest\" | event=\"open-failed\" [5m]))",
+                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"boxel:secrets-at-rest\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:secrets-at-rest\" | event=\"open-failed\" [5m]))",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
@@ -121,7 +121,7 @@
                   "type": "cloudwatch",
                   "uid": "cef5x9o3yzawwf"
                 },
-                "expression": "fields coalesce(detail.userIdentity.sessionContext.sessionIssuer.arn, detail.userIdentity.arn, \"unknown\") as principal\n| filter principal not like /:role\\/boxel-(realm-server|worker)-(staging|production)-ecs-task$/ or ispresent(detail.errorCode)\n| stats count() as unexpected by bin(5m)",
+                "expression": "fields coalesce(detail.userIdentity.sessionContext.sessionIssuer.arn, detail.userIdentity.arn, \"unknown\") as principal\n| filter principal not like /^arn:aws:iam::${SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID}:role\\/boxel-(realm-server|worker)-${SECRETS_DECRYPTS_ENV}-ecs-task$/ or ispresent(detail.errorCode)\n| stats count() as unexpected by bin(5m)",
                 "id": "",
                 "intervalMs": 1000,
                 "logGroups": [
@@ -195,7 +195,7 @@
           "execErrState": "Alerting",
           "for": "0s",
           "annotations": {
-            "summary": "Something other than the realm-server or worker task role called kms:Decrypt on the secrets key, or a Decrypt on it was denied, in the last 30 minutes (CloudTrail, copied by EventBridge into the decrypts log group). The window covers CloudTrail's delivery delay. Read the record on the Keys dashboard or in the log group: the principal, source IP and encryption context. A task role's Decrypt that is not at a task's startup is a shell opened in the task: look up ExecuteCommand in CloudTrail. See the secrets-at-rest skill's audit.",
+            "summary": "Something other than this environment's realm-server or worker task role, in this account, called kms:Decrypt on the secrets key, or a Decrypt on it was denied, in the last 30 minutes (CloudTrail, copied by EventBridge into the decrypts log group). The window covers CloudTrail's delivery delay. Read the record on the Keys dashboard or in the log group: the principal, source IP and encryption context. A task role's Decrypt that is not at a task's startup is a shell opened in the task: look up ExecuteCommand in CloudTrail. See the secrets-at-rest skill's audit.",
             "runbook": "The key-outage-triage skill, and the Keys dashboard.",
             "dashboard_uid": "boxel-keys"
           },
@@ -207,7 +207,7 @@
         },
         {
           "uid": "keys-refusals-across-realms",
-          "title": "callApi refusals across many realms",
+          "title": "callApi failures of ours across many realms",
           "folderUID": "defd2d156sav4d",
           "condition": "C",
           "data": [
@@ -225,7 +225,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "count(sum by (realm) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:key-use\" | outcome=\"refused\" | code!~\"binding-not-approved|share-suspended|rate-limited|over-budget\" [10m])))",
+                "expr": "count(sum by (realm) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | outcome=\"failed\" or code=~\"internal-error|rate-limit-unavailable|upstream-timeout\" [10m])))",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
@@ -290,7 +290,7 @@
           "execErrState": "Alerting",
           "for": "0s",
           "annotations": {
-            "summary": "callApi invocations were refused in three or more realms in the last 10 minutes, for reasons that are not a user's or owner's own state (approval, suspension, rate limit, budget are left out). One realm is one card or one key; several at once is a vendor or us. The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which: a single host is that vendor, every host is us.",
+            "summary": "callApi invocations failed in three or more realms in the last 10 minutes for a reason that is ours or a vendor's: a send that broke (outcome failed), internal-error, rate-limit-unavailable (the limit counters' database) or upstream-timeout. Every other refusal code is a user's, owner's or card author's state, which a card installed in many realms, or one key bound in several, raises in all of them at once, so those are left out; a vendor refusing keys is \"Many grants rejected at one host\". The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which: upstream-timeout at a single host is that vendor, everything else is us.",
             "runbook": "The key-outage-triage skill, and the Keys dashboard.",
             "dashboard_uid": "boxel-keys"
           },
@@ -320,7 +320,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"outbound guard refused: path=system-key\" [10m]))",
+                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"outbound guard refused:\" |= \"destinationSetBy=platform\" [10m]))",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
@@ -385,7 +385,7 @@
           "execErrState": "Alerting",
           "for": "0s",
           "annotations": {
-            "summary": "The outbound guard refused a request on the system-key path (_request-forward, the OpenRouter passthrough or a token endpoint) in the last 10 minutes. Those destinations are rows we configured, so a refusal is ours: a proxy_endpoints row with an http: URL, one that resolves to a private address, or a vendor redirecting to one. The line names the host and reason. See the outbound-guard skill.",
+            "summary": "The outbound guard refused a request to a destination the platform set (a proxy_endpoints row behind _request-forward or the OpenRouter passthrough, a platform OAuth client's token endpoint, Google's token endpoint) in the last 10 minutes. A refusal of one of those is ours: a row with an http: URL, one that resolves to a private address, or a vendor redirecting to one. A user's own OAuth client or a card's request is destinationSetBy=user and never fires this. The line names the host and reason. See the outbound-guard skill.",
             "runbook": "The key-outage-triage skill, and the Keys dashboard.",
             "dashboard_uid": "boxel-keys"
           },
@@ -415,7 +415,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max(sum by (host) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-grant\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [10m])))",
+                "expr": "max(sum by (host) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [10m])))",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
                 "queryType": "instant",
