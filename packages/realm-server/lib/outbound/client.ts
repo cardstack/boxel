@@ -696,7 +696,23 @@ export async function outboundFetch(
   try {
     return await send(request, scrubber, context);
   } catch (error) {
-    throw finalizeError(error, scrubber, context, request.signal);
+    let final = finalizeError(error, scrubber, context, request.signal);
+    if (final instanceof OutboundRefusedError) {
+      // One line per refusal on every path, so a refusal spike shows whichever
+      // caller sent it. The host only: the path can hold a credential.
+      log.warn(
+        `outbound guard refused: path=${request.sizePath} host=${refusedHost(request.url)} reason=${final.reason}`,
+      );
+    }
+    throw final;
+  }
+}
+
+function refusedHost(url: string): string {
+  try {
+    return new URL(url).host || '(none)';
+  } catch {
+    return '(invalid URL)';
   }
 }
 
