@@ -77,6 +77,13 @@ on:
           version sends every file and announces the push to open tabs.
         type: string
         default: latest
+      realm-root:
+        description: |
+          Directory of the caller's repository that is the realm's root,
+          relative to the repository root. Only this directory is pushed,
+          so a repository can keep files the realm doesn't serve beside it.
+        type: string
+        default: .
     secrets:
       staging-matrix-username:
         description: |
@@ -141,6 +148,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
           BOXEL_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
+          REALM_ROOT: ${{ inputs.realm-root }}
         run: |
           # Domain inference mirrors `boxel profile add`'s URL-based
           # default so the resulting profile points at staging.
@@ -163,7 +171,7 @@ jobs:
           echo ""
 
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete --dry-run 2>&1)
+          OUTPUT=$(boxel realm push "${REALM_ROOT}" "${WORKSPACE_URL}" --delete --dry-run 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -187,6 +195,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
           BOXEL_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
+          REALM_ROOT: ${{ inputs.realm-root }}
           PUSH_ARGS: ${{ steps.deployment.outputs.push-args }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
@@ -212,7 +221,7 @@ jobs:
           read -ra push_args <<< "$PUSH_ARGS"
 
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
+          OUTPUT=$(boxel realm push "${REALM_ROOT}" "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
@@ -236,6 +245,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.production-matrix-username }}
           BOXEL_PASSWORD: ${{ secrets.production-matrix-password }}
           WORKSPACE_URL: ${{ inputs.production-workspace-url }}
+          REALM_ROOT: ${{ inputs.realm-root }}
           PUSH_ARGS: ${{ steps.deployment.outputs.push-args }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
@@ -262,7 +272,7 @@ jobs:
           read -ra push_args <<< "$PUSH_ARGS"
 
           set +e
-          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
+          OUTPUT=$(boxel realm push "${REALM_ROOT}" "${WORKSPACE_URL}" --delete "${push_args[@]}" 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
