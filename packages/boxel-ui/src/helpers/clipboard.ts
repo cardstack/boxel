@@ -1,5 +1,3 @@
-import { isTesting } from '@embroider/macros';
-
 export async function copyCardURLToClipboard(
   card: { id: string } | URL | string,
 ): Promise<void> {
@@ -14,8 +12,11 @@ export async function copyCardURLToClipboard(
   if (!copyableUrl) {
     return;
   }
-  if (isTesting()) {
-    return; // navigator.clipboard is not available in test environment
+  try {
+    await navigator.clipboard.writeText(copyableUrl);
+  } catch (error) {
+    // A menu action has no caller to hand this to: the write fails when the
+    // page has lost focus or the clipboard permission is denied.
+    console.warn(`Could not copy ${copyableUrl} to the clipboard`, error);
   }
-  await navigator.clipboard.writeText(copyableUrl);
 }

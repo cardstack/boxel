@@ -1,5 +1,5 @@
 import type { BaseDef, CardCrudFunctions, CardDef } from './card-api';
-import { instanceRealmId, resolveInstanceURL } from './card-api';
+import { instanceRealmId, openableURLOf } from './card-api';
 import {
   copyCardURLToClipboard,
   type MenuItemOptions,
@@ -89,10 +89,7 @@ export function getDefaultCardMenuItems(
   ) {
     menuItems.push({
       label: 'Copy Card URL',
-      action: () =>
-        copyCardURLToClipboard(
-          resolveInstanceURL(card, cardId)?.href ?? cardId,
-        ),
+      action: () => copyCardURLToClipboard(openableURLOf(card) ?? cardId),
       icon: LinkIcon,
       disabled: !cardId,
     });

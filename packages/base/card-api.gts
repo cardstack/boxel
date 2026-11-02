@@ -700,6 +700,9 @@ export interface CardStore {
   // depth, so it can't be recovered from the path — `/user/alice/` is a realm
   // and `/user/` is not.
   realmForId(id: string): string | undefined;
+  // The URL a browser can open for `id`: a prefix-form or aliased id folded
+  // onto the realm's served URL, and any id nothing maps returned unchanged.
+  openableURL(id: string): string;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   // Whether an instance this store is already holding for `url` is current
@@ -6290,7 +6293,7 @@ function getStore(instance: BaseDef): CardStore {
 // explicit store). Returns undefined when none is available, or when the
 // reference can't be resolved, so callers can degrade to URL math.
 export function resolveInstanceURL(
-  instance: CardDef | FileDef,
+  instance: CardDef,
   reference: string,
 ): URL | undefined {
   try {
@@ -6301,6 +6304,13 @@ export function resolveInstanceURL(
   } catch {
     return undefined;
   }
+}
+
+// The URL a browser can open for the instance, through the instance's own
+// store. Undefined for an instance with no id yet.
+export function openableURLOf(instance: CardDef | FileDef): string | undefined {
+  let id = instance.id as string | undefined;
+  return id ? getStore(instance).openableURL(id) : undefined;
 }
 
 // The instance's realm, in the same form as its id. A card id is canonical
@@ -6394,6 +6404,16 @@ class FallbackCardStore implements CardStore {
       return undefined;
     }
     return vn?.realmForReference(id);
+  }
+
+  openableURL(id: string): string {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return id;
+    }
+    return vn ? vn.keyForIdentifier(id) : id;
   }
 
   // Mirror the host stores' bucket-key fold: every spelling of the same
