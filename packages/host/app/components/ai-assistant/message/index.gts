@@ -695,6 +695,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         --ai-assistant-message-avatar-size: 0.75rem; /* 12px. */
         --ai-assistant-message-meta-height: 0.75rem; /* 12px */
         --ai-assistant-message-gap: var(--boxel-sp-xxxs);
+        /* a grouped tool row keeps ToolRow's own header size here; a
+           correctness message sets its own below */
+        --pretui-toolgroup-header-min-h: 2rem;
+        --pretui-toolgroup-header-pad-block: 0.4375rem;
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
