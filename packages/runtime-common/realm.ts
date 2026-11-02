@@ -6785,6 +6785,9 @@ export class Realm {
               this.#pipelineRequests.has(request)
                 ? { callApiMode: 'pipeline' as const }
                 : {}),
+              ...(definition.base === 'callApi'
+                ? this.#callApiAnonymous(requestContext)
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -7284,6 +7287,7 @@ export class Realm {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
           anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
+          ...this.#callApiAnonymous(requestContext),
           ...lanes,
         },
       );
@@ -8037,6 +8041,16 @@ export class Realm {
   ): Pick<RunOperationOptions, 'anonymousRequest'> {
     let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
     return anonymousRequest ? { anonymousRequest } : {};
+  }
+
+  // Where a caller the realm admitted without a session called from, which a
+  // `callApi` filled from a share counts them by. Nothing for a signed-in
+  // caller, or for one whose address the realm server couldn't work out.
+  #callApiAnonymous(
+    requestContext: RequestContext,
+  ): Pick<RunOperationOptions, 'callApiAnonymous'> {
+    let address = requestContext.anonymousCaller?.rateLimitKey;
+    return address ? { callApiAnonymous: { address } } : {};
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor

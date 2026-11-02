@@ -601,6 +601,12 @@ export type PolicyIssueCode =
   // an operation to a caller who isn't signed in before it runs, so the grant
   // never admits one. It is kept for signed-in callers.
   | 'anonymous-grant-reads-actor'
+  // A grant whose `where` names the caller who isn't signed in, on a
+  // `callApi` with a credential slot for the invoking user's own key
+  // (`{{userKey}}`). Such a caller has no key of their own, so the realm
+  // refuses them before anything is sent, and the grant never admits one. It
+  // is kept for signed-in callers.
+  | 'anonymous-grant-user-key'
   // An `actingUser` that is never used: on a grant whose `where` never names
   // the caller who isn't signed in, whose writes are made as themselves, or on
   // a grant for an operation that doesn't write. The grant is kept.
@@ -631,7 +637,10 @@ export type PolicyIssueCode =
 // an operation is one invocation of its base, and a write it makes is made as
 // the user the grant's `actingUser` names. A named query
 // is the exception: it runs a stored query on the search lane, and stays a
-// contract for signed-in callers.
+// contract for signed-in callers. A `callApi` may be opened too, where every
+// key it sends is one shared with the realm (`{{apiKey}}`): such a caller is
+// served only by a share whose owner allowed anonymous use of it, and counted
+// by address against the share's anonymous cap.
 export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'read',
   'readSource',
@@ -650,6 +659,7 @@ export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'render-reaches-ungranted-type',
   'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
+  'anonymous-grant-user-key',
   'acting-user-never-used',
   'acting-user-from-submitted-card',
   'grant-expression-wrong-type',

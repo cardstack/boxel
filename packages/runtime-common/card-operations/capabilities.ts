@@ -1,6 +1,7 @@
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { rri } from '../realm-identifiers.ts';
 import type { AnonymousRequest } from './anonymous-request.ts';
+import type { AnonymousCallApiCaller } from './call-api.ts';
 import {
   CAPABILITY_CHECK_CAP,
   type CapabilityAnswer,
@@ -108,6 +109,9 @@ export interface CapabilityCaller {
   // The request-wide admission a caller without a session passed. Capability
   // pairs must be judged through the same eligible grants as an invocation.
   anonymousRequest?: AnonymousRequest;
+  // Where such a caller was admitted from, which a `callApi`'s readiness is
+  // read for: a share counts them by address.
+  callApiAnonymous?: AnonymousCallApiCaller;
   // Who a search this caller sent would run for. A query pair is judged as
   // that search is, so it is judged for the same principal: a request a
   // render sends runs under a realm's own authority, which no policy grants
@@ -417,6 +421,9 @@ async function readinessOf(
     operation: check.operation,
     ...(target.kind === 'instance' ? { instance: target.url } : {}),
     caller: who.caller.kind === 'user' ? who.caller.actor : undefined,
+    ...(who.caller.kind !== 'user' && who.callApiAnonymous
+      ? { anonymous: who.callApiAnonymous }
+      : {}),
     request,
   });
 }

@@ -45,7 +45,10 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // was approved. Asked with `interactive`, a slot approved for pipelines only
 // needs it too (`pipelines-only`), so a card that is refused
 // `interactive-use-not-approved` can be approved for it: the window offers
-// those only when the user chooses interactive use. A slot approved and
+// those only when the user chooses interactive use. Asked with `anonymous`
+// as well, a share's slot approved for signed-in callers only needs it too
+// (`signed-in-only`), for a card whose visitors who aren't signed in are
+// refused `anonymous-use-not-approved`. A slot approved and
 // unchanged is left out, and so is an operation with nothing left. Review asks
 // only for the changed ones.
 //
@@ -69,8 +72,14 @@ const log = logger('realm:key-bindings');
 
 // `new`: never approved, or its grant is gone. `changed`: its request changed
 // since it was approved. `pipelines-only`: approved, unchanged, for pipelines
-// only, in a batch asked for with `interactive`.
-export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+// only, in a batch asked for with `interactive`. `signed-in-only`: a share's
+// slot approved, unchanged, for interactive use by signed-in callers only, in
+// a batch asked for with `anonymous`.
+export type BatchSlotStatus =
+  | 'new'
+  | 'changed'
+  | 'pipelines-only'
+  | 'signed-in-only';
 
 export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
@@ -86,6 +95,7 @@ export interface BatchSlot {
     keyId: string | null;
     shareId: string | null;
     interactive: boolean;
+    anonymous: boolean;
   };
 }
 
@@ -119,8 +129,10 @@ export interface BatchKey {
 
 // A share of the caller's in the realm, for an `{{apiKey}}` slot, with
 // whether any binding of it is approved for interactive use yet, and the
-// daily budget in force. The first interactive approval of a share names its
-// daily budget.
+// daily budget in force; and whether any is approved for anonymous use yet,
+// and its anonymous cap (null until one is). The first interactive approval
+// of a share names its daily budget, and the first anonymous one its
+// anonymous cap.
 export interface BatchShare {
   id: string;
   label: string;
@@ -129,6 +141,8 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
 }
 
 export interface ApprovalBatch {
@@ -153,6 +167,9 @@ export interface ApprovalBatchRequest {
   review?: boolean;
   // Also answer slots approved for pipelines only.
   interactive?: boolean;
+  // Also answer share slots approved for signed-in callers only. Implies
+  // `interactive`.
+  anonymous?: boolean;
 }
 
 // What a binding is read as here, with the snapshot of its last approval.
@@ -164,6 +181,7 @@ interface BindingRow {
   fingerprint: string;
   state: string;
   interactive: boolean;
+  anonymous: boolean;
   // Whether its grant is still there for its key, or its share's key.
   has_grant: boolean;
   share_owner: string | null;
@@ -214,8 +232,14 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  { target, review = false, interactive = false }: ApprovalBatchRequest,
+  {
+    target,
+    review = false,
+    interactive: asksInteractive = false,
+    anonymous = false,
+  }: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
+  let interactive = asksInteractive || anonymous;
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
   let { realm, realmName } = resolved;
@@ -266,6 +290,7 @@ export async function approvalBatch(
         user,
         ownsShareHere: ownShares.length > 0,
         interactive,
+        anonymous,
       });
       if (!status || (review && status !== 'changed')) {
         continue;
@@ -283,6 +308,7 @@ export async function approvalBatch(
                 keyId: row.key_id,
                 shareId: row.share_id,
                 interactive: Boolean(row.interactive),
+                anonymous: Boolean(row.anonymous),
               },
             }
           : {}),
@@ -307,7 +333,9 @@ export async function approvalBatch(
         ? 'changed'
         : slots.some((s) => s.status === 'new')
           ? 'new'
-          : 'pipelines-only',
+          : slots.some((s) => s.status === 'pipelines-only')
+            ? 'pipelines-only'
+            : 'signed-in-only',
       slots,
     });
   }
@@ -479,7 +507,13 @@ function slotStatus(
     user,
     ownsShareHere,
     interactive,
-  }: { user: string; ownsShareHere: boolean; interactive: boolean },
+    anonymous,
+  }: {
+    user: string;
+    ownsShareHere: boolean;
+    interactive: boolean;
+    anonymous: boolean;
+  },
 ): BatchSlotStatus | undefined {
   // A share slot is approved by the owner of the share's key. Its binding
   // serves every caller, so one someone else approved is theirs to keep up,
@@ -502,6 +536,9 @@ function slotStatus(
   if (interactive && !row.interactive) {
     return 'pipelines-only';
   }
+  if (anonymous && slot.key !== 'userKey' && !row.anonymous) {
+    return 'signed-in-only';
+  }
   return undefined;
 }
 
@@ -514,7 +551,7 @@ async function bindingRows(
   (BindingRow & { operation_name: string; instance_url: string | null })[]
 > {
   return (await query(dbAdapter, [
-    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state, b.interactive,
+    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state, b.interactive, b.anonymous,
             (g.id IS NOT NULL) AS has_grant, s.owner AS share_owner, s.state AS share_state,
             a.destination, a.method, a.path_template, a.headers_template, a.placement, a.placement_name, a.transform, a.body_template
        FROM key_bindings b
@@ -572,8 +609,9 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, s.anonymous_daily_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
+            EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.anonymous) AS anonymous,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
        JOIN user_keys k ON k.id = s.key_id
@@ -583,7 +621,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget
+      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, s.anonymous_daily_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -594,6 +632,9 @@ async function sharesIn(
     grants: grantList(row.grants),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
+    anonymous: Boolean(row.anonymous),
+    anonymousDailyCap:
+      row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
   }));
 }
 

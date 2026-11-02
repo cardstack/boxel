@@ -61,6 +61,7 @@ import {
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
+import { KEY_LIMIT_COLUMNS, limitsOf } from './key-limit-settings.ts';
 import {
   chargeInteractiveCall,
   validateLimitChanges,
@@ -99,7 +100,13 @@ import {
 //   only. Approving interactive use is the owner's choice for the whole
 //   confirmation; a share's first interactive approval also sets the share's
 //   daily budget, since every reader of its realm can then spend it.
-//   Anonymous use is not offered.
+// - **Anonymous use, of a share only, when approved for it.** A caller who
+//   isn't signed in, whom the realm's policy admits to the operation, is
+//   served only by a share's binding approved `anonymous` (which is
+//   interactive too), and refused `anonymous-use-not-approved` by any other.
+//   A `{{userKey}}` slot never fills for such a caller. A share's first
+//   anonymous approval sets its anonymous cap, the calls a day such callers
+//   share inside the share's daily budget.
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
@@ -381,8 +388,9 @@ export async function approveBindings(
     via,
     operations,
     interactive = false,
-    anonymous,
+    anonymous = false,
     dailyBudgets = {},
+    anonymousCaps = {},
   }: {
     core: Pick<
       OperationCore,
@@ -394,15 +402,41 @@ export async function approveBindings(
     operations: OperationApproval[];
     // Approves interactive use as well as pipelines, for every slot.
     interactive?: boolean;
+    // Approves use by callers who aren't signed in as well, for every share
+    // slot it approves; slots it fills with a personal key are never approved
+    // for it. Needs `interactive`.
     anonymous?: boolean;
     // A daily budget for a share this approval fills, by share id. Required
     // for a share's first interactive approval, accepted for any share an
     // interactive approval fills, and refused otherwise.
     dailyBudgets?: Record<string, number>;
+    // An anonymous cap for a share this approval fills, by share id: calls a
+    // UTC day across every caller who isn't signed in, at most the share's
+    // daily budget. Required for a share's first anonymous approval, accepted
+    // for any share an anonymous approval fills, and refused otherwise.
+    anonymousCaps?: Record<string, number>;
   },
 ): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
-  if (anonymous) {
-    throw new UserKeyError(403, 'anonymous use of a binding is not offered');
+  if (anonymous && !interactive) {
+    throw new UserKeyError(
+      400,
+      'anonymous use is approved together with interactive use',
+    );
+  }
+  for (let [shareId, cap] of Object.entries(anonymousCaps)) {
+    if (!anonymous) {
+      throw new UserKeyError(
+        400,
+        'an anonymous cap is set with an approval for anonymous use',
+      );
+    }
+    let { dailyBudget } = validateLimitChanges({ dailyBudget: cap });
+    if (dailyBudget == null) {
+      throw new UserKeyError(
+        400,
+        `the anonymous cap for share ${shareId} is a whole number of calls`,
+      );
+    }
   }
   for (let [shareId, budget] of Object.entries(dailyBudgets)) {
     if (!interactive) {
@@ -544,6 +578,20 @@ export async function approveBindings(
       );
     }
   }
+  for (let shareId of Object.keys(anonymousCaps)) {
+    if (!filledShares.has(shareId)) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} fills no slot of this approval, so its anonymous cap isn't set here`,
+      );
+    }
+  }
+  if (anonymous && filledShares.size === 0) {
+    throw new UserKeyError(
+      400,
+      "anonymous use is approved for a shared key, and this approval fills no slot with one: a caller who isn't signed in has no key of their own",
+    );
+  }
 
   let batchId = randomUUID();
   let approved: ApprovedBinding[] = [];
@@ -560,6 +608,9 @@ export async function approveBindings(
           shareId,
           dailyBudgets[shareId],
         );
+      }
+      if (anonymous) {
+        await setFirstAnonymousCap(txQuery, shareId, anonymousCaps[shareId]);
       }
     }
     for (let plan of planned) {
@@ -587,6 +638,7 @@ export async function approveBindings(
           via,
           snapshot,
           interactive,
+          anonymous: anonymous && fill.shareId !== undefined,
         });
         approved.push({ binding, snapshot, grant, grantCreated: created });
       }
@@ -693,6 +745,49 @@ async function setFirstInteractiveBudget(
   ]);
 }
 
+// A share approved for anonymous use serves anyone who opens the card, so the
+// first approval that allows it names the share's anonymous cap, which is set
+// with it. A later one may name one too, and sets it. The cap sits inside the
+// share's daily budget, as this approval leaves it, so it's refused above
+// that. Runs with the share locked, as the daily budget's does.
+async function setFirstAnonymousCap(
+  txQuery: Querier,
+  shareId: string,
+  cap: number | undefined,
+): Promise<void> {
+  if (cap === undefined) {
+    let [already] = await txQuery([
+      `SELECT 1 FROM key_bindings WHERE share_id = `,
+      param(shareId),
+      ` AND anonymous LIMIT 1`,
+    ]);
+    if (!already) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} is approved for anonymous use for the first time, so the approval names its anonymous cap, as anonymousCaps`,
+      );
+    }
+    return;
+  }
+  let [share] = await txQuery([
+    `SELECT ${KEY_LIMIT_COLUMNS} FROM key_shares WHERE id = `,
+    param(shareId),
+  ]);
+  let { dailyBudget } = limitsOf(share);
+  if (cap > dailyBudget) {
+    throw new UserKeyError(
+      400,
+      `the anonymous cap for share ${shareId} is at most its daily budget, ${dailyBudget} calls`,
+    );
+  }
+  await txQuery([
+    `UPDATE key_shares SET anonymous_daily_cap = `,
+    param(cap),
+    `, updated_at = NOW() WHERE id = `,
+    param(shareId),
+  ]);
+}
+
 // Writes one slot's approval: the binding, created or moved to what was just
 // approved, and its approval row.
 async function writeApproval(
@@ -711,6 +806,7 @@ async function writeApproval(
     via,
     snapshot,
     interactive,
+    anonymous,
   }: {
     batchId: string;
     realmURL: string;
@@ -725,6 +821,7 @@ async function writeApproval(
     via: SecureSessionClient;
     snapshot: BindingSnapshot;
     interactive: boolean;
+    anonymous: boolean;
   },
 ): Promise<KeyBinding> {
   let [existing] = await txQuery([
@@ -760,7 +857,9 @@ async function writeApproval(
         param(approver),
         `, interactive = `,
         param(interactive),
-        `, anonymous = false, fingerprint = `,
+        `, anonymous = `,
+        param(anonymous),
+        `, fingerprint = `,
         param(fingerprint),
         `, approval_id = `,
         param(approvalId),
@@ -769,7 +868,7 @@ async function writeApproval(
         ` RETURNING ${BINDING_COLUMNS}`,
       ])
     : await txQuery([
-        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, interactive, fingerprint, approval_id, state) VALUES (`,
+        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, interactive, anonymous, fingerprint, approval_id, state) VALUES (`,
         param(bindingId),
         `, `,
         param(realmURL),
@@ -794,6 +893,8 @@ async function writeApproval(
         `, `,
         param(interactive),
         `, `,
+        param(anonymous),
+        `, `,
         param(fingerprint),
         `, `,
         param(approvalId),
@@ -817,6 +918,7 @@ async function writeApproval(
     actor: approver,
     via,
     interactive,
+    anonymous,
   });
   return toBinding(row);
 }
@@ -841,6 +943,7 @@ async function insertApprovalRow(
     actor: string;
     via: SecureSessionClient;
     interactive: boolean;
+    anonymous: boolean;
   },
 ): Promise<void> {
   let { snapshot } = row;
@@ -857,7 +960,9 @@ async function insertApprovalRow(
     param(row.action),
     `, `,
     param(row.interactive),
-    `, false, `,
+    `, `,
+    param(row.anonymous),
+    `, `,
     param(row.realmURL),
     `, `,
     param(row.type.module),
@@ -949,7 +1054,9 @@ export async function listOwnBindings(
 // Moves a share's bindings to the key just swapped into it: each gets a grant
 // of the new key for the destination it was last approved for, created or
 // reused, the new owner as its approver, and a `re-approved` row. Its
-// fingerprint stays: the new owner approves the request as it was approved.
+// fingerprint stays, and so does whether it allows interactive and anonymous
+// use: the new owner approves the request as it was approved, and the share's
+// limits, its anonymous cap among them, stay with the share.
 // Runs in the swap's own transaction, with the share locked.
 export async function moveShareBindingsIn(
   txQuery: Querier,
@@ -967,7 +1074,7 @@ export async function moveShareBindingsIn(
   },
 ): Promise<string[]> {
   let rows = await txQuery([
-    `SELECT b.id, b.approval_id, b.fingerprint, b.interactive, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
+    `SELECT b.id, b.approval_id, b.fingerprint, b.interactive, b.anonymous, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
        FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
       WHERE b.share_id = `,
     param(shareId),
@@ -1032,6 +1139,7 @@ export async function moveShareBindingsIn(
       actor: owner,
       via,
       interactive: Boolean(row.interactive),
+      anonymous: Boolean(row.anonymous),
     });
     moved.push(row.id as string);
   }
@@ -1047,7 +1155,8 @@ function refusal(
   code:
     | 'share-suspended'
     | 'binding-needs-reapproval'
-    | 'interactive-use-not-approved',
+    | 'interactive-use-not-approved'
+    | 'anonymous-use-not-approved',
   title: string,
   detail: string,
   slot: CallApiSlot,
@@ -1137,6 +1246,7 @@ export interface CheckedSlotBinding {
   bound_grant_id: string | null;
   approved_by: string;
   interactive: boolean;
+  anonymous: boolean;
   fingerprint: string;
   approval_id: string;
   state: KeyBindingState;
@@ -1177,6 +1287,7 @@ export type SlotCheck =
         | 'share-suspended'
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
+        | 'anonymous-use-not-approved'
         | 'credential-rejected'
         | 'key-rejected';
     };
@@ -1185,7 +1296,8 @@ export type SlotCheck =
 // approved in this realm, for this operation (and this card, when it is
 // approved per instance), by the caller for a `{{userKey}}` slot; its share,
 // if it has one, not suspended; its fingerprint the one the request has now;
-// approved for how the invocation arrived; its grant still there for its key;
+// approved for how the invocation arrived, and for a caller who isn't signed
+// in, approved for anonymous use; its grant still there for its key;
 // that grant not rejected by the vendor, unless its probe is due; and the
 // grant's key not a service-account key Google refused, unless the key's
 // probe is due. The first check a slot fails is its answer.
@@ -1204,7 +1316,7 @@ export async function checkSlots(
   let checks: SlotCheck[] = [];
   for (let slot of request.slots) {
     let [binding] = (await query(dbAdapter, [
-      `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
+      `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.anonymous, b.fingerprint, b.approval_id, b.state,
               s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
               g.state AS grant_state, g.destination AS grant_destination,
               k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
@@ -1249,6 +1361,11 @@ function checkSlot(
   }
   if (lookup.mode === 'interactive' && !binding.interactive) {
     return { slot, binding, refused: 'interactive-use-not-approved' };
+  }
+  // Only a share's binding is ever approved for anonymous use, so a
+  // `{{userKey}}` slot reaching here for such a caller is refused too.
+  if (lookup.anonymous && !binding.anonymous) {
+    return { slot, binding, refused: 'anonymous-use-not-approved' };
   }
   if (!binding.grant_id) {
     return { slot, binding, refused: 'binding-not-approved' };
@@ -1345,6 +1462,14 @@ async function checkedBindings(
           `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI. The key's owner can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
           slot,
         );
+      case 'anonymous-use-not-approved':
+        throw refusal(
+          401,
+          'anonymous-use-not-approved',
+          'Anonymous use not approved',
+          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a key that isn't approved for people who aren't signed in, so it is used only for signed-in callers. Sign in to use it; the key's owner can allow anonymous use in the approval window`,
+          slot,
+        );
       case 'credential-rejected':
         throw credentialRejected(
           lookup.operation,
@@ -1378,6 +1503,7 @@ async function checkedBindings(
       realmURL: lookup.realmURL,
       operation: lookup.operation,
       caller: lookup.caller,
+      ...(lookup.anonymous ? { anonymous: lookup.anonymous } : {}),
       subjects: checked.map(({ binding }) => limitSubjectOf(binding)),
     });
   }

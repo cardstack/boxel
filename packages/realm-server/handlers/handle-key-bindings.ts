@@ -56,6 +56,7 @@ const APPROVE_ATTRIBUTES = new Set([
   'interactive',
   'anonymous',
   'dailyBudgets',
+  'anonymousCaps',
 ]);
 const OPERATION_MEMBERS = new Set([
   'codeRef',
@@ -204,21 +205,30 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
     }
-    let { realm, operations, interactive, anonymous, dailyBudgets } =
-      attributes;
+    let {
+      realm,
+      operations,
+      interactive,
+      anonymous,
+      dailyBudgets,
+      anonymousCaps,
+    } = attributes;
     if (!Array.isArray(operations)) {
       throw new UserKeyError(400, 'an approval lists its operations');
     }
-    if (
-      dailyBudgets !== undefined &&
-      (!dailyBudgets ||
-        typeof dailyBudgets !== 'object' ||
-        Array.isArray(dailyBudgets))
-    ) {
-      throw new UserKeyError(
-        400,
-        'dailyBudgets names a daily budget by share id',
-      );
+    for (let [name, value] of [
+      ['dailyBudgets', dailyBudgets],
+      ['anonymousCaps', anonymousCaps],
+    ] as const) {
+      if (
+        value !== undefined &&
+        (!value || typeof value !== 'object' || Array.isArray(value))
+      ) {
+        throw new UserKeyError(
+          400,
+          `${name} names ${name === 'dailyBudgets' ? 'a daily budget' : 'an anonymous cap'} by share id`,
+        );
+      }
     }
     let approvals = operations.map((operation) =>
       operationOf(args.virtualNetwork, operation),
@@ -236,6 +246,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         interactive: interactive === true,
         anonymous: anonymous === true,
         dailyBudgets: (dailyBudgets ?? {}) as Record<string, number>,
+        anonymousCaps: (anonymousCaps ?? {}) as Record<string, number>,
       },
     );
     await sendJSON(ctxt, 201, {
@@ -365,10 +376,16 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-const BATCH_ATTRIBUTES = new Set(['target', 'review', 'interactive']);
+const BATCH_ATTRIBUTES = new Set([
+  'target',
+  'review',
+  'interactive',
+  'anonymous',
+]);
 
 // The batch the secure window approves in one confirmation
-// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?}`,
+// (`lib/key-binding-batch.ts`):
+// `attributes.{target, review?, interactive?, anonymous?}`,
 // where `target` names a card or a card type in its realm as the window's
 // context does. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
@@ -410,12 +427,15 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be asked about here`);
       }
     }
-    let { review, interactive } = attributes;
+    let { review, interactive, anonymous } = attributes;
     if (review !== undefined && typeof review !== 'boolean') {
       throw new UserKeyError(400, 'review is true or false');
     }
     if (interactive !== undefined && typeof interactive !== 'boolean') {
       throw new UserKeyError(400, 'interactive is true or false');
+    }
+    if (anonymous !== undefined && typeof anonymous !== 'boolean') {
+      throw new UserKeyError(400, 'anonymous is true or false');
     }
     let { target } = validateContextRequest({ target: attributes.target });
     if (!target) {
@@ -433,6 +453,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         target,
         review: review === true,
         interactive: interactive === true,
+        anonymous: anonymous === true,
       },
     );
     await sendJSON(ctxt, 200, {
