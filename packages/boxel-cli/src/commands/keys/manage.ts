@@ -983,9 +983,12 @@ export async function keysLimits(
   return limits;
 }
 
+// The realm server names a caller only to someone who may see them: a call
+// with no session, and one by someone the reader can't see in the realm,
+// both come without a name.
 function callerName(ctx: Context, caller: string | null): string {
   return caller === null
-    ? 'anonymous'
+    ? 'a caller not named to you'
     : caller === ctx.matrixUserId
       ? 'you'
       : caller;
