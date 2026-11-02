@@ -88,12 +88,27 @@ export type KeyGrantEvent =
   | {
       event: 'key-rejected';
       key: string;
+      // The host of the grant the refused call came through.
+      host: string | null;
       realm: string;
       share: string | null;
     }
   | { event: 'key-cleared'; key: string; reason: 'probe' | 'key-replaced' }
   | { event: 'key-probe'; key: string; minted: boolean }
-  | { event: 'vendor-outcome'; host: string; status: number };
+  | { event: 'vendor-outcome'; host: string; status: number }
+  // A key that mints its access tokens couldn't mint one for a call: `kind`
+  // is the key's kind and `host` its grant's destination host, which together
+  // name the vendor. `reason` is why: `rejected` (the vendor refused the key
+  // or its connection), `needs-admin` (the OAuth client it mints through is
+  // broken) or `unavailable` (the token endpoint didn't answer usefully).
+  | {
+      event: 'mint-failed';
+      key: string;
+      kind: string;
+      host: string;
+      realm: string;
+      reason: 'rejected' | 'needs-admin' | 'unavailable';
+    };
 
 let sink: ((event: KeyGrantEvent) => void) | undefined;
 
@@ -386,7 +401,7 @@ export async function markKeyRejected(
       ` RETURNING owner, name`,
     ]);
     if (!row) {
-      return false;
+      return undefined;
     }
     let [grant] = await txQuery([
       `SELECT destination FROM user_key_grants WHERE id = `,
@@ -405,17 +420,18 @@ export async function markKeyRejected(
         reason: 'key-rejected',
       });
     }
-    return true;
+    return { destination: grant ? (grant.destination as string) : null };
   });
   if (moved) {
     emitKeyGrantEvent({
       event: 'key-rejected',
       key: keyId,
+      host: moved.destination === null ? null : hostOf(moved.destination),
       realm: realmURL,
       share: shareId ?? null,
     });
   }
-  return moved;
+  return !!moved;
 }
 
 // Claims the probe of a rejected key: at most one call per interval gets it,

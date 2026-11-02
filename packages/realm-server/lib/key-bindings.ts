@@ -58,6 +58,7 @@ import {
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
   emitKeyGrantEvent,
+  hostOf,
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
@@ -1626,6 +1627,14 @@ async function mintedToken(
     ) {
       throw error;
     }
+    emitKeyGrantEvent({
+      event: 'mint-failed',
+      key: opened.keyId,
+      kind: opened.kind,
+      host: hostOf(opened.destination),
+      realm: call.realmURL,
+      reason: error.reason,
+    });
     if (call.keyProbe) {
       emitKeyGrantEvent({
         event: 'key-probe',
