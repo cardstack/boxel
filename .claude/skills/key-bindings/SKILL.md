@@ -321,6 +321,14 @@ an IPv6 caller's /64) as `callApiAnonymous` on the invocation; the lookup's
 caller the realm couldn't place has no address and is refused
 `actor-required`. A swap keeps `anonymous`, as it keeps `interactive`.
 
+The gate judges every behavior but a create against a stored card, so a
+visitor invokes a `callApi` on a card instance, never on its type. In a realm
+anyone may read, a visitor's capability check judges their write lane through
+the policy's grants that open it (`ANONYMOUS_WRITE_CHECK`), and a `callApi`
+grant counts there (`CompiledAnonymousGrant.sendsOutside`) since it travels
+as a write. A visitor who may read the realm and is refused a `callApi` that
+sends the caller's own key is told readiness `needs-sign-in`.
+
 ```sql
 -- The shares that serve people who aren't signed in, and their caps.
 SELECT s.id, s.label, s.realm_url, s.daily_budget, s.anonymous_daily_cap

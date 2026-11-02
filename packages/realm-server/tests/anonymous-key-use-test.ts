@@ -355,9 +355,12 @@ module(basename(import.meta.filename), function (hooks) {
       .set('Content-Type', OPERATIONS)
       .set('X-Forwarded-For', address);
     if (user) {
+      // A session's permissions match the realm's for its user.
+      let permissions =
+        user === OWNER ? ['read', 'write', 'realm-owner'] : ['read', 'write'];
       req = req.set(
         'Authorization',
-        `Bearer ${createJWT(team, user, ['read', 'write'])}`,
+        `Bearer ${createJWT(team, user, permissions)}`,
       );
     }
     let response = await req.send(onWeather(name));
