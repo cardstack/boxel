@@ -375,17 +375,7 @@ export class VirtualNetwork {
   // of `prefixMatch`, with the same longest-wins rule, so a URL under two
   // nested realm targets belongs to the deeper realm.
   private targetMatch(url: string): [string, string] | undefined {
-    let best: [string, string] | undefined;
-    for (let entry of this.realmMappings) {
-      let target = entry[1];
-      if (
-        url.startsWith(target) &&
-        (best === undefined || target.length > best[1].length)
-      ) {
-        best = entry;
-      }
-    }
-    return best;
+    return longestPrefixEntry(this.realmMappings, url, ([, target]) => target);
   }
 
   /**
@@ -448,12 +438,7 @@ export class VirtualNetwork {
    * `@cardstack/base/` mapping).
    */
   isRegisteredPrefix(reference: string): boolean {
-    for (let [prefix] of this.realmMappings) {
-      if (reference.startsWith(prefix)) {
-        return true;
-      }
-    }
-    return false;
+    return this.prefixMatch(reference) !== undefined;
   }
 
   /**
@@ -485,17 +470,7 @@ export class VirtualNetwork {
       candidates.push([virtual, real], [real, real]);
     }
 
-    let best: string | undefined;
-    let bestLength = -1;
-    for (let [addressable, realmHref] of candidates) {
-      if (
-        reference.startsWith(addressable) &&
-        addressable.length > bestLength
-      ) {
-        bestLength = addressable.length;
-        best = realmHref;
-      }
-    }
+    let best = longestPrefixEntry(candidates, reference)?.[1];
     if (!best) {
       return undefined;
     }
@@ -547,7 +522,9 @@ export class VirtualNetwork {
    * When several targets contain the URL, the deepest one's prefix is used,
    * mirroring the longest-prefix rule `resolveImport` applies the other way.
    * An http(s) input is matched in its parsed serialization, so its dot
-   * segments are folded before it is re-spelled.
+   * segments are folded before it is re-spelled, and the characters the URL
+   * parser percent-encodes come back encoded: `toURL` returns that spelling,
+   * so the raw and the encoded spelling of one URL unresolve to one RRI.
    *
    * If the input doesn't directly match any realm-prefix target, and the
    * input is URL-shaped, chase through any virtual→real URL mapping (e.g.
@@ -568,18 +545,19 @@ export class VirtualNetwork {
   }
 
   private computeUnresolveURL(url: string): RealmResourceIdentifier {
-    let direct = this.prefixFormOf(serializedURL(url));
+    let serialized = serializedURL(url);
+    let direct = this.prefixFormOf(serialized);
     if (direct !== undefined) {
       return direct;
     }
-    if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (serialized.startsWith('http://') || serialized.startsWith('https://')) {
       let resolved: string | undefined;
       try {
-        resolved = this.resolveURLMapping(url, 'virtual-to-real');
+        resolved = this.resolveURLMapping(serialized, 'virtual-to-real');
       } catch {
         resolved = undefined;
       }
-      if (resolved && resolved !== url) {
+      if (resolved && resolved !== serialized) {
         let viaMapping = this.prefixFormOf(resolved);
         if (viaMapping !== undefined) {
           return viaMapping;
@@ -659,6 +637,11 @@ export class VirtualNetwork {
     // registered prefix, resolve the prefix to its mapped URL first
     // and then join. Unmapped prefix-form bases fall through to
     // `resolveRRI`, which raises "no matching prefix mapping".
+    //
+    // Either way the reference is joined to the base's URL, so it lands at
+    // that URL's origin root, which can be another realm served from the same
+    // origin. It is not a path under the prefix, which `toURL` would keep
+    // inside the prefix's target.
     if (
       reference.startsWith('/') &&
       !reference.startsWith('//') &&
@@ -766,7 +749,9 @@ export class VirtualNetwork {
    * Resolve a reference to an absolute `RealmResourceIdentifier`.
    *
    * Resolution rules:
-   * - Absolute URL or registered prefix → return as-is
+   * - Absolute URL → return as-is
+   * - Registered prefix → return as-is, with any dot segments folded; a TypeError
+   *   when its path resolves outside the prefix's target, as from `toURL`
    * - Relative (`./`, `../`, bare name) → resolve against `relativeTo`
    * - `$REALM/` → resolve against the realm root of `relativeTo`
    * - `/` or `~/` prefixed → throw (not valid RRI forms)
@@ -780,9 +765,19 @@ export class VirtualNetwork {
       return reference as RealmResourceIdentifier;
     }
 
-    // Starts with a registered prefix — already resolved
+    // Starts with a registered prefix — already resolved, provided it resolves
+    // under that prefix's target. `toURLHref` refuses a path that leaves the
+    // target, so such a reference fails here rather than being handed out as
+    // an RRI that fails only when something resolves it. It is memoized, so a
+    // repeated reference costs a lookup. A dot segment that stays inside the
+    // target is folded, so the result is the spelling `unresolveURL` gives the
+    // same URL; anything else comes back as written.
     if (this.isRegisteredPrefix(reference)) {
-      return reference as RealmResourceIdentifier;
+      let url = this.toURLHref(reference);
+      if (!hasDotSegment(reference)) {
+        return reference as RealmResourceIdentifier;
+      }
+      return this.prefixFormOf(url) ?? (url as RealmResourceIdentifier);
     }
 
     // "/" and "~/" are not valid RRI reference forms
@@ -1062,7 +1057,8 @@ export function isUrlLike(moduleIdentifier: string): boolean {
 // and concatenation as well as from parsed URLs, and the realm targets they are
 // matched against are serialized: without this, a dot segment, an uppercase
 // host or a default port would make the textual match miss or carry the
-// segment into the prefix form.
+// segment into the prefix form. The characters the parser percent-encodes come
+// back encoded, which is the spelling `toURL` returns.
 function serializedURL(url: string): string {
   if (!/^https?:\/\//i.test(url)) {
     return url;
@@ -1079,20 +1075,30 @@ function serializedURL(url: string): string {
 // `@scope/realm/nested/`, or two realms on one origin with one below the
 // other — and, as under an import map, the most specific one holds whatever
 // lies beneath it. The order the entries were registered in plays no part.
-function longestPrefixEntry<V>(
-  entries: Iterable<[string, V]>,
+//
+// The key is an entry's first element unless `keyOf` picks another, which is
+// how the lookup from a target back to its prefix applies this same rule.
+function longestPrefixEntry<E extends readonly [string, unknown]>(
+  entries: Iterable<E>,
   candidate: string,
-): [string, V] | undefined {
-  let best: [string, V] | undefined;
+  keyOf: (entry: E) => string = (entry) => entry[0],
+): E | undefined {
+  let best: E | undefined;
+  let bestLength = -1;
   for (let entry of entries) {
-    if (
-      candidate.startsWith(entry[0]) &&
-      (best === undefined || entry[0].length > best[0].length)
-    ) {
+    let key = keyOf(entry);
+    if (key.length > bestLength && candidate.startsWith(key)) {
       best = entry;
+      bestLength = key.length;
     }
   }
   return best;
+}
+
+// Whether `reference` has a `.` or `..` path segment, in any spelling the URL
+// parser folds: `%2e` for either dot, and `\` as well as `/` between segments.
+function hasDotSegment(reference: string): boolean {
+  return /(^|[/\\])(\.|%2e){1,2}([/\\?#]|$)/i.test(reference);
 }
 
 // Resolves the remainder of a matched prefix under that prefix's target the way

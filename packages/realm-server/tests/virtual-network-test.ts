@@ -399,6 +399,33 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('resolveRRI: a reference under a registered prefix resolves as toURL resolves it', function (assert) {
+      let vn = new VirtualNetwork();
+      vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
+      vn.addRealmMapping('@scope/other/', 'http://realm.example/other/');
+      assert.strictEqual(
+        vn.resolveRRI('@scope/realm/cards/x'),
+        '@scope/realm/cards/x',
+        'a reference with no dot segment comes back as written',
+      );
+      assert.strictEqual(
+        vn.resolveRRI('@scope/realm/cards/../x', rri('@scope/other/y')),
+        '@scope/realm/x',
+        'a dot segment that stays inside the target is folded',
+      );
+      for (let reference of [
+        '@scope/realm/../other/x',
+        '@scope/realm/%2e%2e/other/x',
+        '@scope/realm//other/x',
+      ]) {
+        assert.throws(
+          () => vn.resolveRRI(reference),
+          TypeError,
+          `${reference} is refused rather than handed out as an RRI`,
+        );
+      }
+    });
+
     test('unresolveURL: a URL is matched in its serialized form', function (assert) {
       let vn = new VirtualNetwork();
       vn.addRealmMapping('@scope/realm/', 'http://realm.example/realm/');
@@ -412,6 +439,25 @@ module(basename(import.meta.filename), function () {
         vn.unresolveURL('HTTP://REALM.EXAMPLE:80/realm/x'),
         '@scope/realm/x',
         'an uppercase host and a default port still match the target',
+      );
+      assert.strictEqual(
+        vn.unresolveURL('http://realm.example/realm/Café Card/x'),
+        '@scope/realm/Caf%C3%A9%20Card/x',
+        'a raw spelling comes back percent-encoded',
+      );
+      assert.strictEqual(
+        vn.unresolveURL(vn.toURL('@scope/realm/Café Card/x').href),
+        vn.unresolveURL('http://realm.example/realm/Café Card/x'),
+        'the spelling toURL returns and the raw one unresolve to one RRI',
+      );
+      vn.addURLMapping(
+        new URL('https://alias.example/realm/'),
+        new URL('http://realm.example/realm/'),
+      );
+      assert.strictEqual(
+        vn.unresolveURL('HTTPS://alias.example/realm/x'),
+        '@scope/realm/x',
+        'an uppercase scheme still chases through a URL alias',
       );
       assert.strictEqual(
         vn.unresolveURL('http://elsewhere.example/a/../b'),
