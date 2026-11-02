@@ -59,6 +59,8 @@ const OWNER = '@usage-owner:localhost';
 const WRITER = '@usage-writer:localhost';
 const READER = '@usage-reader:localhost';
 const REALM_USER = '@node-test_realm:localhost';
+const STRANGER = '@usage-stranger:localhost';
+const OTHER_STRANGER = '@usage-other-stranger:localhost';
 const VALUE = 'sk-usage-owner-key-7e30a1';
 const INBOX = { module: rri(`${realmURL.href}inbox`), name: 'Inbox' };
 
@@ -544,6 +546,45 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(writer.body.data.attributes.refusals, [
       { code: 'share-suspended', count: 1 },
     ]);
+  });
+
+  test('a caller no permission row in the realm names is withheld from a share’s usage', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    assert.strictEqual((await call('shared', WRITER)).status, 200);
+    // Someone admitted only by a `users` or `*` row, or a policy grant, which
+    // name no one, and someone not signed in.
+    for (let caller of [STRANGER, STRANGER, OTHER_STRANGER, null]) {
+      await dbAdapter.execute(
+        `INSERT INTO key_uses (share_id, realm_url, operation, caller, mode, outcome, status) VALUES ($1, $2, 'shared', $3, 'interactive', 'sent', 200)`,
+        { bind: [shared.id, realmURL.href, caller] },
+      );
+    }
+    await dbAdapter.execute(
+      `INSERT INTO key_uses (share_id, realm_url, operation, caller, mode, outcome, status) VALUES ($1, $2, 'shared', $3, 'interactive', 'sent', 200)`,
+      { bind: [shared.id, realmURL.href, STRANGER] },
+    );
+
+    let response = await shareUsage(shared.id, OWNER);
+    assert.strictEqual(response.status, 200, response.text);
+    let { attributes } = response.body.data;
+    assert.notOk(
+      JSON.stringify(attributes).includes('stranger'),
+      'no unnamed caller’s id is shown',
+    );
+    assert.deepEqual(attributes.topCallers, [
+      { caller: null, calls: 4, withheld: true },
+      { caller: WRITER, calls: 1 },
+      { caller: null, calls: 1 },
+    ]);
+    assert.deepEqual(
+      [attributes.lastUse.caller, attributes.lastUse.withheld],
+      [null, true],
+      'the last caller is withheld too',
+    );
   });
 
   test('a personal key’s usage is for its owner alone', async function (assert) {
