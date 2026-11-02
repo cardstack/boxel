@@ -496,8 +496,9 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
       .usage-body {
         display: grid;
         gap: var(--boxel-sp-xs);
-        padding-top: var(--boxel-sp-xs);
-        border-top: 1px solid var(--border);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
       }
       .meters {
         display: grid;

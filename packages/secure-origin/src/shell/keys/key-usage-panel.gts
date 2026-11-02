@@ -36,15 +36,16 @@ type State =
 export default class KeyUsagePanel extends Component<Signature> {
   <template>
     <div class='usage-panel' data-test-key-usage-panel>
-      <Button
+      {{! A disclosure, drawn as the usage's own "Details this month" is: a
+          marker that turns as it opens, with the same name either way. }}
+      <button
+        type='button'
         class='toggle'
-        @kind='text-only'
-        @size='extra-small'
         aria-expanded={{if this.isClosed 'false' 'true'}}
         aria-describedby='key-name-{{@key.id}}'
         data-test-key-usage-toggle
         {{on 'click' this.toggle}}
-      >{{if this.isClosed 'Usage and limits' 'Hide usage and limits'}}</Button>
+      >Usage and limits</button>
       {{#if this.loading}}
         <BusyMessage @title='Loading usage…' />
       {{else if this.failed}}
@@ -59,12 +60,16 @@ export default class KeyUsagePanel extends Component<Signature> {
           >Try again</Button>
         </div>
       {{else if this.open}}
-        <UsageSummary @usage={{this.open.usage}} />
-        <h4 class='heading'>Limits</h4>
-        <LimitsForm
-          @limits={{this.open.usage.limits}}
-          @onSave={{this.saveLimits}}
-        />
+        <div class='panel-body' data-test-key-usage-body>
+          <UsageSummary @usage={{this.open.usage}} />
+          <div class='limits'>
+            <h4 class='heading'>Limits</h4>
+            <LimitsForm
+              @limits={{this.open.usage.limits}}
+              @onSave={{this.saveLimits}}
+            />
+          </div>
+        </div>
       {{/if}}
     </div>
     <style scoped>
@@ -74,9 +79,51 @@ export default class KeyUsagePanel extends Component<Signature> {
       }
       .toggle {
         justify-self: start;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        padding: 0;
+        border: none;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .toggle::before {
+        content: '';
+        width: 0;
+        height: 0;
+        border-top: 0.3em solid transparent;
+        border-bottom: 0.3em solid transparent;
+        border-left: 0.45em solid currentColor;
+        transition: transform 0.15s ease;
+      }
+      .toggle[aria-expanded='true']::before {
+        transform: rotate(90deg);
+      }
+      .toggle:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
+        border-radius: var(--boxel-border-radius-xs, 2px);
+      }
+      .panel-body {
+        display: grid;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+        background: var(--card, var(--background));
+      }
+      .limits {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-sm);
+        border-top: 1px solid var(--border);
       }
       .heading {
-        margin: var(--boxel-sp-xs) 0 0;
+        margin: 0;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
       }

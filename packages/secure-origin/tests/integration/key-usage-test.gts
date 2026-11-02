@@ -220,8 +220,15 @@ module('Integration | key usage and limits', function (hooks) {
         'nothing is asked for until it is opened',
       );
 
+      assert
+        .dom('[data-test-key-usage-toggle]')
+        .hasAttribute('aria-expanded', 'false');
       await click('[data-test-key-usage-toggle]');
       await waitFor('[data-test-key-usage]');
+      assert
+        .dom('[data-test-key-usage-toggle]')
+        .hasAttribute('aria-expanded', 'true')
+        .hasText('Usage and limits', 'the disclosure keeps its name open');
       assert
         .dom('[data-test-key-usage-details]')
         .doesNotHaveAttribute('open', 'the detailed counts start closed');
