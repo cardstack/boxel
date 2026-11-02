@@ -135,9 +135,11 @@ export const BXL_AUTHORIZATION_GRAPH_CALLS = names([
  *
  * `sha256` is here for a deterministic ordering a reader can recompute, such
  * as a lottery keyed on `sha256(seed + id)` in a mutation or transform.
+ * `slugify` is a single linear pass with no regular expression.
  */
 export const BXL_BOUNDED_SCALAR_CALLS = names([
   'sha256',
+  'slugify',
   'ACCRINT',
   'BASE',
   'BESSELI',
@@ -348,6 +350,7 @@ export const BXL_PREDICATE_LOWERABLE_CALLS = names([
  * validator, since the two-argument form takes a regular expression.
  */
 export const BXL_ROUTE_CALLS = names([
+  'slugify',
   'tostring',
   'tonumber',
   'ascii_downcase',

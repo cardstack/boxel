@@ -42,6 +42,7 @@ import {
   isDbExpression,
   sortDirection,
 } from './expression.ts';
+import { ROUTE_KEYS_FIELD } from './site-paths.ts';
 import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
   type Query,
@@ -1932,6 +1933,24 @@ export class IndexQueryEngine {
     onRef: CodeRef,
     polarity: FilterPolarity = 'positive',
   ): CardExpression {
+    // A site's derived path-segment value, stored in the search doc when the
+    // card was indexed (ADR site-routing §1.3). It belongs to no field of the
+    // card type, so it bypasses the field schema: a text containment match
+    // the GIN index on search_doc serves.
+    if (
+      key.startsWith(`${ROUTE_KEYS_FIELD}.`) &&
+      typeof value === 'string' &&
+      polarity === 'positive'
+    ) {
+      return [
+        {
+          kind: 'json-contains',
+          column: 'search_doc',
+          segments: key.split('.'),
+          value: param(value),
+        },
+      ];
+    }
     if (
       currentField(key) === CARD_INSTANCE_FILE_KEY &&
       typeof value === 'boolean'

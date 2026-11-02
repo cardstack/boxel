@@ -8,6 +8,8 @@ import {
   parsePathTemplate,
   readCardVariable,
   resolveSitePath,
+  routeKey,
+  ROUTE_KEYS_FIELD,
   type PathTemplate,
   type SiteSearch,
 } from '../site-paths.ts';
@@ -349,6 +351,94 @@ const tests: SharedTests<unknown> = Object.freeze({
         undefined,
       );
     },
+
+  'parsePathTemplate: reads :name segments as it reads {name}': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      template('/journal/:year/:slug').segments,
+      template('/journal/{year}/{slug}').segments,
+      'both spellings give the same segments',
+    );
+    assert.deepEqual(template('/c/:category.slug').segments, [
+      { literal: 'c' },
+      { variable: 'category.slug' },
+    ]);
+    for (let source of ['/p/:id(\\d+)', '/p/:id?', '/p/:id+', '/p/:id*']) {
+      assert.true(
+        'problem' in parsePathTemplate(source),
+        `${source} is refused: a link could not fill it back in`,
+      );
+    }
+  },
+
+  'derived segments: a page type fills a path from its params and looks it up by the stored value':
+    async (assert) => {
+      let cardTypeKey = `${REALM}journal/JournalPost`;
+      let expression = '.publishedOn | .[0:4]';
+      let key = routeKey(cardTypeKey, expression);
+      let journal = pageType(0, 'Journal', '/journal/:year/:slug', {
+        cardTypeKey,
+        params: [{ name: 'year', expression, key }],
+      });
+      let post = card('JournalPost/how-we-test', {
+        slug: 'how-we-test-a-driver',
+        publishedOn: '2025-09-03',
+      });
+      assert.strictEqual(
+        canonicalPathOf({ pageTypes: [journal] }, post, () => true),
+        '/journal/2025/how-we-test-a-driver',
+        'card to path: the expression runs over the card',
+      );
+      assert.deepEqual(
+        pageTypeMatchFilter(journal, {
+          year: '2025',
+          slug: 'how-we-test-a-driver',
+        }),
+        {
+          every: [
+            { eq: { [`${ROUTE_KEYS_FIELD}.${key}`]: '2025' } },
+            { eq: { slug: 'how-we-test-a-driver' } },
+          ],
+        },
+        'path to card: the derived segment is matched on its stored text',
+      );
+    },
+
+  'derived segments: slugify gives a title its address, and a value with a slash gives none':
+    async (assert) => {
+      let help = pageType(0, 'Help', '/help/:slug', {
+        params: [{ name: 'slug', expression: '.title | slugify', key: 'k1' }],
+      });
+      assert.strictEqual(
+        canonicalPathOf(
+          { pageTypes: [help] },
+          card('HelpArticle/returns', { title: 'When will I get my refund?' }),
+          () => true,
+        ),
+        '/help/when-will-i-get-my-refund',
+      );
+      let byPath = pageType(0, 'Raw', '/raw/:slug', {
+        params: [{ name: 'slug', expression: '.path', key: 'k2' }],
+      });
+      assert.strictEqual(
+        canonicalPathOf(
+          { pageTypes: [byPath] },
+          card('Doc/a', { path: 'a/b' }),
+          () => true,
+        ),
+        undefined,
+        'a value that would leave its segment gives the card no address',
+      );
+    },
+
+  'routeKey: one key per card type and expression': async (assert) => {
+    let a = routeKey(`${REALM}blog/BlogPost`, '.number');
+    assert.strictEqual(a, routeKey(`${REALM}blog/BlogPost`, ' .number '));
+    assert.notStrictEqual(a, routeKey(`${REALM}blog/Page`, '.number'));
+    assert.notStrictEqual(a, routeKey(`${REALM}blog/BlogPost`, '.id'));
+    assert.true(/^k[0-9a-f]{8}$/.test(a));
+  },
 
   'shareFor: reads share tags from the card, and leaves out what it cannot read':
     async (assert) => {

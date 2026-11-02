@@ -2,6 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import GlimmerComponent from '@glimmer/component';
 
 import {
+  evaluateSegment,
   expandPathTemplate,
   isLiteralRedirect,
   normalizeRoutingPath,
@@ -13,7 +14,7 @@ import {
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 
-import type { CardContext, CardDef } from './card-api';
+import { serializeCard, type CardContext, type CardDef } from './card-api';
 
 // What a site serves, shown to its owner as they edit its settings: the
 // problems the settings have, and for each page type, the addresses its
@@ -72,6 +73,24 @@ function siteData(site: SiteValue): unknown {
 
 // A card's value for a path variable: a field, or a linked card's field
 // through a dot (`category.slug`).
+// A segment's value as the site computes it: a page type's derived segment
+// runs its BXL over the card's attributes, anything else reads the field.
+function readSegmentOf(
+  card: CardDef,
+  pageType: SitePageType,
+  variable: string,
+): unknown {
+  let param = pageType.params?.find((p) => p.name === variable);
+  if (!param) {
+    return readVariable(card, variable);
+  }
+  let attributes = (serializeCard(card).data.attributes ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return evaluateSegment(param.expression, { ...attributes, id: card.id });
+}
+
 function readVariable(card: CardDef, variable: string): unknown {
   if (variable === 'id') {
     return card.id;
@@ -245,7 +264,9 @@ export default class SiteRoutesPanel extends GlimmerComponent<Signature> {
       let rows: Row[] = template
         ? (search?.instances ?? []).map((card) => ({
             card,
-            path: expandPathTemplate(template!, (v) => readVariable(card, v)),
+            path: expandPathTemplate(template!, (v) =>
+              readSegmentOf(card, pageType, v),
+            ),
           }))
         : [];
       let byPath = new Map<string, string[]>();

@@ -55,9 +55,11 @@ A page type's address MUST be a path pattern of literal segments and named
 segments (`:name`), each named segment one whole segment with no modifier,
 regular expression or wildcard. A named segment's value MUST be the card's
 field of that name (a dot reads a linked card's field), or the BXL
-derive-profile expression the page type's `params` gives it. An expression
-MUST read only the card's fields and the fields of linked cards marked
-`searchable`, and MUST NOT read the clock, the caller or the request. A value
+expression the page type's `params` gives it, checked against the `route`
+profile and run with its limits. An expression MUST read only the card's
+fields and the fields of linked cards marked `searchable`, MUST NOT read the
+clock, the caller or the request, and MUST NOT build a regular expression
+from authored text (§1.1); `slugify` makes a segment from text without one. A value
 MUST be non-empty text without `/`; a card whose value isn't has no address
 under that page type, and the problem MUST be recorded for the site's editor
 (§1.5). A redirect's source and target MAY be patterns.
@@ -76,7 +78,8 @@ card by an index search per matching pattern, built from the page type's
 source realm, card type, filter and sort and one `eq` per named segment on
 those stored values, and run as the visitor (their credentials, or none, and
 their client address). It MUST derive a card's address by filling the pattern
-from the same stored values. A change to a page type's pattern or `params`
+from the same values, read from the stored text or computed by running the
+same expressions over the card, which gives the same text. A change to a page type's pattern or `params`
 MUST re-index the cards it covers. The server SHOULD remember a card's
 earlier values for a page type and answer them as its other addresses
 (§1.5).

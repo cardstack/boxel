@@ -422,6 +422,21 @@ export class RoutingRuleField extends FieldDef {
 // fields declared here, and validates them on every read
 // (`readSiteSettings` in runtime-common).
 
+// A path segment whose value a BXL expression derives from the card
+// (ADR site-routing §1.2): `{ name: 'year', expression: '.publishedOn | .[0:4]' }`.
+export class SiteSegmentParamField extends FieldDef {
+  static displayName = 'Site Path Segment';
+
+  @field name = contains(StringField, {
+    description:
+      'The segment of the path it fills: year for /journal/:year/:slug',
+  });
+  @field expression = contains(StringField, {
+    description:
+      'BXL over the card giving the segment as text: .publishedOn | .[0:4], .title | slugify',
+  });
+}
+
 // One kind of page: every card of a type, from one realm, gets a path.
 export class SitePageTypeField extends FieldDef {
   static displayName = 'Site Page Type';
@@ -438,7 +453,7 @@ export class SitePageTypeField extends FieldDef {
   });
   @field path = contains(StringField, {
     description:
-      "The address of a card's page, as a path template whose variables name the card's fields: /shop/{handle} or /c/{category.slug}/{slug}. A key the card derives is a computed field",
+      "The address of a card's page, as a path pattern whose :name segments read the card's fields: /shop/:handle or /c/:category.slug/:slug. A segment listed in params gets its value from a BXL expression instead",
   });
   @field sort = contains(StringField, {
     description:
@@ -446,7 +461,11 @@ export class SitePageTypeField extends FieldDef {
   });
   @field aliases = containsMany(StringField, {
     description:
-      "More addresses, as path templates like path, that answer 301 to the card's page",
+      "More addresses, as path patterns like path, that answer 301 to the card's page",
+  });
+  @field params = containsMany(SiteSegmentParamField, {
+    description:
+      'Segments of path and aliases whose value a BXL expression derives from the card. Stored when cards are indexed, so a path finds its card with one lookup',
   });
   @field listingPath = contains(StringField, {
     description:

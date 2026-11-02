@@ -1,27 +1,33 @@
 import { normalizeRoutingPath } from './host-routing-validation.ts';
-import type { RouteCard } from './host-routes.ts';
+import {
+  evaluateSegment,
+  routeCardInput,
+  type RouteCard,
+} from './host-routes.ts';
 import type {
   SitePageType,
   SiteRedirect,
   SiteSettings,
 } from './site-settings.ts';
 
-// A site's addresses as path templates: `/shop/{handle}`,
-// `/c/{category.slug}/{slug}`. The syntax is RFC 6570 Level 1 (`{name}`
-// simple string expansion), matched the way OpenAPI path templating matches
-// a path: an expression fills exactly one whole path segment. A template
-// works both ways, so no table of addresses is stored:
+// A site's addresses as path patterns: `/shop/:handle`,
+// `/c/:category.slug/:slug`. A named segment (`:name`) fills exactly one whole
+// path segment, the convention Rails, Ember and `URLPattern` share; the older
+// RFC 6570 spelling (`{name}`) is still read. A pattern works both ways, so no
+// table of addresses is stored (ADR site-routing §1.2, §1.3):
 //
-// - card → path: read each variable from the card and expand it;
-// - path → card: match the path's segments, then search for the card whose
-//   fields equal the values (`eq`), which the card index answers.
+// - card -> path: each segment's value comes from the card and fills the
+//   pattern;
+// - path -> card: match the path's segments, then search for the card whose
+//   values equal them (`eq`), which the card index answers.
 //
-// A variable names a field of the card's search doc, or of a linked card
-// through a dot (`{category.slug}`). A template
-// never transforms a value, since a transform can't be read back; a card
-// that needs a derived key computes it as a field. Matching compares
-// segments one by one, linear in the path, with no regular expression built
-// from the template (ADR site-routing §1.2).
+// A segment's value is the card field of its name (a dot reads a linked
+// card's field), or, when the page type's `params` names the segment, a BXL
+// expression over the card. An expression's value is stored with the card
+// when it is indexed (`_route.<key>` in the search doc), so the reverse
+// lookup is an `eq` on the stored text and nothing is ever run backwards.
+// Matching compares segments one by one, linear in the path, with no regular
+// expression built from the pattern.
 
 export type PathSegment = { literal: string } | { variable: string };
 
@@ -51,8 +57,18 @@ export function parsePathTemplate(
     if (!segment) {
       return { problem: `"${trimmed}" has an empty segment` };
     }
-    if (segment.startsWith('{') && segment.endsWith('}')) {
-      let name = segment.slice(1, -1);
+    let named = segment.startsWith(':')
+      ? segment.slice(1)
+      : segment.startsWith('{') && segment.endsWith('}')
+        ? segment.slice(1, -1)
+        : undefined;
+    if (segment.startsWith(':') && /[(){}?*+]/.test(named!)) {
+      return {
+        problem: `"${segment}": a named segment is a plain :name, with no pattern, ? + or *, so a link can fill it back in`,
+      };
+    }
+    if (named !== undefined) {
+      let name = named;
       if (/^[+#./;?&]/.test(name)) {
         return {
           problem: `"${segment}": only {name} is allowed; an operator such as + / ? # would let a value span segments or leave the path`,
@@ -67,7 +83,7 @@ export function parsePathTemplate(
         return { problem: `"${segment}" is not a variable name` };
       }
       if (names.has(name)) {
-        return { problem: `{${name}} appears twice` };
+        return { problem: `:${name} appears twice` };
       }
       names.add(name);
       segments.push({ variable: name });
@@ -197,12 +213,52 @@ export function readCardVariable(card: RouteCard, variable: string): unknown {
   return value;
 }
 
+// Where a card's derived segment values sit in its search doc:
+// `_route.<key>`, written when the card is indexed.
+export const ROUTE_KEYS_FIELD = '_route';
+
+// A page type's derived segment: the segment it fills, the BXL expression
+// that gives its value, and the key that value is stored under.
+export interface SegmentParam {
+  name: string;
+  expression: string;
+  key: string;
+}
+
+// The key a derived value is stored under: a hash of the card type and the
+// expression, so sites that share an expression on a card type share one
+// stored value (ADR site-routing §1.3). FNV-1a, 32 bits, in hex.
+export function routeKey(cardTypeKey: string, expression: string): string {
+  let hash = 0x811c9dc5;
+  let text = `${cardTypeKey}\n${expression.trim()}`;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `k${hash.toString(16).padStart(8, '0')}`;
+}
+
+// A segment's value for a card: the expression the page type's `params`
+// gives it, run over the card, or else the card field of its name. The
+// expression is pure, so running it here gives the value the index stored.
+export function readSegment(
+  card: RouteCard,
+  pageType: Pick<SitePageType, 'params'>,
+  variable: string,
+): unknown {
+  let param = pageType.params?.find((p) => p.name === variable);
+  if (param) {
+    return evaluateSegment(param.expression, routeCardInput(card));
+  }
+  return readCardVariable(card, variable);
+}
+
 // The search a match becomes: the page type's own filter and one `eq` per
-// variable. A value that reads as a number matches either spelling, so a
+// variable. A derived segment is matched on its stored text. A value that reads as a number matches either spelling, so a
 // numeric field matches and a part number like `01234` stays a string. The
 // values are data inside `eq`, never operators.
 export function pageTypeMatchFilter(
-  pageType: Pick<SitePageType, 'filter'>,
+  pageType: Pick<SitePageType, 'filter' | 'params'>,
   values: Record<string, string>,
 ): Record<string, unknown> {
   let clauses: Record<string, unknown>[] = [];
@@ -210,6 +266,11 @@ export function pageTypeMatchFilter(
     clauses.push(JSON.parse(pageType.filter) as Record<string, unknown>);
   }
   for (let [variable, value] of Object.entries(values)) {
+    let param = pageType.params?.find((p) => p.name === variable);
+    if (param) {
+      clauses.push({ eq: { [`${ROUTE_KEYS_FIELD}.${param.key}`]: value } });
+      continue;
+    }
     let asNumber = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
       ? Number(value)
       : undefined;
@@ -286,7 +347,7 @@ export function canonicalPathOf(
       continue;
     }
     let path = expandPathTemplate(pageType.template, (v) =>
-      readCardVariable(card, v),
+      readSegment(card, pageType, v),
     );
     if (path) {
       return path;

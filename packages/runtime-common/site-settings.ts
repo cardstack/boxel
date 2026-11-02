@@ -6,10 +6,13 @@ import {
   normalizeRoutingPath,
   type HostRoutingRule,
 } from './host-routing-validation.ts';
+import { compileSegmentExpression } from './host-routes.ts';
 import {
   parsePathTemplate,
+  routeKey,
   templateVariables,
   type PathTemplate,
+  type SegmentParam,
 } from './site-paths.ts';
 import { resolveRRIReference } from './url.ts';
 
@@ -42,6 +45,12 @@ export interface SitePageType {
   sort?: string;
   // More addresses, as templates, that answer 301 to the card's page.
   aliasTemplates: PathTemplate[];
+  // The card type as `boxel_index.types` spells it, which the registry of
+  // derived-segment expressions is keyed by.
+  cardTypeKey?: string;
+  // Segments whose value is a BXL expression over the card, not a field
+  // (ADR site-routing §1.2). Their values are stored when cards are indexed.
+  params?: SegmentParam[];
   listingPath?: string;
   listingTitle?: string;
   listingSort?: string;
@@ -217,6 +226,40 @@ function readPageType(
     }
   }
 
+  let cardTypeKey = `${cardType.module.replace(/\.(gts|ts|js)$/, '')}/${cardType.name}`;
+  let segmentNames = new Set(
+    [template, ...aliasTemplates].flatMap((tpl) =>
+      tpl ? templateVariables(tpl) : [],
+    ),
+  );
+  let params: SegmentParam[] = [];
+  for (let entry of list(t.params)) {
+    let param = record(entry);
+    let paramName = str(param?.name)?.replace(/^:/, '');
+    let expression = str(param?.expression);
+    if (!paramName || !expression) {
+      problems.push(`${label}: a param needs a name and an expression`);
+      continue;
+    }
+    if (!segmentNames.has(paramName)) {
+      problems.push(
+        `${label}: param "${paramName}" names no segment of the path or its aliases`,
+      );
+      continue;
+    }
+    let compiled = compileSegmentExpression(expression);
+    if (!compiled.ok) {
+      problems.push(
+        `${label}: param "${paramName}": ${compiled.error}; its pages have no address until it compiles`,
+      );
+    }
+    params.push({
+      name: paramName,
+      expression,
+      key: routeKey(cardTypeKey, expression),
+    });
+  }
+
   let filter = str(t.filter);
   if (filter && !isJSON(filter, 'object')) {
     problems.push(`${label}: filter is not a JSON object`);
@@ -259,6 +302,8 @@ function readPageType(
     filter,
     sort,
     aliasTemplates,
+    cardTypeKey,
+    params: params.length ? params : undefined,
     listingPath,
     listingTitle: str(t.listingTitle),
     listingSort,

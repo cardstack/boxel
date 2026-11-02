@@ -84,6 +84,81 @@ export function compileRouteExpression(
   }
 }
 
+// A derived path segment (a page type's `params`): BXL in jq syntax under the
+// `route` profile, run over the card with the route limits. Compiled once per
+// expression text, since the same expressions run for every card of a type.
+const compiledSegments = new Map<string, CompiledRouteExpression>();
+
+export function compileSegmentExpression(
+  source: string,
+): CompiledRouteExpression {
+  let expression = source.trim();
+  let cached = compiledSegments.get(expression);
+  if (cached) {
+    return cached;
+  }
+  let compiled: CompiledRouteExpression;
+  try {
+    let ast = parseBxlAst(expression, {
+      profile: 'route',
+      readableSyntax: false,
+    });
+    let errors = ast.profileIssues.filter((i) => i.severity === 'error');
+    compiled = errors.length
+      ? { ok: false, error: errors.map((e) => e.message).join('; ') }
+      : {
+          ok: true,
+          prepared: prepareBxl(expression, {
+            readableSyntax: false,
+            runtimeLimits: ROUTE_LIMITS,
+          }),
+        };
+  } catch (e) {
+    compiled = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (compiledSegments.size >= 500) {
+    compiledSegments.delete(compiledSegments.keys().next().value!);
+  }
+  compiledSegments.set(expression, compiled);
+  return compiled;
+}
+
+// A segment value is non-empty text that stays in its segment: a string
+// without `/`, or a finite number written as text. Anything else gives the
+// card no address under that page type (ADR site-routing §1.2).
+export function segmentText(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  let text = value.trim();
+  return text && !text.includes('/') ? text : undefined;
+}
+
+// A derived segment's value for a card, or undefined when the expression
+// doesn't compile, fails, or gives no usable text. `doc` is the card's
+// attributes (or search doc) with its `id`.
+export function evaluateSegment(
+  source: string,
+  doc: Record<string, unknown>,
+): string | undefined {
+  let compiled = compileSegmentExpression(source);
+  if (!compiled.ok) {
+    return undefined;
+  }
+  try {
+    return segmentText(compiled.prepared.evaluate(doc).value);
+  } catch {
+    return undefined;
+  }
+}
+
+export function routeCardInput(card: RouteCard): Record<string, unknown> {
+  return input(card);
+}
+
 function run(compiled: CompiledRouteExpression, card: RouteCard): unknown {
   if (!compiled.ok) {
     return undefined;

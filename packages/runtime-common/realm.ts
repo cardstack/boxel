@@ -69,6 +69,7 @@ import {
   prerenderHtmlWriterLane,
 } from './jobs/prerender-html.ts';
 import { JobClaimHold } from './jobs/claim-hold.ts';
+import { enqueueReindexRealmJob } from './jobs/reindex-realm.ts';
 import { withoutQueueClaim } from './jobs/queue-claim.ts';
 import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
@@ -4736,6 +4737,15 @@ export class Realm {
     this.#cachedHostRoutingMap = null;
     this.#cachedSiteSettings = null;
     this.#readPlanByURL.clear();
+    // A site's derived-segment expressions are registered for the realms its
+    // page types draw on once its settings change (ADR site-routing §1.3).
+    void this.getSiteSettings()
+      .then((settings) => this.#syncRouteExpressions(settings))
+      .catch((err: unknown) => {
+        this.#log.warn(
+          `registering the route expressions of ${this.url} failed: ${String(err)}`,
+        );
+      });
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
     // not only to this realm's own.
@@ -17596,6 +17606,89 @@ export class Realm {
       );
       // A transient read failure isn't cached, so the next call retries.
       return readSiteSettings(undefined, this.url);
+    }
+  }
+
+  // Make the registry of derived-segment expressions match this site's page
+  // types (ADR site-routing §1.3). When a realm the site draws on gains an
+  // expression, that realm is re-indexed so its cards store the new values.
+  // A removed expression's stored values age out at the next re-index.
+  async #syncRouteExpressions(settings: SiteSettings): Promise<void> {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    let wanted = new Map<
+      string,
+      { realm: string; cardType: string; key: string; expression: string }
+    >();
+    for (let pageType of settings.pageTypes) {
+      if (!pageType.cardTypeKey) {
+        continue;
+      }
+      for (let param of pageType.params ?? []) {
+        let row = {
+          realm: pageType.sourceRealm,
+          cardType: pageType.cardTypeKey!,
+          key: param.key,
+          expression: param.expression,
+        };
+        wanted.set(`${row.realm}|${row.cardType}|${row.key}`, row);
+      }
+    }
+    let existing = (await query(this.#dbAdapter, [
+      `SELECT realm_url, card_type, route_key FROM site_route_expressions WHERE site_realm_url =`,
+      param(this.url),
+    ])) as { realm_url: string; card_type: string; route_key: string }[];
+    let had = new Set(
+      existing.map((r) => `${r.realm_url}|${r.card_type}|${r.route_key}`),
+    );
+    let added = [...wanted.keys()].filter((k) => !had.has(k));
+    let removed = [...had].filter((k) => !wanted.has(k));
+    if (!added.length && !removed.length) {
+      return;
+    }
+    await query(this.#dbAdapter, [
+      `DELETE FROM site_route_expressions WHERE site_realm_url =`,
+      param(this.url),
+    ]);
+    for (let row of wanted.values()) {
+      await query(this.#dbAdapter, [
+        `INSERT INTO site_route_expressions (realm_url, card_type, route_key, expression, site_realm_url) VALUES (`,
+        param(row.realm),
+        `,`,
+        param(row.cardType),
+        `,`,
+        param(row.key),
+        `,`,
+        param(row.expression),
+        `,`,
+        param(this.url),
+        `) ON CONFLICT DO NOTHING`,
+      ]);
+    }
+    let realmsToReindex = new Set(added.map((k) => k.split('|')[0]));
+    for (let realmURL of realmsToReindex) {
+      let [owner] = (await query(this.#dbAdapter, [
+        `SELECT username FROM realm_user_permissions WHERE realm_owner = true AND realm_url =`,
+        param(realmURL),
+        `LIMIT 1`,
+      ])) as { username: string }[];
+      if (!owner) {
+        this.#log.warn(
+          `site ${this.url} needs route values from ${realmURL}, which has no owner to re-index it as`,
+        );
+        continue;
+      }
+      await enqueueReindexRealmJob(
+        realmURL,
+        getMatrixUsername(owner.username),
+        this.#queue,
+        this.#dbAdapter,
+        0,
+      );
+      this.#log.info(
+        `re-indexing ${realmURL}: site ${this.url} added a derived path segment`,
+      );
     }
   }
 

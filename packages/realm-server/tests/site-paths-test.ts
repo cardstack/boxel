@@ -52,4 +52,19 @@ module(basename(import.meta.filename), function () {
   test('shareFor: reads share tags from the card, and leaves out what it cannot read', async function (assert) {
     await runSharedTest(sitePathsTests, assert, {});
   });
+  test('parsePathTemplate: reads :name segments as it reads {name}', async function (assert) {
+    await runSharedTest(sitePathsTests, assert, {});
+  });
+
+  test('derived segments: a page type fills a path from its params and looks it up by the stored value', async function (assert) {
+    await runSharedTest(sitePathsTests, assert, {});
+  });
+
+  test('derived segments: slugify gives a title its address, and a value with a slash gives none', async function (assert) {
+    await runSharedTest(sitePathsTests, assert, {});
+  });
+
+  test('routeKey: one key per card type and expression', async function (assert) {
+    await runSharedTest(sitePathsTests, assert, {});
+  });
 });

@@ -420,6 +420,7 @@ const LOWERCASE_BXL_HELPERS = new Set([
   'overlaps',
   'present',
   'sha256',
+  'slugify',
   'when',
   'words',
 ]);

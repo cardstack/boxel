@@ -276,6 +276,24 @@ export const formulaTextCases: CoverageCase[] = [
   { covers: 'like/2', source: 'like("Alice", "A_i%")', expected: true },
   { covers: 'like/2', source: 'like("Alice", "Ali")', expected: false },
   { covers: 'words/1', source: 'words("Grace  Lin")', expected: 2 },
+  // slugify: letters and digits kept and lowercased, accents dropped, every
+  // other run of characters one `-`, none at either end.
+  {
+    covers: 'slugify/0',
+    source: '"Returning something" | slugify',
+    expected: 'returning-something',
+  },
+  {
+    covers: 'slugify/0',
+    source: '"When will I get my refund?" | slugify',
+    expected: 'when-will-i-get-my-refund',
+  },
+  {
+    covers: 'slugify/1',
+    source: 'slugify("  Crème brûlée -- No. 2!  ")',
+    expected: 'creme-brulee-no-2',
+  },
+  { covers: 'slugify/1', source: 'slugify("--- ")', expected: '' },
   // sha256: lowercase hex of the UTF-8 bytes. The first three are the
   // FIPS 180-2 example vectors — the empty message, "abc" (one block) and the
   // 448-bit message whose padding spills into a second block.
