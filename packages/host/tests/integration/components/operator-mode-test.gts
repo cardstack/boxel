@@ -15,13 +15,46 @@ import {
   percySnapshot,
   testRealmURL,
   type TestContextWithSave,
-  withSlowSave,
+  withHeldSave,
 } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
 import type { CardDef } from '@cardstack/base/card-api';
+
+// Waits for the stack item a create pushes. A timeout reports how far the
+// create got — whether the chooser closed, which items the operator-mode state
+// holds, and how many of them rendered — which separates a slow module load
+// (chooser closed, no new item in state) from an item that was pushed but
+// never rendered. The elapsed time is logged on success too, so passing runs
+// show how much of the timeout a loaded runner uses.
+async function waitForNewStackItem(selector: string) {
+  let startedAt = performance.now();
+  try {
+    await waitFor(selector, { timeout: 10000 });
+  } catch (e) {
+    let stacks = getService('operator-mode-state-service').state?.stacks ?? [];
+    throw new Error(
+      `${(e as Error).message} after ${Math.round(
+        performance.now() - startedAt,
+      )}ms; chooser open: ${Boolean(
+        document.querySelector('[data-test-card-chooser-modal]'),
+      )}; stack items in state: ${JSON.stringify(
+        stacks.map((stack) =>
+          stack.map((item) => ({ id: item.id, format: item.format })),
+        ),
+      )}; rendered stack items: ${
+        document.querySelectorAll('[data-test-stack-card-index]').length
+      }`,
+    );
+  }
+  console.log(
+    `new stack item "${selector}" rendered after ${Math.round(
+      performance.now() - startedAt,
+    )}ms`,
+  );
+}
 
 module('Integration | operator-mode | basics', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
@@ -495,27 +528,37 @@ module('Integration | operator-mode | basics', function (hooks) {
       saved.fulfill();
     });
 
-    await withSlowSave(1000, async () => {
-      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-      assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
-      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
-      await click('[data-test-create-new-card-button]');
-      assert
-        .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
-        .containsText('Choose a Spec card');
-      await waitFor(
-        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
-      );
-      assert
-        .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
-        .exists({ count: 3 });
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-chooser-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a Spec card');
+    await waitFor(
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
+    );
+    assert
+      .dom(`[data-test-realm="${ctx.realmName}"] [data-test-item-button]`)
+      .exists({ count: 3 });
 
-      await click(
-        `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
-      );
+    await click(
+      `[data-test-item-button="${testRealmURL}Spec/publishing-packet"]`,
+    );
+
+    // The new card's save is held until the callback returns, so "not saved
+    // yet" is guaranteed by the hold rather than by how quickly the stack item
+    // renders. Choosing the spec still loads the card's module before the item
+    // is pushed, which on a loaded runner can take seconds; with no save
+    // racing it, the wait for the item can be as long as that load needs.
+    await withHeldSave(async () => {
+      // Not awaited: `click` settles, and the held save keeps a test waiter
+      // open until the callback returns.
       click('[data-test-card-chooser-go-button]');
-      await waitFor('[data-test-stack-card-index="1"]');
+      await waitForNewStackItem(
+        '[data-test-stack-card-index="1"] [data-test-field="blogPost"]',
+      );
       assert
         .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
         .exists();
@@ -524,19 +567,20 @@ module('Integration | operator-mode | basics', function (hooks) {
         0,
         'the new card has not been saved yet',
       );
-      await click(
-        '[data-test-stack-card-index="1"] [data-test-more-options-button]',
-      );
-      await fillIn(`[data-test-field="cardInfo-name"] input`, 'New Post');
-      await saved.promise;
-      let packetId = [...savedCards].find((k) =>
-        k.includes('PublishingPacket'),
-      )!;
-      ctx.setCardInOperatorModeState(packetId);
-
-      await waitFor(`[data-test-stack-card="${packetId}"]`);
-      assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
     });
+
+    await saved.promise;
+    let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
+    assert.ok(packetId, 'the new card was saved once the hold was released');
+
+    await click(
+      '[data-test-stack-card-index="1"] [data-test-more-options-button]',
+    );
+    await fillIn(`[data-test-field="cardInfo-name"] input`, 'New Post');
+
+    ctx.setCardInOperatorModeState(packetId);
+    await waitFor(`[data-test-stack-card="${packetId}"]`);
+    assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
