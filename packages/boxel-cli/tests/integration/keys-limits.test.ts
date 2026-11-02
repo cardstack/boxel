@@ -39,6 +39,7 @@ import {
   keysAdd,
   keysLimits,
   keysShare,
+  keysUsage,
   runKeysCommand,
   type KeysCommandDeps,
 } from '../../src/commands/keys/manage.ts';
@@ -46,10 +47,12 @@ import { invokeOperation } from '../../src/commands/operations.ts';
 import { SecureSessionRequestError } from '../../src/lib/secure-session.ts';
 
 // ============================================================================
-// Setting a key's limits from the terminal, against the stub vendor: limits
-// set on a personal key and on a share hold the next calls invoked from the
-// CLI to them, `default` puts a limit back to the platform's, and a realm's
-// other direct writer can read a share's limits but is refused changing them.
+// Setting a key's limits and reading its usage from the terminal, against
+// the stub vendor: limits set on a personal key and on a share hold the next
+// calls invoked from the CLI to them, `default` puts a limit back to the
+// platform's, a realm's other direct writer can read a share's limits but is
+// refused changing them, and usage counts the calls and refusals the CLI's
+// invokes made.
 //
 // The approval API approves a binding for pipelines only, so the test turns
 // each binding interactive in the database, as allowing interactive use
@@ -375,5 +378,47 @@ describe('boxel keys limits (integration)', () => {
     let { error } = JSON.parse(output.join('\n'));
     expect(error.status).toBe(400);
     expect(error.errors[0].detail ?? error.reason).toContain('dailyBudget');
+  });
+
+  it("reports a personal key's usage: the calls charged, the last use and the refusals", async () => {
+    // Charged today: one call, one after the daily budget was restored, two
+    // before the rate held them. Refused calls are put back.
+    let usage = await keysUsage('my key', deps);
+    expect(usage.budgets.day.used).toBe(4);
+    expect(usage.budgets.month.used).toBe(4);
+    expect(usage.lastUse).toMatchObject({
+      caller: matrixId,
+      operation: 'mine',
+      outcome: 'refused',
+    });
+    expect(usage.topCallers).toEqual([
+      { caller: matrixId, calls: usage.calls },
+    ]);
+    expect(usage.refusals).toEqual(
+      expect.arrayContaining([
+        { code: 'over-budget', count: 1 },
+        { code: 'rate-limited', count: 1 },
+      ]),
+    );
+    expect(usage.vendorOutcomes).toEqual([{ status: 200, count: 4 }]);
+    expect(usage.grants).toEqual([
+      expect.objectContaining({
+        destination: `${vendor.url}/`,
+        state: 'active',
+      }),
+    ]);
+    expect(usage.canEditLimits).toBe(true);
+    expect(usage.limits.rateBurst).toBe(2);
+  });
+
+  it("reports a share's usage to the realm's other direct writer, who can't edit its limits", async () => {
+    let usage = await keysUsage('Vendor', { ...writerDeps, realm });
+    expect(usage.budgets.day.used).toBe(1);
+    expect(usage.refusals).toEqual([{ code: 'rate-limited', count: 1 }]);
+    expect(usage.canEditLimits).toBe(false);
+    expect(usage.limits).toMatchObject({ rateBurst: 1, monthlyBudget: 500 });
+
+    let own = await keysUsage('Vendor', { ...deps, realm });
+    expect(own.canEditLimits).toBe(true);
   });
 });
