@@ -53,8 +53,18 @@ interface ToolRun {
   summary?: string;
   // some calls in the group are still running
   pending?: boolean;
-  // a folded run's group: open while the room says so, see foldOpen
-  folded?: boolean;
+  // a folded run's group is open while the room records it open; any other
+  // group leaves these undefined and keeps its own disclosure
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+// A run of messages, each with one finished call to the same tool, folded
+// into its latest message: every call of the run, its own last, and the key
+// the room keeps the run's open state by.
+export interface FoldedRun {
+  key: string;
+  tools: MessageTool[];
 }
 
 interface Signature {
@@ -76,9 +86,8 @@ interface Signature {
     isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
-    // this message stands for a run of messages, each with one finished call
-    // to the same tool, folded into it: every call of the run, its own last
-    foldedTools?: MessageTool[];
+    // this message stands for a run of messages folded into it
+    foldedRun?: FoldedRun;
     // Whether the reader opened a folded run's group, by the group's key, and
     // how to record it. The room keeps it: when the next call of the run
     // finishes, this message folds away and a newer one draws the group.
@@ -243,17 +252,18 @@ export default class RoomMessage extends Component<Signature> {
       (tool, index) => (tool.id ?? run.parts?.[index]?.id) === id,
     );
 
-  // A folded run's group is open while the room records it open; any other
-  // group keeps its own disclosure (undefined leaves ToolGroup uncontrolled).
-  private foldOpen = (run: ToolRun) =>
-    run.folded && this.args.isFoldOpen && this.args.setFoldOpen
-      ? this.args.isFoldOpen(run.key)
-      : undefined;
+  // one setter per folded run's key, so ToolGroup's @onOpenChange stays the
+  // same function while the run's messages stream
+  private foldSetters = new Map<string, (open: boolean) => void>();
 
-  private onFoldOpenChange = (run: ToolRun) =>
-    run.folded && this.args.isFoldOpen && this.args.setFoldOpen
-      ? (open: boolean) => this.args.setFoldOpen!(run.key, open)
-      : undefined;
+  private foldSetter(key: string) {
+    let setter = this.foldSetters.get(key);
+    if (!setter) {
+      setter = (open: boolean) => this.args.setFoldOpen?.(key, open);
+      this.foldSetters.set(key, setter);
+    }
+    return setter;
+  }
 
   // one ToolGroup row for consecutive finished calls to one tool
   private groupRun(
@@ -291,12 +301,16 @@ export default class RoomMessage extends Component<Signature> {
   private get toolRuns(): ToolRun[] {
     // the earlier messages of a folded run are hidden: their calls open
     // from this one's row, the same way a group within one message does
-    let folded = this.args.foldedTools;
-    if (folded && folded.length > 1) {
+    let folded = this.args.foldedRun;
+    if (folded && folded.tools.length > 1) {
+      let { key, tools } = folded;
+      let controlled = this.args.isFoldOpen && this.args.setFoldOpen;
       return [
         {
-          ...this.groupRun(folded, (k) => folded[k]!.id ?? `folded-call-${k}`),
-          folded: true,
+          ...this.groupRun(tools, (k) => tools[k]!.id ?? `${key}-${k}`),
+          key,
+          open: controlled ? this.args.isFoldOpen!(key) : undefined,
+          onOpenChange: controlled ? this.foldSetter(key) : undefined,
         },
       ];
     }
@@ -589,8 +603,8 @@ export default class RoomMessage extends Component<Signature> {
               @merge='none'
               @pending={{run.pending}}
               @summary={{run.summary}}
-              @open={{this.foldOpen run}}
-              @onOpenChange={{this.onFoldOpenChange run}}
+              @open={{run.open}}
+              @onOpenChange={{run.onOpenChange}}
               data-test-tool-run-group={{run.count}}
             >
               <:tool as |entry|>

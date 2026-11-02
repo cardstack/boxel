@@ -75,7 +75,6 @@ import {
   formatTokenUsage,
 } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import {
   modelIdsOf,
   pickableModels,
@@ -133,6 +132,8 @@ import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 import { Submodes } from '../submode-switcher';
 
 import RoomMessage from './room-message';
+
+import type { FoldedRun } from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
@@ -257,7 +258,7 @@ export default class Room extends Component<Signature> {
                   @isStreaming={{this.isMessageStreaming message}}
                   @inLatestTurn={{this.isInLatestTurn i}}
                   @retryAction={{this.maybeRetryAction i message}}
-                  @foldedTools={{this.foldedToolsFor i}}
+                  @foldedRun={{this.foldedRunFor i}}
                   @isFoldOpen={{this.isFoldOpen}}
                   @setFoldOpen={{this.setFoldOpen}}
                   @turnFold={{this.turnFoldFor i}}
@@ -2908,10 +2909,10 @@ export default class Room extends Component<Signature> {
   // applied, and folded it would be hidden.
   @cached
   private get toolRuns(): {
-    calls: Map<number, MessageTool[]>;
+    calls: Map<number, FoldedRun>;
     folded: Set<number>;
   } {
-    let calls = new Map<number, MessageTool[]>();
+    let calls = new Map<number, FoldedRun>();
     let folded = new Set<number>();
     let soloTool = (message: Message | undefined) => {
       if (
@@ -2929,16 +2930,26 @@ export default class Room extends Component<Signature> {
         : undefined;
     };
     let previous: string | undefined;
-    let run: MessageTool[] = [];
+    // one array per run, grown in place: only the run's latest message
+    // reads it
+    let run: FoldedRun | undefined;
     this.messages.forEach((message, index) => {
       let name = soloTool(message);
-      if (name && name === previous) {
+      if (name && name === previous && run) {
         folded.add(index - 1);
         calls.delete(index - 1);
-        run = [...run, message.tools![0]!];
+        run.tools.push(message.tools![0]!);
         calls.set(index, run);
+      } else if (name) {
+        let first = message.tools![0]!;
+        // the run's first call names it; a call with no id falls back to its
+        // message, so two such runs never share an open state
+        run = {
+          key: first.id ?? `folded-${message.eventId ?? index}`,
+          tools: [first],
+        };
       } else {
-        run = name ? [message.tools![0]!] : [];
+        run = undefined;
       }
       previous = name;
     });
@@ -3368,21 +3379,33 @@ export default class Room extends Component<Signature> {
     return url.href;
   };
 
-  private foldedToolsFor = (index: number) => this.toolRuns.calls.get(index);
+  private foldedRunFor = (index: number) => this.toolRuns.calls.get(index);
 
-  // The folded runs the reader opened, by the run's first call. A run moves
+  // The folded runs the reader opened, by room and the run's key. A run moves
   // to its newest message each time a call of it finishes, so its group is
   // drawn again by another message; kept here, it stays open.
   private openFolds = new TrackedSet<string>();
 
-  private isFoldOpen = (key: string) => this.openFolds.has(key);
+  private foldKey = (key: string) => `${this.args.roomId}\n${key}`;
+
+  private isFoldOpen = (key: string) => this.openFolds.has(this.foldKey(key));
 
   private setFoldOpen = (key: string, open: boolean) => {
-    if (open) {
-      this.openFolds.add(key);
-    } else {
-      this.openFolds.delete(key);
+    if (!open) {
+      this.openFolds.delete(this.foldKey(key));
+      return;
     }
+    // drop the keys of runs that are gone (broken up, or in another room),
+    // so the set holds only open folds the reader can see
+    let live = new Set(
+      [...this.toolRuns.calls.values()].map((run) => this.foldKey(run.key)),
+    );
+    for (let stale of [...this.openFolds]) {
+      if (!live.has(stale)) {
+        this.openFolds.delete(stale);
+      }
+    }
+    this.openFolds.add(this.foldKey(key));
   };
 
   // The calls whose open question or approval is on screen right now, read
