@@ -405,7 +405,12 @@ module(basename(import.meta.filename), function () {
       let writer = await ask(WRITER, { realm: REALM.href });
       assert.strictEqual(writer.status, 200, writer.text);
       assert.deepEqual(writer.body.data.attributes, {
-        realm: { url: REALM.href, name: 'Team Workspace', directWriter: true },
+        realm: {
+          url: REALM.href,
+          name: 'Team Workspace',
+          directWriter: true,
+          opensToAnonymous: false,
+        },
       });
 
       let reader = await ask(READER, {
@@ -427,6 +432,7 @@ module(basename(import.meta.filename), function () {
           url: REALM.href,
           name: 'Team Workspace',
           directWriter: false,
+          opensToAnonymous: false,
         },
         card: {
           name: 'Weather Report',
