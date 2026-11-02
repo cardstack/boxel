@@ -143,6 +143,7 @@ export class TranscriptMotion extends Component<Signature> {
     {{#if this.enabled}}
       <Choreo
         @id='assistant-transcript'
+        class='transcript-region'
         @idle={{not this.awake}}
         @inView={{true}}
         @maxFrameStep={{MAX_FRAME_STEP}}
@@ -195,6 +196,17 @@ export class TranscriptMotion extends Component<Signature> {
     {{else}}
       <div ...attributes>{{yield}}</div>
     {{/if}}
+    <style scoped>
+      /* A disclosure inside the conversation (a tool row's panel, a
+         thinking block) opens and closes at once, and the messages below
+         take the change as one move. Its own height transition resized
+         the content on every frame, and each resize is a render pass, so
+         the move was recompiled from where it was painted on every frame:
+         the messages below crawled, then snapped into place. */
+      .transcript-region {
+        --pretui-disclosure-duration: 0s;
+      }
+    </style>
   </template>
 }
 
