@@ -94,9 +94,13 @@ class OptionCard extends Component<{
       <span class='option-card-loading'>Loading…</span>
     {{/if}}
     <style scoped>
+      /* the choice's box is the one rounded shape and clips to it: the card
+         meets its edges square, or the frame's white shows in each corner */
       .option-card-render {
         width: 100%;
         height: 100%;
+        border-radius: 0;
+        box-shadow: none;
       }
       .option-card-loading {
         display: grid;
@@ -252,14 +256,6 @@ export default class AskUserPicker extends Component<Signature> {
         height: 100%;
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
-      }
-      /* the choice's box is the one rounded shape and clips to it: the card
-         meets its edges square, or the frame's white shows in each corner */
-      .option-card-frame :deep(.boxel-card-container),
-      .option-card-frame :deep(.field-component-card) {
-        height: 100%;
-        border-radius: 0;
-        box-shadow: none;
       }
     </style>
   </template>
