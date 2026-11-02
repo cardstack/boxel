@@ -1993,6 +1993,68 @@ module(basename(import.meta.filename), function () {
         'a link-typed param becomes a relationship',
       );
     });
+    test('a named create fills a link nested in a contained value', async function (assert) {
+      // `cardInfo.theme` is how a card names its theme: a link inside the
+      // contained `cardInfo`. A dotted fill key lands as that relationship,
+      // and the containing value is written so the edge is read back.
+      let profile = { module: `${REALM}profile`, name: 'Profile' } as CodeRef;
+      let person = personDefinition();
+      person.fields.profile = 'f2';
+      person.fieldDefs.f2 = {
+        type: 'contains',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: profile,
+      } as Definition['fieldDefs'][string];
+      let profileDefinition = {
+        type: 'field-def',
+        codeRef: profile,
+        displayName: 'Profile',
+        fields: { theme: 'p0' },
+        fieldDefs: {
+          p0: {
+            type: 'linksTo',
+            isPrimitive: false,
+            isComputed: false,
+            fieldOrCard: PERSON,
+          },
+        },
+      } as unknown as Definition;
+      let definition: OperationDefinition = {
+        base: 'create',
+        deterministic: true,
+        of: PERSON,
+        fill: {
+          firstName: 'Themed',
+          'profile.theme': { $ref: 'card', value: '../Person/house' } as any,
+        },
+      };
+      let { core, commits } = stub({
+        definitions: { Person: person, Profile: profileDefinition },
+      });
+      await commitBatch(
+        core,
+        [{ op: 'create', lid: 'minted', definition }],
+        {},
+      );
+
+      let { data } = JSON.parse(commits[0].writes['Person/minted.json']);
+      assert.strictEqual(
+        data.relationships['profile.theme'].links.self,
+        '../Person/house',
+        'the dotted key becomes the nested relationship',
+      );
+      assert.deepEqual(
+        data.attributes.profile,
+        {},
+        'the contained value the link is read through is written',
+      );
+      assert.strictEqual(
+        data.attributes['profile.theme'],
+        undefined,
+        'nothing lands in the attributes under the dotted key',
+      );
+    });
     test('a named create fills a value from the realm configuration', async function (assert) {
       let definition: OperationDefinition = {
         base: 'create',

@@ -1935,6 +1935,16 @@ async function lowerCreate(
   let target = codeRef ? await context.lookupDefinition(codeRef) : undefined;
   let fill: Record<string, OperationTemplate> = {};
   for (let [key, value] of Object.entries(declaration.fill)) {
+    if (target && key.includes('.')) {
+      let fieldDef = await nestedFillLink(key, target, sink, context);
+      fill[key] = templateOf(value, {
+        path: `fill.${key}`,
+        paramNames,
+        sink,
+        identifies: Boolean(fieldDef),
+      });
+      continue;
+    }
     let fieldDef = target ? getImmediateFieldDef(target, key) : undefined;
     if (target) {
       let unwritable = fieldDef && unwritableReason(key, fieldDef);
@@ -1962,6 +1972,49 @@ async function lowerCreate(
     });
   }
   operation.fill = fill;
+}
+
+// A dotted `fill` key names a link inside a contained value, keyed the way a
+// stored document keys its relationships: `cardInfo.theme` is the `theme` link
+// of the card's `cardInfo`. Only a link may be named this way. A contained
+// value is filled whole under its own name, and a path through another link
+// would write into the linked card rather than the one being created.
+async function nestedFillLink(
+  key: string,
+  target: Definition,
+  sink: IssueSink,
+  context: LoweringContext,
+): Promise<FieldDefinition | undefined> {
+  let resolved = await resolvePath(key, { ...context, definition: target });
+  let segments = resolved.segments;
+  let last = resolved.unresolved ? undefined : segments[segments.length - 1];
+  let crossesLink = segments
+    .slice(0, -1)
+    .some((segment) => LINK_KINDS.includes(segment.fieldDef.type));
+  if (!last || crossesLink || !LINK_KINDS.includes(last.fieldDef.type)) {
+    sink.add(
+      'unknown-field',
+      `fill.${key}`,
+      `"${key}" is not a link inside a contained field of ${describeDefinition(
+        target,
+      )}; a dotted \`fill\` key names a nested link such as cardInfo.theme, and a contained value is filled whole under its own name`,
+    );
+    return undefined;
+  }
+  for (let segment of segments) {
+    let unwritable = unwritableReason(segment.name, segment.fieldDef);
+    if (unwritable) {
+      sink.add(
+        unwritable.code,
+        `fill.${key}`,
+        `${unwritable.why}, and ${describeDefinition(
+          target,
+        )} is the type this creates`,
+      );
+      return undefined;
+    }
+  }
+  return last.fieldDef;
 }
 
 // A value carried to invocation time as data: markers stay exactly as the

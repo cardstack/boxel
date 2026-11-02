@@ -4,6 +4,7 @@ import { v4 as uuidV4 } from 'uuid';
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import {
+  getFieldDef,
   getImmediateFieldDef,
   type Definition,
   type FieldDefinition,
@@ -2586,7 +2587,22 @@ async function resourceFromTemplate(
         });
       }
       setLink(resource, field, resolved.value, field);
+      if (field.includes('.')) {
+        // A nested link is read through the value that contains it, and a
+        // document without that value drops the edge when it is loaded.
+        resource.attributes = withContainingValues(resource.attributes, field);
+      }
       continue;
+    }
+    if (field.includes('.')) {
+      // Lowering admits a dotted key only for a nested link, so reaching here
+      // means the type changed under the declaration.
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid fill',
+        detail: `\`fill.${field}\` names no link on the type this creates`,
+      });
     }
     resource.attributes = { ...resource.attributes, [field]: resolved.value };
   }
@@ -2632,12 +2648,35 @@ async function linkFieldsOf(
   }
   let links = new Set<string>();
   for (let field of Object.keys(entry.definition?.fill ?? {})) {
-    let fieldDef = getImmediateFieldDef(definition, field);
+    let fieldDef = field.includes('.')
+      ? await getFieldDef(definition, field, (codeRef) =>
+          ctx.lookupDefinition(codeRef, relativeTo),
+        )
+      : getImmediateFieldDef(definition, field);
     if (fieldDef?.type === 'linksTo' || fieldDef?.type === 'linksToMany') {
       links.add(field);
     }
   }
   return links;
+}
+
+// The containing values a nested link is read through, each an object at
+// least: `cardInfo.theme` needs `cardInfo`. Values the fill set are kept.
+function withContainingValues(
+  attributes: CardResource['attributes'],
+  path: string,
+): CardResource['attributes'] {
+  let root: Record<string, unknown> = { ...(attributes ?? {}) };
+  let at = root;
+  for (let name of path.split('.').slice(0, -1)) {
+    let member = at[name];
+    let next: Record<string, unknown> = isPlainRecord(member)
+      ? { ...member }
+      : {};
+    at[name] = next;
+    at = next;
+  }
+  return root as CardResource['attributes'];
 }
 
 // Record a link, or a collection of them, on the resource. A collection's

@@ -1111,4 +1111,71 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  module('nested links in a create fill', function () {
+    // A note whose contained `info` holds a link, as a card's `cardInfo`
+    // holds its theme.
+    const Info = definition('Info', {
+      label: scalar(),
+      theme: compound('Author', { type: 'linksTo' }),
+    });
+    const Note = definition('Note', {
+      body: scalar(),
+      info: compound('Info'),
+      owner: compound('Author', { type: 'linksTo' }),
+      comments: compound('Comment', { type: 'containsMany' }),
+    });
+    const NoteClass = function Note() {} as unknown as never;
+    const notes = new Map<string, Definition>([
+      ...graph,
+      [refKey(ref('Info')), Info],
+      [refKey(ref('Note')), Note],
+    ]);
+
+    async function lowerCreate(fill: Record<string, unknown>) {
+      return await lowerOperationDeclarations(
+        { mint: { base: 'create', of: NoteClass, fill } } as never,
+        {
+          definition: Report,
+          lookupDefinition: async (codeRef: CodeRef) =>
+            notes.get(refKey(codeRef)),
+          identifyCard: (def) =>
+            (def as unknown) === NoteClass ? ref('Note') : undefined,
+        },
+      );
+    }
+
+    test('a dotted key names a link inside a contained value', async function (assert) {
+      let { operations, issues } = await lowerCreate({
+        body: 'hello',
+        'info.theme': card('../Author/house'),
+      });
+      assert.deepEqual(issues, [], 'the nested link lowers cleanly');
+      assert.deepEqual(
+        operations.mint.fill?.['info.theme'],
+        { $ref: 'card', value: '../Author/house' },
+        'the marker is carried to invocation as written',
+      );
+    });
+
+    test('a dotted key names nothing but a nested link', async function (assert) {
+      let { issues } = await lowerCreate({
+        'info.label': 'a value',
+        'owner.name': 'through a link',
+        'comments.author': card('../Author/house'),
+        'info.missing': card('../Author/house'),
+      });
+      assert.deepEqual(
+        issues.map((issue) => `${issue.path}: ${issue.code}`),
+        [
+          'fill.info.label: unknown-field',
+          'fill.owner.name: unknown-field',
+          'fill.comments.author: unknown-field',
+          'fill.info.missing: unknown-field',
+        ],
+        'a contained value, a path through a link or a collection, and a ' +
+          'missing field are each refused',
+      );
+    });
+  });
 });
