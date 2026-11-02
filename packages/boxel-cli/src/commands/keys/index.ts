@@ -335,7 +335,7 @@ export function registerKeysCommand(program: Command): void {
     .option('--realm <url>', 'The realm the share is in')
     .option(
       '--rate <burst>/<refill>',
-      'Per caller: how many calls at once, and how many a minute refill, such as 25/15',
+      'Per caller: how many calls at once, and how many a minute refill, such as 25/15 (default for both puts them back)',
     )
     .option('--daily <n>', 'Calls a UTC day, across every caller')
     .option(

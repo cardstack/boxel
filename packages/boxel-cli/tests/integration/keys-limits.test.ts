@@ -421,4 +421,15 @@ describe('boxel keys limits (integration)', () => {
     let own = await keysUsage('Vendor', { ...deps, realm });
     expect(own.canEditLimits).toBe(true);
   });
+
+  it('puts both halves of the rate back with a bare --rate default', async () => {
+    let limits = await keysLimits('Vendor', {
+      ...deps,
+      realm,
+      rate: 'default',
+    });
+    expect(limits.rateBurst).toBeGreaterThan(1);
+    expect(limits.rateRefillPerMinute).toBeGreaterThan(0.001);
+    expect(limits.monthlyBudget, 'other limits are left alone').toBe(500);
+  });
 });

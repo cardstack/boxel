@@ -898,10 +898,14 @@ function limitValue(option: string, value: string): number | null {
 function limitChanges(options: LimitsOptions): KeyLimitChanges {
   let changes: KeyLimitChanges = {};
   if (options.rate !== undefined) {
-    let parts = options.rate.split('/');
+    // A bare `default` puts both halves back, as `--daily default` does its one.
+    let parts =
+      options.rate.trim().toLowerCase() === 'default'
+        ? ['default', 'default']
+        : options.rate.split('/');
     if (parts.length !== 2) {
       throw new Error(
-        '--rate is <burst>/<refill per minute>, such as 25/15; either may be default',
+        '--rate is <burst>/<refill per minute>, such as 25/15; either may be default, or default for both',
       );
     }
     changes.rateBurst = limitValue('--rate burst', parts[0]!);
