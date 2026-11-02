@@ -25,10 +25,11 @@ function ref(module: string, name: string): ResolvedCodeRef {
 
 // Exercises the singular-path scalar `eq` -> `search_doc @>` containment
 // rewrite against real Postgres. The engine emits a `@>` predicate (GIN
-// servable) only for a positive-polarity, singular, string-valued leaf;
-// numeric/boolean leaves, plural paths, and negated contexts keep the `->>`
-// extraction form. We assert both the result set AND which SQL form was
-// emitted (by capturing the executed SQL) so a correct result can't mask the
+// servable) only for a positive-polarity, string-valued leaf: on a singular
+// path it replaces the `->>` extraction, on a plural path it is a pruning
+// conjunct beside the exact json_tree predicate. Numeric/boolean leaves and
+// negated contexts keep the `->>` extraction form. We assert both the result
+// set AND which SQL form was emitted (by capturing the executed SQL) so a correct result can't mask the
 // rewrite silently not firing.
 
 const testRealmURL = 'http://eq-containment-test/';
@@ -413,7 +414,7 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
-    test('plural-field eq keeps the json_tree machinery (no `@>`)', async function (assert) {
+    test('plural-field eq is pruned by `@>` containment and kept exact by json_tree', async function (assert) {
       let { cards, meta } = await engine.searchCards(new URL(testRealmURL), {
         filter: { on: policyRef, eq: { tags: 'vip' } },
       });
@@ -422,16 +423,21 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p1`,
         `${testRealmURL}Policy/p3`,
       ]);
-      assert.notOk(
+      assert.ok(
         usesFieldContainment(),
-        'plural path stays on json_tree, never `@>`',
+        'a plural string eq carries a GIN-servable `@>` conjunct ({"tags":["vip"]})',
+      );
+      assert.ok(
+        lastFilterSql().includes('fullkey'),
+        'and keeps the json_tree predicate for exactness',
       );
     });
 
-    test('nested eq through an INTERIOR plural field stays on json_tree (no `@>`)', async function (assert) {
+    test('nested eq through an INTERIOR plural field is pruned by `@>` and kept exact by json_tree', async function (assert) {
       // `contacts` is plural, so `contacts.email` crosses an array at an
-      // interior segment. `@>` with a nested object would lose the
-      // per-element positional binding, so the walk must divert to json_tree.
+      // interior segment. Containment expresses it as
+      // {"contacts":[{"email":…}]} -- GIN-servable -- and json_tree keeps the
+      // per-element positional binding exact over the rows it lets through.
       let { cards, meta } = await engine.searchCards(new URL(testRealmURL), {
         filter: { on: policyRef, eq: { 'contacts.email': 'shared@x.com' } },
       });
@@ -444,9 +450,9 @@ module(basename(import.meta.filename), function () {
         `${testRealmURL}Policy/p1`,
         `${testRealmURL}Policy/p3`,
       ]);
-      assert.notOk(
+      assert.ok(
         usesFieldContainment(),
-        'an interior plural segment forces json_tree, never `@>`',
+        'an interior plural segment is pruned by `@>` containment',
       );
       assert.ok(
         lastFilterSql().includes('fullkey'),

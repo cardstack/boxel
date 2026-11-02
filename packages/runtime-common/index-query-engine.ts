@@ -21,6 +21,7 @@ import {
   type FieldValue,
   type FieldArity,
   type JsonContainsQuery,
+  type Param,
   type TypeCondition,
   param,
   isParam,
@@ -1979,7 +1980,8 @@ export class IndexQueryEngine {
     // `search_doc` index via a `@>` containment predicate. fieldArity routes on
     // cardinality only: the singular branch resolves the containment-capable
     // node (which itself falls back to `->>` extraction for numeric/non-string
-    // leaves), while a plural path anywhere uses the json_tree machinery. At
+    // leaves), while a plural path uses the json_tree machinery, pruned first by
+    // a GIN-servable containment for a string value (see handleFieldArity). At
     // negated polarity we keep plain extraction, whose NULL-on-absent-path
     // semantics `@>` cannot reproduce under `NOT`.
     if (polarity === 'positive') {
@@ -1989,6 +1991,10 @@ export class IndexQueryEngine {
           path: key,
           value: [jsonContainsQuery(key, onRef, [param(value)])],
           pluralValue: [query, '=', v],
+          // A plural string path is also tested by containment, which the
+          // GIN index serves; the json_tree predicate keeps the exact
+          // semantics over the rows containment lets through.
+          ...(typeof value === 'string' ? { containValue: param(value) } : {}),
           errorHint: 'filter',
         }),
       ];
@@ -2176,8 +2182,30 @@ export class IndexQueryEngine {
   //   ORDER BY url
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
-    let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
+    let { path, value, type, pluralValue, usePluralContainer, containValue } =
+      fieldArity;
     let definition = await this.getDefinition(type);
+    // jsonb containment is type-sensitive: only a string leaf may be pruned by
+    // it (a numeric array never contains the string form of its member). The
+    // value is formatted by the leaf's serializer, as the json_tree predicate's
+    // is, so the two agree on what the stored string looks like.
+    let contained: Param | undefined;
+    if (containValue && typeof containValue.param === 'string') {
+      let leafField = await getField(definition, path, this.#definitionLookup);
+      if (
+        leafField.serializerName !== 'number' &&
+        leafField.serializerName !== 'big-integer'
+      ) {
+        let serializer = leafField.serializerName
+          ? getSerializer(leafField.serializerName)
+          : undefined;
+        let formatted =
+          serializer?.formatQuery?.(containValue.param) ?? containValue.param;
+        if (typeof formatted === 'string') {
+          contained = param(formatted);
+        }
+      }
+    }
     let exp: CardExpression = await this.walkFilterFieldPath(
       definition,
       path,
@@ -2185,8 +2213,24 @@ export class IndexQueryEngine {
       // Leaf field handler
       async (_definition, expression, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
+          let containment: Expression = [];
+          if (contained) {
+            let raw = pathTraveled.split('.');
+            containment = [
+              {
+                kind: 'json-contains',
+                column: 'search_doc',
+                segments: raw.map((segment) => segment.replace(/\[\]$/, '')),
+                arraySegments: raw.flatMap((segment, i) =>
+                  segment.endsWith('[]') ? [i] : [],
+                ),
+                value: contained,
+              },
+            ];
+          }
           return [
             ...every([
+              ...(containment.length ? [containment] : []),
               pluralValue ?? expression,
               [
                 tableValuedTree(
