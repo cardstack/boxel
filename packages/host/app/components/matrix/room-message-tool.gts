@@ -608,30 +608,35 @@ export default class RoomMessageTool extends Component<Signature> {
     if (this.args.messageTool.toolResultFileDef) {
       isLoading = true;
       let loadStartedAt = performance.now();
-      this.args.messageTool.getCommandResultCard().then((result) => {
-        isLoading = false;
-        if (isTesting()) {
-          // A result card that names a saved card is loaded live from its
-          // realm when the store doesn't hold it yet, which is the slow leg of
-          // the chain a test waits on. The duration and branch tell a slow
-          // load apart from one that never finished.
-          console.log(
-            result
-              ? `[tool-result-card] result card for tool call ${this.args.messageTool.toolRequest.id} loaded in ${Math.round(performance.now() - loadStartedAt)}ms (realm card: ${result.isRealmCard})`
-              : `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+      this.args.messageTool.getCommandResultCard().then(
+        (result) => {
+          isLoading = false;
+          if (!result && isTesting()) {
+            console.log(
+              `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+            );
+          }
+          if (isTornDown || !result) {
+            return;
+          }
+          let { card, isRealmCard } = result;
+          if (card.id) {
+            referencedId = card.id;
+            this.store.addReference(card.id);
+          }
+          state.isRealmCard = isRealmCard;
+          state.card = card;
+        },
+        (error) => {
+          isLoading = false;
+          // A load that throws leaves the result card hidden, so say so rather
+          // than leave a timed-out test with no trace of the failure.
+          console.warn(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} failed after ${Math.round(performance.now() - loadStartedAt)}ms:`,
+            error,
           );
-        }
-        if (isTornDown || !result) {
-          return;
-        }
-        let { card, isRealmCard } = result;
-        if (card.id) {
-          referencedId = card.id;
-          this.store.addReference(card.id);
-        }
-        state.isRealmCard = isRealmCard;
-        state.card = card;
-      });
+        },
+      );
     }
     return state;
   });

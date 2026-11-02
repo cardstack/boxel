@@ -4332,7 +4332,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }),
     });
 
-    await waitForToolResult('[data-test-tool-result-container]');
+    await waitForToolResult();
     assert
       .dom('[data-test-tool-result-header]')
       .containsText('patchFields', "the result's meta line names the call");
