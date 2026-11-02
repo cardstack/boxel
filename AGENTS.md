@@ -322,12 +322,11 @@ This end-to-end workflow can be used as a template for future tickets.
 - Assign the issue to yourself.
 - Move the issue to **In Progress**.
 
-## 3) Create an implementation plan doc
+## 3) Write an implementation plan
 
-- Create a short plan in `docs/` named after the issue, e.g.
-  - `docs/cs-<id>-<short-title>-plan.md`
-- Include: goals, assumptions, steps, target files, testing notes.
-- Ask the user to review the doc before proceeding.
+- Write a short plan: goals, assumptions, steps, target files, testing notes.
+- Give it to the user for review before proceeding, in the chat or as a file in the session scratchpad.
+- Never put the plan in the repo. A per-ticket plan in `docs/` names a private tracker ID and goes stale when the PR merges; CI Lint fails on one (`scripts/check-docs-dir.mts`). A decision in the plan that outlives the PR goes in an ADR (see [Architecture decision records](#architecture-decision-records)).
 
 ## 4) Implement changes
 
@@ -363,9 +362,9 @@ This end-to-end workflow can be used as a template for future tickets.
 - Push branch: `git push -u origin <branch>`
 - Open PR with short summary
 
-## 10) Save plan doc on Linear issue
+## 10) Save the plan on the Linear issue
 
-- Post the contents of the plan .md doc as a comment om the Linear issue
+- Post the plan, as built, as a comment on the Linear issue.
 
 ## 11) Share PR link
 

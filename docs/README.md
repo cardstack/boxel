@@ -1,10 +1,13 @@
 # Documentation about Boxel
 
-## Prerequisites
+## What belongs here
 
-The following VS Code addon helps to visualize a .mermaid file: https://marketplace.visualstudio.com/items?itemName=tomoyukim.vscode-mermaid-editor
+- Durable concept and operations docs, each linked from this README, and the [Architecture Decision Records](adr/README.md) in `adr/`.
+- A doc about one package belongs in that package, beside its code.
+- Per-ticket plans, investigation notes and status reports do not belong here. Put them on the ticket.
+- A decision that outlives its PR goes in an ADR.
 
-It also has a feature to save an .svg image, which be opened in Chrome for a decent pan and zoom experience.
+CI Lint enforces this with `scripts/check-docs-dir.mts`. It fails on a file named like a ticket or a plan, and on a Markdown file that this README does not link to.
 
 ## Concepts
 
@@ -19,9 +22,12 @@ The following are important concepts:
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
 - [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
+- [Spec](spec.md): A Spec card documents an exported definition through its code ref, with examples, so the definition is searchable and can be packaged in a listing.
+- [Commands in headless Chrome](commands-in-headless-chrome.md): how a bot trigger becomes a `run-command` job that the prerenderer runs in a headless host tab through the `command-runner` route.
 
 ## Operations
 
+- [AWS operations](aws-operations.md): runbooks for boxel services on AWS, each with pre-requisites, steps, verification and rollback.
 - [Realm-server health signals](realm-server-health-signals.md): which check answers which question, why an event-loop-gated failure is honest, and what to do when the loop saturates.
 - Liveness wedge threshold: set `REALM_LIVENESS_WEDGE_MS` (milliseconds) to control how long the realm-server's event loop may go without turning before `/_liveness` reports it wedged; default is 60000 (sized against measured stalls — see the doc), floor 5000. The endpoint is served only when `--livenessPort` is passed.
 - From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 3600.
