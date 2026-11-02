@@ -440,6 +440,15 @@ export default class AiAssistantPanel extends Component<Signature> {
 
         animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
         animation-timeline: --ai-assistant-chat-scroll-timeline;
+
+        /* the transcript scrolls under this band, so the band lets the
+           pointer through to it; only the header's own controls and the
+           fallback banner take pointer events */
+        pointer-events: none;
+      }
+      .panel-header > *,
+      .panel-header-container > :not(.panel-header) {
+        pointer-events: auto;
       }
 
       .panel-header {
