@@ -44,7 +44,8 @@ root, in backticks, and the requirement it breaks.
   segment values.
 - `packages/base/realm-config.gts` (`SitePageTypeField`) breaks §1.2: it has
   no `params`, and its editor and the routes panel show `{name}` templates.
-- The indexer stores no segment values in the search document, so a derived
+- There is no registry of the expressions a realm's cards need, and the
+  indexer stores no segment values in the search document, so a derived
   segment can't be looked up. Breaks §1.3.
 - No earlier segment values are kept, so a card whose value changed loses its
   old address rather than redirecting from it. Departs from §1.3's SHOULD.

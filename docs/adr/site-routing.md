@@ -66,8 +66,12 @@ under that page type, and the problem MUST be recorded for the site's editor
 
 The realm server MUST NOT store a table of a site's addresses. When it
 indexes a card a page type covers, the indexer MUST evaluate the page type's
-named-segment values and store them as text in the card's search document,
-under a key naming the site and the page type. The server MUST find a path's
+derived segment values and store them as text in the card's search document,
+under a key derived from the card type and the expression, so sites that share
+an expression share the value. The server MUST keep a registry of the
+expressions each realm's cards need, written when a site's settings are
+indexed; it holds expressions, never addresses. A segment with no expression
+MUST be looked up on the card's field itself. The server MUST find a path's
 card by an index search per matching pattern, built from the page type's
 source realm, card type, filter and sort and one `eq` per named segment on
 those stored values, and run as the visitor (their credentials, or none, and
