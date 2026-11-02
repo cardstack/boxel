@@ -1,4 +1,4 @@
-import { click, render, settled, waitFor } from '@ember/test-helpers';
+import { click, fillIn, render, settled, waitFor } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -275,7 +275,11 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(
       requests.find((r) => r.path === '_key-bindings/batch')?.body.data
         .attributes,
-      { target: { kind: 'instance', url: CARD }, review: false },
+      {
+        target: { kind: 'instance', url: CARD },
+        review: false,
+        interactive: true,
+      },
       'the page asks for the batch of the card it was opened for, never naming its operations',
     );
     assert
@@ -862,5 +866,196 @@ module('Integration | approve pages', function (hooks) {
       ['replace'],
       'back to the key page, not closed',
     );
+  });
+  // An operation approved, unchanged, for pipelines only: in the batch only
+  // for interactive use.
+  function pipelinesOnly(name: string, label: string) {
+    let base = operation(name, label);
+    return {
+      ...base,
+      status: 'pipelines-only',
+      slots: base.slots.map((s) => ({
+        ...s,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: s.snapshot,
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    };
+  }
+
+  test('requests start approved for pipelines only; choosing interactive use shows what it allows, once, and approves it', async function (assert) {
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    operation('listPRs', 'List your open pull requests'),
+                    pipelinesOnly('listReviews', 'List reviews'),
+                  ],
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.true(
+      requests.find((r) => r.path === '_key-bindings/batch')?.body.data
+        .attributes.interactive,
+      'the batch also answers what is approved for pipelines only',
+    );
+    assert
+      .dom('[data-test-radio-choice="pipelines"] input')
+      .isChecked('pipelines only is where the choice starts');
+    assert
+      .dom('[data-test-approve-operation="listReviews"]')
+      .doesNotExist('one approved for pipelines already needs nothing more');
+    assert.dom('[data-test-approve-interactive]').doesNotExist();
+
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-operation="listReviews"]').exists();
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 1 })
+      .hasText(
+        'Any card you open can run these operations as you and read what comes back.',
+      );
+    assert.dom('[data-test-approve-budget]').doesNotExist();
+    assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.strictEqual(approval.dailyBudgets, undefined);
+    assert.deepEqual(
+      approval.operations.map((o: { operation: string }) => o.operation),
+      ['listPRs', 'listReviews'],
+    );
+  });
+
+  test('approving for pipelines only sends no interactive approval', async function (assert) {
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.strictEqual(approval.interactive, undefined);
+    assert.strictEqual(approval.operations.length, 4);
+  });
+
+  test('a batch holding only requests approved for pipelines starts on interactive use, and so does one already approved for it', async function (assert) {
+    let alone = (op: ReturnType<typeof pipelinesOnly>) => ({
+      groups: [
+        {
+          destination: {
+            href: GRAPHQL,
+            host: 'api.github.com',
+            path: '/graphql/',
+            registrableDomain: 'github.com',
+          },
+          operations: [op],
+        },
+      ],
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch(alone(pipelinesOnly('listPRs', 'List PRs'))),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert.dom('[data-test-approve-operation="listPRs"]').exists();
+  });
+
+  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+    let shared = operation('listTeamPRs', 'List the team’s pull requests');
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    {
+                      ...shared,
+                      slots: shared.slots.map((s) => ({
+                        ...s,
+                        slot: 'apiKey',
+                        key: 'apiKey',
+                      })),
+                    },
+                  ],
+                },
+              ],
+              keys: [],
+              shares: [
+                {
+                  id: 'share-team',
+                  label: 'Team GitHub',
+                  keyId: 'key-gh',
+                  keyName: 'GitHub token',
+                  covers: [GRAPHQL],
+                  interactive: false,
+                  dailyBudget: 2400,
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 1 })
+      .includesText('Any card a reader of this realm opens, from any realm');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('2400');
+
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
+    assert
+      .dom('[data-test-approve-save]')
+      .isDisabled('a budget that is not a whole number is not sent');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
   });
 });

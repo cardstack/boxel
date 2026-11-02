@@ -35,16 +35,22 @@ export interface BindingSnapshot {
   bodyTemplate: string | null;
 }
 
+// Why a slot needs approving: never approved (`new`), its request changed
+// (`changed`), or approved for pipelines only, in a batch asked for with
+// `interactive` (`pipelines-only`).
+export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+
 export interface BatchSlot {
   slot: string;
   key: 'userKey' | 'apiKey';
-  status: 'new' | 'changed';
+  status: BatchSlotStatus;
   snapshot: BindingSnapshot;
   fingerprint: string;
   approved?: {
     snapshot: BindingSnapshot;
     keyId: string | null;
     shareId: string | null;
+    interactive: boolean;
   };
 }
 
@@ -54,7 +60,7 @@ export interface BatchOperation {
   method: string;
   path: string;
   instance: string | null;
-  status: 'new' | 'changed';
+  status: BatchSlotStatus;
   slots: BatchSlot[];
 }
 
@@ -79,12 +85,16 @@ export interface BatchKey {
   covers: string[];
 }
 
+// A share also says whether any of its bindings allows interactive use yet,
+// and its daily budget in force: its first interactive approval names one.
 export interface BatchShare {
   id: string;
   label: string;
   keyId: string;
   keyName: string;
   covers: string[];
+  interactive: boolean;
+  dailyBudget: number;
 }
 
 export interface ApprovalBatch {
@@ -106,7 +116,11 @@ export type BatchTarget =
 export async function approvalBatch(
   realmServerUrl: string,
   token: string,
-  { target, review = false }: { target: BatchTarget; review?: boolean },
+  {
+    target,
+    review = false,
+    interactive = false,
+  }: { target: BatchTarget; review?: boolean; interactive?: boolean },
   fetchFn: FetchFn = fetch,
 ): Promise<ApprovalBatch> {
   let json = await realmServerRequest(realmServerUrl, '_key-bindings/batch', {
@@ -122,6 +136,7 @@ export async function approvalBatch(
               ? { ...target, realm: realmArgument(target.realm) }
               : target,
           review,
+          ...(interactive ? { interactive: true } : {}),
         },
       },
     },
@@ -174,9 +189,11 @@ function fromResource<T>(resource: {
   return { id: resource.id, ...resource.attributes } as T;
 }
 
-// Approves operations in one realm in one confirmation. `interactive` and
-// `anonymous` ask for use beyond pipelines, which the realm server refuses,
-// since it offers neither.
+// Approves operations in one realm in one confirmation. `interactive` also
+// allows use from an open card, the AI assistant and the CLI; `dailyBudgets`
+// sets the daily budget of each share named, which a share's first
+// interactive approval must. `anonymous` the realm server refuses: it isn't
+// offered.
 export async function approveOperations(
   realmServerUrl: string,
   token: string,
@@ -185,11 +202,13 @@ export async function approveOperations(
     operations,
     interactive,
     anonymous,
+    dailyBudgets,
   }: {
     realm: string;
     operations: OperationApproval[];
     interactive?: boolean;
     anonymous?: boolean;
+    dailyBudgets?: Record<string, number>;
   },
   fetchFn: FetchFn = fetch,
 ): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
@@ -205,6 +224,9 @@ export async function approveOperations(
           operations,
           ...(interactive ? { interactive: true } : {}),
           ...(anonymous ? { anonymous: true } : {}),
+          ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
+            ? { dailyBudgets }
+            : {}),
         },
       },
     },

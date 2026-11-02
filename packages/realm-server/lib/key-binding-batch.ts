@@ -30,6 +30,7 @@ import {
   type DestinationDisplay,
   type SecureWindowTarget,
 } from './secure-window.ts';
+import { limitsOf } from './key-limit-settings.ts';
 import { normalizeGrantDestination } from './user-key-grants.ts';
 import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
@@ -41,9 +42,12 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 // one who approves it — their own key for a `{{userKey}}` slot, a share of
 // theirs in the realm for an `{{apiKey}}` slot — and the slot has no binding,
 // has one whose grant is gone, or has one whose request has changed since it
-// was approved. Approvals are for pipelines only, so a binding approved for
-// them is approved. A slot approved and unchanged is left out, and so
-// is an operation with nothing left. Review asks only for the changed ones.
+// was approved. Asked with `interactive`, a slot approved for pipelines only
+// needs it too (`pipelines-only`), so a card that is refused
+// `interactive-use-not-approved` can be approved for it: the window offers
+// those only when the user chooses interactive use. A slot approved and
+// unchanged is left out, and so is an operation with nothing left. Review asks
+// only for the changed ones.
 //
 // One confirmation approves at most `MAX_BATCH_SLOTS` slots, so a batch
 // holds the operations that fit, in the order the window shows them, and says
@@ -63,7 +67,10 @@ import { UserKeyError, type UserKeyKind } from './user-keys.ts';
 
 const log = logger('realm:key-bindings');
 
-export type BatchSlotStatus = 'new' | 'changed';
+// `new`: never approved, or its grant is gone. `changed`: its request changed
+// since it was approved. `pipelines-only`: approved, unchanged, for pipelines
+// only, in a batch asked for with `interactive`.
+export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
 
 export interface BatchSlot {
   // The token the slot is written as: `userKey`, `apiKey`, `apiKey:<name>`.
@@ -78,6 +85,7 @@ export interface BatchSlot {
     snapshot: BindingSnapshot;
     keyId: string | null;
     shareId: string | null;
+    interactive: boolean;
   };
 }
 
@@ -109,13 +117,18 @@ export interface BatchKey {
   covers: string[];
 }
 
-// A share of the caller's in the realm, for an `{{apiKey}}` slot.
+// A share of the caller's in the realm, for an `{{apiKey}}` slot, with
+// whether any binding of it is approved for interactive use yet, and the
+// daily budget in force. The first interactive approval of a share names its
+// daily budget.
 export interface BatchShare {
   id: string;
   label: string;
   keyId: string;
   keyName: string;
   covers: string[];
+  interactive: boolean;
+  dailyBudget: number;
 }
 
 export interface ApprovalBatch {
@@ -134,6 +147,8 @@ export interface ApprovalBatch {
 export interface ApprovalBatchRequest {
   target: SecureWindowTarget;
   review?: boolean;
+  // Also answer slots approved for pipelines only.
+  interactive?: boolean;
 }
 
 // What a binding is read as here, with the snapshot of its last approval.
@@ -144,6 +159,7 @@ interface BindingRow {
   approved_by: string;
   fingerprint: string;
   state: string;
+  interactive: boolean;
   // Whether its grant is still there for its key, or its share's key.
   has_grant: boolean;
   share_owner: string | null;
@@ -194,7 +210,7 @@ function approvable(
 export async function approvalBatch(
   deps: Deps,
   user: string,
-  { target, review = false }: ApprovalBatchRequest,
+  { target, review = false, interactive = false }: ApprovalBatchRequest,
 ): Promise<ApprovalBatch> {
   let { dbAdapter } = deps;
   let resolved = await resolveWindowRequest(deps, user, { target });
@@ -245,6 +261,7 @@ export async function approvalBatch(
       let status = slotStatus(row, slot, fingerprint, {
         user,
         ownsShareHere: ownShares.length > 0,
+        interactive,
       });
       if (!status || (review && status !== 'changed')) {
         continue;
@@ -261,6 +278,7 @@ export async function approvalBatch(
                 snapshot: snapshotOf(row),
                 keyId: row.key_id,
                 shareId: row.share_id,
+                interactive: Boolean(row.interactive),
               },
             }
           : {}),
@@ -281,7 +299,11 @@ export async function approvalBatch(
       method: request.method,
       path: pathOf(request.url),
       instance: forInstance,
-      status: slots.some((s) => s.status === 'changed') ? 'changed' : 'new',
+      status: slots.some((s) => s.status === 'changed')
+        ? 'changed'
+        : slots.some((s) => s.status === 'new')
+          ? 'new'
+          : 'pipelines-only',
       slots,
     });
   }
@@ -430,7 +452,11 @@ function slotStatus(
   row: BindingRow | undefined,
   slot: CallApiSlot,
   fingerprint: string,
-  { user, ownsShareHere }: { user: string; ownsShareHere: boolean },
+  {
+    user,
+    ownsShareHere,
+    interactive,
+  }: { user: string; ownsShareHere: boolean; interactive: boolean },
 ): BatchSlotStatus | undefined {
   // A share slot is approved by the owner of the share's key. Its binding
   // serves every caller, so one someone else approved is theirs to keep up,
@@ -450,6 +476,9 @@ function slotStatus(
   if (row.state === 'needs-reapproval' || row.fingerprint !== fingerprint) {
     return 'changed';
   }
+  if (interactive && !row.interactive) {
+    return 'pipelines-only';
+  }
   return undefined;
 }
 
@@ -462,7 +491,7 @@ async function bindingRows(
   (BindingRow & { operation_name: string; instance_url: string | null })[]
 > {
   return (await query(dbAdapter, [
-    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state,
+    `SELECT b.operation_name, b.instance_url, b.slot, b.key_id, b.share_id, b.approved_by, b.fingerprint, b.state, b.interactive,
             (g.id IS NOT NULL) AS has_grant, s.owner AS share_owner, s.state AS share_state,
             a.destination, a.method, a.path_template, a.headers_template, a.placement, a.placement_name, a.transform, a.body_template
        FROM key_bindings b
@@ -520,7 +549,8 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget,
+            EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
        JOIN user_keys k ON k.id = s.key_id
@@ -530,7 +560,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name
+      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -539,6 +569,8 @@ async function sharesIn(
     keyId: row.key_id as string,
     keyName: row.key_name as string,
     grants: grantList(row.grants),
+    interactive: Boolean(row.interactive),
+    dailyBudget: limitsOf(row).dailyBudget,
   }));
 }
 

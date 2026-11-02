@@ -479,7 +479,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('an interactive invocation is refused, and nothing is sent', async function (assert) {
+  test('an interactive invocation of a binding approved for pipelines only is refused, and nothing is sent', async function (assert) {
     let key = await addKey();
     await approve(OWNER, [approval('list', { userKey: { keyId: key.id } })]);
     let response = await request
@@ -498,12 +498,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
 
-    let interactive = await approve(
+    let anonymous = await approve(
       OWNER,
       [approval('list', { userKey: { keyId: key.id } })],
-      { attributes: { interactive: true } },
+      { attributes: { interactive: true, anonymous: true } },
     );
-    assert.strictEqual(interactive.status, 403, 'nor can one be approved');
+    assert.strictEqual(anonymous.status, 403, 'anonymous use is not offered');
   });
 
   test('approving takes a session signed in on the secure origin, never the app session', async function (assert) {

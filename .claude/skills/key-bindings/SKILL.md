@@ -49,8 +49,12 @@ One row of `key_bindings` per slot:
   their own key. An `apiKey` slot has one binding per realm (per instance),
   serving every caller; approving another share for it replaces the first.
 - `grant_id` — the grant the credential is sent under.
-- `interactive`, `anonymous` — always false: interactive and anonymous use
-  aren't offered, and approving either is refused 403.
+- `interactive` — whether the owner also allowed interactive use (a card
+  opened in the browser, the AI assistant, the CLI) as well as pipelines.
+  Each approval sets it for every slot it writes, so approving again without
+  it returns a binding to pipelines only. A swap keeps it.
+- `anonymous` — always false: anonymous use isn't offered, and approving it
+  is refused 403.
 - `fingerprint`, `approval_id`, `state` (`active`, `needs-reapproval`,
   `suspended`).
 
@@ -93,8 +97,15 @@ A per-instance operation adds `"instance": "<card id>"`; a share slot is
 `{ "shareId": "<uuid>", "expectedFingerprint": … }`, and only the owner of the
 share's key approves it, while the share is active. A realm, card or module
 may be named in prefix form; answers name them in RRI form. One request is one
-confirmation: every row it writes shares a `batch_id`. For each operation, in
-order:
+confirmation: every row it writes shares a `batch_id`, and its
+`"interactive": true` applies to every slot it approves. A share approved
+for interactive use for the first time (no binding of it is `interactive`
+yet) is spent by every reader of its realm, so that approval names its daily
+budget, `"dailyBudgets": {"<share id>": <calls>}`, which is set on the share
+in the same transaction (see the `key-limits` skill). Without one it is
+refused 400. A later interactive approval may name one; a budget is refused
+for a share the approval doesn't fill, or without `interactive`. For each
+operation, in order:
 
 1. The operation is read from the realm's definition cache (the caller must
    be able to read the realm and the module's realm, as for a grant). Its
@@ -112,7 +123,9 @@ The window builds what it approves from `POST /_key-bindings/batch`
 (`lib/key-binding-batch.ts`, a secure-origin session only: the window's own or
 the CLI's), whose
 `attributes.target` names a card or a card type in its realm as the window's
-context does, with `review` for review-changes. It answers every `callApi`
+context does, with `review` for review-changes, and `interactive` to also
+answer slots approved for pipelines only (status `pipelines-only`), which
+the window shows only once the user allows interactive use. It answers every `callApi`
 operation on that card definition, in that realm, that needs the caller's
 approval: a slot the caller approves (their own key for `userKey`, a share of
 theirs in the realm for `apiKey`; a share slot someone else approved is
@@ -122,7 +135,10 @@ snapshot for a field-by-field diff). Approved, unchanged slots are left out,
 and so is an operation with nothing left; a per-instance operation is in the
 batch only when the target is a card. Operations come grouped by normalized
 destination, with the caller's keys a slot can take and their shares in the
-realm, each with the batch's destinations its grants already cover. A batch
+realm, each with the batch's destinations its grants already cover. A share
+also says whether any binding of it is `interactive` yet, and its
+`dailyBudget` in force; each slot's `approved` says whether its last approval
+was `interactive`. A batch
 never spans card definitions or realms: approving one card's batch says
 nothing about another card calling the same host, which gets its own batch
 and reuses the grant.
@@ -158,7 +174,11 @@ grant.
   the server resolves from prefix form or a URL). The CLI never creates a
   grant on its own. The window approves every slot of an operation, so a
   `--slot` approval that needs a new grant is refused in the terminal.
-  `--interactive` is posted as asked, and refused 403.
+  `--interactive` also asks the batch for pipelines-only slots, prints what
+  interactive use allows, and approves interactively. A share's first
+  interactive approval made in the terminal needs `--daily-budget <calls>`;
+  in the window, the page starts on interactive use (`#interactive=1`) and
+  asks for the budget itself. `--anonymous` is refused 403.
 - `boxel keys revoke` (same shape) lists the user's matching bindings with
   the same filters and deletes them.
 - `boxel keys pending` lists bindings that won't send as approved:
@@ -236,7 +256,17 @@ it carries a user session (a browser card, the AI assistant, the CLI). A
 `_operations` request carrying the payer's session to `realm.handlePipeline`,
 which records that request object and runs it through the ordinary
 authorization; the `callApi` arm then runs with `callApiMode: 'pipeline'`.
-Since every binding is pipelines-only, a binding can only be used that way.
+Any active binding serves a pipeline. Only one approved `interactive` serves
+an interactive call, which also counts against the key's or share's limits
+(`chargeInteractiveCall`; see the `key-limits` skill).
+
+The approve page says what interactive use exposes before it is allowed.
+Card code runs with the user's session, so any card the user opens, from any
+realm, can invoke an operation another card's realm approved and read the
+response: for a personal key, as its owner; for a share, as any reader of
+the realm. The pipeline pattern (a pipeline calls the vendor and writes what
+cards need into the realm) keeps private responses out of that reach.
+Sandboxing card code per realm origin is what would close it.
 
 Before a run starts, `pipelineAdmission(dbAdapter, {core, realmURL, codeRef,
 operation, instance?, payer})` answers the refusal the call would get (or
@@ -318,7 +348,10 @@ SELECT created_at, owner FROM key_binding_notices WHERE binding_id = '<id>';
   `key-shares` skill). For `key-deleted`, the binding's `grant_id` is null
   too, since its grants went with the key: a direct writer swaps a key in,
   which grants it the binding's destination again.
-- **`interactive-use-not-approved`**: expected for every call off the network.
+- **`interactive-use-not-approved`**: the binding is approved for pipelines
+  only (`interactive` false). Its owner approves it again allowing
+  interactive use; readiness answers `needs-approval`, whose button opens the
+  approve page.
 
 The binding tables hold no secret, but like the keys tables they are withheld
 from `readonly_role` and excluded from the SQLite schema dump; query them as
@@ -328,7 +361,7 @@ the application role.
 
 - `packages/realm-server/tests/key-bindings-test.ts` — end to end against the
   stub vendor: approve then call as a pipeline, grant reuse and a second
-  grant at another host, realm and caller scoping, interactive refusal, the
+  grant at another host, realm and caller scoping, pipelines-only refusal, the
   app session refused, re-approval on edits (and not on label or `output`
   edits), approving refused when the request shown has changed, share
   approval only by its key's owner and only while active, grant removal, key
@@ -336,6 +369,12 @@ the application role.
   operations untouched, the fingerprint pinned to a fixed value, and the
   listing's names with and without read on the card. It indexes a card using `perInstance`, so it needs a
   host dist built from your tree (see the `call-api` skill).
+- `packages/realm-server/tests/interactive-bindings-test.ts` — interactive
+  use end to end with the PR Inbox: a personal key approved interactively
+  loads pull requests in a browser call, counted against the key's limits; a
+  pipelines-only binding refuses it; approving again without it; anonymous
+  refused; the batch's `pipelines-only` slots; a share's first interactive
+  approval and its daily budget; a swap keeping `interactive`.
 - `packages/realm-server/tests/key-binding-batch-test.ts` — the batch: six
   operations approved as one with one grant, an unticked one left
   unapproved, an edited one alone in the review batch with its approved
