@@ -192,6 +192,21 @@ const tests: SharedTests<unknown> = Object.freeze({
     };
     assert.strictEqual(matchRedirect(r, '/products/driver'), '/shop/driver');
     assert.strictEqual(matchRedirect(r, '/products'), undefined);
+    let named: SiteRedirect = {
+      from: '/u/:handle',
+      to: '/people/:handle',
+      statusCode: 301,
+    };
+    assert.strictEqual(matchRedirect(named, '/u/adar'), '/people/adar');
+    let external: SiteRedirect = {
+      from: '/ig/:name',
+      to: 'https://www.instagram.com/:name',
+      statusCode: 302,
+    };
+    assert.strictEqual(
+      matchRedirect(external, '/ig/fairway'),
+      'https://www.instagram.com/fairway',
+    );
   },
 
   'resolveSitePath: follows the precedence ladder': async (assert) => {

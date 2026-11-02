@@ -288,8 +288,9 @@ export function pageTypeMatchFilter(
   return clauses.length === 1 ? clauses[0] : { every: clauses };
 }
 
-// A redirect whose `from` is a template, with `{name}` substitution into
-// `to`. Undefined when `from` doesn't match.
+// A redirect whose `from` is a template, with each whole `:name` segment of
+// `to`, or a legacy `{name}`, filled from it. Undefined when `from` doesn't
+// match.
 export function matchRedirect(
   redirect: SiteRedirect,
   path: string,
@@ -302,9 +303,19 @@ export function matchRedirect(
   if (!values) {
     return undefined;
   }
-  return redirect.to.replace(/\{([A-Za-z0-9_.]+)\}/g, (whole, name) =>
-    name in values! ? encodeValue(values![name]) : whole,
-  );
+  let filled = values;
+  return redirect.to
+    .split('/')
+    .map((segment) => {
+      let name = segment.startsWith(':') ? segment.slice(1) : undefined;
+      return name !== undefined && name in filled
+        ? encodeValue(filled[name])
+        : segment;
+    })
+    .join('/')
+    .replace(/\{([A-Za-z0-9_.]+)\}/g, (whole, name) =>
+      name in filled ? encodeValue(filled[name]) : whole,
+    );
 }
 
 export function isLiteralRedirect(redirect: SiteRedirect): boolean {
