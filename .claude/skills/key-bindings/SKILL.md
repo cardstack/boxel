@@ -153,7 +153,9 @@ grant.
   opens `approve#module=…&name=…&realm=…&operation=…&key=…&operations=…`
   with `cli_port`/`cli_state` naming a single-use loopback listener, the
   window approves under its own session (`via` `window`) and posts only
-  `window_outcome=done`, and the CLI reads the bindings back
+  `window_outcome=done`, or `window_outcome=cancelled` when the user cancels
+  or closes the window first (the CLI then ends at once with "Not
+  approved"), and either way the CLI reads the bindings back
   (`GET /_key-bindings` with `realm`, `module`, `name` and `instance`, which
   the server resolves from prefix form or a URL). The CLI never creates a
   grant on its own. The window approves every slot of an operation, so a

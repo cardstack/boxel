@@ -138,7 +138,7 @@ export default class Workspace extends Component<Signature> {
         }}
         tabindex='-1'
         data-nav-index={{@navIndex}}
-        {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
+        {{focusWhenSelected @isSelected scrollOnOpen='never'}}
         data-test-workspace-loading-indicator
       >
         <Spinner @size={{20}} aria-hidden='true' />
@@ -214,10 +214,7 @@ export default class Workspace extends Component<Signature> {
                   aria-describedby={{this.descriptionIds}}
                   data-nav-index={{@navIndex}}
                   {{on 'click' this.openWorkspace}}
-                  {{focusWhenSelected
-                    @isSelected
-                    scrollOnOpen='when-off-screen'
-                  }}
+                  {{focusWhenSelected @isSelected scrollOnOpen='never'}}
                   data-test-workspace-button={{this.name}}
                 >
                   {{! The name beside it labels the button. }}
@@ -343,7 +340,7 @@ export default class Workspace extends Component<Signature> {
             aria-describedby={{this.descriptionIds}}
             data-nav-index={{@navIndex}}
             {{on 'click' this.openWorkspace}}
-            {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
+            {{focusWhenSelected @isSelected scrollOnOpen='never'}}
             data-test-workspace-button={{this.name}}
           >
             <span class='wallpaper'>
@@ -479,7 +476,7 @@ export default class Workspace extends Component<Signature> {
                 aria-describedby={{this.descriptionIds}}
                 data-nav-index={{@navIndex}}
                 {{on 'click' this.openWorkspace}}
-                {{focusWhenSelected @isSelected scrollOnOpen='when-off-screen'}}
+                {{focusWhenSelected @isSelected scrollOnOpen='never'}}
                 data-test-workspace-button={{this.name}}
                 data-test-workspace-name
               >{{this.name}}</button>

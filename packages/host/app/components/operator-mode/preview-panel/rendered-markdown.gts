@@ -9,6 +9,7 @@
 // into boxel-ui's MarkdownContentShell, the single source of the typography
 // rules and the `--markdown-*` styling contract.
 
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
@@ -76,6 +77,9 @@ interface RenderSlot {
   // eventual card's footprint; also carries `overflow: hidden` for resolved
   // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
+  // a sized slot whose size names no height: a fitted card in it is a size
+  // container its content cannot grow, so the drawing card picks a height
+  heightless?: boolean;
   card?: CardDef; // present when refType === 'card' && state === 'resolved'
   file?: FileDef; // present when refType === 'file' && state === 'resolved'
   url?: string; // present when state === 'loading' | 'unresolved'
@@ -110,6 +114,25 @@ function wrapTablesHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
+export interface SlotCardSignature {
+  Args: {
+    card: CardDef | FileDef;
+    format: Format;
+    heightless?: boolean;
+    /** the card is named in a sentence (an atom in an inline slot), not
+     * drawn in a box of its own */
+    inline?: boolean;
+  };
+}
+
+const BareSlotCard: TemplateOnlyComponent<SlotCardSignature> = <template>
+  <CardRenderer
+    @card={{@card}}
+    @format={{@format}}
+    @displayContainer={{false}}
+  />
+</template>;
+
 interface Signature {
   Args: {
     content: string | null | undefined;
@@ -121,7 +144,13 @@ interface Signature {
     lookKeyPrefix?: string;
     /** draws a card the content shows as a block, in place of the bare
      * CardRenderer: the assistant gives its cards a hat and a menu */
-    blockCard?: ComponentLike<{ Args: { card: CardDef; format: Format } }>;
+    blockCard?: ComponentLike<{
+      Args: { card: CardDef; format: Format; heightless?: boolean };
+    }>;
+    /** draws every other resolved card or file, in place of the bare
+     * CardRenderer: the assistant styles the chrome of the cards in a reply
+     * through a class on its own component */
+    slotCard?: ComponentLike<SlotCardSignature>;
     /** an inline card still loading shows a name taken from its URL, in
      * place of a bare placeholder, so its width holds when the card lands */
     loadingLabels?: boolean;
@@ -147,6 +176,14 @@ export default class RenderedMarkdown extends Component<Signature> {
       ...DEFAULT_CARD_CONTEXT,
       ...this.dynamicCardContext,
     } as CardContext;
+  }
+
+  private get slotCard() {
+    return this.args.slotCard ?? BareSlotCard;
+  }
+
+  private get blockCard() {
+    return this.args.blockCard ?? this.slotCard;
   }
 
   private lookKey = (id: string | undefined) =>
@@ -326,6 +363,7 @@ export default class RenderedMarkdown extends Component<Signature> {
           let style: ReturnType<typeof htmlSafe> | undefined = styleRaw
             ? htmlSafe(styleRaw)
             : undefined;
+          let heightless = format === 'fitted' && !derived.hasHeight;
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 
@@ -340,6 +378,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 format,
                 file,
                 style,
+                heightless,
               });
               continue;
             }
@@ -355,6 +394,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 format,
                 card,
                 style,
+                heightless,
               });
               continue;
             }
@@ -471,10 +511,11 @@ export default class RenderedMarkdown extends Component<Signature> {
                   fieldName=undefined
                 }}
               >
-                <CardRenderer
+                <this.slotCard
                   @card={{slot.file}}
                   @format={{slot.format}}
-                  @displayContainer={{false}}
+                  @heightless={{slot.heightless}}
+                  @inline={{eq slot.format 'atom'}}
                 />
               </span>
             {{else}}
@@ -494,10 +535,10 @@ export default class RenderedMarkdown extends Component<Signature> {
                   fieldName=undefined
                 }}
               >
-                <CardRenderer
+                <this.slotCard
                   @card={{slot.file}}
                   @format={{slot.format}}
-                  @displayContainer={{false}}
+                  @heightless={{slot.heightless}}
                 />
               </div>
             {{/if}}
@@ -523,10 +564,11 @@ export default class RenderedMarkdown extends Component<Signature> {
                 fieldName=undefined
               }}
             >
-              <CardRenderer
+              <this.slotCard
                 @card={{slot.card}}
                 @format={{slot.format}}
-                @displayContainer={{false}}
+                @heightless={{slot.heightless}}
+                @inline={{eq slot.format 'atom'}}
               />
             </span>
           {{else}}
@@ -546,15 +588,11 @@ export default class RenderedMarkdown extends Component<Signature> {
                 fieldName=undefined
               }}
             >
-              {{#if @blockCard}}
-                <@blockCard @card={{slot.card}} @format={{slot.format}} />
-              {{else}}
-                <CardRenderer
-                  @card={{slot.card}}
-                  @format={{slot.format}}
-                  @displayContainer={{false}}
-                />
-              {{/if}}
+              <this.blockCard
+                @card={{slot.card}}
+                @format={{slot.format}}
+                @heightless={{slot.heightless}}
+              />
             </div>
           {{/if}}
         {{else if (eq slot.state 'loading')}}

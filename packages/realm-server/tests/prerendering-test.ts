@@ -921,6 +921,190 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The `/_prerender-card` and `/_prerender-file-extract` proxies render
+    // under the caller's session, on a warm tab that index passes never use:
+    // they run under the realm's authority session, a different affinity. So
+    // no index pass resets this tab after a module write, and the tab keeps
+    // the module it evaluated first unless the proxy sends the realm's loader
+    // epoch. Each test renders through its proxy, rewrites the module through
+    // the realm, and renders again on the same tab.
+    let visitProxy = (kind: 'card' | 'file-extract') => {
+      // The proxy takes the runtime-common Prerenderer, which answers with the
+      // visit response alone. Record the pool metadata beside it so a test can
+      // show both renders ran in the same tab.
+      let pools: { reused: boolean; pageId: string }[] = [];
+      let proxiedPrerenderer: RuntimePrerenderer = {
+        async prerenderModule() {
+          throw new Error(`not used by the ${kind} proxy`);
+        },
+        async prerenderVisit(args) {
+          let result = await prerenderer.prerenderVisit(args);
+          pools.push({
+            reused: result.pool.reused,
+            pageId: result.pool.pageId,
+          });
+          return result.response;
+        },
+        async runCommand() {
+          throw new Error(`not used by the ${kind} proxy`);
+        },
+      };
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        `/_prerender-${kind}`,
+        jwtMiddleware(realmSecretSeed, dbAdapter),
+        handlePrerenderProxy({
+          kind,
+          prerenderer: proxiedPrerenderer,
+          dbAdapter,
+          matrixURL: 'http://localhost:8008/',
+          // The same origin-level session `auth()` adds for this realm.
+          createPrerenderAuth: (userId, realmPermissions) => {
+            let sessions = JSON.parse(
+              testCreatePrerenderAuth(userId, realmPermissions),
+            ) as Record<string, string>;
+            let token = sessions[realmURL];
+            if (token) {
+              sessions[new URL(realmURL).origin + '/'] = token;
+            }
+            return JSON.stringify(sessions);
+          },
+        }),
+      );
+      app.use(router.routes());
+      let token = createJWT(
+        { user: testUserId, sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let render = async (url: string, renderOptions?: RenderRouteOptions) => {
+        let response = await supertest(app.callback())
+          .post(`/_prerender-${kind}`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            data: {
+              attributes: { realm: realmURL, url, renderOptions },
+            },
+          })
+          .expect(201);
+        return response.body.data.attributes;
+      };
+      return { pools, render };
+    };
+
+    test('card proxy renders a module rewritten through the realm on the same warm tab', async function (assert) {
+      const modulePath = 'proxy-render-check.gts';
+      const cardURL = `${realmURL}proxy-render-check-1`;
+      const moduleSource = (version: string) => `
+        import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+        export class ProxyRenderCheck extends CardDef {
+          static displayName = "Proxy Render Check";
+          @field name = contains(StringField);
+          static isolated = class extends Component<typeof this> {
+            <template>${version}: {{@model.name}}</template>
+          }
+        }
+      `;
+      let { pools, render } = visitProxy('card');
+
+      await realm.write(modulePath, moduleSource('Version one'));
+      await realm.write(
+        'proxy-render-check-1.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Maple' },
+            meta: {
+              adoptsFrom: {
+                module: rri('./proxy-render-check'),
+                name: 'ProxyRenderCheck',
+              },
+            },
+          },
+        }),
+      );
+      await realm.indexing();
+
+      let first = (await render(cardURL)) as RenderResponse;
+      assert.true(
+        cleanWhiteSpace(first.isolatedHTML ?? '').includes(
+          'Version one: Maple',
+        ),
+        `the first render uses the first module: ${first.isolatedHTML}`,
+      );
+
+      await realm.write(modulePath, moduleSource('Version two'));
+      await realm.indexing();
+
+      let second = (await render(cardURL)) as RenderResponse;
+
+      assert.strictEqual(pools.length, 2, 'both renders ran');
+      assert.true(pools[1].reused, 'the second render reused a pooled tab');
+      assert.strictEqual(
+        pools[1].pageId,
+        pools[0].pageId,
+        'the second render ran in the tab that evaluated the first module',
+      );
+      assert.true(
+        cleanWhiteSpace(second.isolatedHTML ?? '').includes(
+          'Version two: Maple',
+        ),
+        `the second render uses the rewritten module: ${second.isolatedHTML}`,
+      );
+    });
+
+    test('file-extract proxy extracts with a FileDef rewritten through the realm on the same warm tab', async function (assert) {
+      const modulePath = 'proxy-extract-check.gts';
+      const fileURL = `${realmURL}proxy-extract-check.txt`;
+      const moduleSource = (displayName: string) => `
+        import { FileDef } from '@cardstack/base/file-api';
+        export class ProxyExtractCheck extends FileDef {
+          static displayName = "${displayName}";
+        }
+      `;
+      const renderOptions: RenderRouteOptions = {
+        fileDefCodeRef: {
+          module: rri(`${realmURL}proxy-extract-check`),
+          name: 'ProxyExtractCheck',
+        },
+      };
+      let { pools, render } = visitProxy('file-extract');
+
+      await realm.write(modulePath, moduleSource('First Extract'));
+      await realm.write('proxy-extract-check.txt', 'some text');
+      await realm.indexing();
+
+      let first = (await render(fileURL, renderOptions)) as FileExtractResponse;
+      assert.strictEqual(
+        first.status,
+        'ready',
+        `the first extract succeeds: ${first.error?.error.message}`,
+      );
+      assert.true(
+        first.displayNames?.includes('First Extract'),
+        `the first extract uses the first FileDef: ${JSON.stringify(first.displayNames)}`,
+      );
+
+      await realm.write(modulePath, moduleSource('Second Extract'));
+      await realm.indexing();
+
+      let second = (await render(
+        fileURL,
+        renderOptions,
+      )) as FileExtractResponse;
+
+      assert.strictEqual(pools.length, 2, 'both extracts ran');
+      assert.true(pools[1].reused, 'the second extract reused a pooled tab');
+      assert.strictEqual(
+        pools[1].pageId,
+        pools[0].pageId,
+        'the second extract ran in the tab that evaluated the first FileDef',
+      );
+      assert.true(
+        second.displayNames?.includes('Second Extract'),
+        `the second extract uses the rewritten FileDef: ${JSON.stringify(second.displayNames)}`,
+      );
+    });
+
     test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {
       await realmAdapter.write(
         'filedef-mismatch.gts',
