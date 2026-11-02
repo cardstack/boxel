@@ -440,6 +440,15 @@ module(basename(import.meta.filename), function (hooks) {
     let refused = await fromBrowser(OWNER, onInbox('listReviewRequests'));
     assert.strictEqual(refused.status, 403, JSON.stringify(refused.body));
     assert.strictEqual(refused.code, 'interactive-use-not-approved');
+    let detail: string = refused.body.errors[0].detail;
+    assert.true(
+      detail.includes(`"userKey" (the invoking user's own key)`),
+      "the refusal says the slot takes the caller's own key",
+    );
+    assert.true(
+      detail.includes('The invoking user can allow'),
+      'and that the caller can allow it',
+    );
     assert.strictEqual(vendor.requests.length, 1, 'nothing more was sent');
 
     let pipeline = await asPipeline(OWNER, onInbox('listReviewRequests'));
@@ -560,6 +569,21 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("a share's first interactive approval names its daily budget, which is set with it; later ones needn't", async function (assert) {
     let share = await addShare();
+    let pipelinesOnly = await approve(OWNER, TEAM_FEED, ['latest'], {
+      shareId: share.id,
+    });
+    assert.strictEqual(pipelinesOnly.status, 201);
+    let refusedReader = await fromBrowser(READER, onTeamFeed());
+    assert.strictEqual(refusedReader.code, 'interactive-use-not-approved');
+    let readerDetail: string = refusedReader.body.errors[0].detail;
+    assert.true(
+      readerDetail.includes(`"apiKey" (the realm's key)`),
+      "a share slot is named as the realm's key",
+    );
+    assert.true(
+      readerDetail.includes("Whoever shared the realm's key can allow"),
+      'which whoever shared it can allow',
+    );
     let shown = await batchOf(OWNER, TEAM_FEED, { interactive: true });
     assert.deepEqual(
       shown.shares.map((s) => [s.label, s.interactive, s.dailyBudget]),
@@ -579,11 +603,15 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.stringify(unnamed.body).includes('daily budget'),
       'it says what is missing',
     );
-    let none = await dbAdapter.execute(
-      `SELECT id FROM key_bindings WHERE share_id = $1`,
+    let interactiveRows = await dbAdapter.execute(
+      `SELECT id FROM key_bindings WHERE share_id = $1 AND interactive`,
       { bind: [share.id] },
     );
-    assert.strictEqual(none.length, 0, 'nothing was approved');
+    assert.strictEqual(
+      interactiveRows.length,
+      0,
+      'nothing was approved for interactive use',
+    );
 
     let notInteractive = await approve(
       OWNER,

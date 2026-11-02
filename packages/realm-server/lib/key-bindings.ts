@@ -1459,7 +1459,12 @@ async function checkedBindings(
           403,
           'interactive-use-not-approved',
           'Interactive use not approved',
-          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI. The key's owner can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
+          // Says whose key the slot takes, in the words the other refusals
+          // use, since the AI assistant sees only the message and answers a
+          // caller's own key and a realm's shared key differently.
+          slot.key === 'userKey'
+            ? `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+            : `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
           slot,
         );
       case 'anonymous-use-not-approved':
