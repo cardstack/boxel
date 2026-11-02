@@ -304,18 +304,29 @@ async function selectModel(page: Page, requested: string) {
       }. Available: ${names.join(' | ')}`,
     );
   }
+  // The trigger shows a short name without the provider, so the pick is
+  // confirmed by option id rather than by text.
+  let optionId = await items
+    .nth(matches[0].index)
+    .getAttribute('data-test-llm-select-item');
   await items.nth(matches[0].index).locator('button').click();
-  await expect(page.locator('[data-test-llm-select-selected]')).toContainText(
-    matches[0].name,
+  await expect(page.locator('[data-test-llm-select-selected]')).toHaveAttribute(
+    'data-test-llm-select-selected',
+    optionId ?? '',
   );
-  // The picker stays expanded after a choice and hides the mode toggle while
-  // it is open. Escape does not close it; a second click on the pill does.
-  if ((await page.locator('[data-test-llm-select-item]').count()) > 0) {
+  // The picker closes itself after a choice, with an animation; a click on
+  // the pill while it is closing would open it again. It hides the mode
+  // toggle while open, so if it is still open once the animation has had
+  // its time, a click on the pill closes it (Escape does not).
+  let list = page.locator('[data-test-llm-select-item]');
+  let closed = await expect(list)
+    .toHaveCount(0, { timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!closed) {
     await page.locator('[data-test-llm-select-selected]').click();
+    await expect(list).toHaveCount(0, { timeout: 15_000 });
   }
-  await expect(page.locator('[data-test-llm-select-item]')).toHaveCount(0, {
-    timeout: 15_000,
-  });
   return matches[0].name;
 }
 
