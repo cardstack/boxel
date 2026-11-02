@@ -1,4 +1,9 @@
-import { parseBxlAst, prepareBxl, type PreparedBxl } from '@cardstack/bxl';
+import {
+  bxlToJqExpression,
+  parseBxlAst,
+  prepareBxl,
+  type PreparedBxl,
+} from '@cardstack/bxl';
 
 // The cards a site routes, as its searches return them, and the BXL a page
 // type uses for how its pages look when shared. Expressions are checked
@@ -88,6 +93,24 @@ export function compileRouteExpression(
 // `route` profile, run over the card with the route limits. Compiled once per
 // expression text, since the same expressions run for every card of a type.
 const compiledSegments = new Map<string, CompiledRouteExpression>();
+
+// An expression as BXL's own printer writes it, so two spellings of one
+// expression (`.title|slugify`, `.title | slugify`) are one stored value
+// (ADR site-routing §1.3). The printer reads BXL's readable syntax, which
+// disagrees with jq on some forms (it rewrites a slice), so its output is
+// kept only when it parses, as jq, to the same program; otherwise, and for
+// text that doesn't parse, the expression is kept as written, trimmed.
+export function normalizeSegmentExpression(source: string): string {
+  let text = source.trim();
+  try {
+    let printed = bxlToJqExpression(text).source.trim();
+    let body = (expression: string) =>
+      JSON.stringify(parseBxlAst(expression, { readableSyntax: false }).body);
+    return printed !== text && body(printed) === body(text) ? printed : text;
+  } catch {
+    return text;
+  }
+}
 
 export function compileSegmentExpression(
   source: string,

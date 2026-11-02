@@ -34,7 +34,7 @@ import {
   upsertMultipleRows,
 } from './expression.ts';
 import { evaluateSegment } from './host-routes.ts';
-import { ROUTE_KEYS_FIELD } from './site-paths.ts';
+import { ROUTE_VALUES_FIELD, type RouteValue } from './site-paths.ts';
 import {
   clampSerializedError,
   sanitizeForJsonb,
@@ -1442,7 +1442,7 @@ export class Batch {
   // (ADR site-routing §1.3), read once per batch. Only the server keeps the
   // registry; elsewhere, or when it can't be read, there are none.
   #routeExpressions:
-    | Promise<{ card_type: string; route_key: string; expression: string }[]>
+    | Promise<{ card_type: string; expression: string }[]>
     | undefined;
 
   #routeExpressionsForRealm() {
@@ -1451,12 +1451,10 @@ export class Batch {
         this.#dbAdapter.kind === 'pg'
           ? (
               this.#query([
-                `SELECT DISTINCT card_type, route_key, expression
+                `SELECT DISTINCT card_type, expression
                    FROM site_route_expressions WHERE realm_url =`,
                 param(this.realmURL.href),
-              ]) as Promise<
-                { card_type: string; route_key: string; expression: string }[]
-              >
+              ]) as Promise<{ card_type: string; expression: string }[]>
             ).catch(() => [])
           : Promise.resolve([]);
     }
@@ -1464,9 +1462,9 @@ export class Batch {
   }
 
   // Store each derived segment value a site needs from this card in its
-  // search doc, as text under `_route.<key>`, so a path is looked up with an
-  // `eq` on it. A value that isn't usable text is left out: the card then
-  // has no address under that page type.
+  // search doc, as `{ expr, value }` under `_route`, so a path is looked up
+  // by containment of that one entry. A value that isn't usable text is left
+  // out: the card then has no address under that page type.
   async #withRouteValues(url: URL, entry: SearchIndexEntry) {
     if (entry.type !== 'instance' || !entry.searchData) {
       return;
@@ -1476,9 +1474,11 @@ export class Batch {
       return;
     }
     let types = new Set(entry.types ?? []);
-    let values: Record<string, string> = {};
-    for (let { card_type, route_key, expression } of expressions) {
-      if (!types.has(card_type)) {
+    // One entry per expression, though a card whose type and supertype both
+    // have it registered meets it twice.
+    let values = new Map<string, RouteValue>();
+    for (let { card_type, expression } of expressions) {
+      if (!types.has(card_type) || values.has(expression)) {
         continue;
       }
       let value = evaluateSegment(expression, {
@@ -1486,11 +1486,14 @@ export class Batch {
         id: url.href.replace(/\.json$/, ''),
       });
       if (value !== undefined) {
-        values[route_key] = value;
+        values.set(expression, { expr: expression, value });
       }
     }
-    if (Object.keys(values).length) {
-      entry.searchData = { ...entry.searchData, [ROUTE_KEYS_FIELD]: values };
+    if (values.size) {
+      entry.searchData = {
+        ...entry.searchData,
+        [ROUTE_VALUES_FIELD]: [...values.values()],
+      };
     }
   }
 

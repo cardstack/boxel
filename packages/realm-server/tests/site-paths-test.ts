@@ -64,7 +64,7 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(sitePathsTests, assert, {});
   });
 
-  test('routeKey: one key per card type and expression', async function (assert) {
+  test('normalizeSegmentExpression: two spellings of one expression are one', async function (assert) {
     await runSharedTest(sitePathsTests, assert, {});
   });
 });

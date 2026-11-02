@@ -13,14 +13,14 @@ exports.up = (pgm) => {
     realm_url: { type: 'varchar', notNull: true },
     // The card type, as boxel_index.types spells it.
     card_type: { type: 'varchar', notNull: true },
-    // routeKey(card_type, expression): where the value sits under `_route`.
-    route_key: { type: 'varchar', notNull: true },
+    // Normalized as BXL prints it; each card stores its value beside this
+    // text under `_route`.
     expression: { type: 'text', notNull: true },
     // The site realm whose settings asked for it.
     site_realm_url: { type: 'varchar', notNull: true },
   });
   pgm.addConstraint('site_route_expressions', 'site_route_expressions_pkey', {
-    primaryKey: ['realm_url', 'card_type', 'route_key', 'site_realm_url'],
+    primaryKey: ['realm_url', 'card_type', 'expression', 'site_realm_url'],
   });
   pgm.createIndex('site_route_expressions', ['site_realm_url']);
 };

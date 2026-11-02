@@ -42,7 +42,7 @@ import {
   isDbExpression,
   sortDirection,
 } from './expression.ts';
-import { ROUTE_KEYS_FIELD } from './site-paths.ts';
+import { ROUTE_VALUES_FIELD, type RouteValue } from './site-paths.ts';
 import type { RangeOperator, RangeFilterValue } from './query.ts';
 import {
   type Query,
@@ -1934,20 +1934,32 @@ export class IndexQueryEngine {
     polarity: FilterPolarity = 'positive',
   ): CardExpression {
     // A site's derived path-segment value, stored in the search doc when the
-    // card was indexed (ADR site-routing §1.3). It belongs to no field of the
-    // card type, so it bypasses the field schema: a text containment match
-    // the GIN index on search_doc serves.
-    if (
-      key.startsWith(`${ROUTE_KEYS_FIELD}.`) &&
-      typeof value === 'string' &&
-      polarity === 'positive'
-    ) {
+    // card was indexed as an `{ expr, value }` entry of a list (ADR
+    // site-routing §1.3). It belongs to no field of the card type, so it
+    // bypasses the field schema: containment of that one entry, which the GIN
+    // index on search_doc serves. Only Postgres stores these values, so
+    // SQLite matches nothing rather than every card.
+    if (key === ROUTE_VALUES_FIELD && polarity === 'positive') {
+      let entry = value as Partial<RouteValue> | null;
+      if (
+        !entry ||
+        typeof entry.expr !== 'string' ||
+        typeof entry.value !== 'string'
+      ) {
+        throw new InvalidQueryError(
+          `${ROUTE_VALUES_FIELD} matches an { expr, value } pair of strings`,
+        );
+      }
+      if (this.#dbAdapter.kind === 'sqlite') {
+        return ['1=0'];
+      }
       return [
         {
           kind: 'json-contains',
           column: 'search_doc',
-          segments: key.split('.'),
-          value: param(value),
+          segments: [ROUTE_VALUES_FIELD],
+          arraySegments: [0],
+          value: param({ expr: entry.expr, value: entry.value }),
         },
       ];
     }

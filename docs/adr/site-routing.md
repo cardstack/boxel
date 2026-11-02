@@ -69,9 +69,9 @@ under that page type, and the problem MUST be recorded for the site's editor
 
 The realm server MUST NOT store a table of a site's addresses. When it
 indexes a card a page type covers, the indexer MUST evaluate the page type's
-derived segment values and store them as text in the card's search document,
-under a key derived from the card type and the expression, so sites that share
-an expression share the value. The server MUST keep a registry of the
+derived segment values and store each as text in the card's search document,
+beside the expression that produced it, normalized as BXL prints it, so sites
+that share an expression share the value and no opaque key is stored. The server MUST keep a registry of the
 expressions each realm's cards need, written when a site's settings are
 indexed; it holds expressions, never addresses. A segment with no expression
 MUST be looked up on the card's field itself. The server MUST find a path's

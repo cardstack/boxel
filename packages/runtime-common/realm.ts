@@ -17617,9 +17617,14 @@ export class Realm {
     if (this.#dbAdapter.kind !== 'pg') {
       return;
     }
+    // Rows are compared by realm, card type and normalized expression,
+    // joined with newlines, which no URL, type key or expression contains
+    // unescaped.
+    let rowKey = (realm: string, cardType: string, expression: string) =>
+      `${realm}\n${cardType}\n${expression}`;
     let wanted = new Map<
       string,
-      { realm: string; cardType: string; key: string; expression: string }
+      { realm: string; cardType: string; expression: string }
     >();
     for (let pageType of settings.pageTypes) {
       if (!pageType.cardTypeKey) {
@@ -17629,18 +17634,17 @@ export class Realm {
         let row = {
           realm: pageType.sourceRealm,
           cardType: pageType.cardTypeKey!,
-          key: param.key,
           expression: param.expression,
         };
-        wanted.set(`${row.realm}|${row.cardType}|${row.key}`, row);
+        wanted.set(rowKey(row.realm, row.cardType, row.expression), row);
       }
     }
     let existing = (await query(this.#dbAdapter, [
-      `SELECT realm_url, card_type, route_key FROM site_route_expressions WHERE site_realm_url =`,
+      `SELECT realm_url, card_type, expression FROM site_route_expressions WHERE site_realm_url =`,
       param(this.url),
-    ])) as { realm_url: string; card_type: string; route_key: string }[];
+    ])) as { realm_url: string; card_type: string; expression: string }[];
     let had = new Set(
-      existing.map((r) => `${r.realm_url}|${r.card_type}|${r.route_key}`),
+      existing.map((r) => rowKey(r.realm_url, r.card_type, r.expression)),
     );
     let added = [...wanted.keys()].filter((k) => !had.has(k));
     let removed = [...had].filter((k) => !wanted.has(k));
@@ -17653,12 +17657,10 @@ export class Realm {
     ]);
     for (let row of wanted.values()) {
       await query(this.#dbAdapter, [
-        `INSERT INTO site_route_expressions (realm_url, card_type, route_key, expression, site_realm_url) VALUES (`,
+        `INSERT INTO site_route_expressions (realm_url, card_type, expression, site_realm_url) VALUES (`,
         param(row.realm),
         `,`,
         param(row.cardType),
-        `,`,
-        param(row.key),
         `,`,
         param(row.expression),
         `,`,
@@ -17666,7 +17668,7 @@ export class Realm {
         `) ON CONFLICT DO NOTHING`,
       ]);
     }
-    let realmsToReindex = new Set(added.map((k) => k.split('|')[0]));
+    let realmsToReindex = new Set(added.map((k) => k.split('\n')[0]));
     for (let realmURL of realmsToReindex) {
       let [owner] = (await query(this.#dbAdapter, [
         `SELECT username FROM realm_user_permissions WHERE realm_owner = true AND realm_url =`,

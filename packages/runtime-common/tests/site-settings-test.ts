@@ -141,7 +141,7 @@ const tests: SharedTests<unknown> = Object.freeze({
             aliases: ['/j/:id'],
             params: {
               year: '.publishedOn | split("-") | .[0]',
-              id: '.id | split("/") | .[-1]',
+              id: '.id|split("/")|.[-1]',
             },
           }),
         ],
@@ -155,9 +155,6 @@ const tests: SharedTests<unknown> = Object.freeze({
         ['year', '.publishedOn | split("-") | .[0]'],
         ['id', '.id | split("/") | .[-1]'],
       ],
-    );
-    assert.true(
-      pageTypes[0].params!.every((p) => /^k[0-9a-f]{8}$/.test(p.key)),
     );
   },
 

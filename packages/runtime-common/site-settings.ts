@@ -6,10 +6,12 @@ import {
   normalizeRoutingPath,
   type HostRoutingRule,
 } from './host-routing-validation.ts';
-import { compileSegmentExpression } from './host-routes.ts';
+import {
+  compileSegmentExpression,
+  normalizeSegmentExpression,
+} from './host-routes.ts';
 import {
   parsePathTemplate,
-  routeKey,
   templateVariables,
   type PathTemplate,
   type SegmentParam,
@@ -243,8 +245,8 @@ function readPageType(
   }
   for (let [rawName, rawExpression] of Object.entries(authoredParams ?? {})) {
     let paramName = rawName.replace(/^:/, '');
-    let expression = str(rawExpression);
-    if (!paramName || !expression) {
+    let written = str(rawExpression);
+    if (!paramName || !written) {
       problems.push(
         `${label}: param "${rawName}" needs a BXL expression as its value`,
       );
@@ -256,6 +258,7 @@ function readPageType(
       );
       continue;
     }
+    let expression = normalizeSegmentExpression(written);
     let compiled = compileSegmentExpression(expression);
     if (!compiled.ok) {
       problems.push(
@@ -265,7 +268,6 @@ function readPageType(
     params.push({
       name: paramName,
       expression,
-      key: routeKey(cardTypeKey, expression),
     });
   }
 

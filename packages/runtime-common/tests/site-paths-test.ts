@@ -1,4 +1,8 @@
-import { shareFor, type RouteCard } from '../host-routes.ts';
+import {
+  normalizeSegmentExpression,
+  shareFor,
+  type RouteCard,
+} from '../host-routes.ts';
 import {
   canonicalPathOf,
   expandPathTemplate,
@@ -8,8 +12,7 @@ import {
   parsePathTemplate,
   readCardVariable,
   resolveSitePath,
-  routeKey,
-  ROUTE_KEYS_FIELD,
+  ROUTE_VALUES_FIELD,
   type PathTemplate,
   type SiteSearch,
 } from '../site-paths.ts';
@@ -391,10 +394,9 @@ const tests: SharedTests<unknown> = Object.freeze({
     async (assert) => {
       let cardTypeKey = `${REALM}journal/JournalPost`;
       let expression = '.publishedOn | .[0:4]';
-      let key = routeKey(cardTypeKey, expression);
       let journal = pageType(0, 'Journal', '/journal/:year/:slug', {
         cardTypeKey,
-        params: [{ name: 'year', expression, key }],
+        params: [{ name: 'year', expression }],
       });
       let post = card('JournalPost/how-we-test', {
         slug: 'how-we-test-a-driver',
@@ -412,18 +414,20 @@ const tests: SharedTests<unknown> = Object.freeze({
         }),
         {
           every: [
-            { eq: { [`${ROUTE_KEYS_FIELD}.${key}`]: '2025' } },
+            {
+              eq: { [ROUTE_VALUES_FIELD]: { expr: expression, value: '2025' } },
+            },
             { eq: { slug: 'how-we-test-a-driver' } },
           ],
         },
-        'path to card: the derived segment is matched on its stored text',
+        'path to card: the derived segment is matched on the entry its expression stored',
       );
     },
 
   'derived segments: slugify gives a title its address, and a value with a slash gives none':
     async (assert) => {
       let help = pageType(0, 'Help', '/help/:slug', {
-        params: [{ name: 'slug', expression: '.title | slugify', key: 'k1' }],
+        params: [{ name: 'slug', expression: '.title | slugify' }],
       });
       assert.strictEqual(
         canonicalPathOf(
@@ -434,7 +438,7 @@ const tests: SharedTests<unknown> = Object.freeze({
         '/help/when-will-i-get-my-refund',
       );
       let byPath = pageType(0, 'Raw', '/raw/:slug', {
-        params: [{ name: 'slug', expression: '.path', key: 'k2' }],
+        params: [{ name: 'slug', expression: '.path' }],
       });
       assert.strictEqual(
         canonicalPathOf(
@@ -447,12 +451,34 @@ const tests: SharedTests<unknown> = Object.freeze({
       );
     },
 
-  'routeKey: one key per card type and expression': async (assert) => {
-    let a = routeKey(`${REALM}blog/BlogPost`, '.number');
-    assert.strictEqual(a, routeKey(`${REALM}blog/BlogPost`, ' .number '));
-    assert.notStrictEqual(a, routeKey(`${REALM}blog/Page`, '.number'));
-    assert.notStrictEqual(a, routeKey(`${REALM}blog/BlogPost`, '.id'));
-    assert.true(/^k[0-9a-f]{8}$/.test(a));
+  'normalizeSegmentExpression: two spellings of one expression are one': async (
+    assert,
+  ) => {
+    let canonical = normalizeSegmentExpression('.title | slugify');
+    assert.strictEqual(canonical, '.title | slugify');
+    assert.strictEqual(normalizeSegmentExpression('.title|slugify'), canonical);
+    assert.strictEqual(
+      normalizeSegmentExpression('  .title  |  slugify '),
+      canonical,
+    );
+    assert.strictEqual(
+      normalizeSegmentExpression('.id|split("/")|.[-1]'),
+      '.id | split("/") | .[-1]',
+    );
+    assert.strictEqual(
+      normalizeSegmentExpression('"\\(.season) - \\(.year)" | slugify'),
+      '"\\(.season) - \\(.year)" | slugify',
+      'text inside a string literal is left as written',
+    );
+    assert.notStrictEqual(
+      normalizeSegmentExpression('.title | ascii_downcase'),
+      canonical,
+    );
+    assert.strictEqual(
+      normalizeSegmentExpression('.publishedOn[0:4]'),
+      '.publishedOn[0:4]',
+      'a form the printer would change the meaning of is kept as written',
+    );
   },
 
   'shareFor: reads share tags from the card, and leaves out what it cannot read':

@@ -213,29 +213,22 @@ export function readCardVariable(card: RouteCard, variable: string): unknown {
   return value;
 }
 
-// Where a card's derived segment values sit in its search doc:
-// `_route.<key>`, written when the card is indexed.
-export const ROUTE_KEYS_FIELD = '_route';
+// Where a card's derived segment values sit in its search doc, written when
+// the card is indexed: a list of `{ expr, value }`, each value beside the
+// normalized expression that produced it (ADR site-routing §1.3). Sites that
+// use the same expression on a card type share one entry.
+export const ROUTE_VALUES_FIELD = '_route';
 
-// A page type's derived segment: the segment it fills, the BXL expression
-// that gives its value, and the key that value is stored under.
+export interface RouteValue {
+  expr: string;
+  value: string;
+}
+
+// A page type's derived segment: the segment it fills and the BXL expression
+// that gives its value, normalized as BXL prints it.
 export interface SegmentParam {
   name: string;
   expression: string;
-  key: string;
-}
-
-// The key a derived value is stored under: a hash of the card type and the
-// expression, so sites that share an expression on a card type share one
-// stored value (ADR site-routing §1.3). FNV-1a, 32 bits, in hex.
-export function routeKey(cardTypeKey: string, expression: string): string {
-  let hash = 0x811c9dc5;
-  let text = `${cardTypeKey}\n${expression.trim()}`;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return `k${hash.toString(16).padStart(8, '0')}`;
 }
 
 // A segment's value for a card: the expression the page type's `params`
@@ -254,7 +247,8 @@ export function readSegment(
 }
 
 // The search a match becomes: the page type's own filter and one `eq` per
-// variable. A derived segment is matched on its stored text. A value that reads as a number matches either spelling, so a
+// variable. A derived segment is matched on the entry its expression stored.
+// A value that reads as a number matches either spelling, so a
 // numeric field matches and a part number like `01234` stays a string. The
 // values are data inside `eq`, never operators.
 export function pageTypeMatchFilter(
@@ -268,7 +262,8 @@ export function pageTypeMatchFilter(
   for (let [variable, value] of Object.entries(values)) {
     let param = pageType.params?.find((p) => p.name === variable);
     if (param) {
-      clauses.push({ eq: { [`${ROUTE_KEYS_FIELD}.${param.key}`]: value } });
+      let entry: RouteValue = { expr: param.expression, value };
+      clauses.push({ eq: { [ROUTE_VALUES_FIELD]: entry } });
       continue;
     }
     let asNumber = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
