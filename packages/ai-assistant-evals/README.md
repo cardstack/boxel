@@ -90,14 +90,12 @@ prompt in a single session. `bulk-vendors-invoices` sets all 45 vendors to
 NET 30 (6 already are) past customer cards with the same field, lists the
 unpaid invoices more than 60 days overdue as of a date the prompt names, and
 makes every vendor adopt from a subclass, which takes more files than one
-`run-realm-code` call can write. `bulk-records` raises the variant prices of 60 coffee products, more
-than a search returns when it names no page size, and reassigns a leaving
-agent's open tickets, which is a link change. Their seeds live under
-`eval-realm/bulk-operations/`. Their `expectedChangedCards` list a sample of
-each task's targets, and the judge checks the rest from the workspace
-snapshot. Keep a bulk task under about 100 changed cards: each card a run
-changes adds a correctness check to one Matrix event, and about 100 take that
-event past Matrix's 64 KB limit, which breaks the room.
+`run-realm-code` call can write. `bulk-records` raises the variant prices of 110 coffee products, more
+than two pages of what a search returns when it names no page size, and
+reassigns a leaving agent's open tickets, which is a link change. Their seeds
+live under `eval-realm/bulk-operations/`. Their `expectedChangedCards` list a
+sample of each task's targets, and the judge checks the rest from the
+workspace snapshot.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace

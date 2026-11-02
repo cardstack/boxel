@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Bolivia Yungas Washed",
+      "category": "coffee",
+      "origin": "Yungas, Bolivia",
+      "variants": [
+        {
+          "sku": "CF-111-250",
+          "size": "250 g",
+          "price": 20.2
+        },
+        {
+          "sku": "CF-111-500",
+          "size": "500 g",
+          "price": 36.39
+        },
+        {
+          "sku": "CF-111-1KG",
+          "size": "1 kg",
+          "price": 66.3
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

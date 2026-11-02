@@ -587,6 +587,114 @@ test.describe('Correctness Checks', () => {
     expect(finalCardJson.data.attributes.errors).toHaveLength(0);
   });
 
+  test('one checkCorrectness request checks several cards', async ({
+    page,
+  }) => {
+    const { username, password, credentials } =
+      await createSubscribedUserAndLogin(
+        page,
+        'correctness-batch',
+        serverIndexUrl,
+      );
+    const realmName = uniqueRealmName('correctness-batch');
+    await createRealm(page, realmName);
+    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    let cardIds: string[] = [];
+    for (let name of ['Billy', 'Molly']) {
+      cardIds.push(
+        await postNewCard(page, realmURL, {
+          data: {
+            attributes: { name, hasError: false },
+            meta: { adoptsFrom: { module: `${appURL}/boom-pet`, name: 'Pet' } },
+          },
+        }),
+      );
+    }
+
+    await page.goto(realmURL);
+    await openAiAssistant(page);
+    let roomId = await getRoomId(page);
+    let agentId = await page.evaluate(() => {
+      let existing = window.sessionStorage.getItem('agentId');
+      if (existing) {
+        return existing;
+      }
+      let generated = window.crypto.randomUUID();
+      window.sessionStorage.setItem('agentId', generated);
+      return generated;
+    });
+
+    // The request names neither the room nor the reply: the host runs it in
+    // the room it arrived in.
+    const commandRequestId = `check-correctness-batch-${Date.now()}`;
+    await putEvent(
+      credentials.accessToken,
+      roomId,
+      'm.room.message',
+      commandRequestId,
+      {
+        body: '',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        data: { context: { agentId } },
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: commandRequestId,
+            name: 'checkCorrectness',
+            arguments: {
+              description: 'Check 2 cards',
+              attributes: {
+                targets: cardIds.map((ref) => ({ type: 'card', ref })),
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    let commandContainer = page.locator(
+      `[data-test-tool-call-id="${commandRequestId}"]`,
+    );
+    await commandContainer
+      .locator('[data-test-tool-call-apply="applied"]')
+      .waitFor({ state: 'attached' });
+    await expect(commandContainer).not.toHaveClass(/is-failed/);
+    await expect(
+      commandContainer.locator('[data-test-pretui-tool-row-title]'),
+    ).toContainText('Checked 2 cards');
+
+    let toolResultEvent: any;
+    await expect(async () => {
+      let events = await getRoomEvents(username, password, roomId);
+      toolResultEvent = events.find(
+        (e: any) =>
+          e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          e.content.commandRequestId === commandRequestId,
+      );
+      expect(toolResultEvent).toBeDefined();
+    }).toPass();
+    expect(toolResultEvent.content['m.relates_to']?.key).toStrictEqual(
+      'applied',
+    );
+    let resultData =
+      typeof toolResultEvent.content.data === 'string'
+        ? JSON.parse(toolResultEvent.content.data)
+        : toolResultEvent.content.data;
+    let response: Response | undefined;
+    await expect(async () => {
+      response = await fetch(resultData.card.url, {
+        headers: { Authorization: `Bearer ${credentials.accessToken}` },
+      });
+      expect(response.ok).toBe(true);
+    }).toPass();
+    let attributes = (await response!.json()).data.attributes;
+    expect(attributes.correct).toBe(true);
+    expect(attributes.checkedCount).toBe(2);
+    expect(attributes.passedCount).toBe(2);
+    expect(attributes.targetResults).toHaveLength(0);
+  });
+
   test('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
     page,
   }) => {

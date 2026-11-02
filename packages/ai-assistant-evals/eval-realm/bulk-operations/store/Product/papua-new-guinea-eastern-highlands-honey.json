@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Papua New Guinea Eastern Highlands Honey",
+      "category": "coffee",
+      "origin": "Eastern Highlands, Papua New Guinea",
+      "variants": [
+        {
+          "sku": "CF-146-250",
+          "size": "250 g",
+          "price": 16.59
+        },
+        {
+          "sku": "CF-146-500",
+          "size": "500 g",
+          "price": 29.09
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

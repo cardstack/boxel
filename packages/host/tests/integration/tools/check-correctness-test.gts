@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
@@ -18,6 +19,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 function petDocument(name: string, hasError: boolean) {
   return JSON.stringify(
@@ -350,6 +353,147 @@ module('Integration | tools | check-correctness', function (hooks) {
     });
 
     assert.true(thirdResult.correct, 'third run reports no errors');
+  });
+
+  async function targetFields(targets: { type: string; ref: string }[]) {
+    let { CorrectnessTargetField } = await getService(
+      'loader-service',
+    ).loader.import<typeof BaseCommandModule>('@cardstack/base/command');
+    return targets.map((target) => new CorrectnessTargetField(target));
+  }
+
+  test('checks several targets in one call and names the one that fails', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let roomId = '!room:example.com';
+    await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: testRealmURL,
+      roomId,
+      code: writeTextScript('Pet/bill.json', petDocument('Bill', true)),
+    });
+
+    let result = await new CheckCorrectnessTool(
+      toolService.toolContext,
+    ).execute({
+      roomId,
+      targets: await targetFields([
+        { type: 'card', ref: `${testRealmURL}Pet/billy` },
+        { type: 'card', ref: `${testRealmURL}Pet/bill` },
+        { type: 'file', ref: `${testRealmURL}ticket-notes.txt` },
+        { type: 'file', ref: `${testRealmURL}settings.json` },
+      ]),
+    });
+
+    assert.false(result.correct, 'the check fails');
+    assert.strictEqual(result.checkedCount, 4, 'every target was checked');
+    assert.strictEqual(result.passedCount, 3, 'the other three passed');
+    assert.deepEqual(
+      result.targetResults.map((entry) => entry.targetRef),
+      [`${testRealmURL}Pet/bill`],
+      'only the failing card has an entry',
+    );
+    assert.ok(
+      result.targetResults[0]?.errors.some((error) =>
+        error.includes('Name cannot be "Bill"'),
+      ),
+      'with its error',
+    );
+    assert.ok(
+      result.errors.some((error) => error.includes('Name cannot be "Bill"')),
+      'the error is also among the result’s errors',
+    );
+  });
+
+  test('a check of several targets settles each target on its own', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let environmentService = getService('environment-service') as any;
+    let roomId = '!room:example.com';
+    let originalMaxSize = environmentService.fileSizeLimitBytes;
+    environmentService.fileSizeLimitBytes = 20;
+    try {
+      await assert.rejects(
+        new RunRealmCodeTool(toolService.toolContext).execute({
+          realm: testRealmURL,
+          roomId,
+          code: writeTextScript('notes.txt', 'x'.repeat(21)),
+        }),
+        'the oversized write is refused',
+      );
+
+      let result = await new CheckCorrectnessTool(
+        toolService.toolContext,
+      ).execute({
+        roomId,
+        targets: await targetFields([
+          { type: 'file', ref: `${testRealmURL}notes.txt` },
+          { type: 'card', ref: `${testRealmURL}Pet/billy` },
+        ]),
+      });
+
+      assert.deepEqual(
+        result.targetResults.map((entry) => entry.targetRef),
+        [`${testRealmURL}notes.txt`],
+        'the size limit fails only the oversized file',
+      );
+      assert.ok(
+        result.targetResults[0]?.errors[0]?.includes(
+          'exceeds maximum allowed size (20 bytes)',
+        ),
+        'with the size limit error',
+      );
+      assert.strictEqual(result.passedCount, 1, 'the card is still checked');
+    } finally {
+      environmentService.fileSizeLimitBytes = originalMaxSize;
+    }
+  });
+
+  test('a one-target check answers as it always has', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let result = await new CheckCorrectnessTool(
+      toolService.toolContext,
+    ).execute({
+      targetType: 'card',
+      targetRef: `${testRealmURL}Pet/billy`,
+      roomId: '!room:example.com',
+    });
+
+    assert.true(result.correct);
+    assert.deepEqual(result.targetResults, [], 'no per-target entries');
+    assert.notOk(result.checkedCount, 'no counts');
+  });
+
+  test('a check of many targets gets more time', async function (assert) {
+    let cards = Array.from({ length: 20 }, (_, n) => ({
+      type: 'card',
+      ref: `${testRealmURL}Pet/${n}`,
+    }));
+    assert.strictEqual(
+      CheckCorrectnessTool.extraExecuteTimeMsFor({
+        targets: cards.slice(0, 8),
+      }),
+      0,
+      'one round fits the standard timeout',
+    );
+    assert.strictEqual(
+      CheckCorrectnessTool.extraExecuteTimeMsFor({
+        targets: [...cards, { type: 'file', ref: `${testRealmURL}pet.gts` }],
+      }),
+      3 * ENV.cardRenderTimeout,
+      'three cards rounds and one module round: three more render timeouts',
+    );
+    assert.strictEqual(
+      CheckCorrectnessTool.extraExecuteTimeMsFor({
+        targetType: 'card',
+        targetRef: `${testRealmURL}Pet/billy`,
+      }),
+      0,
+      'a one-target check needs no more',
+    );
   });
 
   test('skips correctness checks for empty files', async function (assert) {

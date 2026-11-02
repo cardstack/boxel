@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Peru Cajamarca Anaerobic",
+      "category": "coffee",
+      "origin": "Cajamarca, Peru",
+      "variants": [
+        {
+          "sku": "CF-151-250",
+          "size": "250 g",
+          "price": 19.7
+        },
+        {
+          "sku": "CF-151-500",
+          "size": "500 g",
+          "price": 35.09
+        },
+        {
+          "sku": "CF-151-1KG",
+          "size": "1 kg",
+          "price": 69.39
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

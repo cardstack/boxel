@@ -5356,12 +5356,14 @@ ${patchedFileSource}
       let patchEventId = addPatch(index);
       let attempt = await nextAttempt(patchEventId);
       attempts.push(attempt);
-      addWarningCheck(index, patchEventId, attempt ?? 1);
+      if (attempt !== undefined) {
+        addWarningCheck(index, patchEventId, attempt);
+      }
     }
     assert.deepEqual(
       attempts,
-      [1, 2, 3, 4],
-      'each fix message continues the count, so the fourth round is past the cap',
+      [1, 2, 3, undefined],
+      'each fix message continues the count, and past the cap no check is pending',
     );
 
     events.push({

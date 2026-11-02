@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Guatemala Fraijanes Washed",
+      "category": "coffee",
+      "origin": "Fraijanes, Guatemala",
+      "variants": [
+        {
+          "sku": "CF-126-250",
+          "size": "250 g",
+          "price": 12.79
+        },
+        {
+          "sku": "CF-126-500",
+          "size": "500 g",
+          "price": 23.89
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

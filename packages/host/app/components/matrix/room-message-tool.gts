@@ -56,6 +56,7 @@ import {
   isCardInstance,
 } from '@cardstack/runtime-common';
 
+import { describeCheckTargetCount } from '@cardstack/runtime-common/ai/correctness-targets';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 
 import { isAskUserTool } from '@cardstack/host/lib/ask-user';
@@ -749,10 +750,41 @@ export default class RoomMessageTool extends Component<Signature> {
           ? error
           : ((error as { message?: string }).message ?? String(error)),
       );
-    if (errors.length) {
-      return errors.map((text) => ({ text, tone: 'failed', glyph: 'failed' }));
+    let lines: { text: string; tone: 'failed' | 'done'; glyph: string }[] =
+      errors.map((text) => ({ text, tone: 'failed', glyph: 'failed' }));
+    let attributes = this.args.messageTool.arguments?.attributes;
+    let targets = Array.isArray(attributes?.targets)
+      ? (attributes.targets as { type?: unknown; ref?: unknown }[])
+      : undefined;
+    if (targets) {
+      // A check of several targets: its errors, then how many came back clean.
+      let results =
+        (
+          card as {
+            targetResults?: { targetRef?: string; errors?: unknown[] }[];
+          }
+        ).targetResults ?? [];
+      let failedRefs = new Set(
+        results
+          .filter((result) => result.errors?.length)
+          .map((result) => result.targetRef),
+      );
+      let passed = targets.filter(
+        (target) => !failedRefs.has(target.ref as string),
+      );
+      if (passed.length) {
+        lines.push({
+          text: `No errors in ${failedRefs.size ? 'the other ' : ''}${describeCheckTargetCount(passed)}`,
+          tone: 'done',
+          glyph: 'done',
+        });
+      }
+      return lines;
     }
-    let target = this.args.messageTool.arguments?.attributes?.targetRef;
+    if (lines.length) {
+      return lines;
+    }
+    let target = attributes?.targetRef;
     let file = typeof target === 'string' ? target.split('/').pop() : 'it';
     return [{ text: `No errors in ${file}`, tone: 'done', glyph: 'done' }];
   }
@@ -918,9 +950,13 @@ export default class RoomMessageTool extends Component<Signature> {
     // a check names the file it checked, as the board does: "Checked
     // relaunch.gts", not the tool's sentence about a path
     if (this.baseName === 'checkCorrectness' && !this.isPreparing) {
-      let target = this.args.messageTool.arguments?.attributes?.targetRef;
-      let file =
-        typeof target === 'string' ? target.split('/').pop() : undefined;
+      let attributes = this.args.messageTool.arguments?.attributes;
+      let target = attributes?.targetRef;
+      let file = Array.isArray(attributes?.targets)
+        ? describeCheckTargetCount(attributes.targets)
+        : typeof target === 'string'
+          ? target.split('/').pop()
+          : undefined;
       if (file) {
         return this.didFailCorrectnessCheck
           ? `Checked ${file} · errors`

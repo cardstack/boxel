@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Papua New Guinea Western Highlands Natural",
+      "category": "coffee",
+      "origin": "Western Highlands, Papua New Guinea",
+      "variants": [
+        {
+          "sku": "CF-150-250",
+          "size": "250 g",
+          "price": 18.89
+        },
+        {
+          "sku": "CF-150-500",
+          "size": "500 g",
+          "price": 36.1
+        },
+        {
+          "sku": "CF-150-1KG",
+          "size": "1 kg",
+          "price": 66.39
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -129,6 +129,10 @@ export function getToolDefinitions<T = unknown>(
 ): T[] | undefined {
   return content?.toolDefinitions ?? content?.commandDefinitions;
 }
+// The most JSON-encoded content a Matrix event should carry. Synapse refuses
+// an event over 65,536 bytes (M_TOO_LARGE), and that limit counts the whole
+// event, so the content budget leaves room for the envelope.
+export const MAX_MATRIX_EVENT_CONTENT_BYTES = 56 * 1024;
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =

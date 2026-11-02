@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Zambia Muchinga Honey",
+      "category": "coffee",
+      "origin": "Muchinga, Zambia",
+      "variants": [
+        {
+          "sku": "CF-160-250",
+          "size": "250 g",
+          "price": 17.2
+        },
+        {
+          "sku": "CF-160-500",
+          "size": "500 g",
+          "price": 31.09
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}
