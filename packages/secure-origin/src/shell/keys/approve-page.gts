@@ -379,9 +379,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{#each this.confirmations as |line|}}
                     <p data-test-approve-confirmation>{{line}}</p>
                   {{/each}}
-                  <p class='interactive-limits'>Each key’s limits cap these
-                    calls: how often one person can make them, and how many the
-                    key makes in a day.</p>
                 </div>
               </div>
               {{#each this.budgetShares as |share|}}
@@ -405,9 +402,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     data-test-approve-budget-input
                   />
                   <span class='note budget-note'>The most calls this share makes
-                    in a day, for everyone who opens a card that uses it. Opened
-                    cards haven’t used this share before, so set this to what
-                    your plan with the service allows.</span>
+                    in a day, in total across everyone who opens a card that
+                    uses it. This is the first time opened cards can use this
+                    share, so set it to what your plan with the service allows.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -661,9 +658,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .interactive-text p + p {
         margin-top: var(--boxel-sp-xs);
-      }
-      .interactive-limits {
-        color: var(--muted-foreground);
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));

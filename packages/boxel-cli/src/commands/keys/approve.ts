@@ -349,7 +349,6 @@ function printBatch(
         say(ctx, `  ${FG_YELLOW}${INTERACTIVE_CONFIRMATION[kind]}${RESET}`);
       }
     }
-    say(ctx, `  ${DIM}Each key's limits cap these calls.${RESET}`);
   }
   let remaining =
     batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
