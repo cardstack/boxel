@@ -478,7 +478,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   // by write access to the workspace, so it can run where the user can only
   // read. The realm refuses one the policy does not allow.
   'operations.invoke': false,
-  'operations.atomic': false,
+  'operations.invokeAtomic': false,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -1234,11 +1234,11 @@ class RealmFsSession {
         let [answer] = await this.runOperationEntries([entry], false);
         return answer;
       }
-      case 'operations.atomic': {
+      case 'operations.invokeAtomic': {
         let list = args[0];
         if (!Array.isArray(list) || list.length === 0) {
           throw new TypeError(
-            'realm.operations.atomic expects a non-empty array of { path, operation, payload } entries',
+            'realm.operations.invokeAtomic expects a non-empty array of { path, operation, payload } entries',
           );
         }
         let entries = list.map((item: unknown) => {
@@ -1248,7 +1248,7 @@ class RealmFsSession {
             Array.isArray(item)
           ) {
             throw new TypeError(
-              'each realm.operations.atomic entry is { path, operation, payload }',
+              'each realm.operations.invokeAtomic entry is { path, operation, payload }',
             );
           }
           let { path, operation, payload } = item as Record<string, unknown>;
@@ -2748,7 +2748,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.cards.get, changes card fields with realm.cards.update, runs ' +
     'the operations a card type declares (its @operation statics) with ' +
     'realm.operations.invoke(path, operation, payload), or several as one ' +
-    'all-or-nothing batch with realm.operations.atomic([{ path, operation, ' +
+    'all-or-nothing batch with realm.operations.invokeAtomic([{ path, operation, ' +
     'payload }]) for a bulk change (prefer them over realm.cards.update when ' +
     'the type declares one for the change; each runs at once and answers ' +
     '{ path, operation, id, version } for a write), finds ' +
