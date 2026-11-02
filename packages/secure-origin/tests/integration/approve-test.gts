@@ -286,6 +286,7 @@ module('Integration | approve pages', function (hooks) {
         target: { kind: 'instance', url: CARD },
         review: false,
         interactive: true,
+        anonymous: true,
       },
       'the page asks for the batch of the card it was opened for, never naming its operations',
     );
@@ -1236,7 +1237,8 @@ module('Integration | approve pages', function (hooks) {
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
   });
 
-  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+  // A batch whose one operation a workspace's share fills.
+  function serveShareBatch(share: Record<string, unknown> = {}) {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
     serve({
       'POST _key-bindings/batch': () =>
@@ -1274,12 +1276,19 @@ module('Integration | approve pages', function (hooks) {
                   covers: [GRAPHQL],
                   interactive: false,
                   dailyBudget: 2400,
+                  anonymous: false,
+                  anonymousDailyCap: null,
+                  ...share,
                 },
               ],
             }),
           },
         }),
     });
+  }
+
+  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+    serveShareBatch();
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
@@ -1305,5 +1314,86 @@ module('Integration | approve pages', function (hooks) {
     let [approval] = approvals();
     assert.true(approval.interactive);
     assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
+    assert.strictEqual(approval.anonymous, undefined);
+  });
+
+  test("letting people who aren't signed in use a share is a checkbox under interactive use, with its own confirmation and the share's anonymous cap", async function (assert) {
+    serveShareBatch({ interactive: true, dailyBudget: 500 });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-anonymous-tick]')
+      .isDisabled('it applies only to calls made when the card is opened');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-anonymous-tick]').isNotDisabled();
+    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
+    assert.dom('[data-test-approve-cap]').doesNotExist();
+
+    await click('[data-test-approve-anonymous-tick]');
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 2 }, 'it joins the batch’s confirmation');
+    assert
+      .dom('[data-test-approve-interactive]')
+      .includesText(
+        'Anyone on the internet who opens this card can make these calls with this key, up to the anonymous cap.',
+      );
+    assert
+      .dom('[data-test-approve-anonymous-note]')
+      .hasText(
+        'Anyone can use it for requests to github.com (api.github.com/graphql/), including people who aren’t signed in.',
+      );
+    assert
+      .dom('[data-test-approve-anonymous-note] strong')
+      .hasText('including people who aren’t signed in');
+    assert
+      .dom('[data-test-approve-cap="Team GitHub"]')
+      .hasTagName('label')
+      .includesText('in total across everyone who isn’t signed in');
+    assert.dom('[data-test-approve-cap="Team GitHub"] input').hasValue('');
+    assert
+      .dom('[data-test-approve-save]')
+      .isDisabled('the owner names the cap');
+    await fillIn('[data-test-approve-cap="Team GitHub"] input', '501');
+    assert
+      .dom('[data-test-approve-save]')
+      .isDisabled('the cap is at most the share’s daily budget');
+    assert
+      .dom('[data-test-approve-cap="Team GitHub"]')
+      .includesText('from 1 to the daily budget of 500');
+    await fillIn('[data-test-approve-cap="Team GitHub"] input', '100');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.true(approval.anonymous);
+    assert.deepEqual(approval.anonymousCaps, { 'share-team': 100 });
+  });
+
+  test('a share already allowed for people who are not signed in asks for no cap again', async function (assert) {
+    serveShareBatch({
+      interactive: true,
+      anonymous: true,
+      anonymousDailyCap: 100,
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    await click('[data-test-approve-anonymous-tick]');
+    assert.dom('[data-test-approve-anonymous-note]').exists();
+    assert.dom('[data-test-approve-cap]').doesNotExist();
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.anonymous);
+    assert.strictEqual(approval.anonymousCaps, undefined);
+  });
+
+  test('a batch only personal keys fill offers no anonymous use', async function (assert) {
+    await openWith([operation('listPRs', 'List PRs')]);
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-anonymous]').doesNotExist();
   });
 });
