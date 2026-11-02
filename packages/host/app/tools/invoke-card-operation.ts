@@ -7,24 +7,21 @@ import type {
 } from '@cardstack/runtime-common';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
 
+import {
+  BATCH_MEMBER,
+  assertPayloadSuppliesParams,
+  baseOf,
+  defNameOf,
+  invocableNames,
+  offeredHere,
+  type OperationsBucket,
+} from '../lib/card-operation-invocation';
 import HostBaseTool from '../lib/host-base-tool';
 
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type * as OperationsModule from '@cardstack/base/operations';
-
-// A bucket of callable operations, in the terms a name that arrived as data
-// reaches them by. `operations()` is overloaded per scope so a card author
-// gets the members their class carries and nothing else; a tool is handed the
-// name instead of writing it, so it reads the bucket as the record the
-// implementation answers with.
-type OperationsBucket = Record<string, unknown>;
-
-// The one member of a card's bucket that is not an operation: it opens a batch
-// and takes a builder rather than a payload. One tool call is one operation,
-// so it is neither offered nor invocable here.
-const BATCH_MEMBER = 'atomic';
 
 export default class InvokeCardOperationTool extends HostBaseTool<
   typeof BaseToolModule.InvokeCardOperationInput,
@@ -90,8 +87,10 @@ A write answers the card it wrote and the version that card now holds; a read an
       if (typeof bucket[name] !== 'function') {
         throw new Error(
           `"${name}" is not an operation ${defNameOf(card)} carries. It carries: ${invocableNames(
-            onInstance,
-            bucket,
+            [
+              { scope: 'instance', bucket: onInstance },
+              { scope: 'type', bucket },
+            ],
             declarations,
           ).join(', ')}`,
         );
@@ -184,69 +183,11 @@ A write answers the card it wrote and the version that card now holds; a read an
 // The behavior a name is built on. An author's declaration says which one; a
 // base operation carried by the def type is reached under the behavior's own
 // name.
-function baseOf(
-  name: string,
-  declarations: Record<string, OperationsModule.OperationDeclaration>,
-): BaseOperation {
-  return (declarations[name]?.base ?? name) as BaseOperation;
-}
-
-// Which names this tool invokes: the operations a type's author declared, and
-// the plain `create`.
-//
-// The behaviors every card carries - reading it, patching it, removing it,
-// appending to a collection - are left out although `operations()` offers
-// them, because each is already the job of a tool that describes its own
-// payload, and one of them removes a card. Offering them here would put a
-// delete of any card behind a name the caller supplies, on a tool whose
-// approval is decided once for every operation it carries rather than per
-// invocation. A `delete` an author declared stays reachable: that is a named
-// action its type published, which is what this tool is for.
-//
-// A query is left out for a different reason - it answers a live set of search
-// results rather than a value - and the batch member is not an operation at
-// all.
-function offeredHere(
-  name: string,
-  scope: 'instance' | 'type',
-  base: BaseOperation,
-  declarations: Record<string, OperationsModule.OperationDeclaration>,
-): boolean {
-  if (declarations[name]) {
-    return base !== 'query';
-  }
-  return base === 'create' && scope === 'type';
-}
-
 // Where a behavior this tool does not invoke is reached instead.
 const ELSEWHERE: Partial<Record<BaseOperation, string>> = {
   read: 'Read a card with get-card.',
   update: 'Change a card with patch-fields or patch-card-instance.',
 };
-
-// Every name this tool will invoke on the card, for a caller that named one it
-// will not.
-function invocableNames(
-  onInstance: OperationsBucket,
-  onType: OperationsBucket,
-  declarations: Record<string, OperationsModule.OperationDeclaration>,
-): string[] {
-  let names = new Set<string>();
-  for (let [scope, bucket] of [
-    ['instance', onInstance],
-    ['type', onType],
-  ] as const) {
-    for (let name of Object.keys(bucket)) {
-      if (name === BATCH_MEMBER) {
-        continue;
-      }
-      if (offeredHere(name, scope, baseOf(name, declarations), declarations)) {
-        names.add(name);
-      }
-    }
-  }
-  return [...names].sort();
-}
 
 // What a minted card is given beside its field values: where it lands, and the
 // cards it is created linking to. Both belong to a card being created rather
@@ -288,48 +229,4 @@ function payloadOf(
 ): Record<string, unknown> | undefined {
   let payload = input.payload as Record<string, unknown> | null | undefined;
   return payload ?? undefined;
-}
-
-// Every param the declaration names needs a value, which is the realm's own
-// rule for an invocation; asking it here means a caller hears which name it
-// left out without a request being sent or a write lock being taken.
-//
-// A declaration carrying an `input` program is exempt, and that is the whole
-// reason this is not a blanket check: `input` runs over the payload before the
-// realm's params check and is most often there precisely to supply a param the
-// caller did not send, so refusing here would refuse an invocation the realm
-// would have carried out.
-function assertPayloadSuppliesParams(
-  name: string,
-  declaration: OperationsModule.OperationDeclaration | undefined,
-  payload: Record<string, unknown> | undefined,
-): void {
-  if (!declaration?.params || declaration.input) {
-    return;
-  }
-  for (let key of Object.keys(declaration.params)) {
-    if (own(payload, key) === undefined) {
-      throw new Error(
-        `operation "${name}" requires a value for params("${key}")`,
-      );
-    }
-  }
-}
-
-function own(
-  record: Record<string, unknown> | undefined,
-  key: string,
-): unknown {
-  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) {
-    return undefined;
-  }
-  return record[key];
-}
-
-// The def as a refusal names it. The class's own name first: `displayName` is
-// declared on `CardDef` itself, so a type that does not set one of its own
-// reports as "Card", which tells a caller nothing about the card they named.
-function defNameOf(card: CardDef): string {
-  let owner = card.constructor as { displayName?: string; name?: string };
-  return owner.name || owner.displayName || 'this card';
 }
