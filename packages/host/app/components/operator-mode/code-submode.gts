@@ -62,6 +62,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -71,6 +72,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import {
   cardDefinitionsInModule,
+  cardsInEntries,
   cardsUsingDefinitionsQuery,
 } from '@cardstack/host/utils/cards-using-module';
 import type { SearchResultKind } from '@cardstack/host/utils/search/types';
@@ -168,6 +170,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service('file-upload') declare private fileUpload: FileUploadService;
   @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
@@ -529,24 +532,25 @@ export default class CodeSubmode extends Component<Signature> {
       let definitions = await cardDefinitionsInModule(
         this.loaderService.loader,
         file,
+        (identifier) => this.network.virtualNetwork.toURLHref(identifier),
       );
       if (definitions.length === 0) {
         return;
       }
-      let { instances, meta } = await this.store.searchWithMeta(
+      let doc = await this.store.searchEntries(
         cardsUsingDefinitionsQuery(definitions, {
           number: 0,
           size: CARDS_USING_LIST_LENGTH,
         }),
         [realmURL],
       );
-      let total = meta.page.total ?? instances.length;
+      let total = doc.meta.page.total;
       if (total > 0) {
         this.cardsUsingItemToDelete = {
           definitions,
           realmURL,
           total,
-          titles: instances.map((card) => card.cardTitle || 'Untitled card'),
+          titles: cardsInEntries(doc).map((card) => card.title),
         };
       }
     } catch (error) {
@@ -555,25 +559,26 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
+  // Every page is read before anything is deleted, so deleting never shifts
+  // the pages still to be read.
   private async idsOfCardsUsing({
     definitions,
     realmURL,
   }: CardsUsingDefinition) {
     let ids: string[] = [];
     for (let number = 0; ; number++) {
-      let cards = await this.store.search(
+      let doc = await this.store.searchEntries(
         cardsUsingDefinitionsQuery(definitions, {
           number,
           size: CARDS_USING_PAGE_SIZE,
         }),
         [realmURL],
       );
-      for (let card of cards) {
-        if (card.id) {
-          ids.push(card.id);
-        }
-      }
-      if (cards.length < CARDS_USING_PAGE_SIZE) {
+      ids.push(...cardsInEntries(doc).map((card) => card.id));
+      if (
+        doc.data.length === 0 ||
+        (number + 1) * CARDS_USING_PAGE_SIZE >= doc.meta.page.total
+      ) {
         return ids;
       }
     }
@@ -630,6 +635,8 @@ export default class CodeSubmode extends Component<Signature> {
       });
     } else {
       let file = item;
+      // Only the cards the dialog listed when Delete was pressed go with it.
+      this.findCardsUsingItemToDelete.cancelAll();
       let cardsUsing = this.alsoDeleteCardsUsingItem
         ? this.cardsUsingItemToDelete
         : undefined;

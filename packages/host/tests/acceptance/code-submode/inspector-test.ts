@@ -1306,6 +1306,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     let notFound = await adapter.openFile('pet.gts');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert.notStrictEqual(
+      await adapter.openFile('Pet/mango.json'),
+      undefined,
+      'unticking keeps the cards that use the definition',
+    );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
