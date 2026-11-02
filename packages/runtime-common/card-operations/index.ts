@@ -289,6 +289,8 @@ export {
   type CallApiCredential,
   type CallApiFilledSlot,
   type CallApiGrantUse,
+  type CallApiUse,
+  type CallApiUseSubject,
   type CallApiMode,
   type CallApiReadinessLookup,
   type CallApiRequest,
