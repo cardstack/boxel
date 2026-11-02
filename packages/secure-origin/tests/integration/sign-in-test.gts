@@ -1294,7 +1294,7 @@ module('Integration | sign-in', function (hooks) {
       );
     });
 
-    test('signing out ends the window session and goes back to the app', async function (assert) {
+    test('signing out ends the window session and goes on to sign in, handing back to the app', async function (assert) {
       storeSession(SESSION);
       sessionStorage.setItem('boxel-secure-return', RETURN);
       let server = serve({
@@ -1302,7 +1302,17 @@ module('Integration | sign-in', function (hooks) {
       });
       visitShell(`sign-out${returnFragment(`${APP}/`)}`);
       await render(SignOutPage);
-      assert.deepEqual(navigations, [{ how: 'replace', url: `${APP}/` }]);
+      assert
+        .dom('[data-test-secure-signing-out]')
+        .hasText('Signing you out…', 'says so as the app’s own page does');
+      assert
+        .dom('[data-test-secure-signing-out] .boxel-loading-indicator')
+        .exists('with the same spinner');
+      assert.deepEqual(
+        navigations,
+        [{ how: 'replace', url: '/secure/sign-in' }],
+        'straight to the sign-in page, never back to the app first',
+      );
       assert.true(
         server.requests.some(
           (r) => r.method === 'DELETE' && r.path === '_secure-session',
@@ -1310,7 +1320,35 @@ module('Integration | sign-in', function (hooks) {
         'the session is ended on the server',
       );
       assert.strictEqual(localStorage.getItem('boxel-secure-session'), null);
-      assert.strictEqual(sessionStorage.getItem('boxel-secure-return'), null);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        `${APP}/`,
+        'the sign-in that follows hands back to the app page sign-out named',
+      );
+      assert.strictEqual(
+        window.location.hash,
+        '',
+        '`return` is taken out of the address',
+      );
+    });
+
+    test('the sign-in page after signing out shows the form, keeping the app page to hand back to', async function (assert) {
+      storeSession(SESSION);
+      serve(NO_GOOGLE, {
+        'DELETE _secure-session': () => ({ status: 200, body: {} }),
+      });
+      visitShell(`sign-out${returnFragment(`${APP}/`)}`);
+      await render(SignOutPage);
+      // The route transition the sign-out page makes lands on the sign-in
+      // page at its bare address.
+      visitShell('sign-in');
+      await render(SignInPage);
+      assert.dom('[data-test-secure-sign-in-form]').exists('signed out');
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        `${APP}/`,
+        'a sign-in page opened with no `return` keeps the one sign-out kept',
+      );
     });
 
     test('signing out ends a window session past its stored end too', async function (assert) {
@@ -1331,11 +1369,17 @@ module('Integration | sign-in', function (hooks) {
 
     test('signing out never goes to an origin the realm server does not list', async function (assert) {
       serve({});
+      sessionStorage.setItem('boxel-secure-return', RETURN);
       visitShell(`sign-out${returnFragment('https://elsewhere.test/')}`);
       await render(SignOutPage);
       assert.deepEqual(navigations, [
         { how: 'replace', url: '/secure/sign-in' },
       ]);
+      assert.strictEqual(
+        sessionStorage.getItem('boxel-secure-return'),
+        null,
+        'the sign-in that follows hands over to nothing',
+      );
     });
   });
 });

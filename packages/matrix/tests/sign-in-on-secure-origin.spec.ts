@@ -161,12 +161,27 @@ test.describe('Sign in on the secure origin', () => {
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1, { timeout: 60_000 });
 
+    // Every document the tab loads from here on.
+    let loaded: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        loaded.push(request.url());
+      }
+    });
+
     await logout(page);
 
-    // Through the secure origin's sign-out, back to the app signed out, and
-    // so on to sign in again.
+    // Through the secure origin's sign-out straight on to its sign-in, never
+    // back through the app, which signed out would only send the user there.
     await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
+    expect(
+      loaded.filter((url) => new URL(url).origin === APP_ORIGIN),
+      'the app is not loaded again between sign-out and the sign-in form',
+    ).toEqual([]);
     expect(
       await page.evaluate(
         (key) => localStorage.getItem(key),
@@ -175,6 +190,13 @@ test.describe('Sign in on the secure origin', () => {
       "the secure origin's session is gone",
     ).toBeNull();
     await snapshot(testInfo, page, 'signed out, at the secure sign-in');
+
+    // Signing in again there hands back to the app's root.
+    await signInOnSecurePage(page, username, password);
+    await page.waitForURL((url) => url.origin === APP_ORIGIN);
+    await expect(page.locator('[data-test-workspace-chooser]')).toBeVisible({
+      timeout: 60_000,
+    });
   });
 
   test("the secure window stays signed in past its first week while the app's session lasts", async ({
