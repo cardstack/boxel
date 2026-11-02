@@ -164,13 +164,18 @@ export interface KeyUsage {
   // The start of the current UTC month: the counts below are since then.
   since: string;
   calls: number;
+  // `caller` is null for someone not signed in, and for someone withheld
+  // from the viewer (`withheld`).
   lastUse: {
     at: string;
     caller: string | null;
+    withheld?: true;
     operation: string;
     outcome: CallApiUse['outcome'];
   } | null;
-  topCallers: { caller: string | null; calls: number }[];
+  // The callers who used it most. Every caller withheld from the viewer is
+  // counted together, in one entry.
+  topCallers: { caller: string | null; calls: number; withheld?: true }[];
   refusals: { code: string; count: number }[];
   vendorOutcomes: {
     status: number;
@@ -194,14 +199,64 @@ function startOfMonth(now = new Date()): string {
   ).toISOString();
 }
 
+// Which callers the viewer may be shown. A person's Matrix id is shown only
+// to people who share a realm with them (ADR 011 §1.1): a share's callers
+// include readers admitted by a `*` or `users` row, or a policy grant, none of
+// which names anyone. So a share's caller is shown when it is the viewer, or
+// when a permission row in the share's realm names both the viewer and them,
+// the rule the share listings follow. A personal key serves only its owner's
+// calls, so only the owner, who is the viewer, is ever shown.
+async function namedCallers(
+  dbAdapter: DBAdapter,
+  viewer: string,
+  realmURL: string | undefined,
+  callers: string[],
+): Promise<Set<string>> {
+  let shown = new Set([viewer]);
+  let others = callers.filter((caller) => caller !== viewer);
+  if (!realmURL || others.length === 0) {
+    return shown;
+  }
+  let list = (values: string[]) =>
+    values.flatMap((value, i) => [...(i > 0 ? [', '] : []), param(value)]);
+  let named = new Set(
+    (
+      await query(dbAdapter, [
+        `SELECT username FROM realm_user_permissions WHERE realm_url = `,
+        param(realmURL),
+        ` AND username IN (`,
+        ...list([viewer, ...others]),
+        `)`,
+      ])
+    ).map((row) => row.username as string),
+  );
+  if (named.has(viewer)) {
+    for (let caller of others) {
+      if (named.has(caller)) {
+        shown.add(caller);
+      }
+    }
+  }
+  return shown;
+}
+
 async function usageOf(
   dbAdapter: DBAdapter,
   subject: CallApiUseSubject,
   {
+    viewer,
+    realmURL,
     limits,
     grants,
     canEditLimits,
-  }: { limits: KeyLimits; grants: UsageGrant[]; canEditLimits: boolean },
+  }: {
+    viewer: string;
+    // The share's realm; absent for a personal key.
+    realmURL?: string;
+    limits: KeyLimits;
+    grants: UsageGrant[];
+    canEditLimits: boolean;
+  },
 ): Promise<KeyUsage> {
   let since = startOfMonth();
   let where = () => [
@@ -222,8 +277,19 @@ async function usageOf(
   let callers = await query(dbAdapter, [
     `SELECT caller, COUNT(*) AS calls`,
     ...where(),
-    ` GROUP BY caller ORDER BY calls DESC, caller LIMIT ${TOP_CALLERS}`,
+    ` GROUP BY caller`,
   ]);
+  let shown = await namedCallers(
+    dbAdapter,
+    viewer,
+    realmURL,
+    [
+      ...callers.map((row) => row.caller as string | null),
+      (last?.caller as string | null) ?? null,
+    ].filter((caller): caller is string => typeof caller === 'string'),
+  );
+  let isWithheld = (caller: string | null) =>
+    caller !== null && !shown.has(caller);
   let refusals = await query(dbAdapter, [
     `SELECT code, COUNT(*) AS count`,
     ...where(),
@@ -239,18 +305,8 @@ async function usageOf(
     budgets: await budgetUse(dbAdapter, subject, limits),
     since,
     calls: Number(count?.calls ?? 0),
-    lastUse: last
-      ? {
-          at: iso(last.created_at)!,
-          caller: (last.caller as string | null) ?? null,
-          operation: last.operation as string,
-          outcome: last.outcome as CallApiUse['outcome'],
-        }
-      : null,
-    topCallers: callers.map((row) => ({
-      caller: (row.caller as string | null) ?? null,
-      calls: Number(row.calls),
-    })),
+    lastUse: last ? lastUseOf(last, isWithheld) : null,
+    topCallers: topCallersOf(callers, isWithheld),
     refusals: refusals.map((row) => ({
       code: row.code as string,
       count: Number(row.count),
@@ -266,6 +322,52 @@ async function usageOf(
     grants,
     canEditLimits,
   };
+}
+
+function lastUseOf(
+  row: Record<string, unknown>,
+  isWithheld: (caller: string | null) => boolean,
+): NonNullable<KeyUsage['lastUse']> {
+  let caller = (row.caller as string | null) ?? null;
+  let withheld = isWithheld(caller);
+  return {
+    at: iso(row.created_at)!,
+    caller: withheld ? null : caller,
+    ...(withheld ? { withheld: true as const } : {}),
+    operation: row.operation as string,
+    outcome: row.outcome as CallApiUse['outcome'],
+  };
+}
+
+// The callers who used it most, with every caller withheld from the viewer
+// counted together, most calls first and then by id.
+function topCallersOf(
+  rows: Record<string, unknown>[],
+  isWithheld: (caller: string | null) => boolean,
+): KeyUsage['topCallers'] {
+  let entries: KeyUsage['topCallers'] = [];
+  let withheldCalls = 0;
+  for (let row of rows) {
+    let caller = (row.caller as string | null) ?? null;
+    let calls = Number(row.calls);
+    if (isWithheld(caller)) {
+      withheldCalls += calls;
+    } else {
+      entries.push({ caller, calls });
+    }
+  }
+  if (withheldCalls > 0) {
+    entries.push({ caller: null, calls: withheldCalls, withheld: true });
+  }
+  // Named callers by id, then someone not signed in, then everyone withheld.
+  let order = (entry: KeyUsage['topCallers'][number]) =>
+    entry.caller !== null ? `0${entry.caller}` : entry.withheld ? '2' : '1';
+  return entries
+    .sort((a, b) => {
+      let [x, y] = [order(a), order(b)];
+      return b.calls - a.calls || (x < y ? -1 : x > y ? 1 : 0);
+    })
+    .slice(0, TOP_CALLERS);
 }
 
 function grantOf(row: Record<string, unknown>): UsageGrant {
@@ -317,6 +419,8 @@ export async function shareUsage(
     dbAdapter,
     { kind: 'share', id: shareId },
     {
+      viewer: user,
+      realmURL: share.realm_url as string,
       limits: limitsOf(share),
       grants: grants.map(grantOf),
       canEditLimits: share.owner === user,
@@ -351,6 +455,11 @@ export async function userKeyUsage(
   return usageOf(
     dbAdapter,
     { kind: 'key', id: keyId },
-    { limits: limitsOf(key), grants: grants.map(grantOf), canEditLimits: true },
+    {
+      viewer: owner,
+      limits: limitsOf(key),
+      grants: grants.map(grantOf),
+      canEditLimits: true,
+    },
   );
 }
