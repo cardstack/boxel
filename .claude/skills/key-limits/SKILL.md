@@ -163,3 +163,35 @@ FROM key_limit_notices WHERE share_id = '<id>' ORDER BY created_at DESC;
 
 A notice that can't be recorded is logged on `realm:key-limits` and costs the
 call nothing.
+
+## Usage
+
+Each `callApi` invocation whose binding resolved to a share or a personal key
+is one row in `key_uses`, against that share (`share_id`) or key (`key_id`),
+interactive and pipeline alike (`mode`), whether the vendor answered
+(`outcome` `sent`, with its `status` and `host`) or the call was refused
+(`refused`, with its `code`). A refusal raised while the slots were being
+filled is recorded against the one share or key that refused it; one raised
+before any binding was found (`binding-not-approved`) names no key and is only
+on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
+the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each write
+removes its subject's older rows. The code is `lib/key-uses.ts`. Like the other
+key tables, it's withheld from `readonly_role` and from the SQLite dump.
+
+`GET /_key-shares/:id/usage` (the share's realm's direct writers) and
+`GET /_user-keys/:id/usage` (the key's owner) answer, for the current UTC
+month: calls, the last use, the top five callers, refusals by code and the
+vendor's answers by status (a 403 marked `vendor-forbidden`), plus the budgets
+spent from the limiter's own counters, the grants and the limits. Anyone else
+gets 404, including the owner of a share suspended because they lost write. A
+share's caller is named only to a viewer whom a permission row in the share's
+realm names together with that caller (ADR 011). Every other caller is merged
+into one entry, `withheld: true`.
+
+```sql
+-- A share's refusals this month, by code.
+SELECT code, COUNT(*) FROM key_uses
+WHERE share_id = '<share-id>' AND outcome = 'refused'
+  AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+GROUP BY code;
+```
