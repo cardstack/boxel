@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { randomBytes } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -566,12 +567,15 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a refusal of an operation with a very long name is still recorded and collapsed', async function (assert) {
     let key = await addKey();
-    // Longer than a B-tree index row may be, were the name indexed as is.
-    let operation = 'o'.repeat(4000);
+    // Longer than a B-tree index row may be, were the names indexed as is.
+    // Random, because Postgres compresses a value before it puts it in an
+    // index row, and a repetitive one would fit however long it is.
+    let long = () => randomBytes(2000).toString('hex');
+    let operation = long();
     let refusal = {
-      realmURL: `${realmURL.href}${'r'.repeat(4000)}/`,
+      realmURL: `${realmURL.href}${long()}/`,
       operation,
-      caller: `@${'c'.repeat(4000)}:localhost`,
+      caller: `@${long()}:localhost`,
       mode: 'interactive' as const,
       url: null,
       outcome: 'refused' as const,
