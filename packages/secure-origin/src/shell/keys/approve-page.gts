@@ -144,16 +144,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           <strong>{{this.done.realm}}</strong>
           needs your approval.
         {{else}}
-          <strong data-test-approve-done-count>{{this.done.count}}</strong>
-          {{if (eq this.done.count 1) 'request' 'requests'}}
-          on
           <strong>{{this.done.card}}</strong>
           in
           <strong>{{this.done.realm}}</strong>
+          can make
+          <strong data-test-approve-done-count>{{this.done.count}}</strong>
+          {{if (eq this.done.count 1) 'call' 'calls'}}
+          with your key
           {{#if this.done.interactive}}
-            can use your key in scheduled pipelines and when the card is opened.
+            on its schedule and whenever it’s opened, without asking you again.
           {{else}}
-            can use your key in scheduled pipelines.
+            on its schedule, without asking you again.
           {{/if}}
         {{/if}}
       </DonePage>
@@ -162,15 +163,21 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         <EditPage @heading={{this.heading}} data-test-approve>
           <:intro>
             {{#if @review}}
-              The card changed what it sends in these requests since you
-              approved them. Nothing is sent until you approve them again.
+              This card changed these calls since you approved them. Boxel won’t
+              make them until you approve them again.
             {{else}}
-              Approve once for every request this card makes with your key here.
-              Each is used only as you see it below: if the card changes one, it
-              asks you again.
+              This card calls another service with your key. You approve these
+              calls once,
+              {{#if this.forOneCard}}
+                for this card.
+              {{else}}
+                and the approval covers every card of this kind in the
+                workspace.
+              {{/if}}
+              After that, Boxel makes them exactly as shown below without asking
+              you again. If the card changes a call, Boxel asks you to approve
+              it again before making it.
             {{/if}}
-            Choose whether approved requests run only in the card’s scheduled
-            pipelines, or also when the card is opened.
           </:intro>
           <:default>
             {{#if this.summaryContext}}
@@ -180,7 +187,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               />
             {{/if}}
             <RadioChoices
-              @label='Where these requests run'
+              @label='When calls run'
               @icon={{Globe}}
               @name='approve-use'
               @choices={{this.useChoices}}
@@ -266,8 +273,8 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{group.destination.host}}{{group.destination.path}}
                 </div>
                 {{#if (eq group.destination.path '/')}}
-                  <p class='note' data-test-approve-whole-host>Any request to
-                    this host can be sent with the key.</p>
+                  <p class='note' data-test-approve-whole-host>Boxel can send
+                    the key with any call to this host.</p>
                 {{/if}}
                 {{#each (this.newGrantsAt group.destination.href) as |grant|}}
                   <p
@@ -308,7 +315,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           <span
                             class='pipelines-only'
                             data-test-approve-pipelines-only
-                          >Approved for pipelines</span>
+                          >Approved for the schedule</span>
                         {{/if}}
                       </label>
                       <details class='request'>
@@ -357,11 +364,12 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
             {{#if this.remaining}}
               <p class='more' data-test-approve-remaining>
+                This card has
                 {{this.remaining}}
                 more
-                {{if (eq this.remaining 1) 'request' 'requests'}}
-                on this card need approving. They’re shown once these are
-                approved: open this window from the card again.
+                {{if (eq this.remaining 1) 'call' 'calls'}}
+                to approve. Approve these, then open this window from the card
+                again to see the rest.
               </p>
             {{/if}}
             {{#if this.interactive}}
@@ -371,9 +379,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   {{#each this.confirmations as |line|}}
                     <p data-test-approve-confirmation>{{line}}</p>
                   {{/each}}
-                  <p class='interactive-limits'>Calls from open cards count
-                    against each key’s limits: how often one person can call,
-                    and how many calls a day it serves.</p>
+                  <p class='interactive-limits'>Each key’s limits cap these
+                    calls: how often one person can make them, and how many the
+                    key makes in a day.</p>
                 </div>
               </div>
               {{#each this.budgetShares as |share|}}
@@ -396,9 +404,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     inputmode='numeric'
                     data-test-approve-budget-input
                   />
-                  <span class='note budget-note'>Calls a day this share serves,
-                    across everyone who opens a card with it. It’s the first
-                    time this share is allowed in open cards, so set it to what
+                  <span class='note budget-note'>The most calls this share makes
+                    in a day, for everyone who opens a card that uses it. Opened
+                    cards haven’t used this share before, so set this to what
                     your plan with the service allows.</span>
                 </FieldContainer>
               {{/each}}
@@ -413,7 +421,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             <div class='confirm'>
               {{#if this.newGrants.length}}
                 <p class='confirm-note' data-test-approve-also-sends>
-                  This approves the requests shown above, including sending
+                  Approving lets Boxel make the calls above, and send
                   {{#each this.newGrantNotes as |note index|}}{{#if index}}
                       and
                     {{/if}}<strong>{{note.keyName}}</strong>
@@ -688,13 +696,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private useChoices: RadioChoice[] = [
     {
       value: 'pipelines',
-      label: 'Only in scheduled pipelines',
-      hint: 'The card’s pipelines run these requests and save what comes back. Nothing runs them when the card is opened.',
+      label: 'On a schedule only',
+      hint: 'The card’s scheduled pipelines make these calls and save the results to the card. Opening the card makes no calls.',
     },
     {
       value: 'interactive',
-      label: 'Also when I open this card',
-      hint: 'The card runs these requests in your browser too, and so do the AI assistant and the CLI.',
+      label: 'On a schedule and when the card is opened',
+      hint: 'The card’s pipelines make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
     },
   ];
 
@@ -704,7 +712,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   }
 
   private get heading() {
-    return this.args.review ? 'Review changed requests' : 'Approve requests';
+    return this.args.review ? 'Review changed calls' : 'Approve calls';
   }
   private get loading() {
     return this.page.state.name === 'loading';
@@ -739,6 +747,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
   private get interactive() {
     return this.form.use === 'interactive';
+  }
+
+  // Whether what is shown is approved for one card (an operation approved
+  // per instance) rather than for every card of its kind.
+  private get forOneCard() {
+    return (this.batch?.groups ?? []).some((g) =>
+      g.operations.some((o) => o.instance !== null),
+    );
   }
 
   private get remaining() {
@@ -815,7 +831,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
   private get saveLabel() {
     let count = this.tickedOperations.length;
-    return `Approve ${count} ${count === 1 ? 'request' : 'requests'}`;
+    return `Approve ${count} ${count === 1 ? 'call' : 'calls'}`;
   }
 
   private get submitDisabled() {
@@ -871,7 +887,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       if (!this.opened.target || !request) {
         throw new LinkError(
           'this page names no card',
-          'This link doesn’t name a card whose requests to approve.',
+          'This link doesn’t name a card whose calls to approve.',
         );
       }
       let [context, batch] = await Promise.all([
@@ -1004,7 +1020,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           chosen: { ...this.form.chosen },
           ticked: new Set(this.form.ticked),
         });
-        this.form.error = `${failureMessage(e)} The requests below are as the card sends them now.`;
+        this.form.error = `${failureMessage(e)} The calls below are as the card makes them now.`;
         return;
       }
       this.form.error = failureMessage(e);
@@ -1016,7 +1032,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
 export class ApprovePage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Approve requests' @page='approve' as |api|>
+    <KeysWindow @title='Boxel · Approve calls' @page='approve' as |api|>
       <Approve @api={{api}} @review={{false}} />
     </KeysWindow>
   </template>
@@ -1025,7 +1041,7 @@ export class ApprovePage extends Component {
 export class ReviewChangesPage extends Component {
   <template>
     <KeysWindow
-      @title='Boxel · Review changed requests'
+      @title='Boxel · Review changed calls'
       @page='review-changes'
       as |api|
     >

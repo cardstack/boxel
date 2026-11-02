@@ -300,9 +300,9 @@ export type ApprovalUse = 'pipelines' | 'interactive';
 // approval reaches every reader of the realm.
 export const INTERACTIVE_CONFIRMATION = {
   userKey:
-    'Any card you open can run these operations as you and read what comes back.',
+    'Any card you open can make these calls as you and read what comes back.',
   apiKey:
-    'Any card a reader of this realm opens, from any realm, can run these operations with this key and read the responses. Allow this only for keys whose responses aren’t private, and that are scoped read-only at the vendor.',
+    'Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren’t private, and that the service limits to reading.',
 } as const;
 
 // The batch as the page shows it for `use`. An operation approved for

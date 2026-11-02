@@ -342,10 +342,10 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-also-sends]')
       .hasText(
-        'This approves the requests shown above, including sending GitHub token to uploads.github.com for the first time.',
+        'Approving lets Boxel make the calls above, and send GitHub token to uploads.github.com for the first time.',
         'the one confirmation sums up what it approves',
       );
-    assert.dom('[data-test-approve-save]').hasText('Approve 4 requests');
+    assert.dom('[data-test-approve-save]').hasText('Approve 4 calls');
     await click('[data-test-approve-save]');
     await settled();
 
@@ -401,7 +401,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-new-grant]')
       .doesNotExist('nothing is sent to uploads.github.com, so no grant');
     assert.dom('[data-test-approve-also-sends]').doesNotExist();
-    assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+    assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
     await click('[data-test-approve-save]');
     await settled();
     assert.deepEqual(
@@ -437,7 +437,7 @@ module('Integration | approve pages', function (hooks) {
       assert
         .dom('[data-test-approve-key="Another token"] input')
         .isChecked('the key the CLI named starts chosen');
-      assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+      assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
 
       await click('[data-test-approve-save]');
@@ -487,7 +487,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-also-sends]')
       .includesText(
-        'sending Another token to api.github.com, uploads.github.com for the first time',
+        'send Another token to api.github.com, uploads.github.com for the first time',
       );
   });
 
@@ -533,7 +533,7 @@ module('Integration | approve pages', function (hooks) {
         .attributes.review,
       'review asks for the changed operations only',
     );
-    assert.dom('[data-test-keys-heading]').hasText('Review changed requests');
+    assert.dom('[data-test-keys-heading]').hasText('Review changed calls');
     assert.dom('[data-test-approve-changed]').hasText('Changed');
     assert
       .dom('[data-test-approve-diff-field]')
@@ -562,7 +562,7 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert
       .dom('[data-test-approve-remaining]')
-      .includesText('3 more requests on this card need approving');
+      .includesText('This card has 3 more calls to approve');
   });
 
   test('a batch with nothing in it says so', async function (assert) {
@@ -934,10 +934,10 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-confirmation]')
       .exists({ count: 1 })
       .hasText(
-        'Any card you open can run these operations as you and read what comes back.',
+        'Any card you open can make these calls as you and read what comes back.',
       );
     assert.dom('[data-test-approve-budget]').doesNotExist();
-    assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+    assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
 
     await click('[data-test-approve-save]');
     await settled();
@@ -1020,7 +1020,7 @@ module('Integration | approve pages', function (hooks) {
       .dom(
         '[data-test-approve-operation="listPRs"] [data-test-approve-pipelines-only]',
       )
-      .hasText('Approved for pipelines');
+      .hasText('Approved for the schedule');
   });
 
   test('a batch whose every request was last approved for interactive use starts on it, so approving again keeps it', async function (assert) {

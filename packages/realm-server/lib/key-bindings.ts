@@ -1342,7 +1342,7 @@ async function checkedBindings(
           403,
           'interactive-use-not-approved',
           'Interactive use not approved',
-          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI. The key's owner can allow that in the approval window, under "Also when I open this card"`,
+          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI. The key's owner can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
           slot,
         );
       case 'credential-rejected':

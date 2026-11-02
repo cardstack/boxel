@@ -2605,7 +2605,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-replace-key-unbound]')
         .hasText(
-          'None of your keys is approved for this request yet, so there is nothing to replace.',
+          'None of your keys is approved for this call yet, so there is nothing to replace.',
         );
     });
 

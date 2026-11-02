@@ -129,9 +129,9 @@ interface ApproveOptions {
 // realm. The secure window's approve page says the same.
 export const INTERACTIVE_CONFIRMATION = {
   userKey:
-    'Any card you open can run these operations as you and read what comes back.',
+    'Any card you open can make these calls as you and read what comes back.',
   apiKey:
-    "Any card a reader of this realm opens, from any realm, can run these operations with this key and read the responses. Allow this only for keys whose responses aren't private, and that are scoped read-only at the vendor.",
+    "Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren't private, and that the service limits to reading.",
 } as const;
 
 // `--daily-budget`: a whole number of calls, at least one.
@@ -291,7 +291,7 @@ function printBatch(
 ): void {
   say(
     ctx,
-    `Approving ${planned.length} ${planned.length === 1 ? 'request' : 'requests'} of ${batch.card.name} in ${batch.realm.name} (${batch.realm.url}):`,
+    `Approving ${planned.length} ${planned.length === 1 ? 'call' : 'calls'} that ${batch.card.name} in ${batch.realm.name} (${batch.realm.url}) makes:`,
   );
   let byDestination = new Map<string, Planned[]>();
   for (let p of planned) {
@@ -341,7 +341,7 @@ function printBatch(
     say(ctx, '');
     say(
       ctx,
-      '  These requests also run when a card is opened (in the browser, the AI assistant or the CLI), not only in its pipelines:',
+      '  With --interactive, the card makes these calls on its schedule and whenever it is opened: in the browser, from the AI assistant, or from the CLI.',
     );
     let kinds = new Set(planned.flatMap((p) => p.fills.map((f) => f.kind)));
     for (let kind of ['userKey', 'apiKey'] as const) {
@@ -349,10 +349,7 @@ function printBatch(
         say(ctx, `  ${FG_YELLOW}${INTERACTIVE_CONFIRMATION[kind]}${RESET}`);
       }
     }
-    say(
-      ctx,
-      `  ${DIM}Calls from open cards count against each key's limits.${RESET}`,
-    );
+    say(ctx, `  ${DIM}Each key's limits cap these calls.${RESET}`);
   }
   let remaining =
     batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
@@ -360,7 +357,7 @@ function printBatch(
     say(ctx, '');
     say(
       ctx,
-      `  ${DIM}${remaining} more need approving after these; run it again for them.${RESET}`,
+      `  ${DIM}${remaining} more ${remaining === 1 ? 'call needs' : 'calls need'} approving after these; run it again for them.${RESET}`,
     );
   }
   say(ctx, '');
@@ -612,7 +609,7 @@ export async function keysApprove(
     let result: ApproveResult = { approved, via: 'cli' };
     emit(ctx, result, () => {
       console.log(
-        `${FG_GREEN}Approved ${planned.length} ${planned.length === 1 ? 'request' : 'requests'} of ${batch.card.name}.${RESET}`,
+        `${FG_GREEN}Approved ${planned.length} ${planned.length === 1 ? 'call' : 'calls'} that ${batch.card.name} makes.${RESET}`,
       );
     });
     return result;
@@ -683,7 +680,7 @@ export async function keysApprove(
   emit(ctx, result, () => {
     let count = new Set(approved.map((b) => b.operation)).size;
     console.log(
-      `${FG_GREEN}Approved ${count} ${count === 1 ? 'request' : 'requests'} of ${batch.card.name} in the secure window.${RESET}`,
+      `${FG_GREEN}Approved ${count} ${count === 1 ? 'call' : 'calls'} that ${batch.card.name} makes, in the secure window.${RESET}`,
     );
   });
   return result;
