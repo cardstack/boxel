@@ -343,7 +343,7 @@ export function offersAnonymous(operations: BatchOperation[]): boolean {
   return operations.some((o) => o.slots.some((s) => s.key === 'apiKey'));
 }
 
-// Whether anonymous use starts ticked: for the CLI's `--anonymous`, where the
+// Whether anyone starts chosen to use the shares: for the CLI's `--anonymous`, where the
 // batch holds nothing but share operations approved for signed-in people
 // only, or where any share slot in the batch was last approved for it, so
 // approving the batch again never quietly stops a card serving visitors.
@@ -418,7 +418,7 @@ export function initialUse(
 
 // How many more requests need approving after these, for the choice made:
 // those approved for pipelines only count only for interactive use, and those
-// approved for signed-in people only only while anonymous use is ticked too.
+// approved for signed-in people only only while anyone is chosen to use the shares too.
 export function remainingFor(
   batch: ApprovalBatch,
   use: ApprovalUse,

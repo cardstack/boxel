@@ -1,7 +1,5 @@
 // A choice between a few options, as a row of a card's edit format: a radio
 // button for each, with its label and, under it, a line saying what it means.
-// The block, given each choice's value, draws what belongs under that option,
-// such as a further setting that applies only when it is chosen.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -26,7 +24,6 @@ interface Signature {
     selected: string;
     onSelect: (value: string) => void;
   };
-  Blocks: { default: [value: string] };
 }
 
 const RadioChoices: TemplateOnlyComponent<Signature> = <template>
@@ -54,19 +51,12 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
             {{/if}}
           </span>
         </label>
-        {{yield choice.value}}
       {{/each}}
     </fieldset>
   </FieldContainer>
 
   <style scoped>
     .choices {
-      /* Where a choice's text starts, past its radio: a setting the block
-         draws under a choice lines up with that choice's label. */
-      --radio-choice-indent: calc(
-        var(--radio-choice-input-size) + var(--boxel-sp-xs)
-      );
-      --radio-choice-input-size: 0.8125rem;
       margin: 0;
       padding: var(--boxel-sp-4xs) 0 0;
       border: 0;
@@ -89,8 +79,6 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
       cursor: pointer;
     }
     .choice input {
-      width: var(--radio-choice-input-size);
-      height: var(--radio-choice-input-size);
       margin: 0.1875rem 0 0;
       accent-color: var(--primary-ink);
     }

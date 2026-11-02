@@ -28,12 +28,13 @@
 // else.
 //
 // Under that second choice, for a batch a workspace's share fills, the user
-// can also let people who aren't signed in use the share. Ticking it adds its
-// confirmation to the batch's, says in each group that anyone can use the key
-// there, and asks for the anonymous cap of a share allowed it for the first
-// time: the calls a day everyone who isn't signed in makes with it, together.
-// A personal key is never offered for it. An operation approved for
-// signed-in people only is in the batch only while it is ticked.
+// also chooses who can use the share: only people who are signed in (where
+// the choice starts), or anyone, including people who aren't. Choosing anyone
+// adds its confirmation to the batch's, says in each group that anyone can
+// use the key there, and asks for the anonymous cap of a share allowed it for
+// the first time: the calls a day everyone who isn't signed in makes with it,
+// together. A personal key is never offered for it. An operation approved for
+// signed-in people only is in the batch only while anyone is chosen.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
@@ -42,7 +43,7 @@
 // that grants a key a destination it has none for, the operations the CLI
 // listed (`#operations=<name>,…`) start ticked and the others unticked, the
 // choice starts on interactive use for `--interactive` (`#interactive=1`),
-// anonymous use starts ticked for `--anonymous` (`#anonymous=1`), and
+// anyone is chosen for `--anonymous` (`#anonymous=1`), and
 // the page tells the CLI's listener when the approval is made, or that it was
 // cancelled when the user cancels or closes the window first (`KeysWindow`).
 // It hands over nothing but that: the CLI reads the approval from the realm
@@ -67,6 +68,7 @@ import Checkbox from '../../components/checkbox.gts';
 import Warning from '../../components/icons/warning.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Globe from '../../components/icons/globe.gts';
+import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import RadioTile from '../../components/radio-tile.gts';
@@ -213,28 +215,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
               @choices={{this.useChoices}}
               @selected={{this.form.use}}
               @onSelect={{this.chooseUse}}
-              as |value|
-            >
-              {{#if (eq value 'interactive')}}
-                {{#if this.offersAnonymousNow}}
-                  <label class='anonymous-use' data-test-approve-anonymous>
-                    <Checkbox
-                      @checked={{this.form.anonymous}}
-                      @onChange={{this.toggleAnonymous}}
-                      data-test-approve-anonymous-tick
-                    />
-                    <span class='anonymous-text'>
-                      <span class='anonymous-label'>Also for people who aren’t
-                        signed in</span>
-                      <span class='anonymous-hint'>Anyone who opens the card can
-                        make these calls with the workspace’s shared key, where
-                        the workspace lets them use the card. Your own keys are
-                        never used for them.</span>
-                    </span>
-                  </label>
-                {{/if}}
-              {{/if}}
-            </RadioChoices>
+            />
+            {{#if this.offersAnonymousNow}}
+              <RadioChoices
+                @label='Who can use it'
+                @icon={{Users}}
+                @name='approve-who'
+                @choices={{this.whoChoices}}
+                @selected={{if this.form.anonymous 'anyone' 'signed-in'}}
+                @onSelect={{this.chooseWho}}
+              />
+            {{/if}}
             {{#each this.choices as |choice|}}
               <FieldContainer
                 @tag='div'
@@ -369,7 +360,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                           <span
                             class='pipelines-only'
                             data-test-approve-signed-in-only
-                          >Approved for signed-in people</span>
+                          >Now for signed-in people only</span>
                         {{/if}}
                       </label>
                       <details class='request'>
@@ -478,10 +469,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     inputmode='numeric'
                     data-test-approve-cap-input
                   />
-                  <span class='note budget-note'>The most calls this share makes
-                    in a day, in total across everyone who isn’t signed in.
-                    These calls count toward the share’s daily budget too, so
-                    the rest of that budget stays for people who are signed in.</span>
+                  <span class='note budget-note'>How many calls people who
+                    aren’t signed in can make with this share each day, all
+                    together. Set it below the daily budget: the rest of that
+                    budget is kept for people who are signed in.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -566,26 +557,6 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       .empty,
       .note {
         margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        color: var(--muted-foreground);
-      }
-      .anonymous-use {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        margin-left: var(--radio-choice-indent);
-        cursor: pointer;
-      }
-      .anonymous-text {
-        display: grid;
-        min-width: 0;
-      }
-      .anonymous-label {
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-      }
-      .anonymous-hint {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
         color: var(--muted-foreground);
@@ -817,6 +788,19 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     },
   ];
 
+  private whoChoices: RadioChoice[] = [
+    {
+      value: 'signed-in',
+      label: 'Only people who are signed in',
+      hint: 'People with access to this workspace.',
+    },
+    {
+      value: 'anyone',
+      label: 'Anyone, including people who aren’t signed in',
+      hint: 'Anyone who can open the card can make these calls with the workspace’s shared key. Your own keys are never used for them.',
+    },
+  ];
+
   constructor(owner: Owner, args: ApproveArgs) {
     super(owner, args);
     this.load();
@@ -882,14 +866,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     );
   }
 
-  // The checkbox belongs to interactive use, so it is drawn only while that is
-  // chosen.
+  // Who can use the shares is asked only while calls run when the card is
+  // opened: a scheduled pipeline has no visitor.
   private get offersAnonymousNow() {
     return this.interactive && this.offersAnonymous;
   }
 
-  private toggleAnonymous = () => {
-    this.form.anonymous = !this.form.anonymous;
+  private chooseWho = (value: string) => {
+    this.form.anonymous = value === 'anyone';
     this.form.error = undefined;
   };
 

@@ -1339,20 +1339,20 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(approval.anonymous, undefined);
   });
 
-  test("letting people who aren't signed in use a share is a checkbox under interactive use, with its own confirmation and the share's anonymous cap", async function (assert) {
+  test("letting people who aren't signed in use a share is a choice of who can use it under interactive use, with its own confirmation and the share's anonymous cap", async function (assert) {
     serveShareBatch({ interactive: true, dailyBudget: 500 });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert
-      .dom('[data-test-approve-anonymous]')
+      .dom('[data-test-radio-choices="approve-who"]')
       .doesNotExist('it applies only to calls made when the card is opened');
     await click('[data-test-radio-choice="interactive"] input');
-    assert.dom('[data-test-approve-anonymous-tick]').isNotChecked();
+    assert.dom('[data-test-radio-choice="signed-in"] input').isChecked();
     assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
     assert.dom('[data-test-approve-cap]').doesNotExist();
 
-    await click('[data-test-approve-anonymous-tick]');
+    await click('[data-test-radio-choice="anyone"] input');
     assert
       .dom('[data-test-approve-confirmation]')
       .exists({ count: 2 }, 'it joins the batch’s confirmation');
@@ -1372,7 +1372,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-cap="Team GitHub"]')
       .hasTagName('label')
-      .includesText('in total across everyone who isn’t signed in');
+      .includesText('can make with this share each day, all together');
     assert.dom('[data-test-approve-cap="Team GitHub"] input').hasValue('');
     assert
       .dom('[data-test-approve-save]')
@@ -1403,7 +1403,7 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     await click('[data-test-radio-choice="interactive"] input');
-    await click('[data-test-approve-anonymous-tick]');
+    await click('[data-test-radio-choice="anyone"] input');
     assert.dom('[data-test-approve-anonymous-note]').exists();
     assert.dom('[data-test-approve-cap]').doesNotExist();
     await click('[data-test-approve-save]');
@@ -1413,7 +1413,7 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(approval.anonymousCaps, undefined);
   });
 
-  test('a batch holding only requests approved for signed-in people starts on anonymous use, each marked', async function (assert) {
+  test('a batch holding only requests approved for signed-in people starts on anyone using it, each marked', async function (assert) {
     serveShareBatch(
       { interactive: true, anonymous: false, dailyBudget: 500 },
       { signedInOnly: true },
@@ -1422,19 +1422,19 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    assert.dom('[data-test-approve-anonymous-tick]').isChecked();
+    assert.dom('[data-test-radio-choice="anyone"] input').isChecked();
     assert
       .dom(
         '[data-test-approve-operation="listTeamPRs"] [data-test-approve-signed-in-only]',
       )
-      .hasText('Approved for signed-in people');
-    await click('[data-test-approve-anonymous-tick]');
+      .hasText('Now for signed-in people only');
+    await click('[data-test-radio-choice="signed-in"] input');
     assert
       .dom('[data-test-approve-operation="listTeamPRs"]')
-      .doesNotExist('unticked, it needs nothing approved');
+      .doesNotExist('for signed-in people only, it needs nothing approved');
   });
 
-  test('a request last approved for people who are not signed in starts with anonymous use ticked, so approving it again keeps it', async function (assert) {
+  test('a request last approved for people who are not signed in starts on anyone using it, so approving it again keeps it', async function (assert) {
     serveShareBatch(
       { interactive: true, anonymous: true, anonymousDailyCap: 100 },
       { changedAnonymous: true },
@@ -1443,12 +1443,12 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
     assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
-    assert.dom('[data-test-approve-anonymous-tick]').isChecked();
+    assert.dom('[data-test-radio-choice="anyone"] input').isChecked();
   });
 
   test('a batch only personal keys fill offers no anonymous use', async function (assert) {
     await openWith([operation('listPRs', 'List PRs')]);
     await click('[data-test-radio-choice="interactive"] input');
-    assert.dom('[data-test-approve-anonymous]').doesNotExist();
+    assert.dom('[data-test-radio-choices="approve-who"]').doesNotExist();
   });
 });

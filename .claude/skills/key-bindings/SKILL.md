@@ -132,7 +132,7 @@ context does, with `review` for review-changes, and `interactive` to also
 answer slots approved for pipelines only (status `pipelines-only`), which
 the window shows only once the user allows interactive use, and `anonymous`
 to also answer share slots approved for signed-in people only (status
-`signed-in-only`), shown only while anonymous use is ticked. Within the batch's slot cap, the slots that need approving come first and
+`signed-in-only`), shown only while the window has anyone chosen to use it. Within the batch's slot cap, the slots that need approving come first and
 pipelines-only ones take what room is left, so they never hold one back;
 `remainingPipelinesOnly` counts those left out. It answers every `callApi`
 operation on that card definition, in that realm, that needs the caller's
