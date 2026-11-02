@@ -78,7 +78,7 @@ class PromptLibraryUsage extends GlimmerComponent {
       <:api as |Args|>
         <Args.Object
           @name='prompts'
-          @description='{ id, title, body, category?, tags?, icon? }. Title, body and tags are all searched. The icon is a boxel-ui export name resolved through icon-registry.'
+          @description='{ id, title, body, category?, tags?, icon? }. Title, body and tags are all searched. The icon is an icon-registry key, such as a boxel-icons name, resolved to its icon.'
           @value={{PROMPTS}}
         />
         <Args.Base
