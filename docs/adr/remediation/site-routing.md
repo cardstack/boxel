@@ -1,0 +1,40 @@
+# ADR site-routing remediation
+
+Places where the code does not meet
+[ADR site-routing](../site-routing.md)
+yet (ADR 001 §1.6). Each entry names a file by its path from the repository
+root, in backticks, and the requirement it breaks.
+
+- `packages/realm-server/lib/host-routes.ts` (`resolveSiteRequest`) breaks
+  §1.4: a page-type search that fails or is rate limited is logged and
+  answered as nothing found, so the visitor gets the site's not-found card
+  with status 404.
+- `packages/host/app/services/host-mode-service.ts` (`resolveSitePath`) breaks
+  §1.4: a response that isn't ok, a 429 or 503 included, is read as "the site
+  routes nothing here", and the path is treated as a card URL.
+- `packages/realm-server/lib/realm-routing.ts` (`anonymousCardDoc`) breaks
+  §1.6: any answer but 200 from the holding realm, a 429 or 503 included,
+  reads as "not readable" rather than answering as §1.4 does.
+- `packages/realm-server/handlers/serve-index.ts` breaks §1.6 and §1.5: when
+  the holding realm refuses a cross-realm fixed page or page-type target, the
+  rule doesn't fall through. The path is served as the app shell, with a
+  canonical link, instead of continuing to the card's own path or the
+  not-found card.
+- `packages/realm-server/handlers/handle-host-route.ts` breaks §1.6 and §1.4:
+  it hands the app a cross-realm page-type card on `serveSourcePrerender`
+  alone, without the unauthenticated read the server's own page path makes.
+- `packages/host/app/services/host-navigation.ts` (`updateHead`) breaks §1.5:
+  when a card fails in the browser and the app shows the site's error card,
+  the head keeps a canonical link for the path. Only the not-found card
+  removes it.
+- `packages/realm-server/lib/host-routes.ts` (`searchSiteCards`) skips a card
+  whose render failed, so a page-type card that fails is served as the
+  not-found card with a 404, not as the error card with a 500. Breaks §1.5.
+- `packages/realm-server/handlers/handle-publish-realm.ts` copies `realm.json`
+  into each published copy, so two published URLs of one realm can serve
+  different snapshots of its settings. Breaks §1.1 (every host URL shares the
+  realm's one set of settings).
+- `packages/realm-server/lib/host-routes.ts` (`siteMounts`) returns the
+  request's own mount as the canonical one, so a page's canonical link names
+  the host it was served on rather than the site's canonical host URL. Breaks
+  §1.5.

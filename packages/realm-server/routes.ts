@@ -35,6 +35,7 @@ import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
 import handlePublishProgress from './handlers/handle-publish-progress.ts';
+import handleHostRoute from './handlers/handle-host-route.ts';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm.ts';
 import handleArchiveRealm from './handlers/handle-archive-realm.ts';
 import handleUnarchiveRealm from './handlers/handle-unarchive-realm.ts';
@@ -634,6 +635,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePublishProgress(args),
   );
+  // Public: what a site serves at a path, and where it serves a card, for
+  // the host app's in-app navigation. Answers only for public realms.
+  router.get('/_host-route', handleHostRoute(args));
   router.post(
     '/_unpublish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

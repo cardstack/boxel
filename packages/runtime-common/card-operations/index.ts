@@ -204,6 +204,7 @@ export {
   parseOperationsEnvelope,
   pendingWriteOf,
   projectedResult,
+  emittedResult,
   readResult,
   resultsTree,
   stagedTree,
@@ -225,6 +226,8 @@ export { resolveQueryTargets } from './find-targets.ts';
 export {
   hasTransforms,
   runInputTransform,
+  runGuardTransform,
+  runKeyTransform,
   runOutputTransform,
 } from './transforms.ts';
 export type {
@@ -274,6 +277,7 @@ export {
   isWrite,
   travelsAsWrite,
   isCallApiResult,
+  isEmitResult,
   linkStrategyOf,
   readLinkStrategyOf,
   refusalForNonReader,
@@ -304,6 +308,10 @@ export type {
   EntryPosition,
   OperationCallApi,
   OperationCallApiResult,
+  OperationEmitResult,
+  ChannelMessages,
+  EmitMessage,
+  EmitMessageArgs,
   LowerOperationDeclarationsResult,
   OperationDefinition,
   ExplainedGrant,

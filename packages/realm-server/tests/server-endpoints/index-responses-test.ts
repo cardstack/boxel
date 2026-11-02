@@ -144,6 +144,7 @@ function setupPublishedRealm(
     endpoint,
     publishedRealmURL,
     cards,
+    otherRealmFiles,
     onSetup,
   }: {
     // Names the template, and the realms root directory.
@@ -152,8 +153,12 @@ function setupPublishedRealm(
     endpoint: string;
     publishedRealmURL: string;
     // The card documents to write into the source realm before it is
-    // published, in order, keyed by the path each is written to.
-    cards: (sourceRealmURL: string) => [path: string, doc: object][];
+    // published, in order, keyed by the path each is written to. A string is
+    // written as is, for a module.
+    cards: (sourceRealmURL: string) => [path: string, doc: object | string][];
+    // Files to write into the server's public `test` realm first, for a
+    // source realm that routes to a card another realm holds.
+    otherRealmFiles?: [path: string, doc: object | string][];
     onSetup: (args: { request: SuperTest<Test>; dbAdapter: PgAdapter }) => void;
   },
 ) {
@@ -244,16 +249,26 @@ function setupPublishedRealm(
       VALUES ('${sourceRealmURL}', '*', true, true, true)
     `);
 
-    for (let [path, doc] of cards(sourceRealmURL)) {
+    let write = async (
+      realmPath: string,
+      path: string,
+      doc: object | string,
+    ) => {
       let response = await request
-        .post(`${sourceRealmPath}${path}`)
+        .post(`${realmPath}${path}`)
         .set('Accept', 'application/vnd.card+source')
-        .send(JSON.stringify(doc));
+        .send(typeof doc === 'string' ? doc : JSON.stringify(doc));
       if (response.status !== 204) {
         throw new Error(
-          `Failed to write ${path}: ${response.status} ${response.text}`,
+          `Failed to write ${realmPath}${path}: ${response.status} ${response.text}`,
         );
       }
+    };
+    for (let [path, doc] of otherRealmFiles ?? []) {
+      await write('/test/', path, doc);
+    }
+    for (let [path, doc] of cards(sourceRealmURL)) {
+      await write(sourceRealmPath, path, doc);
     }
 
     // Publishing triggers a full from-scratch index of the published copy.
@@ -2081,6 +2096,183 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   // does NOT equal the routed path, so the card-id fallback cannot mask the
   // bug) and asserts both forms plus the 308 canonical redirect.
   module(
+    'Published realm: realm.json routes to another realm’s card',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let publishedRealmURLString =
+        'http://crossrealm.localhost:4444/cross-realm-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
+      let otherRealmURL = 'http://127.0.0.1:4444/test/';
+      let realmConfig = (path: string) => ({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Cross-realm Source Realm' },
+            serveSourcePrerender: true,
+            hostRoutingRules: [{ path }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: `${otherRealmURL}elsewhere` },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      });
+
+      setupPublishedRealm(hooks, {
+        setup: 'cross-realm host routing',
+        sourceRealmName: 'Cross-realm Source Realm',
+        endpoint: 'cross-realm-source',
+        publishedRealmURL: publishedRealmURLString,
+        // The target lives in the server's public `test` realm, so a visitor
+        // who isn't signed in may read it.
+        otherRealmFiles: [
+          [
+            'elsewhere-page.gts',
+            `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              export class ElsewherePage extends CardDef {
+                static isolated = class extends Component<typeof ElsewherePage> {
+                  <template><p>Prerendered by the test realm</p></template>
+                };
+              }
+            `,
+          ],
+          [
+            'elsewhere.json',
+            {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: './elsewhere-page',
+                    name: 'ElsewherePage',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        cards: () => [['realm.json', realmConfig('/elsewhere')]],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      test('a realm that opts in serves the other realm’s card as that realm prerendered it', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}elsewhere`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, '/elsewhere serves');
+        assert.true(
+          response.text.includes('Prerendered by the test realm'),
+          'the page carries the isolated HTML the other realm prerendered',
+        );
+        assert.strictEqual(
+          response.headers['etag'],
+          undefined,
+          'the page carries no ETag, since the other realm can change it without a republish',
+        );
+      });
+    },
+  );
+
+  module(
+    'Published realm: a cross-realm routing rule in a realm that does not opt in',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let publishedRealmURLString =
+        'http://nocrossrealm.localhost:4444/no-cross-realm-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
+      let otherRealmURL = 'http://127.0.0.1:4444/test/';
+
+      setupPublishedRealm(hooks, {
+        setup: 'cross-realm host routing, not opted in',
+        sourceRealmName: 'No Cross-realm Source Realm',
+        endpoint: 'no-cross-realm-source',
+        publishedRealmURL: publishedRealmURLString,
+        otherRealmFiles: [
+          [
+            'elsewhere-page.gts',
+            `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              export class ElsewherePage extends CardDef {
+                static isolated = class extends Component<typeof ElsewherePage> {
+                  <template><p>Prerendered by the test realm</p></template>
+                };
+              }
+            `,
+          ],
+          [
+            'elsewhere.json',
+            {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: './elsewhere-page',
+                    name: 'ElsewherePage',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        cards: () => [
+          [
+            'realm.json',
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: { name: 'No Cross-realm Source Realm' },
+                  hostRoutingRules: [{ path: '/elsewhere' }],
+                },
+                relationships: {
+                  'hostRoutingRules.0.instance': {
+                    links: { self: `${otherRealmURL}elsewhere` },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/realm-config',
+                    name: 'RealmConfig',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      test('the rule is dropped, and the other realm’s HTML is not served', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}elsewhere`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.false(
+          response.text.includes('Prerendered by the test realm'),
+          'without the opt-in, a card another realm holds is never served at a routed path',
+        );
+      });
+    },
+  );
+
+  module(
     'Published realm: host routing rules + trailing-slash canonicalization',
     function (hooks) {
       let request: SuperTest<Test>;
@@ -2323,19 +2515,24 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('redirect rules are injected into the host config routing map', async function (assert) {
+      test('redirect rules reach the host in the route snapshot', async function (assert) {
         let response = await request
           .get(`${publishedRealmPath}pricing`)
           .set('Host', publishedRealmHost)
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200);
-        // The routing map rides the URL-encoded config meta tag; letters
-        // are not percent-encoded, so the discriminant field name is
-        // directly visible in the served HTML.
+        // The snapshot rides the URL-encoded config meta tag, so an in-app
+        // transition follows a redirect rule without asking the server.
+        let content = response.text.match(
+          /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+        )?.[1];
+        let config = JSON.parse(decodeURIComponent(content ?? '{}'));
+        let redirects: [string, string, number][] =
+          config.hostRouteSnapshot?.redirects ?? [];
         assert.true(
-          response.text.includes('redirectTo'),
-          'the injected hostRoutingMap carries the redirect rules',
+          redirects.length > 0,
+          `the snapshot carries the redirect rules: ${JSON.stringify(redirects)}`,
         );
       });
 
@@ -2390,6 +2587,745 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           bogus.status,
           `a routed and a non-routed bare path are indistinguishable on a non-public realm (routed=${routed.status}, bogus=${bogus.status})`,
         );
+      });
+    },
+  );
+
+  // A published site: one page type whose cards are served at a path
+  // template, with an alias, a filter and a listing; redirects; a not-found
+  // card; a frame; and the files a site serves at its root.
+  module('Published realm: a site’s page types', function (hooks) {
+    let request: SuperTest<Test>;
+    let publishedRealmURLString = 'http://site.localhost:4444/site-source/';
+    let host = new URL(publishedRealmURLString).host;
+    let mount = new URL(publishedRealmURLString).pathname;
+    let get = (path: string, accept = 'text/html') =>
+      request
+        .get(`${mount}${path.replace(/^\//, '')}`)
+        .set('Host', host)
+        .set('Accept', accept);
+    let head = (html: string) =>
+      html.match(/<head>([\s\S]*?)<\/head>/)?.[1] ?? '';
+    let article = (
+      slug: string,
+      name: string,
+      status = 'published',
+    ): [string, object] => [
+      `Article/${slug}.json`,
+      {
+        data: {
+          type: 'card',
+          attributes: { slug, status, cardInfo: { name } },
+          meta: { adoptsFrom: { module: '../article', name: 'Article' } },
+        },
+      },
+    ];
+
+    setupPublishedRealm(hooks, {
+      setup: 'site page types',
+      sourceRealmName: 'Site Source Realm',
+      endpoint: 'site-source',
+      publishedRealmURL: publishedRealmURLString,
+      cards: () => [
+        [
+          'article.gts',
+          `
+            import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+            export class Article extends CardDef {
+              @field slug = contains(StringField);
+              @field status = contains(StringField);
+              static isolated = class extends Component<typeof Article> {
+                <template>
+                  <article data-article={{@model.slug}}>
+                    <h1>{{@model.cardTitle}}</h1>
+                    <a data-next href='./second'>Next</a>
+                    <a data-listing href='#' data-boxel-card-link='/articles'>All</a>
+                  </article>
+                </template>
+              };
+            }
+          `,
+        ],
+        [
+          'site-pages.gts',
+          `
+            import { CardDef, Component } from '@cardstack/base/card-api';
+            import SitePage from '@cardstack/base/site-page';
+            export class NotFound extends CardDef {
+              static isolated = class extends Component<typeof NotFound> {
+                <template><p data-not-found>Nothing lives here</p></template>
+              };
+            }
+            export class ErrorPage extends CardDef {
+              static isolated = class extends Component<typeof ErrorPage> {
+                <template><p data-error-page>Something went wrong</p></template>
+              };
+            }
+            export class Broken extends CardDef {
+              static isolated = class extends Component<typeof Broken> {
+                get boom(): string {
+                  throw new Error('this card cannot render');
+                }
+                <template><p data-broken>{{this.boom}}</p></template>
+              };
+            }
+            export class Frame extends CardDef {
+              static isolated = class extends Component<typeof Frame> {
+                <template><header data-site-header>Site header</header><SitePage /></template>
+              };
+            }
+          `,
+        ],
+        [
+          'NotFound/site.json',
+          {
+            data: {
+              type: 'card',
+              attributes: { cardInfo: { name: 'Not found' } },
+              meta: {
+                adoptsFrom: { module: '../site-pages', name: 'NotFound' },
+              },
+            },
+          },
+        ],
+        [
+          'ErrorPage/site.json',
+          {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: { module: '../site-pages', name: 'ErrorPage' },
+              },
+            },
+          },
+        ],
+        [
+          'Broken/1.json',
+          {
+            data: {
+              type: 'card',
+              meta: { adoptsFrom: { module: '../site-pages', name: 'Broken' } },
+            },
+          },
+        ],
+        [
+          'Frame/site.json',
+          {
+            data: {
+              type: 'card',
+              meta: { adoptsFrom: { module: '../site-pages', name: 'Frame' } },
+            },
+          },
+        ],
+        article('first', 'First article'),
+        article('second', 'Second article'),
+        article('draft', 'Draft article', 'draft'),
+        [
+          'realm.json',
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                cardInfo: { name: 'Site Source Realm' },
+                hostRoutingRules: [{ path: '/broken' }],
+                site: {
+                  tagline: 'Notes from the test site.',
+                  pageTypes: [
+                    {
+                      name: 'Articles',
+                      cardType: { module: './article', name: 'Article' },
+                      path: '/articles/{slug}',
+                      aliases: ['/a/{slug}'],
+                      filter: JSON.stringify({ eq: { status: 'published' } }),
+                      listingPath: '/articles',
+                      listingTitle: 'All articles',
+                    },
+                  ],
+                  redirects: [
+                    {
+                      from: '/posts/{slug}',
+                      to: '/articles/{slug}',
+                      statusCode: 301,
+                    },
+                    { from: '/old', to: '/articles', statusCode: 302 },
+                  ],
+                  listed: true,
+                  crawlers: [{ userAgent: 'GPTBot', allow: false }],
+                },
+              },
+              relationships: {
+                'site.notFound': { links: { self: './NotFound/site' } },
+                'site.frame': { links: { self: './Frame/site' } },
+                'site.errorCard': { links: { self: './ErrorPage/site' } },
+                'hostRoutingRules.0.instance': {
+                  links: { self: './Broken/1' },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/realm-config',
+                  name: 'RealmConfig',
+                },
+              },
+            },
+          },
+        ],
+      ],
+      onSetup(args) {
+        ({ request } = args);
+      },
+    });
+
+    test('a card is served at its page type’s path, inside the frame', async function (assert) {
+      let response = await get('/articles/first');
+      assert.strictEqual(response.status, 200);
+      assert.true(
+        response.text.includes('data-article="first"'),
+        'the page is the card the path names',
+      );
+      let header = response.text.indexOf('data-site-header');
+      assert.notStrictEqual(header, -1, 'the frame is drawn');
+      assert.true(
+        header < response.text.indexOf('data-article="first"'),
+        'the frame is drawn around the page',
+      );
+    });
+
+    test('a served page keeps its head, beside the card data inlined in it', async function (assert) {
+      let response = await get('/articles/first');
+      let headHTML = head(response.text);
+      assert.true(
+        /<title[^>]*>First article<\/title>/.test(headHTML),
+        'the card’s title is in the head',
+      );
+      assert.true(
+        headHTML.includes(
+          `<link rel="canonical" href="http://${host}${mount}articles/first">`,
+        ),
+        `the canonical link names the page’s address: ${headHTML}`,
+      );
+      assert.true(
+        headHTML.includes(
+          `<meta property="og:url" content="http://${host}${mount}articles/first">`,
+        ),
+        'og:url names the page’s address',
+      );
+      let pageDoc = headHTML.match(
+        /<script type="application\/json" data-boxel-page-doc data-card-url="([^"]+)">([\s\S]*?)<\/script>/,
+      );
+      assert.strictEqual(
+        pageDoc?.[1],
+        `${publishedRealmURLString}Article/first`,
+        'the head carries the page card’s data',
+      );
+      assert.strictEqual(
+        JSON.parse(pageDoc![2]).data.attributes.slug,
+        'first',
+        'the inlined data is the card’s',
+      );
+    });
+
+    test('a page’s links point at the addresses the site serves them at', async function (assert) {
+      let response = await get('/articles/first');
+      assert.true(
+        response.text.includes(
+          `<a data-next="" href="http://${host}${mount}articles/second">`,
+        ),
+        'a link to a routed card points at its page',
+      );
+      assert.true(
+        /<a data-listing="" href="http:\/\/site\.localhost:4444\/site-source\/articles"/.test(
+          response.text,
+        ),
+        'a link marked with a site path points at that path',
+      );
+    });
+
+    test('an alias redirects to the card’s address', async function (assert) {
+      let response = await get('/a/first');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/first`,
+      );
+    });
+
+    test('a card’s own path redirects to its address', async function (assert) {
+      let response = await get('/Article/first');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/first`,
+      );
+    });
+
+    test('a template redirect fills its target from the path', async function (assert) {
+      let response = await get('/posts/second');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles/second`,
+      );
+    });
+
+    test('a literal redirect answers with its own status', async function (assert) {
+      let response = await get('/old');
+      assert.strictEqual(response.status, 302);
+      assert.strictEqual(
+        new URL(response.headers['location'], `http://${host}`).pathname,
+        `${mount}articles`,
+      );
+    });
+
+    test('a listing path is served, shared under its own title', async function (assert) {
+      let response = await get('/articles');
+      assert.strictEqual(response.status, 200);
+      let headHTML = head(response.text);
+      assert.true(
+        headHTML.includes('<meta property="og:title" content="All articles">'),
+        "the listing title, not the home card's",
+      );
+      assert.true(
+        headHTML.includes('<title>All articles</title>'),
+        'the page title follows it',
+      );
+      assert.true(
+        headHTML.includes(
+          '<meta name="description" content="Notes from the test site.">',
+        ),
+        'the tagline describes it',
+      );
+      assert.strictEqual(
+        (response.text.match(/<meta name="description"/g) ?? []).length,
+        1,
+        "the shell's empty description gives way",
+      );
+    });
+
+    test('a path that names no card is the not-found card, with a 404 and no canonical link', async function (assert) {
+      for (let path of ['/articles/nope', '/nothing-here']) {
+        let response = await get(path);
+        assert.strictEqual(response.status, 404, `${path} is not found`);
+        assert.true(
+          response.text.includes('data-not-found'),
+          `${path} shows the not-found card`,
+        );
+        let headHTML = head(response.text);
+        assert.false(
+          /rel="canonical"|property="og:url"/.test(headHTML),
+          `${path} has no canonical address`,
+        );
+      }
+    });
+
+    test('a page whose card fails to render is the error card, with a 500 and no canonical link', async function (assert) {
+      let response = await get('/broken');
+      assert.strictEqual(response.status, 500);
+
+      assert.true(
+        response.text.includes('data-error-page'),
+
+        'the site’s error card stands in for the page',
+      );
+
+      assert.false(
+        /rel="canonical"/.test(head(response.text)),
+
+        'a failing page has no canonical address',
+      );
+    });
+
+    test('a card the page type’s filter leaves out is not found', async function (assert) {
+      let response = await get('/articles/draft');
+      assert.strictEqual(response.status, 404);
+      assert.true(response.text.includes('data-not-found'));
+    });
+
+    test('robots.txt follows the site’s crawler rules', async function (assert) {
+      let response = await get('/robots.txt', '*/*');
+      assert.strictEqual(response.status, 200);
+      assert.true(
+        response.headers['content-type'].startsWith('text/plain'),
+        'it is plain text',
+      );
+      assert.true(
+        response.text.includes('User-agent: GPTBot\nDisallow: /'),
+        'a crawler the site turns away is disallowed',
+      );
+      assert.true(
+        response.text.includes('User-agent: *\nAllow: /'),
+        'everyone else is allowed on a listed site',
+      );
+      assert.true(
+        response.text.includes(`Sitemap: http://${host}${mount}sitemap.xml`),
+        'it names the sitemap',
+      );
+    });
+
+    test('sitemap.xml lists every page the site serves', async function (assert) {
+      let response = await get('/sitemap.xml', '*/*');
+      assert.strictEqual(response.status, 200);
+      let locs = [...response.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+        (m) => m[1],
+      );
+      for (let slug of ['first', 'second']) {
+        assert.true(
+          locs.includes(`http://${host}${mount}articles/${slug}`),
+          `${slug} is listed: ${locs.join(', ')}`,
+        );
+      }
+      assert.false(
+        locs.some((loc) => loc.includes('draft')),
+        'a card the filter leaves out is not',
+      );
+    });
+
+    test('llms.txt names the site and where to start', async function (assert) {
+      let response = await get('/llms.txt', '*/*');
+      assert.strictEqual(response.status, 200);
+      assert.true(response.text.startsWith('# '), 'it opens with a title');
+      assert.true(
+        response.text.includes('> Notes from the test site.'),
+        'it carries the tagline',
+      );
+      assert.true(
+        response.text.includes(
+          `- [All articles](http://${host}${mount}articles)`,
+        ),
+        'it links each listing',
+      );
+    });
+  });
+  // A site that draws on another realm serves it under an alias of its own,
+  // so a visitor never learns what the realm is called. The source here is
+  // the server's public `test` realm.
+  module(
+    'Published realm: a site’s source realms are aliased',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let siteURL = 'http://aliassite.localhost:4444/alias-source/';
+      let host = new URL(siteURL).host;
+      let mount = new URL(siteURL).pathname;
+      let source = 'http://127.0.0.1:4444/test/';
+      let aliasedPrefix: string;
+      let aliased = (path: string) => `${aliasedPrefix}${path}`;
+      let pathOf = (url: string) => {
+        let parsed = new URL(url);
+        return `${parsed.pathname}${parsed.search}`;
+      };
+
+      setupPublishedRealm(hooks, {
+        setup: 'site source aliases',
+        sourceRealmName: 'Alias Shop',
+        endpoint: 'alias-source',
+        publishedRealmURL: siteURL,
+        otherRealmFiles: [
+          [
+            'product.gts',
+            `
+            import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+            export class Product extends CardDef {
+              @field handle = contains(StringField);
+              static isolated = class extends Component<typeof Product> {
+                <template><p data-product={{@model.handle}}>{{@model.cardTitle}}</p></template>
+              };
+            }
+          `,
+          ],
+          [
+            'Product/driver.json',
+            {
+              data: {
+                type: 'card',
+                attributes: { handle: 'driver', cardInfo: { name: 'Driver' } },
+                meta: { adoptsFrom: { module: '../product', name: 'Product' } },
+              },
+            },
+          ],
+        ],
+        cards: () => [
+          [
+            'feature.gts',
+            `
+            import { CardDef, field, linksTo } from '@cardstack/base/card-api';
+            import { Product } from '${source}product';
+            export class Feature extends CardDef {
+              @field product = linksTo(Product);
+            }
+          `,
+          ],
+          [
+            'Feature/driver.json',
+            {
+              data: {
+                type: 'card',
+                relationships: {
+                  product: { links: { self: `${source}Product/driver` } },
+                },
+                meta: { adoptsFrom: { module: '../feature', name: 'Feature' } },
+              },
+            },
+          ],
+          [
+            'realm.json',
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: { name: 'Alias Shop' },
+                  serveSourcePrerender: true,
+                  site: {
+                    pageTypes: [
+                      {
+                        name: 'Products',
+                        sourceRealm: source,
+                        cardType: {
+                          module: `${source}product`,
+                          name: 'Product',
+                        },
+                        path: '/shop/{handle}',
+                      },
+                    ],
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/realm-config',
+                    name: 'RealmConfig',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        onSetup(args) {
+          ({ request } = args);
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        let page = await request
+          .get(`${mount}shop/driver`)
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        let match = page.text.match(
+          /http:\/\/aliassite\.localhost:4444\/alias-source\/_r\/[a-z2-7]{26}\//,
+        );
+        aliasedPrefix = match?.[0] ?? '';
+      });
+
+      let visit = (path: string, accept: string) =>
+        request
+          .get(path)
+          .set('Host', host)
+          .set('Accept', accept)
+          .set('X-Boxel-Site', siteURL);
+
+      test('a page names none of the realms its site draws on', async function (assert) {
+        let page = await request
+          .get(`${mount}shop/driver`)
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        assert.strictEqual(page.status, 200);
+        assert.true(
+          page.text.includes('data-product="driver"'),
+          'the page is the source realm’s card',
+        );
+        assert.false(
+          page.text.includes(source),
+          'nothing in the page or its card data names the source realm',
+        );
+        assert.false(
+          page.text.includes(encodeURIComponent(source)),
+          'nor does its config',
+        );
+        assert.notStrictEqual(aliasedPrefix, '', 'the page names it by alias');
+      });
+
+      test('a source realm’s card is served under its alias, describing the site', async function (assert) {
+        let response = await visit(
+          pathOf(aliased('Product/driver')),
+          'application/vnd.card+json',
+        );
+        assert.strictEqual(response.status, 200);
+        assert.false(response.text.includes(source), 'no URL of the realm');
+        let doc = JSON.parse(response.text);
+        assert.strictEqual(doc.data.id, aliased('Product/driver'));
+        assert.strictEqual(doc.data.attributes.handle, 'driver');
+        assert.strictEqual(doc.data.meta.realmInfo.name, 'Alias Shop');
+        assert.false('realmUserId' in doc.data.meta.realmInfo);
+      });
+
+      test('an aliased address names its site, so it needs no header', async function (assert) {
+        let response = await request
+          .get(pathOf(aliased('Product/driver')))
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          JSON.parse(response.text).data.id,
+          aliased('Product/driver'),
+        );
+      });
+
+      test('a search of an aliased realm searches the realm and answers in aliases', async function (assert) {
+        let response = await request
+          .post('/_federated-search')
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('X-Boxel-Site', siteURL)
+          .send({
+            realms: [aliasedPrefix],
+            filter: {
+              'item.on': { module: aliased('product'), name: 'Product' },
+            },
+          });
+        assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+        assert.false(response.text.includes(source), 'no URL of the realm');
+        let ids = JSON.parse(response.text).data.map(
+          (resource: { id: string }) => resource.id,
+        );
+        assert.deepEqual(ids, [aliased('Product/driver')]);
+      });
+
+      test('the site’s own cards and modules name a source realm by alias on a visit, and by its URL otherwise', async function (assert) {
+        let visited = await visit(
+          `${mount}Feature/driver`,
+          'application/vnd.card+json',
+        );
+        assert.strictEqual(visited.status, 200);
+        assert.strictEqual(
+          JSON.parse(visited.text).data.relationships.product.links.self,
+          aliased('Product/driver'),
+        );
+        let module = await visit(`${mount}feature`, '*/*');
+        assert.strictEqual(module.status, 200);
+        assert.false(
+          module.text.includes(source),
+          'the module imports by alias',
+        );
+        assert.true(module.text.includes(aliased('product')));
+
+        // The prerenderer and the indexer send no site, so what they read, and
+        // what the index holds, stays canonical.
+        let unvisited = await request
+          .get(`${mount}Feature/driver`)
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(
+          JSON.parse(unvisited.text).data.relationships.product.links.self,
+          `${source}Product/driver`,
+        );
+      });
+
+      test('an aliased address opened as a page moves to where the site serves its card', async function (assert) {
+        let response = await request
+          .get(pathOf(aliased('Product/driver')))
+          .set('Host', host)
+          .set('Accept', 'text/html');
+        assert.strictEqual(response.status, 301);
+        assert.strictEqual(
+          new URL(response.headers['location'], `http://${host}`).pathname,
+          `${mount}shop/driver`,
+        );
+      });
+
+      test('a site page carries an ETag a repeat visit revalidates against', async function (assert) {
+        let page = () =>
+          request
+
+            .get(`${mount}shop/driver`)
+
+            .set('Host', host)
+
+            .set('Accept', 'text/html');
+
+        let first = await page();
+
+        let etag = first.headers['etag'];
+
+        assert.ok(etag, 'the page has an ETag');
+
+        assert.strictEqual(
+          (await page()).headers['etag'],
+          etag,
+          'the same one twice',
+        );
+
+        let again = await page().set('If-None-Match', etag);
+
+        assert.strictEqual(again.status, 304, 'an unchanged page revalidates');
+      });
+
+      test('a change to a realm the site draws on changes its pages’ ETag', async function (assert) {
+        let page = () =>
+          request
+
+            .get(`${mount}shop/driver`)
+
+            .set('Host', host)
+
+            .set('Accept', 'text/html');
+
+        let before = (await page()).headers['etag'];
+
+        let write = await request
+
+          .post('/test/Product/driver.json')
+
+          .set('Accept', 'application/vnd.card+source')
+
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+
+                attributes: {
+                  handle: 'driver',
+                  cardInfo: { name: 'Driver, renamed' },
+                },
+
+                meta: { adoptsFrom: { module: '../product', name: 'Product' } },
+              },
+            }),
+          );
+
+        assert.strictEqual(write.status, 204);
+
+        // The edit is indexed, then rendered; the page's ETag follows both.
+
+        let after = await page().set('If-None-Match', before);
+
+        let deadline = Date.now() + 60_000;
+
+        while (
+          !after.text.includes('Driver, renamed') &&
+          Date.now() < deadline
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          after = await page().set('If-None-Match', before);
+        }
+
+        assert.strictEqual(after.status, 200, 'the old ETag no longer matches');
+
+        assert.true(
+          after.text.includes('Driver, renamed'),
+          'the page shows the edit',
+        );
+
+        assert.notStrictEqual(after.headers['etag'], before);
+      });
+
+      test('an alias the site doesn’t draw on reaches no realm', async function (assert) {
+        let response = await request
+          .get(`${mount}_r/${'a'.repeat(26)}/Product/driver`)
+          .set('Host', host)
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(response.status, 404);
       });
     },
   );

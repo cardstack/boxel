@@ -5,6 +5,7 @@ import { basename } from 'path';
 import {
   commitBatch,
   isOperationFailure,
+  lowerOperationDeclarations,
   setOperationPerfSink,
   type BatchCore,
   type BatchEntry,
@@ -73,6 +74,8 @@ function stub(opts: StubOptions = {}): {
   let definitions: Record<string, Definition> = {
     Report: reportDefinition(),
     Person: personDefinition(),
+    Quiz: quizDefinition(),
+    QuizAnswer: quizAnswerDefinition(),
   };
 
   let core: BatchCore = {
@@ -232,6 +235,68 @@ function reportDefinition(): Definition {
         isComputed: true,
         fieldOrCard: PERSON,
       },
+    },
+  } as Definition;
+}
+
+const QUIZ = { module: `${REALM}quiz`, name: 'Quiz' } as CodeRef;
+const QUIZ_ANSWER = { module: `${REALM}quiz`, name: 'QuizAnswer' } as CodeRef;
+const NUMBER = { module: `${REALM}number`, name: 'default' } as CodeRef;
+
+// The pub quiz's card: the question in play, when it locks, and the answers
+// the desk records once it does.
+function quizDefinition(): Definition {
+  return {
+    type: 'card-def',
+    codeRef: QUIZ,
+    displayName: 'Quiz',
+    fields: { n: 'f0', lockAt: 'f1', phase: 'f2', answers: 'f3' },
+    fieldDefs: {
+      f0: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: NUMBER,
+      },
+      f1: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f2: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f3: {
+        type: 'containsMany',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: QUIZ_ANSWER,
+      },
+    },
+  } as Definition;
+}
+
+function quizAnswerDefinition(): Definition {
+  let scalar = (fieldOrCard: CodeRef) => ({
+    type: 'contains' as const,
+    isPrimitive: true,
+    isComputed: false,
+    fieldOrCard,
+  });
+  return {
+    type: 'field-def',
+    codeRef: QUIZ_ANSWER,
+    displayName: 'QuizAnswer',
+    fields: { team: 'f0', n: 'f1', choice: 'f2', at: 'f3' },
+    fieldDefs: {
+      f0: scalar(STRING),
+      f1: scalar(NUMBER),
+      f2: scalar(STRING),
+      f3: scalar(STRING),
     },
   } as Definition;
 }
@@ -889,6 +954,155 @@ module(basename(import.meta.filename), function () {
         detail.includes('needs a request context'),
         'and does not report a missing context',
       );
+    });
+  });
+
+  // A transform that `collect`s reads the latest messages an emit published on
+  // the card's live channel, which the realm hands it under the write lock.
+  module('collected params', function () {
+    function quizSource(): string {
+      return JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            n: 1,
+            lockAt: '2026-11-01T10:02:00Z',
+            phase: 'question',
+            answers: [],
+          },
+          meta: { adoptsFrom: QUIZ },
+        },
+      });
+    }
+
+    // The desk's lock, as the quiz declares it. Inside the iteration `.` is
+    // each message, so the card's own values are read with `instance()`.
+    async function lockQuestion(): Promise<OperationDefinition> {
+      let { operations, issues } = await lowerOperationDeclarations(
+        {
+          select: {
+            base: 'emit',
+            params: {
+              team: STRING_PARAM,
+              n: STRING_PARAM,
+              choice: STRING_PARAM,
+            },
+          },
+          lockQuestion: {
+            base: 'transform',
+            collect: { picks: 'select' },
+            transformations: {
+              $bxl: '.answers += [params("picks")[] | select(.n == instance("n")) | select(.at <= instance("lockAt")) | { team: .team, n: .n, choice: .choice, at: .at }];\n.phase = "locked";',
+            },
+          },
+        } as never,
+        {
+          definition: quizDefinition(),
+          lookupDefinition: async (codeRef) =>
+            'name' in codeRef && codeRef.name === 'QuizAnswer'
+              ? quizAnswerDefinition()
+              : undefined,
+          identifyCard: () => STRING,
+        },
+      );
+      if (issues.length > 0) {
+        throw new Error(`lockQuestion lowered with ${issues[0].code}`);
+      }
+      return operations.lockQuestion;
+    }
+    const STRING_PARAM = function StringField() {} as unknown as never;
+
+    const PICKS = [
+      { team: 'red', n: 1, choice: 'a', at: '2026-11-01T10:00:00Z' },
+      // After the lock.
+      { team: 'blue', n: 1, choice: 'b', at: '2026-11-01T10:05:00Z' },
+      // Another question.
+      { team: 'red', n: 2, choice: 'c', at: '2026-11-01T10:01:00Z' },
+    ];
+
+    test("a transform collects an emit's latest messages from the card's channel, inside the lock", async function (assert) {
+      let { core, commits } = stub({ stored: { 'quiz-1.json': quizSource() } });
+      let locked = false;
+      let withWriteLocks = core.withWriteLocks;
+      core.withWriteLocks = (paths, fn) =>
+        withWriteLocks(paths, async (release) => {
+          locked = true;
+          try {
+            return await fn(release);
+          } finally {
+            locked = false;
+          }
+        });
+      let reads: { cardURL: string; operation: string; locked: boolean }[] = [];
+      core.channelMessages = async (args) => {
+        reads.push({ ...args, locked });
+        return PICKS;
+      };
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'lockQuestion',
+          href: `${REALM}quiz-1`,
+          definition: await lockQuestion(),
+        },
+      ]);
+
+      assert.deepEqual(reads, [
+        { cardURL: `${REALM}quiz-1`, operation: 'select', locked: true },
+      ]);
+      let attributes = attributesOf(commits[0], 'quiz-1.json');
+      assert.deepEqual(
+        attributes.answers,
+        [{ team: 'red', n: 1, choice: 'a', at: '2026-11-01T10:00:00Z' }],
+        'only the pick for this question that arrived before the lock is recorded',
+      );
+      assert.strictEqual(attributes.phase, 'locked');
+    });
+
+    test('a payload carrying a collected param is refused, and the channel is not read', async function (assert) {
+      let { core, commits } = stub({ stored: { 'quiz-1.json': quizSource() } });
+      let reads = 0;
+      core.channelMessages = async () => {
+        reads++;
+        return PICKS;
+      };
+
+      let failed = await refusal(core, [
+        {
+          op: 'transform',
+          name: 'lockQuestion',
+          href: `${REALM}quiz-1`,
+          definition: await lockQuestion(),
+          params: { picks: [] },
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 400,
+        code: 'invalid-params',
+        entry: 0,
+      });
+      assert.strictEqual(reads, 0, 'the channel was not read');
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
+    });
+
+    test('a transform that collects on a realm with no channel is refused as not implemented', async function (assert) {
+      let { core, commits } = stub({ stored: { 'quiz-1.json': quizSource() } });
+
+      let failed = await refusal(core, [
+        {
+          op: 'transform',
+          name: 'lockQuestion',
+          href: `${REALM}quiz-1`,
+          definition: await lockQuestion(),
+        },
+      ]);
+      assert.deepEqual(failed, {
+        status: 501,
+        code: 'not-implemented',
+        entry: 0,
+      });
+      assert.strictEqual(commits.length, 0, 'nothing is committed');
     });
   });
 });

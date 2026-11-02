@@ -475,6 +475,37 @@ deepStrictEqual(
   },
   'predicate profile does not treat validator.js functions as SQL-lowerable',
 );
+// sha256 is a classified pure scalar: an explicit allow in every denylist
+// profile, including the two write-time ones and transform, and refused by
+// the allowlist profiles, which cannot lower or route it.
+for (const profile of [
+  'mutation',
+  'transform',
+  'derive',
+  'policy',
+  'authorization',
+] as const) {
+  deepStrictEqual(
+    classifyBxlProfileFunction(profile, 'sha256'),
+    { safety: 'allow', normalizedName: 'SHA256', category: 'boundedScalar' },
+    `${profile} profile allows sha256`,
+  );
+  strictEqual(
+    parseBxlAst('sha256("seed" + .id)', {
+      readableSyntax: false,
+      profile,
+    }).profileIssues.filter((issue) => issue.severity === 'error').length,
+    0,
+    `${profile} profile raises no issue for a sha256 call`,
+  );
+}
+for (const profile of ['predicate', 'route'] as const) {
+  strictEqual(
+    classifyBxlProfileFunction(profile, 'sha256').safety,
+    'deny',
+    `${profile} profile refuses sha256`,
+  );
+}
 deepStrictEqual(
   classifyBxlProfileFunction('policy', 'isAfter'),
   {
@@ -604,3 +635,41 @@ strictEqual(
 );
 
 console.log('BXL semantic AST/profile/storage projection: all checks passed');
+
+// The route profile (ADR site-routing §1.1): what a page type's href may say.
+for (const [href, readableSyntax] of [
+  ['"/shop/" & .handle', true],
+  ['"/collections/" & LOWER(.season) & "-" & .year', true],
+  ['"/shop/\\(.handle)"', false],
+  ['"/journal/\\(.publishedOn[0:4])/\\(.slug)"', false],
+  ['"/c/\\(.slug | ascii_downcase | ltrimstr("-"))"', false],
+  ['"/tags/\\(.tags | split(",") | join("-"))"', false],
+] as const) {
+  deepStrictEqual(
+    parseBxlAst(href, { profile: 'route', readableSyntax }).profileIssues,
+    [],
+    `route profile allows the href ${href}`,
+  );
+}
+for (const [href, code] of [
+  ['"/a/\\(.slug | test("x"))"', 'route-call-banned'],
+  ['"/a/\\(.slug | sub("x"; "y"))"', 'route-call-banned'],
+  ['"/a/\\(.slug | split("[,;]"; null) | join("-"))"', 'route-call-banned'],
+  ['"/a/\\(now)"', 'route-call-banned'],
+  ['"/a/\\($ENV.HOME)"', 'route-variable-banned'],
+  ['. as $c | "/a/\\($c.slug)"', 'route-binding-banned'],
+  ['def f: .slug; "/a/\\(f)"', 'route-def-banned'],
+] as const) {
+  ok(
+    parseBxlAst(href, {
+      profile: 'route',
+      readableSyntax: false,
+    }).profileIssues.some((issue) => issue.code === code),
+    `route profile refuses ${href} with ${code}`,
+  );
+}
+strictEqual(
+  classifyBxlProfileFunction('route', 'gsub').safety,
+  'deny',
+  'route profile is an allowlist: an unlisted function is refused',
+);

@@ -108,6 +108,10 @@ export const PermissionsContextName = 'permissions-context';
 
 export const CardURLContextName = 'card-url-context';
 
+// The card whose template is rendering, so a CardLink can name one of its
+// linked fields without being handed the card.
+export const CurrentCardContextName = 'current-card-context';
+
 export const RealmURLContextName = 'realm-url-context';
 
 // The realm a card-initiated, no-realm search defaults to (the realm the

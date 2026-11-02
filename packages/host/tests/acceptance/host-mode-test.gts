@@ -16,7 +16,9 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred, type HostRoutingRule } from '@cardstack/runtime-common';
+import { Deferred, type HostRouteSnapshot } from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -59,36 +61,11 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
   }
 }
 
-// The routing map normally arrives on the config meta tag the realm
-// server rewrites per request, which no test server emits — so stub the
-// getter that reads it. Paths and realm-relative targets are stored the
-// way the server injects them: prefixed with the realm's mount pathname,
-// which is `/test/` as this app sees it (`hostModeOrigin` absorbs the
-// `/user` segment above).
-class StubRoutingHostModeService extends StubHostModeService {
-  get hostRoutingMap(): HostRoutingRule[] {
-    return [
-      { path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` },
-      { path: '/test/tos', redirectTo: '/test/terms', statusCode: 302 },
-      {
-        path: '/test/docs',
-        redirectTo: '/test/terms?section=intro',
-        statusCode: 302,
-      },
-      {
-        path: '/test/blog',
-        redirectTo: 'https://boxel.example/posts',
-        statusCode: 301,
-      },
-    ];
-  }
-}
-
 // `hostModeOrigin` is visitor-controllable — it hands back the
 // `?hostModeOrigin=` query param verbatim whenever one is present — so a
 // redirect must never resolve a realm-relative target against it. This
 // stub returns an origin no redirect may land on.
-class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
+class StubHijackedOriginHostModeService extends StubHostModeService {
   get hostModeOrigin() {
     return 'https://attacker.example';
   }
@@ -499,6 +476,41 @@ module('Acceptance | host mode tests', function (hooks) {
         },
         'spring-guide.md':
           '# Spring Guide\n\nSprings settle toward their target.\n',
+        // A small site: a home page whose links lead to a card the served
+        // page's snapshot already places and one the app has to ask about,
+        // and the page shown at an address that serves nothing.
+        'site-pages.gts': `
+          import { CardDef, Component } from '@cardstack/base/card-api';
+          import { CardLink } from '@cardstack/base/card-link';
+          export class SiteHome extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p data-test-site-home>Home</p>
+                <CardLink @id='${testHostModeRealmURL}Pet/mango' data-test-site-link='mango'>Mango</CardLink>
+                <CardLink @id='${testHostModeRealmURL}Whitepaper/index' data-test-site-link='whitepaper'>Whitepaper</CardLink>
+              </template>
+            };
+          }
+          export class SiteNotFound extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><p data-test-site-not-found>Nothing lives here</p></template>
+            };
+          }
+        `,
+        'SiteHome/index.json': {
+          data: {
+            meta: {
+              adoptsFrom: { module: '../site-pages', name: 'SiteHome' },
+            },
+          },
+        },
+        'SiteNotFound/index.json': {
+          data: {
+            meta: {
+              adoptsFrom: { module: '../site-pages', name: 'SiteNotFound' },
+            },
+          },
+        },
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
@@ -1377,6 +1389,9 @@ module('Acceptance | host mode tests', function (hooks) {
     try {
       await visit('/test/Whitepaper/index.json');
       await waitFor('[data-test-whitepaper]');
+      // The prerender stays up until the live page can take over; the scroll
+      // offset is carried over at the swap.
+      await waitUntil(() => !document.querySelector('[data-boxel-handoff]'));
 
       assert.dom('[data-host-mode-card-scroll-container]').exists();
       let cardContainer = document.querySelector(
@@ -1399,21 +1414,30 @@ module('Acceptance | host mode tests', function (hooks) {
     // A full-page request to a redirect-ruled path never reaches the SPA
     // — serve-index answers the 3xx first. These cover the other leg: an
     // in-app transition, where the route has to perform the redirect
-    // itself. `window` is ember-window-mock, whose `location.replace`
-    // records the URL instead of navigating.
-    //
-    // A realm-relative target resolves against the document's own
-    // origin, the way a browser resolves a `Location: /path` header.
-    // Read inside each test — the window mock is installed per-test, so
-    // capturing it out here would read the real page's origin instead.
+    // itself. A target within the site is another in-app transition; one
+    // elsewhere, or with a query, leaves the app, through ember-window-mock's
+    // `location.replace`, which records the URL instead of navigating.
 
-    hooks.beforeEach(function (this) {
-      let owner = getOwner(this)!;
-      let ownerWithUnregister = owner as {
-        unregister?: (fullName: string) => void;
+    // realm.json's routing rules reach the app in the served page's route
+    // snapshot, which no test server emits, so it is set here: paths are
+    // realm-relative, and a realm-relative redirect target too. The realm
+    // is mounted at `/test/` as this app sees it.
+    let config = ENV as { hostRouteSnapshot?: HostRouteSnapshot };
+    hooks.beforeEach(function () {
+      config.hostRouteSnapshot = {
+        realm: testHostModeRealmURL,
+        mount: '/test/',
+        pages: [['/terms', `${testHostModeRealmURL}Pet/mango`]],
+        listings: [],
+        redirects: [
+          ['/tos', '/terms', 302],
+          ['/docs', '/terms?section=intro', 302],
+          ['/blog', 'https://boxel.example/posts', 301],
+        ],
       };
-      ownerWithUnregister.unregister?.('service:host-mode-service');
-      owner.register('service:host-mode-service', StubRoutingHostModeService);
+    });
+    hooks.afterEach(function () {
+      delete config.hostRouteSnapshot;
     });
 
     test('a serve rule still renders its target card', async function (assert) {
@@ -1428,10 +1452,13 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/test/tos');
 
       assert.strictEqual(
-        window.location.href,
-        `${window.location.origin}/test/terms`,
-        'the realm-relative target is resolved against the host-mode origin',
+        currentURL(),
+        '/test/terms',
+        'the realm-relative target is a page of the site, reached in place',
       );
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists('the target page renders');
     });
 
     test('a redirect rule may target an external URL', async function (assert) {
@@ -1486,8 +1513,8 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/test/tos');
 
       assert.strictEqual(
-        window.location.href,
-        `${window.location.origin}/test/terms`,
+        currentURL(),
+        '/test/terms',
         'the redirect stays on the document origin',
       );
       assert.notOk(
@@ -1556,6 +1583,229 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/');
       await waitFor(stackItem, { count: 0 });
       assert.dom(stackItem).doesNotExist('Back closes the card');
+    });
+  });
+  // A site's served page carries a snapshot of where its own page and links
+  // are served, on the config the realm server rewrites per request. The app
+  // asks `_host-route` for anything else.
+  module('on a site', function (hooks) {
+    let realm = testHostModeRealmURL;
+    let home = `${realm}SiteHome/index`;
+    let mango = `${realm}Pet/mango`;
+    let whitepaper = `${realm}Whitepaper/index`;
+    let notFound = `${realm}SiteNotFound/index`;
+    let config = ENV as { hostRouteSnapshot?: HostRouteSnapshot };
+    let originalFetch: typeof globalThis.fetch;
+    let asked: { cards: string[]; url: string | null }[];
+
+    hooks.beforeEach(function (this) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubCustomSubdomainHostModeService,
+      );
+      config.hostRouteSnapshot = {
+        realm,
+        mount: '/',
+        pages: [
+          ['/', home],
+          ['/pets/mango', mango],
+        ],
+        listings: [],
+        notFound,
+      };
+      // What the realm server's `_host-route` answers for this site: the
+      // whitepaper is served at /papers/white, and nothing at any other
+      // path.
+      asked = [];
+      originalFetch = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        let url = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.href,
+        );
+        if (!url.pathname.endsWith('/_host-route')) {
+          return originalFetch(input, init);
+        }
+        let cards = url.searchParams.getAll('card');
+        let path = url.searchParams.get('url');
+        asked.push({ cards, url: path });
+        let body = path
+          ? path.endsWith('/papers/white')
+            ? { kind: 'page', card: whitepaper }
+            : { kind: 'none', notFound }
+          : {
+              realm,
+              paths: Object.fromEntries(
+                cards
+                  .filter((card) => card === whitepaper)
+                  .map((card) => [card, '/papers/white']),
+              ),
+            };
+        return new Response(JSON.stringify(body), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+    });
+
+    hooks.afterEach(function () {
+      globalThis.fetch = originalFetch;
+      delete config.hostRouteSnapshot;
+    });
+
+    let canonical = () =>
+      document.head
+        .querySelector('link[rel~="canonical"]')
+        ?.getAttribute('href');
+
+    test('an address the snapshot holds shows its card', async function (assert) {
+      await visit('/pets/mango');
+      assert.dom(`[data-test-host-mode-card="${mango}"]`).exists();
+      assert.deepEqual(asked, [], 'the server is not asked');
+    });
+
+    test('a link shows the address its card is served at, asking the server only for what the snapshot lacks', async function (assert) {
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      assert
+        .dom('[data-test-site-link="mango"]')
+        .hasAttribute('href', '/pets/mango', 'a placed card links at once');
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-site-link="whitepaper"]')
+            ?.getAttribute('href') === '/papers/white',
+      );
+      assert
+        .dom('[data-test-site-link="whitepaper"]')
+        .hasAttribute('href', '/papers/white', 'a learned card links there');
+      assert.deepEqual(
+        asked,
+        [{ cards: [whitepaper], url: null }],
+        'one batched request, for the card the snapshot lacks',
+      );
+    });
+
+    test('following a link moves the site to its address, and Back returns', async function (assert) {
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      await click('[data-test-site-link="mango"]');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      assert.strictEqual(currentURL(), '/pets/mango');
+      assert.strictEqual(
+        canonical(),
+        new URL('/pets/mango', window.location.origin).href,
+        'the canonical link follows the page',
+      );
+
+      // Back is a transition to the URL before the link was followed
+      await visit('/');
+      await waitFor('[data-test-site-home]');
+      assert.dom(`[data-test-host-mode-card="${home}"]`).exists();
+    });
+
+    test('an address the server places shows its card', async function (assert) {
+      await visit('/papers/white');
+      assert.dom(`[data-test-host-mode-card="${whitepaper}"]`).exists();
+    });
+
+    test('an address that serves nothing shows the not-found card, with no canonical link', async function (assert) {
+      // In-app navigations, as a link makes them: a typed address is a full
+      // page load, whose head the server writes.
+      let hostNavigation = getService('host-navigation');
+      await visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      hostNavigation.visit('/nowhere');
+      await waitFor('[data-test-site-not-found]');
+      await settled();
+      assert.dom(`[data-test-host-mode-card="${notFound}"]`).exists();
+      assert.strictEqual(canonical(), undefined, 'no canonical address');
+
+      hostNavigation.visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      await settled();
+      assert.strictEqual(
+        canonical(),
+        new URL('/pets/mango', window.location.origin).href,
+        'a found page has one again',
+      );
+    });
+
+    test('a visitor who is not signed in hears the realm through its event feed', async function (assert) {
+      let opened: string[] = [];
+      let original = globalThis.EventSource;
+      class RecordingEventSource {
+        static CLOSED = 2;
+        readyState = 0;
+        constructor(url: string) {
+          opened.push(url);
+        }
+        addEventListener() {}
+        close() {}
+      }
+      (globalThis as any).EventSource = RecordingEventSource;
+      try {
+        await visit('/pets/mango');
+        await waitFor(`[data-test-host-mode-card="${mango}"]`);
+        await settled();
+        let messageService = getService('message-service');
+        assert.true(
+          opened.some((url) => url === `${realm}_live`),
+          `the realm's feed is opened: ${JSON.stringify({
+            opened,
+            subscribed: messageService.subscribedRealms(),
+          })}`,
+        );
+      } finally {
+        (globalThis as any).EventSource = original;
+      }
+    });
+
+    test('an in-app visit keeps a query the router does not declare', async function (assert) {
+      let hostNavigation = getService('host-navigation');
+      // The address a visitor sees and shares: the router's own currentURL
+      // only follows its transitions, and keeps only the params it declares.
+      let address = () =>
+        (
+          getService('router') as unknown as {
+            location: { getURL(): string };
+          }
+        ).location.getURL();
+      await visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+
+      hostNavigation.visit('/?tag=chalkup');
+      await waitFor('[data-test-site-home]');
+      await settled();
+      assert.strictEqual(address(), '/?tag=chalkup', 'the address keeps it');
+      assert.strictEqual(
+        hostNavigation.sitePath,
+        '/?tag=chalkup',
+        'the page card reads it',
+      );
+
+      hostNavigation.visit('/?tag=bouldering');
+      await settled();
+      assert.strictEqual(
+        address(),
+        '/?tag=bouldering',
+        'a visit that changes only that query moves the address',
+      );
+      assert.strictEqual(hostNavigation.sitePath, '/?tag=bouldering');
+
+      hostNavigation.visit('/pets/mango');
+      await waitFor(`[data-test-host-mode-card="${mango}"]`);
+      await settled();
+      assert.strictEqual(
+        address(),
+        '/pets/mango',
+        'a page without one drops it',
+      );
+      assert.strictEqual(hostNavigation.sitePath, '/pets/mango');
     });
   });
 });

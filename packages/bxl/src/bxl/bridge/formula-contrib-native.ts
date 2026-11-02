@@ -22,6 +22,8 @@ import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.ts';
 import { isoWeekNumber } from '../../formulajs/isoWeek.ts';
 import { excelWildcardSearch } from '../../formulajs/wildcard.ts';
 import { compare } from '../../jqtools/evaluate/compare.ts';
+import { JqEvaluateError } from '../../jqtools/errors.ts';
+import { sha256Hex } from './sha256.ts';
 import type { BareNativeFilter } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 import { wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.ts';
 
@@ -1307,6 +1309,20 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'like/2'(_input, value, pattern) {
     yield sqlLikeValue(value, pattern);
+  },
+  // sha256(text): lowercase hex SHA-256 of the UTF-8 bytes of a string. Pure
+  // and synchronous, so it gives the same answer in the realm server and the
+  // browser — a lottery that orders entrants by sha256(seed + id) can be
+  // re-run by anyone once the seed is revealed. Anything other than a string
+  // is refused rather than serialized, so the bytes hashed are never a
+  // matter of how a number or object happens to print.
+  *'sha256/1'(_input, text) {
+    if (typeof text !== 'string') {
+      throw new JqEvaluateError(
+        `sha256 takes a string; got ${text === null ? 'null' : Array.isArray(text) ? 'array' : typeof text}`,
+      );
+    }
+    yield sha256Hex(text);
   },
   *'ABS/1'(_input, value) {
     yield Math.abs(parseExcelNumber(value));

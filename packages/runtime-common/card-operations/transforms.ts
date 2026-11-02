@@ -190,10 +190,54 @@ export async function runOutputTransform(
   return await runStage(definition.output.source, result, 'output', ctx);
 }
 
+// Run an `emit`'s `key` over the payload its `input` stage left, and answer
+// the compaction key the message is emitted under, or undefined for a
+// declaration that names none. A key is what the channel compares messages
+// by, so it has to be text: a number is spelled the way the program would
+// spell it, and anything else is the program's mistake.
+export async function runKeyTransform(
+  definition: OperationDefinition,
+  payload: Record<string, unknown>,
+  ctx: TransformContext,
+): Promise<string | undefined> {
+  if (!definition.key) {
+    return undefined;
+  }
+  let produced = await runStage(definition.key.source, payload, 'key', ctx);
+  if (typeof produced === 'number' && Number.isFinite(produced)) {
+    return String(produced);
+  }
+  if (typeof produced !== 'string') {
+    throw refusal(
+      ctx,
+      'key',
+      `the \`key\` stage produces the text a later message supersedes this ` +
+        `one by, and this program produced ${describe(produced)}`,
+    );
+  }
+  return produced;
+}
+
+// Run an `emit`'s `assert` over the card as stored, and answer what it
+// produced. Whether that is a yes is the caller's to judge, since only it
+// knows what a refusal says.
+export async function runGuardTransform(
+  definition: OperationDefinition,
+  card: Record<string, unknown>,
+  ctx: TransformContext,
+): Promise<unknown> {
+  if (!definition.guard) {
+    return true;
+  }
+  return await runStage(definition.guard.program.source, card, 'assert', ctx);
+}
+
+type TransformStage = 'input' | 'output' | 'key' | 'assert';
+
 async function runStage(
   source: string,
   input: unknown,
-  stage: 'input' | 'output',
+  stage: TransformStage,
   ctx: TransformContext,
 ): Promise<unknown> {
   let bxl = await loadBxlTransform();
@@ -242,7 +286,7 @@ async function runStage(
 // defect in a card.
 function refusal(
   ctx: TransformContext,
-  stage: 'input' | 'output',
+  stage: TransformStage,
   detail: string,
   phase?: string,
 ): OperationFailure {

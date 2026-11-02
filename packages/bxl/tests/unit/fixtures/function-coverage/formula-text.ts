@@ -1,4 +1,12 @@
-import type { CoverageCase } from './case.ts';
+import { createHash } from 'node:crypto';
+import { strictEqual } from 'node:assert';
+import { inMutationLibraries, type CoverageCase } from './case.ts';
+
+// node:crypto is a second, independent SHA-256 the cases below check BXL's
+// pure-TypeScript one against, beyond the published FIPS 180-2 vectors.
+function nodeSha256(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
 
 export const formulaTextCases: CoverageCase[] = [
   // Character codes. CHAR maps a single-byte code back to its character,
@@ -268,4 +276,53 @@ export const formulaTextCases: CoverageCase[] = [
   { covers: 'like/2', source: 'like("Alice", "A_i%")', expected: true },
   { covers: 'like/2', source: 'like("Alice", "Ali")', expected: false },
   { covers: 'words/1', source: 'words("Grace  Lin")', expected: 2 },
+  // sha256: lowercase hex of the UTF-8 bytes. The first three are the
+  // FIPS 180-2 example vectors — the empty message, "abc" (one block) and the
+  // 448-bit message whose padding spills into a second block.
+  {
+    covers: 'sha256/1',
+    source: 'sha256("")',
+    expected:
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  },
+  {
+    covers: 'sha256/1',
+    source: 'sha256("abc")',
+    expected:
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  },
+  {
+    covers: 'sha256/1',
+    source:
+      'sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")',
+    expected:
+      '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1',
+  },
+  // Non-ASCII text hashes its UTF-8 encoding, a four-byte emoji included —
+  // checked against node:crypto rather than a recorded value.
+  {
+    covers: 'sha256/1',
+    source: 'sha256(.)',
+    input: 'Zoë 🎟️',
+    check: ([digest]) => strictEqual(digest, nodeSha256('Zoë 🎟️')),
+  },
+  // Readable syntax folds the uppercase spelling to the lowercase helper. The
+  // key is a lottery's: the revealed seed followed by the ticket id.
+  {
+    covers: 'sha256/1',
+    source: 'SHA256(.seed + .id)',
+    input: { seed: 'reveal-42', id: 't-7' },
+    check: ([digest]) => strictEqual(digest, nodeSha256('reveal-42t-7')),
+  },
+  // A number is refused rather than hashed as however it happens to print.
+  { covers: 'sha256/1', source: 'sha256(5)', throws: /sha256 takes a string/ },
+  { covers: 'sha256/1', source: 'sha256(null)', throws: /got null/ },
+  // The mutation dialect resolves it too: same digest under the library set
+  // a mutation or transform program gets.
+  inMutationLibraries({
+    covers: 'sha256/1',
+    source: 'sha256("abc")',
+    expected:
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  }),
 ];

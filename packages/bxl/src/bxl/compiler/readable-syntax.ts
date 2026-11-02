@@ -419,6 +419,7 @@ const LOWERCASE_BXL_HELPERS = new Set([
   'nonempty',
   'overlaps',
   'present',
+  'sha256',
   'when',
   'words',
 ]);
@@ -1269,6 +1270,11 @@ function appendPart(parts: string[], source: string) {
   // `. as $x` must not collapse to `.as $x`: glued to the dot, a keyword is
   // a field name to jq 1.7 (a real `.as` field arrives here as `"as"`).
   if (previous === '.' && JQ_PARSER_KEYWORDS.has(source)) {
+    parts.push(' ');
+  }
+  // `.a? // .b` must not collapse to `.a?//.b`: the tokenizer reads `?//` as
+  // the destructuring-alternative operator, not an optional followed by `//`.
+  if (previous?.endsWith('?') && source.startsWith('/')) {
     parts.push(' ');
   }
   // Space after jq separators `;` / `,` so compiled output reads nicely

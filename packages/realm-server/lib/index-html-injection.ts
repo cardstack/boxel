@@ -158,6 +158,37 @@ export async function retrieveIsolatedHTML({
   };
 }
 
+// Whether a page's card failed: its index row is an error, or its latest
+// render is. Asked only when the page has no prerendered HTML, to tell a card
+// that failed from one not rendered yet.
+export async function pageRenderFailed({
+  cardURL,
+  dbAdapter,
+}: {
+  cardURL: URL;
+  dbAdapter: DBAdapter;
+}): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    `
+      SELECT 1
+      FROM boxel_index AS i
+      LEFT JOIN prerendered_html AS ph
+        ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+      WHERE i.is_deleted IS NOT TRUE
+        AND (
+          i.has_error IS TRUE
+          OR (ph.error_doc IS NOT NULL AND ph.generation >= i.generation)
+        )
+        AND
+    `,
+    ...pageRowExpressions(cardURL, 'i'),
+    `
+      LIMIT 1
+    `,
+  ]);
+  return rows.length > 0;
+}
+
 export function injectHeadHTML(indexHTML: string, headHTML: string): string {
   return indexHTML.replace(
     /(<meta[^>]+data-boxel-head-start[^>]*>)([\s\S]*?)(<meta[^>]+data-boxel-head-end[^>]*>)/,

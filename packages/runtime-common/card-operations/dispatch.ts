@@ -13,6 +13,8 @@ import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
   runInputTransform,
+  runGuardTransform,
+  runKeyTransform,
   runOutputTransform,
   type TransformContext,
 } from './transforms.ts';
@@ -54,6 +56,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
+  type EmitMessage,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -72,7 +75,12 @@ import type {
   SingleCardDocument,
   SingleFileMetaDocument,
 } from '../document-types.ts';
-import type { LooseCardResource, FileMetaResource } from '../resource-types.ts';
+import type {
+  CardResource,
+  LooseCardResource,
+  FileMetaResource,
+} from '../resource-types.ts';
+import { isCardResource } from '../card-document-shape.ts';
 import type { InstanceOrError, IndexedFile } from '../index-query-engine.ts';
 import type { SearchResult } from '../realm-index-query-engine.ts';
 import type { SearchEntryQuery } from '../search-entry.ts';
@@ -211,6 +219,12 @@ export interface OperationCore {
   // Sends a `callApi`'s request through the realm server's guarded outbound
   // client. A core without it sends nothing.
   callApi?: CallApiSender;
+  // Puts an `emit`'s message on the target card's live channel (ADR event-feed
+  // §1.6, §1.7) and answers the position it took there. Called once per
+  // admitted emit; in an `_operations` batch, after the batch's writes have
+  // committed. A core without it emits nothing, and refuses every `emit`
+  // with 501 `not-implemented`.
+  emitMessage?: EmitMessage;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -593,6 +607,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   explain: true,
   validate: true,
   callApi: true,
+  emit: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -613,6 +628,7 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   explain: [],
   validate: [],
   callApi: [],
+  emit: [],
 };
 
 // The behaviors a target carries only under a name its type declares on
@@ -621,18 +637,21 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // does not exist. An explain and a validate are the two: each answers only on
 // the card that declares it, a policy card, or for a validate the realm's
 // config card too. A callApi is the third: only a card that declares a request
-// has one to send.
+// has one to send. An emit is the fourth: only a card that declares a
+// message says what one on its channel is.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
     validate: true,
     callApi: true,
+    emit: true,
   });
 
 const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
   explain: ['card-def'],
   validate: ['card-def'],
   callApi: ['card-def'],
+  emit: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -1439,7 +1458,11 @@ function refuseAnonymousActor(
   request: OperationRequest,
   definition: OperationDefinition,
 ): void {
-  if (!hasTransforms(definition) || !definition.readsActor || request.actor) {
+  if (
+    (!hasTransforms(definition) && !definition.key) ||
+    !definition.readsActor ||
+    request.actor
+  ) {
     return;
   }
   throw new OperationFailure({
@@ -1609,6 +1632,8 @@ async function runBaseOperation(
           : {}),
         realmConfig: () => core.realmConfig(),
       });
+    case 'emit':
+      return await emitOperation(core, canonical, definition);
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from
@@ -1653,6 +1678,164 @@ async function runBaseOperation(
         detail: `operation "${canonical.name}" names a base operation the core does not implement`,
       });
   }
+}
+
+// An `emit`: the payload, as the `input` stage left it and the `params`
+// check passed it, is the message, put on the target card's live channel
+// under the key the declaration's `key` program answers. Nothing is staged
+// and nothing is written, so there is no lock to take, no index job to
+// enqueue and no realm event to broadcast: the channel is the realm's, and
+// delivering on it is the one thing this does.
+//
+// A message is emitted on a card's channel, so a type target — a card that
+// does not exist yet — has none to emit on.
+async function emitOperation(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+): Promise<OperationResult> {
+  if (request.target.kind !== 'instance') {
+    throw new OperationFailure({
+      status: 405,
+      code: 'operation-not-allowed',
+      title: 'Operation not allowed',
+      detail:
+        `operation "${request.name}" emits on a card's live channel, so ` +
+        `it is invoked on a card rather than on its type`,
+    });
+  }
+  let cardURL = request.target.url;
+  if (!core.emitMessage) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 501,
+      code: 'not-implemented',
+      title: 'Emitting not available',
+      detail:
+        `operation "${request.name}" emits on the card's live channel, ` +
+        `and this realm has no channel to emit on`,
+    });
+  }
+  let body = (request.params ?? {}) as Record<string, JsonValue>;
+  let key = await runKeyTransform(
+    definition,
+    body,
+    transformContext(core, request),
+  );
+  let position: string;
+  try {
+    ({ position } = await core.emitMessage({
+      cardURL,
+      operation: { name: request.name, base: 'emit' },
+      ...(key === undefined ? {} : { key }),
+      body,
+      ...(definition.unordered ? { unordered: definition.unordered } : {}),
+      ...(definition.guard
+        ? {
+            guard: () => assertEmitGuard(core, request, definition, cardURL),
+          }
+        : {}),
+    }));
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    // The channel's own failure rather than anything the caller sent.
+    throw new OperationFailure({
+      id: cardURL,
+      status: 500,
+      code: 'internal-error',
+      title: 'Cannot emit',
+      detail:
+        `operation "${request.name}" could not emit its message: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+  return { emitted: { id: cardURL, position } };
+}
+
+// An emit's `assert`, judged against the card as stored and the realm's clock
+// before anything is emitted. The card is read from its file rather than from
+// the index, so a write that has landed is what the guard sees whether or not
+// it has been indexed yet. The realm runs it holding the card's write lock and
+// in turn with the channel's appends, so it can't pass against a card a
+// concurrent write is about to change: a transform that collects from the
+// channel and writes what lasts holds that lock, and an emit after it sees
+// what it wrote (ADR event-feed §1.6).
+//
+// `.` is the card's id and attributes, which is also what `instance()` reads.
+// The guard answers `true` for a message that may go; `false` refuses the
+// emit with `assertion-failed` and the declaration's message, as a
+// transform's failed `assert` refuses its write; anything else is the
+// program's mistake.
+async function assertEmitGuard(
+  core: OperationCore,
+  request: OperationRequest,
+  definition: OperationDefinition,
+  cardURL: string,
+): Promise<void> {
+  let guard = definition.guard;
+  if (!guard) {
+    return;
+  }
+  let url = new URL(cardURL);
+  let content = await core.readFileAsText(
+    `${localPathFor(core, url)}.json` as LocalPath,
+  );
+  let resource = content === undefined ? undefined : storedCardIn(content);
+  if (!resource) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 404,
+      code: 'target-not-found',
+      title: 'Not found',
+      detail: `${cardURL} does not exist in realm ${core.realmURL}`,
+    });
+  }
+  let card: Record<string, unknown> = {
+    ...(resource.attributes ?? {}),
+    id: cardURL,
+  };
+  let held = await runGuardTransform(definition, card, {
+    ...transformContext(core, request),
+    instance: card,
+  });
+  if (held === true) {
+    return;
+  }
+  if (held === false) {
+    throw new OperationFailure({
+      id: cardURL,
+      status: 400,
+      code: 'assertion-failed',
+      title: 'Assertion failed',
+      detail:
+        guard.message ??
+        `operation "${request.name}" asserts something the card does not hold`,
+      meta: { operation: request.name },
+    });
+  }
+  throw new OperationFailure({
+    id: cardURL,
+    status: 400,
+    code: 'invalid-params',
+    title: 'Cannot run transform',
+    detail:
+      `the \`assert\` of operation "${request.name}" answers whether the ` +
+      `message may go, and this program answered something other than ` +
+      `true or false`,
+    meta: { operation: request.name, stage: 'assert' },
+  });
+}
+
+function storedCardIn(content: string): CardResource | undefined {
+  let resource: unknown;
+  try {
+    resource = (JSON.parse(content) as { data?: unknown }).data;
+  } catch {
+    return undefined;
+  }
+  return isCardResource(resource) ? resource : undefined;
 }
 
 // The payload has to satisfy the schema the definition declares before any

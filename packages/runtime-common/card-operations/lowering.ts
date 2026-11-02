@@ -180,6 +180,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     // Reached only through a declaration: a card with a request to send says
     // what it is.
     callApi: ['card-def'],
+    // Reached only through a declaration: a card's live channel is the card's,
+    // and only a card that declares a message says what one is.
+    emit: ['card-def'],
   };
 
 function declarableBases(
@@ -211,12 +214,22 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'explain' ||
     base === 'validate' ||
     base === 'callApi' ||
+    base === 'emit' ||
     (base === 'update' && kind === 'file-def')
   );
 }
 
 // The name an ad-hoc search is invoked under, which no declaration may take.
 const AD_HOC_QUERY_NAME = 'query';
+
+// Whether `name` is a base operation's other than `emit` itself, read off
+// the exhaustive table above so a further base is covered without a second
+// list to keep in step.
+function isShadowedBaseName(name: string): boolean {
+  return (
+    name !== 'emit' && Object.prototype.hasOwnProperty.call(DECLARABLE_BY, name)
+  );
+}
 
 // Lower every declared operation on one type.
 //
@@ -305,9 +318,33 @@ export async function lowerOperationDeclarations(
       issues.push(...operation.issues!);
       continue;
     }
+    if (raw[name]?.base === 'emit' && isShadowedBaseName(name)) {
+      // An emit writes nothing, so under a base operation's name it would
+      // answer that name by writing nothing, and a caller reaching for the
+      // built-in would be told it had run. The authoring decorator refuses
+      // the name; this keeps a stored entry from carrying it past the code
+      // that did. Stored invalid on `emit`, so invoking it by name is
+      // refused rather than falling back to the built-in it names.
+      let operation: OperationDefinition = {
+        base: 'emit',
+        deterministic: true,
+        invalid: true,
+        issues: [
+          {
+            code: 'emit-under-base-name',
+            operation: name,
+            path: name,
+            message: `an "emit" operation sends a message and writes nothing, so it cannot take the name of the "${name}" base operation, whose callers expect it to do what "${name}" does`,
+          },
+        ],
+      };
+      operations[name] = operation;
+      issues.push(...operation.issues!);
+      continue;
+    }
     let operation: OperationDefinition;
     try {
-      operation = await lowerOperation(raw[name], sink, context);
+      operation = await lowerOperation(raw[name], sink, context, raw);
     } catch (e: unknown) {
       // Lowering records rather than throws, so this is a defect in it. It
       // costs this operation its validity and nothing else, and the entry
@@ -420,6 +457,8 @@ async function lowerOperation(
   declaration: OperationDeclaration,
   sink: IssueSink,
   context: LoweringContext,
+  // Every declaration on the type, for a `collect` naming the emit it reads.
+  siblings: Record<string, OperationDeclaration> = {},
 ): Promise<OperationDefinition> {
   let base: BaseOperationName = declaration.base;
   let operation: OperationDefinition = { base, deterministic: true };
@@ -440,6 +479,26 @@ async function lowerOperation(
     }
   }
   let paramNames = new Set(Object.keys(declaration.params ?? {}));
+  // The program and the clauses read collected params beside declared ones;
+  // `input` and `output` do not, since neither runs under the lock the
+  // channel is read in.
+  let collected = lowerCollect(declaration, paramNames, siblings, sink);
+  if (collected) {
+    operation.collect = collected;
+    let unorderedParams = Object.entries(collected)
+      .filter(
+        ([, emitted]) =>
+          (siblings[emitted] as { ordered?: unknown }).ordered === false,
+      )
+      .map(([param]) => param);
+    if (unorderedParams.length > 0) {
+      operation.collectUnordered = unorderedParams;
+    }
+  }
+  let programParamNames = new Set([
+    ...paramNames,
+    ...Object.keys(collected ?? {}),
+  ]);
 
   if (declaration.optimistic !== undefined) {
     operation.optimistic = declaration.optimistic;
@@ -518,11 +577,33 @@ async function lowerOperation(
   }
 
   let { statements, snapshot } = await lowerClauses(
-    declaration,
-    paramNames,
+    // An emit's `assert` is its own guard, lowered below, and not a
+    // transform's uniqueness check.
+    base === 'emit'
+      ? ({ ...declaration, assert: undefined } as OperationDeclaration)
+      : declaration,
+    programParamNames,
     sink,
     context,
   );
+  // An emit edits no document, so a transform's clauses stored on one
+  // would assemble a program nothing runs. The decorator refuses the keys;
+  // a stored entry is held to the same rule here.
+  if (base === 'emit') {
+    for (let clause of ['set', 'append'] as const) {
+      if (
+        (declaration as unknown as Record<string, unknown>)[clause] !==
+        undefined
+      ) {
+        sink.add(
+          'unrunnable-program',
+          clause,
+          `an "emit" operation sends its payload as a message and edits no document, so this \`${clause}\` would never be applied`,
+        );
+      }
+    }
+    statements = [];
+  }
   let rawProgram = (declaration as { transformations?: { $bxl: string } })
     .transformations;
   if (rawProgram && runsNoProgram(base, context.definition.type)) {
@@ -537,7 +618,9 @@ async function lowerOperation(
             ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
             : base === 'callApi'
               ? `a "callApi" operation sends the request it declares rather than running a program over a document, so this program would never be reached`
-              : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+              : base === 'emit'
+                ? `an "emit" operation sends its payload as a message on the card's live channel rather than running a program over a document, so this program would never be reached`
+                : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -547,7 +630,7 @@ async function lowerOperation(
       rawProgram.$bxl,
       'readable',
       'transformations',
-      paramNames,
+      programParamNames,
       sink,
     );
     if (program) {
@@ -606,6 +689,12 @@ async function lowerOperation(
       'output',
       `a "validate" operation answers with what the policy card compiles to, as compiling reports it, so this projection would never be reached`,
     );
+  } else if (base === 'emit' && declaration.output !== undefined) {
+    sink.add(
+      'unrunnable-program',
+      'output',
+      `an "emit" operation answers with where its message landed on the card's channel, so this projection would never be reached`,
+    );
   } else {
     let output = await lowerOutput(
       declaration.output,
@@ -637,6 +726,35 @@ async function lowerOperation(
       operation.query = query;
     }
   }
+  if (base === 'emit') {
+    let key = (declaration as { key?: unknown }).key;
+    if (key !== undefined && !isBxl(key)) {
+      sink.add(
+        'invalid-program',
+        'key',
+        `an "emit" operation's \`key\` is a program written with the bxl tag, which answers the string a later message supersedes this one by`,
+      );
+    } else if (key !== undefined) {
+      let program = lowerExpression(key.$bxl, 'key', paramNames, sink);
+      if (program) {
+        operation.key = program;
+      }
+    }
+    let guard = lowerEmitGuard(
+      (declaration as { assert?: unknown }).assert,
+      paramNames,
+      sink,
+    );
+    if (guard) {
+      operation.guard = guard;
+    }
+    let unordered = lowerPresence(declaration, sink);
+    if (unordered) {
+      operation.unordered = unordered;
+      // Presence is never guarded: it waits on no ordered write.
+      delete operation.guard;
+    }
+  }
   if (base === 'callApi') {
     let request = lowerCallApi(
       declaration as CallApiClauses,
@@ -662,17 +780,182 @@ async function lowerOperation(
     }
   }
 
-  operation.deterministic = [
-    operation.program,
-    operation.input,
-    operation.output,
-  ].every((program) => !program || !usesVolatileCall(program.source));
+  // A program reading the card's channel reads what other callers published,
+  // which a client running it locally does not hold.
+  operation.deterministic =
+    !operation.collect &&
+    [
+      operation.program,
+      operation.input,
+      operation.output,
+      operation.key,
+      operation.guard?.program,
+    ].every((program) => !program || !usesVolatileCall(program.source));
 
   if (readsActor(operation)) {
     operation.readsActor = true;
   }
 
   return operation;
+}
+
+// A transform's `collect`: param name → the emit on the same type whose latest
+// messages the program reads there. Recorded, and left out of the stored
+// entry, wherever it cannot be filled — on another base, as anything but a map
+// of names, over a param the caller also sends, or naming an operation that is
+// not an emit the type declares — since a collected param the realm cannot
+// fill would be one the program reads as missing on every invocation.
+function lowerCollect(
+  declaration: OperationDeclaration,
+  paramNames: Set<string>,
+  siblings: Record<string, OperationDeclaration>,
+  sink: IssueSink,
+): Record<string, string> | undefined {
+  let collect = (declaration as { collect?: unknown }).collect;
+  if (collect === undefined) {
+    return undefined;
+  }
+  if (declaration.base !== 'transform') {
+    sink.add(
+      'invalid-collect',
+      'collect',
+      `\`collect\` hands a transform's program the messages on the card's channel, and an "${declaration.base}" operation runs no such program`,
+    );
+    return undefined;
+  }
+  if (!isPlainObject(collect) || Object.keys(collect).length === 0) {
+    sink.add(
+      'invalid-collect',
+      'collect',
+      `\`collect\` must map each param the program reads to the name of an emit declared on this type`,
+    );
+    return undefined;
+  }
+  let lowered: Record<string, string> = {};
+  for (let [param, emitted] of Object.entries(collect)) {
+    let path = `collect.${param}`;
+    if (paramNames.has(param)) {
+      sink.add(
+        'invalid-collect',
+        path,
+        `params("${param}") is filled from the card's channel, so the \`params\` schema cannot also declare it for the caller to send`,
+      );
+      continue;
+    }
+    let named =
+      typeof emitted === 'string' &&
+      Object.prototype.hasOwnProperty.call(siblings, emitted)
+        ? siblings[emitted]
+        : undefined;
+    if (typeof emitted !== 'string' || named?.base !== 'emit') {
+      sink.add(
+        'invalid-collect',
+        path,
+        `\`${path}\` must name an emit operation declared on this type, and ${
+          typeof emitted === 'string'
+            ? `"${emitted}" is ${named ? `a "${named.base}"` : 'not declared here'}`
+            : 'it is not a name'
+        }`,
+      );
+      continue;
+    }
+    lowered[param] = emitted;
+  }
+  return Object.keys(lowered).length > 0 ? lowered : undefined;
+}
+
+// The longest an unordered message may count for, and how long it counts for
+// when the declaration doesn't say.
+const MAX_PRESENCE_SECONDS = 3600;
+const DEFAULT_PRESENCE_SECONDS = 60;
+
+// An emit's `ordered: false` and `expiresAfter` (ADR event-feed §1.6). The decorator
+// refuses a malformed pair; a stored entry is held to the same rule here, and
+// an emit whose presence can't be applied stays ordered.
+function lowerPresence(
+  declaration: OperationDeclaration,
+  sink: IssueSink,
+): OperationDefinition['unordered'] {
+  let { ordered, expiresAfter, key, assert } = declaration as {
+    ordered?: unknown;
+    expiresAfter?: unknown;
+    key?: unknown;
+    assert?: unknown;
+  };
+  if (ordered !== undefined && typeof ordered !== 'boolean') {
+    sink.add('invalid-presence', 'ordered', '`ordered` must be true or false');
+    return undefined;
+  }
+  if (ordered !== false) {
+    if (expiresAfter !== undefined) {
+      sink.add(
+        'invalid-presence',
+        'expiresAfter',
+        '`expiresAfter` applies only to an unordered emit (`ordered: false`)',
+      );
+    }
+    return undefined;
+  }
+  if (key === undefined) {
+    sink.add(
+      'invalid-presence',
+      'ordered',
+      'an unordered emit needs a `key`: each message is the latest for its key',
+    );
+    return undefined;
+  }
+  if (assert !== undefined) {
+    sink.add(
+      'invalid-presence',
+      'assert',
+      "an unordered emit takes no `assert`: a guard is judged in turn with the channel's ordered writes, which an unordered message never waits on",
+    );
+    return undefined;
+  }
+  let seconds = expiresAfter ?? DEFAULT_PRESENCE_SECONDS;
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0 ||
+    seconds > MAX_PRESENCE_SECONDS
+  ) {
+    sink.add(
+      'invalid-presence',
+      'expiresAfter',
+      `\`expiresAfter\` must be a number of seconds greater than 0 and at most ${MAX_PRESENCE_SECONDS}`,
+    );
+    return undefined;
+  }
+  return { expiresAfterMs: seconds * 1000 };
+}
+
+// An emit's `assert`: `{ that, message }`, the expression lowered in the
+// transform profile, which may read the clock — the mutation profile a
+// transform's program runs in may not, and a deadline is most of what an emit
+// guards.
+function lowerEmitGuard(
+  assertion: unknown,
+  paramNames: Set<string>,
+  sink: IssueSink,
+): OperationDefinition['guard'] {
+  if (assertion === undefined) {
+    return undefined;
+  }
+  let that = isPlainObject(assertion) ? assertion.that : undefined;
+  let message = isPlainObject(assertion) ? assertion.message : undefined;
+  if (!isBxl(that) || (message !== undefined && typeof message !== 'string')) {
+    sink.add(
+      'invalid-program',
+      'assert',
+      `an "emit" operation's \`assert\` carries \`that\`, an expression written with the bxl tag that answers true for a message that may go, and an optional string \`message\``,
+    );
+    return undefined;
+  }
+  let program = lowerExpression(that.$bxl, 'assert.that', paramNames, sink);
+  if (!program) {
+    return undefined;
+  }
+  return { program, ...(message !== undefined ? { message } : {}) };
 }
 
 // Whether anything this operation runs or fills reads the invoking actor.
@@ -684,7 +967,13 @@ async function lowerOperation(
 // from a request would have to remember this list, and would be reading
 // program text on a path that must not reach the BXL package at all.
 function readsActor(operation: OperationDefinition): boolean {
-  for (let program of [operation.program, operation.input, operation.output]) {
+  for (let program of [
+    operation.program,
+    operation.input,
+    operation.output,
+    operation.key,
+    operation.guard?.program,
+  ]) {
     if (program && callsActor(program.source)) {
       return true;
     }
@@ -1646,6 +1935,16 @@ async function lowerCreate(
   let target = codeRef ? await context.lookupDefinition(codeRef) : undefined;
   let fill: Record<string, OperationTemplate> = {};
   for (let [key, value] of Object.entries(declaration.fill)) {
+    if (target && key.includes('.')) {
+      let fieldDef = await nestedFillLink(key, target, sink, context);
+      fill[key] = templateOf(value, {
+        path: `fill.${key}`,
+        paramNames,
+        sink,
+        identifies: Boolean(fieldDef),
+      });
+      continue;
+    }
     let fieldDef = target ? getImmediateFieldDef(target, key) : undefined;
     if (target) {
       let unwritable = fieldDef && unwritableReason(key, fieldDef);
@@ -1673,6 +1972,49 @@ async function lowerCreate(
     });
   }
   operation.fill = fill;
+}
+
+// A dotted `fill` key names a link inside a contained value, keyed the way a
+// stored document keys its relationships: `cardInfo.theme` is the `theme` link
+// of the card's `cardInfo`. Only a link may be named this way. A contained
+// value is filled whole under its own name, and a path through another link
+// would write into the linked card rather than the one being created.
+async function nestedFillLink(
+  key: string,
+  target: Definition,
+  sink: IssueSink,
+  context: LoweringContext,
+): Promise<FieldDefinition | undefined> {
+  let resolved = await resolvePath(key, { ...context, definition: target });
+  let segments = resolved.segments;
+  let last = resolved.unresolved ? undefined : segments[segments.length - 1];
+  let crossesLink = segments
+    .slice(0, -1)
+    .some((segment) => LINK_KINDS.includes(segment.fieldDef.type));
+  if (!last || crossesLink || !LINK_KINDS.includes(last.fieldDef.type)) {
+    sink.add(
+      'unknown-field',
+      `fill.${key}`,
+      `"${key}" is not a link inside a contained field of ${describeDefinition(
+        target,
+      )}; a dotted \`fill\` key names a nested link such as cardInfo.theme, and a contained value is filled whole under its own name`,
+    );
+    return undefined;
+  }
+  for (let segment of segments) {
+    let unwritable = unwritableReason(segment.name, segment.fieldDef);
+    if (unwritable) {
+      sink.add(
+        unwritable.code,
+        `fill.${key}`,
+        `${unwritable.why}, and ${describeDefinition(
+          target,
+        )} is the type this creates`,
+      );
+      return undefined;
+    }
+  }
+  return last.fieldDef;
 }
 
 // A value carried to invocation time as data: markers stay exactly as the

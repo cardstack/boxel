@@ -1919,6 +1919,8 @@ export * from './tasks/index.ts';
 export * from './worker.ts';
 export * from './stream.ts';
 export * from './realm.ts';
+export * from './event-feed.ts';
+export * from './event-feed-store.ts';
 export type { AnonymousCaller, AnonymousCount } from './anonymous-admission.ts';
 export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
@@ -2036,6 +2038,9 @@ export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
+export * from './site-settings.ts';
+export * from './host-routes.ts';
+export * from './site-paths.ts';
 
 export type {
   CardDocument,

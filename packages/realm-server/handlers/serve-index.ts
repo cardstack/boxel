@@ -1,11 +1,12 @@
+import { createHash } from 'crypto';
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
 import type {
   DBAdapter,
-  HostRoutingRule,
   PrerenderedHtmlFormat,
   Realm,
+  SiteSettings,
 } from '@cardstack/runtime-common';
 import {
   CAPTURE_SERVING_PREFIXES,
@@ -17,11 +18,11 @@ import {
   hasExtension,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
-  isRedirectRoutingRule,
+  isLiteralRedirect,
   logger,
+  normalizeRoutingPath,
   param,
   query,
-  resolveRedirectTarget,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -30,6 +31,7 @@ import {
   injectHeadHTML,
   injectIsolatedHTML,
   retrieveHeadHTML,
+  pageRenderFailed,
   retrieveIsolatedHTML,
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
@@ -38,17 +40,75 @@ import {
   findOrMountRealm,
   getPublishedRealmInfo,
   hasPublicPermissions,
+  anonymousCardDoc,
+  anonymousMayRead,
   isIndexedCardInstance,
-  matchHostRoutingRule,
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import {
+  resolveSiteRequest,
+  siteHomeCard,
+  siteGenerations,
+  siteMounts,
+  sitePathOf,
+  sitePathsForCards,
+} from '../lib/host-routes.ts';
+import { cardKey, linkedCards, siteRewriter } from '../lib/site-rewrite.ts';
+import { framePage } from '../lib/site-frame.ts';
+import { SITE_FILES, siteFile, type SiteFileName } from '../lib/site-files.ts';
+import type {
+  HostRouteShare,
+  HostRouteSnapshot,
+  SiteAnswer,
+} from '@cardstack/runtime-common';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
 // routed to where it holds it, and otherwise the one a routing rule pointed
 // into. A card no realm holds is served no markup at all, since nothing can say
 // which of its formats its type withholds.
+
+// The frame card a site shows its pages inside, as prerendered: its isolated
+// HTML and scoped CSS. None when the page being served is the frame itself,
+// when the frame has no prerendered HTML yet, or when it is another realm's
+// card and the site doesn't opt in to serving those (ADR site-routing §1.6).
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+async function siteFrameMarkup(
+  frameURL: URL,
+  pageURL: URL,
+  routedRealm: Realm,
+  serveSourcePrerender: boolean,
+  dbAdapter: DBAdapter,
+): Promise<{ url: URL; html: string; scopedCSS: string | null } | undefined> {
+  let key = (url: URL) => url.href.replace(/\.json$/, '');
+  if (key(frameURL) === key(pageURL)) {
+    return undefined;
+  }
+  let holds = new RealmPaths(new URL(routedRealm.url)).inRealm(frameURL);
+  if (!holds && !serveSourcePrerender) {
+    return undefined;
+  }
+  let [markup, scopedCSS] = await Promise.all([
+    retrieveIsolatedHTML({ cardURL: frameURL, dbAdapter, log: isolatedLog }),
+    retrieveScopedCSS({ cardURL: frameURL, dbAdapter, log: scopedCSSLog }),
+  ]);
+  if (markup.html == null) {
+    return undefined;
+  }
+  return { url: frameURL, html: markup.html, scopedCSS };
+}
+
+// Whether a realm routes paths of its own: page types, or fixed pages from
+// realm.json's routing rules. Such a realm's pages are rewritten to the
+// addresses it serves, and carry a snapshot of them for the host app.
+function routesPaths(settings: SiteSettings): boolean {
+  return Boolean(settings.pageTypes.length || settings.fixedPages.length);
+}
+
 async function unshareableFormatsForPage(
   readURL: URL,
   routedRealm: Realm | undefined,
@@ -328,7 +388,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // Recompute the hash in dev mode (where index.html is not cached) so
       // that changes to the shell are reflected in the ETag.
       if (!indexHTMLHash || isDev) {
-        let { createHash } = await import('crypto');
         indexHTMLHash = createHash('md5')
           .update(indexHTML)
           .digest('hex')
@@ -367,6 +426,54 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // probe (isIndexedCardInstance → hasExtensionlessSourceModule) throw on the
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
+
+    // A site's sitemap.xml, robots.txt and llms.txt, at its root, written
+    // from its settings.
+    let fileName = requestURL.pathname.split('/').pop() as SiteFileName;
+    if (ctxt.method === 'GET' && SITE_FILES.includes(fileName)) {
+      let realm = await findOrMountRealm(requestURL, routingDeps);
+      if (
+        realm &&
+        requestURL.pathname ===
+          `${siteMounts(realm, requestURL).mount.pathname}${fileName}` &&
+        (await hasPublicPermissions(realm, routingDeps))
+      ) {
+        let file = await siteFile(
+          fileName,
+          realm,
+          siteMounts(realm, requestURL).mount,
+          requestURL.searchParams,
+          routingDeps,
+        );
+        if (file) {
+          ctxt.type = file.contentType;
+          ctxt.set('Cache-Control', 'public, max-age=300');
+          ctxt.body = file.body;
+          return;
+        }
+      }
+      return next();
+    }
+
+    // What the routing realm's site answers at the request's path, asked once
+    // and only when needed.
+    let siteAnswerPromise:
+      | Promise<(SiteAnswer & { share?: HostRouteShare }) | undefined>
+      | undefined;
+    let siteAnswer = () =>
+      (siteAnswerPromise ??= (async () => {
+        let realm = await findOrMountRealm(requestURL, routingDeps);
+        return realm
+          ? resolveSiteRequest(realm, requestURL, routingDeps, ctxt.req.headers)
+          : undefined;
+      })());
+    // Whether the path is a fixed page another realm holds. Such a page can
+    // change, or stop being served, without this realm changing, so its
+    // response carries no ETag a cache could revalidate against.
+    let servesCrossRealm = async () => {
+      let answer = await siteAnswer();
+      return answer?.kind === 'fixed' && Boolean(answer.crossRealm);
+    };
 
     if (
       isDocumentEmbedRequest(ctxt) ||
@@ -440,10 +547,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // route falls through to the generic 200 shell, a non-route 404s).
           // Requiring public read makes routed and non-routed bare paths
           // behave identically (both next() → 404) on a non-public realm.
-          let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
+          // A path the realm's site answers counts as routed too.
+          let matchedRealm =
+            (await siteAnswer())?.kind !== 'none'
+              ? await findOrMountRealm(requestURL, routingDeps)
+              : undefined;
           if (
-            !matchedRule ||
-            !(await hasPublicPermissions(matchedRule.realm, routingDeps))
+            !matchedRealm ||
+            !(await hasPublicPermissions(matchedRealm, routingDeps))
           ) {
             return next();
           }
@@ -518,28 +629,43 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
-    let etag =
-      lastPublishedAt && indexHTMLHash
-        ? `"${lastPublishedAt}-${indexHTMLHash}"`
-        : null;
-
-    if (etag) {
+    // A site's pages are revalidated further down, once the markup they are
+    // built from has been read (see siteETag). Another page routed into
+    // another realm can change without this realm knowing, so it gets none.
+    let isSitePage = Boolean(
+      routedRealm && (await routedRealm.getSiteSettings()).pageTypes.length,
+    );
+    let etag: string | null = null;
+    if (
+      lastPublishedAt &&
+      indexHTMLHash &&
+      !isSitePage &&
+      !(await servesCrossRealm())
+    ) {
+      etag = `"${lastPublishedAt}-${indexHTMLHash}"`;
+    }
+    let notModified = (tag: string) => {
       let ifNoneMatch = ctxt.get('If-None-Match');
       if (
-        ifNoneMatch === '*' ||
-        ifNoneMatch
+        ifNoneMatch !== '*' &&
+        !ifNoneMatch
           .split(',')
-          .some((t) => t.trim().replace(/^W\//, '') === etag)
+          .some((t) => t.trim().replace(/^W\//, '') === tag)
       ) {
-        ctxt.status = 304;
-        ctxt.set('ETag', etag);
-        ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
-        ctxt.vary('Accept');
-        // The shell is withheld from document embeds (see
-        // isDocumentEmbedRequest), so a cached copy must not satisfy them.
-        ctxt.vary('Sec-Fetch-Dest');
-        return;
+        return false;
       }
+      ctxt.status = 304;
+      ctxt.set('ETag', tag);
+      ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+      ctxt.vary('Accept');
+      // The shell is withheld from document embeds (see
+      // isDocumentEmbedRequest), so a cached copy must not satisfy them.
+      ctxt.vary('Sec-Fetch-Dest');
+      return true;
+    };
+
+    if (etag && notModified(etag)) {
+      return;
     }
     let publicPermissions = await hasPublicPermissions(
       routedRealm,
@@ -554,71 +680,126 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       return;
     }
 
-    // CS-10055: host routing rules in the realm config can map a bare path
-    // (e.g. /whitepaper) to a target card. This runs AFTER the public-
-    // permission gate above so a non-public realm never has its routing map
-    // consulted — otherwise the canonical redirect below would disclose that
-    // a private routed path exists to an unauthenticated caller. The map is
-    // also written into the @cardstack/host/config/environment meta tag
-    // further down so the SPA can resolve the path post-hydration.
-    let routingMap: HostRoutingRule[] = routedRealm
-      ? await routedRealm.getHostRoutingMap()
-      : [];
-    if (routingMap.length > 0) {
-      // The match and its canonical form live once, in matchHostRoutingRule.
-      let matched = await matchHostRoutingRule(requestURL, routingDeps);
-      if (matched) {
-        if (isRedirectRoutingRule(matched.rule)) {
-          // A declared redirect rule. Redirect straight to the
-          // declared target from either trailing-slash form of the
-          // matched path — canonicalizing first would cost the client a
-          // second hop for no benefit. `resolveRedirectTarget` is shared
-          // with the routing map injected further down, so the URL a
-          // full-page visitor is sent to and the one an in-app
-          // transition resolves cannot drift apart. The request's query
-          // string carries over unless the target declares its own —
-          // minus the host app's own params, which a redirect has no
-          // business handing on: the target may be an external site, and
-          // `sid` / `clientSecret` are password-reset tokens. The SPA
-          // drops the same list on its in-app navigation.
-          let { redirectTo, statusCode } = matched.rule;
-          let target = new URL(
-            resolveRedirectTarget(
-              redirectTo,
-              new URL(matched.realm.url).pathname,
-            ),
-            requestURL,
-          );
-          if (requestURL.search && !target.search) {
-            let forwarded = foreignQueryParams(requestURL.search);
-            if (forwarded) {
-              target.search = forwarded;
-            }
-          }
-          ctxt.redirect(target.href);
-          ctxt.status = statusCode;
-          return;
+    // Then what the realm's site answers, in its precedence order
+    // (runtime-common's resolveSitePath): redirects, fixed pages (realm.json's
+    // routing rules, CS-10055), listings and pages from the page types' path
+    // templates. A path it doesn't answer is a card's own address, or
+    // nothing. This runs after the public-permission gate above, so a
+    // non-public realm never discloses which of its paths are routed.
+    let servedShare: HostRouteShare | undefined;
+    // Set when the site answers the path with its not-found card. Koa's own
+    // status reads 404 until a body is set, so it can't say this.
+    let servedNotFound = false;
+    if (routedRealm) {
+      let answer = await siteAnswer();
+      let mount = siteMounts(routedRealm, requestURL).mount.pathname.replace(
+        /\/$/,
+        '',
+      );
+      if (answer?.kind === 'redirect') {
+        let target = new URL(
+          answer.to.startsWith('/') ? mount + answer.to : answer.to,
+          requestURL,
+        );
+        let forwarded = foreignQueryParams(requestURL.search);
+        if (forwarded && !target.search) {
+          target.search = forwarded;
         }
-        // Canonicalize the URL. A rule declared as '/pricing' matches both
-        // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
-        // slashes); the canonical form is the realm mount pathname joined
-        // with the rule's declared path — so the realm-root rule '/' keeps
-        // its trailing slash while a sub-path rule has none. Redirect any
-        // other form with a 308 so bookmarks, shared links and crawlers
-        // converge on one URL, and so relative links in the served HTML
-        // resolve against a stable document base (a trailing slash shifts
-        // that base and breaks './'-relative hrefs in the prerendered page).
-        if (requestURL.pathname !== matched.canonicalPathname) {
+        ctxt.redirect(target.href);
+        ctxt.status = answer.status;
+        return;
+      }
+      // One form of each path: a fixed page or a page is served at its
+      // declared path, so '/pricing/' moves to '/pricing' (308), which keeps
+      // relative links in the page resolving against a stable base. The
+      // root keeps its trailing slash.
+      if (
+        answer?.kind === 'page' ||
+        answer?.kind === 'listing' ||
+        answer?.kind === 'fixed'
+      ) {
+        let canonical = mount + (sitePathOf(routedRealm, requestURL) ?? '/');
+        if (canonical !== mount + '/' && requestURL.pathname !== canonical) {
           ctxt.redirect(
-            new URL(matched.canonicalPathname + requestURL.search, requestURL)
-              .href,
+            new URL(canonical + requestURL.search, requestURL).href,
           );
           ctxt.status = 308;
           return;
         }
-        // Rewrite cardURL so the head/isolated/scoped CSS fetched below
-        // render the routed target.
-        cardURL = new URL(matched.rule.id);
+      }
+      if (answer?.kind === 'listing') {
+        cardURL = new URL(await siteHomeCard(routedRealm));
+        // The home card's own head names the site, not the listing.
+        let { listingTitle, name } = answer.pageType;
+        servedShare = {
+          title: listingTitle || name,
+          description: (await routedRealm.getSiteSettings()).tagline,
+        };
+      } else if (answer?.kind === 'fixed') {
+        // A fixed page in another realm (realm.json opted in) is served as
+        // that realm prerendered it, and only when a visitor who isn't
+        // signed in may read it; otherwise the path is served as if unrouted.
+        let target = new URL(answer.card);
+        if (
+          !answer.crossRealm ||
+          (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
+        ) {
+          cardURL = target;
+        } else {
+          log.warn(
+            `not serving ${target.href} at ${requestURL.pathname}: a visitor who isn't signed in may not read it`,
+          );
+        }
+      } else if (answer?.kind === 'page') {
+        servedShare = answer.share;
+        let target = new URL(answer.card.id);
+        let holds = new RealmPaths(new URL(routedRealm.url)).inRealm(target);
+        if (holds) {
+          cardURL = target;
+        } else if (
+          (await routedRealm.getSiteSettings()).serveSourcePrerender &&
+          (await anonymousMayRead(target, routingDeps, ctxt.req.headers))
+        ) {
+          cardURL = target;
+        } else {
+          log.warn(
+            `not serving ${target.href} at ${requestURL.pathname}: it is in another realm, and either realm.json doesn't opt in or a visitor who isn't signed in may not read it`,
+          );
+        }
+      } else {
+        let path = sitePathOf(routedRealm, requestURL);
+        let ownCard =
+          path && path !== '/'
+            ? new URL(path.slice(1), routedRealm.url)
+            : undefined;
+        // A routed card visited at its own card path moves to the address
+        // the site serves it at, so a page has one address.
+        let routed = ownCard
+          ? (
+              await sitePathsForCards(routedRealm, [ownCard.href], routingDeps)
+            ).get(cardKey(ownCard))
+          : undefined;
+        if (routed) {
+          ctxt.redirect(
+            new URL(mount + routed.path + requestURL.search, requestURL).href,
+          );
+          ctxt.status = 301;
+          return;
+        }
+        // A path that names no card is not found: the site's not-found card,
+        // with status 404.
+        let settings = await routedRealm.getSiteSettings();
+        if (
+          (settings.pageTypes.length || settings.notFound) &&
+          !isIndexRequest &&
+          !(await isIndexedCardInstance(cardURL, routingDeps))
+        ) {
+          ctxt.status = 404;
+          servedNotFound = true;
+          if (settings.notFound) {
+            cardURL = new URL(settings.notFound);
+          }
+        }
       }
     }
 
@@ -626,23 +807,39 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
     scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
 
-    let [headMarkup, isolatedMarkup, scopedCSS] = await Promise.all([
-      retrieveHeadHTML({
-        cardURL,
-        dbAdapter,
-        log: headLog,
-      }),
-      retrieveIsolatedHTML({
-        cardURL,
-        dbAdapter,
-        log: isolatedLog,
-      }),
-      retrieveScopedCSS({
-        cardURL,
-        dbAdapter,
-        log: scopedCSSLog,
-      }),
-    ]);
+    let readMarkup = (url: URL) =>
+      Promise.all([
+        retrieveHeadHTML({
+          cardURL: url,
+          dbAdapter,
+          log: headLog,
+        }),
+        retrieveIsolatedHTML({
+          cardURL: url,
+          dbAdapter,
+          log: isolatedLog,
+        }),
+        retrieveScopedCSS({
+          cardURL: url,
+          dbAdapter,
+          log: scopedCSSLog,
+        }),
+      ]);
+    let [headMarkup, isolatedMarkup, scopedCSS] = await readMarkup(cardURL);
+
+    // A page whose card failed to render shows the site's error card in its
+    // place, with status 500, as the not-found card stands in for a missing
+    // one. A card that simply hasn't been rendered yet is left to the app.
+    let servedError = false;
+    if (routedRealm && isolatedMarkup.html == null && !servedNotFound) {
+      let { errorCard } = await routedRealm.getSiteSettings();
+      if (errorCard && (await pageRenderFailed({ cardURL, dbAdapter }))) {
+        cardURL = new URL(errorCard);
+        ctxt.status = 500;
+        servedError = true;
+        [headMarkup, isolatedMarkup, scopedCSS] = await readMarkup(cardURL);
+      }
+    }
     // The page is a read rooted at the card, so a format its type's `read`
     // declares unshareable is served data-only here as on every other route:
     // no markup of it is injected, and the host renders the card from its
@@ -687,6 +884,109 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
     }
 
+    // A site with a frame shows every page inside it: the frame card's
+    // prerendered HTML, with the page's in the place its <SitePage /> marks.
+    let siteSettings = routedRealm
+      ? await routedRealm.getSiteSettings()
+      : undefined;
+    let frame = siteSettings?.frame
+      ? await siteFrameMarkup(
+          new URL(siteSettings.frame),
+          cardURL,
+          routedRealm!,
+          siteSettings.serveSourcePrerender === true,
+          dbAdapter,
+        )
+      : undefined;
+    if (frame?.scopedCSS) {
+      scopedCSS = scopedCSS
+        ? `${frame.scopedCSS}\n${scopedCSS}`
+        : frame.scopedCSS;
+    }
+
+    // A site page's ETag names everything it is built from: the publish, the
+    // host shell, the index generation of every realm the site draws on
+    // (which covers where its links go), and the page's and frame's
+    // prerendered markup, which a render can replace after the index has
+    // committed. A revalidation is answered here, before the work of placing
+    // the page's links. A page whose card hasn't been prerendered yet, or a
+    // missing one, isn't given one.
+    if (
+      isSitePage &&
+      lastPublishedAt &&
+      indexHTMLHash &&
+      isolatedHTML != null &&
+      !servedNotFound &&
+      !servedError
+    ) {
+      let generations = await siteGenerations(routedRealm!, routingDeps);
+      etag = `"site-${createHash('sha256')
+        .update(
+          [
+            lastPublishedAt,
+            indexHTMLHash,
+            generations,
+            cardURL.href,
+            headHTML ?? '',
+            isolatedHTML,
+            scopedCSS ?? '',
+            frame?.html ?? '',
+          ].join('\n'),
+        )
+        .digest('hex')
+        .slice(0, 32)}"`;
+      if (notModified(etag)) {
+        return;
+      }
+    }
+
+    // A site's pages are rewritten on the way out to the address they are
+    // served at: links to routed cards, the canonical URL and og:url. The
+    // cards the page and its frame link to are looked up in one batch.
+    let canonicalHead: string | undefined;
+    let sitePaths: Map<string, { path: string; share?: HostRouteShare }> =
+      new Map();
+    if (routedRealm && siteSettings && routesPaths(siteSettings)) {
+      let { mount, canonical } = siteMounts(routedRealm, requestURL);
+      let linked = new Set<string>([cardKey(cardURL)]);
+      for (let key of linkedCards(isolatedHTML ?? '', cardURL, doc)) {
+        linked.add(key);
+      }
+      if (frame) {
+        for (let key of linkedCards(frame.html, frame.url, doc)) {
+          linked.add(key);
+        }
+      }
+      sitePaths = await sitePathsForCards(
+        routedRealm,
+        [...linked],
+        routingDeps,
+      );
+      let rewriter = siteRewriter({
+        requestMount: mount,
+        canonicalMount: canonical,
+        requestPath: `/${requestURL.pathname.slice(mount.pathname.length)}`,
+        paths: new Map([...sitePaths].map(([card, { path }]) => [card, path])),
+        share: servedShare,
+        canonical: !servedNotFound && !servedError,
+        document: doc,
+      });
+      if (isolatedHTML != null) {
+        isolatedHTML = rewriter.body(isolatedHTML, cardURL);
+      }
+      if (frame) {
+        frame.html = rewriter.body(frame.html, frame.url);
+      }
+      if (headHTML != null) {
+        headHTML = rewriter.head(headHTML);
+      } else {
+        canonicalHead = rewriter.head('');
+      }
+    }
+    if (frame) {
+      isolatedHTML = framePage(frame.html, isolatedHTML ?? '', doc);
+    }
+
     if (headHTML != null) {
       headLog.debug(
         `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${truncateLogLines(
@@ -716,6 +1016,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       headFragments.push(ensureSingleTitle(headHTML));
     } else {
       headFragments.push('<title>Boxel</title>');
+      if (canonicalHead) {
+        headFragments.push(canonicalHead);
+      }
     }
 
     if (scopedCSS != null) {
@@ -744,48 +1047,111 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       );
     }
 
+    // The shell's empty description gives way to the page's own.
+    if (
+      /<meta[^>]+name="description"[^>]+content="[^"]/.test(
+        headFragments.join(''),
+      )
+    ) {
+      responseHTML = responseHTML.replace(
+        /<meta name="description" content=""\s*\/?>\s*/,
+        '',
+      );
+    }
+
     if (headFragments.length > 0) {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
-    if (routingMap.length > 0 && routedRealm) {
-      // Rules are stored realm-relative ('/whitepaper'). The client sees URL
-      // paths that include the realm's mount segment ('/routing/whitepaper'
-      // when the realm is mounted at '/routing/' on the published host). For
-      // the SPA's path lookup to be a direct equality match, prefix each
-      // rule path with the realm's pathname before serializing.
-      let realmPathname = new URL(routedRealm.url).pathname;
-      let hostScopedMap = routingMap.map((rule) => {
-        let path = realmPathname + rule.path.replace(/^\//, '');
-        if (isRedirectRoutingRule(rule)) {
-          // A redirect rule's realm-relative target is prefixed the same
-          // way as its path, so the SPA can hand the value straight to a
-          // location change without knowing the realm's mount point.
-          // Same helper the `Location` header above goes through.
-          return {
-            path,
-            redirectTo: resolveRedirectTarget(rule.redirectTo, realmPathname),
-            statusCode: rule.statusCode,
-          };
+    // Per-request additions to the host's config: where the site serves this
+    // page and its links, as a snapshot.
+    let configPatch: Record<string, unknown> = {};
+    if (routedRealm && siteSettings && routesPaths(siteSettings)) {
+      // Where the page, the cards it links to and the fixed pages are
+      // served, and the literal redirects, so its links and navigation need
+      // no request. Anything else the host asks for.
+      let pages = new Map<
+        string,
+        [string, string] | [string, string, HostRouteShare]
+      >();
+      for (let page of siteSettings.fixedPages) {
+        pages.set(page.path, [page.path, page.card]);
+      }
+      for (let [card, { path, share }] of sitePaths) {
+        if (!pages.has(path)) {
+          pages.set(path, share ? [path, card, share] : [path, card]);
         }
-        return { path, id: rule.id };
-      });
-      // Per-request merge into the already-rewritten config meta tag.
-      // The retrieveIndexHTML rewrite is cached process-wide because the
-      // fields it touches are global; the routing map is per-realm so it
-      // can't share that cache. This second regex pass parses the URL-
-      // encoded JSON, sets hostRoutingMap, and re-encodes — keeping the
-      // routing data on the same typed channel the host already reads
-      // for hostsOwnAssets / realmServerURL / matrixURL etc., rather
-      // than via a separate `window.__hostRoutingMap` global.
+      }
+      let snapshot: HostRouteSnapshot = {
+        realm: routedRealm.url,
+        mount: siteMounts(routedRealm, requestURL).mount.pathname,
+        pages: [...pages.values()],
+        redirects: siteSettings.redirects.flatMap((r) =>
+          isLiteralRedirect(r)
+            ? [[normalizeRoutingPath(r.from), r.to, r.statusCode]]
+            : [],
+        ) as [string, string, number][],
+        listings: siteSettings.pageTypes.flatMap((t) =>
+          t.listingPath ? [t.listingPath] : [],
+        ),
+        ...(siteSettings.notFound ? { notFound: siteSettings.notFound } : {}),
+        ...(siteSettings.errorCard
+          ? { errorCard: siteSettings.errorCard }
+          : {}),
+      };
+      configPatch.hostRouteSnapshot = snapshot;
+    }
+    if (
+      routedRealm &&
+      siteSettings &&
+      (siteSettings.pageTypes.length ||
+        siteSettings.frame ||
+        siteSettings.notFound)
+    ) {
+      // The site as the visitor sees it, which the host app names on every
+      // request it makes for the visit, so the realm server answers it as the
+      // site (see site-boundary).
+      configPatch.hostSite = siteMounts(routedRealm, requestURL).mount.href;
+    }
+    if (
+      routedRealm &&
+      siteSettings?.frame &&
+      (siteSettings.serveSourcePrerender ||
+        new RealmPaths(new URL(routedRealm.url)).inRealm(
+          new URL(siteSettings.frame),
+        ))
+    ) {
+      configPatch.hostSiteFrame = siteSettings.frame;
+    }
+    if (Object.keys(configPatch).length > 0) {
       responseHTML = responseHTML.replace(
         /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
         (_match, g1, g2, g3) => {
-          let cfg = JSON.parse(decodeURIComponent(g2));
-          cfg.hostRoutingMap = hostScopedMap;
+          let cfg = { ...JSON.parse(decodeURIComponent(g2)), ...configPatch };
           return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
         },
       );
+    }
+
+    // A site's page carries its card's data, so the app shows the card it was
+    // served without fetching it again.
+    if (siteSettings && isolatedHTML != null) {
+      let pageDoc = await anonymousCardDoc(
+        cardURL,
+        routingDeps,
+        ctxt.req.headers,
+      );
+      if (pageDoc) {
+        // Beside the head, not inside its markers: injectHeadHTML replaces
+        // what the markers hold, which is the page's title and share tags.
+        let script = `<script type="application/json" data-boxel-page-doc data-card-url="${escapeAttribute(
+          cardURL.href.replace(/\.json$/, ''),
+        )}">${pageDoc.replace(/</g, '\\u003c')}</script>`;
+        responseHTML = responseHTML.replace(
+          '</head>',
+          () => `${script}\n</head>`,
+        );
+      }
     }
 
     if (isolatedHTML != null) {

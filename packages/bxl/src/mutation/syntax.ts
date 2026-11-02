@@ -9,6 +9,7 @@ import type {
   FilterAst,
   IndexAst,
 } from '../jqtools/parser/AST.ts';
+import { Parser } from '../jqtools/parser/Parser.ts';
 import type {
   BxlMutationField,
   BxlMutationPath,
@@ -620,60 +621,225 @@ function quoted(value: string): string {
   return JSON.stringify(value);
 }
 
+const IDENTIFIER_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Nodes whose syntax runs to the end of the enclosing expression: `E as $x |
+ * body`, `try body catch handler` and `label $l | body` each take everything
+ * after them. Anywhere but the end of a delimited context they need
+ * parentheses, or they swallow the operators that follow.
+ */
+function isOpenEnded(node: ExpressionAst): boolean {
+  return (
+    node.type === 'varDeclaration' ||
+    node.type === 'label' ||
+    node.type === 'def' ||
+    (node.type === 'try' && !node.short)
+  );
+}
+
+/**
+ * Nodes that may take a postfix (`.k`, `[i]`, `[]`, `[a:b]`, `?`) or stand as
+ * the term of `as`, `reduce` and `foreach` without parentheses — the parser's
+ * `atomMaybe` chain. Anything else is wrapped.
+ */
+function isPostfixTerm(node: ExpressionAst): boolean {
+  switch (node.type) {
+    case 'identity':
+    case 'var':
+    case 'filter':
+    case 'index':
+    case 'slice':
+    case 'iterator':
+    case 'array':
+    case 'object':
+      return true;
+    case 'try':
+      return node.short;
+    default:
+      return false;
+  }
+}
+
+function parenthesize(source: string): string {
+  return `(${source})`;
+}
+
+function printPostfixTerm(node: ExpressionAst): string {
+  const printed = printMutationAst(node);
+  return isPostfixTerm(node) ? printed : parenthesize(printed);
+}
+
+function binaryPrecedence(operator: string): number {
+  return Parser.getPrecedence(operator);
+}
+
+/**
+ * One operand of a binary operator. The parser left-associates a chain of
+ * equal precedence, so a right operand at the parent's precedence was
+ * parenthesized in the source and has to stay so; an operand of lower
+ * precedence always does. A binary the author parenthesized keeps its
+ * parentheses, so the printed program re-parses to the same tree, grouping
+ * flags included.
+ */
+function printBinaryOperand(
+  node: ExpressionAst,
+  parentOperator: string,
+  side: 'left' | 'right',
+): string {
+  const printed = printMutationAst(node);
+  if (node.type === 'binary') {
+    const parent = binaryPrecedence(parentOperator);
+    const child = binaryPrecedence(node.operator);
+    const needsGroup =
+      node.parenthesized ||
+      child < parent ||
+      (side === 'right' && child === parent);
+    return needsGroup ? parenthesize(printed) : printed;
+  }
+  return isOpenEnded(node) ? parenthesize(printed) : printed;
+}
+
+function printBinary(node: Extract<ExpressionAst, { type: 'binary' }>): string {
+  let left = printBinaryOperand(node.left, node.operator, 'left');
+  const right = printBinaryOperand(node.right, node.operator, 'right');
+  if (node.operator === 'and' || node.operator === 'or') {
+    // Keyword operators need whitespace, or `.n==$n and .at` runs together
+    // into `$nand` and `.at` reads as part of it.
+    return `${left} ${node.operator} ${right}`;
+  }
+  // Symbolic operators stay unspaced, as canonical text always has been. The
+  // one adjacency that tokenizes differently is a trailing `?` before `//`,
+  // which reads as the destructuring operator `?//`.
+  if (left.endsWith('?')) {
+    left = `${left} `;
+  }
+  return `${left}${node.operator}${right}`;
+}
+
+/**
+ * A value inside an object literal. The parser reads it up to the next
+ * top-level comma, so a comma expression, or an open-ended form that would
+ * run past the comma, is wrapped.
+ */
+function printObjectValue(node: ExpressionAst): string {
+  const printed = printMutationAst(node);
+  return (node.type === 'binary' && node.operator === ',') || isOpenEnded(node)
+    ? parenthesize(printed)
+    : printed;
+}
+
+function printObjectKey(key: string | ExpressionAst): string {
+  if (typeof key === 'string') {
+    return IDENTIFIER_KEY.test(key) ? key : quoted(key);
+  }
+  if (key.type === 'str' && !key.interpolated && !key.format) {
+    return quoted(key.value);
+  }
+  return parenthesize(printMutationAst(key));
+}
+
+function printStringLiteral(
+  node: Extract<ExpressionAst, { type: 'str' }>,
+): string {
+  if (node.interpolated) {
+    throw new Error(
+      'Interpolated strings are not supported in mutation canonicalization.',
+    );
+  }
+  return node.format
+    ? `${node.format.name} ${quoted(node.value)}`
+    : quoted(node.value);
+}
+
+/**
+ * Print a parsed mutation expression as canonical jq text that parses back to
+ * the same tree. Spacing is minimal — only keywords are separated — and
+ * parentheses appear where precedence, associativity or an open-ended form
+ * requires them, or where the author wrote them around a binary.
+ */
 export function printMutationAst(node: ExpressionAst): string {
   switch (node.type) {
     case 'identity':
       return '.';
+    case 'recursiveDescent':
+      return '..';
     case 'num':
     case 'bool':
       return String(node.value);
     case 'null':
       return 'null';
     case 'str':
-      if (node.interpolated) {
-        throw new Error(
-          'Interpolated strings are not supported in mutation canonicalization.',
-        );
-      }
-      return quoted(node.value);
-    case 'unary':
-      return `${node.operator}${printMutationAst(node.expr)}`;
+      return printStringLiteral(node);
+    case 'format':
+      return node.name;
+    case 'unary': {
+      const operand = printMutationAst(node.expr);
+      const grouped =
+        node.expr.type === 'binary' ||
+        node.expr.type === 'unary' ||
+        isOpenEnded(node.expr) ||
+        operand.startsWith('-');
+      return `${node.operator}${grouped ? parenthesize(operand) : operand}`;
+    }
     case 'binary':
-      return `${printMutationAst(node.left)}${node.operator}${printMutationAst(node.right)}`;
+      return printBinary(node);
     case 'index': {
-      const base = printMutationAst(node.expr);
       if (typeof node.index === 'string') {
-        const suffix = /^[A-Za-z_][A-Za-z0-9_]*$/.test(node.index)
-          ? `.${node.index}`
-          : `[${quoted(node.index)}]`;
-        return node.expr.type === 'identity' ? suffix : `${base}${suffix}`;
+        if (IDENTIFIER_KEY.test(node.index)) {
+          return node.expr.type === 'identity'
+            ? `.${node.index}`
+            : `${printPostfixTerm(node.expr)}.${node.index}`;
+        }
+        return `${printPostfixTerm(node.expr)}[${quoted(node.index)}]`;
       }
-      return `${base}[${printMutationAst(node.index)}]`;
+      return `${printPostfixTerm(node.expr)}[${printMutationAst(node.index)}]`;
     }
     case 'iterator':
-      return `${printMutationAst(node.expr)}[]`;
+      return `${printPostfixTerm(node.expr)}[]`;
     case 'slice':
-      return `${printMutationAst(node.expr)}[${node.from ? printMutationAst(node.from) : ''}:${node.to ? printMutationAst(node.to) : ''}]`;
+      return `${printPostfixTerm(node.expr)}[${node.from ? printMutationAst(node.from) : ''}:${node.to ? printMutationAst(node.to) : ''}]`;
     case 'filter':
+      // A zero-arity call keeps its empty parentheses — `actor()`, `not()` —
+      // which parse to the same `name/0`, so canonical text already stored by
+      // lowering reads the same.
       return `${node.name.split('/')[0]}(${node.args.map(printMutationAst).join(';')})`;
     case 'array':
       return `[${node.expr ? printMutationAst(node.expr) : ''}]`;
     case 'object':
       return `{${node.entries
-        .map((entry) => {
-          const key =
-            typeof entry.key === 'string'
-              ? entry.key
-              : printMutationAst(entry.key);
-          return entry.value === undefined
-            ? key
-            : `${/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? key : quoted(key)}:${printMutationAst(entry.value)}`;
-        })
+        .map((entry) =>
+          entry.value === undefined
+            ? printObjectKey(entry.key)
+            : `${printObjectKey(entry.key)}:${printObjectValue(entry.value)}`,
+        )
         .join(',')}}`;
     case 'if':
-      return `if ${printMutationAst(node.cond)} then ${printMutationAst(node.then)}${node.else ? ` else ${printMutationAst(node.else)}` : ''} end`;
-    case 'try':
-      return `try ${printMutationAst(node.body)}${node.catch ? ` catch ${printMutationAst(node.catch)}` : ''}`;
+      return `if ${printMutationAst(node.cond)} then ${printMutationAst(node.then)}${(
+        node.elifs ?? []
+      )
+        .map(
+          (elif) =>
+            ` elif ${printMutationAst(elif.cond)} then ${printMutationAst(elif.then)}`,
+        )
+        .join(
+          '',
+        )}${node.else ? ` else ${printMutationAst(node.else)}` : ''} end`;
+    case 'try': {
+      if (node.short) {
+        return `${printPostfixTerm(node.body)}?`;
+      }
+      // The body runs up to `catch`; a nested try in it would claim that
+      // `catch` for itself.
+      const body = printMutationAst(node.body);
+      const groupedBody =
+        node.catch && isOpenEnded(node.body) ? parenthesize(body) : body;
+      return `try ${groupedBody}${node.catch ? ` catch ${printMutationAst(node.catch)}` : ''}`;
+    }
+    case 'reduce':
+      return `reduce ${printPostfixTerm(node.expr)} as ${node.var}(${printMutationAst(node.init)};${printMutationAst(node.update)})`;
+    case 'foreach':
+      return `foreach ${printPostfixTerm(node.expr)} as ${node.var}(${printMutationAst(node.init)};${printMutationAst(node.update)}${node.extract ? `;${printMutationAst(node.extract)}` : ''})`;
     case 'var':
       return node.name;
     case 'varDeclaration':
@@ -685,7 +851,7 @@ export function printMutationAst(node: ExpressionAst): string {
           'Complex bindings are not supported in mutation canonicalization.',
         );
       }
-      return `${printMutationAst(node.expr)}as${node.destructuring[0].name}|${printMutationAst(node.next)}`;
+      return `${printPostfixTerm(node.expr)} as ${node.destructuring[0].name}|${printMutationAst(node.next)}`;
     default:
       throw new Error(`Unsupported mutation expression node ${node.type}.`);
   }
@@ -1040,16 +1206,16 @@ export function parseBxlMutationProgram(
       const location = argument(left, options, statementNumber, true);
       const value = argument(right, options, statementNumber, false);
       warnings.push(...location.warnings, ...value.warnings);
-      const canonicalOperator = assignment.operator === '=' ? '=' : '|=';
-      let canonicalValue = value.argument.canonical;
-      if (assignment.operator !== '=' && assignment.operator !== '|=') {
-        canonicalValue = `.${assignment.operator.slice(0, -1)}${canonicalValue}`;
-      }
+      // The operator is kept as written. Rewriting `.n += .x` as
+      // `.n |= . + .x` would change the program: a compound assignment
+      // evaluates its right-hand side against the whole document, as jq's
+      // does, while `|=` evaluates it against the target.
+      const canonicalValue = value.argument.canonical;
       statements.push({
         kind: 'assignment',
         statement: statementNumber,
         source: statementSource,
-        canonical: `${location.argument.canonical}${canonicalOperator}${canonicalValue}`,
+        canonical: `${location.argument.canonical}${assignment.operator}${canonicalValue}`,
         operator: assignment.operator,
         location: location.argument,
         value: value.argument,

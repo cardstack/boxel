@@ -75,6 +75,8 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  type ChannelMessage,
+  type RefreshNotice,
   type Store,
   type SearchResultsComponentSignature,
   type ErrorEntry,
@@ -388,7 +390,29 @@ interface RelationshipOptions extends Options {
   eager?: boolean;
 }
 
+// Who owns a click on a linked card rendered as a field
+// (`<@fields.author @interactions='self' />`):
+//   'open'   (default) the card opens: a link over it on a published site,
+//            the environment's click in the app;
+//   'self'   the card itself, for live children (a player, a form). The app
+//            still outlines it on hover, but never opens it on a click;
+//   'chrome' the app's click only; inert on a published site;
+//   'none'   nobody: no link, no outline, no click.
+export type CardInteractions = 'open' | 'self' | 'chrome' | 'none';
+
 export interface CardContext<T extends CardDef = CardDef> {
+  actions?: { openCard: OpenCardFn };
+  // On a published site, the page's path relative to the site, with its
+  // query: '/shop?sort=price'. Changes as the visitor navigates, so a card
+  // that serves several of the site's paths (a listing) reads which one is
+  // showing. Undefined anywhere else.
+  sitePath?: string;
+  // On a published site with a frame: in the frame card's context, the page
+  // being shown, which <SitePage /> renders. Undefined anywhere else.
+  sitePage?: ComponentLike<{ Element: HTMLElement }>;
+  // True for the page shown inside a site's frame, so a card that draws its
+  // own header when it stands alone can leave that to the frame.
+  siteFramed?: boolean;
   toolContext?: ToolContext;
   // Pre-rename spelling of `toolContext`. Realm content reads
   // `@context.commandContext`; populated with the same value until no
@@ -402,6 +426,7 @@ export interface CardContext<T extends CardDef = CardDef> {
         format: Format | 'data';
         fieldType: FieldType | undefined;
         fieldName: string | undefined;
+        interactions?: CardInteractions;
       };
     };
   }>;
@@ -413,6 +438,22 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;
+  // Follows a card's live channel (ADR event-feed §1.6): `onMessage` hears each
+  // message an `emit` operation puts on it, starting with the latest for
+  // each key, and a change to the card reaches the page as any change does.
+  // Returns a function that stops following. The card's realm must let a
+  // visitor who isn't signed in read the card. Absent where nothing follows a
+  // channel, such as a prerender, so consumers guard on it.
+  followChannel?: (
+    card: CardDef | string,
+    onMessage: (message: ChannelMessage) => void,
+  ) => () => void;
+  // Takes the page's refresh requests (ADR event-feed §1.8): while a card takes
+  // them, the page doesn't reload when the site's realm asks it to; the card
+  // can tell its visitors an update is ready and call `notice.reload()` when
+  // it suits them. Returns a function that stops taking them. Absent off a
+  // site, so consumers guard on it.
+  takeRefreshRequests?: (taker: (notice: RefreshNotice) => void) => () => void;
   // May this session invoke `operation` on `target`? A target is a saved card
   // or its URL, or a card class to ask whether a card of that type may be
   // created (in `opts.realm`, or where a create names no realm, the realm it
@@ -1880,6 +1921,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
           typeConstraint?: ResolvedCodeRef;
           lockConsumingRealm?: boolean;
           consumingRealm?: URL;
+          interactions?: CardInteractions;
         };
       };
       Blocks: {};
@@ -1925,6 +1967,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                       isFileDefField
                     }}
                     @displayContainer={{@displayContainer}}
+                    @interactions={{@interactions}}
                     ...attributes
                   />
                 {{/let}}
@@ -2996,6 +3039,8 @@ export type ViewCardFn = (
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
     useBaseTemplate?: boolean;
+    // Host mode: open the card over the page instead of navigating to it.
+    overlay?: boolean;
   },
 ) => void;
 
@@ -3014,7 +3059,35 @@ export interface CardCrudFunctions {
   editCard: EditCardFn;
   viewCard: ViewCardFn;
   deleteCard: DeleteCardFn;
+  // Where a link points in this environment: a card's routed address on a
+  // published site, or a site path under the site's mount. Undefined means
+  // the card's own URL, or the path as written.
+  hrefFor?: (target: CardLinkTarget) => string | undefined;
+  // Navigates to a card or a site path, where the environment navigates by
+  // address (a published site). Absent elsewhere, where `viewCard` opens
+  // cards.
+  navigateTo?: (
+    target: CardLinkTarget,
+    opts?: { format?: Format; overlay?: boolean },
+  ) => void;
+  // Loads a link's target before it is followed, where the environment can.
+  prefetch?: (target: CardLinkTarget) => void;
 }
+
+export type CardLinkTarget = { card: string } | { path: string };
+
+// Opens a card the way the environment opens cards: a page navigation on a
+// published site, a stack push in interact mode, the preview in code mode.
+// Always present on a card's context; a no-op where nothing can open cards
+// (the prerender, tests).
+export type OpenCardFn = (
+  cardOrURL: CardDef | URL | string,
+  opts?: {
+    format?: Format;
+    stack?: 'push' | 'rightmost';
+    overlay?: boolean;
+  },
+) => void;
 
 export type BaseDefComponent = ComponentLike<{
   Blocks: {};

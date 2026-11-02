@@ -296,9 +296,11 @@ export default class SubmodeLayout extends Component<Signature> {
             this.operatorModeStateService.setHostModePrimaryCard();
           }
         } else if (currentSubmode === Submodes.Interact) {
+          let cardId = this.lastCardIdInRightMostStack;
           this.operatorModeStateService.setHostModePrimaryCard(
-            this.lastCardIdInRightMostStack
-              ? this.lastCardIdInRightMostStack + '.json'
+            cardId
+              ? (await this.operatorModeStateService.hostHomeFor(cardId)) +
+                  '.json'
               : undefined,
           );
         }

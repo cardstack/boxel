@@ -37,6 +37,7 @@ import SecureSignIn from '@cardstack/host/components/matrix/secure-sign-in';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import { liveCardContext } from '@cardstack/host/lib/live-card-context';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -53,9 +54,11 @@ import CreateListingModal from './create-listing-modal';
 
 import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
+import type EventFeedService from '../../services/event-feed';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '../../services/operator-mode-state-service';
+import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
 import type ToolService from '../../services/tool-service';
@@ -70,6 +73,8 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
+  @service declare private eventFeed: EventFeedService;
+  @service declare private realm: RealmService;
   @service declare private capabilities: CapabilitiesService;
   @service declare private cardService: CardService;
   @service declare matrixService: MatrixService;
@@ -166,6 +171,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.toolService.toolContext;
   }
 
+  // Following a card's channel and taking refresh requests (ADR event-feed).
+  // Matrix carries the realm's events here, but never a channel's messages.
+  @cached
+  private get live() {
+    return liveCardContext(this.eventFeed, this.realm);
+  }
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): CardContext {
@@ -174,6 +186,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      ...this.live,
       keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,

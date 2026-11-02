@@ -72,7 +72,14 @@ export const DEFAULT_REDIRECT_STATUS: RedirectStatusCode = 302;
 // either a realm-relative path ('/terms', resolved against the realm's
 // mount pathname just like `path` is) or an absolute http(s) URL —
 // external targets are allowed.
-export type HostRoutingServeRule = { path: string; id: string };
+// `crossRealm` marks a card in another realm, which a realm routes to only
+// when realm.json opts in (`serveSourcePrerender`); serve-index serves it only when a visitor who
+// isn't signed in may read it, as the realm holding it prerendered it.
+export type HostRoutingServeRule = {
+  path: string;
+  id: string;
+  crossRealm?: true;
+};
 export type HostRoutingRedirectRule = {
   path: string;
   redirectTo: string;

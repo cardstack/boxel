@@ -4,6 +4,7 @@ import { v4 as uuidV4 } from 'uuid';
 import { visitModuleDeps, type CodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import {
+  getFieldDef,
   getImmediateFieldDef,
   type Definition,
   type FieldDefinition,
@@ -62,7 +63,7 @@ import {
 } from './telemetry.ts';
 import type { LooseSingleCardDocument } from '../index.ts';
 import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
-import type { OperationTemplate } from './types.ts';
+import type { ChannelMessages, OperationTemplate } from './types.ts';
 
 // ============================================================================
 // The `create`, `update` and `delete` executors.
@@ -487,6 +488,10 @@ export interface StagingContext {
     codeRef: CodeRef,
     relativeTo: URL,
   ): Promise<Definition | undefined>;
+  // The latest messages an emit put on a card's live channel, for a
+  // transform that collects them. Absent where the realm has no channel, which
+  // refuses such a transform.
+  channelMessages?: ChannelMessages;
 }
 
 // ---------------------------------------------------------------------------
@@ -1497,7 +1502,12 @@ async function transform(
     });
   }
   let program = programFor(entry, url);
-  let params = resolvedParams(entry, ctx, url);
+  let params = await withCollectedParams(
+    entry,
+    ctx,
+    url,
+    resolvedParams(withoutCollected(entry, url), ctx, url),
+  );
   let resource = storedResource(stored.content, url);
   let definition = await transformTargetDefinition(resource, url, ctx);
   let bxl = await loadBxlMutation();
@@ -1802,6 +1812,74 @@ function resolvedParams(
   return resolved;
 }
 
+// A collected param is the realm's to fill, so a payload carrying one is
+// refused rather than overwritten: either answer would leave the caller
+// believing they had said something the program read.
+function withoutCollected(entry: TransformEntry, url: URL): TransformEntry {
+  let collect = entry.definition?.collect;
+  if (!collect) {
+    return entry;
+  }
+  for (let param of Object.keys(collect)) {
+    if (own(entry.params ?? {}, param) !== undefined) {
+      throw new OperationFailure({
+        id: url.href,
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid params',
+        detail:
+          `operation "${entry.name ?? 'transform'}" fills params("${param}") ` +
+          `from the card's live channel, so the payload cannot carry it`,
+      });
+    }
+  }
+  return entry;
+}
+
+// The params a program reads, with each collected one bound to the messages
+// its emit put on the target card's channel.
+//
+// Read here, while the batch holds the write lock on the card, so what the
+// program collects is the channel as it stood when this entry staged: a
+// guarded emit takes the same lock, so it waits for this write and judges its
+// guard against what it wrote; an unguarded message emitted after this read
+// is not counted, and the next transform to collect from the channel is the
+// one that sees it. A read of a channel is a
+// read of what other callers emitted, so the operation is never a candidate
+// for the client's optimistic path (lowering marks it non-deterministic).
+async function withCollectedParams(
+  entry: TransformEntry,
+  ctx: StagingContext,
+  url: URL,
+  params: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  let collect = entry.definition?.collect;
+  if (!collect) {
+    return params;
+  }
+  if (!ctx.channelMessages) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 501,
+      code: 'not-implemented',
+      title: 'Channel not available',
+      detail:
+        `operation "${entry.name ?? 'transform'}" reads the card's live ` +
+        `channel, and this realm has no channel to read`,
+    });
+  }
+  let collected: Record<string, unknown> = { ...(params ?? {}) };
+  let unordered = new Set(entry.definition?.collectUnordered ?? []);
+  for (let [param, operation] of Object.entries(collect)) {
+    collected[param] = await ctx.channelMessages({
+      cardURL: url.href,
+      operation,
+      ...(unordered.has(param) ? { unordered: true } : {}),
+    });
+  }
+  return collected;
+}
+
 // A param value held to being JSON. A program's context is plain data — the
 // planner walks it and refuses anything it cannot put in front of an
 // expression — so a value that is not JSON is refused here, where the message
@@ -1900,6 +1978,58 @@ function reasonFor(
 // definition graph with a cycle guard, at a definition lookup per hop, on
 // every transform; the depth that earns that is worth measuring against real
 // declarations rather than guessing at here.
+// The indexed document with only what may hold a computed value: a computed
+// field, or a compound field whose own fields may be computed. A stored field's
+// indexed value is no overlay. The stored document answers for it, even when
+// the answer is an empty list the overlay would otherwise read as a gap: the
+// index can still hold a list the card has since emptied, and handing that
+// over as computed would make the card's own field read-only to the next
+// write.
+function computedOnly(
+  pristine: CardResource,
+  definition: Definition,
+): CardResource {
+  let attributes: Record<string, unknown> = {};
+  for (let [field, value] of Object.entries(pristine.attributes ?? {})) {
+    let defId = definition.fields[field];
+    let fieldDef =
+      defId === undefined ? undefined : definition.fieldDefs[defId];
+    if (
+      !fieldDef ||
+      fieldDef.isComputed ||
+      (fieldDef.type === 'contains' && !fieldDef.isPrimitive)
+    ) {
+      attributes[field] = value;
+    }
+  }
+  return { ...pristine, attributes } as CardResource;
+}
+
+// The search document with only the card's links, the one thing it supplies
+// that the stored document can't. Like the computed overlay above, it carries
+// the card's own stored fields too, and those must never shadow what is
+// stored, an emptied list included.
+function linkedOnly(
+  searchDoc: Record<string, unknown>,
+  definition: Definition,
+): Record<string, unknown> {
+  let linked: Record<string, unknown> = {};
+  for (let [field, value] of Object.entries(searchDoc)) {
+    let defId = definition.fields[field];
+    let fieldDef =
+      defId === undefined ? undefined : definition.fieldDefs[defId];
+    if (
+      !fieldDef ||
+      fieldDef.type === 'linksTo' ||
+      fieldDef.type === 'linksToMany' ||
+      (fieldDef.type === 'contains' && !fieldDef.isPrimitive)
+    ) {
+      linked[field] = value;
+    }
+  }
+  return linked;
+}
+
 async function gatherOverlays(
   definition: Definition,
   url: URL,
@@ -1959,8 +2089,12 @@ async function gatherOverlays(
     }
   }
   return {
-    ...(row?.pristine ? { computeds: project(row.pristine, schema) } : {}),
-    ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
+    ...(row?.pristine
+      ? { computeds: project(computedOnly(row.pristine, definition), schema) }
+      : {}),
+    ...(row?.searchDoc
+      ? { linked: linkedOnly(row.searchDoc, definition) }
+      : {}),
     unavailable,
   };
 }
@@ -2453,7 +2587,22 @@ async function resourceFromTemplate(
         });
       }
       setLink(resource, field, resolved.value, field);
+      if (field.includes('.')) {
+        // A nested link is read through the value that contains it, and a
+        // document without that value drops the edge when it is loaded.
+        resource.attributes = withContainingValues(resource.attributes, field);
+      }
       continue;
+    }
+    if (field.includes('.')) {
+      // Lowering admits a dotted key only for a nested link, so reaching here
+      // means the type changed under the declaration.
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid fill',
+        detail: `\`fill.${field}\` names no link on the type this creates`,
+      });
     }
     resource.attributes = { ...resource.attributes, [field]: resolved.value };
   }
@@ -2499,12 +2648,35 @@ async function linkFieldsOf(
   }
   let links = new Set<string>();
   for (let field of Object.keys(entry.definition?.fill ?? {})) {
-    let fieldDef = getImmediateFieldDef(definition, field);
+    let fieldDef = field.includes('.')
+      ? await getFieldDef(definition, field, (codeRef) =>
+          ctx.lookupDefinition(codeRef, relativeTo),
+        )
+      : getImmediateFieldDef(definition, field);
     if (fieldDef?.type === 'linksTo' || fieldDef?.type === 'linksToMany') {
       links.add(field);
     }
   }
   return links;
+}
+
+// The containing values a nested link is read through, each an object at
+// least: `cardInfo.theme` needs `cardInfo`. Values the fill set are kept.
+function withContainingValues(
+  attributes: CardResource['attributes'],
+  path: string,
+): CardResource['attributes'] {
+  let root: Record<string, unknown> = { ...(attributes ?? {}) };
+  let at = root;
+  for (let name of path.split('.').slice(0, -1)) {
+    let member = at[name];
+    let next: Record<string, unknown> = isPlainRecord(member)
+      ? { ...member }
+      : {};
+    at[name] = next;
+    at = next;
+  }
+  return root as CardResource['attributes'];
 }
 
 // Record a link, or a collection of them, on the resource. A collection's
