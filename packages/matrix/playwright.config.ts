@@ -119,11 +119,7 @@ export default defineConfig({
         launchOptions: {
           args: [
             // Simulate resolving a custom workspace domain to a realm server.
-            // The second rule points the mock OIDC provider's container-name
-            // host at its published host port, so a `boxel-mock-oauth:8080`
-            // URL opened in the browser reaches the same server the realm
-            // server uses.
-            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205,MAP boxel-mock-oauth 127.0.0.1:8083',
+            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
             // The mkcert leaf's SAN is `localhost` only — the published
             // realm subdomain (`https://published.realm:4205/`) and the
             // tenant-style subdomains under `*.localhost:4205` that

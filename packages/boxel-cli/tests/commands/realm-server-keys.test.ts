@@ -16,10 +16,10 @@ import {
   replacePlatformClientSecret,
   readKeyValue,
   refuseClientOptions,
-  refuseNoteForClient,
   refuseSystemOptions,
   replaceSystemKey,
   resolveSystemKeyId,
+  showPlatformClient,
   type SystemKey,
 } from '../../src/commands/realm-server/keys.js';
 import { buildBoxelProgram } from '../../src/build-program.js';
@@ -258,6 +258,7 @@ describe('boxel realm-server keys', () => {
       name: 'github',
       label: 'Boxel (read-only)',
       secret: 'github-client-secret-0123456789',
+      note: 'registering the GitHub App',
       oauth: {
         clientId: 'Iv23.boxel',
         authorizeUrl: 'https://github.com/login/oauth/authorize',
@@ -281,32 +282,53 @@ describe('boxel realm-server keys', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
 
-    it('lists, adds, replaces the secret of and deletes a platform client with a system-keys operator token, the secret only in a body', async () => {
+    it('lists, shows, adds, replaces the secret of and deletes a platform client with a system-keys operator token, each change with its note, the secret only in a body', async () => {
+      let history = [
+        {
+          action: 'add',
+          name: 'github',
+          clientId: 'Iv23.boxel',
+          note: 'registering the GitHub App',
+          keyId: 'kms-0123456789abcdef',
+          changedAt: '2026-01-01T00:00:00.000Z',
+          clientAddress: '203.0.113.7',
+          tokenIssuedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
       let { fetch, requests } = fakeServer([
         { body: { clients: [client] } },
+        { body: { client, history } },
         { status: 201, body: { client } },
         { body: { client } },
         { body: { deleted: 'github' } },
       ]);
       expect(await listPlatformClients(options(fetch))).toEqual([client]);
+      expect(await showPlatformClient(options(fetch), 'github')).toEqual({
+        client,
+        history,
+      });
       expect(await addPlatformClient(options(fetch), GITHUB)).toEqual(client);
-      await replacePlatformClientSecret(
-        options(fetch),
-        'github',
-        'github-client-secret-rotated',
-      );
-      await deletePlatformClient(options(fetch), 'github');
+      await replacePlatformClientSecret(options(fetch), 'github', {
+        secret: 'github-client-secret-rotated',
+        note: 'rotating it',
+      });
+      await deletePlatformClient(options(fetch), 'github', {
+        note: 'retiring it',
+      });
 
       expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
         'GET https://realms.example.test/_platform-oauth-clients',
+        'GET https://realms.example.test/_platform-oauth-clients/github',
         'POST https://realms.example.test/_platform-oauth-clients',
         'PATCH https://realms.example.test/_platform-oauth-clients/github',
         'DELETE https://realms.example.test/_platform-oauth-clients/github',
       ]);
-      expect(JSON.parse(requests[1].body!)).toEqual(GITHUB);
-      expect(JSON.parse(requests[2].body!)).toEqual({
+      expect(JSON.parse(requests[2].body!)).toEqual(GITHUB);
+      expect(JSON.parse(requests[3].body!)).toEqual({
         secret: 'github-client-secret-rotated',
+        note: 'rotating it',
       });
+      expect(JSON.parse(requests[4].body!)).toEqual({ note: 'retiring it' });
       for (let { url, authorization, redirect } of requests) {
         expect(url).not.toContain('secret');
         expect(redirect).toBe('error');
@@ -318,7 +340,7 @@ describe('boxel realm-server keys', () => {
       }
     });
 
-    it("refuses a system key's settings for a platform client, a platform client's for a system key, and a note it would record nowhere", () => {
+    it("refuses a system key's settings for a platform client, and a platform client's for a system key", () => {
       let base = { realmServer: 'https://realms.example.test' };
       expect(() =>
         refuseSystemOptions({
@@ -332,24 +354,23 @@ describe('boxel realm-server keys', () => {
       expect(() =>
         refuseClientOptions({ ...base, clientId: 'Iv23.x', apiHost: ['a'] }),
       ).toThrow(/--client-id, --api-host are for a platform client/);
-      expect(() => refuseNoteForClient({ ...base, note: 'rotating' })).toThrow(
-        /the server keeps none for a platform client/,
-      );
       expect(() => refuseSystemOptions(base)).not.toThrow();
       expect(() => refuseClientOptions(base)).not.toThrow();
-      expect(() => refuseNoteForClient(base)).not.toThrow();
     });
 
     it('shows the client and asks before deleting it, unless --yes is given', async () => {
-      let { fetch, requests } = fakeServer([{ body: { clients: [client] } }]);
+      let shown = { body: { client, history: [] } };
+      let { fetch, requests } = fakeServer([shown]);
       let questions: string[] = [];
       await confirmPlatformClientDelete(options(fetch), 'github', {
         isTTY: true,
         confirm: async (question) => (questions.push(question), true),
       });
       expect(questions).toEqual(['Delete the platform client github? [y/N] ']);
+      expect(requests[0].method).toBe('GET');
+      expect(requests[0].url).toMatch(/\/_platform-oauth-clients\/github$/);
 
-      let declining = fakeServer([{ body: { clients: [client] } }]);
+      let declining = fakeServer([shown]);
       await expect(
         confirmPlatformClientDelete(options(declining.fetch), 'github', {
           isTTY: true,
@@ -357,7 +378,9 @@ describe('boxel realm-server keys', () => {
         }),
       ).rejects.toThrow(/Not deleted/);
 
-      let unknown = fakeServer([{ body: { clients: [client] } }]);
+      let unknown = fakeServer([
+        { status: 404, body: { errors: [{ detail: 'not found' }] } },
+      ]);
       await expect(
         confirmPlatformClientDelete(options(unknown.fetch), 'gitlab', {
           isTTY: true,
@@ -377,7 +400,7 @@ describe('boxel realm-server keys', () => {
       expect(requests).toHaveLength(1);
     });
 
-    it('refuses --yes for a system key, whose delete asks for a note instead', () => {
+    it('refuses --yes for a system key, whose delete asks for a note', () => {
       expect(() =>
         refuseClientOptions({ realmServer: 'https://x.test', yes: true }),
       ).toThrow(/--yes/);

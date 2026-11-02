@@ -21,6 +21,7 @@ import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -98,15 +99,14 @@ class UseKey extends Component<{
                   <fieldset class='cards'>
                     <legend class='visually-hidden'>Card</legend>
                     {{#each this.form.cards as |card|}}
-                      <label class='card' data-test-use-key-card={{card.name}}>
-                        <input
-                          type='radio'
-                          name='card'
-                          checked={{eq this.form.card card}}
-                          {{on 'change' (this.selectCard card)}}
-                        />
+                      <RadioTile
+                        @name='card'
+                        @checked={{eq this.form.card card}}
+                        @onChange={{this.selectCard card}}
+                        data-test-use-key-card={{card.name}}
+                      >
                         <span class='card-name'>{{card.displayName}}</span>
-                      </label>
+                      </RadioTile>
                     {{else}}
                       <p class='empty' data-test-use-key-no-cards>No card in
                         this workspace sends a key of yours in a request.</p>
@@ -164,31 +164,9 @@ class UseKey extends Component<{
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .card {
-        position: relative;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-      }
-      .card input {
-        position: absolute;
-        opacity: 0;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-      }
-      .card:has(input:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-      }
-      .card:has(input:checked) {
-        box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-      }
       .card-name {
+        display: block;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-weight: 600;
         overflow-wrap: anywhere;
       }

@@ -80,7 +80,7 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
     }
     .choice input {
       margin: 0.1875rem 0 0;
-      accent-color: var(--primary, var(--boxel-highlight));
+      accent-color: var(--primary-ink);
     }
     .text {
       display: grid;

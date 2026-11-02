@@ -4,11 +4,11 @@
 // it asks for. Everything a tile shows is the realm server's description of
 // the client; the page that opened the window names none of it.
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
 import Globe from '../../components/icons/globe.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 
 import { scopesOf, type ConnectableClient } from './context.ts';
@@ -53,14 +53,13 @@ const ClientPicker: TemplateOnlyComponent<Signature> = <template>
         class={{if (gt @clients.length 1) 'prompt' 'visually-hidden'}}
       >Select an app</legend>
       {{#each @clients as |client index|}}
-        <label class='choice' data-test-client-choice={{client.label}}>
-          <input
-            type='radio'
-            name='client'
-            value={{index}}
-            checked={{eq @selected index}}
-            {{on 'change' (fn @onSelect index)}}
-          />
+        <RadioTile
+          @name='client'
+          @value={{index}}
+          @checked={{eq @selected index}}
+          @onChange={{fn @onSelect index}}
+          data-test-client-choice={{client.label}}
+        >
           <div class='tile'>
             <div class='label' data-test-client-label>{{client.label}}</div>
             <div class='meta'>
@@ -88,7 +87,7 @@ const ClientPicker: TemplateOnlyComponent<Signature> = <template>
               {{/if}}
             {{/let}}
           </div>
-        </label>
+        </RadioTile>
       {{/each}}
     </fieldset>
   </FieldContainer>
@@ -117,35 +116,9 @@ const ClientPicker: TemplateOnlyComponent<Signature> = <template>
       clip-path: inset(50%);
       white-space: nowrap;
     }
-    .choice {
-      position: relative;
-      display: block;
-      cursor: pointer;
-    }
-    .choice input {
-      position: absolute;
-      opacity: 0;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-    }
     .tile {
       padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-      background-color: var(--card, var(--background));
-      color: var(--card-foreground, var(--foreground));
-      border-radius: var(--boxel-border-radius);
-      box-shadow: 0 0 0 1px var(--border);
       overflow-wrap: anywhere;
-    }
-    .choice:hover .tile {
-      box-shadow: 0 0 0 1px var(--foreground, var(--boxel-dark));
-    }
-    .choice:has(input:checked) .tile {
-      box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
-    }
-    .choice:has(input:focus-visible) .tile {
-      outline: 2px solid var(--ring, var(--boxel-highlight));
-      outline-offset: 2px;
     }
     .label {
       font-size: var(--boxel-font-size-sm);

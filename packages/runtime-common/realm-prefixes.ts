@@ -47,6 +47,9 @@ export interface PrefixRealm {
   hostConfigKey: string;
 }
 
+/** The catalog realm's prefix, for code that names the catalog by itself. */
+export const CATALOG_REALM_PREFIX = '@cardstack/catalog/';
+
 export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
   {
     prefix: baseRealmRRI,
@@ -54,7 +57,7 @@ export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
     hostConfigKey: 'resolvedBaseRealmURL',
   },
   {
-    prefix: '@cardstack/catalog/',
+    prefix: CATALOG_REALM_PREFIX,
     hostConfigKey: 'resolvedCatalogRealmURL',
   },
   {
