@@ -146,6 +146,16 @@ The answer is the limits in force, defaults filled in. A share's listing
 (`GET /_key-shares`, for its owner and the realm's direct writers) and a key's
 (`GET /_user-keys`, for its owner) carry `limits` the same way.
 
+From the terminal, `boxel keys limits <name>` (a personal key) or
+`boxel keys limits <label> --realm <url>` (a share) shows the limits in force,
+and with `--rate <burst>/<refill>`, `--daily <n>` or `--monthly <n>` sets
+them; `default` for any of them is null, the platform's default. Setting
+them uses the profile's secure session (`boxel keys sign-in`), reading them
+the ordinary one. A share is looked up among the user's own shares, then in
+the realm's listing, so a writer who doesn't own it gets the realm server's
+403, not a local "no such share". `boxel keys usage`, with the same
+arguments, reads what the share or key has served.
+
 ## Notices
 
 `key_limit_notices` holds one row per recipient when a period's use reaches
