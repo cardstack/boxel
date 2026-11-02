@@ -349,6 +349,25 @@ export function initialUse(
   return 'pipelines';
 }
 
+// Whether an operation was last approved for interactive use: approving it
+// again for pipelines only stops it running when a card is opened.
+export function approvedForOpenCards(operation: BatchOperation): boolean {
+  return operation.slots.some((s) => s.approved?.interactive);
+}
+
+// Which cards the approval covers: only this card (every operation approved
+// per instance), every card of its kind, or a mix of the two.
+export function approvalScope(
+  batch: ApprovalBatch | undefined,
+): 'card' | 'kind' | 'mixed' {
+  let operations = (batch?.groups ?? []).flatMap((g) => g.operations);
+  let perCard = operations.filter((o) => o.instance !== null).length;
+  if (perCard === 0) {
+    return 'kind';
+  }
+  return perCard === operations.length ? 'card' : 'mixed';
+}
+
 // How many more requests need approving after these, for the choice made:
 // those approved for pipelines only count only for interactive use.
 export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
