@@ -21,6 +21,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
+  getRealmServerRoute,
   registerRealmServerRoute,
   unregisterRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
@@ -33,6 +34,8 @@ const NOTICES_PATH = '/_key-policy-notices';
 // count in `meta`.
 function stubNotices(unread: { count: number }) {
   let reads = 0;
+  // The mock's own listing, put back when the test is done.
+  let standing = getRealmServerRoute(new URL(NOTICES_PATH, 'http://mock/'));
   registerRealmServerRoute({
     path: NOTICES_PATH,
     handler: async (req) => {
@@ -53,7 +56,10 @@ function stubNotices(unread: { count: number }) {
     get reads() {
       return reads;
     },
-    restore: () => unregisterRealmServerRoute(NOTICES_PATH),
+    restore: () =>
+      standing
+        ? registerRealmServerRoute(standing)
+        : unregisterRealmServerRoute(NOTICES_PATH),
   };
 }
 
