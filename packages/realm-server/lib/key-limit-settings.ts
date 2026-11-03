@@ -130,6 +130,26 @@ export function keyLimitDefaultsFromEnv(
   };
 }
 
+// The limits as the share and key listings, their usage and the limits routes
+// serve them: those in force, plus what tells a value the owner chose from
+// one the platform filled in, so a form can show a default as a default.
+//
+// - `set`: each limit as the owner set it, or null where they left the
+//   default.
+// - `defaults`: what an unset limit takes. An unset monthly budget is
+//   `monthlyBudgetDays` daily budgets of the daily budget in force, so it
+//   follows the daily budget; a monthly budget the owner set stays put when
+//   the daily budget changes.
+export interface KeyLimitsView extends KeyLimits {
+  set: Record<keyof KeyLimits, number | null>;
+  defaults: {
+    rateBurst: number;
+    rateRefillPerMinute: number;
+    dailyBudget: number;
+    monthlyBudgetDays: number;
+  };
+}
+
 // A row's limits, each one its owner left unset filled in from the defaults.
 // A monthly budget left unset is `MONTHLY_BUDGET_DAYS` daily budgets, of the
 // daily budget in force, so raising the daily budget raises it too.
@@ -148,5 +168,30 @@ export function limitsOf(
     monthlyBudget:
       stored('monthly_budget') ??
       Math.min(MAX_KEY_LIMIT, dailyBudget * MONTHLY_BUDGET_DAYS),
+  };
+}
+
+// A row's limits as they're served: in force, as its owner set them, and the
+// defaults an unset one takes (see `KeyLimitsView`).
+export function limitsViewOf(
+  row: Record<string, unknown>,
+  defaults: KeyLimitDefaults = configured,
+): KeyLimitsView {
+  let stored = (column: string) =>
+    row[column] == null ? null : Number(row[column]);
+  return {
+    ...limitsOf(row, defaults),
+    set: {
+      rateBurst: stored('rate_burst'),
+      rateRefillPerMinute: stored('rate_refill_per_minute'),
+      dailyBudget: stored('daily_budget'),
+      monthlyBudget: stored('monthly_budget'),
+    },
+    defaults: {
+      rateBurst: defaults.rateBurst,
+      rateRefillPerMinute: defaults.rateRefillPerMinute,
+      dailyBudget: defaults.dailyBudget,
+      monthlyBudgetDays: MONTHLY_BUDGET_DAYS,
+    },
   };
 }

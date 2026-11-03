@@ -22,9 +22,9 @@ import {
 import { clearKeyRejected, clearKeyRejections } from './key-grant-rejection.ts';
 import {
   KEY_LIMIT_COLUMNS,
-  limitsOf,
+  limitsViewOf,
   MAX_KEY_LIMIT,
-  type KeyLimits,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
@@ -107,8 +107,9 @@ export interface UserKeyMetadata {
   // Only a google-service-account key has one.
   serviceAccount?: ServiceAccountDetails;
   // How much of the key its owner's own interactive calls may spend, their
-  // settings with the platform's defaults filled in.
-  limits: KeyLimits;
+  // settings with the platform's defaults filled in, and which of them they
+  // set (see `KeyLimitsView`).
+  limits: KeyLimitsView;
   // Whether its owner lets people who aren't signed in use it, through a
   // share, wherever a realm's policy lets them make the call; and the
   // optional caps on their calls a UTC day and a UTC month, all together, in
@@ -472,7 +473,7 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
-    limits: limitsOf(row),
+    limits: limitsViewOf(row),
     anonymous: Boolean(row.anonymous),
     anonymousDailyCap:
       row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),

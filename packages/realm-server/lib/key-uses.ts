@@ -15,8 +15,8 @@ import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anony
 import { budgetUse, type BudgetUse } from './key-limits.ts';
 import {
   KEY_LIMIT_COLUMNS,
-  limitsOf,
-  type KeyLimits,
+  limitsViewOf,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
 import { subjectOfRefusal } from './key-use-subject.ts';
@@ -202,7 +202,7 @@ export interface UsageGrant {
 }
 
 export interface KeyUsage {
-  limits: KeyLimits;
+  limits: KeyLimitsView;
   budgets: BudgetUse;
   // The start of the current UTC month: the counts below are since then.
   since: string;
@@ -272,7 +272,7 @@ async function usageOf(
     viewer: string;
     // The share's realm; absent for a personal key.
     realmURL?: string;
-    limits: KeyLimits;
+    limits: KeyLimitsView;
     grants: UsageGrant[];
     canEditLimits: boolean;
   },
@@ -444,7 +444,7 @@ export async function shareUsage(
     {
       viewer: user,
       realmURL: share.realm_url as string,
-      limits: limitsOf(share),
+      limits: limitsViewOf(share),
       grants: grants.map(grantOf),
       canEditLimits: share.owner === user,
     },
@@ -480,7 +480,7 @@ export async function userKeyUsage(
     { kind: 'key', id: keyId },
     {
       viewer: owner,
-      limits: limitsOf(key),
+      limits: limitsViewOf(key),
       grants: grants.map(grantOf),
       canEditLimits: true,
     },

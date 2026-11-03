@@ -1,16 +1,23 @@
 // A key's or a share's limits, edited in place by the key's owner: how many
 // calls one caller may make at once, how fast that refills, and how many
-// calls it serves in a UTC day and a month across every caller. Each starts at
-// the limit in force; only the ones changed are sent. A field left empty goes
-// back to the platform's default. These count calls, not money: the service's
-// own price for a call is the owner's to look up.
+// calls it serves in a UTC day and a month across every caller. A field holds
+// the value its owner set, or is empty where they left the default, which it
+// shows as its placeholder and spells out under it. Only the fields changed
+// are sent, and a field emptied goes back to the default. An unset monthly
+// budget follows the daily one, so its default moves as the daily field is
+// edited; a monthly budget the owner set stays put. These count calls, not
+// money: the service's own price for a call is the owner's to look up.
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import Button from '../../components/button.gts';
 import BoxelInput from '../../components/input.gts';
-import type { KeyLimitChanges, KeyLimits } from '../../security/keys.ts';
+import type {
+  KeyLimitChanges,
+  KeyLimitName,
+  KeyLimits,
+} from '../../security/keys.ts';
 
 interface Signature {
   Args: {
@@ -24,15 +31,29 @@ interface Signature {
   };
 }
 
-type Field = keyof KeyLimits;
+type Field = KeyLimitName;
 
+const COUNT = new Intl.NumberFormat('en-US');
+
+// The fields' text: what the owner set, empty where they left the default.
 function textOf(limits: KeyLimits): Record<Field, string> {
+  let text = (value: number | null) => (value == null ? '' : String(value));
   return {
-    rateBurst: String(limits.rateBurst),
-    rateRefillPerMinute: String(limits.rateRefillPerMinute),
-    dailyBudget: String(limits.dailyBudget),
-    monthlyBudget: String(limits.monthlyBudget),
+    rateBurst: text(limits.set.rateBurst),
+    rateRefillPerMinute: text(limits.set.rateRefillPerMinute),
+    dailyBudget: text(limits.set.dailyBudget),
+    monthlyBudget: text(limits.set.monthlyBudget),
   };
+}
+
+// A field's text as the limit it names, or undefined when it isn't one.
+function limitOf(text: string, whole: boolean): number | undefined {
+  let value = Number(text.trim());
+  let valid =
+    text.trim() !== '' &&
+    Number.isFinite(value) &&
+    (whole ? Number.isInteger(value) && value >= 1 : value > 0);
+  return valid ? value : undefined;
 }
 
 interface FieldSpec {
@@ -105,10 +126,15 @@ export default class LimitsForm extends Component<Signature> {
               <BoxelInput
                 @value={{field.value}}
                 @onInput={{field.onInput}}
+                @placeholder={{field.placeholder}}
                 inputmode={{if field.whole 'numeric' 'decimal'}}
                 data-test-key-limit-input={{field.name}}
               />
               <span class='hint'>{{field.hint}}</span>
+              <span
+                class='hint default'
+                data-test-key-limit-default={{field.name}}
+              >{{field.defaultNote}}</span>
             </label>
           {{/each}}
         </fieldset>
@@ -189,16 +215,21 @@ export default class LimitsForm extends Component<Signature> {
     </style>
   </template>
 
-  // The limits the fields were last filled from, which a field is compared
-  // against to tell whether it changed.
-  private current: KeyLimits = this.args.limits;
+  // The limits the fields were last filled from, whose `set` a field is
+  // compared against to tell whether it changed. Tracked, since the defaults
+  // the fields show come from it.
+  private filled = trackedObject({ limits: this.args.limits });
+
+  private get current(): KeyLimits {
+    return this.filled.limits;
+  }
 
   private values = trackedObject<Record<Field, string>>(
     textOf(this.args.limits),
   );
 
   private fill(limits: KeyLimits) {
-    this.current = limits;
+    this.filled.limits = limits;
     Object.assign(this.values, textOf(limits));
   }
 
@@ -208,12 +239,43 @@ export default class LimitsForm extends Component<Signature> {
     error: undefined as string | undefined,
   });
 
+  // What each field takes while it's empty: the platform's default, or for
+  // the monthly budget that many days of the daily budget the form holds.
+  private get defaults(): Record<Field, number> {
+    let { defaults } = this.current;
+    let daily = limitOf(this.values.dailyBudget, true) ?? defaults.dailyBudget;
+    return {
+      rateBurst: defaults.rateBurst,
+      rateRefillPerMinute: defaults.rateRefillPerMinute,
+      dailyBudget: defaults.dailyBudget,
+      monthlyBudget: daily * defaults.monthlyBudgetDays,
+    };
+  }
+
+  // Under each field: the default it takes, said as the value in force when
+  // the field is empty and as what emptying it gives when it isn't.
+  private defaultNote(field: Field): string {
+    let value = COUNT.format(this.defaults[field]);
+    let empty = this.values[field].trim() === '';
+    if (field === 'monthlyBudget') {
+      let days = this.current.defaults.monthlyBudgetDays;
+      return empty
+        ? `Follows calls a day: ${days} × calls a day, ${value}.`
+        : `Leave empty to follow calls a day (${days} × calls a day, ${value}).`;
+    }
+    return empty
+      ? `Using the default, ${value}.`
+      : `Leave empty for the default, ${value}.`;
+  }
+
   private get groups() {
     return groups(Boolean(this.args.shared)).map((group) => ({
       legend: group.legend,
       fields: group.fields.map((field) => ({
         ...field,
         value: this.values[field.name],
+        placeholder: COUNT.format(this.defaults[field.name]),
+        defaultNote: this.defaultNote(field.name),
         onInput: (value: string) => {
           this.values[field.name] = value;
           this.state.saved = false;
@@ -223,24 +285,24 @@ export default class LimitsForm extends Component<Signature> {
     }));
   }
 
-  // The fields that differ from the limits in force, or an error naming the
-  // first that isn't a limit.
+  // The fields that differ from what the owner set, or an error naming the
+  // first that isn't a limit. A field emptied goes back to the default; one
+  // left empty sends nothing, so a default stays a default.
   private changes(): KeyLimitChanges | string {
     let changes: KeyLimitChanges = {};
     for (let field of FIELDS) {
-      let text = this.values[field.name].trim();
-      if (text === '') {
-        changes[field.name] = null;
+      let set = this.current.set[field.name];
+      if (this.values[field.name].trim() === '') {
+        if (set !== null) {
+          changes[field.name] = null;
+        }
         continue;
       }
-      let value = Number(text);
-      let valid =
-        Number.isFinite(value) &&
-        (field.whole ? Number.isInteger(value) && value >= 1 : value > 0);
-      if (!valid) {
+      let value = limitOf(this.values[field.name], field.whole);
+      if (value === undefined) {
         return `${field.label} must be ${field.whole ? 'a whole number of at least 1' : 'a number above 0'}.`;
       }
-      if (value !== this.current[field.name]) {
+      if (value !== set) {
         changes[field.name] = value;
       }
     }
@@ -268,7 +330,7 @@ export default class LimitsForm extends Component<Signature> {
       if (typeof answer === 'string') {
         this.state.error = answer;
       } else {
-        // A field left empty now shows the default it went back to.
+        // A field emptied stays empty, showing the default it went back to.
         this.fill(answer);
         this.state.saved = true;
       }

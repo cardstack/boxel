@@ -48,6 +48,7 @@ import {
   unshareUserKey,
   type ConnectableClient,
   type KeyLimitChanges,
+  type KeyLimitName,
   type KeyLimits,
   type KeyShare,
   type KeyUsage,
@@ -1100,13 +1101,25 @@ function limitChanges(options: LimitsOptions): KeyLimitChanges {
   return changes;
 }
 
+// Each limit in force, marked where it is the platform's default rather than
+// one its owner set.
 function printLimits(what: string, limits: KeyLimits): void {
+  let unset = (name: KeyLimitName) => limits.set?.[name] === null;
+  let rateDefault =
+    unset('rateBurst') && unset('rateRefillPerMinute') ? ' (default)' : '';
+  let monthlyDefault = unset('monthlyBudget')
+    ? ` (default: ${limits.defaults?.monthlyBudgetDays ?? 30} × the daily budget)`
+    : '';
   console.log(`Limits on ${what}:`);
   console.log(
-    `  rate: ${limits.rateBurst} calls at once per caller, refilled at ${limits.rateRefillPerMinute} a minute`,
+    `  rate: ${limits.rateBurst} calls at once per caller, refilled at ${limits.rateRefillPerMinute} a minute${rateDefault}`,
   );
-  console.log(`  daily budget: ${limits.dailyBudget} calls`);
-  console.log(`  monthly budget: ${limits.monthlyBudget} calls`);
+  console.log(
+    `  daily budget: ${limits.dailyBudget} calls${unset('dailyBudget') ? ' (default)' : ''}`,
+  );
+  console.log(
+    `  monthly budget: ${limits.monthlyBudget} calls${monthlyDefault}`,
+  );
 }
 
 // A share named by its label with `--realm`, or else one of the user's own
