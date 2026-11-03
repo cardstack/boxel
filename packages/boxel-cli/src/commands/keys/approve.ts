@@ -25,6 +25,7 @@ import {
   type WindowOutcome,
 } from '../../lib/sso-login.ts';
 import {
+  anonymousCapsClause,
   findUserKey,
   listOwnShares,
   type UserKeyGrant,
@@ -372,7 +373,7 @@ function printBatch(
       say(
         ctx,
         share.anonymous
-          ? `  ${FG_YELLOW}Anyone on the internet who opens this card, including people who aren't signed in, can make ${operations.join(', ')} with ${share.label}${share.anonymousDailyCap != null ? `, up to ${share.anonymousDailyCap} calls a day all together` : ''}.${RESET}`
+          ? `  ${FG_YELLOW}Anyone on the internet who opens this card, including people who aren't signed in, can make ${operations.join(', ')} with ${share.label}${anonymousCapsClause(share)}.${RESET}`
           : `  This realm lets people who aren't signed in make ${operations.join(', ')}, but ${share.label}'s key allows signed-in people only, so they're asked to sign in.`,
       );
     }

@@ -100,10 +100,35 @@ export interface UserKeyMetadata {
   createdAt: string;
   updatedAt: string;
   // Whether its owner lets people who aren't signed in use it, wherever a
-  // realm's policy lets them make the call, and the optional cap on their
-  // calls a day, all together, in every realm it is shared into.
+  // realm's policy lets them make the call, and the optional caps on their
+  // calls a day and a month, all together, in every realm it is shared into.
   anonymous?: boolean;
   anonymousDailyCap?: number | null;
+  anonymousMonthlyCap?: number | null;
+}
+
+// A key's anonymous caps as a clause that ends a sentence about people who
+// aren't signed in: ", up to 100 calls a day and 1000 a month all together",
+// or nothing where the key has neither.
+export function anonymousCapsClause({
+  anonymousDailyCap,
+  anonymousMonthlyCap,
+}: {
+  anonymousDailyCap?: number | null;
+  anonymousMonthlyCap?: number | null;
+}): string {
+  let daily = anonymousDailyCap ?? null;
+  let monthly = anonymousMonthlyCap ?? null;
+  if (daily === null && monthly === null) {
+    return '';
+  }
+  let caps =
+    daily !== null && monthly !== null
+      ? `${daily} calls a day and ${monthly} a month`
+      : daily !== null
+        ? `${daily} calls a day`
+        : `${monthly} calls a month`;
+  return `, up to ${caps} all together`;
 }
 
 export interface KeyShare {
@@ -311,6 +336,7 @@ export async function addUserKey(
     ticket,
     anonymous,
     anonymousDailyCap,
+    anonymousMonthlyCap,
     ...entered
   }: {
     name: string;
@@ -318,6 +344,7 @@ export async function addUserKey(
     ticket?: string;
     anonymous?: boolean;
     anonymousDailyCap?: number;
+    anonymousMonthlyCap?: number;
   } & EnteredValue,
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {
@@ -340,6 +367,7 @@ export async function addUserKey(
           ...valueAttributes(entered),
           ...(anonymous ? { anonymous: true } : {}),
           ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+          ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
         },
       },
       meta: { ticket },
@@ -376,7 +404,8 @@ export async function realmOpensToAnonymous(
 }
 
 // Sets whether people who aren't signed in may use one of the user's keys,
-// and the optional cap on their calls a day. Takes a secure session.
+// and the optional caps on their calls a day and a month. A cap left out is
+// kept. Takes a secure session.
 export async function setUserKeyAnonymousUse(
   realmServerUrl: string,
   token: string,
@@ -384,7 +413,13 @@ export async function setUserKeyAnonymousUse(
     keyId,
     anonymous,
     anonymousDailyCap,
-  }: { keyId: string; anonymous: boolean; anonymousDailyCap?: number },
+    anonymousMonthlyCap,
+  }: {
+    keyId: string;
+    anonymous: boolean;
+    anonymousDailyCap?: number;
+    anonymousMonthlyCap?: number;
+  },
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {
   let json = await realmServerRequest(
@@ -400,6 +435,9 @@ export async function setUserKeyAnonymousUse(
           attributes: {
             anonymous,
             ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+            ...(anonymousMonthlyCap !== undefined
+              ? { anonymousMonthlyCap }
+              : {}),
           },
         },
       },

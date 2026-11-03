@@ -40,6 +40,7 @@ import {
   replaceUserKey,
   setKeyLimits,
   setUserKeyAnonymousUse,
+  anonymousCapsClause,
   shareUserKey,
   completeOAuthConnect,
   startOAuthConnect,
@@ -605,6 +606,7 @@ export async function keysAdd(
     json?: boolean;
     anonymous?: boolean;
     anonymousCap?: string;
+    anonymousMonthlyCap?: string;
   } & KeyValueSource &
     ServiceAccountOptions &
     OAuthClientOptions &
@@ -615,6 +617,11 @@ export async function keysAdd(
   let anonymousDailyCap = anonymousCapOption(
     options.anonymous,
     options.anonymousCap,
+  );
+  let anonymousMonthlyCap = anonymousCapOption(
+    options.anonymous,
+    options.anonymousMonthlyCap,
+    { flag: '--anonymous-monthly-cap' },
   );
   if (options.anonymous && kind === 'oauth-client') {
     throw new Error(
@@ -636,6 +643,7 @@ export async function keysAdd(
     ...oauthClientSettings(kind, options),
     ...(options.anonymous ? { anonymous: true } : {}),
     ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   });
   emit(ctx, key, () => {
     if (kind === 'oauth-client' && options.grantType !== 'client_credentials') {
@@ -826,17 +834,18 @@ async function warnWhereVisitorsWillUse(
   }
   if (!key.anonymous) {
     throw new Error(
-      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls>)`,
+      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls> a day and --monthly-cap <calls> a month)`,
     );
   }
   console.error(
-    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}.${RESET}`,
+    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${anonymousCapsClause(key)}.${RESET}`,
   );
   return true;
 }
 
-// `--anonymous-cap <calls>`, given only with `--anonymous` (or `on`): a whole
-// number of calls a day, from 1.
+// An anonymous cap (`--anonymous-cap`, `--anonymous-monthly-cap`, or `--cap`
+// and `--monthly-cap` with `on`), given only with `--anonymous` (or `on`): a
+// whole number of calls, from 1.
 function anonymousCapOption(
   anonymous: boolean | undefined,
   cap: string | undefined,
@@ -858,18 +867,22 @@ function anonymousCapOption(
 // How a key's setting for people who aren't signed in reads.
 function anonymousUseOf(key: UserKeyMetadata): string {
   return key.anonymous
-    ? `allowed${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}, wherever a realm's policy lets them make the call`
+    ? `allowed${anonymousCapsClause(key)}, wherever a realm's policy lets them make the call`
     : 'not allowed';
 }
 
 // Whether people who aren't signed in may use one of the user's keys: its
 // owner's setting for the key itself, which every realm it is shared into
-// follows where that realm's policy lets them make the call. `off` clears the
-// cap.
+// follows where that realm's policy lets them make the call. `off` clears
+// both caps; `on` keeps a cap it doesn't name.
 export async function keysAnonymous(
   name: string,
   setting: string,
-  options: { cap?: string; json?: boolean } & KeysCommandDeps = {},
+  options: {
+    cap?: string;
+    monthlyCap?: string;
+    json?: boolean;
+  } & KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   if (setting !== 'on' && setting !== 'off') {
     throw new Error('say on or off');
@@ -879,6 +892,10 @@ export async function keysAnonymous(
     flag: '--cap',
     with: 'on',
   });
+  let anonymousMonthlyCap = anonymousCapOption(anonymous, options.monthlyCap, {
+    flag: '--monthly-cap',
+    with: 'on',
+  });
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
@@ -886,6 +903,7 @@ export async function keysAnonymous(
     keyId: key.id,
     anonymous,
     ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   });
   emit(ctx, updated, () => {
     console.log(
