@@ -3,6 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { delay } from '@cardstack/runtime-common';
 import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
@@ -836,6 +837,57 @@ module('Integration | tools | check-correctness', function (hooks) {
       await waiting,
       [b],
       'a render announced during the wait ends it',
+    );
+  });
+
+  test("a realm's render watch ends once its module write's time is up and no wait holds it", async function (assert) {
+    let toolService = getService('tool-service');
+    let messageService = getService('message-service');
+    toolService.__setWaitsForTesting({ renderedHTMLWatchMs: 50 });
+    let a = `${testRealmURL}Milestone/a.json`;
+    let trackModuleWrite = () =>
+      toolService.trackAiAssistantCardRequest({
+        action: 'test',
+        roomId: '!room:example.com',
+        fileUrl: `${testRealmURL}milestone.gts`,
+      });
+    let announce = () =>
+      messageService.relayRealmEvent({
+        eventName: 'prerender_html',
+        invalidations: [a],
+        generation: 1,
+        realmURL: testRealmURL,
+      });
+    let wait = async () => [
+      ...(await toolService.waitForRenderedHTML(
+        testRealmURL,
+        new Map([[a, 1]]),
+        10_000,
+      )),
+    ];
+
+    trackModuleWrite();
+    await delay(150);
+    announce();
+    assert.deepEqual(
+      await wait(),
+      [],
+      "a render announced after the write's time is up is not recorded",
+    );
+
+    trackModuleWrite();
+    let waiting = wait();
+    await delay(150);
+    announce();
+    assert.deepEqual(
+      await waiting,
+      [a],
+      "a wait under way keeps the watch past the write's time",
+    );
+    assert.deepEqual(
+      await wait(),
+      [],
+      'the watch ends with the last wait on it',
     );
   });
 

@@ -323,16 +323,22 @@ export interface IndexedWrite {
   generation?: number;
 }
 
+// How long a tracked write waits for its index event.
+const TRACKED_WRITE_MS = 5 * 60 * 1000;
+
 // How many `prerender_html` events a realm's watch keeps.
 const RENDERED_HTML_LOG_SIZE = 100;
 
 // A realm's `prerender_html` events since a module write there was first
 // tracked: which files each render job rendered, as file URLs, and the
-// generation it rendered at.
+// generation it rendered at. `expired` says the time the realm's last
+// tracked module write gave the watch is up; it then ends with its last wait.
 interface RenderedHTMLWatch {
   log: { generation: number; files: Set<string> }[];
   listeners: Set<() => void>;
   unsubscribe: () => void;
+  expired: boolean;
+  endTimer?: ReturnType<typeof setTimeout>;
 }
 
 export default class ToolService extends Service {
@@ -348,6 +354,7 @@ export default class ToolService extends Service {
   // reader. Only __setWaitsForTesting changes them.
   #toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
   #scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
+  #renderedHTMLWatchMs = TRACKED_WRITE_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   // The room each running call runs for, by tool call id.
   private executingToolRooms = new TrackedMap<string, string>();
@@ -386,11 +393,13 @@ export default class ToolService extends Service {
     }
   >();
 
-  // Shortens the tool deadline and the wait for a script's question, so a
-  // test can reach them. Refused outside tests.
+  // Shortens the tool deadline, the wait for a script's question and how
+  // long a realm's render watch outlives a module write, so a test can reach
+  // them. Refused outside tests.
   __setWaitsForTesting(waits: {
     toolExecuteTimeoutMs?: number;
     scriptAskMaxMs?: number;
+    renderedHTMLWatchMs?: number;
   }) {
     if (!isTesting()) {
       throw new Error('__setWaitsForTesting is only for tests');
@@ -398,6 +407,8 @@ export default class ToolService extends Service {
     this.#toolExecuteTimeoutMs =
       waits.toolExecuteTimeoutMs ?? this.#toolExecuteTimeoutMs;
     this.#scriptAskMaxMs = waits.scriptAskMaxMs ?? this.#scriptAskMaxMs;
+    this.#renderedHTMLWatchMs =
+      waits.renderedHTMLWatchMs ?? this.#renderedHTMLWatchMs;
   }
 
   private askFromScript(
@@ -534,13 +545,8 @@ export default class ToolService extends Service {
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
       this.cleanupInvalidationWaiter(key);
     }
-    let watches = [...this.renderedHTMLWatches.values()];
-    this.renderedHTMLWatches.clear();
-    for (let watch of watches) {
-      watch.unsubscribe();
-      for (let listener of [...watch.listeners]) {
-        listener();
-      }
+    for (let [realmURL, watch] of [...this.renderedHTMLWatches]) {
+      this.endRenderedHTMLWatch(realmURL, watch);
     }
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
@@ -640,15 +646,12 @@ export default class ToolService extends Service {
           : {}),
       });
     });
-    let timeoutId = setTimeout(
-      () => {
-        this.cleanupInvalidationWaiter(key);
-        let current = this.aiAssistantInvalidations.get(key);
-        current?.deferred.fulfill(undefined);
-        this.aiAssistantInvalidations.delete(key);
-      },
-      5 * 60 * 1000,
-    );
+    let timeoutId = setTimeout(() => {
+      this.cleanupInvalidationWaiter(key);
+      let current = this.aiAssistantInvalidations.get(key);
+      current?.deferred.fulfill(undefined);
+      this.aiAssistantInvalidations.delete(key);
+    }, TRACKED_WRITE_MS);
     this.aiAssistantInvalidationWaiters.set(key, {
       unsubscribe,
       timeoutId,
@@ -712,15 +715,20 @@ export default class ToolService extends Service {
   // A realm server's index pass leaves rendering its cards' formats to a
   // render job of its own, which announces the files it rendered in a
   // `prerender_html` event. The watch records those events for the realm from
-  // the time it starts.
+  // the time it starts, for as long as a tracked write waits for its index
+  // event after the realm's last tracked module write. That covers a check
+  // that starts from the write's index event and then waits for its renders.
   private watchRenderedHTML(realmURL: string) {
-    if (this.renderedHTMLWatches.has(realmURL)) {
+    let existing = this.renderedHTMLWatches.get(realmURL);
+    if (existing) {
+      this.renewRenderedHTMLWatch(realmURL, existing);
       return;
     }
     let watch: RenderedHTMLWatch = {
       log: [],
       listeners: new Set(),
       unsubscribe: () => undefined,
+      expired: false,
     };
     watch.unsubscribe = this.messageService.subscribe(realmURL, (event) => {
       if (event?.eventName !== 'prerender_html') {
@@ -738,12 +746,39 @@ export default class ToolService extends Service {
       }
     });
     this.renderedHTMLWatches.set(realmURL, watch);
+    this.renewRenderedHTMLWatch(realmURL, watch);
+  }
+
+  // Gives the watch the full time again, from now.
+  private renewRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    watch.expired = false;
+    watch.endTimer = setTimeout(() => {
+      watch.expired = true;
+      if (watch.listeners.size === 0) {
+        this.endRenderedHTMLWatch(realmURL, watch);
+      }
+    }, this.#renderedHTMLWatchMs);
+  }
+
+  // Stops recording the realm's renders, and ends any wait on the watch with
+  // what it recorded.
+  private endRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    if (this.renderedHTMLWatches.get(realmURL) === watch) {
+      this.renderedHTMLWatches.delete(realmURL);
+    }
+    watch.unsubscribe();
+    for (let listener of [...watch.listeners]) {
+      listener();
+    }
   }
 
   // Waits until every file in `files` has been rendered by a render job at
   // the generation it maps to or later, or until `timeoutMs` passes, and
-  // returns the files that have. A realm with no tracked module write has no
-  // watch, so nothing is known to be rendered there.
+  // returns the files that have. The realm's watch lasts at least as long as
+  // the wait. A realm with no recent tracked module write has no watch, so
+  // nothing is known to be rendered there.
   async waitForRenderedHTML(
     realmURL: string,
     files: Map<string, number>,
@@ -769,11 +804,18 @@ export default class ToolService extends Service {
         let finish = () => {
           clearTimeout(timeoutId);
           watch.listeners.delete(listener);
+          if (
+            watch.expired &&
+            watch.listeners.size === 0 &&
+            this.renderedHTMLWatches.get(realmURL) === watch
+          ) {
+            this.endRenderedHTMLWatch(realmURL, watch);
+          }
           resolve();
         };
         let listener = () => {
           if (
-            !this.renderedHTMLWatches.has(realmURL) ||
+            this.renderedHTMLWatches.get(realmURL) !== watch ||
             rendered().size === files.size
           ) {
             finish();
