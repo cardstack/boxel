@@ -632,6 +632,113 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 200);
       assert.strictEqual(response.headers.get('content-length'), '50000');
     });
+
+    test('the size and refusal lines end with the name of the key the call attached', async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let credential = {
+        name: 'system:https://vendor.test/v1',
+        value: 'sk-test-0123456789abcdefghij',
+        placement: { in: 'header' as const, header: 'Authorization' },
+      };
+      let lines = await outboundLogDuring(async () => {
+        let response = await outboundFetch({
+          url: `${vendor.url}/large?bytes=1000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          destinationSetBy: 'platform',
+          credential,
+        });
+        await response.text();
+        await refusal(
+          outboundFetch({
+            url: `${vendor.url}/large?bytes=50000`,
+            method: 'GET',
+            headers: {},
+            sizePath: 'system-key',
+            destinationSetBy: 'platform',
+            credential,
+          }),
+        );
+        let unnamed = await outboundFetch({
+          url: `${vendor.url}/large?bytes=10`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'call-api',
+          destinationSetBy: 'user',
+        });
+        await unnamed.text();
+      });
+      let sizes = lines.filter((line) =>
+        line.message.startsWith('outbound response size:'),
+      );
+      assert.true(
+        sizes[0]?.message.endsWith(
+          'bytes=1000 outcome=complete key=system:https://vendor.test/v1',
+        ),
+        `the size line names the key (${sizes[0]?.message})`,
+      );
+      let refused = lines.find((line) =>
+        line.message.startsWith('outbound response over size cap:'),
+      );
+      assert.true(
+        refused?.message.endsWith(
+          'refused=declared-length key=system:https://vendor.test/v1',
+        ),
+        `the refusal line names the key (${refused?.message})`,
+      );
+      assert.true(
+        sizes[1]?.message.endsWith('outcome=complete key=(none)'),
+        `a call with no named key says so (${sizes[1]?.message})`,
+      );
+    });
+
+    test("a call's own response size cap takes the place of its path's", async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let lines = await outboundLogDuring(async () => {
+        let raised = await outboundFetch({
+          url: `${vendor.url}/large?bytes=50000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          responseSizeCap: 60_000,
+          destinationSetBy: 'platform',
+        });
+        assert.strictEqual(
+          (await raised.text()).length,
+          50_000,
+          'a raised cap lets a response over the path cap through whole',
+        );
+      });
+      assert.true(
+        lines.some(
+          (line) =>
+            line.message.startsWith('outbound response size:') &&
+            line.message.includes('cap=60000 bytes=50000 outcome=complete'),
+        ),
+        'the size line reports the cap the call was held to',
+      );
+
+      let error = await refusal(
+        outboundFetch({
+          url: `${vendor.url}/large?bytes=5000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          responseSizeCap: 1_000,
+          destinationSetBy: 'platform',
+        }),
+      );
+      assert.true(
+        error instanceof OutboundResponseTooLargeError,
+        'a lowered cap refuses a response under the path cap',
+      );
+      assert.strictEqual((error as OutboundResponseTooLargeError).cap, 1_000);
+    });
   });
 
   module('credentials on the send path', function (hooks) {

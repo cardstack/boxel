@@ -1548,6 +1548,91 @@ export class MyCard${i} extends CardDef {
     });
   });
 
+  module('no-nested-interactive', function (hooks) {
+    let thread: LintThread;
+
+    hooks.before(function () {
+      thread = new LintThread();
+    });
+
+    hooks.after(async function () {
+      await thread.terminate();
+    });
+
+    async function lintTemplate(
+      filename: string,
+      template: string,
+    ): Promise<{ passed: boolean | undefined; messages: string[] }> {
+      let result = await lintArgs(
+        { source: `<template>\n${template}\n</template>\n`, filename },
+        thread,
+      );
+      return {
+        passed: result.passed,
+        messages: result.messages
+          .filter((m) => m.ruleId === 'no-nested-interactive')
+          .map((m) => m.message),
+      };
+    }
+
+    test('passes controls in the body of a <details> element', async function (assert) {
+      let result = await lintTemplate(
+        'disclosure.gts',
+        `  <details class='status-picker'>
+    <summary class='status-pill'>Status</summary>
+    <div class='options'>
+      <button type='button'>Open</button>
+      <button type='button'>Closed</button>
+    </div>
+  </details>`,
+      );
+      assert.deepEqual(
+        result.messages,
+        [],
+        'no no-nested-interactive message for buttons in the open panel',
+      );
+      assert.true(result.passed, 'lint passes');
+    });
+
+    test('reports a control inside a <summary>', async function (assert) {
+      let result = await lintTemplate(
+        'summary-button.gts',
+        `  <details>
+    <summary>Status <button type='button'>Clear</button></summary>
+    <p>Body</p>
+  </details>`,
+      );
+      assert.deepEqual(result.messages, [
+        'Do not use <button> inside <summary>',
+      ]);
+      assert.false(result.passed, 'lint fails');
+    });
+
+    test('reports a control inside another control', async function (assert) {
+      let result = await lintTemplate(
+        'button-button.gts',
+        `  <button type='button'>Outer <button type='button'>Inner</button></button>`,
+      );
+      assert.deepEqual(result.messages, [
+        'Do not use <button> inside <button>',
+      ]);
+      assert.false(result.passed, 'lint fails');
+    });
+
+    test('reports a <details> inside a control through its <summary>', async function (assert) {
+      let result = await lintTemplate(
+        'button-details.gts',
+        `  <button type='button'>
+    <details><summary>More</summary><p>Body</p></details>
+  </button>`,
+      );
+      assert.deepEqual(result.messages, [
+        'Do not use <summary> inside <button>',
+      ]);
+      assert.false(result.passed, 'lint fails');
+    });
+  });
+
   module('lint thread', function () {
     test('an idle thread exits, and the next lint starts a fresh one', async function (assert) {
       let thread = new LintThread(undefined, 200);

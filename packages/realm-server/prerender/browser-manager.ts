@@ -98,7 +98,24 @@ export class BrowserManager {
     });
 
     this.#browserUserDataDir = this.#extractUserDataDir(this.#browser);
+    await this.#logBrowserVersion(this.#browser);
     return this.#browser;
+  }
+
+  // Records which browser binary, at which version, a running prerenderer
+  // actually launched. The installed Chrome can differ from both the Puppeteer
+  // release and the Dockerfile (a cached image layer keeps an older browser),
+  // so this log line is the record of what a deployment runs.
+  async #logBrowserVersion(browser: Browser): Promise<void> {
+    let executable = browser.process()?.spawnfile ?? 'unknown executable';
+    try {
+      log.info(`Launched browser ${await browser.version()} (${executable})`);
+    } catch (e) {
+      log.warn(
+        `Launched browser (${executable}) but could not read its version:`,
+        e,
+      );
+    }
   }
 
   // SIGKILLs the running Chrome without waiting on it. Used when Chrome has

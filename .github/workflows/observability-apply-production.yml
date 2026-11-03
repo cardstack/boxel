@@ -96,6 +96,9 @@ jobs:
       SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID: "120317779495"
       # The environment in its task role names, `boxel-<service>-<env>-ecs-task`.
       SECRETS_DECRYPTS_ENV: production
+      # The environment the response size cap alerts (keys-group.json) name in
+      # their notifications.
+      ALERT_ENVIRONMENT: production
       REALM_SERVER_ALB_FULL_NAME: app/boxel-realm-server-production/e1d83dcf1a10d92f
       REALM_SERVER_TARGET_GROUP_FULL_NAME: targetgroup/boxel-realm-server-production/f5582cefd78674e5
 

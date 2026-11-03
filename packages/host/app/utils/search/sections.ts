@@ -15,6 +15,14 @@ export interface RealmSectionInfo {
   publishable: boolean | null;
 }
 
+// What the card chooser offers to create, and for which card's workspace.
+export interface OfferToCreate {
+  ref: CodeRef;
+  relativeTo: URL | undefined;
+  // The workspace of the card the new card is for.
+  realmURL?: URL | undefined;
+}
+
 export interface RealmSection {
   sid: string;
   type: 'realm';
@@ -22,6 +30,8 @@ export interface RealmSection {
   realmInfo: RealmSectionInfo;
   cards: RenderableSearchEntryLike[];
   totalCount: number;
+  // The workspace of the card a new card is being created for.
+  isCurrent?: boolean;
 }
 
 export type RecentsSection =
@@ -173,8 +183,10 @@ export function buildQuerySections(
     isSearchKeyEmpty: boolean;
     hasBaseFilter: boolean;
     realmURLs: string[];
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: OfferToCreate;
     realm: RealmInfoLookup;
+    // Puts an identifier in one form, so a prefix-form realm and its URL match.
+    canonical?: (identifier: string) => string;
     // Each realm's full match count; the rows handed in are only its first page.
     realmTotals?: Record<string, number>;
   },
@@ -225,6 +237,28 @@ export function buildQuerySections(
         });
       }
     }
+  }
+
+  // The workspace of the card being edited comes first among the workspaces,
+  // so its "Create New" is the one the eye lands on. Recents, and a section
+  // the user chose with "Show only", stay above it.
+  let canonical = opts.canonical ?? ((identifier: string) => identifier);
+  let inCurrent =
+    opts.offerToCreate?.realmURL?.href ?? opts.offerToCreate?.relativeTo?.href;
+  let current: RealmSection | undefined;
+  if (inCurrent) {
+    let location = canonical(inCurrent);
+    // The longest match, so a workspace nested under another is still found.
+    current = sections
+      .filter((section) => location.startsWith(canonical(section.realmUrl)))
+      .sort(
+        (a, b) => canonical(b.realmUrl).length - canonical(a.realmUrl).length,
+      )[0];
+  }
+  if (current) {
+    current.isCurrent = true;
+    sections.splice(sections.indexOf(current), 1);
+    sections.unshift(current);
   }
 
   return sections;

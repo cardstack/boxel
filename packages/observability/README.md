@@ -40,8 +40,14 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups for every env; routing uses
-                       # Grafana's default notification policy
+  alerting/            # alert rule groups for every env; a rule routes
+                       # through Grafana's default notification policy, or
+                       # to a contact point by `notification_settings.receiver`
+                       # (the response size cap rules in keys-group.json go
+                       # to Techops). local-techops-contact-point.json is the
+                       # local stand-in for that contact point, with no SMTP
+                       # behind it; apply-alerting.sh skips it, as it skips
+                       # any file here with no rule groups
   alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
                        # <env>/rules/ exist in that hosted env only;
                        # apply-alerting.sh pushes contact points first, with
@@ -396,6 +402,33 @@ BASE=$(aws ssm get-parameter --name /$ENV/loki/public_url --query 'Parameter.Val
 curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/labels" | jq
 curl -sS -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/label/service/values" | jq
 ```
+
+### Query cost on hosted Loki
+
+The hosted Loki runs as one small task, and the alert rules share it with
+everyone's dashboards and ad-hoc queries. When a burst of heavy queries fills
+its queue, alert rule evaluations time out with the rest.
+
+What a query costs is the bytes it must read. That is set by the streams its
+selector matches and the time it covers, not by its line filter: Loki reads
+every line of `{service=~"realm-server|worker"}` in the window before `|=`
+discards most of them. Measured on staging:
+
+| Query                                                        | Bytes read | Time      |
+| ------------------------------------------------------------ | ---------- | --------- |
+| one alert rule over realm-server + worker, `[5m]` or `[10m]` | 2–50 MB    | 10–230 ms |
+| the same selector over `[1d]` (an instant query)             | 0.3–2.4 GB | 2–17 s    |
+
+The alert rules together read about 5 GB an hour. About 100 `[1d]` queries sent
+every 30 s for 23 minutes read 159 GB, and Loki cancelled queries, alert rules
+among them, until they stopped. By those figures, a 24-panel dashboard over a day reads
+7–60 GB each time it loads or refreshes. So:
+
+- Start with the shortest window that answers the question, and widen it only
+  when you need to. `/api/v1/index/volume_range` gives bytes per stream at
+  almost no cost, when you need to know how much is there.
+- Do not run a `[1d]` or multi-day query in a loop. For a count over days,
+  Logs Insights on the service's CloudWatch group does not load Loki.
 
 ### LogQL cookbook
 

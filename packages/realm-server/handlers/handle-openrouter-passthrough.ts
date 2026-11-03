@@ -170,7 +170,11 @@ export default function handleOpenRouterPassthrough({
               finalBody,
               matrixUserId,
               clientGone,
-              { credential, scrubber },
+              {
+                credential,
+                scrubber,
+                responseSizeCap: destinationConfig.responseSizeCap,
+              },
             );
           }
 
@@ -185,6 +189,7 @@ export default function handleOpenRouterPassthrough({
             body: finalBody,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
+            responseSizeCap: destinationConfig.responseSizeCap,
             destinationSetBy: 'platform',
             credential,
             scrubber,
