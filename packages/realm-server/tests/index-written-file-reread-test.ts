@@ -329,6 +329,14 @@ module(basename(import.meta.filename), function () {
         { value: undefined, rereads: 0, waitedMs: 0, removed: false },
         'a later file in the pass is not re-read once the window has closed',
       );
+      let third = await rereads.reread(
+        async () => undefined,
+        async () => false,
+      );
+      assert.true(
+        third.removed,
+        'a file the realm removed reads as a removal after the window has closed too',
+      );
       assert.deepEqual(clock.slept, [10, 20, 40]);
     });
 

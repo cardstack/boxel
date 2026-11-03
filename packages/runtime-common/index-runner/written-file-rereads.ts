@@ -87,6 +87,8 @@ export class WrittenFileRereads {
         return result(value);
       }
     }
-    return result(undefined);
+    // Asked again once the window is spent, so a file the realm removed reads
+    // as a removal even when the window had already closed before this file.
+    return result(undefined, !(await realmRecordsFile()));
   }
 }
