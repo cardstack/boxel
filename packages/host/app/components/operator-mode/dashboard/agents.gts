@@ -582,6 +582,15 @@ export default class Agents extends Component<Signature> {
         width: min(100%, 20rem);
         margin-top: var(--boxel-sp-4xs);
       }
+      /* Select grows its text on touch screens to keep iOS from zooming
+         into its search box. This one has no search box, so it and its list
+         keep the step's small text. */
+      @media (pointer: coarse) {
+        .workspace-pick {
+          --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
+          --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
+        }
+      }
       .step-text {
         display: flex;
         align-items: flex-start;
