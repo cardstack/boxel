@@ -17,8 +17,10 @@ import {
 import { UserKeyError } from '../lib/user-keys.ts';
 import { realmOpensSharedKeysToAnonymous } from '../lib/anonymous-key-use.ts';
 import {
+  countUnreadPolicyNotices,
   declinePolicyNotice,
   listOwnPolicyNotices,
+  markPolicyNoticesRead,
 } from '../lib/policy-share-audit.ts';
 import { secureClientOf } from './handle-user-key-grants.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
@@ -146,13 +148,57 @@ export function handleListKeyPolicyNotices({
   dbAdapter,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
-    let notices = await listOwnPolicyNotices(dbAdapter, ownerOf(ctxt));
+    let owner = ownerOf(ctxt);
+    let notices = await listOwnPolicyNotices(dbAdapter, owner);
     await sendJSON(ctxt, 200, {
       data: notices.map(({ id, ...attributes }) => ({
         type: 'key-policy-notice',
         id,
         attributes,
       })),
+      meta: { unread: await countUnreadPolicyNotices(dbAdapter, owner) },
+    });
+  });
+}
+
+// `POST /_key-policy-notices/read` marks the notices it names read, as the
+// key page does once it has shown them: `{ "data": [{ "type":
+// "key-policy-notice", "id": "<id>" }, ...] }`. Only a secure-origin session
+// may, so the app page, where card code runs, can't clear the badge that
+// tells the owner a workspace opened their keys to people who aren't signed
+// in.
+export function handleMarkKeyPolicyNoticesRead(
+  args: CreateRoutesArgs,
+): Handler {
+  return keysHandler(async (ctxt) => {
+    let owner = ownerOf(ctxt);
+    await secureClientOf(ctxt, args, 'notices are marked read');
+    let body = await readJSON(ctxt);
+    let data = body.data;
+    if (
+      !Array.isArray(data) ||
+      !data.every(
+        (entry) =>
+          entry &&
+          typeof entry === 'object' &&
+          (entry as { type?: unknown }).type === 'key-policy-notice',
+      )
+    ) {
+      throw new UserKeyError(
+        400,
+        `data must be a list of 'key-policy-notice' resources`,
+      );
+    }
+    let marked = await markPolicyNoticesRead(
+      args.dbAdapter,
+      owner,
+      data.map((entry) => (entry as { id?: unknown }).id),
+    );
+    await sendJSON(ctxt, 200, {
+      meta: {
+        marked,
+        unread: await countUnreadPolicyNotices(args.dbAdapter, owner),
+      },
     });
   });
 }

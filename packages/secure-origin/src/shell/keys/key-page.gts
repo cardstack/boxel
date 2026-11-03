@@ -33,6 +33,7 @@ import {
   listBindings,
   declinePolicyNotice,
   listKeys,
+  markPolicyNoticesRead,
   policyNotices,
   removeGrant,
   replaceKey,
@@ -537,6 +538,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       this.state.bindings = await this.readBindings();
       this.state.notices = await this.readNotices();
       this.args.api.visit.loaded();
+      this.markNoticesRead();
       this.openAnonymousUseFromFragment();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -670,6 +672,21 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       return [];
     }
   };
+
+  // The notices this page lists have been seen, so the app's badge for them
+  // clears. One that can't be marked stays unread and is marked the next time
+  // the page lists it.
+  private markNoticesRead() {
+    let unread = this.state.notices
+      .filter((notice) => !notice.readAt)
+      .map((notice) => notice.id);
+    if (unread.length === 0) {
+      return;
+    }
+    markPolicyNoticesRead(this.args.api.config, unread).catch((e) => {
+      console.warn(`Could not mark the key notices read: ${e}`);
+    });
+  }
 
   // Declining a workspace's request leaves the key as it is; the request
   // isn't shown again.

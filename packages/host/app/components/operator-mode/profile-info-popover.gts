@@ -10,6 +10,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 
 import type BillingService from '@cardstack/host/services/billing-service';
+import type KeyNoticesService from '@cardstack/host/services/key-notices';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ProfileInfoPopoverSignature {
@@ -110,6 +111,36 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       :deep(.buy-more-credits.out-of-credit .size-base) {
         --boxel-button-min-height: 39px;
       }
+      .api-keys-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+        margin-bottom: var(--boxel-sp);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        background: var(--boxel-light);
+        color: var(--boxel-dark);
+        font: 600 var(--boxel-font-sm);
+        text-align: left;
+        cursor: pointer;
+      }
+      .api-keys-item:hover,
+      .api-keys-item:focus-visible {
+        border-color: var(--boxel-dark);
+      }
+      .api-keys-badge {
+        min-width: 20px;
+        padding: 0 var(--boxel-sp-4xs);
+        border-radius: 10px;
+        background: var(--boxel-danger);
+        color: var(--boxel-light);
+        font: 700 var(--boxel-font-xs);
+        line-height: 20px;
+        text-align: center;
+      }
       .daily-grant-note {
         flex-basis: 100%;
         color: var(--boxel-500);
@@ -147,6 +178,20 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
+      <button
+        type='button'
+        class='api-keys-item'
+        {{on 'click' this.keyNotices.openKeys}}
+        data-test-profile-api-keys-button
+      >
+        <span>API Keys</span>
+        {{#if this.keyNotices.unread}}
+          <span
+            class='api-keys-badge'
+            data-test-profile-api-keys-badge
+          >{{this.keyNotices.unread}}</span>
+        {{/if}}
+      </button>
       <WithSubscriptionData as |subscriptionData|>
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
@@ -200,6 +245,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
 
   @service declare matrixService: MatrixService;
   @service declare billingService: BillingService;
+  @service declare private keyNotices: KeyNoticesService;
 
   @action private logout() {
     this.matrixService.signOut();

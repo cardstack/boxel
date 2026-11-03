@@ -38,7 +38,7 @@ export default class KeyNoticesService
 
   constructor(owner: Owner) {
     super(owner);
-    this.realmServer.subscribeEvent(KEY_NOTICES_UPDATED_EVENT_TYPE, () =>
+    this.realmServer.subscribeEvent(KEY_NOTICES_UPDATED_EVENT_TYPE, async () =>
       this.refresh(),
     );
     let stopWatching = this.secureWindow.onReturn(() => this.refresh());

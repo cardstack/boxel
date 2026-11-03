@@ -7,7 +7,9 @@ import {
   query,
   realmPolicyCardNamed,
   rri,
+  separatedByCommas,
   type DBAdapter,
+  type Expression,
   type LocalPath,
   type PolicyShareAudit,
   type PolicyShareAuditEntry,
@@ -19,6 +21,8 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { SendEvent } from '@cardstack/runtime-common/send-event';
 import { servesVisitorsSQL, UserKeyError } from './user-keys.ts';
 
 // The realm server's side of the policy audit (`policy-share-audit.ts` in
@@ -69,12 +73,16 @@ export function createPolicyWriteAuditor({
   realmFor,
   virtualNetwork,
   policyPointerOf = async () => null,
+  sendEvent,
 }: {
   dbAdapter: DBAdapter;
   realmFor: (url: URL) => Promise<ServedRealm | undefined>;
   virtualNetwork: VirtualNetwork;
   // Without it, each candidate realm is mounted to read its pointer.
   policyPointerOf?: PolicyPointerReader;
+  // Tells each owner a notice was recorded for that one is waiting, so a
+  // session they have open shows it (`KEY_NOTICES_UPDATED_EVENT_TYPE`).
+  sendEvent?: SendEvent;
 }): PolicyWriteAuditor {
   return {
     audit: (request) =>
@@ -85,12 +93,28 @@ export function createPolicyWriteAuditor({
         policyPointerOf,
       }),
     notify: async (audit, savedBy) => {
+      let owners: Set<string>;
       try {
-        await recordPolicyNotices(dbAdapter, audit, savedBy);
+        owners = await recordPolicyNotices(dbAdapter, audit, savedBy);
       } catch (err: unknown) {
         log.warn(
           `could not record the notices of a policy change that opens shares to people who aren't signed in: ${err instanceof Error ? err.message : String(err)}`,
         );
+        return;
+      }
+      if (!sendEvent) {
+        return;
+      }
+      for (let owner of owners) {
+        try {
+          await sendEvent(owner, KEY_NOTICES_UPDATED_EVENT_TYPE);
+        } catch (err: unknown) {
+          // The notice is recorded either way; the owner sees it the next
+          // time their session asks.
+          log.warn(
+            `could not tell ${owner} a key notice is waiting: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     },
   };
@@ -348,19 +372,20 @@ async function openedShares(
 // One notice per listed share, unless the owner's latest notice for that share
 // already says the same: a save confirmed again before the first one's index
 // pass lands is audited against the policy it replaced, and owes no second
-// notice.
+// notice. Answers the owners a notice was recorded for.
 async function recordPolicyNotices(
   dbAdapter: DBAdapter,
   audit: PolicyShareAudit,
   savedBy: string | null,
-): Promise<void> {
+): Promise<Set<string>> {
+  let owners = new Set<string>();
   for (let entry of audit.entries) {
     if (!entry.share) {
       continue;
     }
     let reason = entry.keyAllowsAnonymous ? 'visitors-use' : 'visitors-wanted';
     let operations = JSON.stringify(entry.operations);
-    await query(dbAdapter, [
+    let rows = (await query(dbAdapter, [
       `INSERT INTO key_policy_notices (owner, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations)
        SELECT s.owner, s.id, s.key_id, s.realm_url, s.label, `,
       param(entry.policy),
@@ -383,9 +408,13 @@ async function recordPolicyNotices(
       param(entry.policy),
       ` AND latest.operations = `,
       param(operations),
-      `::jsonb)`,
-    ]);
+      `::jsonb) RETURNING owner`,
+    ])) as { owner: string }[];
+    for (let { owner } of rows) {
+      owners.add(owner);
+    }
   }
+  return owners;
 }
 
 export interface KeyPolicyNotice {
@@ -401,6 +430,8 @@ export interface KeyPolicyNotice {
   operations: string[];
   // When the owner declined a `visitors-wanted` request; null otherwise.
   declinedAt: string | null;
+  // When the owner's key page first listed it; null while it is unread.
+  readAt: string | null;
   createdAt: string;
 }
 
@@ -418,7 +449,7 @@ export async function listOwnPolicyNotices(
 }
 
 const NOTICE_COLUMNS =
-  'id, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, declined_at, created_at';
+  'id, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, declined_at, read_at, created_at';
 
 function noticeOf(row: Record<string, any>): KeyPolicyNotice {
   return {
@@ -437,8 +468,59 @@ function noticeOf(row: Record<string, any>): KeyPolicyNotice {
     declinedAt: row.declined_at
       ? new Date(row.declined_at).toISOString()
       : null,
+    readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+// How many of the owner's notices their key page hasn't listed yet: the count
+// the app shows on the user's avatar.
+export async function countUnreadPolicyNotices(
+  dbAdapter: DBAdapter,
+  owner: string,
+): Promise<number> {
+  let [row] = (await query(dbAdapter, [
+    `SELECT COUNT(*) AS unread FROM key_policy_notices WHERE owner = `,
+    param(owner),
+    ` AND read_at IS NULL`,
+  ])) as { unread: number | string }[];
+  return Number(row?.unread ?? 0);
+}
+
+// The most notices one request marks read: the most a listing returns.
+const MAX_MARKED_READ = 100;
+
+// Marks the owner's notices with these ids read, as their key page does once
+// it has shown them. Naming the ids, rather than marking everything, leaves a
+// notice recorded after the page loaded unread until a page lists it. Ids that
+// aren't the owner's, or are already read, are passed over. Answers how many
+// it marked.
+export async function markPolicyNoticesRead(
+  dbAdapter: DBAdapter,
+  owner: string,
+  ids: unknown,
+): Promise<number> {
+  if (
+    !Array.isArray(ids) ||
+    ids.length > MAX_MARKED_READ ||
+    !ids.every((id) => typeof id === 'string' && /^[0-9]{1,18}$/.test(id))
+  ) {
+    throw new UserKeyError(
+      400,
+      `ids must be a list of at most ${MAX_MARKED_READ} notice ids`,
+    );
+  }
+  if (ids.length === 0) {
+    return 0;
+  }
+  let rows = (await query(dbAdapter, [
+    `UPDATE key_policy_notices SET read_at = NOW() WHERE owner = `,
+    param(owner),
+    ` AND read_at IS NULL AND id IN (`,
+    ...separatedByCommas(ids.map((id) => [param(Number(id))])),
+    `) RETURNING id`,
+  ] as Expression)) as { id: unknown }[];
+  return rows.length;
 }
 
 // The owner declines a workspace's request that visitors use one of their
