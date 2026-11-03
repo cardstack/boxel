@@ -8145,7 +8145,14 @@ ${patchedFileSource}
       {
         isCanceled = false,
         isStreamingFinished = true,
-      }: { isCanceled?: boolean; isStreamingFinished?: boolean } = {},
+        errorMessage,
+        toolRequestIds = [],
+      }: {
+        isCanceled?: boolean;
+        isStreamingFinished?: boolean;
+        errorMessage?: string;
+        toolRequestIds?: string[];
+      } = {},
     ) =>
       ({
         type: 'm.room.message',
@@ -8157,7 +8164,17 @@ ${patchedFileSource}
           body,
           isStreamingFinished,
           ...(isCanceled ? { isCanceled: true } : {}),
+          ...(errorMessage ? { errorMessage } : {}),
           data: { context: { tools: [], functions: [] } },
+          ...(toolRequestIds.length
+            ? {
+                [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequestIds.map((id) => ({
+                  id,
+                  name: 'someTool_ab12',
+                  arguments: JSON.stringify({ description: `run ${id}` }),
+                })),
+              }
+            : {}),
         },
         sender: '@aibot:localhost',
         room_id: 'room1',
@@ -8251,6 +8268,35 @@ ${patchedFileSource}
       ]);
 
       assert.deepEqual(imageUrls(prompt), [dataUrlOf(sample)]);
+    });
+
+    test("a follow-up sent while the bot's tool call waits keeps the earlier message's image in the turn", async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Creating the app.', {
+          toolRequestIds: ['create-1'],
+        }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(sample)]);
+    });
+
+    test('an answer that ended in an error closes the turn', async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer(
+          '2',
+          2,
+          'There was an error processing your request, please try again later.',
+          { errorMessage: 'the provider rejected the request' },
+        ),
+        userMessage('3', 3, 'Try again'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), []);
     });
 
     test('an image from an answered turn stays out of the prompt, and its metadata says its content is not there', async () => {

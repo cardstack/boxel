@@ -2825,11 +2825,14 @@ export interface CurrentTurnMedia {
   omitted: { file: SerializedFileDef; reason: string }[];
 }
 
-// A bot message that answered the human messages before it. An answer that
-// was canceled (the user stopped it, or wrote again before it finished) or
-// is still streaming answered nothing, so the messages before it stay part of
-// the turn. An answer that ended in an error counts as answered: sending the
-// same media again would repeat whatever failed.
+// A bot message that answered the human messages before it: the reply a tool
+// loop ends on. An answer that was canceled (the user stopped it, or wrote
+// again before it finished) or is still streaming answered nothing, and a
+// message that makes tool calls is a step of the loop, not its end — the
+// user can write again while a call runs or waits for approval — so the
+// messages before either stay part of the turn. An answer that ended in an
+// error counts as answered: sending the same media again would repeat
+// whatever failed.
 function isCompletedAnswer(
   event: DiscreteMatrixEvent,
   aiBotUserId: string,
@@ -2837,12 +2840,11 @@ function isCompletedAnswer(
   if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
     return false;
   }
-  let { isStreamingFinished } = event.content as {
-    isStreamingFinished?: boolean;
-  };
+  let content = event.content as CardMessageContent;
   return (
-    isStreamingFinished !== false &&
-    !isCanceledAnswer(event as CardMessageEvent)
+    content.isStreamingFinished !== false &&
+    !isCanceledAnswer(event as CardMessageEvent) &&
+    !getToolRequests<Partial<EncodedToolRequest>>(content)?.length
   );
 }
 
