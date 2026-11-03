@@ -73,6 +73,7 @@ const LIMITS = {
   rateRefillPerMinute: 6,
   dailyBudget: 5,
   highWaterPercent: 80,
+  anonymousSharePercent: 50,
 };
 // An hour before a UTC day (and month) turns.
 const START_MS = Date.UTC(2027, 0, 31, 23);

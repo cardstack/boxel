@@ -6,7 +6,7 @@ import {
   validateLimitChanges,
 } from '../lib/key-limits.ts';
 import type { KeyLimits } from '../lib/key-limit-settings.ts';
-import { UserKeyError } from '../lib/user-keys.ts';
+import { setUserKeyAnonymousUse, UserKeyError } from '../lib/user-keys.ts';
 import { secureClientOf } from './handle-user-key-grants.ts';
 import {
   keysHandler,
@@ -64,6 +64,41 @@ export function handleSetKeyShareLimits(args: CreateRoutesArgs): Handler {
       changes,
     });
     await sendJSON(ctxt, 200, { data: serialize(shareId, limits) });
+  });
+}
+
+// Setting whether people who aren't signed in may use one of the user's keys,
+// and the optional cap on their calls a day: like its limits, its owner's to
+// set, from the secure window or the CLI only. The body is
+// `{ data: { type: 'anonymous-use', attributes: { anonymous, anonymousDailyCap? } } }`,
+// and the answer is the key.
+export function handleSetUserKeyAnonymousUse(args: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let owner = ownerOf(ctxt);
+    await secureClientOf(ctxt, args, 'anonymous use is changed');
+    let body = await readJSON(ctxt);
+    let data = body.data as
+      | { type?: unknown; attributes?: Record<string, unknown> }
+      | undefined;
+    if (!data || typeof data !== 'object' || data.type !== 'anonymous-use') {
+      throw new UserKeyError(400, `the resource type is 'anonymous-use'`);
+    }
+    let attributes = data.attributes ?? {};
+    for (let name of Object.keys(attributes)) {
+      if (name !== 'anonymous' && name !== 'anonymousDailyCap') {
+        throw new UserKeyError(400, `'${name}' can't be set here`);
+      }
+    }
+    let key = await setUserKeyAnonymousUse(args.dbAdapter, {
+      owner,
+      keyId: ctxt.params.keyId,
+      anonymous: attributes.anonymous,
+      anonymousDailyCap: attributes.anonymousDailyCap,
+    });
+    let { id, ...rest } = key;
+    await sendJSON(ctxt, 200, {
+      data: { type: 'user-key', id, attributes: rest },
+    });
   });
 }
 

@@ -366,10 +366,11 @@ async function parseRealmFilesUncached(
     options.runGlintCheckFn ??
     ((files) =>
       runGlintCheck(files, {
-        targetRealm: options.targetRealm,
         // Realm I/O goes through BoxelCLIClient — the boundary AGENTS.md
-        // states — which also lets the staging walk read non-public prefix
-        // realms instead of degrading them to the shim.
+        // states. The prefix map says where each prefix realm is served, and
+        // the authed fetch lets the staging walk read non-public prefix realms
+        // instead of degrading them to the shim.
+        readPrefixRealmURLs: () => options.client.prefixRealmURLs(),
         fetchFn: (input, init) => options.client.authedFetch(input, init),
         cacheScope: options.client.getActiveProfile()?.matrixId,
       }));
@@ -642,10 +643,13 @@ export async function runParseInMemory(
  */
 export interface RunGlintCheckOptions {
   /**
-   * The realm the files belong to. Its origin is where realm-prefixed imports
-   * are fetched from. Without it, those imports fall back to the shim.
+   * Reads where each prefix realm is served, as the realm server's prefix map
+   * has it (`BoxelCLIClient.prefixRealmURLs`); the staging calls it only when a
+   * file references a prefix realm (see
+   * `StageRealmSourcesOptions.readPrefixRealmURLs`). Without it, realm-prefixed
+   * imports fall back to the shim.
    */
-  targetRealm?: string;
+  readPrefixRealmURLs?: () => Promise<Record<string, string> | undefined>;
   fetchFn?: typeof globalThis.fetch;
   /** Identity behind `fetchFn`, partitioning the realm-source memo. */
   cacheScope?: string;
@@ -681,7 +685,8 @@ export async function runGlintCheck(
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
-      origin: options.targetRealm,
+      readPrefixRealmURLs:
+        options.readPrefixRealmURLs ?? (async () => undefined),
       fetchFn: options.fetchFn,
       cacheScope: options.cacheScope,
       onWarn: (message) => log.warn(message),

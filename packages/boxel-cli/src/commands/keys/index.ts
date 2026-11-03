@@ -8,6 +8,7 @@ import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { secureSignOut } from '../../lib/secure-session.ts';
 import {
   keysAdd,
+  keysAnonymous,
   keysClients,
   keysConnect,
   keysDelete,
@@ -168,9 +169,47 @@ export function registerKeysCommand(program: Command): void {
         'static (the default): the value is sent as it is; google-service-account: a JSON key file Boxel mints access tokens from; oauth-client: an app registered with a vendor, which people connect their accounts through',
       ),
     ),
-  ).action((name: string, options: ValueCommandOptions) =>
-    runKeysCommand(options.json, () => keysAdd(name, options)),
-  );
+  )
+    .option(
+      '--anonymous',
+      "Let people who aren't signed in use the key, wherever a realm you share it into lets them make the call",
+    )
+    .option(
+      '--anonymous-cap <calls>',
+      "With --anonymous, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into",
+    )
+    .action(
+      (
+        name: string,
+        options: ValueCommandOptions & {
+          anonymous?: boolean;
+          anonymousCap?: string;
+        },
+      ) => runKeysCommand(options.json, () => keysAdd(name, options)),
+    );
+
+  keys
+    .command('anonymous')
+    .description(
+      "Say whether people who aren't signed in may use one of your keys, wherever a realm you share it into lets them make the call. off clears the cap",
+    )
+    .argument('<name>', 'The key')
+    .argument('<on|off>', 'Allow it or not')
+    .option(
+      '--cap <calls>',
+      "With on, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into",
+    )
+    .option('--json', 'Output JSON')
+    .action(
+      (
+        name: string,
+        setting: string,
+        options: { cap?: string; json?: boolean },
+      ) =>
+        runKeysCommand(options.json, () =>
+          keysAnonymous(name, setting, options),
+        ),
+    );
 
   serviceAccountOptions(
     valueOptions(
@@ -201,7 +240,7 @@ export function registerKeysCommand(program: Command): void {
   keys
     .command('share')
     .description(
-      'Share a key into a realm you write to, for the people there to use',
+      "Share a key into a realm you write to, for the people there to use. Where the realm's policy lets people who aren't signed in make calls with a shared key, they will use it too: the key must allow it (boxel keys anonymous), and you're warned",
     )
     .argument('<name>', 'The key')
     .requiredOption('--realm <url>', 'The realm')
@@ -268,7 +307,7 @@ export function registerKeysCommand(program: Command): void {
     )
     .option(
       '--anonymous',
-      'With --interactive, also approve use by anyone who can reach the card (the realm server refuses it: anonymous use is not offered)',
+      "Not offered, and refused by the realm server: whether people who aren't signed in can use a key is its owner's setting on the key (boxel keys anonymous), and where is the realm's policy's",
     )
     .option(
       '--timeout <seconds>',

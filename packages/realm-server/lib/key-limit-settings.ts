@@ -25,6 +25,10 @@ export interface KeyLimitDefaults {
   dailyBudget: number;
   // Percent of a period's budget whose use sends the high-water notice.
   highWaterPercent: number;
+  // Percent of a share's daily budget that people who aren't signed in may
+  // spend through it, all together. The rest is always left for signed-in
+  // readers, whatever anonymous cap the key's owner set, or none.
+  anonymousSharePercent: number;
 }
 
 // The rate limit follows the largest refresh of the first integration, an
@@ -40,6 +44,7 @@ export const DEFAULT_KEY_LIMITS: KeyLimitDefaults = {
   rateRefillPerMinute: 15,
   dailyBudget: 2400,
   highWaterPercent: 80,
+  anonymousSharePercent: 50,
 };
 
 // A monthly budget nobody set is this many daily budgets.
@@ -67,7 +72,8 @@ export function setKeyLimitDefaults(defaults?: KeyLimitDefaults): void {
 
 // The defaults as the platform's environment overrides them:
 // `KEY_RATE_LIMIT_BURST`, `KEY_RATE_LIMIT_REFILL_PER_MINUTE`,
-// `KEY_DAILY_BUDGET` and `KEY_BUDGET_HIGH_WATER_PERCENT`. A value that isn't
+// `KEY_DAILY_BUDGET`, `KEY_BUDGET_HIGH_WATER_PERCENT` and
+// `KEY_ANONYMOUS_SHARE_PERCENT`. A value that isn't
 // a limit stops startup rather than leave keys unlimited.
 export function keyLimitDefaultsFromEnv(
   env: Record<string, string | undefined> = process.env,
@@ -112,6 +118,12 @@ export function keyLimitDefaultsFromEnv(
     highWaterPercent: read(
       'KEY_BUDGET_HIGH_WATER_PERCENT',
       DEFAULT_KEY_LIMITS.highWaterPercent,
+      (n) => Number.isFinite(n) && n > 0 && n < 100,
+      'a percentage above 0 and below 100',
+    ),
+    anonymousSharePercent: read(
+      'KEY_ANONYMOUS_SHARE_PERCENT',
+      DEFAULT_KEY_LIMITS.anonymousSharePercent,
       (n) => Number.isFinite(n) && n > 0 && n < 100,
       'a percentage above 0 and below 100',
     ),

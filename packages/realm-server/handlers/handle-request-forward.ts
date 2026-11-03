@@ -344,6 +344,7 @@ export default function handleRequestForward({
             body: json.method !== 'GET' ? finalBody : undefined,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
             credential,
             scrubber,
           });

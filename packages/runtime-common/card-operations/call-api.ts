@@ -13,6 +13,7 @@ import {
   type OperationRequest,
   type OperationTemplate,
 } from './types.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
 import { emitKeyUse, recordSafely, type KeyUseOutcome } from './telemetry.ts';
 import { destinationCovers } from './destination-covers.ts';
 
@@ -791,16 +792,31 @@ export interface CallApiSlotLookup {
   // The card the operation was invoked on; absent for one invoked on the type.
   instance?: string;
   // Who the invocation acts for: the signed-in caller, or a pipeline's payer.
-  // A `{{userKey}}` slot is filled only from this user's own binding.
+  // A `{{userKey}}` slot is filled only from this user's own binding. For a
+  // caller who isn't signed in, it is `"anonymous"` (`ANONYMOUS_ACTOR`), and
+  // `anonymous` says where they called from.
   caller: string;
+  // Set for a caller who isn't signed in, whom the realm's policy admitted.
+  // Only `{{apiKey}}` slots are filled for one, from a share whose key allows
+  // anonymous use, and each call counts against the share's limit for their
+  // address, their part of the share's budget, and the key's anonymous cap.
+  anonymous?: AnonymousCallApiCaller;
   mode: CallApiMode;
   // The request as the definition cache holds it now, which the binding's
   // fingerprint is checked against.
   request: OperationCallApi;
 }
 
+// A caller who isn't signed in, as a `callApi` counts them: by the address
+// the realm admitted them from, in the form the anonymous rate limiter counts
+// it under (`rateLimitKey`).
+export interface AnonymousCallApiCaller {
+  address: string;
+}
+
 // What names the bindings a readiness answer is about: the same as a call's,
-// for a caller invoking from a card, who may be nobody signed in.
+// for a caller invoking from a card, who may be nobody signed in. `anonymous`
+// is set where the realm admitted such a caller from a known address.
 export interface CallApiReadinessLookup extends Omit<
   CallApiSlotLookup,
   'caller' | 'mode'
@@ -851,8 +867,8 @@ export interface CallApiUse {
 // The realm server's side of a `callApi`. `fill` finds the binding for every
 // slot a request carries and opens its key under the grant it names, or
 // refuses with `binding-not-approved`, `share-suspended`,
-// `binding-needs-reapproval`, `interactive-use-not-approved` or
-// `credential-rejected`; an interactive call over its key's limits with
+// `binding-needs-reapproval`, `interactive-use-not-approved`,
+// `anonymous-use-not-approved` or `credential-rejected`; an interactive call over its key's limits with
 // `rate-limited` or `over-budget`, or `rate-limit-unavailable` when they
 // couldn't be counted. `send` sends the request through the guarded
 // outbound client and answers with the vendor's response, its credentials
@@ -1172,6 +1188,9 @@ export interface CallApiInvocation {
   duringPrerender: boolean;
   mode: CallApiMode;
   sender: CallApiSender | undefined;
+  // Set for a request that authenticated nobody, which the realm's policy
+  // admitted from this address.
+  anonymous?: AnonymousCallApiCaller;
   // The type the operation resolved on, read only once a slot needs filling.
   type: () => Promise<{ module: string; name: string } | undefined>;
   // The target's indexed document, read only once the request is going to be
@@ -1218,13 +1237,26 @@ export async function callApiOperation(
       detail: `operation "${request.name}" sends a request to an outside service, which a card being rendered may not do`,
     });
   }
+  // A caller who isn't signed in has no key of their own, so a `{{userKey}}`
+  // slot can't be filled for them. A shared key can, where its owner allowed
+  // anonymous use, and the share counts such callers by address, so one the
+  // realm couldn't place is refused too.
+  let anonymous =
+    !request.actor && declared.slots.length > 0
+      ? invocation.anonymous
+      : undefined;
   if (declared.slots.length > 0 && !request.actor) {
-    return refuse({
-      status: 401,
-      code: 'actor-required',
-      title: 'Operation needs an identity',
-      detail: `operation "${request.name}" sends a credential, and this request authenticated nobody`,
-    });
+    let sendsUserKey = declared.slots.some(({ key }) => key === 'userKey');
+    if (sendsUserKey || !anonymous) {
+      return refuse({
+        status: 401,
+        code: 'actor-required',
+        title: 'Operation needs an identity',
+        detail: sendsUserKey
+          ? `operation "${request.name}" sends the invoking user's own key, and this request authenticated nobody`
+          : `operation "${request.name}" sends a credential, and this request authenticated nobody`,
+      });
+    }
   }
   if (!invocation.sender) {
     return refuse({
@@ -1248,7 +1280,8 @@ export async function callApiOperation(
         type,
         operation: request.name,
         ...(id ? { instance: id } : {}),
-        caller: request.actor,
+        caller: request.actor || ANONYMOUS_ACTOR,
+        ...(anonymous ? { anonymous } : {}),
         mode: invocation.mode,
         request: declared,
       });

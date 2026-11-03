@@ -85,11 +85,18 @@ Registration happens in two places:
   --fromUrl='@cardstack/catalog/' --toUrl="${CATALOG_REALM_URL}"
   ```
 
-A prefix's URL is whatever its mapping says, not a naming convention.
-`boxel-cli` still resolves `@cardstack/<realm>/` as `<realm-server>/<realm>/`
-without a VirtualNetwork (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
-ADR 002 §1.2 forbids that: a client without a VirtualNetwork builds one from
-the prefix map the realm server serves.
+A prefix's URL is whatever its mapping says, not a naming convention. A
+client with no VirtualNetwork of its own — `boxel-cli`, the VS Code extension
+— builds one from the prefix map the realm server serves at `/_prefix-realms`
+(ADR 002 §1.2): `prefixRealmNetworkFor(realmServerURL)` in
+`packages/runtime-common/prefix-realm-network.ts` reads the map once per
+process, within a 10 s budget, and registers each entry on a
+`PrefixRealmNetwork`, a dependency-light subset of VirtualNetwork. It resolves
+prefixes as VirtualNetwork does, but holds no URL mappings, so it names the
+base realm by the URL it is served at, never by its
+`https://cardstack.com/base/` alias. The realm server reads the map off its
+own VirtualNetwork, and the host's served index HTML carries the same map in
+`prefixRealmURLs`.
 
 Realms with no registered prefix — most user workspaces — are addressed by
 their URL, and that URL is their RRI. Nothing about the identifier system

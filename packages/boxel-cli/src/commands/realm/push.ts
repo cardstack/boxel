@@ -510,7 +510,7 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  const resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options.profileManager,
   });
   if (!resolvedRealm.ok) {

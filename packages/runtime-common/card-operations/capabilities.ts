@@ -1,6 +1,7 @@
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { rri } from '../realm-identifiers.ts';
 import type { AnonymousRequest } from './anonymous-request.ts';
+import type { AnonymousCallApiCaller } from './call-api.ts';
 import {
   CAPABILITY_CHECK_CAP,
   type CapabilityAnswer,
@@ -12,6 +13,7 @@ import {
   canonicalizeTarget,
   newOperationScope,
   resolveGatedOperation,
+  resolveOperation,
   resolvedTypeOf,
   resolvesToWrite,
   type CoarseDeclined,
@@ -108,6 +110,9 @@ export interface CapabilityCaller {
   // The request-wide admission a caller without a session passed. Capability
   // pairs must be judged through the same eligible grants as an invocation.
   anonymousRequest?: AnonymousRequest;
+  // Where such a caller was admitted from, which a `callApi`'s readiness is
+  // read for: a share counts them by address.
+  callApiAnonymous?: AnonymousCallApiCaller;
   // Who a search this caller sent would run for. A query pair is judged as
   // that search is, so it is judged for the same principal: a request a
   // render sends runs under a realm's own authority, which no policy grants
@@ -376,8 +381,45 @@ async function decide(
     // Anything that is not a refusal is a fault rather than an answer, and the
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
-    return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
+    let refusal = refused(
+      isOperationFailure(e) ? e.error.code : 'internal-error',
+    );
+    let readiness = isOperationFailure(e)
+      ? await signInReadiness(core, check, who, scope).catch(() => undefined)
+      : undefined;
+    return readiness
+      ? { ...refusal, answer: { ...refusal.answer, readiness } }
+      : refusal;
   }
+}
+
+// What a visitor who isn't signed in, and who may read the realm, is told
+// about a `callApi` the realm refused them that sends the caller's own key:
+// that signing in is what it needs, since no grant can open such an operation
+// to them. Anyone else is told nothing more than the refusal.
+async function signInReadiness(
+  core: OperationCore,
+  check: CapabilityCheck,
+  who: CapabilityCaller,
+  scope: OperationScope,
+): Promise<KeyReadiness | undefined> {
+  if (
+    !check.readiness ||
+    who.caller.kind === 'user' ||
+    who.coarseDeclined === 'all'
+  ) {
+    return undefined;
+  }
+  let definition = await resolveOperation(
+    core,
+    targetFor(core, check.target),
+    check.operation,
+    scope.derive({ coarseDeclined: 'none' }),
+  );
+  return definition.base === 'callApi' &&
+    definition.callApi?.slots.some(({ key }) => key === 'userKey')
+    ? 'needs-sign-in'
+    : undefined;
 }
 
 // Whether the `callApi` a pair names would have its credentials, as the realm
@@ -417,6 +459,9 @@ async function readinessOf(
     operation: check.operation,
     ...(target.kind === 'instance' ? { instance: target.url } : {}),
     caller: who.caller.kind === 'user' ? who.caller.actor : undefined,
+    ...(who.caller.kind !== 'user' && who.callApiAnonymous
+      ? { anonymous: who.callApiAnonymous }
+      : {}),
     request,
   });
 }

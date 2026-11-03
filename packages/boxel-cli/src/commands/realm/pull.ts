@@ -256,7 +256,7 @@ export async function pull(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<{ files: string[]; error?: string }> {
-  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  const resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options.profileManager,
   });
   if (!resolvedRealm.ok) {
