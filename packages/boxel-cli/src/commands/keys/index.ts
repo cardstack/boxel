@@ -178,12 +178,17 @@ export function registerKeysCommand(program: Command): void {
       '--anonymous-cap <calls>',
       "With --anonymous, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into",
     )
+    .option(
+      '--anonymous-monthly-cap <calls>',
+      "With --anonymous, the most calls a UTC month people who aren't signed in make with it, all together, in every realm it's shared into",
+    )
     .action(
       (
         name: string,
         options: ValueCommandOptions & {
           anonymous?: boolean;
           anonymousCap?: string;
+          anonymousMonthlyCap?: string;
         },
       ) => runKeysCommand(options.json, () => keysAdd(name, options)),
     );
@@ -191,20 +196,24 @@ export function registerKeysCommand(program: Command): void {
   keys
     .command('anonymous')
     .description(
-      "Say whether people who aren't signed in may use one of your keys, wherever a realm you share it into lets them make the call. off clears the cap",
+      "Say whether people who aren't signed in may use one of your keys, wherever a realm you share it into lets them make the call. off clears both caps; on keeps a cap you don't name",
     )
     .argument('<name>', 'The key')
     .argument('<on|off>', 'Allow it or not')
     .option(
       '--cap <calls>',
-      "With on, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into",
+      "With on, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into, or none to remove the cap",
+    )
+    .option(
+      '--monthly-cap <calls>',
+      "With on, the most calls a UTC month people who aren't signed in make with it, all together, in every realm it's shared into, or none to remove the cap",
     )
     .option('--json', 'Output JSON')
     .action(
       (
         name: string,
         setting: string,
-        options: { cap?: string; json?: boolean },
+        options: { cap?: string; monthlyCap?: string; json?: boolean },
       ) =>
         runKeysCommand(options.json, () =>
           keysAnonymous(name, setting, options),

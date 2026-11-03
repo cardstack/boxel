@@ -72,6 +72,7 @@ import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
   url: string;
@@ -98,6 +99,7 @@ type State =
       key: string;
       anonymous: boolean;
       anonymousDailyCap: number | null;
+      anonymousMonthlyCap: number | null;
     };
 
 interface ShareKeyArgs {
@@ -127,9 +129,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
         {{#if this.done.anonymous}}
           <strong data-test-share-key-done-anonymous>People who aren’t signed in
-            will use it too</strong>{{#if this.done.anonymousDailyCap}}, up to
-            {{this.done.anonymousDailyCap}}
-            calls a day all together{{/if}}.
+            will use it too</strong>{{anonymousCapsClause this.done}}.
         {{/if}}
       </DonePage>
     {{else if this.choosing}}
@@ -221,10 +221,8 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-share-key-key-allows
               >
                 <p class='allows' data-test-share-key-key-allows-text>This key
-                  allows it{{#if this.chosenKey.anonymousDailyCap}}, up to
-                    {{this.chosenKey.anonymousDailyCap}}
-                    calls a day all together{{/if}}. Sharing it here means they
-                  will use it.</p>
+                  allows it{{anonymousCapsClause this.chosenKey}}. Sharing it
+                  here means they will use it.</p>
               </FieldContainer>
             {{else if this.keyRefusesAnonymous}}
               <FieldContainer
@@ -541,6 +539,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     // the key allows them, so they will.
     let anonymous = this.opensToAnonymous;
     let anonymousDailyCap = this.chosenKey?.anonymousDailyCap ?? null;
+    let anonymousMonthlyCap = this.chosenKey?.anonymousMonthlyCap ?? null;
     try {
       let share = await shareKey(this.args.api.config, {
         keyId: key,
@@ -554,6 +553,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         key: this.keyName(key),
         anonymous,
         anonymousDailyCap: anonymous ? anonymousDailyCap : null,
+        anonymousMonthlyCap: anonymous ? anonymousMonthlyCap : null,
       };
       if (!this.fromKeyPage) {
         this.args.api.close();

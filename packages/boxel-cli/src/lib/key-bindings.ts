@@ -97,9 +97,10 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
-  // Whether the share's key allows people who aren't signed in, and its cap.
+  // Whether the share's key allows people who aren't signed in, and its caps.
   anonymous?: boolean;
   anonymousDailyCap?: number | null;
+  anonymousMonthlyCap?: number | null;
 }
 
 export interface ApprovalBatch {
