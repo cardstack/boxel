@@ -2,7 +2,7 @@
 import { module, test } from 'qunit';
 import { render, click, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { chooseForms, HYSTERESIS_PX, LayoutControl } from './layout-control';
+import { applyHysteresis, chooseForms, HYSTERESIS_PX, LayoutControl } from './layout-control';
 import type { LayoutControlChoice, LayoutControlSlotSpec } from './layout-control';
 
 const REM = 16;
@@ -41,11 +41,23 @@ module('Pretui | components/layout-control | chooseForms', function () {
 
   test('stepping back up is guarded by HYSTERESIS_PX', function (assert) {
     assert.strictEqual(HYSTERESIS_PX, 16);
-    // the bar runs the chooser HYSTERESIS_PX narrower before accepting a richer
-    // choice; at an exact boundary that narrower run is still the poorer one
-    let edge = 28 * REM;
-    assert.deepEqual(names([A, B, P], edge), ['big', 'big', 'label']);
-    assert.deepEqual(names([A, B, P], edge - HYSTERESIS_PX), ['big', 'small', 'label']);
+    let lv = (a: number, b: number) => new Map([['a', a], ['b', b]]);
+    assert.deepEqual(
+      [...applyHysteresis(lv(0, 0), lv(1, 1), lv(1, 1))],
+      [['a', 1], ['b', 1]],
+      'richer at the exact width but not HYSTERESIS_PX narrower: held',
+    );
+    assert.deepEqual(
+      [...applyHysteresis(lv(0, 0), lv(1, 1), lv(0, 0))],
+      [['a', 0], ['b', 0]],
+      'richer HYSTERESIS_PX narrower too: accepted',
+    );
+    assert.deepEqual(
+      [...applyHysteresis(lv(0, 2), lv(1, 1), lv(1, 2))],
+      [['a', 1], ['b', 2]],
+      'mixed: the slot stepping down moves at once, the one stepping up is held (per slot, not by total steps)',
+    );
+    assert.deepEqual([...applyHysteresis(lv(0, 0), new Map(), lv(0, 0))], [['a', 0], ['b', 0]], 'no previous choice: taken as is');
   });
 });
 
@@ -83,7 +95,7 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     );
     await waitUntil(() => document.querySelector('[data-test-pretui-layout-control-more]'));
     let bar = document.querySelector('[data-test-pretui-layout-control]')!;
-    assert.strictEqual(bar.getAttribute('role'), 'toolbar');
+    assert.strictEqual(bar.getAttribute('role'), 'group');
     assert.strictEqual(bar.getAttribute('aria-label'), 'Candidates');
     assert.dom('[data-test-add]').exists('pinned slot stays in the row');
     assert.dom('[data-test-view]').doesNotExist('folded slot is not rendered in the row');
@@ -99,8 +111,11 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     assert.ok(fallback, 'a slot without @menuItems folds to one "@label…" item');
 
     await click(fallback);
-    await waitUntil(() => document.querySelector('[data-test-pretui-layout-control-fallback] [data-test-search]') ||
-      document.querySelector('[data-test-pretui-layout-control-sheet] [data-test-search]'));
-    assert.ok(true, 'the slot’s own block opens in the popover (or sheet)');
+    let moved = await waitUntil(
+      () =>
+        document.querySelector('[data-test-pretui-layout-control-fallback] [data-test-search]') ||
+        document.querySelector('[data-test-pretui-layout-control-sheet] [data-test-search]'),
+    );
+    assert.ok(moved, 'the slot’s own block opens in the popover (or sheet)');
   });
 });

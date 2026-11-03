@@ -10,6 +10,7 @@ import { Menu } from './menu';
 import { IconButton } from './icon-button';
 import { Popover } from './popover';
 import { Drawer } from './drawer';
+import { FOCUSABLE } from '../focus';
 import { iconFor } from '../icon-registry';
 import type { MenuEntry } from '../internal/menu';
 
@@ -87,11 +88,24 @@ export function chooseForms(
   return new Map(slots.map((slot, i) => [slot.id, level[i]!]));
 }
 
-// The richer of two choices is the one with fewer total steps down.
-function steps(levels: Map<string, number>) {
-  let n = 0;
-  levels.forEach((l) => (n += l));
-  return n;
+/**
+ * Hysteresis, per slot and pure. A slot that would step back up (`next` richer
+ * than `last`) only does so as far as `guarded` allows: the choice made
+ * HYSTERESIS_PX narrower. Steps down, and slots with no previous level, are
+ * taken as they are. Each level is never richer than `next`'s, so the result
+ * still fits.
+ */
+export function applyHysteresis(
+  next: Map<string, number>,
+  last: Map<string, number>,
+  guarded: Map<string, number>,
+): Map<string, number> {
+  return new Map(
+    [...next].map(([id, n]) => {
+      let l = last.get(id);
+      return [id, l !== undefined && n < l ? Math.min(guarded.get(id) ?? l, l) : n];
+    }),
+  );
 }
 
 /** A choice a folded slot offers in the ⋯ menu. With `group` it is one of a
@@ -123,8 +137,6 @@ function toMenuEntry(item: LayoutControlChoice | MenuEntry): MenuEntry {
 
 // The fallback opens as a bottom sheet below this viewport width.
 const SHEET_QUERY = '(max-width: 40rem)';
-const FOCUSABLE =
-  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 export interface LayoutControlSlotSignature {
   Args: {
@@ -221,7 +233,7 @@ class LayoutControlSlot extends Component<
 
 export interface LayoutControlSignature {
   Args: {
-    /** accessible name for the toolbar (default 'Toolbar') */
+    /** accessible name for the row (default 'Toolbar') */
     label?: string;
     /** one height for every control in the row; sets --control-height on the
      * bar. Any CSS length (default: whatever an ancestor sets, else the
@@ -326,14 +338,14 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     });
     let at = (w: number) =>
       chooseForms(specs, w, this.gapPx, this.overflowPx, this.remPx);
-    let next = at(this.widthPx);
     let last = this.levels;
     // Stepping down happens at the exact width; stepping back up only once
     // the richer choice also fits HYSTERESIS_PX narrower.
-    if (last.size === next.size && steps(next) < steps(last)) {
-      let guarded = at(this.widthPx - HYSTERESIS_PX);
-      next = steps(guarded) < steps(last) ? guarded : last;
-    }
+    let next = applyHysteresis(
+      at(this.widthPx),
+      last,
+      at(this.widthPx - HYSTERESIS_PX),
+    );
     let same =
       next.size === last.size &&
       [...next].every(([id, l]) => last.get(id) === l);
@@ -531,7 +543,7 @@ export class LayoutControl extends Component<LayoutControlSignature> {
   <template>
     <div
       class='pretui-lc'
-      role='toolbar'
+      role='group'
       aria-label={{this.label}}
       style={{this.style}}
       data-overflow={{if this.overflow.active 'true'}}
@@ -616,6 +628,8 @@ export class LayoutControl extends Component<LayoutControlSignature> {
           flex-wrap: nowrap;
           min-height: var(--control-height);
           overflow: clip;
+          /* room for the 2px focus ring plus its 2px offset on the edge controls */
+          overflow-clip-margin: 4px;
         }
         .pretui-lc-more {
           flex: none;

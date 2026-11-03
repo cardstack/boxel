@@ -1,10 +1,8 @@
-# LayoutControl
-
 ## What it is
 
 A toolbar row that fits its controls to its own width. Each control sits in a `Slot` that lists the forms it can take, richest first (a search field → a shorter field → an icon). The bar measures its inline size with a `ResizeObserver`, picks one form per slot, and renders only that form. A slot whose last form is `'menu'` can fold into one ⋯ overflow menu at the end of the row.
 
-It lays out and chooses; it paints nothing. It is not a page header (no title slot) and not a selection bar (see Pret UI `ActionBar`).
+It lays out and chooses; it paints nothing. It is not a page header (no title slot) and not a selection bar. `ActionBar` also has an overflow menu, but it keeps a fixed number of actions visible (`maxVisible`); LayoutControl decides from the measured width, and steps each control down through its own forms before folding anything.
 
 ## The contract
 
@@ -18,7 +16,7 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 
 | Arg              | On   | Meaning                                                                                                                                                                                                                                                          |
 | ---------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@label`         | bar  | accessible name of the `role='toolbar'` (default `'Toolbar'`)                                                                                                                                                                                                    |
+| `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                    |
 | `@controlHeight` | bar  | any CSS length; sets `--control-height` on the bar so every control shares one height (default: inherited from an ancestor, else the row's own height)                                                                                                           |
 | `@overflowLabel` | bar  | name of the ⋯ button (default `'More options'`)                                                                                                                                                                                                                  |
 | `@id`            | Slot | stable id, unique in the bar                                                                                                                                                                                                                                     |
@@ -30,9 +28,7 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 
 **Folding.** A folded slot with `@menuItems` becomes a labelled section of native items in the ⋯ `Menu`. Without them it becomes one item, `'@label…'`; choosing it opens the slot's richest form in the kit `Popover`, anchored to ⋯. When the viewport is under 40rem (640px) it opens in the kit `Drawer` at `placement='bottom'` (a bottom sheet) instead. Focus moves to the first control inside; Esc or a click outside closes it, and focus returns to ⋯. The content is the slot's own block, moved with `in-element`, so it keeps its state and wiring. A resize that unfolds the slot closes the panel.
 
-### LayoutControl-ready checklist
-
-A component is ready to sit in a slot when:
+**LayoutControl-ready checklist.** A component is ready to sit in a slot when:
 
 - [ ] it reads `--control-height`, or LayoutControl maps it onto a height knob the component has (see Equal height);
 - [ ] it has a `@display`-style arg for its smaller forms, or the author swaps components per form in the slot block;
@@ -59,7 +55,7 @@ The bar yields `{ Slot, overflow: { active, folded } }`; each Slot yields the ch
 - a slot that fits records its real width;
 - if the row still overflows (`scrollWidth > clientWidth`), the deficit is charged to the least important slot that can still step.
 
-Real widths (from renders that fit) are cached per slot + form and replace `minWidth`. A form that wrapped or overflowed is remembered only for bar widths below the one it failed at; once the bar is 16px wider than that, the form is tried again and re-measured, so growing the bar always returns to the richer forms. Each resize gets at most 8 measure-and-step frames, so a bad guess costs a frame or two and can't loop. A slot whose content grows later (new chips, longer labels) is re-measured on the next resize. Children are not restyled: a component that wraps internally simply gets stepped to its next form.
+Real widths (from renders that fit) are cached per slot + form and replace `minWidth`. A form that wrapped or overflowed is remembered only for bar widths below the one it failed at; once the bar is 16px wider than that, the form is tried again and re-measured, so growing the bar always returns to the richer forms. Each resize gets at most 8 measure-and-step frames, so a bad guess costs a frame or two and can't loop. A slot whose content grows later (new chips, longer labels), or whose `@forms` change, is re-measured on the next resize, not at once. Children are not restyled: a component that wraps internally simply gets stepped to its next form.
 
 Only the chosen form is rendered. Alternatives are never hidden with CSS, so they never reach the accessibility tree or the tab order.
 
@@ -71,11 +67,11 @@ Only the chosen form is rendered. Alternatives are never hidden with CSS, so the
 | MUI / Ant Design toolbars                              | No built-in fit; apps use breakpoints (`useMediaQuery`, `Grid` breakpoints) or Ant `Menu` overflow `…` | Container width, not viewport; a toolbar in a narrow pane adapts even on a wide screen                              |
 | WordPress block toolbar                                | Collapses groups into a "More" dropdown as width shrinks                                               | Same idea; ours keeps the primary action out of the fold by declaration, not position                               |
 
-What we leave out: no per-item `isHidden` breakpoints, no CSS `display: none` variants, no automatic measuring of each form's natural width (forms declare `minWidth`, which keeps the choice stable and SSR-safe).
+What we leave out: no per-item `isHidden` breakpoints, no CSS `display: none` variants, no up-front measuring (forms declare a `minWidth` as the first guess; the bar replaces it with measured widths once a form has rendered).
 
 ## Accessibility
 
-- The row is `role='toolbar'` with `@label`. It does not yet implement the APG toolbar's roving tab stop and arrow keys; each control keeps its own tab stop (open question).
+- The row is `role='group'` with `@label`. Each control keeps its own tab stop; it is not an APG toolbar (no roving tab stop or arrow keys), which would conflict with the text input a row often holds.
 - The ⋯ trigger is an `IconButton` (required label → `aria-label` and `title`) inside the kit `Menu`, which gives the APG menu-button contract: `aria-haspopup`, live `aria-expanded`, arrow keys, Escape and focus return.
 - Folded slots with `@menuItems` appear as `role='group'` sections named by `@label`; choices with `group` are `menuitemradio`, without are `menuitemcheckbox`, each with `aria-checked`.
 - The fallback popover is `role='dialog'` named by `@label`; the bottom sheet is a modal native `<dialog>`. Both take focus on open and hand it back to ⋯ on Esc.
@@ -89,9 +85,7 @@ What we leave out: no per-item `isHidden` breakpoints, no CSS `display: none` va
 | `--control-height` (via `@controlHeight`, or set by any ancestor) | unset (the row's own height) | row min-height; also the ⋯ button size the chooser reserves |
 | `--pretui-lc-gap`                                                 | `var(--boxel-sp-xs)`         | gap between slots; the chooser reads the computed gap       |
 
-### Equal height
-
-LayoutControl sets `--control-height` on its root. Each child maps it onto its own height knob from the bar's style block (custom properties inherit, so no `:deep()` or `!important`). Today no Pret UI control has such a knob, so children keep their own height and render their default form; the bar still measures them, so the chooser works either way.
+**Equal height.** LayoutControl sets `--control-height` on its root. Each child maps it onto its own height knob from the bar's style block (custom properties inherit, so no `:deep()` or `!important`). Today no Pret UI control has such a knob, so children keep their own height and render their default form; the bar still measures them, so the chooser works either way.
 
 A control joins by adding, in its own component:
 

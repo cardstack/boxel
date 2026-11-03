@@ -197,7 +197,7 @@ class LayoutControlUsage extends Component {
                   {{#if (eq form 'icon')}}
                     <IconButton
                       @label='Sort'
-                      @icon={{this.icon 'filter'}}
+                      @icon={{this.icon 'arrow-down-up'}}
                       {{on 'click' toggle}}
                     />
                   {{else}}
@@ -241,7 +241,7 @@ class LayoutControlUsage extends Component {
           @name='label'
           @value={{this.label}}
           @defaultValue='Toolbar'
-          @description='Accessible name of the role=toolbar row.'
+          @description='Accessible name of the role=group row.'
           @onInput={{this.setLabel}}
         />
         <Args.String
@@ -291,8 +291,12 @@ class LayoutControlUsage extends Component {
       .lc-usage-search[data-form='field-s'] {
         inline-size: 9rem;
       }
+      /* The chooser counts one gap between slots; the spacer is a flex item
+         with a gap on each side, so half-gap negative margins make a
+         zero-width spacer cost exactly one gap. */
       .lc-usage-spacer {
         flex-grow: 1;
+        margin-inline: calc(var(--pretui-lc-gap, var(--boxel-sp-xs)) / -2);
       }
       .lc-usage-pair {
         display: inline-flex;
