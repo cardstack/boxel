@@ -44,7 +44,15 @@ export function onMembershipEvent({
   };
 }
 
+// Synapse answers a join to a room everyone has left with 404 M_UNKNOWN, so
+// the status matters as much as the errcode.
 function isUnjoinable(error: unknown): boolean {
-  let errcode = (error as { errcode?: unknown } | undefined)?.errcode;
-  return errcode === 'M_FORBIDDEN' || errcode === 'M_NOT_FOUND';
+  let { errcode, httpStatus } =
+    (error as { errcode?: unknown; httpStatus?: unknown } | undefined) ?? {};
+  return (
+    httpStatus === 403 ||
+    httpStatus === 404 ||
+    errcode === 'M_FORBIDDEN' ||
+    errcode === 'M_NOT_FOUND'
+  );
 }

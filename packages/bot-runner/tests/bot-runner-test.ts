@@ -144,6 +144,43 @@ module('membership handler', () => {
     assert.deepEqual(leftRooms, ['!dead-room:localhost'], 'rejects the invite');
   });
 
+  test('rejects an invite to a room everyone has left', async (assert) => {
+    let leftRooms: string[] = [];
+    let handle = onMembershipEvent({
+      client: makeMatrixClient({
+        joinRoom: async () => {
+          throw Object.assign(
+            new Error(
+              "Can't join remote room because no servers that are in the room have been provided.",
+            ),
+            { errcode: 'M_UNKNOWN', httpStatus: 404 },
+          );
+        },
+        leave: async (roomId: string) => {
+          leftRooms.push(roomId);
+          return {};
+        },
+      }),
+      authUserId: '@submissionbot:localhost',
+    });
+
+    await handle(
+      makeStrippedInviteEvent('@submissionbot:localhost'),
+      makeMember({
+        membership: 'invite',
+        userId: '@submissionbot:localhost',
+        roomId: '!empty-room:localhost',
+        name: 'submissionbot',
+      }),
+    );
+
+    assert.deepEqual(
+      leftRooms,
+      ['!empty-room:localhost'],
+      'rejects the invite',
+    );
+  });
+
   test('keeps the invite when joining fails for another reason', async (assert) => {
     let leftRooms: string[] = [];
     let handle = onMembershipEvent({
