@@ -11,7 +11,10 @@ import {
   type RenderVisitResponse,
 } from '@cardstack/runtime-common';
 import { IndexRunner } from '@cardstack/runtime-common/index-runner';
-import { WrittenFileRereads } from '@cardstack/runtime-common/index-runner/written-file-rereads';
+import {
+  WrittenFileRereads,
+  type VisitedFileRead,
+} from '@cardstack/runtime-common/index-runner/written-file-rereads';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   closeTestPgAdapter,
@@ -35,18 +38,26 @@ module(basename(import.meta.filename), function () {
 
     const url = (name: string) => `${testRealm}${name}`;
 
-    // A realm whose reads of a file come back missing a set number of times
-    // before the file is served, the way a realm-server instance with a stale
-    // view of the directory answers until its view catches up.
-    function realmReader(files: Record<string, { missFor?: number }>) {
+    // A realm whose reads of a file come back missing (a 404) a set number of
+    // times before the file is served, the way a realm-server instance with a
+    // stale view of the directory answers until its view catches up. A file
+    // given a `status` is answered with that status on every read instead.
+    function realmReader(
+      files: Record<string, { missFor?: number; status?: number }>,
+    ) {
       let reads = new Map<string, number>();
       let reader: Reader = {
-        async readFile(fileURL: URL) {
+        async readFile(fileURL: URL, opts) {
           let count = (reads.get(fileURL.href) ?? 0) + 1;
           reads.set(fileURL.href, count);
           let name = fileURL.href.slice(testRealm.length);
           let file = files[name];
+          if (file?.status !== undefined) {
+            opts?.onNoFile?.(file.status);
+            return undefined;
+          }
           if (!file || count <= (file.missFor ?? 0)) {
+            opts?.onNoFile?.(404);
             return undefined;
           }
           return {
@@ -285,6 +296,32 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(await fileRow('notes.txt'), undefined);
     });
 
+    test('does not wait on a written file the realm answers with a status other than 404', async function (assert) {
+      // An archived realm answers every read with a 403, however often it is
+      // asked, whatever its record of the file says.
+      await realmCreatedFile('notes.txt');
+      let { reader, readsOf } = realmReader({ 'notes.txt': { status: 403 } });
+      let start = Date.now();
+
+      // Any re-read would hold the pass for a minute.
+      await runIncremental(
+        reader,
+        [{ name: 'notes.txt', operation: 'update' }],
+        [60_000],
+      );
+
+      assert.true(
+        Date.now() - start < 30_000,
+        'the pass finishes without sleeping through a re-read delay',
+      );
+      assert.strictEqual(
+        readsOf('notes.txt'),
+        2,
+        'one attempt, under both URL forms',
+      );
+      assert.strictEqual(await fileRow('notes.txt'), undefined);
+    });
+
     test('removes a deleted file without waiting on the re-read window', async function (assert) {
       let { reader: writing } = realmReader({ 'notes.txt': {} });
       await runIncremental(
@@ -333,6 +370,10 @@ module(basename(import.meta.filename), function () {
       };
     }
 
+    // A read that serves the file, and one the realm answers with a 404.
+    const found = (): VisitedFileRead<string> => ({ file: 'file' });
+    const notFound = (): VisitedFileRead<string> => ({ missingStatus: 404 });
+
     // The clock records are aged on, and a record of a file created on it
     // just now.
     const NOW_MS = 1_800_000_000_000;
@@ -348,7 +389,7 @@ module(basename(import.meta.filename), function () {
       });
       let reads = 0;
       let result = await rereads.reread(
-        async () => (++reads === 2 ? 'file' : undefined),
+        async () => (++reads === 2 ? found() : notFound()),
         recorded,
       );
       assert.deepEqual(result, {
@@ -369,7 +410,7 @@ module(basename(import.meta.filename), function () {
       });
       let checks = 0;
       let result = await rereads.reread(
-        async () => undefined,
+        async () => notFound(),
         async () => (++checks === 1 ? NOW_MS / 1000 : undefined),
       );
       assert.deepEqual(
@@ -387,20 +428,20 @@ module(basename(import.meta.filename), function () {
         sleep: clock.sleep,
         now,
       });
-      let first = await rereads.reread(async () => undefined, recorded);
+      let first = await rereads.reread(async () => notFound(), recorded);
       assert.deepEqual(
         first,
         { value: undefined, rereads: 3, waitedMs: 70, removed: false },
         'the first missing file spends the whole budget',
       );
-      let second = await rereads.reread(async () => undefined, recorded);
+      let second = await rereads.reread(async () => notFound(), recorded);
       assert.deepEqual(
         second,
         { value: undefined, rereads: 0, waitedMs: 0, removed: false },
         'a later file in the pass is not re-read once the budget is spent',
       );
       let third = await rereads.reread(
-        async () => undefined,
+        async () => notFound(),
         async () => undefined,
       );
       assert.true(
@@ -417,8 +458,8 @@ module(basename(import.meta.filename), function () {
         sleep: clock.sleep,
         now,
       });
-      await rereads.reread(async () => 'file', recorded);
-      let second = await rereads.reread(async () => undefined, recorded);
+      await rereads.reread(async () => found(), recorded);
+      let second = await rereads.reread(async () => notFound(), recorded);
       assert.deepEqual(
         clock.slept,
         [10, 10, 20, 30],
@@ -436,11 +477,11 @@ module(basename(import.meta.filename), function () {
       // Real timers: a budget measured from the first re-read would have run
       // out during the pause below.
       let rereads = new WrittenFileRereads({ delaysMs: [5, 10], now });
-      await rereads.reread(async () => 'file', recorded);
+      await rereads.reread(async () => found(), recorded);
       await new Promise((r) => setTimeout(r, 50));
       let reads = 0;
       let later = await rereads.reread(
-        async () => (++reads === 2 ? 'file' : undefined),
+        async () => (++reads === 2 ? found() : notFound()),
         recorded,
       );
       assert.strictEqual(
@@ -459,7 +500,7 @@ module(basename(import.meta.filename), function () {
         now,
       });
       let longAgo = await rereads.reread(
-        async () => undefined,
+        async () => notFound(),
         async () => NOW_MS / 1000 - 60 * 60,
       );
       assert.deepEqual(
@@ -469,7 +510,7 @@ module(basename(import.meta.filename), function () {
       );
       let reads = 0;
       let recently = await rereads.reread(
-        async () => (++reads === 1 ? 'file' : undefined),
+        async () => (++reads === 1 ? found() : notFound()),
         async () => NOW_MS / 1000 - 60,
       );
       assert.strictEqual(
@@ -478,6 +519,62 @@ module(basename(import.meta.filename), function () {
         'a file created a minute ago is re-read',
       );
       assert.deepEqual(clock.slept, [10]);
+    });
+
+    test('stops at a re-read the realm answers with a status other than 404', async function (assert) {
+      let clock = fakeSleep();
+      let rereads = new WrittenFileRereads({
+        delaysMs: [10, 20, 40],
+        sleep: clock.sleep,
+        now,
+      });
+      let reads = 0;
+      let result = await rereads.reread(
+        async () => (++reads === 2 ? { missingStatus: 403 } : notFound()),
+        recorded,
+      );
+      assert.deepEqual(
+        result,
+        {
+          value: undefined,
+          rereads: 2,
+          waitedMs: 30,
+          removed: false,
+          refusedStatus: 403,
+        },
+        'the re-reads stop at the first answer other than a 404',
+      );
+      assert.deepEqual(clock.slept, [10, 20]);
+    });
+
+    test('does not re-read a file the realm first answers with a status other than 404', async function (assert) {
+      let clock = fakeSleep();
+      let rereads = new WrittenFileRereads({
+        delaysMs: [10, 20, 40],
+        sleep: clock.sleep,
+        now,
+      });
+      let logged: string[] = [];
+      let reads = 0;
+      let value = await rereads.readVisitedFile(
+        async (): Promise<VisitedFileRead<string>> => {
+          reads++;
+          return { missingStatus: 403 };
+        },
+        {
+          recordedCreatedAt: recorded,
+          label: 'notes.txt',
+          ifMissing: 'indexing it as removed',
+          log: {
+            info: (m) => logged.push(m),
+            warn: (m) => logged.push(m),
+          },
+        },
+      );
+      assert.strictEqual(value, undefined);
+      assert.strictEqual(reads, 1, 'the file is read once');
+      assert.deepEqual(clock.slept, [], 'and nothing is waited on');
+      assert.deepEqual(logged, [], 'and nothing is logged');
     });
   });
 });

@@ -70,6 +70,7 @@ import type { SpawningIndexPass } from '../jobs/prerender-html.ts';
 const SPAWNING_PASS_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
+  readServedFile,
   WRITTEN_FILE_REREAD_DELAYS_MS,
   WrittenFileRereads,
 } from './written-file-rereads.ts';
@@ -1044,9 +1045,10 @@ async function visitForPrerenderedHtml({
     return;
   }
 
-  let readFile = async () =>
-    (await reader.readFile(url)) ??
-    (await reader.readFile(new URL(encodeURI(localPath), url)));
+  let readFile = readServedFile(reader, [
+    url,
+    new URL(encodeURI(localPath), url),
+  ]);
   // While the realm records a file as just created, a miss here is this read
   // landing on a stale view of the realm (see WrittenFileRereads), not a
   // removal. That holds whether the committed index holds the file live or
@@ -1055,7 +1057,7 @@ async function visitForPrerenderedHtml({
   // index pass took as removed, and this pass takes it as removed too, so the
   // two channels agree.
   let fileRef = batch.indexHoldsTombstone(url.href)
-    ? await readFile()
+    ? (await readFile()).file
     : await writtenFileRereads.readVisitedFile(readFile, {
         recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
         label: `${jobIdentity(jobInfo)} file ${url.href}`,

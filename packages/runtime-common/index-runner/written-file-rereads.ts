@@ -1,4 +1,6 @@
 import { now as clockNow } from '../clock.ts';
+import type { TextFileRef } from '../stream.ts';
+import type { Reader } from '../worker.ts';
 
 // Re-reads a file that reads as missing although the realm created it moments
 // ago.
@@ -31,6 +33,39 @@ export const WRITTEN_FILE_REREAD_DELAYS_MS: readonly number[] = [
 // file and removing its record.
 export const STALE_MISS_HORIZON_MS = 5 * 60_000;
 
+// One read of a file a pass visits: the file, or the status of the realm's
+// answer without it. Only a 404, the realm finding no file there, can come
+// from a stale view. Any other answer that serves no file, such as an archived
+// realm's 403 or a route that answers the path, is the realm's answer about
+// the file itself, and it gives the same one however often it is asked.
+export type VisitedFileRead<T> =
+  | { file: T; missingStatus?: undefined }
+  | { file?: undefined; missingStatus: number };
+
+// Reads the file at the first of `urls` that serves one. A miss carries the
+// first status other than 404 that any of them answered, and 404 otherwise,
+// including when the reader reports no status.
+export function readServedFile(
+  reader: Reader,
+  urls: URL[],
+): () => Promise<VisitedFileRead<TextFileRef>> {
+  return async () => {
+    let missingStatus: number | undefined;
+    let onNoFile = (status: number) => {
+      if (status !== 404) {
+        missingStatus ??= status;
+      }
+    };
+    for (let url of urls) {
+      let file = await reader.readFile(url, { onNoFile });
+      if (file) {
+        return { file };
+      }
+    }
+    return { missingStatus: missingStatus ?? 404 };
+  };
+}
+
 export interface WrittenFileRereadResult<T> {
   value: T | undefined;
   // Reads made here, beyond the caller's own first read.
@@ -40,6 +75,9 @@ export interface WrittenFileRereadResult<T> {
   // a stale view: the realm records no file there, or created the one it
   // records longer ago than STALE_MISS_HORIZON_MS.
   removed: boolean;
+  // The status of a re-read the realm answered with something other than a
+  // 404, which stopped the re-reads.
+  refusedStatus?: number;
 }
 
 export interface WrittenFileRereadLog {
@@ -80,12 +118,14 @@ export class WrittenFileRereads {
     this.#now = opts.now ?? clockNow;
   }
 
-  // Reads a file the pass visits. When `read` finds nothing, re-reads it
-  // through the pass's budget while the realm's record says it created the
-  // file recently, and logs what the re-reads came to. `label` leads each log line and names the file;
-  // `ifMissing` says what the pass does with a file that stays missing.
+  // Reads a file the pass visits. When the realm finds no file there (a 404),
+  // re-reads it through the pass's budget while the realm's record says it
+  // created the file recently, and logs what the re-reads came to. Any other
+  // answer without the file is taken as it is, with no re-read. `label` leads
+  // each log line and names the file; `ifMissing` says what the pass does with
+  // a file that stays missing.
   async readVisitedFile<T>(
-    read: () => Promise<T | undefined>,
+    read: () => Promise<VisitedFileRead<T>>,
     {
       recordedCreatedAt,
       label,
@@ -99,16 +139,18 @@ export class WrittenFileRereads {
     },
   ): Promise<T | undefined> {
     let first = await read();
-    if (first !== undefined) {
-      return first;
+    if (first.file !== undefined || first.missingStatus !== 404) {
+      return first.file;
     }
-    let { value, rereads, waitedMs, removed } = await this.reread(
-      read,
-      recordedCreatedAt,
-    );
+    let { value, rereads, waitedMs, removed, refusedStatus } =
+      await this.reread(read, recordedCreatedAt);
     if (value !== undefined) {
       log.info(
         `${label} read on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
+      );
+    } else if (refusedStatus !== undefined) {
+      log.info(
+        `${label} was answered with status ${refusedStatus} on re-read ${rereads} after ${waitedMs}ms; ${ifMissing}`,
       );
     } else if (!removed) {
       log.warn(
@@ -122,14 +164,15 @@ export class WrittenFileRereads {
     return value;
   }
 
-  // Calls `read` after each delay until it returns a file or the pass's
-  // budget is spent. `recordedCreatedAt` gives when the realm's record says it
-  // created the file, in epoch seconds, read fresh; undefined when the realm
-  // records no file there. It is asked before each wait, so a file the realm
-  // removed meanwhile stops the re-reads at once instead of holding the pass
-  // for the rest of the budget.
+  // Calls `read` after each delay until it returns a file, the realm answers
+  // it with a status other than 404, or the pass's budget is spent.
+  // `recordedCreatedAt` gives when the realm's record says it created the
+  // file, in epoch seconds, read fresh; undefined when the realm records no
+  // file there. It is asked before each wait, so a file the realm removed
+  // meanwhile stops the re-reads at once instead of holding the pass for the
+  // rest of the budget.
   async reread<T>(
-    read: () => Promise<T | undefined>,
+    read: () => Promise<VisitedFileRead<T>>,
     recordedCreatedAt: () => Promise<number | undefined>,
   ): Promise<WrittenFileRereadResult<T>> {
     let mayStillAppear = async () => {
@@ -141,11 +184,16 @@ export class WrittenFileRereads {
     };
     let rereads = 0;
     let waitedMs = 0;
-    let result = (value: T | undefined, removed = false) => ({
+    let result = (
+      value: T | undefined,
+      removed = false,
+      refusedStatus?: number,
+    ): WrittenFileRereadResult<T> => ({
       value,
       rereads,
       waitedMs,
       removed,
+      ...(refusedStatus !== undefined ? { refusedStatus } : {}),
     });
     for (let delayMs of this.#delaysMs) {
       if (this.#remainingMs <= 0) {
@@ -161,9 +209,12 @@ export class WrittenFileRereads {
       await this.#sleep(sleepMs);
       waitedMs += sleepMs;
       rereads++;
-      let value = await read();
-      if (value !== undefined) {
-        return result(value);
+      let { file, missingStatus } = await read();
+      if (file !== undefined) {
+        return result(file);
+      }
+      if (missingStatus !== 404) {
+        return result(undefined, false, missingStatus);
       }
     }
     // Asked again once the budget is spent, so a file the realm removed reads

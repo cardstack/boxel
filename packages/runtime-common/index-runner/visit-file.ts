@@ -25,7 +25,10 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import type { WrittenFileRereads } from './written-file-rereads.ts';
+import {
+  readServedFile,
+  type WrittenFileRereads,
+} from './written-file-rereads.ts';
 
 interface RenderFileForIndexingOptions {
   url: URL;
@@ -172,9 +175,10 @@ export async function renderFileForIndexing({
     return undefined;
   }
 
-  let readFile = async () =>
-    (await reader.readFile(url)) ??
-    (await reader.readFile(new URL(encodeURI(localPath), url)));
+  let readFile = readServedFile(reader, [
+    url,
+    new URL(encodeURI(localPath), url),
+  ]);
   let fileRef = writtenFileRereads
     ? await writtenFileRereads.readVisitedFile(readFile, {
         recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
@@ -182,7 +186,7 @@ export async function renderFileForIndexing({
         ifMissing: 'indexing it as removed',
         log: { info: logInfo, warn: logWarn },
       })
-    : await readFile();
+    : (await readFile()).file;
   if (!fileRef) {
     let error = new CardError(`missing file ${url.href}`, { status: 404 });
     error.deps = [url.href];
