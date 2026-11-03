@@ -117,13 +117,13 @@ module('Pretui | components/sidebar', function (hooks) {
   });
 
   test('@railBreakpoint: changing the breakpoint re-sorts the pane at the same width', async function (assert) {
-    class Args {
+    class Knobs {
       @tracked rb = 1024;
     }
-    let args = new Args();
-    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{args.rb}}><:nav>Lots</:nav></Sidebar></div></template>);
+    let knobs = new Knobs();
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{knobs.rb}}><:nav>Lots</:nav></Sidebar></div></template>);
     await resizeTo(800, () => state() === 'collapsed');
-    args.rb = 700;
+    knobs.rb = 700;
     await waitUntil(() => state() === 'expanded', { timeout: 2000 });
     assert.strictEqual(state(), 'expanded', 'the same 800px pane is now in the full band');
   });
