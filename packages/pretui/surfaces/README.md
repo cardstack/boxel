@@ -2,8 +2,12 @@
 
 Built ES modules of two Cardstack surface packages, copied in so Pret UI's
 NodeCanvas and PageScaffold can import them by relative path. Only
-host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
-`ember-modifier`, `@floating-ui/dom`) stay external.
+host-provided modules (`@ember/*`, `@glimmer/*`, `ember-modifier`,
+`ember-provide-consume-context`, `ember-modify-based-class-resource`,
+`@floating-ui/dom`) and two Pret UI modules stay external: the bundles take
+their template helpers from `../helpers` and their form-alert and form-field
+state icons from `../internal/surfaces-icons`, so Pret UI imports nothing
+from boxel-ui (ADR 009 §1.6).
 
 | Directory | Package                   | Version       | Built (manifest)         | Used by      |
 | --------- | ------------------------- | ------------- | ------------------------ | ------------ |
@@ -31,7 +35,10 @@ host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
 
 - Do not hand-edit or reformat the `index.js` bundles; they are
   build output. `lint-staged.config.mjs` and `.prettierignore` keep the
-  autofix away from them.
+  autofix away from them. The one edit a vendoring pass makes is to the
+  bundles' import lines: a rebuild that still externalizes
+  `@cardstack/boxel-ui/helpers` and `@cardstack/boxel-ui/icons` gets those
+  two specifiers rewritten to the Pret UI modules named above.
 - The canvas stylesheet is not imported from the bundle. A side-effect CSS
   import fails at realm indexing, so `../surfaces-canvas-css.ts` carries it as
   a string, and `../internal/surfaces-canvas.gts` injects it.

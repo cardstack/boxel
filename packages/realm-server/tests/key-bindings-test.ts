@@ -996,6 +996,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
         } as unknown as DefinitionLookup,
         virtualNetwork,
+        matrixServerName: 'localhost',
       },
       OWNER,
       bindings,

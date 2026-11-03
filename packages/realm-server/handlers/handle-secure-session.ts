@@ -14,7 +14,6 @@ import {
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
-  matrixServerName,
   mintLoginToken,
   renewSecureSession,
   resumeDeviceSweeps,
@@ -449,7 +448,7 @@ export function handleSecureOriginInfo({
         type: 'secure-origin',
         attributes: {
           url: secureOriginURL.href,
-          matrixServerName: await matrixServerName({ matrixClient }),
+          matrixServerName: matrixClient.serverName,
           // Its `cli-auth` page signs a CLI profile in, handing the CLI a
           // Matrix login token, whenever this server can sign anyone in
           // there. A CLI that finds this false or missing signs in on the
