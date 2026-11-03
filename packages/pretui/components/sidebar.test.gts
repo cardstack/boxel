@@ -2,13 +2,25 @@
 // and the shortcut's routing between several sidebars.
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
-import { render, settled, triggerKeyEvent } from '@ember/test-helpers';
+import { click, render, settled, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Sidebar } from './sidebar';
 
 function shells(): HTMLElement[] {
   return [...document.querySelectorAll('[data-test-pretui-sidebar]')] as HTMLElement[];
 }
+
+function pane(): HTMLElement {
+  return document.querySelector('[data-test-pane]') as HTMLElement;
+}
+// Resizes the pane and waits for the ResizeObserver to report the new band.
+async function resizeTo(width: number, until: () => boolean) {
+  pane().style.inlineSize = width + 'px';
+  await waitUntil(until, { timeout: 2000 });
+  await settled();
+}
+const state = () => shells()[0]?.dataset['state'];
+const mobile = () => shells()[0]?.dataset['mobile'];
 
 module('Pretui | components/sidebar', function (hooks) {
   setupCardTest(hooks);
@@ -52,5 +64,43 @@ module('Pretui | components/sidebar', function (hooks) {
     let after = shells().map((s) => s.dataset['state']);
     let changed = after.filter((state, i) => state !== before[i]).length;
     assert.strictEqual(changed, 1);
+  });
+
+  test('@railBreakpoint: full, icon rail and drawer bands', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(1200, () => state() === 'expanded');
+    assert.strictEqual(state(), 'expanded', 'full at or above the breakpoint');
+    await resizeTo(800, () => state() === 'collapsed');
+    assert.strictEqual(mobile(), 'false', 'icon rail between the breakpoints');
+    await resizeTo(500, () => mobile() === 'true');
+    assert.strictEqual(mobile(), 'true', 'drawer below the mobile breakpoint');
+    await resizeTo(1200, () => mobile() === 'false' && state() === 'expanded');
+    assert.strictEqual(state(), 'expanded', 'full again');
+  });
+
+  test('@railBreakpoint: a manual toggle holds within a band and is released on crossing', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(800, () => state() === 'collapsed');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(state(), 'expanded', 'the toggle wins in the rail band');
+    pane().style.inlineSize = '700px';
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await settled();
+    assert.strictEqual(state(), 'expanded', 'still held after a resize within the band');
+    await resizeTo(1200, () => state() === 'expanded');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(state(), 'collapsed', 'collapsed by hand in the full band');
+    await resizeTo(800, () => state() === 'collapsed');
+    await resizeTo(1200, () => state() === 'expanded');
+    assert.strictEqual(state(), 'expanded', 'crossing back hands control to the automatic choice');
+  });
+
+  test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library'><:nav>Lots</:nav></Sidebar></div></template>);
+    pane().style.inlineSize = '800px';
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await settled();
+    assert.strictEqual(state(), 'expanded');
+    assert.strictEqual(mobile(), 'false');
   });
 });
