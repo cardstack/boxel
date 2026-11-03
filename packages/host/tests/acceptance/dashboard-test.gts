@@ -2440,7 +2440,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agent: 'grok',
-          agentSetup: { grok: 1 },
+          agentSetup: { grok: 1, claude: 1 },
         });
         await settled();
 
@@ -2448,7 +2448,109 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'claude');
         assert
           .dom('[data-test-agent-setup-progress]')
-          .includesText('0 of 6 copied');
+          .includesText('1 of 6 copied');
+      });
+
+      test('progress kept only for an agent no longer listed leaves the section minimized', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'grok',
+          agentSetup: { grok: 1 },
+        });
+        await settled();
+
+        assert.dom('[data-test-agent-picker]').doesNotExist();
+        assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'boxel');
+      });
+
+      test('until a coding agent is taken up, the section shows only Boxel AI Assistant and a way to the others', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+        await settled();
+
+        assert.dom('[data-test-agents-pitch]').doesNotExist();
+        assert.dom('[data-test-agent-picker]').doesNotExist();
+        assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'boxel');
+        assert.dom('[data-test-agent-describe-it]').exists();
+        assert
+          .dom('[data-test-agents-show-coding]')
+          .hasText('Use Claude Code or Codex?');
+      });
+
+      test('opening the coding agents shows the first one, and copying its step takes it up', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+        await settled();
+
+        await click('[data-test-agents-show-coding]');
+
+        assert.dom('[data-test-agents-show-coding]').doesNotExist();
+        assert
+          .dom('[data-test-agents-pitch]')
+          .isFocused('focus moves to what the button opened');
+        assert.strictEqual(pickedAgent(), 'claude');
+        assert.dom(PANEL).hasAttribute('data-test-agent-panel', 'claude');
+        let matrixService = getService('matrix-service') as MatrixService;
+        assert.strictEqual(
+          matrixService.dashboardState.agent,
+          undefined,
+          'opening the section picks nothing',
+        );
+
+        await click('[data-test-agent-copy="1"]');
+
+        assert.deepEqual(clipboard.copied, [
+          'npm install -g @cardstack/boxel-cli',
+        ]);
+        assert.strictEqual(matrixService.dashboardState.agent, 'claude');
+        assert.strictEqual(matrixService.dashboardState.agentSetup?.claude, 1);
+      });
+
+      test('a copied step keeps the full section, whichever agent is picked', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'boxel',
+          agentSetup: { codex: 1 },
+        });
+        await settled();
+
+        assert.dom('[data-test-agents-show-coding]').doesNotExist();
+        assert.dom('[data-test-agent-picker]').exists();
+        assert.strictEqual(pickedAgent(), 'boxel');
+      });
+
+      test('the workspace pick offers only workspaces the user can write to', async function (assert) {
+        const sharedRealmURL = 'http://test-realm/testuser/shared-read-only/';
+        await setupAcceptanceTestRealm({
+          realmURL: sharedRealmURL,
+          mockMatrixUtils,
+          permissions: { '@testuser:localhost': ['read'] },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name: 'Shared Workspace' }),
+          },
+        });
+        mockMatrixUtils.setActiveRealms([sharedRealmURL, realmURL]);
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        let realmServer = getService('realm-server') as any;
+        assert.true(
+          realmServer.userRealmIdentifiers.includes(sharedRealmURL),
+          "the shared workspace is one of the user's workspaces",
+        );
+
+        await click(
+          '[data-test-agent-workspace-pick] [data-test-pretui-select-trigger]',
+        );
+
+        assert.deepEqual(
+          findAll("[role='listbox'] [data-test-pretui-select-option]").map(
+            (el) => el.textContent?.trim(),
+          ),
+          ['Workspace A'],
+        );
       });
 
       test('the workspace step names the workspace', async function (assert) {
@@ -2786,16 +2888,16 @@ module('Acceptance | dashboard', function (hooks) {
         });
       }
 
-      test('a new account sees every step, none done', async function (assert) {
+      test('a new account sees every step but the agent one, none done', async function (assert) {
         await visitAsNewUser();
 
         assert.dom(GET_STARTED).exists();
-        assert.dom('[data-test-get-started-count]').hasText('0 of 4 done');
+        assert.dom('[data-test-get-started-count]').hasText('0 of 3 done');
         assert.deepEqual(
           findAll('[data-test-get-started-step]').map((el) =>
             el.getAttribute('data-test-get-started-step'),
           ),
-          ['open-card', 'ask-ai', 'publish', 'agent'],
+          ['open-card', 'ask-ai', 'publish'],
         );
         assert.dom('[data-test-get-started-step-done="true"]').doesNotExist();
         assert
@@ -2848,11 +2950,11 @@ module('Acceptance | dashboard', function (hooks) {
         );
 
         sendMessage(roomId);
-        await waitUntil(() => countText().startsWith('1 of 4 done'));
+        await waitUntil(() => countText().startsWith('1 of 3 done'));
 
         assert
           .dom('[data-test-get-started-count]')
-          .hasText('1 of 4 done · Next: Open a card in a workspace');
+          .hasText('1 of 3 done · Next: Open a card in a workspace');
       });
 
       test('a session the bot has renamed ticks the ask step, before any message loads', async function (assert) {
@@ -2862,7 +2964,7 @@ module('Acceptance | dashboard', function (hooks) {
         mockMatrixUtils.setRoomState(roomId, 'm.room.name', {
           name: 'Task tracker',
         });
-        await waitUntil(() => countText().startsWith('1 of 4 done'));
+        await waitUntil(() => countText().startsWith('1 of 3 done'));
 
         await click('[data-test-get-started-toggle]');
         assert.strictEqual(stepDone('ask-ai'), 'true');
@@ -2872,12 +2974,9 @@ module('Acceptance | dashboard', function (hooks) {
         await visitAsNewUser();
 
         sendMessage(await openBoxelAiSession());
-        await waitUntil(() => countText().startsWith('1 of 4 done'));
+        await waitUntil(() => countText().startsWith('1 of 3 done'));
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         markHosted(realmURL);
-        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
-          agentSetup: { claude: 1 },
-        });
         await settled();
 
         let matrixService = getService('matrix-service') as MatrixService;
@@ -2900,8 +2999,24 @@ module('Acceptance | dashboard', function (hooks) {
           );
       });
 
+      test('picking a coding agent adds the agent step', async function (assert) {
+        await visitAsNewUser();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'codex',
+        });
+        await settled();
+
+        assert.dom('[data-test-get-started-count]').hasText('0 of 4 done');
+        assert.strictEqual(stepDone('agent'), 'false');
+      });
+
       test("the agent step's action shows the Agents section", async function (assert) {
         await visitAsNewUser();
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'codex',
+        });
+        await settled();
 
         await click('[data-test-get-started-action="agent"]');
 

@@ -158,11 +158,15 @@ export default class Agents extends Component<Signature> {
     return !this.kind.setup;
   }
 
-  // Favorites first, since they're what the user works on, then the rest of
-  // their own workspaces. Catalogs are left out: most users can't push there.
+  // Workspaces the user can write to, since the agent pushes its changes
+  // there: favorites first, since they're what the user works on, then the
+  // rest, newest first. A workspace shared read-only, or a catalog, is left
+  // out.
   @cached
   private get workspaceOptions() {
-    let own = this.realmServer.userRealmIdentifiers as string[];
+    let own = (this.realmServer.userRealmIdentifiers as string[]).filter(
+      (url) => this.realm.canWrite(url),
+    );
     let ownSet = new Set(own);
     let favorites = this.matrixService.workspaceFavorites.filter((url) =>
       ownSet.has(url),
