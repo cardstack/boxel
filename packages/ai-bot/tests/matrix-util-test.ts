@@ -936,6 +936,8 @@ test('downloadFile and downloadFileAsBase64DataUrl refuse a URL that names no Ma
     'notes-uploaded',
     'mxc://mock-server/not/a-media-id',
     'mxc://mock-server/not.a.media.id',
+    'mxc://../config',
+    'mxc://./media-id',
   ];
   let { requests, restore } = recordMediaRequests({});
   try {

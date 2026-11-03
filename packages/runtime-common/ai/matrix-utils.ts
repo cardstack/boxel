@@ -257,10 +257,16 @@ function mediaResponseError(status: number) {
 // The Matrix media key (`mxc://<server>/<id>`) a URL names: an mxc:// URL
 // itself, or a download or thumbnail URL on a Matrix media endpoint (see
 // canonicalizeMatrixMediaKey). Undefined when the URL names no Matrix media
-// item.
+// item. A server name of `.` or `..` names none: `mxcUrlToHttp`'s
+// server-name check accepts it, but it becomes a dot segment in the download
+// URL's path, which URL resolution collapses.
 function matrixMediaKey(url: string): string | undefined {
   let key = canonicalizeMatrixMediaKey(url);
-  return key?.startsWith('mxc://') ? key : undefined;
+  if (!key?.startsWith('mxc://')) {
+    return undefined;
+  }
+  let serverName = key.slice('mxc://'.length).split('/')[0];
+  return serverName === '.' || serverName === '..' ? undefined : key;
 }
 
 function notMatrixMediaError(url: string) {
