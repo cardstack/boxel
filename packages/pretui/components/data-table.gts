@@ -1427,11 +1427,12 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt[data-flush] .pretui-dt-table th {
           background: none;
         }
+        /* 2px, not 0: room for an edge control's ring, which the scroller clips */
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
-          padding-inline-start: 0;
+          padding-inline-start: 2px;
         }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):last-child {
-          padding-inline-end: 0;
+          padding-inline-end: 2px;
         }
         .pretui-dt-table td {
           height: 2.56em;

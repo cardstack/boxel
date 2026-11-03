@@ -33,7 +33,7 @@ Not built, and not stubbed: virtualization (the kit already has one windowing en
 
 **Every view axis is controlled or uncontrolled by the same rule.** Sort, selection, visibility, filters, expansion and page each take a value, a `default*` seed and an `on*Change` callback. Passing the value makes the axis controlled and the component stops writing its own copy; leaving it out lets the component keep state and still report every change. There is no separate flag that switches modes.
 
-**`@flush` is for a table that already has a frame around it.** A Panel or card that holds the table draws its own ring and radius; without `@flush` the table draws a second one inside it. `@flush` drops the table's ring, radius and header fill and the inline padding on the first and last cells, so the columns line up with the container's own content edge. Rules between rows stay. Default false.
+**`@flush` is for a table that already has a frame around it.** A Panel or card that holds the table draws its own ring and radius; without `@flush` the table draws a second one inside it. `@flush` drops the table's ring, radius and header fill and trims the inline padding on the first and last cells to a 2px hairline (room for a checkbox ring the scroller would otherwise clip), so the columns line up with the container's own content edge. Rules between rows stay. Default false.
 
 **Pass `@key`.** Without it the row's identity is its index, and a listing sorts. The index handed to the key function is absolute across pages, so even the index fallback does not let selection leak from page 1 to page 2, but a keyed row is the only one that survives a sort.
 
