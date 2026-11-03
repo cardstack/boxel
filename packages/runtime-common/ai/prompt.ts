@@ -2365,11 +2365,21 @@ export async function buildPromptForModel(
   // The correctness-summary instruction applies to this request only, so it
   // rides the volatile trailing message; a history entry that vanishes on
   // the next request would both churn the history and waste the marker.
+  let toolResultMedia = currentTurnToolResultMedia(
+    history,
+    aiBotUserId,
+    inputModalities,
+  );
   let { mediaParts, unsupportedNote } = await buildCurrentTurnMediaParts(
     client,
-    currentTurnMessageMedia(history, aiBotUserId, inputModalities),
+    currentTurnMessageMedia(
+      history,
+      aiBotUserId,
+      inputModalities,
+      toolResultMedia,
+    ),
     inputModalities,
-    currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
+    toolResultMedia,
   );
   let trailingContent = [
     TRAILING_CONTEXT_PREAMBLE,
@@ -2810,10 +2820,12 @@ export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = Math.floor(
 );
 export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES = 16 * 1024 * 1024;
 
-// The bytes of media the human messages of one turn embed, counted across
-// all of them: the per-turn budget tool-result media get, kept apart from
-// theirs. The newest message's own media are always sent, so only media from
-// the turn's earlier messages are ever left out to stay within it.
+// The bytes of media one request carries that the media of a turn's earlier
+// messages must fit within: the same 16 MiB tool-result media are held to,
+// sized against the provider request limit. The turn's tool-result media and
+// the newest message's own media count first and are never cut to make room,
+// so media from earlier messages only fill what those leave and never raise a
+// request beyond what the newest message and the tool results reach alone.
 export const MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES =
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES;
 
@@ -2875,7 +2887,9 @@ function currentTurnHumanMessages(
 // The media files (images, PDFs, audio, video) attached to the current
 // turn's human messages (see currentTurnHumanMessages), oldest first. The
 // newest message's media are always included. Media from the turn's earlier
-// messages are added newest first while the turn's message media stay within
+// messages are added newest first while they fit in what the turn's
+// tool-result media (`toolResultMedia`, as currentTurnToolResultMedia chose
+// them) and the newest message's media leave of
 // MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES; an earlier file with no recorded size
 // is left out, since its bytes cannot be counted against the budget. Files
 // the active model cannot take (per `inputModalities`, when given) use none
@@ -2886,11 +2900,15 @@ export function currentTurnMessageMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   inputModalities?: string[],
+  toolResultMedia: CurrentTurnMedia = { included: [], omitted: [] },
 ): CurrentTurnMedia {
   let messages = currentTurnHumanMessages(history, aiBotUserId);
   let included: SerializedFileDef[] = [];
   let omitted: CurrentTurnMedia['omitted'] = [];
-  let totalBytes = 0;
+  let totalBytes = toolResultMedia.included.reduce(
+    (sum, file) => sum + (file.contentSize ?? 0),
+    0,
+  );
   for (let i = messages.length - 1; i >= 0; i--) {
     let isNewestMessage = i === messages.length - 1;
     let attachedFiles: SerializedFileDef[] =
@@ -2907,7 +2925,7 @@ export function currentTurnMessageMedia(
         if (typeof size !== 'number') {
           reason = 'its size is unknown';
         } else if (totalBytes + size > MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES) {
-          reason = `newer attachments already fill the ${formatMiB(MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES)} sent per turn`;
+          reason = `newer media already fill the ${formatMiB(MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES)} sent per turn`;
         }
       }
       if (reason) {

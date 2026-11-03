@@ -8091,7 +8091,7 @@ ${patchedFileSource}
 
   module('message media of the current turn', () => {
     type AttachedFile = {
-      sourceUrl?: string;
+      sourceUrl: string;
       url: string;
       name: string;
       contentType: string;
@@ -8363,7 +8363,7 @@ ${patchedFileSource}
         [
           [
             'old.png',
-            `newer attachments already fill the ${MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / (1024 * 1024)} MiB sent per turn`,
+            `newer media already fill the ${MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / (1024 * 1024)} MiB sent per turn`,
           ],
           ['sizeless.png', 'its size is unknown'],
         ],
@@ -8401,6 +8401,34 @@ ${patchedFileSource}
         names(withoutImageInput.included),
         ['sizeless.png', 'oversized.png'],
         'files the model cannot take use none of the budget; the modality note names them',
+      );
+    });
+
+    test("earlier messages' media fit only in what the turn's tool-result media and the newest message leave", () => {
+      let quarter = MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / 4;
+      let old = png('old.png', 1);
+      let recent = png('recent.png', quarter);
+      let newest = png('newest.png', quarter);
+      let capture = png('capture.png', 2 * quarter);
+
+      let media = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [old, recent]),
+          userMessage('2', 2, 'Second', [newest]),
+        ],
+        '@aibot:localhost',
+        undefined,
+        { included: [capture], omitted: [] },
+      );
+      assert.deepEqual(
+        media.included.map((f) => f.name),
+        ['recent.png', 'newest.png'],
+        'the earlier file that exactly fills the budget is sent',
+      );
+      assert.deepEqual(
+        media.omitted.map(({ file }) => file.name),
+        ['old.png'],
+        'the next byte is over the budget the tool-result media share',
       );
     });
   });
