@@ -44,7 +44,11 @@ import {
 } from '../lib/user-keys.ts';
 import { shareKey, swapKeyIntoShare } from '../lib/key-shares.ts';
 import { opensSharedKeysToAnonymous } from '../lib/anonymous-key-use.ts';
-import { setShareLimits } from '../lib/key-limits.ts';
+import {
+  chargeInteractiveCall,
+  limitReadiness,
+  setShareLimits,
+} from '../lib/key-limits.ts';
 
 // ============================================================================
 // Anonymous use of a share, end to end against the stub vendor. A realm's
@@ -960,6 +964,52 @@ module(basename(import.meta.filename), function (hooks) {
       0,
       'a key with no daily anonymous cap counts no day against it',
     );
+  });
+
+  test("a call through two shares of one key spends the key's anonymous caps once", async function (assert) {
+    let key = await addKey({
+      anonymous: true,
+      anonymousDailyCap: 1,
+      anonymousMonthlyCap: 1,
+    });
+    let subjects = [];
+    for (let label of ['Team weather', 'Team weather backup']) {
+      let share = await shareKey(dbAdapter, {
+        owner: OWNER,
+        realm: TEAM,
+        keyId: key.id,
+        label,
+        opensToAnonymous: async () => true,
+        ticket: await ticket(OWNER, 'share', { keyId: key.id, realm: TEAM }),
+      });
+      subjects.push({ kind: 'share' as const, id: share.id });
+    }
+    let call = {
+      realmURL: TEAM,
+      operation: 'forecast',
+      caller: 'anonymous',
+      anonymous: { address: VISITOR },
+      subjects,
+    };
+    assert.strictEqual(
+      await limitReadiness(dbAdapter, call),
+      'ready',
+      'one call fits under caps of one',
+    );
+    await chargeInteractiveCall(dbAdapter, call);
+    for (let period of ['day', 'month'] as const) {
+      assert.strictEqual(
+        await used(['key-limit', 'key', key.id, 'anonymous'], period),
+        1,
+        `the ${period} cap counted the call once, not once per share`,
+      );
+    }
+    await assert.rejects(
+      chargeInteractiveCall(dbAdapter, call),
+      /over-budget: .*aren't signed in/,
+      'the next call is over the caps',
+    );
+    assert.strictEqual(await limitReadiness(dbAdapter, call), 'over-budget');
   });
 
   test("a key swapped into the share is held to the rule sharing is, and brings its own owner's setting", async function (assert) {

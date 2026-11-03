@@ -278,6 +278,27 @@ function budgetsOf(
   return budgets;
 }
 
+// The budgets a call spends across every share and key filling its slots,
+// each counter once. Two shares of one key both carry that key's anonymous
+// caps, and a call through both is still one call against them.
+function callBudgets(
+  subjects: LimitedSubject[],
+  anonymous?: AnonymousCallApiCaller,
+): { limited: LimitedSubject; budget: CountedBudget }[] {
+  let seen = new Set<string>();
+  let budgets: { limited: LimitedSubject; budget: CountedBudget }[] = [];
+  for (let limited of subjects) {
+    for (let budget of budgetsOf(limited, anonymous)) {
+      let id = `${budget.key}|${budget.period}`;
+      if (!seen.has(id)) {
+        seen.add(id);
+        budgets.push({ limited, budget });
+      }
+    }
+  }
+  return budgets;
+}
+
 function limitOf(budget: CountedBudget): Limit {
   return {
     period: budget.period,
@@ -362,14 +383,14 @@ export async function chargeInteractiveCall(
   }
   let store = storeOf(dbAdapter);
 
+  let budgets = callBudgets(subjects, call.anonymous);
+
   // Reading every budget first refuses a call that is plainly over one
   // without taking anything at all.
-  for (let limited of subjects) {
-    for (let budget of budgetsOf(limited, call.anonymous)) {
-      let outcome = await store.budget(budget.key, budget);
-      if (!outcome.admitted) {
-        throw refuse(call, limited, outcome, limitOf(budget));
-      }
+  for (let { limited, budget } of budgets) {
+    let outcome = await store.budget(budget.key, budget);
+    if (!outcome.admitted) {
+      throw refuse(call, limited, outcome, limitOf(budget));
     }
   }
 
@@ -412,21 +433,19 @@ export async function chargeInteractiveCall(
     budget: CountedBudget;
     outcome: Extract<BudgetOutcome, { admitted: true }>;
   }[] = [];
-  for (let limited of subjects) {
-    for (let budget of budgetsOf(limited, call.anonymous)) {
-      let { key } = budget;
-      let outcome = await store.spend(key, budget);
-      if (!outcome.admitted) {
-        await giveBack();
-        throw refuse(call, limited, outcome, limitOf(budget));
-      }
-      spent.push({ key, period: budget.period, resetsAt: outcome.resetsAt });
-      // An anonymous cap sends no notice of its own: reaching it refuses
-      // only callers who aren't signed in, and the share's budgets, which
-      // their calls spend too, notify as they always do.
-      if (!budget.anonymousCap) {
-        reached.push({ limited, budget, outcome });
-      }
+  for (let { limited, budget } of budgets) {
+    let { key } = budget;
+    let outcome = await store.spend(key, budget);
+    if (!outcome.admitted) {
+      await giveBack();
+      throw refuse(call, limited, outcome, limitOf(budget));
+    }
+    spent.push({ key, period: budget.period, resetsAt: outcome.resetsAt });
+    // An anonymous cap sends no notice of its own: reaching it refuses
+    // only callers who aren't signed in, and the share's budgets, which
+    // their calls spend too, notify as they always do.
+    if (!budget.anonymousCap) {
+      reached.push({ limited, budget, outcome });
     }
   }
   for (let { limited, budget, outcome } of reached) {
@@ -495,13 +514,13 @@ export async function limitReadiness(
   let limited = await limitedSubjects(dbAdapter, subjects);
   let store = storeOf(dbAdapter);
   let answer: 'ready' | 'rate-limited' = 'ready';
-  for (let one of limited) {
-    for (let budget of budgetsOf(one, anonymous)) {
-      let outcome = await store.budget(budget.key, budget);
-      if (!outcome.admitted && !isRateLimitUnavailable(outcome)) {
-        return 'over-budget';
-      }
+  for (let { budget } of callBudgets(limited, anonymous)) {
+    let outcome = await store.budget(budget.key, budget);
+    if (!outcome.admitted && !isRateLimitUnavailable(outcome)) {
+      return 'over-budget';
     }
+  }
+  for (let one of limited) {
     let outcome = await store.peek(
       bucketKey(one.subject, caller, anonymous),
       bucketOf(one.limits),
