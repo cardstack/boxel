@@ -1,5 +1,6 @@
 import {
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
   toolResultMediaRefusal,
   VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
@@ -30,7 +31,9 @@ export { VIEW_ATTACHMENT_TOOL_NAME };
 
 // How many files one call may name: the most tool-result media files one turn
 // embeds. The turn's count and byte limits still apply across all of its
-// tool results, so a file a call names can still be left out of a request.
+// tool results, so a file a call names can still be left out of a request,
+// by a later call or another tool's media. The tool description says so: an
+// applied result is no promise that every file it names will be sent.
 export const VIEW_ATTACHMENT_MAX_URLS = MAX_CURRENT_TURN_TOOL_RESULT_MEDIA;
 
 export const viewAttachmentTool: Tool = {
@@ -46,8 +49,12 @@ export const viewAttachmentTool: Tool = {
       "describe it or compare it) and the last message of this request doesn't " +
       'include it. The files come back attached to the result, and you see ' +
       `them on your next turn. Views up to ${VIEW_ATTACHMENT_MAX_URLS} files ` +
-      "in one call. Text files don't need it: their content is already in " +
-      'the message that attached them.',
+      'in one call. The files every tool result of a turn attaches, these ' +
+      `included, share one limit of ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} ` +
+      `files and ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / (1024 * 1024)} ` +
+      'MiB: past it the oldest are left out, and a note names them, so view ' +
+      "only what you need for the step you are on. Text files don't need " +
+      'it: their content is already in the message that attached them.',
     parameters: {
       type: 'object',
       properties: {

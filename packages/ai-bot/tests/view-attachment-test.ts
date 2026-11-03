@@ -18,6 +18,7 @@ import {
   VIEW_ATTACHMENT_MAX_URLS,
   VIEW_ATTACHMENT_TOOL_NAME,
   viewAttachmentLabel,
+  viewAttachmentTool,
 } from '../lib/bot-tools/view-attachment/view.ts';
 
 const BOT = '@aibot:localhost';
@@ -429,6 +430,15 @@ module('viewAttachment', () => {
     assert.strictEqual(
       content.failureReason,
       `${VIEW_ATTACHMENT_TOOL_NAME} needs a non-empty list of urls.`,
+    );
+  });
+
+  test("the tool description names the turn's shared tool-result media limit", () => {
+    assert.ok(
+      viewAttachmentTool.function.description!.includes(
+        'share one limit of 8 files and 16 MiB: past it the oldest are left out, and a note names them',
+      ),
+      viewAttachmentTool.function.description,
     );
   });
 
