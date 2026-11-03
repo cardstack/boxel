@@ -9289,9 +9289,19 @@ ${patchedFileSource}
       contentSize: number;
     };
 
+    // An uploaded file, stored as the host stores it: under the homeserver's
+    // http download URL for its Matrix media item.
     let jpg = (name: string, contentSize = 2048): AttachedFile => ({
       sourceUrl: `boxel-local://3f2a/${name}`,
-      url: `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+      url: fakeMatrixClient.mxcUrlToHttp(
+        `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )!,
       name,
       contentType: 'image/jpeg',
       contentSize,
@@ -9299,16 +9309,7 @@ ${patchedFileSource}
 
     // The bytes the homeserver's media endpoint serves for a file.
     let storeMedia = (file: AttachedFile) => {
-      let downloadUrl = fakeMatrixClient.mxcUrlToHttp(
-        file.url,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        true,
-      )!;
-      mockResponses.set(downloadUrl, {
+      mockResponses.set(file.url, {
         ok: true,
         text: `bytes-of-${file.name}`,
       });
@@ -9549,6 +9550,63 @@ ${patchedFileSource}
         ),
         'the tool message gives the reason',
       );
+    });
+
+    test('a file the budget left out of message media is sent once when viewed, and no longer named as left out', async () => {
+      let photo = jpg('earlier.jpg', 3 * 1024 * 1024);
+      let large = jpg('large.jpg', 14 * 1024 * 1024);
+      storeMedia(photo);
+      storeMedia(large);
+      let turn = [
+        userMessage('1', 1, 'Here is a photo', [photo]),
+        userMessage('2', 2, 'And a much larger one', [large]),
+      ];
+
+      let beforeView = await buildPrompt(turn);
+      assert.deepEqual(
+        imageUrls(beforeView),
+        [dataUrlOf(large)],
+        'the budget leaves the earlier photo out',
+      );
+      assert.ok(
+        textOf(beforeView[beforeView.length - 1]).includes(
+          `earlier.jpg (${photo.sourceUrl}): newer media already fill`,
+        ),
+      );
+
+      let history = [...turn, viewRequest('3', 3, 'view-1', [photo.sourceUrl])];
+      history.push(
+        await viewResult('4', 4, history, '3', 'view-1', [photo.sourceUrl]),
+      );
+      let afterView = await buildPrompt(history);
+
+      assert.deepEqual(
+        imageUrls(afterView),
+        [dataUrlOf(large), dataUrlOf(photo)],
+        'the viewed photo rides once, as tool-result media',
+      );
+      assert.notOk(
+        textOf(afterView[afterView.length - 1]).includes(
+          "The following files attached to the user's messages were not sent",
+        ),
+        'no note names the viewed photo as left out',
+      );
+    });
+
+    test('a file the last message already carries is sent once when the model views it anyway', async () => {
+      let photo = jpg('sample-photo.jpg');
+      storeMedia(photo);
+      let history = [
+        userMessage('1', 1, 'What is in this photo?', [photo]),
+        viewRequest('2', 2, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('3', 3, history, '2', 'view-1', [photo.sourceUrl]),
+      );
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(photo)]);
     });
 
     test("viewed attachments share the turn's tool-result media budget", async () => {

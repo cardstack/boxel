@@ -2916,6 +2916,9 @@ function currentTurnHumanMessages(
 // A file attached to more than one of the turn's messages (the host attaches
 // the file open in code mode to every message) is sent once, as its newest
 // attachment, which history already tells the model supersedes the others.
+// The same rule spans the turn's tool results, which all come after its
+// messages: a file one of them already sends (viewAttachment attaches a
+// user's file again) is neither sent again here nor named as left out.
 export function currentTurnMessageMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -2925,7 +2928,9 @@ export function currentTurnMessageMedia(
   let messages = currentTurnHumanMessages(history, aiBotUserId);
   let included: SerializedFileDef[] = [];
   let omitted: CurrentTurnMedia['omitted'] = [];
-  let newerAttachments = new Set<string>();
+  let newerAttachments = new Set<string>(
+    toolResultMedia.included.map((file) => file.sourceUrl || file.url!),
+  );
   let totalBytes = toolResultMedia.included.reduce(
     (sum, file) => sum + (file.contentSize ?? 0),
     0,
