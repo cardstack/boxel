@@ -121,6 +121,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   @tracked rejected = false;
   @tracked problem: string | undefined;
   openedWindow = false;
+  tokenAdvice = TOKEN_ADVICE;
 
   get record(): PRReviewWatcher {
     return this.args.model as PRReviewWatcher;
@@ -285,8 +286,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         >
           <:default>
             The watcher lists pull requests as you, with
-            {{TOKEN_ADVICE}}. You enter it in Boxel's secure window, never in
-            this card.
+            {{this.tokenAdvice}}. You enter it in Boxel's secure window, never
+            in this card.
           </:default>
           <:action>
             <Button
