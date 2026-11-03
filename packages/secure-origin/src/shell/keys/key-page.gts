@@ -31,6 +31,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import {
   deleteKey,
   listBindings,
+  declinePolicyNotice,
   listKeys,
   policyNotices,
   removeGrant,
@@ -119,6 +120,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
               @notices={{this.state.notices}}
               @keys={{this.state.keys}}
               @onAllow={{this.startAnonymousUse}}
+              @onDecline={{this.declineRequest}}
+              @declining={{this.state.declining}}
             />
             {{#if this.state.keys.length}}
               <ul class='list' data-test-key-list>
@@ -489,6 +492,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     // What workspaces' policies opened the user's shares to people who aren't
     // signed in. Empty when there are none, or when they can't be read.
     notices: [] as KeyPolicyNotice[],
+    // The request being declined, while it is.
+    declining: undefined as string | undefined,
     error: undefined as string | undefined,
     // What went wrong when the key list didn't load.
     loadFailed: undefined as LoadFailure | undefined,
@@ -663,6 +668,20 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         throw e;
       }
       return [];
+    }
+  };
+
+  // Declining a workspace's request leaves the key as it is; the request
+  // isn't shown again.
+  private declineRequest = async (notice: KeyPolicyNotice) => {
+    this.state.declining = notice.id;
+    try {
+      await this.guard(async () => {
+        await declinePolicyNotice(this.args.api.config, notice.id);
+        this.state.notices = await this.readNotices();
+      });
+    } finally {
+      this.state.declining = undefined;
     }
   };
 

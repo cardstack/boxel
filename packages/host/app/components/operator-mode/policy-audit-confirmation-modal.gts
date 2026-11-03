@@ -131,7 +131,7 @@ export default class PolicyAuditConfirmationModal extends Component {
             <h2>Let people who aren't signed in use shared keys?</h2>
             <p>
               This change lets people who aren't signed in make calls that send
-              a key shared into the workspace. Each key's owner will be told.
+              a key shared into the workspace.
             </p>
           </header>
           {{#if this.starting.length}}
@@ -155,22 +155,35 @@ export default class PolicyAuditConfirmationModal extends Component {
             </div>
           {{/if}}
           <footer>
-            <BoxelButton
-              data-test-policy-audit-cancel
-              @size='tall'
-              @kind='secondary-light'
-              {{on 'click' this.cancel}}
-            >
-              Don't save
-            </BoxelButton>
-            <BoxelButton
-              data-test-policy-audit-confirm
-              @size='tall'
-              @kind='primary'
-              {{on 'click' (fn this.answer true)}}
-            >
-              Save and tell the owners
-            </BoxelButton>
+            <p class='save-note' data-test-policy-audit-save-note>
+              {{#if this.refusing.length}}
+                Owners of keys that don't allow it yet will be asked to approve
+                anonymous use. Until they do, those keys refuse people who
+                aren't signed in.
+              {{/if}}
+              {{#if this.starting.length}}
+                Keys that already allow it are used as soon as you save, and
+                their owners are told.
+              {{/if}}
+            </p>
+            <div class='buttons'>
+              <BoxelButton
+                data-test-policy-audit-cancel
+                @size='tall'
+                @kind='secondary-light'
+                {{on 'click' this.cancel}}
+              >
+                Don't save
+              </BoxelButton>
+              <BoxelButton
+                data-test-policy-audit-confirm
+                @size='tall'
+                @kind='primary'
+                {{on 'click' (fn this.answer true)}}
+              >
+                Save
+              </BoxelButton>
+            </div>
           </footer>
         </section>
       </Modal>
@@ -217,7 +230,19 @@ export default class PolicyAuditConfirmationModal extends Component {
         margin-top: var(--boxel-sp-lg);
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+      }
+      .save-note {
+        flex: 1 1 16rem;
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+      .buttons {
+        display: flex;
         gap: var(--boxel-sp-xs);
       }
     </style>

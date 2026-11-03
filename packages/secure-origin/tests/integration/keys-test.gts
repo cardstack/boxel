@@ -638,35 +638,86 @@ module('Integration | key pages', function (hooks) {
       });
       visitShell('keys');
       await render(KeyPage);
-      await waitFor('[data-test-key-policy-notices]');
+      await waitFor('[data-test-key-policy-requests]');
       assert
-        .dom('[data-test-key-policy-notice]')
-        .exists({ count: 3 }, 'newest first, as the server lists them');
+        .dom('[data-test-key-policy-requests] [data-test-key-policy-notice]')
+        .exists(
+          { count: 1 },
+          'only the request still waiting on an answer asks for one: a deleted key’s is settled',
+        );
+      assert
+        .dom('[data-test-key-policy-requests]')
+        .containsText('Action needed')
+        .containsText('wants people who aren’t signed in to use your key')
+        .containsText('Team weather');
       assert
         .dom(
-          '[data-test-key-policy-notice="Weather"][data-test-key-policy-notice-reason="visitors-use"]',
+          '[data-test-key-policy-notices] [data-test-key-policy-notice="Weather"]',
         )
         .containsText('now use')
         .containsText('Weather.forecast');
       assert
         .dom(
-          '[data-test-key-policy-notice="Weather"] [data-test-key-policy-notice-allow]',
+          '[data-test-key-policy-notices] [data-test-key-policy-notice-allow]',
         )
-        .doesNotExist('a key visitors already use offers nothing more');
-      assert
-        .dom(
-          '[data-test-key-policy-notice="Deleted"] [data-test-key-policy-notice-allow]',
-        )
-        .doesNotExist('nor does one whose key is deleted');
-      assert
-        .dom('[data-test-key-policy-notice="Team weather"]')
-        .containsText('wants people who aren’t signed in to use');
-      await click(
-        '[data-test-key-policy-notice="Team weather"] [data-test-key-policy-notice-allow]',
-      );
+        .doesNotExist('a key visitors already use asks for nothing');
+      await click('[data-test-key-policy-notice-allow]');
       assert
         .dom('[data-test-key-anonymous-use-form]')
         .exists('allowing it opens the key’s own setting');
+    });
+
+    test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
+      let declined = false;
+      let request = {
+        type: 'key-policy-notice',
+        id: '7',
+        attributes: {
+          realm: REALM,
+          share: 'share-team-2',
+          label: 'Team weather',
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-wanted',
+          operations: [`${REALM}weather#Weather.alerts`],
+          declinedAt: null as string | null,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      };
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              declined
+                ? {
+                    ...request,
+                    attributes: {
+                      ...request.attributes,
+                      declinedAt: '2026-11-02T12:00:00.000Z',
+                    },
+                  }
+                : request,
+            ],
+          }),
+        'POST _key-policy-notices/7/decline': () => {
+          declined = true;
+          return json(200, { data: request });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      await click('[data-test-key-policy-notice-decline]');
+      await settled();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.deepEqual(
+        requests
+          .filter((r) => r.method === 'POST' && r.path.startsWith('_key'))
+          .map((r) => r.path),
+        ['_key-policy-notices/7/decline'],
+        'nothing about the key is changed',
+      );
     });
 
     test('a notice that a workspace wants visitors to use a key is settled once the key allows them', async function (assert) {
@@ -697,14 +748,14 @@ module('Integration | key pages', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-row="Maps"]');
-      assert.dom('[data-test-key-policy-notices]').doesNotExist();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
     });
 
     test('a link naming a key opens its setting for people who aren’t signed in', async function (assert) {
       visitShell('keys#anonymous=key-2');
       await render(KeyPage);
       await waitFor('[data-test-key-anonymous-use-form]');
-      assert.dom('[data-test-key-policy-notices]').doesNotExist();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
       assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
     });
 

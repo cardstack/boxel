@@ -11,8 +11,10 @@
 // opened that are bound to the share, each as `<module>#<export>.<operation>`.
 // `saved_by` is who saved the policy, null when the realm server can't say.
 //
-// The owner reads their own notices, newest first. Deleting the share deletes
-// its notices; deleting the key keeps them, without the key.
+// The owner reads their own notices, newest first. A `visitors-wanted` notice is
+// a request the owner answers: allowing anonymous use on the key settles it,
+// and declining it sets `declined_at`, after which it isn't shown again. Deleting
+// the share deletes its notices; deleting the key keeps them, without the key.
 //
 // The table holds no secret, but like the other key tables it is withheld
 // from the read-only role and from every role that reads with its privileges,
@@ -32,8 +34,10 @@ exports.up = (pgm) => {
       saved_by varchar,
       reason varchar NOT NULL,
       operations jsonb NOT NULL,
+      declined_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT NOW(),
-      CONSTRAINT key_policy_notices_reason_check CHECK (reason IN ('visitors-use', 'visitors-wanted'))
+      CONSTRAINT key_policy_notices_reason_check CHECK (reason IN ('visitors-use', 'visitors-wanted')),
+      CONSTRAINT key_policy_notices_declined_check CHECK (declined_at IS NULL OR reason = 'visitors-wanted')
     )
   `);
   pgm.sql(`

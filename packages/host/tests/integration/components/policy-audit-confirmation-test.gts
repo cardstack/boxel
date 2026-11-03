@@ -118,6 +118,16 @@ module('Integration | policy audit confirmation', function (hooks) {
       .dom('[data-test-policy-audit-entry="Alerts key"]')
       .containsText('Weather.alerts');
 
+    assert
+      .dom('[data-test-policy-audit-confirm]')
+      .hasText(
+        'Save',
+        'the button saves; the note beside it says what follows',
+      );
+    assert
+      .dom('[data-test-policy-audit-save-note]')
+      .containsText('will be asked to approve anonymous use')
+      .containsText('used as soon as you save');
     await click('[data-test-policy-audit-confirm]');
     let response = await saving;
     assert.strictEqual(response.status, 204, 'the save lands');

@@ -159,6 +159,7 @@ import {
   handleRevokeKeyBinding,
 } from './handlers/handle-key-bindings.ts';
 import {
+  handleDeclineKeyPolicyNotice,
   handleListKeyPolicyNotices,
   handleListKeyShareNotices,
   handleListKeyShares,
@@ -525,6 +526,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_POLICY_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyPolicyNotices(args),
+  );
+  router.post(
+    `${KEY_POLICY_NOTICES_PATH}/:id/decline`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeclineKeyPolicyNotice(args),
   );
   router.get(
     `${OAUTH_PATH}/clients`,
