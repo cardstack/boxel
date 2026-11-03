@@ -45,6 +45,10 @@ import type { CardDef, Format } from '@cardstack/base/card-api';
 import type * as CommandModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
 
+// The name a session is created with. The bot renames a session once it has
+// answered in it.
+export const NEW_SESSION_NAME = 'New AI Assistant Chat';
+
 export interface SessionRoomData {
   roomId: string;
   name: string;
@@ -302,7 +306,7 @@ export default class AiAssistantPanelService extends Service {
       return;
     }
 
-    await this.doCreateRoom.perform('New AI Assistant Chat', opts);
+    await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
   }
 
   private get newSessionId() {
@@ -413,7 +417,7 @@ export default class AiAssistantPanelService extends Service {
 
   private doCreateRoom = restartableTask(
     async (
-      name: string = 'New AI Assistant Chat',
+      name: string = NEW_SESSION_NAME,
       opts: {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;

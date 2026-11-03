@@ -8,6 +8,7 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
 import Copy from '@cardstack/boxel-icons/copy';
+import X from '@cardstack/boxel-icons/x';
 import { Button } from '@cardstack/pretui/components/button';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
@@ -16,7 +17,7 @@ import { Select } from '@cardstack/pretui/components/select';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { add, cn } from '@cardstack/boxel-ui/helpers';
 
 import { logger } from '@cardstack/runtime-common';
 
@@ -67,9 +68,9 @@ export default class Agents extends Component<Signature> {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  // Kept with its agent, so a copy's feedback doesn't carry over to another
-  // agent's steps.
-  @tracked private copied: AgentStep | null = null;
+  // The last copy's result, kept with its agent, so its feedback doesn't
+  // carry over to another agent's steps.
+  @tracked private copied: CopyResult | null = null;
   @tracked private pickedWorkspaceURL: string | undefined;
   // The agent whose finished setup is shown in full: opened with Show steps,
   // or copied from here, so a last copy doesn't fold the list away under the
@@ -88,9 +89,30 @@ export default class Agents extends Component<Signature> {
     return agentKindFor(this.matrixService.dashboardAgent);
   }
 
-  private get copiedStep() {
-    return this.copied?.agent === this.kind.id ? this.copied.index : null;
+  private get copiedResult() {
+    return this.copied?.agent === this.kind.id ? this.copied : null;
   }
+
+  private copyFailed = (index: number) =>
+    this.copiedResult?.index === index && !this.copiedResult.ok;
+
+  private copyTooltip = (index: number) =>
+    this.copiedResult?.index !== index
+      ? 'Copy'
+      : this.copiedResult.ok
+        ? 'Copied'
+        : 'Copy failed';
+
+  private copyIcon = (index: number) =>
+    this.copiedResult?.index !== index
+      ? Copy
+      : this.copiedResult.ok
+        ? Check
+        : X;
+
+  // The copied and failed glyphs match the bold ticks beside the steps.
+  private copyIconStroke = (index: number) =>
+    this.copiedResult?.index === index ? '3' : undefined;
 
   private get isBuiltIn() {
     return !this.kind.setup;
@@ -144,8 +166,12 @@ export default class Agents extends Component<Signature> {
   // Names the step, so a copy of another step inside the feedback window is
   // announced too.
   private get copiedMessage() {
-    let index = this.copiedStep;
-    return index === null ? '' : `Step ${index + 1} copied`;
+    let result = this.copiedResult;
+    if (!result) {
+      return '';
+    }
+    let step = `Step ${result.index + 1}`;
+    return result.ok ? `${step} copied` : `${step} copy failed`;
   }
 
   // Once every step is copied, the list folds away; the progress bar says
@@ -191,20 +217,22 @@ export default class Agents extends Component<Signature> {
   // step is what counts as doing it. The count is computed from the stored
   // one, so a later step copied in another tab isn't wound back. A copy the
   // browser refuses (no clipboard permission, an unfocused page) leaves the
-  // step as it was.
+  // step as it was, and says so.
   private copyTask = restartableTask(async (index: number, text: string) => {
     let agent = this.kind.id;
-    let copied = { agent, index };
+    let copied: CopyResult = { agent, index, ok: true };
     this.expandedAgent = agent;
     try {
       try {
         await navigator.clipboard.writeText(text);
       } catch (error) {
         log.warn(`copying setup step ${index + 1} failed: ${error}`);
-        return;
+        copied = { agent, index, ok: false };
       }
       this.copied = copied;
-      this.saveProgress(agent, index);
+      if (copied.ok) {
+        this.saveProgress(agent, index);
+      }
       await timeout(COPIED_FEEDBACK_MS);
     } finally {
       // Also when a later copy cancels this one.
@@ -343,7 +371,7 @@ export default class Agents extends Component<Signature> {
                   >
                     <span class='step-number' aria-hidden='true'>
                       {{#if (this.isCopied index)}}
-                        <Check width='12' height='12' />
+                        <Check width='14' height='14' stroke-width='3' />
                       {{else}}
                         {{add index 1}}
                       {{/if}}
@@ -381,16 +409,14 @@ export default class Agents extends Component<Signature> {
                         <IconButton
                           class='copy'
                           @label='Copy'
-                          @tooltip={{if
-                            (eq this.copiedStep index)
-                            'Copied'
-                            'Copy'
+                          @tooltip={{this.copyTooltip index}}
+                          @tone={{if
+                            (this.copyFailed index)
+                            'danger'
+                            'neutral'
                           }}
                           @appearance='plain'
                           @size='xs'
-                          @icon={{if (eq this.copiedStep index) Check Copy}}
-                          @iconWidth='14'
-                          @iconHeight='14'
                           aria-describedby={{concat
                             this.stepsId
                             '-'
@@ -402,7 +428,15 @@ export default class Agents extends Component<Signature> {
                             (fn this.copyTask.perform index step.text)
                           }}
                           data-test-agent-copy={{add index 1}}
-                        />
+                        >
+                          {{#let (this.copyIcon index) as |CopyIcon|}}
+                            <CopyIcon
+                              width='14'
+                              height='14'
+                              stroke-width={{this.copyIconStroke index}}
+                            />
+                          {{/let}}
+                        </IconButton>
                       </div>
                     </div>
                   </li>
@@ -413,7 +447,7 @@ export default class Agents extends Component<Signature> {
         </section>
       </div>
       {{! Rendered empty up front, so the copy is announced. }}
-      <VisuallyHidden role='status'>
+      <VisuallyHidden role='status' data-test-agent-copy-status>
         {{this.copiedMessage}}
       </VisuallyHidden>
     </div>
@@ -584,7 +618,8 @@ export default class Agents extends Component<Signature> {
   </template>
 }
 
-interface AgentStep {
+interface CopyResult {
   agent: DashboardAgent;
   index: number;
+  ok: boolean;
 }

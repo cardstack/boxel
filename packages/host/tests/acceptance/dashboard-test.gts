@@ -2526,13 +2526,25 @@ module('Acceptance | dashboard', function (hooks) {
         clipboard.fail = true;
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        await click('[data-test-agent-copy="3"]');
+        // Not awaited: settling waits out the feedback, which clears the
+        // announcement.
+        click('[data-test-agent-copy="3"]');
+        await waitUntil(() =>
+          find('[data-test-agent-copy-status]')?.textContent?.trim(),
+        );
+        assert
+          .dom('[data-test-agent-copy-status]')
+          .hasText('Step 3 copy failed', 'the refusal is announced');
+        await settled();
 
         let matrixService = getService('matrix-service') as MatrixService;
         assert.strictEqual(matrixService.dashboardState.agentSetup?.codex, 2);
         assert
           .dom('[data-test-agent-setup-progress]')
           .includesText('2 of 6 copied');
+        assert
+          .dom('[data-test-agent-step="3"]')
+          .hasAttribute('data-test-agent-step-copied', 'false');
       });
 
       test('a finished setup folds its steps away behind Show steps', async function (assert) {
@@ -2768,6 +2780,7 @@ module('Acceptance | dashboard', function (hooks) {
           .dom('[data-test-get-started-count]')
           .hasText('1 of 4 done · Next: Open a card in a workspace');
         assert.dom('[data-test-get-started-step]').doesNotExist('folded');
+        assert.dom('[data-test-get-started-toggle]').hasText('Show steps');
 
         await click('[data-test-get-started-toggle]');
 
@@ -2805,6 +2818,19 @@ module('Acceptance | dashboard', function (hooks) {
         assert
           .dom('[data-test-get-started-count]')
           .hasText('1 of 4 done · Next: Open a card in a workspace');
+      });
+
+      test('a session the bot has renamed ticks the ask step, before any message loads', async function (assert) {
+        await visitAsNewUser();
+
+        let roomId = await openBoxelAiSession();
+        mockMatrixUtils.setRoomState(roomId, 'm.room.name', {
+          name: 'Task tracker',
+        });
+        await waitUntil(() => countText().startsWith('1 of 4 done'));
+
+        await click('[data-test-get-started-toggle]');
+        assert.strictEqual(stepDone('ask-ai'), 'true');
       });
 
       test('finishing every step dismisses it for good', async function (assert) {

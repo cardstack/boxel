@@ -18,6 +18,7 @@ import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { logger } from '@cardstack/runtime-common';
 
 import { isHostedRealm } from '@cardstack/host/lib/workspace-list';
+import { NEW_SESSION_NAME } from '@cardstack/host/services/ai-assistant-panel-service';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -113,9 +114,12 @@ export default class GetStarted extends Component<Signature> {
         title: 'Ask Boxel AI to build something',
         hint: 'It can make your first cards from a sentence.',
         // Opening the panel makes an empty session, so only one with a
-        // message has been asked.
-        done: this.aiAssistantPanelService.aiSessionRooms.some((session) =>
-          Boolean(session.lastMessage),
+        // message has been asked. The sync's first pass brings only each
+        // session's newest event, often the bot's rename rather than a
+        // message, so a renamed session counts too.
+        done: this.aiAssistantPanelService.aiSessionRooms.some(
+          (session) =>
+            Boolean(session.lastMessage) || session.name !== NEW_SESSION_NAME,
         ),
       },
       {
@@ -276,7 +280,7 @@ export default class GetStarted extends Component<Signature> {
                 {{on 'click' this.toggleExpanded}}
                 data-test-get-started-toggle
               >
-                {{if this.isExpanded 'Hide steps' 'Continue'}}
+                {{if this.isExpanded 'Hide steps' 'Show steps'}}
               </Button>
             {{/if}}
             <Button
@@ -302,7 +306,7 @@ export default class GetStarted extends Component<Signature> {
               >
                 <span class='tick' aria-hidden='true'>
                   {{#if step.done}}
-                    <Check width='12' height='12' />
+                    <Check width='14' height='14' stroke-width='3' />
                   {{/if}}
                 </span>
                 <span class='step-words'>
