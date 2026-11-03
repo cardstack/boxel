@@ -41,6 +41,11 @@ versions may change behavior until `1.0.0`.
   standalone `@glimmer/tracking` 1.x package, and Embroider then resolved glimmer-motion's `tracked` to
   that copy instead of ember-source's. Its tracked state never reached Ember's renderer, so a
   `<Presence>` leaver stayed in the DOM after its exit finished. ember-source provides the module.
+- **Development-only warnings stay out of production bundles.** The development check read
+  `typeof process` before `process.env.NODE_ENV`, and a bundler replaces only the second, so in a
+  production build of an app with no `process` global the check stayed true and warnings such as the
+  layout-loop guard's reached the console. It reads `process.env.NODE_ENV` alone, which a production
+  build replaces with `'production'`; with nothing replacing it, it counts as development.
 - **`LICENSE` carries Motion's MIT notice.** The files adapted or ported from
   Motion (listed in `VENDORED.md`) ship under Framer B.V.'s copyright as well
   as Cardstack's.
