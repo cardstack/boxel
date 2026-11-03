@@ -42,6 +42,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('authenticates user and creates session room', async function (assert) {
       let matrixClient = new MatrixClient({
+        serverName: 'localhost',
         matrixURL: realmServerTestMatrix.url,
         // it's a little awkward that we are hijacking a realm user to pretend to
         // act like a normal user, but that's what's happening here

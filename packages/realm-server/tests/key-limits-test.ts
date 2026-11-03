@@ -51,8 +51,8 @@ import {
 // counters, and owners and the realm's direct writers are told once at the
 // high-water mark and once at the budget.
 //
-// The approval API approves a binding for pipelines only, so each test turns
-// one interactive in the database. The counters run on a clock the test moves.
+// Each test approves a binding, then turns it interactive in the database (see
+// `approveInteractive`). The counters run on a clock the test moves.
 // ============================================================================
 
 const realmURL = new URL('http://127.0.0.1:4444/key-limits-test/');
@@ -225,7 +225,9 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // Approves `operation` with the given slots, then turns its bindings
-  // interactive, as allowing interactive use would.
+  // interactive by setting the column the call reads. Approving with
+  // `interactive` would set a share's daily budget on its first interactive
+  // approval, and these tests measure the platform's defaults.
   async function approveInteractive(
     user: string,
     operation: string,

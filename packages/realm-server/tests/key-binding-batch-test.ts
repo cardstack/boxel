@@ -737,6 +737,36 @@ module(basename(import.meta.filename), function (hooks) {
       'the rest are counted for the next confirmation',
     );
     assert.deepEqual(withinSlotLimit(groups, 100).remaining, 0);
+
+    let pipelinesOnly = (name: string, slots: number) => ({
+      ...operation(name, slots),
+      status: 'pipelines-only' as const,
+    });
+    let mixed: BatchGroup[] = [
+      {
+        destination: destination('a.example'),
+        operations: [pipelinesOnly('approved', 4), operation('pending', 2)],
+      },
+      {
+        destination: destination('b.example'),
+        operations: [pipelinesOnly('alsoApproved', 1)],
+      },
+    ];
+    let capped = withinSlotLimit(mixed, 5);
+    assert.deepEqual(
+      capped.kept.map((g) => g.operations.map((o) => o.name)),
+      [['pending']],
+      'the one that needs approving comes first; ones approved for pipelines only fill what is left, in order',
+    );
+    assert.strictEqual(capped.remaining, 0);
+    assert.strictEqual(capped.remainingPipelinesOnly, 2);
+    assert.deepEqual(
+      withinSlotLimit(mixed, 7).kept.map((g) =>
+        g.operations.map((o) => o.name),
+      ),
+      [['approved', 'pending'], ['alsoApproved']],
+      'with room for all, they keep the order the window shows',
+    );
   });
 
   test('the batch is asked with the secure window’s own session, about what the user can read', async function (assert) {

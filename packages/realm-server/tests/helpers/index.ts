@@ -1595,6 +1595,7 @@ export async function createRealm({
       queuePublisher: publisher,
       virtualNetwork,
       matrixURL: realmServerTestMatrix.url,
+      matrixServerName: 'localhost',
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
@@ -1603,6 +1604,7 @@ export async function createRealm({
     });
   }
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1759,6 +1761,7 @@ export async function runTestRealmServer({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName: 'localhost',
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1795,6 +1798,7 @@ export async function runTestRealmServer({
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1937,6 +1941,7 @@ export async function runTestRealmServerWithRealms({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName: 'localhost',
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1987,6 +1992,7 @@ export async function runTestRealmServerWithRealms({
   }
 
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -2349,6 +2355,7 @@ export function setupMatrixRoom(
   },
 ) {
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: 'node-test_realm',
     seed: realmSecretSeed,
@@ -3312,6 +3319,7 @@ async function buildBaseRealmTemplate(
     virtualNetwork.mount(base.handle);
 
     let matrixClient = new MatrixClient({
+      serverName: 'localhost',
       matrixURL: realmServerTestMatrix.url,
       username: realmServerTestMatrix.username,
       seed: realmSecretSeed,

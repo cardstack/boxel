@@ -67,7 +67,7 @@ class UseKey extends Component<{
       <form novalidate {{on 'submit' this.next}} data-test-use-key-form>
         <EditPage @heading='Use a key with a card' data-test-use-key>
           <:intro>Choose a workspace and a card there. Next you’ll see every
-            request the card makes with your key, and approve them once.</:intro>
+            call the card makes with your key, and approve them once.</:intro>
           <:default>
             <FieldContainer @tag='div' @label='Key' @icon={{KeyRound}}>
               <KeyTile @key={{this.choosing.key}} />

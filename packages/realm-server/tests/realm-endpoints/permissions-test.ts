@@ -118,6 +118,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       hooks.beforeEach(async function () {
         matrixClient = new MatrixClient({
+          serverName: 'localhost',
           matrixURL: realmServerTestMatrix.url,
           username: 'test_realm',
           seed: realmSecretSeed,

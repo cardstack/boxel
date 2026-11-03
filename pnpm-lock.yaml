@@ -4578,15 +4578,33 @@ importers:
 
   packages/test-realm-cards:
     devDependencies:
+      '@babel/plugin-proposal-decorators':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1(supports-color@8.1.1)
 
   packages/vscode-boxel-tools:
     dependencies:
