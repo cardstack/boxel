@@ -73,7 +73,8 @@ export function secureSignInURL(returnTo = currentAppPage()): string {
 }
 
 // Where the app sends the user once it has signed out of its own session, so
-// the secure origin ends its session too and comes back here signed out.
+// the secure origin ends its session too and goes on to its sign-in page,
+// whose next sign-in hands back to `returnTo`.
 export function secureSignOutURL(returnTo: string): string {
   return withFragment(pageURL('sign-out'), { return: returnTo });
 }
@@ -102,8 +103,9 @@ export function secureResetPasswordURL({
   });
 }
 
-// The app's own page, at its root, signed out: where signing out comes back
-// to. It carries no card ids, so no private card is named in the address.
+// The app's own page, at its root: where the sign-in that follows a sign-out
+// comes back to. It carries no card ids, so no private card is named in the
+// address.
 export function appRootURL(): string {
   return new URL('/', window.location.href).href;
 }

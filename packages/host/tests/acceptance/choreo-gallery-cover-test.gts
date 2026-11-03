@@ -62,11 +62,21 @@ const runningInStages = () =>
  * it finds at once, and looks again within a second for effects a score
  * starts by script, so a tile whose score passes as the page opens over it
  * rests a moment later than the rest.
+ *
+ * It then waits for the grid to stop being written to. A finite spring Motion
+ * drives by script (the Enter tile's notices, still landing as the page opens
+ * over them) writes for a moment and then stops; resting cannot pause it, and
+ * it is not a loop. Only a writer that never stops is left for the count.
  */
-const stagesSettled = () =>
-  waitUntil(() => runningInStages() === 0, { timeout: 2500 }).catch(
+async function stagesSettled() {
+  await waitUntil(() => runningInStages() === 0, { timeout: 2500 }).catch(
     () => undefined,
   );
+  let deadline = performance.now() + 2500;
+  while (performance.now() < deadline && (await tileWrites(3)) > 0) {
+    // a finite animation is still landing
+  }
+}
 
 /**
  * A click on a tile's title as a pointer makes it. The `click` helper also

@@ -161,12 +161,30 @@ test.describe('Sign in on the secure origin', () => {
       page.locator('[data-test-operator-mode-stack="0"]'),
     ).toHaveCount(1, { timeout: 60_000 });
 
+    // Every document the tab loads from here on.
+    let loaded: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        loaded.push(request.url());
+      }
+    });
+
     await logout(page);
 
-    // Through the secure origin's sign-out, back to the app signed out, and
-    // so on to sign in again.
+    // Through the secure origin's sign-out straight on to its sign-in, never
+    // back through the app, which signed out would only send the user there.
     await page.waitForURL((url) => url.pathname.endsWith('/sign-in'));
     await expect(page.locator('[data-test-secure-sign-in-form]')).toBeVisible();
+    expect(
+      loaded.map((url) => {
+        let { origin, pathname } = new URL(url);
+        return `${origin}${pathname}`;
+      }),
+      'the sign-out page is the only document loaded: the app is not loaded again, and sign-in follows it as a route transition',
+    ).toEqual([`${secureOriginURL}/sign-out`]);
     expect(
       await page.evaluate(
         (key) => localStorage.getItem(key),

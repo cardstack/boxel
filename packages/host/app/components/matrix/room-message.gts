@@ -53,6 +53,18 @@ interface ToolRun {
   summary?: string;
   // some calls in the group are still running
   pending?: boolean;
+  // a folded run's group is open while the room records it open; any other
+  // group leaves these undefined and keeps its own disclosure
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+// A run of messages, each with one finished call to the same tool, folded
+// into its latest message: every call of the run, its own last, and the key
+// the room keeps the run's open state by.
+export interface FoldedRun {
+  key: string;
+  tools: MessageTool[];
 }
 
 interface Signature {
@@ -74,8 +86,13 @@ interface Signature {
     isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
-    // this message stands for a run of N identical calls folded into it
-    foldCount?: number;
+    // this message stands for a run of messages folded into it
+    foldedRun?: FoldedRun;
+    // Whether the reader opened a folded run's group, by the group's key, and
+    // how to record it. The room keeps it: when the next call of the run
+    // finishes, this message folds away and a newer one draws the group.
+    isFoldOpen?: (key: string) => boolean;
+    setFoldOpen?: (key: string, open: boolean) => void;
     // the settled turn this message belongs to folds its tool rows
     turnFold?: TurnFold;
     turnHead?: TurnHead;
@@ -235,7 +252,68 @@ export default class RoomMessage extends Component<Signature> {
       (tool, index) => (tool.id ?? run.parts?.[index]?.id) === id,
     );
 
+  // one setter per folded run's key, so ToolGroup's @onOpenChange stays the
+  // same function while the run's messages stream
+  private foldSetters = new Map<string, (open: boolean) => void>();
+
+  private foldSetter(key: string) {
+    let setter = this.foldSetters.get(key);
+    if (!setter) {
+      setter = (open: boolean) => this.args.setFoldOpen?.(key, open);
+      this.foldSetters.set(key, setter);
+    }
+    return setter;
+  }
+
+  // one ToolGroup row for consecutive finished calls to one tool
+  private groupRun(
+    group: MessageTool[],
+    keyOf: (k: number) => string,
+  ): ToolRun {
+    let count = group.length;
+    let done = group.filter((tool) => tool.status === 'applied').length;
+    let pending = done < count;
+    let isCheck = group[0]!.name === 'checkCorrectness';
+    let name = humanizeToolName(group[0]!.name ?? 'tool');
+    return {
+      key: keyOf(0),
+      command: group[count - 1]!,
+      count,
+      group,
+      pending,
+      parts: group.map((tool, index) => ({
+        id: keyOf(index),
+        name: tool.name ?? 'tool',
+        state: tool.status === 'applied' ? 'completed' : 'running',
+      })),
+      // a check that found errors still ends applied, so the group
+      // counts checks and leaves their outcome to the rows inside it
+      summary: isCheck
+        ? pending
+          ? `Running ${count} checks · ${done} done`
+          : `Ran ${count} checks`
+        : pending
+          ? `${name} ×${count} · ${done} done`
+          : `${name} ×${count}`,
+    };
+  }
+
   private get toolRuns(): ToolRun[] {
+    // the earlier messages of a folded run are hidden: their calls open
+    // from this one's row, the same way a group within one message does
+    let folded = this.args.foldedRun;
+    if (folded && folded.tools.length > 1) {
+      let { key, tools } = folded;
+      let controlled = this.args.isFoldOpen && this.args.setFoldOpen;
+      return [
+        {
+          ...this.groupRun(tools, (k) => tools[k]!.id ?? `${key}-${k}`),
+          key,
+          open: controlled ? this.args.isFoldOpen!(key) : undefined,
+          onOpenChange: controlled ? this.foldSetter(key) : undefined,
+        },
+      ];
+    }
     let tools = this.message.tools ?? [];
     let runs: ToolRun[] = [];
     let keyOf = (k: number) => tools[k]!.id ?? `call-${k}`;
@@ -268,32 +346,7 @@ export default class RoomMessage extends Component<Signature> {
       }
       let count = j - i + 1;
       if (count >= 3) {
-        let group = tools.slice(i, j + 1);
-        let done = group.filter((tool) => tool.status === 'applied').length;
-        let pending = done < count;
-        let isCheck = tools[i]!.name === 'checkCorrectness';
-        let name = humanizeToolName(tools[i]!.name ?? 'tool');
-        runs.push({
-          key: keyOf(i),
-          command: tools[j]!,
-          count,
-          group,
-          pending,
-          parts: group.map((tool, index) => ({
-            id: tool.id ?? `call-${i + index}`,
-            name: tool.name ?? 'tool',
-            state: tool.status === 'applied' ? 'completed' : 'running',
-          })),
-          // a check that found errors still ends applied, so the group
-          // counts checks and leaves their outcome to the rows inside it
-          summary: isCheck
-            ? pending
-              ? `Running ${count} checks · ${done} done`
-              : `Ran ${count} checks`
-            : pending
-              ? `${name} ×${count} · ${done} done`
-              : `${name} ×${count}`,
-        });
+        runs.push(this.groupRun(tools.slice(i, j + 1), (k) => keyOf(i + k)));
       } else {
         for (let k = i; k <= j; k++) {
           runs.push({ key: keyOf(k), command: tools[k]! });
@@ -550,6 +603,8 @@ export default class RoomMessage extends Component<Signature> {
               @merge='none'
               @pending={{run.pending}}
               @summary={{run.summary}}
+              @open={{run.open}}
+              @onOpenChange={{run.onOpenChange}}
               data-test-tool-run-group={{run.count}}
             >
               <:tool as |entry|>
@@ -586,7 +641,6 @@ export default class RoomMessage extends Component<Signature> {
                 @isError={{bool this.errorMessage}}
                 @isStreaming={{@isStreaming}}
                 @isSuperseded={{this.isRetriedLater command}}
-                @foldCount={{@foldCount}}
               />
             {{/let}}
           {{/if}}
