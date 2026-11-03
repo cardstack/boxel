@@ -145,6 +145,20 @@ export function declinedToolCalls(
   return declined;
 }
 
+// The declined calls this process has not taken on yet, claimed like
+// approved ones so a call is answered once however many events show its 👎.
+export function claimDeclinedToolCalls(
+  claims: ApprovalClaims,
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  toolNames: ReadonlySet<string>,
+): DeclinedToolCall[] {
+  return claims.claim(
+    history,
+    declinedToolCalls(history, aiBotUserId, toolNames),
+  );
+}
+
 function approvedByResult(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -253,10 +267,10 @@ export class ApprovalClaims {
 
   // Claims and returns the released calls not already claimed, after
   // dropping claims on calls the history shows settled.
-  claim(
+  claim<T extends ReleasedToolCall>(
     history: DiscreteMatrixEvent[],
-    released: ReleasedToolCall[],
-  ): ReleasedToolCall[] {
+    released: T[],
+  ): T[] {
     let settled = settledToolCallIds(history);
     for (let id of this.#claimed) {
       if (settled.has(id)) {
