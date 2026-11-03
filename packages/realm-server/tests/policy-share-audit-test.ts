@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import sinon from 'sinon';
 import supertest from 'supertest';
 import type { SuperTest, Test } from 'supertest';
 import { basename, join } from 'path';
@@ -23,6 +24,7 @@ import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
   createJWT,
+  insertUser,
   createVirtualNetwork,
   matrixURL,
   realmConfigCardJSON,
@@ -33,7 +35,12 @@ import {
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { createPolicyWriteAuditor } from '../lib/policy-share-audit.ts';
-import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  KEY_NOTICES_UPDATED_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { upsertSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
@@ -235,6 +242,7 @@ module(basename(import.meta.filename), function (hooks) {
       await start({ dbAdapter: adapter, publisher, runner });
     },
     afterEach: async () => {
+      sinon.restore();
       resetOutbound();
       resetSecretsAtRest();
       await stop();
@@ -918,6 +926,29 @@ module(basename(import.meta.filename), function (hooks) {
           data: ids.map((id) => ({ type: 'key-policy-notice', id })),
         });
 
+    // The realm server tells the owner's session room each time it marks
+    // something read, so their other sessions clear the badge.
+    const OWNER_ROOM = '!owner-session-room:localhost';
+    try {
+      await upsertSessionRoom(dbAdapter, OWNER, OWNER_ROOM);
+    } catch {
+      await insertUser(dbAdapter, OWNER, 'cus_policy_audit_owner', null);
+      await upsertSessionRoom(dbAdapter, OWNER, OWNER_ROOM);
+    }
+    sinon.stub(MatrixClient.prototype, 'isLoggedIn').returns(true);
+    let sent = sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+    let pushes = () =>
+      sent
+        .getCalls()
+        .map((call) => call.args as [string, string, Record<string, any>])
+        .filter(
+          (args) =>
+            args[0] === OWNER_ROOM &&
+            args[2]?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE &&
+            JSON.parse(args[2].body).eventType ===
+              KEY_NOTICES_UPDATED_EVENT_TYPE,
+        ).length;
+
     let fromApp = await request
       .post('/_key-policy-notices/read')
       .set('Authorization', appSessionAuth(OWNER))
@@ -947,6 +978,7 @@ module(basename(import.meta.filename), function (hooks) {
       { marked: 1, unread: 0 },
       'only the owner’s own notice is marked',
     );
+    assert.strictEqual(pushes(), 1, 'marking read tells the owner’s sessions');
     assert.strictEqual(await unreadFor(OWNER), 0);
     assert.strictEqual(
       await unreadFor(OTHER_OWNER),
@@ -963,6 +995,11 @@ module(basename(import.meta.filename), function (hooks) {
       again.body.meta,
       { marked: 0, unread: 0 },
       'a notice is marked read once',
+    );
+    assert.strictEqual(
+      pushes(),
+      1,
+      'a mark that changes nothing sends nothing',
     );
   });
 

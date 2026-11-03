@@ -101,7 +101,7 @@ module('Acceptance | key notices badge', function (hooks) {
     await waitFor('[data-test-profile-icon-button]');
   }
 
-  test('unread notices put a dot on the avatar and a count beside API Keys, which opens the key page', async function (assert) {
+  test('unread notices put a count on the avatar and on API Keys, which opens the key page', async function (assert) {
     unread.count = 2;
     await visitApp();
     await waitFor('[data-test-profile-icon-key-notices-badge]');
@@ -111,18 +111,35 @@ module('Acceptance | key notices badge', function (hooks) {
     assert.strictEqual(
       avatarSpoken?.textContent?.trim(),
       '2 unseen key notices',
-      'the avatar says what the dot means',
+      'the avatar says what the count means',
     );
     assert
       .dom('[data-test-profile-icon-button]')
       .hasAttribute(
         'aria-describedby',
         avatarSpoken!.id,
-        'the avatar keeps its own name and is described by the dot',
+        'the avatar keeps its own name and is described by the count',
       );
     assert
       .dom('[data-test-profile-icon-button]')
       .doesNotHaveAttribute('aria-label');
+    let mark = document.querySelector(
+      '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-mark]',
+    )!;
+    assert.strictEqual(
+      mark.textContent?.trim(),
+      '2',
+      'the avatar shows the count',
+    );
+    // The badge wraps the avatar button and carries the top bar's stacking;
+    // a z-index on the button itself would draw the avatar over the count.
+    assert.strictEqual(
+      getComputedStyle(
+        document.querySelector('[data-test-profile-icon-button]')!,
+      ).zIndex,
+      'auto',
+      'the avatar takes no stacking of its own, so the count is drawn over it',
+    );
 
     await click('[data-test-profile-icon-button]');
     assert
@@ -151,6 +168,35 @@ module('Acceptance | key notices badge', function (hooks) {
     await click('[data-test-profile-icon-button]');
     assert.dom('[data-test-profile-api-keys-button]').hasText('API Keys');
     assert.dom('[data-test-profile-api-keys-badge]').doesNotExist();
+  });
+
+  test('once the key page has marked the notices read, both badges go away', async function (assert) {
+    unread.count = 2;
+    await visitApp();
+    await waitFor('[data-test-profile-icon-key-notices-badge]');
+
+    // The key page marks what it lists read, and the realm server tells the
+    // owner's sessions.
+    unread.count = 0;
+    mockMatrixUtils.simulateRemoteMessage(
+      'test-auth-realm-server-session-room',
+      '@realm-server:localhost',
+      {
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+        body: JSON.stringify({ eventType: KEY_NOTICES_UPDATED_EVENT_TYPE }),
+      },
+    );
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-profile-icon-key-notices-badge]'),
+    );
+    assert.dom('[data-test-pretui-badge-mark]').doesNotExist();
+    assert
+      .dom('[data-test-profile-icon-button]')
+      .doesNotHaveAttribute('aria-describedby');
+    await click('[data-test-profile-icon-button]');
+    assert.dom('[data-test-profile-api-keys-badge]').doesNotExist();
+    assert.dom('[data-test-pretui-badge-mark]').doesNotExist();
   });
 
   test('a notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {

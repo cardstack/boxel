@@ -551,11 +551,10 @@ export default class SubmodeLayout extends Component<Signature> {
               {{yield to='topBar'}}
             {{/if}}
 
-            {{! The dot says the user has key notices they haven't seen; the
-                profile menu's API Keys item carries the count. }}
+            {{! How many key notices the user hasn't seen, as the profile
+                menu's API Keys item shows too. }}
             <Badge
               class='profile-icon-badge'
-              @dot={{true}}
               @circular={{true}}
               @count={{this.keyNotices.unread}}
               @label='unseen key notices'
@@ -838,9 +837,10 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
-        z-index: var(--host-profile-z-index);
       }
-      /* The badge wraps the button, so it is the top bar's item. */
+      /* The badge wraps the button, so it is the top bar's item and carries
+         its stacking. The button takes none of its own, which would lift the
+         avatar over the badge's mark. */
       .profile-icon-badge {
         margin-left: auto;
         z-index: var(--host-profile-z-index);

@@ -119,9 +119,8 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         display: flex;
         margin-bottom: var(--boxel-sp);
       }
-      .api-keys-item :deep(button) {
-        width: 100%;
-        justify-content: flex-start;
+      .api-keys-button {
+        inline-size: 100%;
       }
       .daily-grant-note {
         flex-basis: 100%;
@@ -170,7 +169,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
         }}
       >
         <Button
-          @variant='outline'
+          class='api-keys-button'
+          @tone='neutral'
+          @appearance='outlined'
           {{on 'click' this.keyNotices.openKeys}}
           data-test-profile-api-keys-button
         >API Keys</Button>

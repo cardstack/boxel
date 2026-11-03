@@ -222,7 +222,7 @@ can't be recorded is logged on `realm:policy-share-audit` and costs the write
 nothing.
 
 Recording a notice sends `key-notices-updated` to the owner's session room,
-and the app shows a dot on the user's avatar and a count beside the profile
+and the app shows the count on the user's avatar and on the profile
 menu's API Keys item. The count is `meta.unread` on `GET /_key-policy-notices`:
 the notices among the newest 100 whose `read_at` is null. The key page marks
 the ones it lists read with `POST /_key-policy-notices/read`

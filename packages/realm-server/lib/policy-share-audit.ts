@@ -93,14 +93,15 @@ export function createPolicyWriteAuditor({
         policyPointerOf,
       }),
     notify: async (audit, savedBy) => {
-      let owners: Set<string>;
+      // Filled as each notice is recorded, so an owner whose notice was
+      // recorded before a later one failed is still told.
+      let owners = new Set<string>();
       try {
-        owners = await recordPolicyNotices(dbAdapter, audit, savedBy);
+        await recordPolicyNotices(dbAdapter, audit, savedBy, owners);
       } catch (err: unknown) {
         log.warn(
           `could not record the notices of a policy change that opens shares to people who aren't signed in: ${err instanceof Error ? err.message : String(err)}`,
         );
-        return;
       }
       if (!sendEvent) {
         return;
@@ -372,13 +373,13 @@ async function openedShares(
 // One notice per listed share, unless the owner's latest notice for that share
 // already says the same: a save confirmed again before the first one's index
 // pass lands is audited against the policy it replaced, and owes no second
-// notice. Answers the owners a notice was recorded for.
+// notice. Adds each owner a notice was recorded for to `owners` as it goes.
 async function recordPolicyNotices(
   dbAdapter: DBAdapter,
   audit: PolicyShareAudit,
   savedBy: string | null,
-): Promise<Set<string>> {
-  let owners = new Set<string>();
+  owners: Set<string>,
+): Promise<void> {
   for (let entry of audit.entries) {
     if (!entry.share) {
       continue;
@@ -414,7 +415,6 @@ async function recordPolicyNotices(
       owners.add(owner);
     }
   }
-  return owners;
 }
 
 export interface KeyPolicyNotice {
@@ -523,7 +523,8 @@ export async function markPolicyNoticesRead(
     `UPDATE key_policy_notices SET read_at = NOW() WHERE owner = `,
     param(owner),
     ` AND read_at IS NULL AND id IN (`,
-    ...separatedByCommas(ids.map((id) => [param(Number(id))])),
+    // Bound as text and cast, so an id past 2^53 isn't rounded on the way.
+    ...separatedByCommas(ids.map((id) => [param(id), '::bigint'])),
     `) RETURNING id`,
   ] as Expression)) as { id: unknown }[];
   return rows.length;
