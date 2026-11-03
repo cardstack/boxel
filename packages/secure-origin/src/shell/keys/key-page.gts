@@ -120,7 +120,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
             <KeyPolicyNotices
               @notices={{this.state.notices}}
               @keys={{this.state.keys}}
-              @onAllow={{this.startAnonymousUse}}
+              @onAllow={{this.startAllowingAnonymousUse}}
               @onDecline={{this.declineRequest}}
               @declining={{this.state.declining}}
             />
@@ -248,6 +248,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           class='panel'
                           novalidate
                           {{on 'submit' this.saveAnonymousUse}}
+                          data-anonymous-use-panel
                           data-test-key-anonymous-use-form
                         >
                           <AnonymousUseFields
@@ -713,7 +714,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       ? this.state.keys.find((candidate) => candidate.id === keyId)
       : undefined;
     if (key && servesVisitors(key)) {
-      this.startAnonymousUse(key);
+      this.startAllowingAnonymousUse(key);
     }
   }
 
@@ -731,6 +732,20 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       key.anonymousMonthlyCap == null ? '' : String(key.anonymousMonthlyCap);
     this.state.error = undefined;
     this.state.action = { name: 'anonymous-use', key };
+  };
+
+  // Opened to answer a workspace's request, the panel starts allowing it, so
+  // one Save finishes it and Cancel changes nothing.
+  // The panel opens beside the key, which can be far down the page from the
+  // request, so it is brought into view.
+  private startAllowingAnonymousUse = (key: ListedKey) => {
+    this.startAnonymousUse(key);
+    this.form.anonymous = true;
+    requestAnimationFrame(() =>
+      document
+        .querySelector('[data-anonymous-use-panel]')
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+    );
   };
 
   private toggleAnonymous = () => {
