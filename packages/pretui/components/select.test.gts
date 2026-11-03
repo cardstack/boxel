@@ -201,4 +201,16 @@ module('Pretui | components/select', function (hooks) {
     assert.strictEqual(chosen, 'oolong');
     assert.strictEqual(trigger().getAttribute('aria-label'), 'Tea: Oolong', 'the name follows the value');
   });
+
+  test("@display 'icon' with @labelledBy reads the label, then the value", async function (assert) {
+    await render(
+      <template>
+        <span id='tea-heading'>Tea</span>
+        <Select @options={{OPTIONS}} @labelledBy='tea-heading' @display='icon' @icon={{Globe}} @defaultValue='green' />
+      </template>,
+    );
+    let ids = (trigger().getAttribute('aria-labelledby') ?? '').split(' ');
+    assert.strictEqual(ids[0], 'tea-heading', "the caller's label is kept");
+    assert.strictEqual(document.getElementById(ids[1] ?? '')?.textContent, 'Green', 'then the current value');
+  });
 });

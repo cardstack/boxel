@@ -82,4 +82,15 @@ module('Pretui | components/search-input', function (hooks) {
     await render(<template><SearchInput @placeholder='Search tasks' /></template>);
     assert.strictEqual(input()?.getAttribute('aria-label'), 'Search tasks');
   });
+
+  test("@display 'collapsed' keeps @controlId on the toggle, so a label still names it", async function (assert) {
+    await render(
+      <template>
+        <label for='task-search'>Tasks</label>
+        <SearchInput @display='collapsed' @controlId='task-search' />
+      </template>,
+    );
+    assert.strictEqual(toggle()?.id, 'task-search');
+    assert.notOk(toggle()?.hasAttribute('aria-label'), 'the label, not an aria-label, names it');
+  });
 });

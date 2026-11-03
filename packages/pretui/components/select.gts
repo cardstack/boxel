@@ -2,6 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { guidFor } from '@ember/object/internals';
 import { consume } from 'ember-provide-consume-context';
 import { on } from '@ember/modifier';
 import SearchIcon from '@cardstack/boxel-icons/search';
@@ -283,14 +284,25 @@ export class Select extends Component<SelectSignature> {
   get iconFace(): SelectIcon | undefined {
     return this.args.display === 'icon' ? this.args.icon : undefined;
   }
+  get iconValue(): string {
+    return this.selectedOption?.label ?? this.args.placeholder ?? 'Select…';
+  }
   // with no visible value, the name and title say it: 'Region: Europe'
   get iconName(): string | undefined {
     if (!this.iconFace) {
       return undefined;
     }
-    let current =
-      this.selectedOption?.label ?? this.args.placeholder ?? 'Select…';
-    return this.args.label ? `${this.args.label}: ${current}` : current;
+    return this.args.label
+      ? `${this.args.label}: ${this.iconValue}`
+      : this.iconValue;
+  }
+  valueId = `${guidFor(this)}-value`;
+  // an icon face shows no value, so a caller's label is read with it
+  get iconLabelledBy(): string | undefined {
+    if (!this.iconFace || !this.args.labelledBy) {
+      return this.iconFace ? undefined : this.args.labelledBy;
+    }
+    return `${this.args.labelledBy} ${this.valueId}`;
   }
   get placeholder() {
     if (this.iconFace) {
@@ -334,6 +346,11 @@ export class Select extends Component<SelectSignature> {
       {{! no id here: BoxelSelect finds the trigger by its own id to copy the
           theme onto the wormhole. A label[for=@controlId] still names it,
           through the aria-labelledby that nameFromLabel sets. }}
+      {{#if this.iconLabelledBy}}
+        {{#if this.iconFace}}
+          <span id={{this.valueId}} hidden>{{this.iconValue}}</span>
+        {{/if}}
+      {{/if}}
       <PoweredSelect
         class='pretui-selecttrigger'
         @options={{this.options}}
@@ -348,7 +365,7 @@ export class Select extends Component<SelectSignature> {
         @dropdownClass='pretui-select-dropdown'
         @renderInPlace={{this.popupsInPlace}}
         @ariaLabel={{if this.iconFace this.iconName @label}}
-        @ariaLabelledBy={{unless this.iconFace @labelledBy}}
+        @ariaLabelledBy={{this.iconLabelledBy}}
         @selectedItemComponent={{if
           this.iconFace
           (component SelectIconFace icon=this.iconFace)

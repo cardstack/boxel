@@ -210,7 +210,8 @@ export class SearchInput extends Component<SearchInputSignature> {
           <button
             type='button'
             class='pretui-searchtoggle'
-            aria-label={{this.collapsedName}}
+            id={{@controlId}}
+            aria-label={{unless @controlId this.collapsedName}}
             title={{this.collapsedName}}
             disabled={{this.disabled}}
             data-pretui-search-toggle
