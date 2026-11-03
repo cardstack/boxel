@@ -2916,9 +2916,9 @@ function currentTurnHumanMessages(
 // A file attached to more than one of the turn's messages (the host attaches
 // the file open in code mode to every message) is sent once, as its newest
 // attachment, which history already tells the model supersedes the others.
-// The same rule spans the turn's tool results, which all come after its
-// messages: a file one of them already sends (viewAttachment attaches a
-// user's file again) is neither sent again here nor named as left out.
+// A file a tool result of the turn attaches again (viewAttachment) is sent
+// once too, but that is settled at download time (see
+// buildCurrentTurnMediaParts), once it is known which copy arrived.
 export function currentTurnMessageMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -2928,9 +2928,7 @@ export function currentTurnMessageMedia(
   let messages = currentTurnHumanMessages(history, aiBotUserId);
   let included: SerializedFileDef[] = [];
   let omitted: CurrentTurnMedia['omitted'] = [];
-  let newerAttachments = new Set<string>(
-    toolResultMedia.included.map((file) => file.sourceUrl || file.url!),
-  );
+  let newerAttachments = new Set<string>();
   let totalBytes = toolResultMedia.included.reduce(
     (sum, file) => sum + (file.contentSize ?? 0),
     0,
@@ -2943,7 +2941,7 @@ export function currentTurnMessageMedia(
       .filter((file) => file.url && requiredModality(file.contentType))
       .map(toFileDefMetadata);
     for (let file of mediaFiles.reverse()) {
-      let identity = file.sourceUrl || file.url!;
+      let identity = mediaIdentity(file);
       if (newerAttachments.has(identity)) {
         continue;
       }
@@ -3120,6 +3118,11 @@ function toolResultMediaDownloadUrl(
 // anyway (it carries the current time), so the current media can ride there
 // without touching a single history byte; history lists the same files as
 // stable metadata (see buildAttachmentsMessagePart).
+// A file both a message and a tool result attach (viewAttachment attaches a
+// user's file again) rides once. Message media download first, so the
+// message's copy is the one sent whenever it arrives, and a tool result's
+// copy fills in only for a message copy that was left out or failed to
+// download. A file the request carries is never named as left out.
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
   messageMedia: CurrentTurnMedia = { included: [], omitted: [] },
@@ -3142,8 +3145,13 @@ export const buildCurrentTurnMediaParts = async (
   // The bytes tool-result media actually downloaded this turn; declared
   // sizes chose the files, but the budget holds on what arrives.
   let toolResultBytes = 0;
+  // The files whose bytes this request carries, by mediaIdentity.
+  let carried = new Set<string>();
   for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
+      continue;
+    }
+    if (fromToolResult && carried.has(mediaIdentity(f))) {
       continue;
     }
     let downloadUrl = f.url;
@@ -3244,6 +3252,7 @@ export const buildCurrentTurnMediaParts = async (
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
     if (mediaParts.length > partCountBefore) {
+      carried.add(mediaIdentity(f));
       mediaParts.splice(partCountBefore, 0, {
         type: 'text',
         text: `${fromToolResult ? 'Attached to a tool result' : 'Attached to a user message'}: ${mediaFileLabel(f)}`,
@@ -3264,8 +3273,11 @@ export const buildCurrentTurnMediaParts = async (
       `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
     );
   }
-  if (messageMedia.omitted.length > 0) {
-    let fileList = messageMedia.omitted
+  let messageOmitted = messageMedia.omitted.filter(
+    ({ file }) => !carried.has(mediaIdentity(file)),
+  );
+  if (messageOmitted.length > 0) {
+    let fileList = messageOmitted
       .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
       .join('; ');
     notes.push(
@@ -3292,6 +3304,12 @@ function base64DataUrlByteLength(dataUrl: string): number {
   let base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
   let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
   return (base64.length * 3) / 4 - padding;
+}
+
+// Which file a media attachment is, across the messages and tool results of
+// a turn: its source URL, or its stored URL when it has none.
+function mediaIdentity(file: SerializedFileDef): string {
+  return file.sourceUrl || file.url!;
 }
 
 function mediaFileLabel(file: SerializedFileDef): string {

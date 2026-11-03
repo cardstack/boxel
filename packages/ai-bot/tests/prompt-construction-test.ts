@@ -9609,6 +9609,38 @@ ${patchedFileSource}
       assert.deepEqual(imageUrls(prompt), [dataUrlOf(photo)]);
     });
 
+    test("a file the last message carries still reaches the model when the tool result's copy can't be sent", async () => {
+      // Declared small, but the stored bytes are over the tool-result
+      // per-file limit, which the message's own copy isn't held to.
+      let photo = jpg('understated.jpg');
+      let bytes = 'x'.repeat(MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1);
+      mockResponses.set(photo.url, { ok: true, text: bytes });
+      let history = [
+        userMessage('1', 1, 'What is in this photo?', [photo]),
+        viewRequest('2', 2, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('3', 3, history, '2', 'view-1', [photo.sourceUrl]),
+      );
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(imageUrls(prompt), [
+        `data:image/jpeg;base64,${Buffer.from(bytes).toString('base64')}`,
+      ]);
+      let parts = trailingParts(prompt);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        `Attached to a user message: understated.jpg (${photo.sourceUrl})`,
+        "the message's copy is the one sent",
+      );
+      assert.notOk(
+        textOf(prompt[prompt.length - 1]).includes('were not sent'),
+        'no note names the file as left out',
+      );
+    });
+
     test("viewed attachments share the turn's tool-result media budget", async () => {
       let photos = ['a', 'b', 'c', 'd', 'e'].map((letter) =>
         jpg(`${letter}.jpg`, 3.5 * 1024 * 1024),
