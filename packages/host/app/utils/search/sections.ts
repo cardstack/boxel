@@ -175,7 +175,11 @@ export function buildQuerySections(
     isSearchKeyEmpty: boolean;
     hasBaseFilter: boolean;
     realmURLs: string[];
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL?: URL | undefined;
+    };
     realm: RealmInfoLookup;
     // Each realm's full match count; the rows handed in are only its first page.
     realmTotals?: Record<string, number>;
@@ -231,9 +235,10 @@ export function buildQuerySections(
 
   // The workspace of the card being edited comes first, so its "Create New"
   // is the one the eye lands on.
-  let relativeTo = opts.offerToCreate?.relativeTo?.href;
-  let current = relativeTo
-    ? sections.find((section) => relativeTo!.startsWith(section.realmUrl))
+  let inCurrent =
+    opts.offerToCreate?.realmURL?.href ?? opts.offerToCreate?.relativeTo?.href;
+  let current = inCurrent
+    ? sections.find((section) => inCurrent!.startsWith(section.realmUrl))
     : undefined;
   if (current) {
     current.isCurrent = true;

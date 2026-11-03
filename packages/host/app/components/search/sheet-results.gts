@@ -75,7 +75,11 @@ interface Signature {
     // suppressed rather than offered.
     realmsLocked?: boolean;
     baseFilter?: Filter;
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: {
+      ref: CodeRef;
+      relativeTo: URL | undefined;
+      realmURL?: URL | undefined;
+    };
     // The main search's query, which a realm section re-issues scoped to its
     // own realm to load rows past the first page.
     pageQuery?: SearchEntryWireQuery;

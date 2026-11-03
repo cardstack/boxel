@@ -63,6 +63,8 @@ type Request = {
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
+      // The workspace of the card the new card is for.
+      realmURL?: URL | undefined;
     };
     createNewCard?: CreateNewCard;
   };
