@@ -274,7 +274,8 @@ async function resolveMatrixUser(
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    return isUserOfMatrixServer(name, deps.matrixClient.serverName)
+    return /^@[^:\s]+:\S+$/.test(name) &&
+      isUserOfMatrixServer(name, deps.matrixClient.serverName)
       ? name
       : undefined;
   }
