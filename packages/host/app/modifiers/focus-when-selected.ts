@@ -22,11 +22,28 @@ function focusIsAvailable(): boolean {
   );
 }
 
+// Less than half of it shows within the window and every scroller around it,
+// so a sliver at an edge still counts as off screen.
+function isOffScreen(element: HTMLElement): boolean {
+  let { top, bottom, height } = element.getBoundingClientRect();
+  let shownTop = Math.max(top, 0);
+  let shownBottom = Math.min(bottom, window.innerHeight);
+  for (let el = element.parentElement; el; el = el.parentElement) {
+    if (getComputedStyle(el).overflowY !== 'visible') {
+      let clip = el.getBoundingClientRect();
+      shownTop = Math.max(shownTop, clip.top);
+      shownBottom = Math.min(shownBottom, clip.bottom);
+    }
+  }
+  return shownBottom - shownTop < height / 2;
+}
+
 // Focuses the item the keyboard cursor moves to. When an arrow key moved it
 // there, the item is also scrolled into view, so the walk down the page stays
 // visible. The item the list opens on is scrolled into view too, unless
-// `scrollOnOpen='never'`: then the page opens at its top, wherever the item
-// sits.
+// `scrollOnOpen='never'`: then the page opens at its top, and the item takes
+// focus only if it is in view, since focus out of sight would hand Enter to
+// an item nobody can see.
 export default modifier(
   (
     element: HTMLElement,
@@ -42,6 +59,9 @@ export default modifier(
       focusIsAvailable()
     ) {
       let fromItem = !!document.activeElement?.closest('[data-nav-index]');
+      if (!fromItem && scrollOnOpen === 'never' && isOffScreen(element)) {
+        return;
+      }
       element.focus({ preventScroll: true });
       if (fromItem || scrollOnOpen === 'always') {
         element.scrollIntoView({ block: 'nearest' });

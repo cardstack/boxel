@@ -92,12 +92,14 @@ export default class Dashboard extends Component<Signature> {
   @service declare private realm: RealmService;
 
   // The workspace the dashboard opened over, read once: the cursor starts on
-  // it, so Enter goes straight back to where the user was.
+  // it, so Enter goes straight back to where the user was. With nothing open
+  // there is none, rather than a default workspace the user may never have
+  // opened.
   private returnRealmURL = this.readReturnRealmURL();
 
   private readReturnRealmURL(): string | undefined {
     try {
-      return this.operatorModeStateService.realmURL || undefined;
+      return this.operatorModeStateService.openRealmURL || undefined;
     } catch {
       return undefined;
     }
@@ -492,8 +494,8 @@ export default class Dashboard extends Component<Signature> {
 
   // The workspace the dashboard opened over, otherwise the first favorite or
   // workspace, even when the catalogs lead the page. The cursor takes focus on
-  // open, so it never starts on New Workspace while anything else is shown:
-  // the first Enter would create a workspace.
+  // open when it is in view, so it never starts on New Workspace while
+  // anything else is shown: the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
