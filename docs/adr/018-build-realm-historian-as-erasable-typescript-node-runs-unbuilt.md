@@ -36,7 +36,11 @@ tests run the same way, and its container image copies the sources.
 
 The package MUST NOT depend on `packages/realm-server`, `packages/host` or
 `packages/base`. It SHOULD depend only on `@cardstack/postgres`,
-`@cardstack/runtime-common` and the `git` executable.
+`@cardstack/runtime-common` and the `git` executable. `@cardstack/runtime-common`
+brings its own dependencies, UI packages among them; the package SHOULD
+import from it only modules that run under Node with no browser or Ember
+runtime, such as the database, expression, logging and realm-history
+modules.
 
 ### 1.3. Lint
 
@@ -81,10 +85,13 @@ That is cheap at the one place it has to happen, the change that adds the
 import, and expensive anywhere else: a missed filter does not fail, it skips.
 
 A separate package, rather than a directory in `packages/realm-server` as the
-worker is, keeps the dependency set explicit. The worker runs realm code and
-needs everything the realm server needs. realm-historian needs Postgres, a
-POSIX file system and git, and it is the only writer and the only reader of
-the repo format, so one package can own both sides of that format.
+worker is, keeps the package's direct dependencies explicit in its own
+`package.json`. The worker runs realm code and needs everything the realm
+server needs. realm-historian needs Postgres, a POSIX file system and git,
+and it is the only writer and the only reader of the repo format, so one
+package can own both sides of that format. What it shares with the realm
+server, the journal and repo-format types, lives in `@cardstack/runtime-common`,
+whose transitive dependencies the package carries without loading them.
 
 ## 3. Considered options
 
