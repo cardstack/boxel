@@ -665,6 +665,11 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-key-anonymous-use-form]')
         .exists('allowing it opens the key’s own setting');
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked('already set to allow it, so one Save finishes it');
     });
 
     test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
@@ -757,6 +762,11 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-key-anonymous-use-form]');
       assert.dom('[data-test-key-policy-requests]').doesNotExist();
       assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked();
     });
 
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
