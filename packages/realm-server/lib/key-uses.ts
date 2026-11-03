@@ -194,7 +194,6 @@ export async function recordFillRefusal(
 // refused a request with a 403 (`lastForbiddenAt`).
 export interface UsageGrant {
   id: string;
-  host: string;
   destination: string;
   state: 'active' | 'rejected';
   rejectedAt: string | null;
@@ -394,11 +393,9 @@ function topCallersOf(
 }
 
 function grantOf(row: Record<string, unknown>): UsageGrant {
-  let destination = row.destination as string;
   return {
     id: row.id as string,
-    host: hostOf(destination) ?? destination,
-    destination,
+    destination: row.destination as string,
     state: row.state === 'rejected' ? 'rejected' : 'active',
     rejectedAt: iso(row.rejected_at),
     lastForbiddenAt: iso(row.last_forbidden_at),

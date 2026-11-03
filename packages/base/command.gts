@@ -339,11 +339,10 @@ export class KeyUsageCountField extends FieldDef {
   @field withheld = contains(BooleanField);
 }
 
-// Where a share's key is sent by the realm's operations: the destination's
-// `host`, and whether the service there rejected the key (`state` is
+// Where a share's key is sent by the realm's operations: the `destination`
+// (one per grant, so a host can appear under several paths), and whether the service there rejected the key (`state` is
 // `rejected`, since `rejectedAt`) or last refused a request (`lastForbiddenAt`).
 export class KeyUsageGrantField extends FieldDef {
-  @field host = contains(StringField);
   @field destination = contains(StringField);
   @field state = contains(StringField);
   @field rejectedAt = contains(StringField);

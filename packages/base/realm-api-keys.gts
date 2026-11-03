@@ -132,6 +132,16 @@ function shortDate(iso: string | undefined): string {
     : '';
 }
 
+// A destination as the key pages name it: its host and path, the prefix a
+// request must start with to be sent the key.
+function hostAndPath(destination: string | undefined): string {
+  if (!destination) {
+    return '';
+  }
+  let url = new URL(destination);
+  return `${url.host}${url.pathname}`;
+}
+
 function callerText(caller: string | undefined, withheld?: boolean): string {
   if (withheld) {
     return 'Others';
@@ -464,15 +474,24 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
                 </div>
               {{/if}}
               {{#if this.usage.grants.length}}
-                <div class='group' data-test-realm-key-share-grants>
+                <div
+                  class='group destinations'
+                  data-test-realm-key-share-grants
+                >
                   <h3 class='group-title'>Sent to</h3>
                   <ul class='counts'>
                     {{#each this.usage.grants as |grant|}}
+                      {{! A key has a grant per destination, and several can
+                          share a host, so each is named by its host and path. }}
                       <li
-                        data-test-realm-key-share-grant={{grant.host}}
+                        data-test-realm-key-share-grant={{hostAndPath
+                          grant.destination
+                        }}
                         data-test-realm-key-share-grant-state={{grant.state}}
                       >
-                        <span class='name host'>{{grant.host}}</span>
+                        <span class='name host'>{{hostAndPath
+                            grant.destination
+                          }}</span>
                         {{#if (eq grant.state 'rejected')}}
                           <Chip @tone='danger' @label='Rejected' />
                         {{else if grant.lastForbiddenAt}}
@@ -602,6 +621,16 @@ class ShareUsage extends GlimmerComponent<ShareUsageSignature> {
       }
       .host {
         font-family: var(--font-mono);
+      }
+      /* A destination's host and path is longer than a count's name, so its
+         list takes the whole width, and each flag follows its destination
+         rather than sitting at the far edge. */
+      .destinations {
+        grid-column: 1 / -1;
+      }
+      .destinations li {
+        justify-content: flex-start;
+        flex-wrap: wrap;
       }
       .flag {
         flex-shrink: 0;

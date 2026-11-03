@@ -94,7 +94,6 @@ function usage(overrides: Record<string, unknown> = {}) {
     grants: [
       {
         id: 'grant-1',
-        host: 'api.openweathermap.org',
         destination: 'https://api.openweathermap.org/data/',
         state: 'rejected',
         rejectedAt: '2026-11-01T08:00:00.000Z',
@@ -318,7 +317,6 @@ module('Integration | key usage and limits', function (hooks) {
               grants: [
                 {
                   id: 'grant-1',
-                  host: 'api.openweathermap.org',
                   destination: 'https://api.openweathermap.org/data/2.5/',
                   state: 'active',
                   rejectedAt: null,
@@ -326,7 +324,6 @@ module('Integration | key usage and limits', function (hooks) {
                 },
                 {
                   id: 'grant-2',
-                  host: 'api.openweathermap.org',
                   destination: 'https://api.openweathermap.org/geo/1.0/',
                   state: 'rejected',
                   rejectedAt: '2026-11-01T08:00:00.000Z',
