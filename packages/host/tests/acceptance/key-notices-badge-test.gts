@@ -21,6 +21,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
+  getRealmServerRoute,
   registerRealmServerRoute,
   unregisterRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
@@ -44,6 +45,10 @@ function stubNotices(unread: Unread) {
     [POLICY_NOTICES_PATH, () => unread.policy],
     [LIMIT_NOTICES_PATH, () => unread.limit],
   ];
+  // The mock's own listings, put back when the test is done.
+  let standing = listings.map(([path]) =>
+    getRealmServerRoute(new URL(path, 'http://mock/')),
+  );
   for (let [path, count] of listings) {
     registerRealmServerRoute({
       path,
@@ -67,9 +72,14 @@ function stubNotices(unread: Unread) {
       return reads;
     },
     restore: () => {
-      for (let [path] of listings) {
-        unregisterRealmServerRoute(path);
-      }
+      listings.forEach(([path], index) => {
+        let route = standing[index];
+        if (route) {
+          registerRealmServerRoute(route);
+        } else {
+          unregisterRealmServerRoute(path);
+        }
+      });
     },
   };
 }
