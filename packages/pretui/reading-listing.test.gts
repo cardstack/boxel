@@ -415,6 +415,41 @@ module('Pretui | reading-listing', function (hooks) {
     );
   });
 
+  // ── DataTable: @flush ─────────────────────────────────────────────────
+
+  test('@flush marks the table root so its own frame can drop', async function (assert) {
+    await render(
+      <template>
+        <DataTable
+          data-test-flush-table
+          @columns={{COLUMNS}}
+          @rows={{LOTS}}
+          @key={{rowKey}}
+          @flush={{true}}
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-flush-table]')
+      .hasAttribute('data-flush', 'true', 'flush is advertised on the root');
+  });
+
+  test('a table is framed by default (no data-flush)', async function (assert) {
+    await render(
+      <template>
+        <DataTable
+          data-test-framed-table
+          @columns={{COLUMNS}}
+          @rows={{LOTS}}
+          @key={{rowKey}}
+        />
+      </template>,
+    );
+    assert
+      .dom('[data-test-framed-table]')
+      .doesNotHaveAttribute('data-flush', 'default keeps the frame');
+  });
+
   // ── DataTable: column visibility ──────────────────────────────────────
 
   test('column visibility is controlled, and alwaysVisible columns cannot leave', async function (assert) {
