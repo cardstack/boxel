@@ -2874,9 +2874,11 @@ export class Realm {
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #directoryViewRefresher = new DirectoryViewRefresher(
     async (directory) => {
-      for await (let _entry of this.#adapter.readdir(directory)) {
-        // draining the listing is the whole effect; the entries are not used
+      let names: string[] = [];
+      for await (let entry of this.#adapter.readdir(directory)) {
+        names.push(entry.name);
       }
+      return names;
     },
     { exists: (path) => this.#adapter.exists(path) },
   );
