@@ -566,6 +566,10 @@ export async function handleStreamingRequest(
   }: { credential: OutboundCredential; scrubber: CredentialScrubber },
 ): Promise<StreamUsage | undefined> {
   let usage: StreamUsage | undefined;
+  // Read from the stream as it passes, and kept outside the `try` so a body
+  // refused partway can still be charged for the generation that began.
+  let generationId: string | undefined;
+  let costInUsd: number | undefined;
   try {
     setupSSEHeaders(ctxt);
 
@@ -600,8 +604,6 @@ export async function handleStreamingRequest(
     const reader = externalResponse.body?.getReader();
     if (!reader) throw new Error('No readable stream available');
 
-    let generationId: string | undefined;
-    let costInUsd: number | undefined;
     let lastPing = Date.now();
 
     await proxySSE(
@@ -672,6 +674,18 @@ export async function handleStreamingRequest(
       }
       ctxt.res.write(`data: ${JSON.stringify({ error: failure.message })}\n\n`);
       ctxt.res.write('data: [DONE]\n\n');
+      // A stream that passes the size cap has already delivered everything
+      // up to it, so a generation that began is charged, priced by its id
+      // when the usage never arrived, as the non-streamed path does.
+      if (
+        error instanceof OutboundResponseTooLargeError &&
+        generationId != null
+      ) {
+        log.warn(
+          `Streamed response passed the size cap after generation ${generationId} began; charging for the generation`,
+        );
+        return { id: generationId, usage: { cost: costInUsd } };
+      }
       return undefined;
     }
     log.error(

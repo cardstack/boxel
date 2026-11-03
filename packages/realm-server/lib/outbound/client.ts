@@ -880,10 +880,12 @@ function leavesOrigin(location: string, current: URL): boolean {
 //
 // A body whose declared length is over the cap is refused before any of it
 // is read: the body is cancelled and `OutboundResponseTooLargeError` thrown.
-// With compression the declared length is the compressed size, which exceeds
-// the decompressed body by a few bytes of framing at most, so a body refused
-// on it would have passed the cap while streaming too. A body whose count
-// passes the cap while streaming ends there: the
+// With compression the declared length is the compressed size. For any body
+// that compresses at all that is smaller than the decompressed body, so the
+// stream count is the binding check. An incompressible body grows by about
+// 0.03% under deflate (some 20 KiB at 64 MiB), so one just under the cap can be
+// refused on its declared length, a margin far below the headroom the caps
+// leave. A body whose count passes the cap while streaming ends there: the
 // chunk that passed it is dropped, the upstream read cancelled, and the
 // stream errors with `OutboundResponseTooLargeError`, so a reader gets an
 // error, never a body cut short at the cap. A response with no body (a HEAD,

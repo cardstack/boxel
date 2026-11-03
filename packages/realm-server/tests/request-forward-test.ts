@@ -2477,6 +2477,58 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test('a streamed response that passes the cap ends with an error frame and is charged for the generation', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 64 * 1024, 'call-api': 64 * 1024 },
+        });
+        let lookups = stubGenerationCost(0.003);
+        try {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/respond`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+                chunks: [
+                  'data: {"id":"gen-stream-cap","choices":[{"delta":{"content":"Hi"}}]}\n\n',
+                  `data: {"choices":[{"delta":{"content":"${'x'.repeat(96 * 1024)}"}}]}\n\n`,
+                  'data: {"usage":{"cost":0.004}}\n\n',
+                  'data: [DONE]\n\n',
+                ],
+              }),
+              stream: true,
+            });
+
+          assert.true(
+            response.text.includes('gen-stream-cap'),
+            'the caller has the stream up to the cap',
+          );
+          assert.true(
+            response.text.includes('Response too large'),
+            `the stream ends with the refusal: ${response.text.slice(-200)}`,
+          );
+          assert.true(response.text.trimEnd().endsWith('data: [DONE]'));
+          // The usage past the cap is never read; the generation is priced
+          // by its id. 0.003 USD × 1000 = 3 credits.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeoutMessage:
+              'the generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-stream-cap']);
+          await waitUntil(async () => (await inFlightReservations()) === 0, {
+            timeoutMessage: 'the slot should be given back',
+          });
+        } finally {
+          sinon.restore();
+        }
+      });
+
       test('a charged call whose caller stops reading without leaving is given up on, read to its end and charged', async function (assert) {
         configureClientStall(500);
         // Any generation lookup would mean the usage at the end was never
