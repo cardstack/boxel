@@ -2744,6 +2744,149 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    module('a file that reads as missing', function () {
+      const notesURL = `${testRealm}notes.txt`;
+
+      async function indexFileRow(url: string, isDeleted: boolean) {
+        await adapter.execute(
+          `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, is_deleted)
+           VALUES ($1, $1, $2, 'file', 1, $3)`,
+          { bind: [url, testRealm, isDeleted] },
+        );
+      }
+
+      // Reads of `url` come back missing `misses` times before the file is
+      // served, the way a realm-server instance with a stale view of the
+      // directory answers until its view catches up.
+      function readerMissing(url: string, misses: number) {
+        let reads = 0;
+        let reader: Reader = {
+          async readFile(fileURL: URL) {
+            if (fileURL.href !== url) {
+              return undefined;
+            }
+            reads++;
+            if (reads <= misses) {
+              return undefined;
+            }
+            return { content: 'plain text', lastModified: 0, path: url };
+          },
+          async readStream() {
+            return undefined;
+          },
+          async mtimes() {
+            return {};
+          },
+        };
+        return { reader, reads: () => reads };
+      }
+
+      const fileRenderingPrerenderer: Prerenderer = {
+        async prerenderVisit() {
+          return {
+            fileRender: {
+              isolatedHTML: '<pre>notes</pre>',
+              headHTML: null,
+              atomHTML: null,
+              embeddedHTML: null,
+              fittedHTML: null,
+              iconHTML: null,
+              markdown: null,
+            },
+          };
+        },
+        async prerenderModule() {
+          throw new Error('not used by the prerender-html pass');
+        },
+        async runCommand() {
+          throw new Error('not used by the prerender-html pass');
+        },
+      };
+
+      function passArgs(reader: Reader, rereadDelaysMs: number[]): PassAtArgs {
+        return {
+          realmURL: new URL(testRealm),
+          changes: [{ url: notesURL, operation: 'update' }],
+          generation: 2,
+          loaderEpoch: 'epoch-a',
+          spawningJobId: null,
+          ...noPreWarmDeps,
+          indexWriter,
+          virtualNetwork,
+          reader,
+          prerenderer: fileRenderingPrerenderer,
+          auth: 'test-auth',
+          jobInfo: jobInfo(),
+          writtenFileRereadDelaysMs: rereadDelaysMs,
+        };
+      }
+
+      // The record the realm keeps of a file it holds, which it removes when
+      // it removes the file.
+      async function realmRecordsFile(localPath: string) {
+        await adapter.execute(
+          `INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES ($1, $2, 1)`,
+          { bind: [testRealm, localPath] },
+        );
+      }
+
+      test('is re-read and rendered when the committed index holds it', async function (assert) {
+        await indexFileRow(notesURL, false);
+        await realmRecordsFile('notes.txt');
+        // The visit reads the file under both of its URL forms before it
+        // gives up, so two misses are one failed attempt.
+        let { reader, reads } = readerMissing(notesURL, 2);
+
+        await runPassAt(passArgs(reader, [5, 5, 5]));
+
+        let row = await productionRow(notesURL, 'file');
+        assert.strictEqual(
+          row?.isolated_html,
+          '<pre>notes</pre>',
+          'the file the index pass read gets its HTML',
+        );
+        assert.false(Boolean(row?.is_deleted));
+        assert.strictEqual(reads(), 3, 'the file was read again once');
+      });
+
+      test('is taken as removed at once when the realm no longer records it', async function (assert) {
+        // The index still holds the file, but the realm removed it after the
+        // index pass committed.
+        await indexFileRow(notesURL, false);
+        let { reader, reads } = readerMissing(notesURL, Infinity);
+        let start = Date.now();
+
+        // Any re-read would hold the pass for a minute.
+        await runPassAt(passArgs(reader, [60_000]));
+
+        assert.true(
+          Date.now() - start < 30_000,
+          'the pass finishes without sleeping through a re-read delay',
+        );
+        assert.strictEqual(reads(), 2, 'one attempt, under both URL forms');
+      });
+
+      test('is taken as removed at once when the index holds it as a tombstone', async function (assert) {
+        // A card delete that names the extensionless URL tombstones the
+        // `.json` row while the fan-out still carries that form as an update.
+        await indexFileRow(notesURL, true);
+        let { reader, reads } = readerMissing(notesURL, Infinity);
+        let start = Date.now();
+
+        // Any re-read would hold the pass for a minute.
+        await runPassAt(passArgs(reader, [60_000]));
+
+        assert.true(
+          Date.now() - start < 30_000,
+          'the pass finishes without sleeping through a re-read delay',
+        );
+        assert.strictEqual(reads(), 2, 'one attempt, under both URL forms');
+        let row = await productionRow(notesURL, 'file');
+        let live = Boolean(row) && !row?.is_deleted;
+        assert.false(live, 'the file gets no live rendering');
+      });
+    });
+
     // The scope a render is keyed to decides which resident instances a
     // prerender tab may reuse. An index pass and the prerender_html job it
     // spawns render one view of the same realm from two queue jobs, so keying

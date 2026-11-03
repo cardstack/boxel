@@ -813,6 +813,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   queuePublisher,
   createPrerenderAuth,
   reportRealmEvent,
+  writtenFileRereadDelaysMs,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, changes, realmURL } = args;
@@ -926,6 +927,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       prerenderer,
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
+      ...(writtenFileRereadDelaysMs ? { writtenFileRereadDelaysMs } : {}),
     });
     let {
       stats,

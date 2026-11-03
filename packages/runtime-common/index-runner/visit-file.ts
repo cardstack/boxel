@@ -25,6 +25,7 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import type { WrittenFileRereads } from './written-file-rereads.ts';
 
 interface RenderFileForIndexingOptions {
   url: URL;
@@ -51,9 +52,15 @@ interface RenderFileForIndexingOptions {
   // re-reads after peer commits moved the realm (see `renderScopeFor`).
   renderScopeRound: number;
   prerenderer: Prerenderer;
+  // Present when the pass was asked to index this file because the realm
+  // wrote it: a read that finds no file is then retried through the pass's
+  // re-read window, for as long as the realm still records the file, before
+  // the visit reports the file gone.
+  writtenFileRereads?: WrittenFileRereads;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
+  logInfo(message: string): void;
   logWarn(message: string): void;
 }
 
@@ -143,9 +150,11 @@ export async function renderFileForIndexing({
   batchId,
   renderScopeRound,
   prerenderer,
+  writtenFileRereads,
   consumeClearCacheForRender,
   consumeResetStoreForRender,
   logDebug,
+  logInfo,
   logWarn,
 }: RenderFileForIndexingOptions): Promise<IndexVisitRenderResult | undefined> {
   if (isIgnored(realmURL, ignoreMap, url)) {
@@ -164,9 +173,29 @@ export async function renderFileForIndexing({
     return undefined;
   }
 
-  let fileRef = await reader.readFile(url);
-  if (!fileRef) {
-    fileRef = await reader.readFile(new URL(encodeURI(localPath), url));
+  let readFile = async () =>
+    (await reader.readFile(url)) ??
+    (await reader.readFile(new URL(encodeURI(localPath), url)));
+  let fileRef = await readFile();
+  if (!fileRef && writtenFileRereads) {
+    let { value, rereads, waitedMs, removed } = await writtenFileRereads.reread(
+      readFile,
+      () => batch.realmRecordsFile(localPath),
+    );
+    fileRef = value;
+    if (fileRef) {
+      logInfo(
+        `${jobIdentity(jobInfo)} read written file ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
+      );
+    } else if (removed) {
+      logInfo(
+        `${jobIdentity(jobInfo)} written file ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
+      );
+    } else {
+      logWarn(
+        `${jobIdentity(jobInfo)} written file ${url.href} still reads as missing after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
+      );
+    }
   }
   if (!fileRef) {
     let error = new CardError(`missing file ${url.href}`, { status: 404 });

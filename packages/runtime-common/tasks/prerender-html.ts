@@ -373,6 +373,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   virtualNetwork,
   createPrerenderAuth,
   mediaCacheAdapter,
+  writtenFileRereadDelaysMs,
 }) =>
   async function (args) {
     let {
@@ -449,6 +450,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       // MediaCache configured still renders HTML, it just captures nothing.
       dbAdapter,
       mediaCacheAdapter,
+      ...(writtenFileRereadDelaysMs ? { writtenFileRereadDelaysMs } : {}),
     });
     let { invalidations, stats } = pass;
 

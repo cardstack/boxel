@@ -62,6 +62,10 @@ import {
 } from './index-runner/visit-file.ts';
 import { performCardIndexing } from './index-runner/card-indexer.ts';
 import { performFileIndexing } from './index-runner/file-indexer.ts';
+import {
+  WRITTEN_FILE_REREAD_DELAYS_MS,
+  WrittenFileRereads,
+} from './index-runner/written-file-rereads.ts';
 
 // The result of a prefetched render, with any thrown error captured rather
 // than rejected so an un-awaited prefetch can't surface as an unhandled
@@ -252,6 +256,14 @@ export class IndexRunner {
   // jobInfo is known so the id is easy to correlate with a job in logs.
   #batchId!: string;
   #idleRenderTimeoutAbortAfter: number;
+  #writtenFileRereadDelaysMs: readonly number[];
+  // The files an incremental pass was asked to index because the realm wrote
+  // them, and the re-read window they share (see WrittenFileRereads). Fan-out
+  // dependents are not in the set: a dependent that reads as missing was
+  // removed, and visiting it as gone right away is what a removal needs.
+  #writtenFiles:
+    | { hrefs: Set<string>; rereads: WrittenFileRereads }
+    | undefined;
 
   constructor({
     realmURL,
@@ -271,6 +283,7 @@ export class IndexRunner {
     fetch,
     realmOwnerUserId,
     idleRenderTimeoutAbortAfter = IDLE_RENDER_TIMEOUT_ABORT_AFTER,
+    writtenFileRereadDelaysMs = WRITTEN_FILE_REREAD_DELAYS_MS,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -285,6 +298,9 @@ export class IndexRunner {
     // Consecutive idle render timeouts after which a from-scratch pass gives
     // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
     idleRenderTimeoutAbortAfter?: number;
+    // The delays an incremental pass re-reads a written file through when it
+    // reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
+    writtenFileRereadDelaysMs?: readonly number[];
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
     // `jobPriority` wins — this is the path the worker handler takes
@@ -332,6 +348,7 @@ export class IndexRunner {
     this.#fetch = fetch;
     this.#realmOwnerUserId = realmOwnerUserId;
     this.#idleRenderTimeoutAbortAfter = idleRenderTimeoutAbortAfter;
+    this.#writtenFileRereadDelaysMs = writtenFileRereadDelaysMs;
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
@@ -359,6 +376,9 @@ export class IndexRunner {
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
     current.#dependencyResolver.reset();
+    // A from-scratch pass visits what the realm lists, not files a write
+    // named, so a miss in it is a file that is gone.
+    current.#writtenFiles = undefined;
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
     // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
@@ -618,6 +638,16 @@ export class IndexRunner {
     for (let href of await current.#removalsBackOnDisk(removals)) {
       operations.set(href, 'update');
     }
+    current.#writtenFiles = {
+      hrefs: new Set(
+        [...operations]
+          .filter(([, operation]) => operation === 'update')
+          .map(([href]) => href),
+      ),
+      rereads: new WrittenFileRereads({
+        delaysMs: current.#writtenFileRereadDelaysMs,
+      }),
+    };
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -1028,9 +1058,13 @@ export class IndexRunner {
         batchId: this.#batchId,
         renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
+        ...(this.#writtenFiles?.hrefs.has(url.href)
+          ? { writtenFileRereads: this.#writtenFiles.rereads }
+          : {}),
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
+        logInfo: (message) => this.#log.info(message),
         logWarn: (message) => this.#log.warn(message),
       });
       return result ? { status: 'rendered', result } : { status: 'skipped' };

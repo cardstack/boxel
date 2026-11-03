@@ -789,6 +789,10 @@ module(basename(import.meta.filename), function (hooks) {
         matrixURL: 'http://localhost:8008',
         matrixServerName: 'localhost',
         getReader: () => reader,
+        // The default reader holds no files, so the pass's own update would
+        // otherwise sit through the whole re-read window for a write that
+        // never lands.
+        writtenFileRereadDelaysMs: [],
         getAuthedFetch: async () => {
           return (async () => {
             throw new Error('this pass fetches nothing');
