@@ -82,6 +82,7 @@ import {
   READ_REALM_FILE_TOOL_NAME,
   SKILL_INSTRUCTIONS_MESSAGE,
   SYSTEM_MESSAGE,
+  VIEW_ATTACHMENT_TOOL_NAME,
 } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -153,6 +154,10 @@ function getLog() {
  *      would rewrite an older message's bytes as history grows and reset
  *      the cache prefix. The trailing message is rebuilt every turn, so
  *      it can carry the current media without touching history bytes.
+ *      A media file a user attached to an earlier, answered message comes
+ *      back only when the model calls viewAttachment for it: the tool's
+ *      result attaches the same stored file again, so it rides the trailing
+ *      message as tool-result media under the same limits.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
  *    (from the active LLM's model configuration), the current turn's
@@ -901,8 +906,15 @@ function svgTooLarge(
 export const MEDIA_NOT_IN_HISTORY_NOTE =
   '(its content is not in this message; you can see it only if the last message of this request includes it)';
 
+// MEDIA_NOT_IN_HISTORY_NOTE for a media file attached to a message someone
+// sent, which the viewAttachment tool can bring back into the current turn.
+// A tool result's media keep the plain note: the tool shows only files a
+// user attached to a message.
+export const ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE = `(its content is not in this message; you can see it only if the last message of this request includes it, and if it doesn't, call ${VIEW_ATTACHMENT_TOOL_NAME} with this file's URL to see it)`;
+
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
+  mediaNote: string = MEDIA_NOT_IN_HISTORY_NOTE,
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
@@ -932,7 +944,7 @@ export function attachedFilesToMessage(
           .filter(Boolean)
           .join(', ');
         return requiredModality(f.contentType)
-          ? `${hyperlink}: [${meta}] ${MEDIA_NOT_IN_HISTORY_NOTE}`
+          ? `${hyperlink}: [${meta}] ${mediaNote}`
           : `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
@@ -2773,7 +2785,9 @@ function hasAppliedChanges(
 // message is the current one: the rendering becomes part of the cached
 // prompt prefix, and any retroactive change re-bills everything after it
 // (see getAttachedCards). Media bodies are handled separately, by
-// buildCurrentTurnMediaParts.
+// buildCurrentTurnMediaParts. A message's media are listed with the note
+// that names the viewAttachment tool, a tool result's with the plain one;
+// the choice rests on the event's own type, which never changes.
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
@@ -2787,6 +2801,9 @@ export const buildAttachmentsMessagePart = async (
   if (attachedFiles.length > 0) {
     text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
       attachedFiles,
+      matrixEvent.type === 'm.room.message'
+        ? ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE
+        : MEDIA_NOT_IN_HISTORY_NOTE,
     )}\n`;
   }
   return text;
@@ -3217,7 +3234,7 @@ export const buildCurrentTurnMediaParts = async (
       .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
       .join('; ');
     notes.push(
-      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one, ask the user to attach it again.`,
+      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one, call ${VIEW_ATTACHMENT_TOOL_NAME} with its URL, or ask the user to attach it again if you can't.`,
     );
   }
   let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];

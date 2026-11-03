@@ -47,6 +47,7 @@ import {
 import { MAX_SVG_TEXT_BYTES } from '@cardstack/runtime-common/ai/modality';
 import {
   absolutizeSkillLinks,
+  ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE,
   attachedFilesToMessage,
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
@@ -69,8 +70,11 @@ import {
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
+  VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
+import { roomAttachments } from '../lib/bot-tools/view-attachment/view.ts';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
 const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
@@ -8357,13 +8361,13 @@ ${patchedFileSource}
       );
       assert.ok(
         messageText(prompt[1]).includes(
-          `[sample.png](http://test.com/my-realm/sample.png): [image/png, 1024 bytes] ${MEDIA_NOT_IN_HISTORY_NOTE}`,
+          `[sample.png](http://test.com/my-realm/sample.png): [image/png, 1024 bytes] ${ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE}`,
         ),
-        'the history metadata says the content is not in the message',
+        'the history metadata says the content is not in the message, and how to see it',
       );
     });
 
-    test('the note naming a left-out file asks the user to attach it again', async () => {
+    test('the note naming a left-out file points at viewAttachment, then at attaching it again', async () => {
       let sizeless = png('sizeless.png', 'unknown');
       let prompt = await buildPrompt([
         userMessage('1', 1, 'Here is the first image', [sizeless]),
@@ -8379,8 +8383,10 @@ ${patchedFileSource}
         'the note names the file and the reason',
       );
       assert.ok(
-        text.includes('ask the user to attach it again'),
-        'the note tells the model to ask for the file',
+        text.includes(
+          `if you need one, call ${VIEW_ATTACHMENT_TOOL_NAME} with its URL, or ask the user to attach it again if you can't.`,
+        ),
+        'the note tells the model how to get the file',
       );
     });
 
@@ -9271,6 +9277,296 @@ ${patchedFileSource}
         ),
         ['current.png'],
       );
+    });
+  });
+
+  module('viewing an earlier attachment', () => {
+    type AttachedFile = {
+      sourceUrl: string;
+      url: string;
+      name: string;
+      contentType: string;
+      contentSize: number;
+    };
+
+    let jpg = (name: string, contentSize = 2048): AttachedFile => ({
+      sourceUrl: `boxel-local://3f2a/${name}`,
+      url: `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+      name,
+      contentType: 'image/jpeg',
+      contentSize,
+    });
+
+    // The bytes the homeserver's media endpoint serves for a file.
+    let storeMedia = (file: AttachedFile) => {
+      let downloadUrl = fakeMatrixClient.mxcUrlToHttp(
+        file.url,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )!;
+      mockResponses.set(downloadUrl, {
+        ok: true,
+        text: `bytes-of-${file.name}`,
+      });
+    };
+
+    let dataUrlOf = (file: AttachedFile) =>
+      `data:image/jpeg;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
+
+    let event = (
+      eventId: string,
+      ts: number,
+      sender: string,
+      content: Record<string, unknown>,
+      type = 'm.room.message',
+    ) =>
+      ({
+        type,
+        event_id: eventId,
+        origin_server_ts: ts,
+        content,
+        sender,
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let userMessage = (
+      eventId: string,
+      ts: number,
+      body: string,
+      attachedFiles: AttachedFile[] = [],
+    ) =>
+      event(eventId, ts, '@user:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        data: {
+          context: { tools: [], submode: 'interact', functions: [] },
+          attachedFiles,
+        },
+      });
+
+    let botAnswer = (eventId: string, ts: number, body: string) =>
+      event(eventId, ts, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body,
+        isStreamingFinished: true,
+        data: { context: { tools: [], functions: [] } },
+      });
+
+    let viewRequest = (
+      eventId: string,
+      ts: number,
+      callId: string,
+      urls: string[],
+    ) =>
+      event(eventId, ts, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body: '',
+        isStreamingFinished: true,
+        data: { context: { tools: [], functions: [] } },
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: callId,
+            name: VIEW_ATTACHMENT_TOOL_NAME,
+            arguments: JSON.stringify({ urls }),
+          },
+        ],
+      });
+
+    // The result event viewAttachment publishes for a call, as the room
+    // hands it back to the bot.
+    let viewResult = async (
+      eventId: string,
+      ts: number,
+      history: DiscreteMatrixEvent[],
+      requestEventId: string,
+      callId: string,
+      urls: string[],
+    ) => {
+      let sent: { eventType: string; content: any }[] = [];
+      let client = {
+        sendEvent: async (_roomId: string, eventType: string, content: any) => {
+          sent.push({ eventType, content });
+          return { event_id: eventId };
+        },
+      } as any;
+      await fulfillViewAttachmentCall(
+        {
+          id: callId,
+          type: 'function',
+          function: {
+            name: VIEW_ATTACHMENT_TOOL_NAME,
+            arguments: JSON.stringify({ urls }),
+          },
+        },
+        {
+          client,
+          roomId: 'room1',
+          requestEventId,
+          agentId: undefined,
+          attachments: roomAttachments(history, '@aibot:localhost'),
+        },
+      );
+      let { eventType, content } = sent[0];
+      return event(
+        eventId,
+        ts,
+        '@aibot:localhost',
+        { ...content, data: JSON.parse(content.data) },
+        eventType,
+      );
+    };
+
+    let buildPrompt = (history: DiscreteMatrixEvent[]) =>
+      buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+    let trailingParts = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content) ? (content as any[]) : [];
+    };
+
+    let imageUrls = (prompt: { content?: unknown }[]) =>
+      trailingParts(prompt)
+        .filter((p) => p.type === 'image_url')
+        .map((p) => p.image_url.url);
+
+    let textOf = (message: { content?: unknown } | undefined) => {
+      let content = message?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
+    };
+
+    let followUp = 'Which plants are in it?';
+
+    let answeredPhotoTurn = (photo: AttachedFile) => [
+      userMessage('1', 1, 'What is in this photo?', [photo]),
+      botAnswer('2', 2, 'A garden path with a bench.'),
+      userMessage('3', 3, followUp),
+    ];
+
+    test('an image from an answered turn reaches the model again when it views the attachment', async () => {
+      let photo = jpg('sample-photo.jpg');
+      storeMedia(photo);
+      let history = [
+        ...answeredPhotoTurn(photo),
+        viewRequest('4', 4, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('5', 5, history, '4', 'view-1', [photo.sourceUrl]),
+      );
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(photo)]);
+      let parts = trailingParts(prompt);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        'Attached to a tool result: sample-photo.jpg (boxel-local://3f2a/sample-photo.jpg)',
+        'a label naming the file precedes the image',
+      );
+      let toolMessage = prompt.find((m) => m.role === 'tool');
+      assert.ok(
+        textOf(toolMessage).includes(
+          `[sample-photo.jpg](boxel-local://3f2a/sample-photo.jpg): [image/jpeg, 2048 bytes] ${MEDIA_NOT_IN_HISTORY_NOTE}`,
+        ),
+        "the tool message lists the file as metadata, with the tool result's note",
+      );
+    });
+
+    test('viewing an attachment leaves the history before the call byte-identical', async () => {
+      let photo = jpg('sample-photo.jpg');
+      storeMedia(photo);
+      let beforeCall = answeredPhotoTurn(photo);
+      let history = [
+        ...beforeCall,
+        viewRequest('4', 4, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('5', 5, history, '4', 'view-1', [photo.sourceUrl]),
+      );
+
+      let promptBeforeCall = await buildPrompt(beforeCall);
+      let promptAfterCall = await buildPrompt(history);
+
+      assert.deepEqual(
+        imageUrls(promptBeforeCall),
+        [],
+        'the answered image is not sent before the model asks for it',
+      );
+      let throughFollowUp = (prompt: { role?: string; content?: unknown }[]) =>
+        prompt
+          .slice(0, prompt.findIndex((m) => textOf(m).startsWith(followUp)) + 1)
+          .map((m) => ({ role: m.role, text: textOf(m) }));
+      let expected = throughFollowUp(promptBeforeCall);
+      assert.ok(expected.length > 2, 'the history reaches the follow-up');
+      assert.deepEqual(throughFollowUp(promptAfterCall), expected);
+      assert.ok(
+        expected.some((m) =>
+          m.text.includes(
+            `[sample-photo.jpg](boxel-local://3f2a/sample-photo.jpg): [image/jpeg, 2048 bytes] ${ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE}`,
+          ),
+        ),
+        "the attaching message's metadata names the tool",
+      );
+    });
+
+    test('a viewed attachment is held to the tool-result media limits', async () => {
+      let photo = jpg('huge.jpg', MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1);
+      storeMedia(photo);
+      let history = [
+        ...answeredPhotoTurn(photo),
+        viewRequest('4', 4, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('5', 5, history, '4', 'view-1', [photo.sourceUrl]),
+      );
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        textOf(prompt[prompt.length - 1]).includes(
+          'The following files attached to tool results were not sent to the model, so you cannot see them: huge.jpg (boxel-local://3f2a/huge.jpg): it is larger than',
+        ),
+        'the trailing note names the file the limit left out',
+      );
+    });
+
+    test('a viewed attachment rides only the turn that viewed it', async () => {
+      let photo = jpg('sample-photo.jpg');
+      storeMedia(photo);
+      let history = [
+        ...answeredPhotoTurn(photo),
+        viewRequest('4', 4, 'view-1', [photo.sourceUrl]),
+      ];
+      history.push(
+        await viewResult('5', 5, history, '4', 'view-1', [photo.sourceUrl]),
+        botAnswer('6', 6, 'Ferns and a maple.'),
+        userMessage('7', 7, 'Thanks. Now something else.'),
+      );
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(imageUrls(prompt), []);
     });
   });
 
