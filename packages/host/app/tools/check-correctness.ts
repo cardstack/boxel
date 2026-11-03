@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import {
+  hasExecutableExtension,
   isCardDocumentString,
   isCardErrorJSONAPI,
   rri,
@@ -35,12 +36,11 @@ const cardIndexingTimeout = ENV.cardRenderTimeout;
 const maxInstanceChecks = 10;
 
 // An index event strips `.json` from every file it names, so a card instance
-// appears as its URL with no extension, and a name with an extension is some
-// other file. A card whose name holds a dot reads as a file here and is not
-// checked.
-function hasNoExtension(href: string): boolean {
+// appears as its URL without `.json`, keeping any dot in its own name. A
+// module is not an instance; any other name may be one.
+function mayNameInstance(href: string): boolean {
   let name = href.split('/').pop() ?? '';
-  return name.length > 0 && !name.includes('.');
+  return name.length > 0 && !hasExecutableExtension(name);
 }
 
 // What reading a file as a card instance found: no card instance at that URL,
@@ -365,10 +365,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   }
 
   // Reads the card instances among a write's invalidations, the ones the
-  // user is looking at first, capped at `maxInstanceChecks`. A name with no
-  // extension can still be a JSON file that is not a card, a file with no
-  // extension, or an instance deleted after the write was indexed; the read
-  // finds no card instance for those, and the next candidate takes the place.
+  // user is looking at first, capped at `maxInstanceChecks`. A name that is
+  // not a module's can still be a JSON file that is not a card, some other
+  // file, or an instance deleted after the write was indexed; the read finds
+  // no card instance for those, and the next candidate takes the place.
   private async readInstances(
     invalidations: string[],
     roomId: string,
@@ -379,7 +379,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       return index === -1 ? contextHrefs.length : index;
     };
     let candidates = invalidations
-      .filter(hasNoExtension)
+      .filter(mayNameInstance)
       .sort((a, b) => rank(a) - rank(b));
     let instances: { href: string; read: InstanceRead }[] = [];
     while (candidates.length > 0 && instances.length < maxInstanceChecks) {

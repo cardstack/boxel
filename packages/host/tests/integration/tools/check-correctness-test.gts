@@ -3,7 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { delay } from '@cardstack/runtime-common';
+import { delay, hasExecutableExtension } from '@cardstack/runtime-common';
 import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
@@ -159,9 +159,9 @@ function announceRendersWithIndexEvents() {
     }
     let generation = event.generation;
     // the index event names a card without `.json`; the render job names it
-    // by its file
+    // by its file. These module edits invalidate only modules and instances.
     let invalidations = event.invalidations.map((href) =>
-      (href.split('/').pop() ?? '').includes('.') ? href : `${href}.json`,
+      hasExecutableExtension(href) ? href : `${href}.json`,
     );
     void Promise.resolve().then(() => {
       messageService.relayRealmEvent({
@@ -589,6 +589,27 @@ module('Integration | tools | check-correctness', function (hooks) {
       'the instance was rendered again, so it was checked',
     );
     assert.true(result.correct, 'the edit passes');
+  });
+
+  test('checks an instance whose name holds a dot', async function (assert) {
+    mountModulePrerender();
+    await testRealm.write(
+      'Milestone/v1.2.json',
+      JSON.stringify(milestoneDocument('Version 1.2')),
+    );
+    announceRendersWithIndexEvents();
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+    );
+
+    assert.false(result.correct, 'the broken render fails the check');
+    assert.ok(
+      result.errors.some((error: string) =>
+        error.startsWith(`${testRealmURL}Milestone/v1.2: `),
+      ),
+      `the instance named with a dot is checked: ${result.errors.join('; ')}`,
+    );
   });
 
   test("reads an instance's document without fetching its source", async function (assert) {
