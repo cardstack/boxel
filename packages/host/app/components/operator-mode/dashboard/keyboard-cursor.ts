@@ -12,9 +12,10 @@ interface Walk {
 }
 
 // The dashboard's keyboard cursor: one item in the walk of workspaces and
-// catalogs. It rests on an item, focused, from the moment the dashboard opens,
-// so Enter works at once. Its ring is the keyboard's: Tab or the first
-// arrow key shows it without moving it, and a pointer press hides it again.
+// catalogs. It rests on an item from the moment the dashboard opens, focused
+// when in view, so Enter works at once. Its ring is the keyboard's: Tab or
+// the first arrow key shows it without moving it, and a pointer press hides
+// it again.
 // Left and Right step through the walk; Up and Down move to the nearest item
 // in the row above or below, whatever the layout.
 export default class KeyboardCursor {
@@ -96,6 +97,19 @@ export default class KeyboardCursor {
     }
     if (event.key === 'Tab') {
       this.keyboardEngaged = true;
+    }
+    // The container holds focus while the cursor's item is out of view; an
+    // arrow key brings the item into view and hands it focus, and Enter does
+    // nothing, since nobody can see what it would open.
+    if (event.target === container) {
+      if (event.key.startsWith('Arrow')) {
+        event.preventDefault();
+        this.keyboardEngaged = true;
+        let item = this.itemAt(container, this.currentIndex);
+        item?.focus({ preventScroll: true });
+        item?.scrollIntoView({ block: 'nearest' });
+      }
+      return;
     }
     // An item's own controls (star, menu, site link) handle their own keys.
     if (!(event.target as HTMLElement).closest('[data-nav-index]')) {

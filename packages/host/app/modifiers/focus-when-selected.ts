@@ -18,6 +18,7 @@ function focusIsAvailable(): boolean {
     !active ||
     active === document.body ||
     active.hasAttribute('data-workspace-chooser-toggle') ||
+    active.hasAttribute('data-keyboard-cursor') ||
     !!active.closest('[data-nav-index]')
   );
 }
@@ -43,7 +44,8 @@ function isOffScreen(element: HTMLElement): boolean {
 // visible. The item the list opens on is scrolled into view too, unless
 // `scrollOnOpen='never'`: then the page opens at its top, and the item takes
 // focus only if it is in view, since focus out of sight would hand Enter to
-// an item nobody can see.
+// an item nobody can see. Focus then goes to the cursor's container, so the
+// first arrow key still reaches the cursor.
 export default modifier(
   (
     element: HTMLElement,
@@ -60,6 +62,9 @@ export default modifier(
     ) {
       let fromItem = !!document.activeElement?.closest('[data-nav-index]');
       if (!fromItem && scrollOnOpen === 'never' && isOffScreen(element)) {
+        element
+          .closest<HTMLElement>('[data-keyboard-cursor]')
+          ?.focus({ preventScroll: true });
         return;
       }
       element.focus({ preventScroll: true });

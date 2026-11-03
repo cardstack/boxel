@@ -551,7 +551,9 @@ export default class Dashboard extends Component<Signature> {
     <section
       class={{cn 'dashboard' is-compact=@sections.isCompact}}
       aria-label='Dashboard'
+      tabindex='-1'
       data-theme='dark'
+      data-keyboard-cursor
       {{on 'keydown' this.cursor.onKeydown}}
       {{on 'focusin' this.cursor.onFocusIn}}
       {{on 'pointerup' this.cursor.onPointerUp}}
@@ -879,6 +881,11 @@ export default class Dashboard extends Component<Signature> {
         to {
           opacity: 1;
         }
+      }
+      /* Only takes focus in place of an item out of view; the cursor's ring
+         marks where the keyboard is. */
+      .dashboard:focus {
+        outline: none;
       }
       .dashboard {
         /* Pret UI selection reads this undefined token and falls back to a

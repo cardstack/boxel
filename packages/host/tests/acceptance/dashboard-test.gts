@@ -1737,6 +1737,25 @@ module('Acceptance | dashboard', function (hooks) {
             0,
             'the page opens at its top, not scrolled to the cursor',
           );
+          assert
+            .dom('[data-test-dashboard]')
+            .isFocused('the dashboard holds focus for the arrow keys');
+
+          await pressKey('Enter');
+          assert
+            .dom('[data-test-dashboard]')
+            .exists('Enter does not open a row nobody can see');
+
+          await pressKey('ArrowRight');
+
+          assert.true(
+            scroller.scrollTop > 0,
+            'the first arrow key brings the cursor into view',
+          );
+          assert
+            .dom(`[data-test-workspace-button="${hiddenName}"]`)
+            .isFocused();
+          assert.strictEqual(selectedName(), hiddenName);
         });
 
         test('Right from the last row shown moves past the hidden rows', async function (assert) {
@@ -1961,15 +1980,29 @@ module('Acceptance | dashboard', function (hooks) {
         module('keyboard cursor', function () {
           test('reopened, the cursor rests on the workspace just left, with no ring', async function (assert) {
             await visitDashboard(assert, 2);
-            let rowName = workspaceNames(ROWS)[2]!;
-            await click(`[data-test-workspace-button="${rowName}"]`);
+            // A workspace below the fold reopens without focus, so this one
+            // must be in view.
+            let isInView = (el: Element) => {
+              let { top, bottom } = el.getBoundingClientRect();
+              let scroller = find(
+                '[data-test-dashboard-scroller]',
+              )!.getBoundingClientRect();
+              return (
+                top >= Math.max(scroller.top, 0) &&
+                bottom <= Math.min(scroller.bottom, window.innerHeight)
+              );
+            };
+            let workspace = findAll(`${RECENT_TILES}, ${ROWS}`).find(isInView);
+            assert.ok(workspace, 'a workspace is in view');
+            let name = workspace!.getAttribute('data-test-workspace')!;
+            await click(`[data-test-workspace-button="${name}"]`);
             assert.dom('[data-test-dashboard]').doesNotExist();
 
             await click('[data-test-workspace-chooser-toggle]');
 
-            assert.strictEqual(selectedName(), rowName);
+            assert.strictEqual(selectedName(), name);
             assert
-              .dom(`[data-test-workspace-button="${rowName}"]`)
+              .dom(`[data-test-workspace-button="${name}"]`)
               .isFocused('the workspace holds focus, so Enter works at once');
             assert.strictEqual(ringName(), undefined, 'no ring shows');
           });
