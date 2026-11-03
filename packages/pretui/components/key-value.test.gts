@@ -133,4 +133,22 @@ module('Pretui | components/key-value', function (hooks) {
     assert.dom('[data-test-kv="default"]').doesNotHaveAttribute('data-label-style');
     assert.dom('[data-test-kv="eyebrow"]').hasAttribute('data-label-style', 'eyebrow');
   });
+
+  test("KeyValue rules its rows only with @rows='ruled' on the horizontal layout", async function (assert) {
+    const ITEMS: KeyValueItem[] = [{ key: 'Origin', value: 'Wuyi' }];
+    await render(
+      <template>
+        <KeyValue @items={{ITEMS}} data-test-kv='none' />
+        <KeyValue @items={{ITEMS}} @rows='plain' data-test-kv='plain' />
+        <KeyValue @items={{ITEMS}} @rows='ruled' data-test-kv='ruled' />
+        <KeyValue @items={{ITEMS}} @rows='ruled' @layout='stacked' data-test-kv='stacked' />
+        <KeyValue @items={{ITEMS}} @rows='ruled' @layout='inline' data-test-kv='inline' />
+      </template>,
+    );
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-rows');
+    assert.dom('[data-test-kv="plain"]').doesNotHaveAttribute('data-rows');
+    assert.dom('[data-test-kv="ruled"]').hasAttribute('data-rows', 'ruled');
+    assert.dom('[data-test-kv="stacked"]').doesNotHaveAttribute('data-rows');
+    assert.dom('[data-test-kv="inline"]').doesNotHaveAttribute('data-rows');
+  });
 });

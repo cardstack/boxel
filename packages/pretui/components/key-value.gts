@@ -18,6 +18,10 @@ export interface KeyValueSignature {
     /** 'eyebrow' sets the keys in the theme's eyebrow role (uppercase,
      *  tracked out). Default 'default'. */
     labelStyle?: 'default' | 'eyebrow';
+    /** 'ruled' right-aligns the values and draws a --border line between
+     *  rows. Default 'plain'. Only the 'horizontal' layout takes it; the
+     *  other layouts ignore it. */
+    rows?: 'plain' | 'ruled';
   };
   Blocks: { value: [item: KeyValueItem] };
   Element: HTMLDListElement;
@@ -37,10 +41,16 @@ export class KeyValue extends Component<KeyValueSignature> {
   get labelStyle(): 'eyebrow' | undefined {
     return this.args.labelStyle === 'eyebrow' ? 'eyebrow' : undefined;
   }
+  get rows(): 'ruled' | undefined {
+    return this.args.rows === 'ruled' && this.layout === 'horizontal'
+      ? 'ruled'
+      : undefined;
+  }
   <template>
     <dl
       class='pretui-kv'
       data-layout={{this.layout}}
+      data-rows={{this.rows}}
       data-label-style={{this.labelStyle}}
       data-test-pretui-kv
       ...attributes
@@ -125,6 +135,30 @@ export class KeyValue extends Component<KeyValueSignature> {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-2xs);
+        }
+        /* Ruled rows: the gaps move into the cells so each line runs
+           unbroken across both columns, and stretched cells keep both
+           halves of a row's border at the same height. */
+        .pretui-kv[data-rows='ruled'] {
+          gap: 0;
+          align-items: stretch;
+        }
+        .pretui-kv[data-rows='ruled'] dt,
+        .pretui-kv[data-rows='ruled'] dd {
+          padding-block: var(--boxel-sp-xs);
+        }
+        .pretui-kv[data-rows='ruled'] dt {
+          display: flex;
+          align-items: center;
+          padding-inline-end: var(--boxel-sp-lg);
+        }
+        .pretui-kv[data-rows='ruled'] dd {
+          justify-content: flex-end;
+          text-align: end;
+        }
+        .pretui-kv[data-rows='ruled'] dt:not(:first-of-type),
+        .pretui-kv[data-rows='ruled'] dd:not(:first-of-type) {
+          border-block-start: 1px solid var(--border);
         }
         .pretui-kv[data-layout='stacked'] {
           grid-template-columns: minmax(0, 1fr);

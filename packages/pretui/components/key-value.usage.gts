@@ -14,11 +14,17 @@ const LOT_DETAILS = [
 ];
 const LAYOUTS: KeyValueLayout[] = ['horizontal', 'stacked', 'inline'];
 const LABEL_STYLES = ['default', 'eyebrow'];
+const ROWS = ['plain', 'ruled'];
 
 class KeyValueUsage extends Component {
   items = LOT_DETAILS;
   @tracked layout: KeyValueLayout = 'horizontal';
   @tracked labelStyle = 'default';
+  @tracked rows = 'plain';
+  setRows = (v: string) => (this.rows = v);
+  get rowsVal(): 'ruled' | undefined {
+    return this.rows === 'ruled' ? 'ruled' : undefined;
+  }
   setLayout = (v: string) => (this.layout = v as KeyValueLayout);
   setLabelStyle = (v: string) => (this.labelStyle = v);
   get labelStyleVal(): 'eyebrow' | undefined {
@@ -31,6 +37,9 @@ class KeyValueUsage extends Component {
     }
     if (this.labelStyleVal) {
       bits.push(`@labelStyle='${this.labelStyleVal}'`);
+    }
+    if (this.rowsVal) {
+      bits.push(`@rows='${this.rowsVal}'`);
     }
     return `<KeyValue ${bits.join(' ')} />`;
   }
@@ -46,6 +55,7 @@ class KeyValueUsage extends Component {
           @items={{this.items}}
           @layout={{this.layout}}
           @labelStyle={{this.labelStyleVal}}
+          @rows={{this.rowsVal}}
         ><:value as |item|>{{#if (this.isLot item)}}<Token
                 @value={{item.value}}
               />{{else}}{{item.value}}{{/if}}</:value></KeyValue>
@@ -67,6 +77,14 @@ class KeyValueUsage extends Component {
           @defaultValue='default'
           @description="'eyebrow' sets the keys in the theme's eyebrow role, uppercase; the --pretui-kv-label-* properties still win (Pretui addition)."
           @onInput={{this.setLabelStyle}}
+        />
+        <Args.String
+          @name='rows'
+          @value={{this.rows}}
+          @options={{ROWS}}
+          @defaultValue='plain'
+          @description="'ruled' right-aligns the values and draws a --border line between rows, unbroken across both columns. Horizontal layout only (Pretui addition)."
+          @onInput={{this.setRows}}
         />
         <Args.Yield
           @name='value'
