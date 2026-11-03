@@ -426,8 +426,8 @@ module(basename(import.meta.filename), function (hooks) {
             stranger(publishedRealmURL, ['read']),
           )
         ).status,
-        201,
-        "the source's policy admits a signed-in caller's create into the snapshot",
+        403,
+        "a published realm keeps none of a policy's write grants, even one naming the source's live policy",
       );
 
       let second = await publish();

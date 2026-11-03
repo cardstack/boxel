@@ -79,7 +79,7 @@ const REALM_POLICY = {
 
 // `forecast` sends the realm's shared key; `myStations` the invoking user's
 // own.
-function weatherModule(path = 'graphql') {
+function weatherModule(field = 'login') {
   return `import { CardDef } from '@cardstack/base/card-api';
 import { operation } from '@cardstack/base/operations';
 
@@ -89,9 +89,9 @@ export class Weather extends CardDef {
   @operation static forecast = {
     base: 'callApi',
     label: 'Read the forecast',
-    url: '${VENDOR}/${path}',
+    url: '${VENDOR}/graphql',
     headers: { authorization: 'Bearer {{apiKey}}' },
-    graphql: { document: 'query { viewer { login } }' },
+    graphql: { document: 'query { viewer { ${field} } }' },
   };
 
   @operation static myStations = {
@@ -577,14 +577,25 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("a call the source's owner approved again for newer code is refused on an older snapshot, and stays approved in the source", async function (assert) {
+  test("a call the source's owner approved again for newer code is refused on an older snapshot, and stays active in the source", async function (assert) {
     let { shareId } = await shareIntoSource();
     await publish();
 
-    await source.write('weather.gts', weatherModule('v2/graphql'));
+    await source.write('weather.gts', weatherModule('name'));
     await source.indexing();
+    let owner = signedIn(source.url, OWNER, ['read', 'write', 'realm-owner']);
+    let changed = await invoke(source.url, 'forecast', owner);
+    assert.strictEqual(
+      changed.code,
+      'binding-needs-reapproval',
+      "the source's own call finds its request changed",
+    );
     let reapproved = await approveForecast(shareId);
-    assert.strictEqual(reapproved.status, 201, 'approved again in the source');
+    assert.strictEqual(
+      reapproved.status,
+      201,
+      `approved again in the source: ${reapproved.text}`,
+    );
 
     let stale = await invoke(publishedRealmURL, 'forecast');
     assert.strictEqual(stale.status, 409, JSON.stringify(stale.body));
@@ -597,14 +608,10 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       rows.map((row) => row.state),
-      ['approved'],
-      "the source's binding is left approved",
+      ['active'],
+      "the source's binding is left active",
     );
-    let fromSource = await invoke(
-      source.url,
-      'forecast',
-      signedIn(source.url, OWNER, ['read', 'write', 'realm-owner']),
-    );
+    let fromSource = await invoke(source.url, 'forecast', owner);
     assert.strictEqual(fromSource.status, 200, 'the source is still served');
 
     await publish();

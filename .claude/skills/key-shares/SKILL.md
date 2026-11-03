@@ -149,6 +149,33 @@ static key, a Google service account, or an OAuth client whose grant type is
 app (an `authorization_code` client) never serves visitors, so sharing or
 swapping one has no anonymous check.
 
+## Published realms
+
+A published realm holds no share or binding of its own, and nobody can share
+into it, since it has no direct writers. Its cards use the shares of the realm
+it was published from:
+
+- **Policy.** Publishing points the copy's `realm.json` at its own copy of the
+  source's policy card, when the source's pointer names a card in the source
+  (`rebaseRealmPolicyPointer` in `handlers/handle-publish-realm.ts`). A pointer
+  to a card in another realm is dropped. A published realm compiles only the
+  grants on a `callApi` whose every slot is `{{apiKey}}`
+  (`sharedKeyCallsOnly`), so it admits no write. A rule naming a type by the
+  source's URL names the copy's type (`Realm#ownCopyOf`).
+- **Bindings.** The published realm's sender (`publishedFrom` in
+  `lib/outbound/call-api-sender.ts`, from `realm_registry.source_url`) looks a
+  call's binding up in the source: the realm, the type's module and the card
+  are each read at the same path under the source's URL, and a module in any
+  other realm as it is. Uses, limits and caps count against the source's
+  share, recorded under the source realm.
+- **Staleness.** The policy is the snapshot's, so a change to the source's
+  policy reaches the published realm on republish. The share, its key and its
+  bindings are live: unsharing, suspending or turning off anonymous use on the
+  key applies at once. A binding approved again for a request the snapshot's
+  older code doesn't send refuses the published realm's call
+  `binding-needs-reapproval` and is left active for the source; republishing
+  serves it again.
+
 ## Visibility
 
 - A share's owner sees every share they own, in every realm, with its key
