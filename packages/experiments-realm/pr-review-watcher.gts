@@ -247,23 +247,32 @@ class TokenGuide extends GlimmerComponent<{
   </template>
 }
 
-// Runs `act` with the readiness answer whenever it changes, after the render
-// that showed it, so loading the lists or opening the secure window is never
-// part of a render.
+// Runs `act` with the readiness answer whenever it, or what the card searches,
+// changes, after the render that showed it, so loading the lists or opening
+// the secure window is never part of a render.
 class OnReadiness extends Modifier<{
   Args: {
-    Positional: [readiness: string | undefined, act: (r: string) => void];
+    Positional: [
+      readiness: string | undefined,
+      searching: string,
+      act: (r: string) => void,
+    ];
   };
 }> {
   last: string | undefined;
   modify(
     _element: Element,
-    [readiness, act]: [string | undefined, (r: string) => void],
+    [readiness, searching, act]: [
+      string | undefined,
+      string,
+      (r: string) => void,
+    ],
   ) {
-    if (readiness === undefined || readiness === this.last) {
+    let key = `${readiness}|${searching}`;
+    if (readiness === undefined || key === this.last) {
       return;
     }
-    this.last = readiness;
+    this.last = key;
     Promise.resolve().then(() => act(readiness));
   }
 }
@@ -293,6 +302,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     myPullRequests: [],
   };
   walkedAt = 0;
+  // What the last full walk searched; a different organization or team
+  // walks again from scratch.
+  walkedFor = '';
   // The GitHub login the key belongs to.
   @tracked viewer = '';
   // Calls wait until then after a refusal for the key's limits.
@@ -318,6 +330,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         document.visibilityState === 'hidden' ||
         this.loading ||
         this.rejected ||
+        this.needsOrg ||
         Date.now() < this.pausedUntil ||
         this.readiness !== 'ready'
       ) {
@@ -341,6 +354,17 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   }
 
   installApp = INSTALL_GITHUB_APP;
+
+  // A new watcher has no organization yet, and searching without one would
+  // search all of GitHub; it asks for one first.
+  get needsOrg() {
+    return !this.record.org?.trim();
+  }
+
+  // What the card searches, so a change to it loads the lists again.
+  get searching() {
+    return `${this.record.org ?? ''}/${this.record.team ?? ''}`;
+  }
   mostShown = (MOST_PAGES * 100).toLocaleString();
 
   get loadedAtTime() {
@@ -507,6 +531,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   // person has no key for it, approving the watcher's requests when they
   // have one.
   readinessChanged = (readiness: string) => {
+    if (this.needsOrg) {
+      return;
+    }
     if (readiness === 'ready') {
       if (!this.loading) {
         this.load();
@@ -531,7 +558,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     this.loading = true;
     this.problem = undefined;
     try {
-      let walk = Date.now() - this.walkedAt >= WALK_EVERY_MS;
+      let walk =
+        this.walkedFor !== this.searching ||
+        Date.now() - this.walkedAt >= WALK_EVERY_MS;
       let [review, authored] = await Promise.all([
         this.search('waitingOnMyReview', walk),
         this.search('myPullRequests', walk),
@@ -543,6 +572,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       }
       if (walk) {
         this.walkedAt = Date.now();
+        this.walkedFor = this.searching;
       }
       let viewer = review.viewer;
       this.viewer = viewer;
@@ -677,17 +707,22 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   <template>
     <article
       class='watcher'
-      {{OnReadiness this.readiness this.readinessChanged}}
+      {{OnReadiness this.readiness this.searching this.readinessChanged}}
       data-test-pr-review-watcher
     >
       <header class='top'>
         <div>
           <h1><@fields.cardTitle /></h1>
-          <p class='scope'>
-            Open pull requests across
-            <strong>{{@model.org}}</strong>, with review requested from you or
-            <strong>{{@model.teamSlug}}</strong>.
-          </p>
+          {{#unless this.needsOrg}}
+            <p class='scope'>
+              Open pull requests across
+              <strong>{{@model.org}}</strong>, with review requested from you{{#if
+                @model.teamSlug
+              }}
+                or
+                <strong>{{@model.teamSlug}}</strong>{{/if}}.
+            </p>
+          {{/unless}}
         </div>
         {{#if (eq this.readiness 'ready')}}
           <div class='refresh'>
@@ -702,7 +737,22 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         {{/if}}
       </header>
 
-      {{#if (and (eq this.readiness 'needs-connect') this.signedIn)}}
+      {{#if this.needsOrg}}
+        <Alert
+          @tone='info'
+          @title='Choose a GitHub organization'
+          data-test-needs-org
+        >
+          Edit this card (the pencil above) and set its
+          <strong>Org</strong>, the GitHub organization whose pull requests it
+          watches, such as
+          <code>cardstack</code>. Set its
+          <strong>Team</strong>
+          too, by the team's slug, such as
+          <code>boxel-developers</code>, to also list pull requests whose review
+          was requested from that team.
+        </Alert>
+      {{else if (and (eq this.readiness 'needs-connect') this.signedIn)}}
         <Alert
           @tone='info'
           @title='Allow the watcher to use your GitHub sign-in'
@@ -1151,12 +1201,16 @@ export class PRReviewWatcher extends CardDef {
   // reviews, which a `team-review-requested:` search would miss.
   @field reviewSearch = contains(StringField, {
     computeVia: function (this: PRReviewWatcher) {
-      return `is:pr is:open archived:false org:${this.org} -author:@me sort:updated-desc`;
+      return this.org
+        ? `is:pr is:open archived:false org:${this.org} -author:@me sort:updated-desc`
+        : undefined;
     },
   });
   @field authoredSearch = contains(StringField, {
     computeVia: function (this: PRReviewWatcher) {
-      return `is:pr is:open archived:false org:${this.org} author:@me sort:updated-desc`;
+      return this.org
+        ? `is:pr is:open archived:false org:${this.org} author:@me sort:updated-desc`
+        : undefined;
     },
   });
   @field cardTitle = contains(StringField, {

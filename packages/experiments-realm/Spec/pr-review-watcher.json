@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "PR Review Watcher",
+      "cardDescription": "The pull requests waiting on your review across a GitHub organization, and your own, read from GitHub with your own key",
+      "specType": "card",
+      "readMe": "# PR Review Watcher\n\nLists the open pull requests in a GitHub organization that are **waiting on your review**, and **your own open pull requests** with where each one stands. It reads GitHub as you, with your own key, so each person sees exactly what they can see on GitHub.\n\n## Setting up an instance\n\n- **org**: the GitHub organization whose repositories are searched, such as `cardstack`.\n- **team**: a team in that organization whose review requests count as yours, by its slug, such as `boxel-developers`.\n\n## Waiting on my review\n\nOpen pull requests by others whose review was ever requested from you directly or from the team. The watcher reads each pull request's history of review requests, so a team request stays listed after GitHub drops the team from the requested reviewers, which it does once any member reviews. A pull request leaves the list when it is merged or closed. The **Approval** filter starts on **Not approved yet**; **Approved** and **All** show the approved ones too, marked **Approved by \u2026**.\n\n## My PRs\n\nYour open pull requests, drafts included, with how long each has waited since review was requested, who approved it, and whether changes were requested.\n\nBoth lists show drafts, comment counts (people other than the author, bots left out) and changes requested; sort by request time, author or repository, either way; and filter by author and repository. They refresh every minute while the card is open, and pause while the browser tab is hidden.\n\n## Getting a key\n\nThe watcher's two operations, `waitingOnMyReview` and `myPullRequests`, are `callApi` GraphQL requests to `https://api.github.com/graphql` with your own key in the `Authorization` header (`{{userKey}}`).\n\n1. **Sign in with GitHub** connects your account through Boxel's read-only GitHub app in Boxel's secure window. For an organization's private repositories, the app has to be installed on that organization once, by an owner. It reads pull requests and the organization's members and teams, and never writes.\n2. **Use a token instead** takes a fine-grained token with read-only Pull requests and Members, or a classic token with `repo` and `read:org`. The card shows how to make one.\n3. Approve the two calls in the secure window with **On a schedule and when the card is opened**. One approval covers every watcher card in the workspace.\n\nA key GitHub rejects stops the card with **GitHub rejected your key**, with Replace key and Try again. A shared key is never used: the lists are yours alone.\n",
+      "ref": {
+        "module": "../pr-review-watcher",
+        "name": "PRReviewWatcher"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PRReviewWatcher/cardstack"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
