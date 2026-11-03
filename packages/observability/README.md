@@ -539,8 +539,8 @@ A `DatasourceError` alert carries the rule's labels, including the routing
 labels that `notification_settings.receiver` adds, so it goes where the rule's
 own alert would: a rule with a receiver sends it to that contact point, and a
 rule without one sends it through the default notification policy. The rule's
-`for` period applies to it too, so a single failed evaluation sends nothing.
-When one arrives, look at the data source (for Loki, the Loki task and its
+`for` period applies to it too: a rule with `for: 0s` sends one on the first
+failed query, as it fired its own alert before. When one arrives, look at the data source (for Loki, the Loki task and its
 `context canceled` / `context deadline exceeded` errors), not at the service
 the rule watches.
 
@@ -551,12 +551,21 @@ as true when the query failed:
 - With `noDataState: OK`, wrap the summary in
   `{{ if $values }}…{{ else }}…{{ end }}`. A failed query has no values, and
   for these rules no data never notifies, so the `else` text is what a
-  `DatasourceError` shows: say the query failed and what to check. Do the
+  `DatasourceError` shows: say the query failed and what to check, naming
+  the rule's own data source (Loki or CloudWatch). Do the
   same for every other annotation the rule's contact point shows: the
   `Techops` email uses `title` as its subject and `description` as its body.
 - With `noDataState: Alerting`, a rule that found no data has no values
-  either, so the template cannot tell the two apart. Open the summary with
-  both cases, keyed on the alert name (`DatasourceError` or the rule's title).
+  either, so the `else` text cannot tell the two apart: give both cases there,
+  keyed on the alert name (`DatasourceError` or the rule's title). When the
+  rule's usual firing case has a value, put that text in the `if` branch. When
+  no data is the firing case, as for a log stream gone silent, there is no
+  `if` branch to use: open the summary with both cases.
+
+A resolved notification keeps the text from the last evaluation that had
+values. When a rule moves to Normal through no data, Grafana copies the
+alert's state and does not expand its annotations again, so the `else` text
+does not appear on a rule's resolved notice.
 
 ## Staging / production workflow
 

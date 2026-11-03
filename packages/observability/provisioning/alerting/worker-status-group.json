@@ -144,7 +144,10 @@
           "for": "30s",
           "provenance": "api",
           "isPaused": false,
-          "notification_settings": null
+          "notification_settings": null,
+          "annotations": {
+            "summary": "{{ if $values }}Workers reported ready more than 4 times in a 5-minute window, on average, for one priority. Worker processes are starting over and over: look in the worker log group for why they exit.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the workers. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+          }
         },
         {
           "id": 7,
@@ -286,7 +289,10 @@
           "for": "30s",
           "provenance": "api",
           "isPaused": false,
-          "notification_settings": null
+          "notification_settings": null,
+          "annotations": {
+            "summary": "{{ if $values }}More than one worker process exited and was replaced in a 5-minute window, on average. Look in the worker log group for why the workers exit.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about the workers. The query reads CloudWatch: the Error annotation's text says why, usually throttling or a missing permission.{{ end }}"
+          }
         }
       ]
     }
