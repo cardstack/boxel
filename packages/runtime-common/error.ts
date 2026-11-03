@@ -398,6 +398,10 @@ export interface CardErrorJSONAPI {
     cardTitle: string | null;
     scopedCssUrls: string[];
     stack: string | null;
+    // The realm's index row for this card records the error, so it is the
+    // card's own failure to index rather than a read that failed for another
+    // reason, such as permissions or the network.
+    indexError?: true;
     isCreationError?: true;
     responseHeaders?: { [header: string]: string };
     remoteId?: string;

@@ -23,6 +23,7 @@
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "policy-share-audit-test",
+      "published-realm-shared-key-test",
       "realm-endpoints/search-test",
       "realm-policy-activation-test",
       "realm-policy-anonymous-explain-test",

@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 import { guidFor } from '@ember/object/internals';
 import { consume } from 'ember-provide-consume-context';
 import { on } from '@ember/modifier';
+import { schedule } from '@ember/runloop';
 import SearchIcon from '@cardstack/boxel-icons/search';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
@@ -95,6 +96,7 @@ interface PoweredSelectSignature {
     matchTriggerWidth?: boolean;
     dropdownClass?: string;
     renderInPlace?: boolean;
+    onOpen?: (select: SelectApi) => void;
     ariaLabel?: string;
     ariaLabelledBy?: string;
     selectedItemComponent?: unknown;
@@ -102,6 +104,12 @@ interface PoweredSelectSignature {
   Blocks: { default: [SelectOption] };
   Element: HTMLElement;
 }
+// The part of power-select's public API that Select reads on open.
+interface SelectApi {
+  uniqueId: string;
+  actions: { reposition: () => void };
+}
+
 const PoweredSelect = BoxelSelect as unknown as new (
   owner: unknown,
   args: PoweredSelectSignature['Args'],
@@ -281,6 +289,38 @@ export class Select extends Component<SelectSignature> {
     wrap.addEventListener('mousedown', onPress);
     return () => wrap.removeEventListener('mousedown', onPress);
   });
+  private wrap: HTMLElement | null = null;
+  trackWrap = modifier((wrap: HTMLElement) => {
+    this.wrap = wrap;
+    return () => {
+      this.wrap = null;
+    };
+  });
+  // The options take the trigger's type size. The list renders outside the
+  // trigger's subtree, so each open copies the size onto it once it has
+  // rendered, before it paints, then repositions it: a list that opened
+  // above the trigger would otherwise be left short of it.
+  matchListType = (select: SelectApi) => {
+    schedule('afterRender', () => {
+      let trigger = this.wrap?.querySelector<HTMLElement>(
+        '[data-pretui-select-trigger]',
+      );
+      let list = document.getElementById(
+        `ember-basic-dropdown-content-${select.uniqueId}`,
+      );
+      if (!trigger || !list) {
+        return;
+      }
+      let style = getComputedStyle(trigger);
+      for (let name of [
+        '--pretui-select-list-font-size',
+        '--pretui-select-list-line-height',
+      ]) {
+        list.style.setProperty(name, style.getPropertyValue(name));
+      }
+      select.actions.reposition();
+    });
+  };
   get explicitName(): boolean {
     return (
       this.args.label !== undefined ||
@@ -350,6 +390,7 @@ export class Select extends Component<SelectSignature> {
         (if this.iconFace this.valueId)
       }}
       {{this.keepFocusInList}}
+      {{this.trackWrap}}
       data-test-pretui-select
       ...attributes
     >
@@ -372,6 +413,7 @@ export class Select extends Component<SelectSignature> {
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
         @renderInPlace={{this.popupsInPlace}}
+        @onOpen={{this.matchListType}}
         @ariaLabel={{if this.iconFace this.iconName @label}}
         @ariaLabelledBy={{this.iconLabelledBy}}
         @selectedItemComponent={{if
@@ -403,6 +445,9 @@ export class Select extends Component<SelectSignature> {
           --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
           --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
           --boxel-select-trigger-letter-spacing: var(--boxel-lsp-xs);
+          /* the options' type follows the trigger's */
+          --pretui-select-list-font-size: var(--boxel-select-trigger-font-size);
+          --pretui-select-list-line-height: var(--boxel-select-trigger-line-height);
           /* one block line, so a long label ends in an ellipsis */
           --boxel-select-trigger-content-display: block;
           --boxel-select-background-color: var(--field);
@@ -516,17 +561,20 @@ export class Select extends Component<SelectSignature> {
         }
         .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
         .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
           letter-spacing: var(--boxel-lsp-xs);
         }
+        /* the trigger's type, copied onto the list on each open */
         .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+          font-size: var(--pretui-select-list-font-size);
+          line-height: var(--pretui-select-list-line-height);
           min-height: var(--_select-h);
           padding-block: 0;
           padding-inline: var(--_select-px);
         }
         /* the trigger's 1px edge, and its 2px focus ring laid over it */
         .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
           min-height: var(--_select-h);
           padding-block: 0;
           border: 1px solid var(--border);
@@ -535,10 +583,9 @@ export class Select extends Component<SelectSignature> {
           outline: 2px solid var(--ring);
           outline-offset: -1px;
         }
-        /* iOS zooms into inputs under 16px on focus; the options follow
-           the trigger, and their rows grow as Autocomplete's do */
+        /* iOS zooms into inputs under 16px on focus; the options' rows
+           grow as Autocomplete's do */
         @media (pointer: coarse) {
-          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
           .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
             font-size: var(--boxel-form-control-touch-font-size);
             line-height: var(--boxel-form-control-line-height-sm);

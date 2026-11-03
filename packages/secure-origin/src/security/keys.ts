@@ -1031,6 +1031,9 @@ export interface KeyUsage {
     count: number;
     outcome?: 'vendor-forbidden';
   }[];
+  // For a share, where its calls this month were made: its own realm, and each
+  // site published from it (`published`). Empty for a personal key.
+  realms: { realm: string; calls: number; published?: true }[];
   grants: UsageGrant[];
   canEditLimits: boolean;
 }

@@ -1833,8 +1833,14 @@ export default class RealmService extends Service {
         // could have already been discovered while we were queued
         return;
       }
+      // Asked as a card document so the realm answers it. A request that
+      // accepts anything is answered by the host app's page instead — which
+      // names no realm — wherever the realm server also serves the app, as it
+      // does on a published site. The realm names itself on every response to
+      // this, a card's, a module's and a missing path's alike.
       let response = await this.network.authedFetch(url, {
         method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardJson },
       });
       let realmURL = response.headers.get('x-boxel-realm-url');
       if (realmURL) {

@@ -166,6 +166,7 @@ import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
   RealmPaths,
+  sameResourceIn,
   ensureTrailingSlash,
   isCaptureServingPath,
   withoutCaptureServingPrefix,
@@ -2586,8 +2587,13 @@ interface Options {
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
   // identify carries no server stack (see `withholdsStacksFrom`), and, at a
   // host's root, a crawler's `/robots.txt` gets a default answer when the
-  // realm holds none.
+  // realm holds none. Its policy keeps only the grants that send a key shared
+  // with its source (see `sharedKeyCallsOnly`).
   published?: true;
+  // For a published realm, the realm it was published from. Its policy card is
+  // the source's, copied, so a rule naming a type by the source's own URL names
+  // the copy of that type here.
+  sourceRealmURL?: string;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2864,6 +2870,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #published = false;
+  #sourceRealmURL: string | undefined;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   // The root ignore files' mtimes when their rules were last read.
@@ -2872,11 +2879,16 @@ export class Realm {
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
-    for await (let _entry of this.#adapter.readdir(directory)) {
-      // draining the listing is the whole effect; the entries are not used
-    }
-  });
+  #directoryViewRefresher = new DirectoryViewRefresher(
+    async (directory) => {
+      let names: string[] = [];
+      for await (let entry of this.#adapter.readdir(directory)) {
+        names.push(entry.name);
+      }
+      return names;
+    },
+    { exists: (path) => this.#adapter.exists(path) },
+  );
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -3225,6 +3237,7 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#published = Boolean(opts?.published);
+    this.#sourceRealmURL = opts?.published ? opts.sourceRealmURL : undefined;
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -15356,6 +15369,10 @@ export class Realm {
           cardTitle: error.cardTitle,
           scopedCssUrls: error.scopedCssUrls,
           stack: error.stack,
+          // The card's index row records this error, whatever its status, so
+          // a client can tell a card to fix from a read that failed for
+          // another reason.
+          ...(error.fromIndexRow ? { indexError: true } : {}),
         },
       },
     });
@@ -17686,7 +17703,9 @@ export class Realm {
           undefined,
           this.#virtualNetwork,
         );
-        return isResolvedCodeRef(absolute) ? absolute : undefined;
+        return isResolvedCodeRef(absolute)
+          ? this.#ownCopyOf(absolute)
+          : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
         this.#definitionLookup.lookupDefinitionEntry(codeRef),
@@ -17703,7 +17722,26 @@ export class Realm {
         (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
           .map((summary) => summary.code_ref)
           .sort(),
+      ...(this.#published ? { sharedKeyCallsOnly: true } : {}),
     };
+  }
+
+  // A type in a published realm's source, as the published realm names its
+  // copy: the module at the same path in this realm. A policy card copied from
+  // the source may name the source's types by their absolute URLs, while the
+  // published realm's cards adopt from its own copies of those modules. Any
+  // other type is named as it is.
+  #ownCopyOf(codeRef: ResolvedCodeRef): ResolvedCodeRef {
+    let source = this.#sourceRealmURL;
+    if (!source) {
+      return codeRef;
+    }
+    let copy = sameResourceIn(
+      new RealmPaths(new URL(source)),
+      new RealmPaths(new URL(this.url)),
+      this.#virtualNetwork.toURL(codeRef.module),
+    );
+    return copy ? { ...codeRef, module: copy } : codeRef;
   }
 
   // Indexes the policy card stored at `file` again, in the realm at `realmURL`
@@ -18486,6 +18524,7 @@ function cardJsonAssemblyFromFailure(
     return {
       kind: 'error',
       error: {
+        fromIndexRow: false,
         status: error.status,
         title: error.title,
         message: error.detail,
@@ -18502,6 +18541,7 @@ function cardJsonAssemblyFromFailure(
   return {
     kind: 'error',
     error: {
+      fromIndexRow: true,
       status: row.status,
       title: row.title,
       message: row.message,

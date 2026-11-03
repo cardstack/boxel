@@ -397,3 +397,20 @@ export function isPartialWritePath(localPath: LocalPath): boolean {
 export function realmConfigHrefFor(realmURL: URL): string {
   return new RealmPaths(realmURL).fileURL('realm.json').href;
 }
+
+// The resource at `id`'s path in `from`, found at the same path in `to`: how
+// a published realm names, in the realm it was published from, a card or
+// module it serves a copy of, and the reverse. Undefined when `id` is not in
+// `from`. A string `id` is compared in the form it is written in, so a caller
+// holding a VirtualNetwork passes a URL it resolved there.
+export function sameResourceIn(
+  from: RealmPaths,
+  to: RealmPaths,
+  id: RealmResourceIdentifier | URL,
+): RealmResourceIdentifier | undefined {
+  if (!from.inRealm(id)) {
+    return undefined;
+  }
+  let local = id instanceof URL ? from.local(id) : from.local(id);
+  return to.fileRRI(local);
+}

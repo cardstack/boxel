@@ -726,6 +726,9 @@ export class Batch {
   // `boxel_index` generation by row type, read once the job's spawning passes
   // have committed. Undefined until `adoptIndexGenerations` runs.
   #indexGenerations: Map<string, number> | undefined;
+  // The URLs of those that the index holds only as tombstones, read with the
+  // generations.
+  #tombstonedIndexURLs: Set<string> | undefined;
   #priorLoaderEpoch = '0';
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
@@ -1256,6 +1259,20 @@ export class Batch {
     for (let [path, meta] of fetched) {
       this.#fileMetaCache.set(path, meta);
     }
+  }
+
+  // When the realm's record of the file at this path says it created the
+  // file, in epoch seconds, or undefined when the realm records no file there:
+  // the realm writes a file's `realm_file_meta` row when it creates the file
+  // and removes it when it removes the file. Read fresh rather than from the
+  // prefetch, which predates anything the realm did since the pass began.
+  async recordedCreatedAt(localPath: string): Promise<number | undefined> {
+    let fetched = await getFileMetaForPaths(
+      this.#dbAdapter,
+      this.realmURL.href,
+      [localPath],
+    );
+    return fetched.get(localPath)?.createdAt;
   }
 
   // Ensure a created_at row exists for this file in realm_file_meta and return
@@ -1929,11 +1946,13 @@ export class Batch {
     }
     await this.ready;
     let indexGenerations = new Map<string, number>();
+    let indexedURLs = new Set<string>();
+    let liveIndexURLs = new Set<string>();
     let uniqueURLs = [...new Set(urls)];
     for (let offset = 0; offset < uniqueURLs.length; offset += 10000) {
       let chunk = uniqueURLs.slice(offset, offset + 10000);
       let rows = (await this.#query([
-        'SELECT url, type, generation FROM boxel_index WHERE',
+        'SELECT url, type, generation, is_deleted FROM boxel_index WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
           [
@@ -1943,12 +1962,16 @@ export class Batch {
             ),
           ],
         ]),
-      ] as Expression)) as Pick<
+      ] as Expression)) as (Pick<
         BoxelIndexTable,
         'url' | 'type' | 'generation'
-      >[];
-      for (let { url, type, generation } of rows) {
+      > & { is_deleted: boolean | null })[];
+      for (let { url, type, generation, is_deleted } of rows) {
         indexGenerations.set(indexGenerationKey(url, type), Number(generation));
+        indexedURLs.add(url);
+        if (!is_deleted) {
+          liveIndexURLs.add(url);
+        }
       }
     }
     let [row] = (await this.#query([
@@ -1957,7 +1980,22 @@ export class Batch {
     ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     this.#provisionalGeneration = row ? Number(row.current_generation) : 0;
     this.#indexGenerations = indexGenerations;
+    this.#tombstonedIndexURLs = new Set(
+      [...indexedURLs].filter((url) => !liveIndexURLs.has(url)),
+    );
     return this.#provisionalGeneration;
+  }
+
+  // Whether the committed index holds `url` only as a tombstone, among the
+  // URLs `adoptIndexGenerations` read: the index pass that committed it took
+  // the file as removed.
+  indexHoldsTombstone(url: string): boolean {
+    if (!this.#tombstonedIndexURLs) {
+      throw new Error(
+        `the prerender-html batch for ${this.realmURL.href} asked about ${url} before adopting the index generations`,
+      );
+    }
+    return this.#tombstonedIndexURLs.has(url);
   }
 
   // The generation this batch stamps on the `prerendered_html` row of `url`
