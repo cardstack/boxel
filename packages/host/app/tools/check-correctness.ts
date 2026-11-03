@@ -43,6 +43,16 @@ function hasNoExtension(href: string): boolean {
   return name.length > 0 && !name.includes('.');
 }
 
+// What reading a file as a card instance found: no card instance at that URL,
+// an error the instance carries, or a clean document and the index generation
+// it was written at. A read that fails without a card error says nothing
+// about the file.
+type InstanceRead =
+  | { kind: 'not-an-instance' }
+  | { kind: 'error'; error: string }
+  | { kind: 'clean'; generation?: number }
+  | { kind: 'unknown' };
+
 export default class CheckCorrectnessTool extends HostBaseTool<
   typeof BaseToolModule.CheckCorrectnessInput,
   typeof BaseToolModule.CorrectnessResultCard
@@ -302,26 +312,20 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       return { errors: [], warnings: [] };
     }
     let moduleGeneration = indexed.generation;
-    let instanceHrefs = await this.instancesToCheck(
-      indexed.invalidations,
-      roomId,
-    );
+    let instances = await this.readInstances(indexed.invalidations, roomId);
     let errors: string[] = [];
     let warnings: string[] = [];
     let awaitingRender = new Map<string, number>();
-    await Promise.all(
-      instanceHrefs.map(async (href) => {
-        let read = await this.readInstance(href);
-        if (read?.error) {
-          errors.push(read.error);
-        } else if (read) {
-          awaitingRender.set(
-            href,
-            Math.max(moduleGeneration, read.generation ?? moduleGeneration),
-          );
-        }
-      }),
-    );
+    for (let { href, read } of instances) {
+      if (read.kind === 'error') {
+        errors.push(read.error);
+      } else if (read.kind === 'clean') {
+        awaitingRender.set(
+          href,
+          Math.max(moduleGeneration, read.generation ?? moduleGeneration),
+        );
+      }
+    }
     if (awaitingRender.size === 0) {
       return { errors, warnings };
     }
@@ -341,9 +345,12 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     await Promise.all(
       [...awaitingRender.keys()].map(async (href) => {
         let read = await this.readInstance(href);
-        if (read?.error) {
+        if (read.kind === 'error') {
           errors.push(read.error);
-        } else if (!rendered.has(`${href}.json`)) {
+        } else if (
+          read.kind !== 'not-an-instance' &&
+          !rendered.has(`${href}.json`)
+        ) {
           warnings.push(
             `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
           );
@@ -353,15 +360,15 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return { errors, warnings };
   }
 
-  // The card instances among a write's invalidations, the ones the user is
-  // looking at first, capped at `maxInstanceChecks`. A name with no extension
-  // can still be a JSON file that is not a card, a file with no extension, or
-  // an instance deleted after the write was indexed, so a candidate counts
-  // only once its source reads as a card document.
-  private async instancesToCheck(
+  // Reads the card instances among a write's invalidations, the ones the
+  // user is looking at first, capped at `maxInstanceChecks`. A name with no
+  // extension can still be a JSON file that is not a card, a file with no
+  // extension, or an instance deleted after the write was indexed; the read
+  // finds no card instance for those, and the next candidate takes the place.
+  private async readInstances(
     invalidations: string[],
     roomId: string,
-  ): Promise<string[]> {
+  ): Promise<{ href: string; read: InstanceRead }[]> {
     let contextHrefs = this.contextCardHrefs(roomId);
     let rank = (href: string) => {
       let index = contextHrefs.indexOf(href);
@@ -370,13 +377,17 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     let candidates = invalidations
       .filter(hasNoExtension)
       .sort((a, b) => rank(a) - rank(b));
-    let instances: string[] = [];
+    let instances: { href: string; read: InstanceRead }[] = [];
     while (candidates.length > 0 && instances.length < maxInstanceChecks) {
       let batch = candidates.splice(0, maxInstanceChecks - instances.length);
-      let found = await Promise.all(
-        batch.map((href) => this.checkIfFileIsACardInstance(`${href}.json`)),
+      let reads = await Promise.all(
+        batch.map((href) => this.readInstance(href)),
       );
-      instances.push(...batch.filter((_href, index) => found[index]));
+      batch.forEach((href, index) => {
+        if (reads[index].kind !== 'not-an-instance') {
+          instances.push({ href, read: reads[index] });
+        }
+      });
     }
     return instances;
   }
@@ -402,15 +413,14 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return hrefs;
   }
 
-  // Reads the instance's document. An error is what its index visit
-  // recorded, which the realm answers with in place of the document, or what
-  // its current render recorded, which the document carries as
-  // `meta.renderError`; otherwise the read gives the index generation the
-  // document was written at. A read that fails without a card error says
-  // nothing about the instance, so it is logged and gives nothing.
-  private async readInstance(
-    cardHref: string,
-  ): Promise<{ error?: string; generation?: number } | undefined> {
+  // Reads the file as a card instance. The realm answers 404 for a URL with
+  // no card instance, and a file-meta document for a file that is not a card.
+  // An error is what the instance's index visit recorded, which the realm
+  // answers with in place of the document, or what its current render
+  // recorded, which the document carries as `meta.renderError`; otherwise
+  // the read gives the index generation the document was written at. A read
+  // that fails without a card error is logged.
+  private async readInstance(cardHref: string): Promise<InstanceRead> {
     let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
     try {
       let response = await this.network.authedFetch(rri(cardHref), {
@@ -419,29 +429,45 @@ export default class CheckCorrectnessTool extends HostBaseTool<
           [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only',
         },
       });
+      if (response.status === 404) {
+        await response.body?.cancel().catch(() => undefined);
+        return { kind: 'not-an-instance' };
+      }
       let body = await response.json().catch(() => undefined);
       if (!response.ok) {
         let error = body?.errors?.[0];
-        if (response.status !== 404 && isCardErrorJSONAPI(error)) {
-          return { error: this.describeCardError(cardId, error) };
+        if (isCardErrorJSONAPI(error)) {
+          return {
+            kind: 'error',
+            error: this.describeCardError(cardId, error),
+          };
         }
         console.warn(
           `CheckCorrectnessTool: reading ${cardId} for its errors failed (${response.status})`,
         );
-        return undefined;
+        return { kind: 'unknown' };
       }
-      let renderError: RenderErrorSummary | undefined = body?.meta?.renderError;
+      if (body?.data?.type !== 'card') {
+        return { kind: 'not-an-instance' };
+      }
+      let renderError: RenderErrorSummary | undefined = body.meta?.renderError;
       if (renderError) {
-        return { error: this.describeCardError(cardId, renderError) };
+        return {
+          kind: 'error',
+          error: this.describeCardError(cardId, renderError),
+        };
       }
-      let generation = body?.data?.meta?.generation;
-      return typeof generation === 'number' ? { generation } : {};
+      let generation = body.data.meta?.generation;
+      return {
+        kind: 'clean',
+        ...(typeof generation === 'number' ? { generation } : {}),
+      };
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: reading ${cardId} for its errors threw`,
         error,
       );
-      return undefined;
+      return { kind: 'unknown' };
     }
   }
 

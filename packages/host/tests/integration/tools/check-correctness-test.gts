@@ -591,6 +591,50 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.true(result.correct, 'the edit passes');
   });
 
+  test("reads an instance's document without fetching its source", async function (assert) {
+    mountModulePrerender();
+    let renders = announceRendersWithIndexEvents();
+    let announcedBefore = renders.announced;
+    let cardURL = `${testRealmURL}Milestone/launch`;
+    let reads = { source: 0, document: 0 };
+
+    let result = await checkMilestoneEdit(
+      '<h2>{{@model.title}}</h2>',
+      async () => {
+        // counts from the write's index event on, after the indexer's own reads
+        await waitUntil(() => renders.announced > announcedBefore, {
+          timeout: 10_000,
+        });
+        getService('network').virtualNetwork.mount(
+          async (request: Request) => {
+            let accept = request.headers.get('Accept') ?? '';
+            if (
+              request.url === `${cardURL}.json` &&
+              accept.includes('source')
+            ) {
+              reads.source++;
+            } else if (
+              request.url === cardURL &&
+              accept.includes('card+json')
+            ) {
+              reads.document++;
+            }
+            return null;
+          },
+          { prepend: true },
+        );
+      },
+    );
+
+    assert.true(result.correct, 'the edit passes');
+    assert.strictEqual(reads.source, 0, "the instance's source is not read");
+    assert.ok(reads.document >= 1, "the instance's document is read");
+    assert.ok(
+      reads.document <= 2,
+      `the instance's document is read at most twice (${reads.document})`,
+    );
+  });
+
   test('does not check an instance deleted after the module write', async function (assert) {
     mountModulePrerender();
     announceRendersWithIndexEvents();
