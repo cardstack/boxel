@@ -157,8 +157,9 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         data-test-anonymous-monthly-cap-input
       />
       <span id='anonymous-monthly-cap-note' class='note cap-note'>How many calls
-        they can make with it each calendar month (UTC), all together, in every
-        workspace it’s shared into. Leave it empty for no cap.</span>
+        people who aren’t signed in can make with this key each calendar month
+        (UTC), all together, in every workspace it’s shared into. Leave it empty
+        for no cap.</span>
     </FieldContainer>
   {{/if}}
 
