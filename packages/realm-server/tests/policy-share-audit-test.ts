@@ -28,8 +28,12 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  realmSecretSeed,
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
+import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { createPolicyWriteAuditor } from '../lib/policy-share-audit.ts';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
@@ -494,6 +498,7 @@ module(basename(import.meta.filename), function (hooks) {
         reason: 'visitors-use',
         operations: [FORECAST],
         declinedAt: null,
+        readAt: null,
         createdAt: 'string',
       },
       'the owner of a key that allows it is told visitors now use it',
@@ -852,5 +857,163 @@ module(basename(import.meta.filename), function (hooks) {
       confirmation,
     );
     assert.strictEqual((await notices(OTHER_OWNER)).length, 1);
+  });
+  // The app's own session, which the app page (and card code in it) holds.
+  function appSessionAuth(user: string) {
+    return `Bearer ${createRealmServerJWT(
+      { user, sessionRoom: 'test-session' },
+      realmSecretSeed,
+    )}`;
+  }
+
+  async function saveOpenedPolicy() {
+    let opened = policy(['forecast', 'alerts']);
+    let refused = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+    );
+    let saved = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+      auditOf(refused)!.confirmation,
+    );
+    if (saved.status !== 204) {
+      throw new Error(`could not save: ${saved.status} ${saved.text}`);
+    }
+  }
+
+  test('the app reads how many notices are unread, and the key page marks the ones it shows read', async function (assert) {
+    await shareBoth();
+    await saveOpenedPolicy();
+
+    let unreadFor = async (user: string) =>
+      (
+        await request
+          .get('/_key-policy-notices')
+          .set('Authorization', appSessionAuth(user))
+      ).body.meta.unread;
+    assert.strictEqual(await unreadFor(OWNER), 1, 'the app session reads it');
+    assert.strictEqual(await unreadFor(OTHER_OWNER), 1);
+
+    let listed = await request
+      .get('/_key-policy-notices')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+    let ownId = listed.body.data[0].id as string;
+    let othersId = (
+      await request
+        .get('/_key-policy-notices')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OTHER_OWNER))
+    ).body.data[0].id as string;
+    let markRead = (authorization: string, ids: unknown[]) =>
+      request
+        .post('/_key-policy-notices/read')
+        .set('Authorization', authorization)
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: ids.map((id) => ({ type: 'key-policy-notice', id })),
+        });
+
+    let fromApp = await request
+      .post('/_key-policy-notices/read')
+      .set('Authorization', appSessionAuth(OWNER))
+      .set('Content-Type', 'application/json')
+      .send({ data: [{ type: 'key-policy-notice', id: ownId }] });
+    assert.strictEqual(
+      fromApp.status,
+      403,
+      'the app page, where card code runs, cannot clear the badge',
+    );
+    assert.strictEqual(await unreadFor(OWNER), 1);
+
+    assert.strictEqual(
+      (await markRead(await secureSessionAuth(dbAdapter, OWNER), ['x1']))
+        .status,
+      400,
+      'an id that is not a notice id is refused',
+    );
+
+    let marked = await markRead(await secureSessionAuth(dbAdapter, OWNER), [
+      ownId,
+      othersId,
+    ]);
+    assert.strictEqual(marked.status, 200, marked.text);
+    assert.deepEqual(
+      marked.body.meta,
+      { marked: 1, unread: 0 },
+      'only the owner’s own notice is marked',
+    );
+    assert.strictEqual(await unreadFor(OWNER), 0);
+    assert.strictEqual(
+      await unreadFor(OTHER_OWNER),
+      1,
+      'another owner’s notice stays unread',
+    );
+    let [read] = await notices(OWNER);
+    assert.strictEqual(typeof read.readAt, 'string');
+
+    let again = await markRead(await secureSessionAuth(dbAdapter, OWNER), [
+      ownId,
+    ]);
+    assert.deepEqual(
+      again.body.meta,
+      { marked: 0, unread: 0 },
+      'a notice is marked read once',
+    );
+  });
+
+  test('recording a notice tells each owner one is waiting, once per notice', async function (assert) {
+    let { forecast, alerts } = await shareBoth();
+    let sent: { user: string; eventType: string }[] = [];
+    let auditor = createPolicyWriteAuditor({
+      dbAdapter,
+      realmFor: async () => undefined,
+      virtualNetwork: createVirtualNetwork(),
+      sendEvent: async (user, eventType) => {
+        sent.push({ user, eventType });
+      },
+    });
+    let audit: PolicyShareAudit = {
+      entries: [
+        {
+          realm: TEAM,
+          policy: TEAM_POLICY,
+          share: forecast.shareId,
+          label: 'Forecast key',
+          owner: OWNER,
+          keyAllowsAnonymous: true,
+          operations: [FORECAST],
+        },
+        {
+          realm: TEAM,
+          policy: TEAM_POLICY,
+          share: alerts.shareId,
+          label: 'Alerts key',
+          owner: OTHER_OWNER,
+          keyAllowsAnonymous: false,
+          operations: [ALERTS],
+        },
+      ],
+      confirmation: 'unused',
+    };
+    await auditor.notify(audit, ORG_ADMIN);
+    assert.deepEqual(
+      sent.sort((a, b) => a.user.localeCompare(b.user)),
+      [OTHER_OWNER, OWNER]
+        .sort((a, b) => a.localeCompare(b))
+        .map((user) => ({ user, eventType: KEY_NOTICES_UPDATED_EVENT_TYPE })),
+    );
+
+    sent = [];
+    await auditor.notify(audit, ORG_ADMIN);
+    assert.deepEqual(
+      sent,
+      [],
+      'a notice that says the same as the last one is not recorded or sent again',
+    );
   });
 });
