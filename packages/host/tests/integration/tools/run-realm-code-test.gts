@@ -809,7 +809,7 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
 
-  test('realm.capture refuses the image a capture took', async function (assert) {
+  test('realm.capture refuses the image a capture took, and says to capture what it shows', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
     let captured = `${CAPTURE_SOURCE_URL_PREFIX}0000000000000001/mango.png`;
@@ -820,7 +820,10 @@ return { show: 'Pet/missing' };`,
         roomId: '!room:example.com',
         code: `return await realm.capture('${captured}');`,
       }),
-      (error: Error) => error.message.includes(`Cannot capture ${captured}`),
+      (error: Error) =>
+        error.message.includes(`Cannot capture ${captured}`) &&
+        error.message.includes('capture the card or file it shows') &&
+        !error.message.includes('attach it again'),
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
