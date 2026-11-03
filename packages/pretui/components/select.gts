@@ -110,9 +110,13 @@ const PoweredSelect = BoxelSelect as unknown as new (
 // The trigger is a role='combobox' div, which a <label> does not name, so a
 // label pointing at @controlId (or wrapping the Select) is linked through
 // aria-labelledby — label first, then the trigger itself, so the chosen
-// value is still announced after the name.
+// value is still announced after the name. An icon face shows no value, so
+// there the hidden value span (tailId) follows the label instead.
 const nameFromLabel = modifier(
-  (wrap: HTMLElement, [controlId, explicit]: [string | undefined, boolean]) => {
+  (
+    wrap: HTMLElement,
+    [controlId, explicit, tailId]: [string | undefined, boolean, string?],
+  ) => {
     if (explicit) {
       return;
     }
@@ -134,7 +138,10 @@ const nameFromLabel = modifier(
     if (!label.id) {
       label.id = `${trigger.id}-label`;
     }
-    trigger.setAttribute('aria-labelledby', `${label.id} ${trigger.id}`);
+    trigger.setAttribute(
+      'aria-labelledby',
+      `${label.id} ${tailId ?? trigger.id}`,
+    );
   },
 );
 
@@ -276,7 +283,6 @@ export class Select extends Component<SelectSignature> {
   });
   get explicitName(): boolean {
     return (
-      this.iconFace !== undefined ||
       this.args.label !== undefined ||
       this.args.labelledBy !== undefined
     );
@@ -338,7 +344,11 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       data-display={{if this.iconFace 'icon'}}
-      {{nameFromLabel @controlId this.explicitName}}
+      {{nameFromLabel
+        @controlId
+        this.explicitName
+        (if this.iconFace this.valueId)
+      }}
       {{this.keepFocusInList}}
       data-test-pretui-select
       ...attributes
@@ -346,10 +356,8 @@ export class Select extends Component<SelectSignature> {
       {{! no id here: BoxelSelect finds the trigger by its own id to copy the
           theme onto the wormhole. A label[for=@controlId] still names it,
           through the aria-labelledby that nameFromLabel sets. }}
-      {{#if this.iconLabelledBy}}
-        {{#if this.iconFace}}
-          <span id={{this.valueId}} hidden>{{this.iconValue}}</span>
-        {{/if}}
+      {{#if this.iconFace}}
+        <span id={{this.valueId}} hidden>{{this.iconValue}}</span>
       {{/if}}
       <PoweredSelect
         class='pretui-selecttrigger'

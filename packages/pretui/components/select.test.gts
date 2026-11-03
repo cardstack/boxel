@@ -157,6 +157,19 @@ module('Pretui | components/select', function (hooks) {
     );
   });
 
+  test('in icon mode a label pointing at @controlId names the trigger, then the value', async function (assert) {
+    await render(
+      <template>
+        <label for='tea-icon'>Tea</label>
+        <Select @options={{OPTIONS}} @controlId='tea-icon' @display='icon' @icon={{Globe}} @defaultValue='green' />
+      </template>,
+    );
+    let labelEl = document.querySelector('label[for="tea-icon"]') as HTMLElement;
+    let [labelId, valueId] = (trigger().getAttribute('aria-labelledby') ?? '').split(' ');
+    assert.strictEqual(labelId, labelEl.id, 'the label comes first');
+    assert.strictEqual(document.getElementById(valueId!)?.textContent?.trim(), 'Green', 'then the hidden value');
+  });
+
   test('a label wrapping the Select names it too', async function (assert) {
     await render(
       <template>
