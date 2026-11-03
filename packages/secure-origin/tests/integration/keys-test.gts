@@ -593,6 +593,182 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Status"]').doesNotExist();
     });
 
+    test('lists what workspaces opened the user’s keys to people who aren’t signed in, and offers to allow a key that doesn’t', async function (assert) {
+      let notice = (
+        id: string,
+        attributes: Record<string, unknown>,
+      ): Record<string, unknown> => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          policy: `${REALM}policies/team`,
+          savedBy: '@admin:example.test',
+          createdAt: '2026-11-01T12:00:00.000Z',
+          ...attributes,
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('2', {
+                share: 'share-team-2',
+                label: 'Team weather',
+                key: 'key-1',
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+              notice('1', {
+                share: 'share-team-1',
+                label: 'Weather',
+                key: 'key-1',
+                reason: 'visitors-use',
+                operations: [`${REALM}weather#Weather.forecast`],
+              }),
+              notice('0', {
+                share: 'share-gone',
+                label: 'Deleted',
+                key: null,
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      assert
+        .dom('[data-test-key-policy-requests] [data-test-key-policy-notice]')
+        .exists(
+          { count: 1 },
+          'only the request still waiting on an answer asks for one: a deleted key’s is settled',
+        );
+      assert
+        .dom('[data-test-key-policy-requests]')
+        .containsText('Action needed')
+        .containsText('wants people who aren’t signed in to use your key')
+        .containsText('Team weather');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice="Weather"]',
+        )
+        .containsText('now use')
+        .containsText('Weather.forecast');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice-allow]',
+        )
+        .doesNotExist('a key visitors already use asks for nothing');
+      await click('[data-test-key-policy-notice-allow]');
+      assert
+        .dom('[data-test-key-anonymous-use-form]')
+        .exists('allowing it opens the key’s own setting');
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked('already set to allow it, so one Save finishes it');
+    });
+
+    test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
+      let declined = false;
+      let request = {
+        type: 'key-policy-notice',
+        id: '7',
+        attributes: {
+          realm: REALM,
+          share: 'share-team-2',
+          label: 'Team weather',
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-wanted',
+          operations: [`${REALM}weather#Weather.alerts`],
+          declinedAt: null as string | null,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      };
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              declined
+                ? {
+                    ...request,
+                    attributes: {
+                      ...request.attributes,
+                      declinedAt: '2026-11-02T12:00:00.000Z',
+                    },
+                  }
+                : request,
+            ],
+          }),
+        'POST _key-policy-notices/7/decline': () => {
+          declined = true;
+          return json(200, { data: request });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      await click('[data-test-key-policy-notice-decline]');
+      await settled();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.deepEqual(
+        requests
+          .filter((r) => r.method === 'POST' && r.path.startsWith('_key'))
+          .map((r) => r.path),
+        ['_key-policy-notices/7/decline'],
+        'nothing about the key is changed',
+      );
+    });
+
+    test('a notice that a workspace wants visitors to use a key is settled once the key allows them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([{ ...KEYS[0], anonymous: true }, KEYS[1]])),
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '1',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-team-2',
+                  label: 'Team weather',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-wanted',
+                  operations: [`${REALM}weather#Weather.alerts`],
+                  createdAt: '2026-11-01T12:00:00.000Z',
+                },
+              },
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+    });
+
+    test('a link naming a key opens its setting for people who aren’t signed in', async function (assert) {
+      visitShell('keys#anonymous=key-2');
+      await render(KeyPage);
+      await waitFor('[data-test-key-anonymous-use-form]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked();
+    });
+
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
         'GET _key-shares': () =>
@@ -700,7 +876,7 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings'],
+        ['GET _user-keys', 'GET _key-bindings', 'GET _key-policy-notices'],
         'the page asks nothing per key',
       );
     });
