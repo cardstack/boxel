@@ -161,11 +161,7 @@ module('viewAttachment', () => {
     assert.strictEqual(content.failureReason, undefined);
     assert.deepEqual(data.context, { agentId: AGENT_ID });
     assert.deepEqual(data.attachedFiles, [jpg]);
-    assert.deepEqual(outcome, {
-      commandRequestId: 'call-1',
-      ok: true,
-      published: true,
-    });
+    assert.deepEqual(outcome, { commandRequestId: 'call-1', published: true });
   });
 
   test('a URL no message in the room attached is refused', async () => {
@@ -187,7 +183,7 @@ module('viewAttachment', () => {
       content.failureReason,
     );
     assert.strictEqual(data.attachedFiles, undefined, 'nothing is attached');
-    assert.false(outcome.ok);
+    assert.true(outcome.published, 'the refusal reaches the room');
   });
 
   test('a stored media URL that no message attached is refused, even on this homeserver', async () => {
@@ -458,7 +454,7 @@ module('viewAttachment', () => {
       ),
       content.failureReason,
     );
-    assert.false(outcome.ok);
+    assert.true(outcome.published, 'the result reaches the room');
   });
 
   test('a call names at most the per-turn tool-result media count, and the rest are named back', async () => {

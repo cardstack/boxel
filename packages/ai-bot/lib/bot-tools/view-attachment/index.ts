@@ -40,11 +40,11 @@ export const viewAttachmentBotTool: BotTool = {
           attachments = roomAttachments(room.history, room.aiBotUserId);
           inputModalities = activeModelInputModalities(room.history);
         }
-        let { commandRequestId, published } = await fulfillViewAttachmentCall(
-          call,
-          { ...target, attachments, inputModalities },
-        );
-        return { commandRequestId, published };
+        return await fulfillViewAttachmentCall(call, {
+          ...target,
+          attachments,
+          inputModalities,
+        });
       },
     };
   },

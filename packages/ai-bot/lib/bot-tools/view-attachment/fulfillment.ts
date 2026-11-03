@@ -5,7 +5,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { publishToolResult } from '../results.ts';
-import type { BotToolCall, BotToolTarget } from '../types.ts';
+import type { BotToolCall, BotToolOutcome, BotToolTarget } from '../types.ts';
 import {
   lookUpAttachment,
   selectViewAttachmentUrls,
@@ -23,15 +23,6 @@ export interface ViewAttachmentFulfillmentDeps extends BotToolTarget {
   inputModalities?: string[];
 }
 
-export interface ViewAttachmentFulfillmentOutcome {
-  commandRequestId: string;
-  // True only when every named file was attached to the result.
-  ok: boolean;
-  error?: string;
-  // Whether the call's result reached the room.
-  published: boolean;
-}
-
 // Runs one viewAttachment call and publishes its result. Each file the call
 // names that a user attached in the room is attached to the result as the
 // same stored file (data.attachedFiles), which the prompt builder embeds on
@@ -42,7 +33,7 @@ export interface ViewAttachmentFulfillmentOutcome {
 export async function fulfillViewAttachmentCall(
   call: BotToolCall,
   deps: ViewAttachmentFulfillmentDeps,
-): Promise<ViewAttachmentFulfillmentOutcome> {
+): Promise<BotToolOutcome> {
   let { urls, dropped } = selectViewAttachmentUrls(call.function.arguments);
   if (urls.length === 0) {
     return await publishFailure(
@@ -89,19 +80,14 @@ export async function fulfillViewAttachmentCall(
     },
     VIEW_ATTACHMENT_TOOL_NAME,
   );
-  return {
-    commandRequestId: call.id,
-    ok: errors.length === 0,
-    ...(failureReason ? { error: failureReason } : {}),
-    published,
-  };
+  return { commandRequestId: call.id, published };
 }
 
 async function publishFailure(
   commandRequestId: string,
   error: string,
   deps: ViewAttachmentFulfillmentDeps,
-): Promise<ViewAttachmentFulfillmentOutcome> {
+): Promise<BotToolOutcome> {
   let published = await publishToolResult(
     deps.client,
     deps.roomId,
@@ -118,5 +104,5 @@ async function publishFailure(
     },
     VIEW_ATTACHMENT_TOOL_NAME,
   );
-  return { commandRequestId, ok: false, error, published };
+  return { commandRequestId, published };
 }
