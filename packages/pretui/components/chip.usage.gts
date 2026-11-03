@@ -109,7 +109,7 @@ class ChipUsage extends GlimmerComponent {
         />
         <Args.String
           @name='appearance'
-          @description='outlined (default) keeps the tone treatment; soft tints the fill with the hue and drops the ring; plain is dot + text with no frame, for dense tables.'
+          @description='outlined (default) keeps the tone treatment; soft tints the fill with the tone and drops the ring; plain is dot + text with no frame, for dense tables.'
           @options={{APPEARANCE_OPTIONS}}
           @defaultValue='outlined'
           @value={{this.appearance}}
