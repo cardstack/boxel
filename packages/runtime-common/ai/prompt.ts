@@ -2896,6 +2896,9 @@ function currentTurnHumanMessages(
 // of the budget: they are included, and buildCurrentTurnMediaParts names
 // them in its note instead of sending them. Text-based attachments are
 // excluded: their content rides in the history message that attached them.
+// A file attached to more than one of the turn's messages (the host attaches
+// the file open in code mode to every message) is sent once, as its newest
+// attachment, which history already tells the model supersedes the others.
 export function currentTurnMessageMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -2905,6 +2908,7 @@ export function currentTurnMessageMedia(
   let messages = currentTurnHumanMessages(history, aiBotUserId);
   let included: SerializedFileDef[] = [];
   let omitted: CurrentTurnMedia['omitted'] = [];
+  let newerAttachments = new Set<string>();
   let totalBytes = toolResultMedia.included.reduce(
     (sum, file) => sum + (file.contentSize ?? 0),
     0,
@@ -2917,6 +2921,11 @@ export function currentTurnMessageMedia(
       .filter((file) => file.url && requiredModality(file.contentType))
       .map(toFileDefMetadata);
     for (let file of mediaFiles.reverse()) {
+      let identity = file.sourceUrl || file.url!;
+      if (newerAttachments.has(identity)) {
+        continue;
+      }
+      newerAttachments.add(identity);
       let modality = requiredModality(file.contentType)!;
       let sendable = !inputModalities || inputModalities.includes(modality);
       let size = file.contentSize;

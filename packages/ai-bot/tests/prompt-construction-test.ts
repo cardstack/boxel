@@ -8259,6 +8259,26 @@ ${patchedFileSource}
       ]);
     });
 
+    test('a file attached to more than one message of the turn is sent once, as its newest attachment', async () => {
+      let firstCopy = png('open.png');
+      let newestCopy = {
+        ...firstCopy,
+        url: 'http://test.com/open.png-attached-again',
+      };
+      mockResponses.set(newestCopy.url, {
+        ok: true,
+        text: 'bytes-of-newest-copy',
+      });
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Look at this', [firstCopy]),
+        userMessage('2', 2, 'And make it brighter', [newestCopy]),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [
+        `data:image/png;base64,${Buffer.from('bytes-of-newest-copy').toString('base64')}`,
+      ]);
+    });
+
     test("an answer still streaming leaves the earlier message's image in the turn", async () => {
       let sample = png('sample.png');
       let prompt = await buildPrompt([
