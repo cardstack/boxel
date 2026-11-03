@@ -46,7 +46,9 @@ while their content keeps running).
   before it left. `<Presence>` measures only on a pass where its `@items`
   change: a row inside one that grows for any other reason still needs a
   `<LayoutGroup>`. In development the first such element logs a console
-  warning with the element attached.
+  warning with the element attached. The group goes around the `{{#each}}`,
+  never inside each row: Glimmer moves a keyed row's DOM before it re-renders
+  anything inside the row, so a group inside the row measures too late.
   ```gts
   <LayoutGroup>
     <ul>

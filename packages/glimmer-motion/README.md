@@ -256,7 +256,9 @@ places. A `layoutId` hand-off needs one too: the outgoing element's box is only 
 measured it before it left. In development the first such element logs a console warning with the
 element attached. `<Presence>` measures only on a pass where its `@items` change, so it covers a
 list that reorders, adds or removes, but a row inside one that grows for any other reason still
-needs a `<LayoutGroup>`.
+needs a `<LayoutGroup>`. The group goes around the `{{#each}}`, not inside each row: Glimmer moves a
+keyed row's DOM before it re-renders anything inside the row, so a group inside the row measures too
+late.
 Key the rows by a stable id as well: a key derived from position changes when the rows before it
 shift, and Glimmer replaces a row whose key changed with a new element, which has no earlier box to
 animate from.

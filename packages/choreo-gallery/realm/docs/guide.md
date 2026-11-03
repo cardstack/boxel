@@ -267,7 +267,9 @@ starts from is measured by a render detector at the start of each render pass, a
 `layout=true` rows with none of them above it jumps, and so does a `layoutId` hand-off; in development
 the first such element logs a warning with the element attached. `<Presence>` measures only on a pass
 where its `@items` change, so a row inside one that grows for any other reason still needs a
-`<LayoutGroup>`. Wrap the list, and key its rows by a stable id: a key derived from
+`<LayoutGroup>`. Wrap the `{{#each}}`, not each row: Glimmer moves a keyed row's DOM before it
+re-renders anything inside the row, so a group inside the row measures too late. Key its rows by a
+stable id: a key derived from
 position changes when the rows before it shift, and a row whose key changed is a new element with no
 earlier box to animate from.
 
