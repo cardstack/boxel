@@ -14,7 +14,16 @@ import {
 import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
-import { module, skip, test } from 'qunit';
+import { module, skip, test as qunitTest } from 'qunit';
+
+// STRESS HACK (do not merge): register every test 25 times, so the
+// filtered run repeats the targeted tests with a fresh setup each time.
+const STRESS_REPEATS = 25;
+const test = ((name: string, callback: any) => {
+  for (let i = 0; i < STRESS_REPEATS; i++) {
+    qunitTest(`${name} #${i}`, callback);
+  }
+}) as typeof qunitTest;
 
 import {
   buildToolFunctionNameFromResolvedRef,
