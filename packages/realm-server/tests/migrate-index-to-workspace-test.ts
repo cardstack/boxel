@@ -451,12 +451,12 @@ module(basename(import.meta.filename), function () {
       withTempDir((dir) => {
         let handRolled = makeRealm(
           dir,
-          'ctse/demo',
+          'alice/demo',
           indexCard('./workspace', 'Workspace'),
         );
         let otherBespoke = makeRealm(
           dir,
-          'ctse/other',
+          'alice/other',
           indexCard('./workspace', 'Workspace'),
         );
 
@@ -465,7 +465,7 @@ module(basename(import.meta.filename), function () {
             '--realms-root',
             dir,
             '--include',
-            'ctse/demo',
+            'alice/demo',
             '--manifest',
             join(dir, 'manifest.json'),
           ]),

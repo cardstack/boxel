@@ -1,3 +1,4 @@
+import type { PublishedProxyPolicies } from './lib/published-proxy-policy.ts';
 import Koa from 'koa';
 import cors from '@koa/cors';
 import http from 'http';
@@ -48,6 +49,12 @@ import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
+import {
+  createRealmIdentityResolver,
+  createMatrixOpenIdTokenVerifier,
+  createRealmOwnerNamespace,
+  createLocalHostedLoginClient,
+} from './lib/realm-identity.ts';
 import {
   appOrigin,
   createSecureOrigin,
@@ -715,9 +722,11 @@ export class RealmServer {
   private fileSizeLimitBytes: number;
   private audioSizeLimitBytes: number;
   private videoSizeLimitBytes: number;
+  private publishedProxyPolicies: PublishedProxyPolicies;
   private domainsForPublishedRealms:
     | {
         boxelSpace?: string;
+        boxelSpaceBaseURL?: string;
         boxelSite?: string;
       }
     | undefined;
@@ -729,8 +738,13 @@ export class RealmServer {
   private linkShapePolicy: LinkShapePolicy | undefined;
   private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
   private secureOrigin: SecureOrigin | undefined;
+  private readonly resolveMatrixRealmIdentity = createRealmIdentityResolver();
+  private readonly verifyMatrixOpenIdToken = createMatrixOpenIdTokenVerifier();
+  private readonly realmOwnerNamespace = createRealmOwnerNamespace();
+  private readonly localHostedLogin = createLocalHostedLoginClient();
   private googleSignIn: GoogleSignInConfig | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
+  private errorResponseFilter: Koa.Middleware;
 
   constructor({
     serverURL,
@@ -755,6 +769,7 @@ export class RealmServer {
     matrixAdminPassword,
     getRegistrationSecret,
     domainsForPublishedRealms,
+    publishedProxyPolicies = {},
     prerenderer,
     reportHostShell,
     searchCache,
@@ -764,6 +779,7 @@ export class RealmServer {
     secureOriginURL,
     secureOriginAppOrigins = [],
     googleSignIn,
+    errorResponseFilter,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -792,8 +808,10 @@ export class RealmServer {
     matrixAdminPassword?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
+    publishedProxyPolicies?: PublishedProxyPolicies;
     domainsForPublishedRealms?: {
       boxelSpace?: string;
+      boxelSpaceBaseURL?: string;
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
@@ -827,6 +845,7 @@ export class RealmServer {
     // The Google client the secure window signs in with (see
     // `lib/google-sign-in.ts`). Unset, it offers only a password.
     googleSignIn?: GoogleSignInConfig;
+    errorResponseFilter?: Koa.Middleware;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -837,6 +856,8 @@ export class RealmServer {
     ensureDirSync(realmsRootPath);
 
     this.serverURL = serverURL;
+    this.errorResponseFilter =
+      errorResponseFilter ?? (async (_context, next) => next());
     this.cardSizeLimitBytes = Number(
       process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
     );
@@ -869,6 +890,7 @@ export class RealmServer {
     this.matrixAdminPassword = matrixAdminPassword;
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
+    this.publishedProxyPolicies = publishedProxyPolicies;
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
     // realms — a bug under multi-instance Phase 3 semantics. The legacy
@@ -889,6 +911,9 @@ export class RealmServer {
           {
             matrixURL: matrixClient.matrixURL,
             realmServerURL: serverURL,
+            localIdentityLoginURL: this.localHostedLogin
+              ? new URL('_local-identity-login', serverURL)
+              : undefined,
             appOrigins: [
               ...new Set([
                 serverURL.origin,
@@ -919,6 +944,7 @@ export class RealmServer {
       fileSizeLimitBytes: this.fileSizeLimitBytes,
       audioSizeLimitBytes: this.audioSizeLimitBytes,
       videoSizeLimitBytes: this.videoSizeLimitBytes,
+      publishedProxyPolicies: this.publishedProxyPolicies,
     });
     let serveFromRealm = createServeFromRealm({
       realms: this.realms,
@@ -935,6 +961,7 @@ export class RealmServer {
       // Ahead of everything, so a request to the secure origin can never
       // reach realm routing, CORS or request logging.
       .use(secureOriginGate(this.secureOrigin))
+      .use(this.errorResponseFilter)
       // Next, so nothing downstream reads a client-supplied copy of the
       // headers it sets.
       .use(clientAddress(this.clientAddress))
@@ -1016,6 +1043,10 @@ export class RealmServer {
       .use(methodOverrideSupport)
       .use(
         createRoutes({
+          resolveMatrixRealmIdentity: this.resolveMatrixRealmIdentity,
+          verifyMatrixOpenIdToken: this.verifyMatrixOpenIdToken,
+          realmOwnerNamespace: this.realmOwnerNamespace,
+          localHostedLogin: this.localHostedLogin,
           dbAdapter: this.dbAdapter,
           definitionLookup: this.definitionLookup,
           mediaCacheAdapter: this.mediaCacheAdapter,
@@ -1039,6 +1070,7 @@ export class RealmServer {
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
+          publishedProxyPolicies: this.publishedProxyPolicies,
           prerenderer: this.prerenderer,
           reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,

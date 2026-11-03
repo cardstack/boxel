@@ -37,6 +37,13 @@ function fakeResponse(
 }
 
 describe('hostAppUrlForProfile', () => {
+  it('redeems native runtime profile tokens on the app gateway instead of the realm gateway', () => {
+    expect(
+      hostAppUrlForProfile({
+        realmServerUrl: 'http://realm.default.boxel.localhost:4242/',
+      }),
+    ).toBe('http://app.default.boxel.localhost:4242/');
+  });
   it('maps standard local dev to the host dev server origin', () => {
     // The realm server (4201) and host app (4200) run on different origins in
     // local dev; the token must be redeemed on the host app's.

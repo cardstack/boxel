@@ -53,6 +53,7 @@ export interface BotToolRoomFacts {
 }
 
 export interface BotToolRoom extends BotToolRoomFacts {
+  fetchRealmFile?: typeof globalThis.fetch;
   history: DiscreteMatrixEvent[];
   aiBotUserId: string;
   client: MatrixClient;

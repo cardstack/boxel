@@ -21,6 +21,15 @@ const execFileAsync = promisify(execFile);
 export class BrowserManager {
   #browser: Browser | null = null;
   #browserUserDataDir: string | undefined;
+  readonly #enableSandbox: boolean;
+
+  constructor(env: NodeJS.ProcessEnv = process.env) {
+    let sandbox = env.PRERENDER_CHROME_SANDBOX ?? 'false';
+    if (sandbox !== 'true' && sandbox !== 'false') {
+      throw new Error('PRERENDER_CHROME_SANDBOX must be true or false');
+    }
+    this.#enableSandbox = sandbox === 'true';
+  }
 
   async getBrowser(): Promise<Browser> {
     if (this.#browser) {
@@ -29,16 +38,12 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    // Always launch the prerender renderer with the Chromium sandbox off — it
-    // always has, and we require it to. This task runs only in a container
-    // where the sandbox can't initialize, so Chrome won't start with it on
-    // (and the V8 `--prof` diagnostic needs the renderer able to write its log
-    // to disk, which the sandbox blocks). The security boundary is the task
-    // itself: the prerenderer is a separate, segregated ECS task, isolated
-    // from the realm-server. Forced unconditionally rather than gated on CI /
-    // PUPPETEER_DISABLE_SANDBOX so a missing env var can't silently break the
-    // launch.
-    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    // Hosted container deployments retain their existing sandbox setting.
+    // Native launchers enable Chromium's sandbox explicitly; a local renderer
+    // does not have the ECS task isolation assumed by the container path.
+    if (!this.#enableSandbox) {
+      launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA

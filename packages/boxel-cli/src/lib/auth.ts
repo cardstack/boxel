@@ -41,6 +41,7 @@ interface MatrixLoginResponse {
 
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { requestNativeLoginToken } from './native-login-token.ts';
 
 export async function matrixLogin(
   matrixUrl: string,
@@ -127,6 +128,7 @@ function parseMatrixError(text: string): {
 export async function requestLoginToken(
   matrixAuth: MatrixAuth,
   fetchFn: typeof fetch = fetch,
+  realmServerUrl?: string,
 ): Promise<LoginToken> {
   let response = await fetchFn(
     new URL('_matrix/client/v1/login/get_token', matrixAuth.matrixUrl).href,
@@ -160,6 +162,12 @@ export async function requestLoginToken(
 
   let text = await response.text();
   let { errcode, flows, retryAfterMs } = parseMatrixError(text);
+  if (
+    response.status === 401 &&
+    Array.isArray(flows) &&
+    realmServerUrl !== undefined
+  )
+    return requestNativeLoginToken(matrixAuth, realmServerUrl, fetchFn);
 
   // A rejected access token — surface it as MatrixAuthError so the caller can
   // re-authenticate and retry once, matching the other Matrix calls here.
@@ -220,6 +228,7 @@ export async function requestLoginToken(
 
 async function getOpenIdToken(
   matrixAuth: MatrixAuth,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   let response = await fetch(
     new URL(
@@ -228,6 +237,8 @@ async function getOpenIdToken(
     ).href,
     {
       method: 'POST',
+      redirect: 'error',
+      ...(signal ? { signal } : {}),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${matrixAuth.accessToken}`,
@@ -256,13 +267,15 @@ export async function getRealmServerToken(
   // Ask the realm server for a long-lived token. Only for a caller that hands
   // the bare token to something which cannot re-mint on a 401 — everything
   // going through the CLI's own fetch wrappers should take the default.
-  opts: { extendedLifetime?: boolean } = {},
+  opts: { extendedLifetime?: boolean; signal?: AbortSignal } = {},
 ): Promise<string> {
-  let openIdToken = await getOpenIdToken(matrixAuth);
+  let openIdToken = await getOpenIdToken(matrixAuth, opts.signal);
   let url = `${realmServerUrl.replace(/\/$/, '')}/_server-session`;
 
   let response = await fetch(url, {
     method: 'POST',
+    redirect: 'error',
+    ...(opts.signal ? { signal: opts.signal } : {}),
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',

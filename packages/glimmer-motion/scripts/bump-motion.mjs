@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 // Moves the workspace catalog's Motion pins (framer-motion, motion, motion-dom,
 // motion-utils) to a newer framer-motion release, and writes the report a bump
 // PR carries: how the TypeScript source of every framer-motion module
@@ -33,7 +34,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, posix } from 'node:path';
 import { parseArgs } from 'node:util';
 
-const packageDir = new URL('..', import.meta.url).pathname;
+const packageDir = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = join(packageDir, '..', '..');
 const workspaceFile = join(repoRoot, 'pnpm-workspace.yaml');
 // The packages whose motion-dom / motion-utils peer ranges follow the catalog.

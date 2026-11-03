@@ -24,6 +24,7 @@ export interface PublishTargetSpec {
 }
 
 export interface PublishedRealmUrlContext {
+  spaceBaseURL?: string;
   // Required for 'subdirectory' targets.
   matrixUsername?: string;
   // Required for 'subdirectory' targets (e.g. config.publishedRealmBoxelSpaceDomain).
@@ -173,6 +174,34 @@ export function publishedSpaceHost(
   return `${publishedSpaceSubdomain(matrixUsername)}.${spaceDomain}`;
 }
 
+// The URL of a user's Boxel Space: `<base>/<username>/` when the realm server
+// serves spaces under a base URL, and the space's own host otherwise.
+export function resolvePublishedSpaceUrl(
+  ctx: PublishedRealmUrlContext,
+): string {
+  if (!ctx.matrixUsername) {
+    throw new Error('A subdirectory publish target requires `matrixUsername`');
+  }
+  if (ctx.spaceBaseURL) {
+    let base = new URL(ctx.spaceBaseURL);
+    if (
+      !['http:', 'https:'].includes(base.protocol) ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      !base.pathname.endsWith('/')
+    ) {
+      throw new Error('Invalid published space base URL');
+    }
+    return new URL(`${encodeURIComponent(ctx.matrixUsername)}/`, base).href;
+  }
+  if (!ctx.spaceDomain) {
+    throw new Error('A subdirectory publish target requires `spaceDomain`');
+  }
+  return `${normalizeProtocol(ctx.protocol ?? DEFAULT_PROTOCOL)}://${publishedSpaceHost(ctx.matrixUsername, ctx.spaceDomain)}/`;
+}
+
 export function resolvePublishedRealmUrl(
   target: PublishTargetSpec,
   ctx: PublishedRealmUrlContext = {},
@@ -196,15 +225,10 @@ export function resolvePublishedRealmUrl(
       } else {
         realmName = realmName.toLowerCase();
       }
-      if (!ctx.matrixUsername) {
-        throw new Error(
-          'A subdirectory publish target requires `matrixUsername`',
-        );
+      if (ctx.spaceBaseURL && !/^[a-z0-9][a-z0-9_-]*$/.test(realmName)) {
+        throw new Error('Invalid published space path segment');
       }
-      if (!ctx.spaceDomain) {
-        throw new Error('A subdirectory publish target requires `spaceDomain`');
-      }
-      return `${protocol}://${publishedSpaceHost(ctx.matrixUsername, ctx.spaceDomain)}/${realmName}/`;
+      return `${resolvePublishedSpaceUrl(ctx)}${realmName}/`;
     }
     default: {
       throw new Error(

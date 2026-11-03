@@ -63,6 +63,9 @@ export default config as {
   };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;
+  publishedRealmBoxelSpaceBaseURL?: string;
+  publishedRealmURL?: string;
+  publishedRequestForwardURL?: string;
   publishedRealmBoxelSiteDomain: string;
   defaultSystemCardId?: string;
   defaultFieldSpecId?: string;

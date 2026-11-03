@@ -1,3 +1,4 @@
+import type { PublishedProxyPolicies } from '../lib/published-proxy-policy.ts';
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
@@ -79,6 +80,7 @@ async function unshareableFormatsForPage(
 }
 
 export type ServeIndexDeps = {
+  publishedProxyPolicies?: PublishedProxyPolicies;
   serverURL: URL;
   assetsURL: URL;
   realms: Realm[];
@@ -312,6 +314,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             fileSizeLimitBytes,
             audioSizeLimitBytes,
             videoSizeLimitBytes,
+            publishedRealmBoxelSpaceBaseURL:
+              process.env.PUBLISHED_REALM_BOXEL_SPACE_BASE_URL ??
+              config.publishedRealmBoxelSpaceBaseURL,
             publishedRealmDomainOverrides:
               process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
               config.publishedRealmDomainOverrides,
@@ -572,6 +577,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // a private routed path exists to an unauthenticated caller. The map is
     // also written into the @cardstack/host/config/environment meta tag
     // further down so the SPA can resolve the path post-hydration.
+    if (
+      routedRealm &&
+      publishedRealmInfo &&
+      Object.keys(deps.publishedProxyPolicies ?? {}).length > 0
+    ) {
+      indexHTML = indexHTML.replace(
+        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*?)("\s*\/?>)/,
+        (_match, prefix, value, suffix) => {
+          let config = JSON.parse(decodeURIComponent(value));
+          config.publishedRealmURL = routedRealm.url;
+          config.publishedRequestForwardURL = new URL(
+            '_published-request-forward',
+            serverURL,
+          ).href;
+          return `${prefix}${encodeURIComponent(JSON.stringify(config))}${suffix}`;
+        },
+      );
+    }
     let routingMap: HostRoutingRule[] = routedRealm
       ? await routedRealm.getHostRoutingMap()
       : [];

@@ -32,3 +32,11 @@ export function resolveFullIndexOnStartup(
   }
   return kind === 'bootstrap';
 }
+
+export function resolveSkipBootIndex(
+  kind: RealmRegistryRow['kind'],
+  skipAll: boolean,
+  skipBootstrap: boolean,
+): boolean {
+  return skipAll || (skipBootstrap && kind === 'bootstrap');
+}

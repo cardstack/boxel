@@ -88,7 +88,10 @@ export default {
 
     // Emit .d.ts declaration files (includes rewriting the .gts import
     // specifiers the compiler leaves in them to resolvable .js ones).
-    addon.declarations('declarations', `pnpm ember-tsc --project ${tsConfig}`),
+    addon.declarations(
+      'declarations',
+      `pnpm ember-tsc --project ${tsConfig.replaceAll(' ', '\\ ')}`,
+    ),
 
     // Addons are allowed to contain imports of .css files, which we want
     // rollup to leave alone and keep in the published output. Anchored to this

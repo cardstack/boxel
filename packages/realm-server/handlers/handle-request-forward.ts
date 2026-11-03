@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
@@ -124,7 +126,7 @@ function setContentTypeHeader(
   headers['Content-Type'] = value;
 }
 
-interface RequestForwardBody {
+export interface RequestForwardBody {
   url: string;
   method: string;
   requestBody: string;
@@ -135,8 +137,10 @@ interface RequestForwardBody {
 
 export default function handleRequestForward({
   dbAdapter,
+  bodyOverride,
 }: {
   dbAdapter: DBAdapter;
+  bodyOverride?: RequestForwardBody;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // A caller that stops waiting must take the upstream call with it. Each
@@ -167,7 +171,9 @@ export default function handleRequestForward({
 
       // 2. Parse request body
       const request = await fetchRequestFromContext(ctxt);
-      const body = await request.text();
+      const body = bodyOverride
+        ? JSON.stringify(bodyOverride)
+        : await request.text();
       let json: RequestForwardBody;
 
       try {
@@ -354,6 +360,51 @@ export default function handleRequestForward({
             scrubber,
           });
           upstreamCall.release();
+
+          const mediaType = externalResponse.headers
+            .get('content-type')
+            ?.split(';')[0]
+            .trim()
+            .toLowerCase();
+          const binaryTypes = new Set([
+            'application/octet-stream',
+            'model/gltf-binary',
+            'application/vnd.cesium.b3dm',
+            'application/vnd.cesium.pnts',
+            'image/png',
+            'image/jpeg',
+            'image/webp',
+          ]);
+          if (
+            !destinationConfig.creditStrategy.chargesForUsage &&
+            mediaType &&
+            binaryTypes.has(mediaType) &&
+            externalResponse.body
+          ) {
+            ctxt.respond = false;
+            ctxt.res.writeHead(externalResponse.status, {
+              'Content-Type': mediaType,
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+            });
+            const reader = externalResponse.body.getReader();
+            const chunks = async function* () {
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) return;
+                  yield value;
+                }
+              } finally {
+                await reader.cancel().catch(() => undefined);
+                reader.releaseLock();
+              }
+            };
+            await pipeline(Readable.from(chunks()), ctxt.res, {
+              signal: clientGone,
+            });
+            return undefined;
+          }
 
           return await forwardJsonResponse(ctxt, externalResponse, {
             chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,

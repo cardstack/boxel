@@ -33,12 +33,13 @@ import {
 
 const log = logger('system-keys');
 
-export type SystemKeyAuthMethod = 'header' | 'url-parameter';
+export type SystemKeyAuthMethod = 'header' | 'raw-header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
 export type SystemKeyAction = 'add' | 'replace' | 'delete' | 'set-response-cap';
 
 export const SYSTEM_KEY_AUTH_METHODS: readonly SystemKeyAuthMethod[] = [
   'header',
+  'raw-header',
   'url-parameter',
 ];
 export const SYSTEM_KEY_CREDIT_STRATEGIES: readonly SystemKeyCreditStrategy[] =
@@ -366,6 +367,9 @@ export async function addSystemKey(
       400,
       `the auth method must be one of ${SYSTEM_KEY_AUTH_METHODS.join(', ')}`,
     );
+  }
+  if (key.authMethod === 'raw-header' && !key.paramName) {
+    throw new SystemKeyError(400, 'raw-header requires a parameter name');
   }
   if (!SYSTEM_KEY_CREDIT_STRATEGIES.includes(key.creditStrategy)) {
     throw new SystemKeyError(

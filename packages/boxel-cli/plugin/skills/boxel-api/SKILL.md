@@ -180,3 +180,24 @@ CodeRef fields (e.g. `ref` on a Spec card) are matched against the full `{ modul
 - **Sync / pull / track / watch CLI ergonomics** — those have their own per-command skills (`boxel-sync`, `boxel-track`, `boxel-watch`).
 - **Host commands via the prerenderer** (`/_run-command`) — that's the `boxel-command` skill.
 - **Realm provisioning** (`createRealm` / `boxel realm create`) and **readiness polling** (`client.waitForReady` / `/_readiness-check`) — orchestration concerns. The software-factory creates target realms in `factory-target-realm.ts` before the agent loop starts; consumers needing those APIs should read `boxel-cli/src/api.ts` directly or run `boxel realm create --help`.
+
+### System proxy credentials
+
+`boxel realm-server keys add` and the SDK `addSystemKey` support `header`
+(Bearer-prefixed), `raw-header` (no scheme, requires `paramName`), and
+`url-parameter`. For Google Map Tiles use `raw-header` with
+`X-Goog-Api-Key` and the destination `https://tile.googleapis.com/v1/3dtiles/`.
+Supply values using the masked prompt, stdin, or `--key-file`; never put a
+key in arguments or realm content. The authenticated `_request-forward`
+endpoint forwards JSON and, for no-credit destinations, binary 3D tiles and
+raster images with their original content type and no persistent cache.
+
+### Native prerender memory
+
+The native stack releases its prerender Chrome process after 60 seconds with
+no running or queued work, and starts it lazily for the next render. The
+prerender service remains ready while Chrome sleeps. An idle status is not a
+render failure; allow the next render its normal cold-start time. Server
+operators can set `PRERENDER_BROWSER_IDLE_TIMEOUT_MS` to a positive millisecond
+integer; 0 (the hosted default) retains the warm browser. See
+`packages/realm-server/LOCAL.md` for limits and lifecycle behavior.

@@ -452,6 +452,7 @@ export class PagePool {
   // → drop one slot. Reset every time pending appears or expansion
   // fires; see `#contractionLoop`.
   #idleContractionMs: number;
+  #contractionTickMs: number;
   // Background tick that drives contraction. Started in the
   // constructor whenever the dynamic-pool envelope can grow
   // (`#maxBurstPages > #minPages`), even before the first expansion;
@@ -694,6 +695,8 @@ export class PagePool {
       process.env.PRERENDER_POOL_IDLE_CONTRACTION_MS,
     );
     this.#idleContractionMs = envContractionMs ?? 60_000;
+    this.#contractionTickMs =
+      options.contractionTickMs ?? this.#idleContractionMs;
     let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 5);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
@@ -841,11 +844,15 @@ export class PagePool {
     // Pools running on the legacy fixed-size config skip the timer
     // entirely so test isolation and process exit cleanup don't have
     // to chase a ticker that does nothing.
-    if (this.#maxBurstPages > this.#minPages) {
-      let tickMs = options.contractionTickMs ?? this.#idleContractionMs;
+    this.#startContractionLoop();
+  }
+
+  #startContractionLoop(): void {
+    if (!this.#contractionInterval && this.#maxBurstPages > this.#minPages) {
+      this.#idleObservedAt = undefined;
       this.#contractionInterval = setInterval(
         () => this.#contractionTick(),
-        tickMs,
+        this.#contractionTickMs,
       );
       this.#contractionInterval.unref?.();
     }
@@ -1552,6 +1559,7 @@ export class PagePool {
   // refill attach nothing; the one rejection handler is attached here, when
   // the refill starts.
   #ensureStandbyPool(): Promise<void> {
+    this.#startContractionLoop();
     if (this.#ensuringStandbys) {
       // A request that lands mid-refill may carry news the running pass has
       // already read past — a close that freed budget after the pass found

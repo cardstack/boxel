@@ -25,6 +25,50 @@ Set this as the `OPENROUTER_API_KEY` environment variable.
 
     OPENROUTER_API_KEY="sk-..."
 
+### Local OpenAI-compatible models
+
+Set the backend explicitly at ai-bot startup. For the local Ollama setup:
+
+```sh
+AI_MODEL_PROVIDER=local \
+AI_MODEL_BASE_URL=http://127.0.0.1:11434/v1 \
+AI_MODEL_IDS='["boxel-qwen3.5:9b"]' \
+AI_TITLE_MODEL=boxel-qwen3.5:9b \
+node main.ts
+```
+
+Matrix and Postgres configuration are still required. No Ollama sign-in or
+API key is needed for a downloaded local model. The host's model configuration
+must use one of the local IDs; the bot does not replace a selected hosted
+model with an unrelated local model.
+
+| Setting             | Meaning                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AI_MODEL_PROVIDER` | `openrouter` (default) or `local`. Invalid values fail startup.                                                                                                      |
+| `AI_MODEL_BASE_URL` | Required in local mode; OpenAI-compatible API base, including `/v1`. No credentials, query or fragment in the URL.                                                   |
+| `AI_MODEL_IDS`      | Optional JSON array of allowed local IDs. Omission discovers the list from the endpoint's `/models`; an empty or invalid list fails startup.                         |
+| `AI_MODEL_API_KEY`  | Optional credential for a local server that requires one. Omission sends no Authorization header, including when a hosted `OPENROUTER_API_KEY` exists.               |
+| `AI_TITLE_MODEL`    | Hosted default `gpt-4o`; local default the first explicit/discovered ID. A local title model must be in the local list. Used for automatic and debug-command titles. |
+
+Local mode sets one explicit `unmetered` billing policy: the ai-bot neither
+checks credits nor debits generation/compaction costs or calls OpenRouter's
+generation-cost lookup. Hosted mode retains the existing credit behavior.
+Local provider configuration fields are rejected in hosted mode to expose
+misconfiguration instead of ignoring it. Catalog discovery fails startup if
+the endpoint is unavailable; no hosted fallback occurs.
+
+The local adapter strips OpenRouter-only request fields and attribution. It
+supports automatic tool selection; `none` removes tool definitions. Forced
+tool selection is rejected because Ollama's OpenAI endpoint does not support
+it. Local model selection, titles, compaction and normal completions use the
+same configured client.
+
+Run tests and the glint typecheck from the monorepo root through Turbo:
+
+```sh
+pnpm exec turbo run test lint:types --filter=@cardstack/ai-bot
+```
+
 ## Running
 
 Start the server with `pnpm start` or `pnpm start-dev` for live reload.

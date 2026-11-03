@@ -10,6 +10,7 @@ import {
   authorizationMiddleware,
   fetcher,
 } from '@cardstack/runtime-common';
+import { createPublicReferenceFetch } from '@cardstack/runtime-common/public-reference-fetch';
 
 import config from '@cardstack/host/config/environment';
 
@@ -28,6 +29,22 @@ export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare session: SessionService;
+
+  fetchPublicReference = createPublicReferenceFetch(
+    typeof config.publicReferenceCacheURL === 'string'
+      ? {
+          proxyURL: config.publicReferenceCacheURL,
+          realmURLs: [
+            config.resolvedCatalogRealmURL,
+            config.resolvedSkillsRealmURL,
+            config.resolvedOpenRouterRealmURL,
+            config.resolvedPretuiRealmURL,
+          ].filter(
+            (url): url is string => typeof url === 'string' && url !== '',
+          ),
+        }
+      : null,
+  );
 
   virtualNetwork = this.makeVirtualNetwork();
 
@@ -124,7 +141,7 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
+    let virtualNetwork = new VirtualNetwork(this.fetchPublicReference, {
       // Native (un-stubbed) timer so the fetch retry path's header-timeout
       // abort and retry backoff still fire during prerender, where
       // render-timer-stub disables the global setTimeout — otherwise a stalled

@@ -49,6 +49,63 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('local published spaces share one configured origin with owner paths', function (assert) {
+      assert.strictEqual(
+        resolvePublishedRealmUrl(
+          { type: 'subdirectory', name: 'geography' },
+          {
+            matrixUsername: 'alice',
+            spaceBaseURL: 'http://realm.default.boxel.localhost:4242/sites/',
+          },
+        ),
+        'http://realm.default.boxel.localhost:4242/sites/alice/geography/',
+      );
+      assert.strictEqual(
+        resolvePublishedRealmUrl(
+          { type: 'subdirectory', name: 'abc234def567ghjk' },
+          {
+            matrixUsername: 'alice',
+            spaceBaseURL: 'https://view-example-abcd.boxel.link/sites/',
+          },
+        ),
+        'https://view-example-abcd.boxel.link/sites/alice/abc234def567ghjk/',
+      );
+      for (let name of [
+        '../private',
+        'geography/extra',
+        '?query',
+        '#fragment',
+      ]) {
+        assert.throws(
+          () =>
+            resolvePublishedRealmUrl(
+              { type: 'subdirectory', name },
+              {
+                matrixUsername: 'alice',
+                spaceBaseURL: 'https://view-example-abcd.boxel.link/sites/',
+              },
+            ),
+          /Invalid published space path segment/,
+        );
+      }
+      for (let spaceBaseURL of [
+        'file:///tmp/',
+        'https://user:password@example.test/',
+        'https://example.test/?query',
+        'https://example.test/#fragment',
+        'https://example.test/sites',
+      ]) {
+        assert.throws(
+          () =>
+            resolvePublishedRealmUrl(
+              { type: 'subdirectory', name: 'geography' },
+              { matrixUsername: 'alice', spaceBaseURL },
+            ),
+          /Invalid published space base URL/,
+        );
+      }
+    });
+
     test('subdirectory lowercases the provided name', async function (assert) {
       assert.strictEqual(
         resolvePublishedRealmUrl(

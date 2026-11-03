@@ -131,6 +131,7 @@ export type ExtendedClient = Pick<
   | 'fetchRoomEvent'
   | 'forget'
   | 'getAccessToken'
+  | 'getCapabilities'
   | 'getJoinedRooms'
   | 'getProfileInfo'
   | 'getRoom'

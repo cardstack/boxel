@@ -571,6 +571,15 @@ You should be able to subscribe successfully after you perform the steps above.
 
 ## External API Proxy Setup
 
+The ai-bot can use a local OpenAI-compatible endpoint independently of the
+realm-server proxy. Set `AI_MODEL_PROVIDER=local`, `AI_MODEL_BASE_URL`, and
+optionally `AI_MODEL_IDS`, `AI_TITLE_MODEL`, or `AI_MODEL_API_KEY` at ai-bot
+startup. Local inference uses an explicit unmetered policy and sends no
+Authorization header when its local key is omitted. See
+[AI bot local models](packages/ai-bot/README.md#local-openai-compatible-models)
+for configuration and tool-selection support. This does not yet configure
+the host model picker or disable realm-server billing routes.
+
 The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, the realm server needs a **system key** (a row in `proxy_endpoints`) for each destination.
 
 #### Add a system key

@@ -24,6 +24,7 @@ The user can optionally apply 'patchCardInstance' by sending data about fields t
 Explain the general actions and user intent. If 'patchCardInstance' was used, express the title in an active sentence. Do NOT use the word "patch" in the title.`;
 
 export async function setTitle(
+  model: string,
   openai: OpenAI,
   client: MatrixClient,
   roomId: string,
@@ -47,7 +48,7 @@ export async function setTitle(
 
   let result = await openai.chat.completions.create(
     {
-      model: 'gpt-4o',
+      model,
       messages: startOfConversation as ChatCompletionMessageParam[],
       stream: false,
       ...(senderMatrixUserId ? { user: senderMatrixUserId } : {}),

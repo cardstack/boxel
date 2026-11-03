@@ -270,6 +270,7 @@ class RealmResource {
       realmServerURL: ensureTrailingSlash(this.realmServer.url.href),
       config: {
         spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        spaceBaseURL: ENV.publishedRealmBoxelSpaceBaseURL,
         siteDomain: ENV.publishedRealmBoxelSiteDomain,
       },
       matrixUsername: userId ? getMatrixUsername(userId) : undefined,

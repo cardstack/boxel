@@ -80,6 +80,7 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  boxelSlidingSyncRequiredState,
   SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
@@ -91,6 +92,7 @@ import {
   getToolRequests,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import { slidingSyncRoomIds } from '@cardstack/runtime-common/sliding-sync-room-ids';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
@@ -1811,7 +1813,7 @@ export default class MatrixService extends Service {
         not_room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE],
       },
       timeline_limit: timelineLimit,
-      required_state: [['*', '*']],
+      required_state: boxelSlidingSyncRequiredState(),
     };
   }
 
@@ -1827,7 +1829,7 @@ export default class MatrixService extends Service {
         is_dm: true,
       },
       timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
-      required_state: [['*', '*']],
+      required_state: boxelSlidingSyncRequiredState(),
     });
     // The rooms private realms send their realm events into. Like the session
     // rooms they aren't AI rooms, so their events are relayed as realm events.
@@ -1863,10 +1865,10 @@ export default class MatrixService extends Service {
     state: SlidingSyncState,
     resp: MSC3575SlidingSyncResponse | null,
   ) => {
-    let list = resp?.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME] as
-      | { ops: { room_ids: string[] }[] }
-      | undefined;
-    let roomIds: string[] = list?.ops?.[0]?.room_ids ?? [];
+    let roomIds = slidingSyncRoomIds(resp, SLIDING_SYNC_AI_ROOM_LIST_NAME);
+    let syncedRoomIds = [
+      ...new Set([...roomIds, ...Object.keys(resp?.rooms ?? {})]),
+    ];
     switch (state) {
       case SlidingSyncState.Complete:
         if (!this.initialSyncCompleted) {
@@ -1883,7 +1885,9 @@ export default class MatrixService extends Service {
             );
           });
         }
-        roomIds.forEach((id) => this.roomsWaitingForSync.get(id)?.fulfill());
+        syncedRoomIds.forEach((id) =>
+          this.roomsWaitingForSync.get(id)?.fulfill(),
+        );
         break;
       case SlidingSyncState.RequestFinished:
         roomIds.forEach((id) => this.aiRoomIds.add(id));
@@ -2845,12 +2849,32 @@ export default class MatrixService extends Service {
   }
 
   async createRoom(opts: MatrixSDK.ICreateRoomOpts) {
+    let capabilities = await this.client.getCapabilities();
+    let roomVersion =
+      opts.room_version ?? capabilities['m.room_versions']?.default;
+    let userId = this.userId;
+    if (
+      Number(roomVersion) >= 12 &&
+      userId &&
+      opts.power_level_content_override?.users
+    ) {
+      let users = { ...opts.power_level_content_override.users };
+      delete users[userId];
+      opts = {
+        ...opts,
+        power_level_content_override: {
+          ...opts.power_level_content_override,
+          users,
+        },
+      };
+    }
     let result = await this.client.createRoom(opts);
     await this.waitForRoomSync(result.room_id);
     return result;
   }
 
   async waitForRoomSync(roomId: string) {
+    if (this.client.getRoom(roomId)) return;
     let deferred = this.roomsWaitingForSync.get(roomId);
     if (!deferred) {
       deferred = new Deferred<void>();

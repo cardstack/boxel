@@ -184,10 +184,12 @@ export function systemKeyCredential(
     placement: {
       in: 'header',
       header:
-        destination.authMethod === 'header' && destination.authParameterName
+        (destination.authMethod === 'header' ||
+          destination.authMethod === 'raw-header') &&
+        destination.authParameterName
           ? destination.authParameterName
           : 'Authorization',
-      scheme: 'Bearer',
+      ...(destination.authMethod === 'raw-header' ? {} : { scheme: 'Bearer' }),
     },
   };
 }

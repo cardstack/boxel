@@ -23,6 +23,12 @@ export {
   resetProfileManager,
   setProfileManager,
 } from './src/lib/profile-manager.ts';
+export {
+  listStoredProfiles,
+  createStoredProfileBrowserLogin,
+  type StoredProfileSummary,
+  type StoredProfileBrowserLogin,
+} from './src/lib/desktop-profiles.ts';
 
 export { setQuiet, isQuiet } from './src/lib/cli-log.ts';
 
@@ -37,3 +43,9 @@ export {
   type QunitTestResult,
   type QunitRunSummary,
 } from './src/lib/test-engine.ts';
+
+export {
+  BoxelRuntimeClient,
+  type LocalStackStatus,
+  type LocalStackDoctor,
+} from './src/lib/boxel-runtime-client.ts';

@@ -18,6 +18,7 @@ export async function ensureSessionRoom(
   }: { dbAdapter: DBAdapter; matrixClient: MatrixClient },
   userId: string,
   registrationToken?: string,
+  matrixUserId = userId,
 ): Promise<string> {
   let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
   if (sessionRoom) {
@@ -39,7 +40,7 @@ export async function ensureSessionRoom(
       });
     }
   }
-  sessionRoom = await matrixClient.createDM(userId);
+  sessionRoom = await matrixClient.createDM(matrixUserId);
   await upsertSessionRoom(dbAdapter, userId, sessionRoom);
   return sessionRoom;
 }

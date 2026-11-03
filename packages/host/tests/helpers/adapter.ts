@@ -63,6 +63,15 @@ interface TestAdapterContents {
 let shimmedModuleIndicator = '// this file is shimmed';
 
 export class TestRealmAdapter implements RealmAdapter {
+  readonly verifyMatrixOpenIdToken = (
+    client: MatrixClient,
+    token: string,
+    matrixServerName: string,
+  ) => client.verifyOpenIdToken(token, matrixServerName);
+  readonly resolveMatrixRealmIdentity = async (matrixUser: string) => ({
+    user: matrixUser,
+    matrixUser,
+  });
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;

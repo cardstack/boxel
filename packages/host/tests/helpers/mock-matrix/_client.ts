@@ -856,6 +856,12 @@ export class MockClient implements ExtendedClient {
     return { event_id: this.serverState.eventId() };
   }
 
+  async getCapabilities() {
+    return {
+      'm.room_versions': { default: '11', available: {} },
+    };
+  }
+
   async createRoom({
     name,
     initial_state,

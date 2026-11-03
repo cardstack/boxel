@@ -1,6 +1,8 @@
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
+import { publicReferenceFetchFromEnv } from '@cardstack/runtime-common/public-reference-fetch';
+import { createEnvironmentAwareFetch } from '@cardstack/runtime-common/fetch-node';
 import { writeSync } from 'node:fs';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
@@ -156,7 +158,9 @@ if (fromUrls.length !== toUrls.length) {
   process.exit(-1);
 }
 
-let virtualNetwork = new VirtualNetwork();
+let virtualNetwork = new VirtualNetwork(
+  publicReferenceFetchFromEnv(process.env, createEnvironmentAwareFetch()),
+);
 for (let i = 0; i < fromUrls.length; i++) {
   let from = String(fromUrls[i]);
   let to = new URL(String(toUrls[i]));

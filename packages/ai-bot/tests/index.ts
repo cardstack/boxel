@@ -24,6 +24,7 @@ import './read-url-approval-test.ts';
 import './view-attachment-test.ts';
 import './bot-tools-test.ts';
 import './chat-completion-request-test.ts';
+import './model-backend-test.ts';
 import './lenient-json-test.ts';
 import './stop-test.ts';
 import './compaction-test.ts';

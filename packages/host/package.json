@@ -26,6 +26,8 @@
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm ember-test-pre-built",
     "test:deploy-cache-control": "node --test support/deploy-cache-control.test.mts",
+    "test:realm-server-transport": "node --test support/realm-server-transport.test.mts",
+    "test:public-source-names": "node --test support/public-source-names.test.mjs",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
     "test:live": "./scripts/live-test-wait-for-servers.sh",
     "ember-test-pre-built": "sleep 15 && ember test --path ./dist --query \"shard=$HOST_TEST_PARTITION&shardCount=$HOST_TEST_PARTITION_COUNT\"",

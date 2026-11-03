@@ -241,6 +241,10 @@ module(basename(import.meta.filename), function () {
         '/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker-61c2ae',
       ],
       ['the key write tickets route', '/_key-write-tickets'],
+      [
+        'native hosted sign-in',
+        '/_local-identity-login?password=password-marker-native',
+      ],
     ]) {
       test(`lists only header names on ${route}`, async function (assert) {
         sentry = startSentryCapture({ tracing: false, incomingRequests: true });
@@ -553,6 +557,8 @@ module(basename(import.meta.filename), function () {
         'https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
         'https://app.telemetry.test/_USER-KEYS/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
         'https://app.telemetry.test/_key-write-tickets',
+        'https://app.telemetry.test/_local-identity-login',
+        'https://app.telemetry.test/_LOCAL-IDENTITY-LOGIN',
       ]) {
         let event = scrubRequestTelemetry({
           request: {

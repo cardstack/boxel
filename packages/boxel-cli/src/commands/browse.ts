@@ -78,6 +78,11 @@ export function hostAppUrlForProfile(
     return ensureTrailingSlash(hostUrlOverride);
   }
   let realmServerUrl = ensureTrailingSlash(profile.realmServerUrl);
+  const native = new URL(realmServerUrl);
+  if (/^realm\.[a-z0-9-]+\.boxel\.localhost$/.test(native.hostname)) {
+    native.hostname = native.hostname.replace(/^realm\./, 'app.');
+    return native.href;
+  }
   if (realmServerUrl === LOCAL_REALM_SERVER_URL) {
     return LOCAL_HOST_APP_URL;
   }
@@ -146,7 +151,6 @@ export async function browse(
   options: BrowseOptions = {},
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
-  let requestLoginToken = options.requestLoginToken ?? defaultRequestLoginToken;
   let resolveAnonymousBrowseUrl =
     options.resolveAnonymousBrowseUrl ?? defaultResolveAnonymousBrowseUrl;
   let openBrowserFn = options.openBrowserFn ?? openBrowser;
@@ -195,6 +199,9 @@ export async function browse(
     throw new Error(NO_ACTIVE_PROFILE_ERROR);
   }
   let { id: profileId, profile } = resolved;
+  const requestLoginToken =
+    options.requestLoginToken ??
+    ((auth) => defaultRequestLoginToken(auth, fetch, profile.realmServerUrl));
 
   // Mint the login token, recovering once from a rejected access token via the
   // profile manager's interactive re-auth (same pattern as the other commands).

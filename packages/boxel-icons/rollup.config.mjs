@@ -1,6 +1,8 @@
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 import copy from 'rollup-plugin-copy';
+import { fileURLToPath } from 'node:url';
+import { publicSourceNamesPlugin } from '../host/lib/build/public-source-names.mjs';
 
 const addon = new Addon({
   srcDir: 'src',
@@ -43,6 +45,10 @@ export default {
 
     // Ensure that .gjs files are properly integrated as Javascript
     addon.gjs(),
+    publicSourceNamesPlugin({
+      sourceRoot: fileURLToPath(new URL('../../', import.meta.url)),
+      setting: process.env.BOXEL_PUBLIC_SOURCE_NAMES,
+    }),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean({ runOnce: true }),

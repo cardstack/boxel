@@ -791,6 +791,7 @@ module('setTitle', () => {
 
     // Call setTitle with our test data
     await setTitle(
+      'gpt-4o',
       mockOpenAI,
       mockMatrixClient,
       'test-room-id',
@@ -846,6 +847,7 @@ module('setTitle', () => {
     ];
 
     await setTitle(
+      'gpt-4o',
       mockOpenAI,
       mockMatrixClient,
       'test-room-id',
@@ -907,6 +909,7 @@ module('setTitle', () => {
     ];
 
     await setTitle(
+      'gpt-4o',
       mockOpenAI,
       mockMatrixClient,
       'test-room-id',

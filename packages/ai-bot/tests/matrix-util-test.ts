@@ -28,8 +28,10 @@ import {
   ROOM_EVENTS_MAX_PAGES,
   ROOM_EVENTS_PAGE_SIZE,
   sendErrorEvent,
+  setPublicErrorMessageFormatter,
 } from '@cardstack/runtime-common/ai';
 import { OpenAIError } from 'openai/error';
+import { createErrorDisclosureFromEnv } from '@cardstack/runtime-common/error-disclosure-node';
 
 const AI_BOT_USER_ID = '@aibot:localhost';
 
@@ -1015,6 +1017,32 @@ test('sendErrorEvent - falls back to error.message', async function (assert) {
     errorMessage,
     'generic failure',
     'Uses message property when no special handling applies',
+  );
+});
+
+test('sendErrorEvent - native error messages exclude filesystem paths and frames', async function (assert) {
+  let disclosure = createErrorDisclosureFromEnv({
+    BOXEL_ERROR_DETAILS: 'redacted',
+    BOXEL_ERROR_PRIVATE_PATH_PREFIXES: '["/private/tmp/boxel-error-fixture"]',
+  });
+  let previous = setPublicErrorMessageFormatter(disclosure.formatText);
+  try {
+    let errorMessage = await getErrorMessageFromSend(
+      new Error(
+        'Cannot connect /private/tmp/boxel-error-fixture/pg-socket\n    at connect (file:///private/tmp/boxel-error-fixture/runtime.ts:1:2)',
+      ),
+    );
+    assert.strictEqual(errorMessage, 'Cannot connect [local file]');
+    assert.strictEqual(
+      await getErrorMessageFromSend({ message: { invalid: true } }),
+      'Unknown error',
+    );
+  } finally {
+    setPublicErrorMessageFormatter(previous);
+  }
+  assert.strictEqual(
+    await getErrorMessageFromSend('Ordinary provider failure'),
+    'Ordinary provider failure',
   );
 });
 

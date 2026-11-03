@@ -13,6 +13,10 @@ import {
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
 import {
+  IdleBrowserLifecycle,
+  browserIdleTimeoutMs,
+} from './idle-browser-lifecycle.ts';
+import {
   PagePool,
   StandbyTargetNotReadyError,
   type ConsoleErrorEntry,
@@ -64,6 +68,7 @@ type PoolMeta = {
 
 export class Prerenderer {
   #stopped = false;
+  #idleBrowser: IdleBrowserLifecycle;
   #browserManager: BrowserManager;
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
@@ -111,6 +116,24 @@ export class Prerenderer {
     maxPages?: number;
     registerWithManager?: boolean;
   }) {
+    this.#idleBrowser = new IdleBrowserLifecycle({
+      timeoutMs: browserIdleTimeoutMs(),
+      release: async () => {
+        await this.#restartInFlight;
+        let affinities = this.#pagePool.getAffinityKeys();
+        await this.#pagePool.closeAll();
+        await this.#browserManager.stop();
+        this.#batchOwnership.clear();
+        for (let key of affinities) {
+          this.#renderRunner.clearIconMemo(key);
+          this.#renderRunner.clearAuthCache(key);
+        }
+        this.#unresponsiveTabs.reset();
+        log.info('Released idle prerender browser');
+      },
+      onError: (error) =>
+        log.warn('Failed to release idle prerender browser:', error),
+    });
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
@@ -165,7 +188,7 @@ export class Prerenderer {
     this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
     this.#startQueueSnapshotLoop();
-    void this.#pagePool.warmStandbys().catch((e) => {
+    void this.warmStandbys().catch((e) => {
       if (e instanceof StandbyTargetNotReadyError) {
         log.debug(
           'Prerenderer startup skipped standby warmup because the Boxel host target is not ready yet:',
@@ -266,6 +289,7 @@ export class Prerenderer {
       clearInterval(this.#queueSnapshotInterval);
       this.#queueSnapshotInterval = undefined;
     }
+    await this.#idleBrowser.stop();
     this.#affinitySnapshotSampler.shutdown();
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
@@ -278,17 +302,20 @@ export class Prerenderer {
     affinityType: AffinityType;
     affinityValue: string;
   }): Promise<void> {
-    // A realm's affinity goes with every session affinity it was split into.
-    let realmKey = toAffinityKey({ affinityType, affinityValue });
-    let affinityKeys = new Set([
-      realmKey,
-      ...this.#pagePool
-        .getAffinityKeys()
-        .filter((key) => isAffinityOfRealm(key, realmKey)),
-    ]);
-    for (let affinityKey of affinityKeys) {
-      await this.#pagePool.disposeAffinity(affinityKey);
-    }
+    if (this.#idleBrowser.suspended) return;
+    return this.#idleBrowser.run(async () => {
+      // A realm's affinity goes with every session affinity it was split into.
+      let realmKey = toAffinityKey({ affinityType, affinityValue });
+      let affinityKeys = new Set([
+        realmKey,
+        ...this.#pagePool
+          .getAffinityKeys()
+          .filter((key) => isAffinityOfRealm(key, realmKey)),
+      ]);
+      for (let affinityKey of affinityKeys) {
+        await this.#pagePool.disposeAffinity(affinityKey);
+      }
+    });
   }
 
   // Block until the standby pool has reached its desired count. The
@@ -297,7 +324,7 @@ export class Prerenderer {
   // (rather than racing the kicked refill) await this instead. Wraps
   // `PagePool.warmStandbys`, which dedupes against any in-flight kick.
   async warmStandbys(): Promise<void> {
-    await this.#pagePool.warmStandbys();
+    await this.#idleBrowser.run(() => this.#pagePool.warmStandbys());
   }
 
   // Recycle the whole browser to pick up a redeployed host. Reuses the
@@ -307,8 +334,9 @@ export class Prerenderer {
   // bundle. Coalesced via the same in-flight guard as #restartBrowser, so
   // overlapping recycle signals collapse to one restart.
   async recycle(): Promise<void> {
+    if (this.#idleBrowser.suspended) return;
     log.info('Recycling prerender browser to pick up a redeployed host');
-    await this.#restartBrowser();
+    await this.#idleBrowser.run(() => this.#restartBrowser());
   }
 
   // Emit the `render cancelled` log line (format from CS-10872)
@@ -486,78 +514,49 @@ export class Prerenderer {
     timings: Timings;
     pool: PoolMeta;
   }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
-    let activity = this.#affinityActivity.record(
-      affinityKey,
-      url,
-      'module',
-      'module',
-      priority,
-    );
-    // Declared before the try so the finally releases both even if the
-    // register call itself throws synchronously (e.g. setInterval
-    // fails under pressure). Without this, `activity` would leak.
-    let poller: PeakRegistration | undefined;
-    try {
-      poller = this.#affinitySnapshotSampler.register(
+    return this.#idleBrowser.run(async () => {
+      if (this.#stopped) {
+        throw new Error('Prerenderer has been stopped and cannot be used');
+      }
+      let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
+      let activity = this.#affinityActivity.record(
         affinityKey,
-        activity.handle,
+        url,
+        'module',
+        'module',
+        priority,
       );
-      let overallStart = Date.now();
-      let attemptOptions = renderOptions;
-      let lastResult:
-        | {
+      // Declared before the try so the finally releases both even if the
+      // register call itself throws synchronously (e.g. setInterval
+      // fails under pressure). Without this, `activity` would leak.
+      let poller: PeakRegistration | undefined;
+      try {
+        poller = this.#affinitySnapshotSampler.register(
+          affinityKey,
+          activity.handle,
+        );
+        let overallStart = Date.now();
+        let attemptOptions = renderOptions;
+        let lastResult:
+          | {
+              response: ModuleRenderResponse;
+              timings: Timings;
+              pool: PoolMeta;
+            }
+          | undefined;
+        // CS-10872: `totalElapsedMs` must cover only the attempt whose
+        // result we return, not earlier retries. Reset the marker at the
+        // top of each iteration so launch+render still sums to ~total.
+        let attemptStart = Date.now();
+        let freshTabRetried = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          throwIfAborted(signal);
+          attemptStart = Date.now();
+          let result: {
             response: ModuleRenderResponse;
             timings: Timings;
             pool: PoolMeta;
-          }
-        | undefined;
-      // CS-10872: `totalElapsedMs` must cover only the attempt whose
-      // result we return, not earlier retries. Reset the marker at the
-      // top of each iteration so launch+render still sums to ~total.
-      let attemptStart = Date.now();
-      let freshTabRetried = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        throwIfAborted(signal);
-        attemptStart = Date.now();
-        let result: {
-          response: ModuleRenderResponse;
-          timings: Timings;
-          pool: PoolMeta;
-        };
-        try {
-          result = await this.#renderRunner.prerenderModuleAttempt({
-            affinityType,
-            affinityValue,
-            realm,
-            url,
-            auth,
-            opts,
-            renderOptions: attemptOptions,
-            priority,
-            signal,
-            onTabAcquired: activity.markRunning,
-          });
-        } catch (e) {
-          // Caller cancelled — log + conditionally evict, then
-          // propagate. Don't restart the browser.
-          if (e instanceof PrerenderCancelledError) {
-            await this.#handlePrerenderCancel(
-              e,
-              affinityKey,
-              overallStart,
-              url,
-            );
-            throw e;
-          }
-          log.error(
-            `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-            e,
-          );
-          await this.#restartBrowser();
+          };
           try {
             result = await this.#renderRunner.prerenderModuleAttempt({
               affinityType,
@@ -571,104 +570,135 @@ export class Prerenderer {
               signal,
               onTabAcquired: activity.markRunning,
             });
-          } catch (e2) {
-            if (e2 instanceof PrerenderCancelledError) {
+          } catch (e) {
+            // Caller cancelled — log + conditionally evict, then
+            // propagate. Don't restart the browser.
+            if (e instanceof PrerenderCancelledError) {
               await this.#handlePrerenderCancel(
-                e2,
+                e,
                 affinityKey,
                 overallStart,
                 url,
               );
-              throw e2;
+              throw e;
             }
             log.error(
-              `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
+              `module prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+              e,
             );
-            throw e2;
+            await this.#restartBrowser();
+            try {
+              result = await this.#renderRunner.prerenderModuleAttempt({
+                affinityType,
+                affinityValue,
+                realm,
+                url,
+                auth,
+                opts,
+                renderOptions: attemptOptions,
+                priority,
+                signal,
+                onTabAcquired: activity.markRunning,
+              });
+            } catch (e2) {
+              if (e2 instanceof PrerenderCancelledError) {
+                await this.#handlePrerenderCancel(
+                  e2,
+                  affinityKey,
+                  overallStart,
+                  url,
+                );
+                throw e2;
+              }
+              log.error(
+                `module prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+                e2,
+              );
+              throw e2;
+            }
           }
-        }
-        lastResult = result;
+          lastResult = result;
 
-        let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
-          result.response,
-        );
-        let isClearCacheAttempt = attemptOptions?.clearCache === true;
-
-        if (!isClearCacheAttempt && retrySignature) {
-          log.warn(
-            `retrying module prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-              ' | ',
-            )}`,
+          let retrySignature = this.#renderRunner.shouldRetryWithClearCache(
+            result.response,
           );
-          attemptOptions = {
-            ...(attemptOptions ?? {}),
-            clearCache: true,
-          };
-          continue;
-        }
+          let isClearCacheAttempt = attemptOptions?.clearCache === true;
 
-        if (isClearCacheAttempt && retrySignature && result.response.error) {
-          log.warn(
-            `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-              ' | ',
-            )} for ${url}`,
-          );
-        }
+          if (!isClearCacheAttempt && retrySignature) {
+            log.warn(
+              `retrying module prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+                ' | ',
+              )}`,
+            );
+            attemptOptions = {
+              ...(attemptOptions ?? {}),
+              clearCache: true,
+            };
+            continue;
+          }
 
-        let failedChunk = result.pool.evicted
-          ? this.#renderRunner.failedHostChunkImport(result.response.error)
-          : undefined;
-        if (failedChunk && !freshTabRetried) {
-          // The evicted tab can never import that chunk again, but a fresh
-          // tab fetches it anew, so the next attempt gets one.
-          log.warn(
-            `retrying module prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
-          );
-          freshTabRetried = true;
-          continue;
-        }
-        if (failedChunk) {
-          log.warn(
-            `module prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
-          );
-        }
+          if (isClearCacheAttempt && retrySignature && result.response.error) {
+            log.warn(
+              `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+                ' | ',
+              )} for ${url}`,
+            );
+          }
 
-        Prerenderer.decorateRenderErrorsWithTimings(
-          result.response,
-          result.timings,
-          Date.now() - attemptStart,
-          {
-            affinitySnapshot: poller.currentPeak(),
-            priority,
-            tabReused: result.pool?.reused,
-          },
-        );
-        return result;
+          let failedChunk = result.pool.evicted
+            ? this.#renderRunner.failedHostChunkImport(result.response.error)
+            : undefined;
+          if (failedChunk && !freshTabRetried) {
+            // The evicted tab can never import that chunk again, but a fresh
+            // tab fetches it anew, so the next attempt gets one.
+            log.warn(
+              `retrying module prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+            );
+            freshTabRetried = true;
+            continue;
+          }
+          if (failedChunk) {
+            log.warn(
+              `module prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
+            );
+          }
+
+          Prerenderer.decorateRenderErrorsWithTimings(
+            result.response,
+            result.timings,
+            Date.now() - attemptStart,
+            {
+              affinitySnapshot: poller.currentPeak(),
+              priority,
+              tabReused: result.pool?.reused,
+            },
+          );
+          return result;
+        }
+        if (lastResult) {
+          if (lastResult.response.error) {
+            log.error(
+              `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
+            );
+          }
+          Prerenderer.decorateRenderErrorsWithTimings(
+            lastResult.response,
+            lastResult.timings,
+            Date.now() - attemptStart,
+            {
+              affinitySnapshot: poller.currentPeak(),
+              priority,
+              tabReused: lastResult.pool?.reused,
+            },
+          );
+          return lastResult;
+        }
+        throw new Error(`module prerender attempts exhausted for ${url}`);
+      } finally {
+        poller?.stop();
+        activity.release();
       }
-      if (lastResult) {
-        if (lastResult.response.error) {
-          log.error(
-            `module prerender attempts exhausted for ${url} in realm ${realm}, returning last error response`,
-          );
-        }
-        Prerenderer.decorateRenderErrorsWithTimings(
-          lastResult.response,
-          lastResult.timings,
-          Date.now() - attemptStart,
-          {
-            affinitySnapshot: poller.currentPeak(),
-            priority,
-            tabReused: lastResult.pool?.reused,
-          },
-        );
-        return lastResult;
-      }
-      throw new Error(`module prerender attempts exhausted for ${url}`);
-    } finally {
-      poller?.stop();
-      activity.release();
-    }
+    });
   }
 
   async runCommand({
@@ -693,46 +723,48 @@ export class Prerenderer {
     timings: Timings;
     pool: PoolMeta;
   }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    let commandStart = Date.now();
-    let affinityKey = toAffinityKey({
-      affinityType: 'user',
-      affinityValue: userId,
-      auth,
-    });
-    try {
-      let result = await this.#renderRunner.runCommandAttempt({
+    return this.#idleBrowser.run(async () => {
+      if (this.#stopped) {
+        throw new Error('Prerenderer has been stopped and cannot be used');
+      }
+      let commandStart = Date.now();
+      let affinityKey = toAffinityKey({
         affinityType: 'user',
         affinityValue: userId,
         auth,
-        command,
-        commandInput,
-        opts,
-        priority,
-        signal,
       });
-      Prerenderer.decorateRenderErrorsWithTimings(
-        result.response,
-        result.timings,
-        Date.now() - commandStart,
-        { priority, tabReused: result.pool?.reused },
-      );
-      return result;
-    } catch (e) {
-      if (e instanceof PrerenderCancelledError) {
-        await this.#handlePrerenderCancel(
-          e,
-          affinityKey,
-          commandStart,
+      try {
+        let result = await this.#renderRunner.runCommandAttempt({
+          affinityType: 'user',
+          affinityValue: userId,
+          auth,
           command,
+          commandInput,
+          opts,
+          priority,
+          signal,
+        });
+        Prerenderer.decorateRenderErrorsWithTimings(
+          result.response,
+          result.timings,
+          Date.now() - commandStart,
+          { priority, tabReused: result.pool?.reused },
         );
+        return result;
+      } catch (e) {
+        if (e instanceof PrerenderCancelledError) {
+          await this.#handlePrerenderCancel(
+            e,
+            affinityKey,
+            commandStart,
+            command,
+          );
+          throw e;
+        }
+        log.error(`command run attempt failed (user ${userId})`, e);
         throw e;
       }
-      log.error(`command run attempt failed (user ${userId})`, e);
-      throw e;
-    }
+    });
   }
 
   async prerenderCapture({
@@ -760,82 +792,84 @@ export class Prerenderer {
     timings: Timings;
     pool: PoolMeta;
   }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    let cdpCaptureStart = Date.now();
-    let affinityKey = toAffinityKey({
-      affinityType: 'realm',
-      affinityValue: realm,
-      auth,
-    });
-    try {
-      // Both attempts share the one time limit a single render has, so a
-      // retry keeps the capture inside the request and job deadlines sized
-      // for one render — the same bound a file capture's extract and render
-      // share in `runCaptureAttempt`.
-      let deadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
-      let attempt = (timeoutMs?: number) =>
-        this.#renderRunner.runCaptureAttempt({
-          affinityType: 'realm',
-          affinityValue: realm,
-          realm,
-          url,
-          auth,
-          format,
-          ...(captureSpec ? { captureSpec } : {}),
-          ...(renderOptions ? { renderOptions } : {}),
-          priority,
-          opts: timeoutMs === undefined ? opts : { ...opts, timeoutMs },
-          signal,
-        });
-      let attemptStart = Date.now();
-      let result = await attempt();
-      let attemptMs = Date.now() - attemptStart;
-      // A fetch that failed at the network layer failed the capture with it.
-      // The capture gets one more attempt — on a fresh tab when the failure
-      // evicted this one, as a visit does when its tab fails to import a host
-      // chunk. A capture is a read, so repeating it is safe. A retry left
-      // less time than the failed attempt took is unlikely to finish, so the
-      // first result stands instead.
-      let fetchFailure = this.#renderRunner.captureFetchFailure(result);
-      let remainingMs = deadline - Date.now();
-      if (fetchFailure && remainingMs < attemptMs) {
-        log.warn(
-          `not retrying capture of ${url}: the attempt failed a fetch after ${attemptMs}ms and ${Math.max(
-            0,
-            remainingMs,
-          )}ms remain: ${fetchFailure}`,
-        );
-      } else if (fetchFailure) {
-        log.warn(
-          `retrying capture of ${url}${
-            result.pool.evicted ? ' on a fresh tab' : ''
-          } with ${remainingMs}ms left: the attempt failed a fetch: ${fetchFailure}`,
-        );
-        result = await attempt(remainingMs);
-        let again = this.#renderRunner.captureFetchFailure(result);
-        if (again) {
-          log.error(
-            `capture of ${url} failed a fetch on its retry too: ${again}`,
-          );
-        }
+    return this.#idleBrowser.run(async () => {
+      if (this.#stopped) {
+        throw new Error('Prerenderer has been stopped and cannot be used');
       }
-      Prerenderer.decorateRenderErrorsWithTimings(
-        result.response,
-        result.timings,
-        Date.now() - cdpCaptureStart,
-        { priority, tabReused: result.pool?.reused },
-      );
-      return result;
-    } catch (e) {
-      if (e instanceof PrerenderCancelledError) {
-        await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
+      let cdpCaptureStart = Date.now();
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realm,
+        auth,
+      });
+      try {
+        // Both attempts share the one time limit a single render has, so a
+        // retry keeps the capture inside the request and job deadlines sized
+        // for one render — the same bound a file capture's extract and render
+        // share in `runCaptureAttempt`.
+        let deadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
+        let attempt = (timeoutMs?: number) =>
+          this.#renderRunner.runCaptureAttempt({
+            affinityType: 'realm',
+            affinityValue: realm,
+            realm,
+            url,
+            auth,
+            format,
+            ...(captureSpec ? { captureSpec } : {}),
+            ...(renderOptions ? { renderOptions } : {}),
+            priority,
+            opts: timeoutMs === undefined ? opts : { ...opts, timeoutMs },
+            signal,
+          });
+        let attemptStart = Date.now();
+        let result = await attempt();
+        let attemptMs = Date.now() - attemptStart;
+        // A fetch that failed at the network layer failed the capture with it.
+        // The capture gets one more attempt — on a fresh tab when the failure
+        // evicted this one, as a visit does when its tab fails to import a host
+        // chunk. A capture is a read, so repeating it is safe. A retry left
+        // less time than the failed attempt took is unlikely to finish, so the
+        // first result stands instead.
+        let fetchFailure = this.#renderRunner.captureFetchFailure(result);
+        let remainingMs = deadline - Date.now();
+        if (fetchFailure && remainingMs < attemptMs) {
+          log.warn(
+            `not retrying capture of ${url}: the attempt failed a fetch after ${attemptMs}ms and ${Math.max(
+              0,
+              remainingMs,
+            )}ms remain: ${fetchFailure}`,
+          );
+        } else if (fetchFailure) {
+          log.warn(
+            `retrying capture of ${url}${
+              result.pool.evicted ? ' on a fresh tab' : ''
+            } with ${remainingMs}ms left: the attempt failed a fetch: ${fetchFailure}`,
+          );
+          result = await attempt(remainingMs);
+          let again = this.#renderRunner.captureFetchFailure(result);
+          if (again) {
+            log.error(
+              `capture of ${url} failed a fetch on its retry too: ${again}`,
+            );
+          }
+        }
+        Prerenderer.decorateRenderErrorsWithTimings(
+          result.response,
+          result.timings,
+          Date.now() - cdpCaptureStart,
+          { priority, tabReused: result.pool?.reused },
+        );
+        return result;
+      } catch (e) {
+        if (e instanceof PrerenderCancelledError) {
+          await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
+          throw e;
+        }
+        log.error(`capture attempt failed (url ${url})`, e);
         throw e;
       }
-      log.error(`capture attempt failed (url ${url})`, e);
-      throw e;
-    }
+    });
   }
 
   async prerenderVisit(
@@ -858,118 +892,80 @@ export class Prerenderer {
     timings: Timings;
     pool: PoolMeta;
   }> {
-    if (this.#stopped) {
-      throw new Error('Prerenderer has been stopped and cannot be used');
-    }
-    // Apply batch-ownership gating before the retry loop so the internal
-    // retry-with-clearCache (see `retrySignature` handling below) operates
-    // on options that have already been through the gate. The retry still
-    // works regardless of ownership — it's the external caller's
-    // clearCache that's policy-checked, not the server's own recovery.
-    let {
-      affinityType,
-      affinityValue,
-      realm,
-      url,
-      auth,
-      visitType,
-      renderOptions,
-      fileData,
-      types,
-      cardTypes,
-      opts,
-      priority,
-      jobId,
-      batchId,
-      captures,
-      renderScope,
-      cardSource,
-    } = this.#gateClearCache(rawArgs);
-    let signal = (rawArgs as { signal?: AbortSignal }).signal;
-    let testOnTabAcquired = (
-      rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
-    ).onTabAcquired;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
-    let activity = this.#affinityActivity.record(
-      affinityKey,
-      url,
-      'visit',
-      'file',
-      priority,
-      batchId,
-    );
-    let onTabAcquired = (info: { pageId: string }) => {
-      activity.markRunning();
-      testOnTabAcquired?.(info);
-    };
-    // See `prerenderModule` — declared before the try so a synchronous
-    // throw from `#registerPeakSampling` can't leak the activity entry.
-    let poller: PeakRegistration | undefined;
-    try {
-      poller = this.#affinitySnapshotSampler.register(
+    return this.#idleBrowser.run(async () => {
+      if (this.#stopped) {
+        throw new Error('Prerenderer has been stopped and cannot be used');
+      }
+      // Apply batch-ownership gating before the retry loop so the internal
+      // retry-with-clearCache (see `retrySignature` handling below) operates
+      // on options that have already been through the gate. The retry still
+      // works regardless of ownership — it's the external caller's
+      // clearCache that's policy-checked, not the server's own recovery.
+      let {
+        affinityType,
+        affinityValue,
+        realm,
+        url,
+        auth,
+        visitType,
+        renderOptions,
+        fileData,
+        types,
+        cardTypes,
+        opts,
+        priority,
+        jobId,
+        batchId,
+        captures,
+        renderScope,
+        cardSource,
+      } = this.#gateClearCache(rawArgs);
+      let signal = (rawArgs as { signal?: AbortSignal }).signal;
+      let testOnTabAcquired = (
+        rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
+      ).onTabAcquired;
+      let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
+      let activity = this.#affinityActivity.record(
         affinityKey,
-        activity.handle,
+        url,
+        'visit',
+        'file',
+        priority,
+        batchId,
       );
-      let overallStart = Date.now();
-      let attemptOptions = renderOptions;
-      let lastResult:
-        | {
+      let onTabAcquired = (info: { pageId: string }) => {
+        activity.markRunning();
+        testOnTabAcquired?.(info);
+      };
+      // See `prerenderModule` — declared before the try so a synchronous
+      // throw from `#registerPeakSampling` can't leak the activity entry.
+      let poller: PeakRegistration | undefined;
+      try {
+        poller = this.#affinitySnapshotSampler.register(
+          affinityKey,
+          activity.handle,
+        );
+        let overallStart = Date.now();
+        let attemptOptions = renderOptions;
+        let lastResult:
+          | {
+              response: RenderVisitResponse;
+              timings: Timings;
+              pool: PoolMeta;
+            }
+          | undefined;
+        // CS-10872: see prerenderModule for why totalElapsedMs is
+        // attempt-local rather than loop-wide.
+        let attemptStart = Date.now();
+        let freshTabRetried = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          throwIfAborted(signal);
+          attemptStart = Date.now();
+          let result: {
             response: RenderVisitResponse;
             timings: Timings;
             pool: PoolMeta;
-          }
-        | undefined;
-      // CS-10872: see prerenderModule for why totalElapsedMs is
-      // attempt-local rather than loop-wide.
-      let attemptStart = Date.now();
-      let freshTabRetried = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        throwIfAborted(signal);
-        attemptStart = Date.now();
-        let result: {
-          response: RenderVisitResponse;
-          timings: Timings;
-          pool: PoolMeta;
-        };
-        try {
-          result = await this.#renderRunner.prerenderVisitAttempt({
-            affinityType,
-            affinityValue,
-            realm,
-            url,
-            auth,
-            visitType,
-            opts,
-            renderOptions: attemptOptions,
-            fileData,
-            types,
-            cardTypes,
-            priority,
-            jobId,
-            batchId,
-            captures,
-            renderScope,
-            cardSource,
-            signal,
-            onTabAcquired,
-          });
-        } catch (e) {
-          // Caller cancelled — log + conditionally evict, then
-          // propagate. Don't restart the browser.
-          if (e instanceof PrerenderCancelledError) {
-            await this.#handlePrerenderCancel(
-              e,
-              affinityKey,
-              overallStart,
-              url,
-            );
-            throw e;
-          }
-          log.error(
-            `visit prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
-            e,
-          );
-          await this.#restartBrowser();
+          };
           try {
             result = await this.#renderRunner.prerenderVisitAttempt({
               affinityType,
@@ -992,95 +988,135 @@ export class Prerenderer {
               signal,
               onTabAcquired,
             });
-          } catch (e2) {
-            if (e2 instanceof PrerenderCancelledError) {
+          } catch (e) {
+            // Caller cancelled — log + conditionally evict, then
+            // propagate. Don't restart the browser.
+            if (e instanceof PrerenderCancelledError) {
               await this.#handlePrerenderCancel(
-                e2,
+                e,
                 affinityKey,
                 overallStart,
                 url,
               );
-              throw e2;
+              throw e;
             }
             log.error(
-              `visit prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
-              e2,
+              `visit prerender attempt for ${url} (realm ${realm}) failed with error, restarting browser`,
+              e,
             );
-            throw e2;
+            await this.#restartBrowser();
+            try {
+              result = await this.#renderRunner.prerenderVisitAttempt({
+                affinityType,
+                affinityValue,
+                realm,
+                url,
+                auth,
+                visitType,
+                opts,
+                renderOptions: attemptOptions,
+                fileData,
+                types,
+                cardTypes,
+                priority,
+                jobId,
+                batchId,
+                captures,
+                renderScope,
+                cardSource,
+                signal,
+                onTabAcquired,
+              });
+            } catch (e2) {
+              if (e2 instanceof PrerenderCancelledError) {
+                await this.#handlePrerenderCancel(
+                  e2,
+                  affinityKey,
+                  overallStart,
+                  url,
+                );
+                throw e2;
+              }
+              log.error(
+                `visit prerender attempt for ${url} (realm ${realm}) failed again after browser restart`,
+                e2,
+              );
+              throw e2;
+            }
           }
-        }
-        lastResult = result;
+          lastResult = result;
 
-        // Retry with clearCache if any sub-pass produced a retry-worthy
-        // signature. The retry re-runs all requested passes — matches
-        // the existing per-call retry semantics.
-        let retrySignature = this.#visitRetrySignature(result.response);
-        let isClearCacheAttempt = attemptOptions?.clearCache === true;
-        if (!isClearCacheAttempt && retrySignature) {
-          log.warn(
-            `retrying visit prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
-              ' | ',
-            )}`,
+          // Retry with clearCache if any sub-pass produced a retry-worthy
+          // signature. The retry re-runs all requested passes — matches
+          // the existing per-call retry semantics.
+          let retrySignature = this.#visitRetrySignature(result.response);
+          let isClearCacheAttempt = attemptOptions?.clearCache === true;
+          if (!isClearCacheAttempt && retrySignature) {
+            log.warn(
+              `retrying visit prerender for ${url} with clearCache due to error signature: ${retrySignature.join(
+                ' | ',
+              )}`,
+            );
+            attemptOptions = {
+              ...(attemptOptions ?? {}),
+              clearCache: true,
+            };
+            continue;
+          }
+          if (isClearCacheAttempt && retrySignature) {
+            log.warn(
+              `visit prerender retry with clearCache did not resolve error signature ${retrySignature.join(
+                ' | ',
+              )} for ${url}`,
+            );
+          }
+          let failedChunk = result.pool.evicted
+            ? this.#visitFailedHostChunkImport(result.response)
+            : undefined;
+          if (failedChunk && !freshTabRetried) {
+            // See the matching retry in prerenderModule.
+            log.warn(
+              `retrying visit prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+            );
+            freshTabRetried = true;
+            continue;
+          }
+          if (failedChunk) {
+            log.warn(
+              `visit prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
+            );
+          }
+          Prerenderer.decorateRenderErrorsWithTimings(
+            result.response,
+            result.timings,
+            Date.now() - attemptStart,
+            {
+              affinitySnapshot: poller.currentPeak(),
+              priority,
+              tabReused: result.pool?.reused,
+            },
           );
-          attemptOptions = {
-            ...(attemptOptions ?? {}),
-            clearCache: true,
-          };
-          continue;
+          return result;
         }
-        if (isClearCacheAttempt && retrySignature) {
-          log.warn(
-            `visit prerender retry with clearCache did not resolve error signature ${retrySignature.join(
-              ' | ',
-            )} for ${url}`,
+        if (lastResult) {
+          Prerenderer.decorateRenderErrorsWithTimings(
+            lastResult.response,
+            lastResult.timings,
+            Date.now() - attemptStart,
+            {
+              affinitySnapshot: poller.currentPeak(),
+              priority,
+              tabReused: lastResult.pool?.reused,
+            },
           );
+          return lastResult;
         }
-        let failedChunk = result.pool.evicted
-          ? this.#visitFailedHostChunkImport(result.response)
-          : undefined;
-        if (failedChunk && !freshTabRetried) {
-          // See the matching retry in prerenderModule.
-          log.warn(
-            `retrying visit prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
-          );
-          freshTabRetried = true;
-          continue;
-        }
-        if (failedChunk) {
-          log.warn(
-            `visit prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
-          );
-        }
-        Prerenderer.decorateRenderErrorsWithTimings(
-          result.response,
-          result.timings,
-          Date.now() - attemptStart,
-          {
-            affinitySnapshot: poller.currentPeak(),
-            priority,
-            tabReused: result.pool?.reused,
-          },
-        );
-        return result;
+        throw new Error(`visit prerender attempts exhausted for ${url}`);
+      } finally {
+        poller?.stop();
+        activity.release();
       }
-      if (lastResult) {
-        Prerenderer.decorateRenderErrorsWithTimings(
-          lastResult.response,
-          lastResult.timings,
-          Date.now() - attemptStart,
-          {
-            affinitySnapshot: poller.currentPeak(),
-            priority,
-            tabReused: lastResult.pool?.reused,
-          },
-        );
-        return lastResult;
-      }
-      throw new Error(`visit prerender attempts exhausted for ${url}`);
-    } finally {
-      poller?.stop();
-      activity.release();
-    }
+    });
   }
 
   #visitRetrySignature(
@@ -1211,6 +1247,7 @@ export class Prerenderer {
       intervalMs = 5 * 60 * 1000;
     }
     this.#cleanupInterval = setInterval(() => {
+      if (this.#idleBrowser.suspended) return;
       void this.#browserManager.cleanupUserDataDirs();
       void this.#pagePool
         .evictIdleAffinities(this.#affinityIdleEvictMs)

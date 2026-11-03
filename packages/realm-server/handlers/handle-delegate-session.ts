@@ -42,7 +42,16 @@ export default function handleDelegateSession({
   realmSecretSeed,
   serverURL,
   aiBotDelegationSecret,
-}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  resolveMatrixRealmIdentity,
+}: Pick<
+  CreateRoutesArgs,
+  | 'dbAdapter'
+  | 'matrixClient'
+  | 'realmSecretSeed'
+  | 'serverURL'
+  | 'aiBotDelegationSecret'
+  | 'resolveMatrixRealmIdentity'
+>): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!aiBotDelegationSecret) {
       // No shared secret configured: the delegation endpoint is disabled.
@@ -108,6 +117,15 @@ export default function handleDelegateSession({
       return;
     }
     let normalizedRealmHref = normalizedRealmURL.href;
+    const identity = await resolveMatrixRealmIdentity(onBehalfOf);
+    if (!identity) {
+      await sendResponseForUnauthorizedRequest(
+        ctxt,
+        'Hosted identity requires online verification',
+      );
+      return;
+    }
+    const realmUser = identity.user;
 
     // Forensic audit record (security design CS-11551): every delegation
     // request is logged with a correlation id, requester, and outcome.
@@ -126,22 +144,22 @@ export default function handleDelegateSession({
       realmPermissions,
       matrixClient,
     );
-    if (!(await permissionChecker.can(onBehalfOf, 'read'))) {
+    if (!(await permissionChecker.can(realmUser, 'read'))) {
       log.warn(
-        `[delegate-session ${auditId}] denied: user ${onBehalfOf} has no read access to ${normalizedRealmHref}`,
+        `[delegate-session ${auditId}] denied: user ${realmUser} has no read access to ${normalizedRealmHref}`,
       );
       await sendResponseForError(
         ctxt,
         403,
         'Forbidden',
-        `User ${onBehalfOf} has no read access to ${normalizedRealmHref}`,
+        `User ${realmUser} has no read access to ${normalizedRealmHref}`,
       );
       return;
     }
 
     let token = createJWT(
       {
-        user: onBehalfOf,
+        user: realmUser,
         realm: normalizedRealmHref,
         permissions: ['read'],
         sessionRoom: undefined,
@@ -153,7 +171,7 @@ export default function handleDelegateSession({
     );
 
     log.info(
-      `[delegate-session ${auditId}] granted: read-only session for ${onBehalfOf} on ${normalizedRealmHref}`,
+      `[delegate-session ${auditId}] granted: read-only session for ${realmUser} on ${normalizedRealmHref}`,
     );
 
     await setContextResponse(

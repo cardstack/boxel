@@ -10,6 +10,9 @@ import type {
 } from '@cardstack/runtime-common';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import handleLocalIdentityLogin from './handlers/handle-local-identity-login.ts';
+import { createLocalRuntimeDiscovery } from './lib/local-runtime-discovery.ts';
+import { LOCAL_IDENTITY_LOGIN_PATH } from './lib/request-telemetry.ts';
 import Router from '@koa/router';
 import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
@@ -60,6 +63,8 @@ import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import handlePublishedRequestForward from './handlers/handle-published-request-forward.ts';
+import type { PublishedProxyPolicies } from './lib/published-proxy-policy.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -201,6 +206,12 @@ import {
 } from './handlers/handle-oauth.ts';
 
 export type CreateRoutesArgs = {
+  localHostedLogin: ReturnType<
+    typeof import('./lib/realm-identity.ts').createLocalHostedLoginClient
+  >;
+  realmOwnerNamespace: (ownerUserId: string) => string;
+  verifyMatrixOpenIdToken: import('@cardstack/runtime-common/matrix-backend-authentication').MatrixOpenIdTokenVerifier;
+  resolveMatrixRealmIdentity: import('@cardstack/runtime-common/matrix-backend-authentication').MatrixRealmIdentityResolver;
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
@@ -240,8 +251,10 @@ export type CreateRoutesArgs = {
     eventType: string,
     data?: Record<string, any>,
   ) => Promise<void>;
+  publishedProxyPolicies: PublishedProxyPolicies;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
+    boxelSpaceBaseURL?: string;
     boxelSite?: string;
   };
   assetsURL: URL;
@@ -283,6 +296,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   let searchCache = args.searchCache;
 
   let createRealmDeps: CreateRealmDeps = {
+    ownerNamespace: args.realmOwnerNamespace,
     serverURL: new URL(args.serverURL),
     realms: args.realms,
     dbAdapter: args.dbAdapter,
@@ -300,6 +314,13 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
   router.post('/_server-session', handleCreateSessionRequest(args));
+  router.post(LOCAL_IDENTITY_LOGIN_PATH, handleLocalIdentityLogin(args));
+  const nativeDiscovery = createLocalRuntimeDiscovery();
+  router.get('/.well-known/boxel-runtime', async (ctxt) => {
+    ctxt.set('Cache-Control', 'no-store');
+    ctxt.status = nativeDiscovery ? 200 : 404;
+    ctxt.body = nativeDiscovery ?? { error: 'Native runtime unavailable' };
+  });
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -585,6 +606,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowCards(args),
   );
+  if (Object.keys(args.publishedProxyPolicies).length > 0) {
+    router.post(
+      '/_published-request-forward',
+      handlePublishedRequestForward({
+        dbAdapter: args.dbAdapter,
+        policies: args.publishedProxyPolicies,
+      }),
+    );
+  }
   router.post(
     REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

@@ -631,6 +631,11 @@ export default class ClientTelemetryService
   }
 
   #isAllowed(): boolean {
+    if (
+      config.clientTelemetryEnabled === false &&
+      !(isTesting() && this.#testOptIn)
+    )
+      return false;
     // Never instrument a prerender tab — the render path is hot and headless,
     // and a render that throws is an expected indexing outcome rather than a
     // client fault.

@@ -9,7 +9,8 @@
 
 - We pin the toolchain with [mise](https://mise.jdx.dev/) (`.mise.toml`), which manages Node.js and pnpm versions. Run `mise install` from the repo root to get the correct versions—avoid global installs outside mise.
 - pnpm is required for all scripts; use the pinned version as specified above.
-- Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
+- Docker is required for the conventional development stack and suites using Postgres, Synapse, SMTP or the Stripe CLI container. Ensure the daemon is running and you can run `docker` without sudo.
+- Boxel Studio managed environments use verified, pinned tools and isolated native services instead. For this Docker-free workflow and its narrower test baseline, read [packages/boxel-local-runtime/README.md](packages/boxel-local-runtime/README.md). Do not point native tests at a running user database.
 
 ## Parallel agent sessions
 

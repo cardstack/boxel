@@ -18,7 +18,8 @@
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
     "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:dev-cleanup": "node --test scripts/tests/dev-cleanup-test.mjs"
   },
   "devDependencies": {
     "@actions/core": "catalog:",
@@ -47,6 +48,7 @@
     "lint-staged": "^17.0.5",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
+    "turbo": "2.11.10",
     "typescript": "catalog:"
   },
   "engines": {
@@ -64,5 +66,6 @@
   },
   "volta": {
     "node": "24.22.1"
-  }
+  },
+  "packageManager": "pnpm@12.7.0"
 }

@@ -39,3 +39,4 @@ __pycache__/
 /.choreo-realm-sync.json
 /out/
 /videos/
+.turbo/

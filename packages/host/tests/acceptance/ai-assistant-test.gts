@@ -1232,7 +1232,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
-  test('auto-attaches the module of a card whose adoptsFrom is prefix-form', async function (assert) {
+  test('auto-attaches the open JSON without inlining its referenced definition module', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}index.json`,
@@ -1255,7 +1255,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let cardsGridModuleURL = getService('network').virtualNetwork.toURL(
       rri('@cardstack/base/cards-grid.gts'),
     ).href;
-    assert.dom('[data-test-autoattached-file]').exists({ count: 2 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
     assert
       .dom(
         `[data-test-attached-file="${testRealmURL}index.json"][data-test-autoattached-file]`,
@@ -1265,7 +1265,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom(
         `[data-test-attached-file="${cardsGridModuleURL}"][data-test-autoattached-file]`,
       )
-      .exists('the prefix-form module resolves to the base realm');
+      .doesNotExist(
+        'the referenced definition is available on demand instead of automatically attached',
+      );
   });
 
   test('errored card instance is not auto-attached in code mode', async function (assert) {

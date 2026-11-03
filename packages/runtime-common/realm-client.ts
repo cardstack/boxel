@@ -25,7 +25,7 @@ export interface RealmClient {
 
   // Domains used to resolve publish targets. Sourced from host
   // `config/environment` or the CLI's config.
-  config: { spaceDomain: string; siteDomain: string };
+  config: { spaceDomain: string; spaceBaseURL?: string; siteDomain: string };
 
   // The caller's matrix username, used to form subdirectory Boxel Space URLs.
   // Only required for callers that resolve a 'subdirectory' target via

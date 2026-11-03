@@ -69,6 +69,10 @@ import {
   retireRealmEventRoom,
   syncRealmEventRoom,
 } from './realm-event-rooms.ts';
+import {
+  createRealmIdentityResolver,
+  createMatrixOpenIdTokenVerifier,
+} from './lib/realm-identity.ts';
 
 const realmEventsLog = logger('realm:events');
 
@@ -100,6 +104,8 @@ function lastModifiedSeconds(stat: Stats): number {
 }
 
 export class NodeAdapter implements RealmAdapter {
+  readonly resolveMatrixRealmIdentity = createRealmIdentityResolver();
+  readonly verifyMatrixOpenIdToken = createMatrixOpenIdTokenVerifier();
   private realmDir: string;
   private enableFileWatcher?: boolean;
   private dispatcher: RealmEventDispatcher;

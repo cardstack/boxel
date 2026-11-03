@@ -1,6 +1,10 @@
+import { parsePublishedProxyPolicies } from './lib/published-proxy-policy.ts';
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
+import { errorResponseFilterFromEnv } from './lib/error-response-filter.ts';
+import { publicReferenceFetchFromEnv } from '@cardstack/runtime-common/public-reference-fetch';
+import { createEnvironmentAwareFetch } from '@cardstack/runtime-common/fetch-node';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import { writeSync } from 'node:fs';
 import {
@@ -82,7 +86,10 @@ import {
 import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
-import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
+import {
+  resolveFullIndexOnStartup,
+  resolveSkipBootIndex,
+} from './lib/full-index-on-startup.ts';
 import {
   matrixFederationAllowlistFromEnv,
   matrixServerNameFromEnv,
@@ -234,6 +241,8 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 const KEY_GRANT_PROBE_INTERVAL_MS = probeIntervalFromEnv();
 // The limits a share or key gets where its owner set none.
 setKeyLimitDefaults(keyLimitDefaultsFromEnv());
+const SKIP_BOOTSTRAP_INDEX =
+  process.env.REALM_SERVER_SKIP_BOOTSTRAP_INDEX === 'true';
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -420,7 +429,9 @@ if (!useRegistrationSecretFunction && !MATRIX_REGISTRATION_SHARED_SECRET) {
   process.exit(-1);
 }
 
-let virtualNetwork = new VirtualNetwork();
+let virtualNetwork = new VirtualNetwork(
+  publicReferenceFetchFromEnv(process.env, createEnvironmentAwareFetch()),
+);
 let urlMappings: [URL, URL][] = [];
 for (let i = 0; i < fromUrls.length; i++) {
   let from = String(fromUrls[i]);
@@ -801,6 +812,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ? `realm-server.${getEnvironmentSlug()}.localhost`
     : 'localhost:4201';
   let domainsForPublishedRealms = {
+    boxelSpaceBaseURL: process.env.PUBLISHED_REALM_BOXEL_SPACE_BASE_URL,
     boxelSpace:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaultPublishedDomain,
     boxelSite:
@@ -915,7 +927,13 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           // realm's boot reindex can only be served by the all-priority pool,
           // behind any backlog already queued there.
           fromScratchIndexPriority: systemInitiatedIndexPriority(row.url),
-          ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
+          ...(resolveSkipBootIndex(
+            row.kind,
+            SKIP_BOOT_INDEX,
+            SKIP_BOOTSTRAP_INDEX,
+          )
+            ? { skipBootIndex: true as const }
+            : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
@@ -945,6 +963,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   });
 
   let server = new RealmServer({
+    errorResponseFilter: errorResponseFilterFromEnv(process.env),
     realms,
     reconciler,
     mediaCacheAdapter,
@@ -970,6 +989,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     matrixAdminPassword: MATRIX_ADMIN_PASSWORD,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     domainsForPublishedRealms,
+    publishedProxyPolicies: parsePublishedProxyPolicies(
+      JSON.parse(process.env.BOXEL_PUBLISHED_PROXY_POLICIES ?? '{}'),
+    ),
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,

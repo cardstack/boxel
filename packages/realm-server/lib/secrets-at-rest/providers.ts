@@ -175,6 +175,26 @@ export class LocalKeyProvider implements SecretsKeyProvider {
   }
 }
 
+// A provisioned local stack gets its own random key from its native secret
+// store. The provider never reads the OS keychain or chooses product policy.
+class ProvisionedLocalKeyProvider implements SecretsKeyProvider {
+  readonly name = 'local';
+  readonly #key: Buffer;
+  readonly #keyId: string;
+
+  constructor(key: Buffer) {
+    this.#key = Buffer.from(key);
+    this.#keyId = `local-${createHash('sha256').update(key).digest('hex').slice(0, 24)}`;
+  }
+
+  async loadDataKeys(): Promise<LoadedDataKeys> {
+    return {
+      keys: [{ keyId: this.#keyId, key: Buffer.from(this.#key) }],
+      currentKeyId: this.#keyId,
+    };
+  }
+}
+
 // Picks the provider the environment configures: KMS when both of its
 // settings are present, the local provider when neither is. Exactly one of
 // them is a misconfiguration and throws. SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS,
@@ -184,6 +204,30 @@ export function secretsKeyProviderFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   { kms }: { kms?: KmsDecrypter } = {},
 ): SecretsKeyProvider {
+  let localDataKey = env.SECRETS_LOCAL_DATA_KEY;
+  if (localDataKey !== undefined) {
+    if (
+      env.SECRETS_KMS_KEY_ARN !== undefined ||
+      env.SECRETS_WRAPPED_DATA_KEY !== undefined ||
+      env.SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS !== undefined
+    ) {
+      throw new Error(
+        'SECRETS_LOCAL_DATA_KEY cannot be combined with KMS settings',
+      );
+    }
+    // Require canonical base64 for exactly 32 bytes. Buffer.from alone accepts
+    // truncated or malformed input, which could silently select another key.
+    let key = Buffer.from(localDataKey, 'base64');
+    if (key.length !== 32 || key.toString('base64') !== localDataKey) {
+      key.fill(0);
+      throw new Error(
+        'SECRETS_LOCAL_DATA_KEY must be canonical base64 for 32 bytes',
+      );
+    }
+    let provider = new ProvisionedLocalKeyProvider(key);
+    key.fill(0);
+    return provider;
+  }
   let keyArn = env.SECRETS_KMS_KEY_ARN?.trim();
   let wrappedDataKey = env.SECRETS_WRAPPED_DATA_KEY?.trim();
   let additionalWrappedDataKeys = (

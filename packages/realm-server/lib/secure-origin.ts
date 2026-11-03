@@ -27,6 +27,7 @@ import {
 // port the realm-server listens on, which serves this and nothing else.
 
 const MATRIX_URL_PLACEHOLDER = /%MATRIX_URL%/g;
+const LOCAL_IDENTITY_LOGIN_URL_PLACEHOLDER = /%LOCAL_IDENTITY_LOGIN_URL%/g;
 const APP_ORIGINS_PLACEHOLDER = /%APP_ORIGINS%/g;
 const REALM_SERVER_URL_PLACEHOLDER = /%REALM_SERVER_URL%/g;
 
@@ -215,6 +216,7 @@ export interface SecureOrigin {
 }
 
 export interface CredentialFieldsOptions {
+  localIdentityLoginURL?: URL;
   // The Matrix server the credential fields sign in to and change passwords
   // on. With the realm server, it is the only server a password typed into
   // them is ever sent to, so it comes from the realm server's own
@@ -389,7 +391,12 @@ function addCredentialFieldRoutes(
   routes: Map<string, SecureOriginRoute>,
   shellBase: string,
   build: ReturnType<typeof readSecureOriginBuild>,
-  { matrixURL, realmServerURL, appOrigins }: CredentialFieldsOptions,
+  {
+    matrixURL,
+    realmServerURL,
+    appOrigins,
+    localIdentityLoginURL,
+  }: CredentialFieldsOptions,
 ) {
   let origins = appOrigins.map(appOrigin);
   if (origins.length === 0) {
@@ -398,13 +405,21 @@ function addCredentialFieldRoutes(
   let html = String(build.files.get(CREDENTIALS_DOCUMENT)!.body)
     .replace(MATRIX_URL_PLACEHOLDER, escapeAttribute(matrixURL.href))
     .replace(REALM_SERVER_URL_PLACEHOLDER, escapeAttribute(realmServerURL.href))
+    .replace(
+      LOCAL_IDENTITY_LOGIN_URL_PLACEHOLDER,
+      escapeAttribute(localIdentityLoginURL?.href ?? ''),
+    )
     .replace(APP_ORIGINS_PLACEHOLDER, escapeAttribute(origins.join(' ')));
   routes.set(`${shellBase}/${CREDENTIALS_PATH}`, {
     body: html,
     contentType: 'text/html; charset=utf-8',
     headers: {
       frameAncestors: origins,
-      connectSrc: [matrixURL.origin, realmServerURL.origin],
+      connectSrc: [
+        matrixURL.origin,
+        realmServerURL.origin,
+        ...(localIdentityLoginURL ? [localIdentityLoginURL.origin] : []),
+      ],
     },
   });
   addFileRoutes(

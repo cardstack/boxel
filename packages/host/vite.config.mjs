@@ -15,6 +15,7 @@ import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { bundledBaseScopedCSS } from './lib/bundled-base-scoped-css.mjs';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
 import { versionStableShellReferencesPlugin } from './lib/build/version-stable-shell-references.mjs';
+import { publicSourceNamesPlugin } from './lib/build/public-source-names.mjs';
 import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 // Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
@@ -377,6 +378,10 @@ export default defineConfig(({ mode }) => ({
     boxelUIChecksumPlugin(__dirname),
     excludeTestFixturesFromProduction(mode),
     versionStableShellReferencesPlugin(),
+    publicSourceNamesPlugin({
+      sourceRoot: path.resolve(__dirname, '../..'),
+      setting: process.env.BOXEL_PUBLIC_SOURCE_NAMES,
+    }),
   ],
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],

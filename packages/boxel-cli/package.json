@@ -103,7 +103,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "concurrently": "catalog:",
-    "esbuild": "^0.19.0",
+    "esbuild": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",

@@ -1,4 +1,6 @@
 import './instrument.ts';
+import { createErrorDisclosureFromEnv } from '@cardstack/runtime-common/error-disclosure-node';
+import { publicReferenceFetchFromEnv } from '@cardstack/runtime-common/public-reference-fetch';
 import './setup-logger.ts'; // This should be first
 import type { MatrixEvent } from 'matrix-js-sdk';
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
@@ -6,7 +8,8 @@ import {
   SlidingSync,
   type MSC3575List,
 } from 'matrix-js-sdk/lib/sliding-sync.js';
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
+import { modelBackendFromEnv, type ModelBackend } from './lib/model-backend.ts';
 import {
   logger,
   aiBotUsername,
@@ -27,6 +30,7 @@ import {
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  boxelSlidingSyncRequiredState,
   SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE,
   SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
@@ -69,6 +73,7 @@ import {
 import {
   approvalReaction,
   isApprovalResult,
+  setPublicErrorMessageFormatter,
 } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
@@ -108,6 +113,9 @@ import {
 } from './constants.ts';
 
 let log = logger('ai-bot');
+setPublicErrorMessageFormatter(
+  createErrorDisclosureFromEnv(process.env).formatText,
+);
 
 // The approved bot-tool calls this process has taken on running (see
 // ApprovalClaims).
@@ -134,7 +142,12 @@ let aiBotInstanceId = uuidv4();
 let roomEventSerializer = new RoomEventSerializer();
 
 class Assistant {
+  readonly publicReferenceFetch = publicReferenceFetchFromEnv(
+    process.env,
+    globalThis.fetch.bind(globalThis),
+  );
   private openai: OpenAI;
+  readonly modelBackend: ModelBackend;
   private client: MatrixClient;
   pgAdapter: PgAdapter;
   id: string;
@@ -144,11 +157,14 @@ class Assistant {
   // consumer.
   delegatedUserRealmSessions: DelegatedUserRealmSessionManager;
 
-  constructor(client: MatrixClient, id: string, aiBotInstanceId: string) {
-    this.openai = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey: process.env.OPENROUTER_API_KEY,
-    });
+  constructor(
+    client: MatrixClient,
+    id: string,
+    aiBotInstanceId: string,
+    modelBackend: ModelBackend,
+  ) {
+    this.modelBackend = modelBackend;
+    this.openai = modelBackend.client;
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
@@ -174,6 +190,7 @@ class Assistant {
     eventList: DiscreteMatrixEvent[],
   ) {
     return handleDebugCommands(
+      this.modelBackend.titleModel,
       this.openai,
       eventBody,
       this.client,
@@ -200,6 +217,7 @@ class Assistant {
     senderMatrixUserId?: string,
   ) {
     return setTitle(
+      this.modelBackend.titleModel,
       this.openai,
       this.client,
       roomId,
@@ -218,6 +236,7 @@ async function debitUsageCost(
   costInUsd: number | undefined,
   generationId: string | undefined,
 ) {
+  if (assistant.modelBackend.billing !== 'credits') return;
   await assistant.pgAdapter.withUserCostLock(senderMatrixUserId, async () => {
     if (
       typeof costInUsd === 'number' &&
@@ -251,10 +270,7 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
-  if (!process.env.OPENROUTER_API_KEY) {
-    log.error('OPENROUTER_API_KEY is required.');
-    process.exit(1);
-  }
+  const modelBackend = await modelBackendFromEnv(process.env);
   let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
     ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
     : undefined;
@@ -287,7 +303,7 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
 
-  assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
+  assistant = new Assistant(client, aiBotUserId, aiBotInstanceId, modelBackend);
 
   // Set up signal handlers for graceful shutdown
   setupSignalHandlers();
@@ -611,6 +627,7 @@ Common issues are:
               client,
               onBehalfOf: senderMatrixUserId,
               delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
+              fetchRealmFile: assistant.publicReferenceFetch,
             }));
           stopInHistory =
             readStopState(eventList, aiBotUserId).inForce !== undefined;
@@ -804,40 +821,42 @@ Common issues are:
           // sections give up is that rooms started together are all gated on
           // the same balance, so the overshoot is one turn per open room
           // rather than one turn. The room lock still serializes per room.
-          let creditGatePassed = await assistant.pgAdapter.withUserCostLock(
-            senderMatrixUserId,
-            async () => {
-              // Do not generate new responses if previous ones' cost is still being reported
-              let { error: creditTrackingError } =
-                await waitForPendingCreditTracking(
-                  trackAiUsageCostPromises,
-                  senderMatrixUserId,
-                );
-              if (creditTrackingError) {
-                await responder.onError(
-                  'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-                );
-                return false;
-              }
+          let creditGatePassed =
+            assistant.modelBackend.billing !== 'credits' ||
+            (await assistant.pgAdapter.withUserCostLock(
+              senderMatrixUserId,
+              async () => {
+                // Do not generate new responses if previous ones' cost is still being reported
+                let { error: creditTrackingError } =
+                  await waitForPendingCreditTracking(
+                    trackAiUsageCostPromises,
+                    senderMatrixUserId,
+                  );
+                if (creditTrackingError) {
+                  await responder.onError(
+                    'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+                  );
+                  return false;
+                }
 
-              const creditValidation = await profTime(
-                eventId,
-                'billing:validateCredits',
-                async () =>
-                  validateAICredits(assistant.pgAdapter, senderMatrixUserId),
-              );
-
-              if (!creditValidation.hasEnoughCredits) {
-                // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
-                await responder.onError(
-                  `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
-                  { reloadBillingData: true },
+                const creditValidation = await profTime(
+                  eventId,
+                  'billing:validateCredits',
+                  async () =>
+                    validateAICredits(assistant.pgAdapter, senderMatrixUserId),
                 );
-                return false;
-              }
-              return true;
-            },
-          );
+
+                if (!creditValidation.hasEnoughCredits) {
+                  // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
+                  await responder.onError(
+                    `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+                    { reloadBillingData: true },
+                  );
+                  return false;
+                }
+                return true;
+              },
+            ));
           if (!creditGatePassed) {
             return;
           }
@@ -1403,7 +1422,7 @@ Common issues are:
       is_dm: false,
     },
     timeline_limit: SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT,
-    required_state: [['*', '*']],
+    required_state: boxelSlidingSyncRequiredState(),
   });
   let slidingSync = new SlidingSync(
     client.baseUrl,

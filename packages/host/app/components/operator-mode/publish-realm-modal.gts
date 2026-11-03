@@ -135,7 +135,8 @@ export default class PublishRealmModal extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.ensureInitialSelectionsTask.perform();
-    this.fetchBoxelClaimedDomain.perform();
+    if (!config.publishedRealmBoxelSpaceBaseURL)
+      this.fetchBoxelClaimedDomain.perform();
     this.loadUnlistedPathTask.perform();
     this.checkPrivateDependenciesTask.perform();
     this.checkDanglingRoutingRulesTask.perform();
@@ -301,6 +302,7 @@ export default class PublishRealmModal extends Component<Signature> {
         protocol: this.getProtocol(),
         matrixUsername: this.getMatrixUsername(),
         spaceDomain: this.getDefaultPublishedRealmDomain(),
+        spaceBaseURL: config.publishedRealmBoxelSpaceBaseURL,
       },
     );
   }
@@ -470,6 +472,7 @@ export default class PublishRealmModal extends Component<Signature> {
         protocol: this.getProtocol(),
         matrixUsername: this.getMatrixUsername(),
         spaceDomain: this.getDefaultPublishedRealmDomain(),
+        spaceBaseURL: config.publishedRealmBoxelSpaceBaseURL,
       },
     );
   }
@@ -481,10 +484,12 @@ export default class PublishRealmModal extends Component<Signature> {
     };
   }
 
-  // The origin of the user's Boxel Space, taken from the resolved target URL
-  // so the base URL the modal shows is the one it publishes to.
+  // The user's Boxel Space, taken from the resolved target URL so the base URL
+  // the modal shows is the one it publishes to: the target without its realm
+  // segment. That is the origin for a space at its own host, and the space's
+  // path for one served under a base URL (`publishedRealmBoxelSpaceBaseURL`).
   private get spaceBaseUrl() {
-    return `${new URL(this.subdirectoryRealmUrl).origin}/`;
+    return new URL('..', this.subdirectoryRealmUrl).href;
   }
 
   // For a username with dots, `<username>.<spaceDomain>` is two labels deep
@@ -1372,212 +1377,219 @@ export default class PublishRealmModal extends Component<Signature> {
             {{/if}}
           </div>
 
-          <div class='domain-option'>
-            <input
-              type='checkbox'
-              id='custom-subdomain-checkbox'
-              class='domain-checkbox'
-              checked={{this.isCustomSubdomainSelected}}
-              data-test-custom-subdomain-checkbox
-              disabled={{not this.claimedDomain}}
-              {{on 'change' this.toggleCustomSubdomain}}
-            />
-            <label class='option-title' for='custom-subdomain-checkbox'>Custom
-              Site Name</label>
-            {{#if this.isCustomSubdomainSetupVisible}}
-              <BoxelButton
-                @size='extra-small'
-                @kind='text-only'
-                class='custom-subdomain-cancel cancel'
-                {{on 'click' this.cancelCustomSubdomainSetup}}
-                data-test-custom-subdomain-cancel
-              >
-                Cancel
-                <IconX width='12' height='12' class='cancel-icon' />
-              </BoxelButton>
-            {{/if}}
-            <div
-              class='domain-details
-                {{if this.isCustomSubdomainSetupVisible "full-width"}}'
-              data-test-custom-subdomain-details
-            >
+          {{#unless config.publishedRealmBoxelSpaceBaseURL}}
+            <div class='domain-option'>
+              <input
+                type='checkbox'
+                id='custom-subdomain-checkbox'
+                class='domain-checkbox'
+                checked={{this.isCustomSubdomainSelected}}
+                data-test-custom-subdomain-checkbox
+                disabled={{not this.claimedDomain}}
+                {{on 'change' this.toggleCustomSubdomain}}
+              />
+              <label class='option-title' for='custom-subdomain-checkbox'>Custom
+                Site Name</label>
               {{#if this.isCustomSubdomainSetupVisible}}
-                <div class='custom-subdomain-setup'>
-                  <label
-                    class='custom-subdomain-label'
-                    for='custom-subdomain-input'
-                  >
-                    Choose a site name
-                  </label>
-                  <div class='custom-subdomain-row'>
-                    <BoxelInputGroup
-                      @id='custom-subdomain-input'
-                      @placeholder='custom-name'
-                      @value={{this.customSubdomain}}
-                      @state={{this.customSubdomainState}}
-                      @errorMessage={{this.customSubdomainError}}
-                      {{on 'input' this.handleCustomSubdomainInput}}
-                      class='custom-subdomain-input'
-                      spellcheck='false'
-                      data-test-custom-subdomain-input
+                <BoxelButton
+                  @size='extra-small'
+                  @kind='text-only'
+                  class='custom-subdomain-cancel cancel'
+                  {{on 'click' this.cancelCustomSubdomainSetup}}
+                  data-test-custom-subdomain-cancel
+                >
+                  Cancel
+                  <IconX width='12' height='12' class='cancel-icon' />
+                </BoxelButton>
+              {{/if}}
+              <div
+                class='domain-details
+                  {{if this.isCustomSubdomainSetupVisible "full-width"}}'
+                data-test-custom-subdomain-details
+              >
+                {{#if this.isCustomSubdomainSetupVisible}}
+                  <div class='custom-subdomain-setup'>
+                    <label
+                      class='custom-subdomain-label'
+                      for='custom-subdomain-input'
                     >
-                      <:after as |Accessories|>
-                        <Accessories.Text
-                          class='custom-domain-suffix'
-                        >.{{this.customSubdomainBase}}</Accessories.Text>
-                      </:after>
-                    </BoxelInputGroup>
-                    <BoxelButton
-                      @kind='primary'
-                      @size='small'
-                      class='claim-custom-subdomain-button'
-                      @disabled={{this.isClaimCustomSubdomainDisabled}}
-                      {{on
-                        'click'
-                        (perform this.handleClaimCustomSubdomainTask)
-                      }}
-                      data-test-claim-custom-subdomain-button
-                    >
-                      {{#if this.isCheckingCustomSubdomain}}
-                        <LoadingIndicator />
-                        Checking…
-                      {{else}}
-                        Claim Site Name
-                      {{/if}}
-                    </BoxelButton>
+                      Choose a site name
+                    </label>
+                    <div class='custom-subdomain-row'>
+                      <BoxelInputGroup
+                        @id='custom-subdomain-input'
+                        @placeholder='custom-name'
+                        @value={{this.customSubdomain}}
+                        @state={{this.customSubdomainState}}
+                        @errorMessage={{this.customSubdomainError}}
+                        {{on 'input' this.handleCustomSubdomainInput}}
+                        class='custom-subdomain-input'
+                        spellcheck='false'
+                        data-test-custom-subdomain-input
+                      >
+                        <:after as |Accessories|>
+                          <Accessories.Text
+                            class='custom-domain-suffix'
+                          >.{{this.customSubdomainBase}}</Accessories.Text>
+                        </:after>
+                      </BoxelInputGroup>
+                      <BoxelButton
+                        @kind='primary'
+                        @size='small'
+                        class='claim-custom-subdomain-button'
+                        @disabled={{this.isClaimCustomSubdomainDisabled}}
+                        {{on
+                          'click'
+                          (perform this.handleClaimCustomSubdomainTask)
+                        }}
+                        data-test-claim-custom-subdomain-button
+                      >
+                        {{#if this.isCheckingCustomSubdomain}}
+                          <LoadingIndicator />
+                          Checking…
+                        {{else}}
+                          Claim Site Name
+                        {{/if}}
+                      </BoxelButton>
+                    </div>
                   </div>
-                </div>
-              {{else if this.claimedDomain}}
-                <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                  <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
-                    <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
-                  </RealmURLTooltip>
-                </WithLoadedRealm>
-                <div class='domain-url-container'>
-                  <span class='domain-url'>
-                    <span class='url-part'>{{this.getProtocol}}://</span><span
-                      class='url-part-bold'
-                    >{{this.customSubdomainDisplay}}</span><span
-                      class='url-part'
-                    >.{{this.customSubdomainBase}}/</span>
-                  </span>
-                  {{#if this.claimedDomain}}
-                    <div class='domain-info'>
-                      {{#if this.claimedDomainLastPublishedTime}}
-                        <span class='last-published-at'>Published
-                          {{this.claimedDomainLastPublishedTime}}</span>
-                        {{#if this.claimedDomainPublishedUrl}}
+                {{else if this.claimedDomain}}
+                  <WithLoadedRealm
+                    @realmURL={{this.currentRealmURL}}
+                    as |realm|
+                  >
+                    <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                      <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                    </RealmURLTooltip>
+                  </WithLoadedRealm>
+                  <div class='domain-url-container'>
+                    <span class='domain-url'>
+                      <span class='url-part'>{{this.getProtocol}}://</span><span
+                        class='url-part-bold'
+                      >{{this.customSubdomainDisplay}}</span><span
+                        class='url-part'
+                      >.{{this.customSubdomainBase}}/</span>
+                    </span>
+                    {{#if this.claimedDomain}}
+                      <div class='domain-info'>
+                        {{#if this.claimedDomainLastPublishedTime}}
+                          <span class='last-published-at'>Published
+                            {{this.claimedDomainLastPublishedTime}}</span>
+                          {{#if this.claimedDomainPublishedUrl}}
+                            <BoxelButton
+                              @kind='text-only'
+                              @size='extra-small'
+                              @disabled={{this.isUnpublishingRealm
+                                this.claimedDomainPublishedUrl
+                              }}
+                              class='unpublish-button'
+                              {{on
+                                'click'
+                                (fn
+                                  @handleUnpublish
+                                  this.claimedDomainPublishedUrl
+                                )
+                              }}
+                              data-test-unpublish-custom-subdomain-button
+                            >
+                              {{#if
+                                (this.isUnpublishingRealm
+                                  this.claimedDomainPublishedUrl
+                                )
+                              }}
+                                <LoadingIndicator />
+                                Unpublishing…
+                              {{else}}
+                                <Undo2
+                                  width='11'
+                                  height='11'
+                                  class='unpublish-icon'
+                                />
+                                Unpublish
+                              {{/if}}
+                            </BoxelButton>
+                          {{/if}}
+                        {{else}}
+                          <span class='not-published-yet'>Not published yet</span>
+                        {{/if}}
+                        {{#if this.shouldShowUnclaimDomainButton}}
                           <BoxelButton
                             @kind='text-only'
                             @size='extra-small'
-                            @disabled={{this.isUnpublishingRealm
-                              this.claimedDomainPublishedUrl
-                            }}
-                            class='unpublish-button'
+                            class='unpublish-button unclaim-button'
+                            @disabled={{this.isUnclaimDomainButtonDisabled}}
                             {{on
                               'click'
-                              (fn
-                                @handleUnpublish this.claimedDomainPublishedUrl
-                              )
+                              (perform this.handleUnclaimCustomSubdomainTask)
                             }}
-                            data-test-unpublish-custom-subdomain-button
+                            data-test-unclaim-custom-subdomain-button
                           >
                             {{#if
-                              (this.isUnpublishingRealm
-                                this.claimedDomainPublishedUrl
-                              )
+                              this.handleUnclaimCustomSubdomainTask.isRunning
                             }}
                               <LoadingIndicator />
-                              Unpublishing…
+                              Unclaiming…
                             {{else}}
-                              <Undo2
-                                width='11'
-                                height='11'
-                                class='unpublish-icon'
-                              />
-                              Unpublish
+                              Unclaim Site Name
                             {{/if}}
                           </BoxelButton>
                         {{/if}}
-                      {{else}}
-                        <span class='not-published-yet'>Not published yet</span>
-                      {{/if}}
-                      {{#if this.shouldShowUnclaimDomainButton}}
-                        <BoxelButton
-                          @kind='text-only'
-                          @size='extra-small'
-                          class='unpublish-button unclaim-button'
-                          @disabled={{this.isUnclaimDomainButtonDisabled}}
-                          {{on
-                            'click'
-                            (perform this.handleUnclaimCustomSubdomainTask)
-                          }}
-                          data-test-unclaim-custom-subdomain-button
-                        >
-                          {{#if
-                            this.handleUnclaimCustomSubdomainTask.isRunning
-                          }}
-                            <LoadingIndicator />
-                            Unclaiming…
-                          {{else}}
-                            Unclaim Site Name
-                          {{/if}}
-                        </BoxelButton>
-                      {{/if}}
-                    </div>
-                  {{/if}}
+                      </div>
+                    {{/if}}
+                  </div>
+                {{else}}
+                  <span class='domain-url'>
+                    <span class='url-part'>{{this.getProtocol}}://</span><span
+                      class='url-part'
+                    >{{this.customSubdomainDisplay}}</span><span
+                      class='url-part-bold'
+                    >.{{this.customSubdomainBase}}/</span>
+                  </span>
+                {{/if}}
+              </div>
+
+              {{#if (not this.isCustomSubdomainSetupVisible)}}
+                {{#if this.isClaimedDomainPublished}}
+                  <BoxelButton
+                    @as='anchor'
+                    @kind='secondary-light'
+                    @size='small'
+                    @href={{this.customSubdomainIndexUrl}}
+                    @disabled={{this.isUnpublishingAnyRealms}}
+                    class='action'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    data-test-open-custom-subdomain-button
+                  >
+                    <ExternalLink width='16' height='16' class='button-icon' />
+                    Open Site
+                  </BoxelButton>
+                {{else if (not this.claimedDomain)}}
+                  <BoxelButton
+                    @kind='secondary-light'
+                    @size='small'
+                    class='action'
+                    {{on 'click' this.openCustomSubdomainSetup}}
+                    data-test-custom-subdomain-setup-button
+                  >
+                    <Settings width='16' height='16' class='button-icon' />
+                    Set Up
+                  </BoxelButton>
+                {{/if}}
+              {{/if}}
+              {{#if this.publishErrorForCustomSubdomain}}
+                <div
+                  class='domain-publish-error'
+                  data-test-domain-publish-error={{this.claimedDomainPublishedUrl}}
+                >
+                  <span
+                    class='error-text'
+                  >{{this.publishErrorForCustomSubdomain}}</span>
                 </div>
-              {{else}}
-                <span class='domain-url'>
-                  <span class='url-part'>{{this.getProtocol}}://</span><span
-                    class='url-part'
-                  >{{this.customSubdomainDisplay}}</span><span
-                    class='url-part-bold'
-                  >.{{this.customSubdomainBase}}/</span>
-                </span>
               {{/if}}
             </div>
 
-            {{#if (not this.isCustomSubdomainSetupVisible)}}
-              {{#if this.isClaimedDomainPublished}}
-                <BoxelButton
-                  @as='anchor'
-                  @kind='secondary-light'
-                  @size='small'
-                  @href={{this.customSubdomainIndexUrl}}
-                  @disabled={{this.isUnpublishingAnyRealms}}
-                  class='action'
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  data-test-open-custom-subdomain-button
-                >
-                  <ExternalLink width='16' height='16' class='button-icon' />
-                  Open Site
-                </BoxelButton>
-              {{else if (not this.claimedDomain)}}
-                <BoxelButton
-                  @kind='secondary-light'
-                  @size='small'
-                  class='action'
-                  {{on 'click' this.openCustomSubdomainSetup}}
-                  data-test-custom-subdomain-setup-button
-                >
-                  <Settings width='16' height='16' class='button-icon' />
-                  Set Up
-                </BoxelButton>
-              {{/if}}
-            {{/if}}
-            {{#if this.publishErrorForCustomSubdomain}}
-              <div
-                class='domain-publish-error'
-                data-test-domain-publish-error={{this.claimedDomainPublishedUrl}}
-              >
-                <span
-                  class='error-text'
-                >{{this.publishErrorForCustomSubdomain}}</span>
-              </div>
-            {{/if}}
-          </div>
+          {{/unless}}
 
           {{#if this.shouldShowCustomSubdomainOverride}}
             {{#let this.customSubdomainOverrideUrl as |overrideUrl|}}

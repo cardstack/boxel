@@ -69,6 +69,7 @@ module('handleDebugCommands - boxel-debug:eventlist', (hooks) => {
 
   async function dumpedEventList(eventBody: string): Promise<any[]> {
     await handleDebugCommands(
+      'gpt-4o',
       {} as any, // openai is only used by boxel-debug:title:create
       eventBody,
       fakeMatrixClient,
@@ -110,6 +111,7 @@ module('handleDebugCommands - boxel-debug:eventlist', (hooks) => {
     let pristine = structuredClone(input);
 
     await handleDebugCommands(
+      'gpt-4o',
       {} as any,
       'boxel-debug:eventlist',
       fakeMatrixClient,
@@ -156,6 +158,7 @@ module('handleDebugCommands - help', (hooks) => {
 
   async function reply(eventBody: string): Promise<string> {
     await handleDebugCommands(
+      'gpt-4o',
       {} as any,
       eventBody,
       fakeMatrixClient,

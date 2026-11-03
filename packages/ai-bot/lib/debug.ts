@@ -67,6 +67,7 @@ const KNOWN_COMMANDS = [
 ];
 
 export async function handleDebugCommands(
+  titleModel: string,
   openai: OpenAI,
   eventBody: string,
   client: MatrixClient,
@@ -210,7 +211,7 @@ export async function handleDebugCommands(
   }
   // Use GPT to set the room title
   else if (eventBody.startsWith('boxel-debug:title:create')) {
-    return await setTitle(openai, client, roomId, [], userId);
+    return await setTitle(titleModel, openai, client, roomId, [], userId);
   } else if (eventBody.startsWith('boxel-debug:patch:')) {
     let patchMessage = eventBody.split('boxel-debug:patch:')[1];
     // If there's a card attached, we need to split it off to parse the json

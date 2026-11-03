@@ -81,6 +81,15 @@ const ENVIRONMENTS: Record<PresetName, EnvironmentDefaults> = {
   },
 };
 
+export function profileSignInPresets() {
+  return (['production', 'staging'] as const).map((id) => ({
+    id,
+    matrixUrl: ENVIRONMENTS[id].matrixUrl,
+    realmServerUrl: ENVIRONMENTS[id].realmServerUrl,
+    hostUrl: ENVIRONMENTS[id].appUrl ?? ENVIRONMENTS[id].realmServerUrl,
+  }));
+}
+
 // Validate and normalize a URL provided by the user via --matrix-url,
 // --realm-server-url, or --host-url. Returns the trimmed input on success;
 // exits 1 with a clear message otherwise. Without this, downstream code

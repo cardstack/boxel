@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "workspaceDevelopmentDependencies": {
+    "boxel-local-runtime": [],
+    "realm-server": [
+      "@aws-crypto/sha256-js",
+      "@cardstack/billing",
+      "@cardstack/boxel-icons",
+      "@cardstack/boxel-ui",
+      "@cardstack/bxl",
+      "@cardstack/eslint-plugin-boxel",
+      "@cardstack/postgres",
+      "@cardstack/runtime-common",
+      "@koa/cors",
+      "@koa/router",
+      "@octokit/rest",
+      "@sentry/node",
+      "archiver",
+      "cron",
+      "date-fns",
+      "decorator-transforms",
+      "fs-extra",
+      "jsdom",
+      "jsonwebtoken",
+      "koa",
+      "lodash-es",
+      "mime-types",
+      "pg",
+      "pluralize",
+      "qs",
+      "sane",
+      "super-fast-md5",
+      "undici",
+      "uuid",
+      "wtfnode",
+      "yaml",
+      "yargs",
+      "zod"
+    ],
+    "ai-bot": [],
+    "billing": [],
+    "boxel-cli": [
+      "@cardstack/runtime-common",
+      "esbuild",
+      "prettier",
+      "semver",
+      "vitest"
+    ],
+    "boxel-ui": [
+      "@embroider/macros",
+      "@glimmer/component",
+      "glimmer-scoped-css"
+    ],
+    "bxl": ["eslint", "semver", "typescript"],
+    "eslint-plugin-boxel": ["eslint", "eslint-plugin-import"],
+    "local-types": [],
+    "postgres": ["sql-parser-cst", "typescript"],
+    "runtime-common": [
+      "@babel/core",
+      "dompurify",
+      "es-module-lexer",
+      "statuses"
+    ]
+  }
+}

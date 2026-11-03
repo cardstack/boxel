@@ -41,6 +41,7 @@ export const readRealmFileBotTool: BotTool = {
             onBehalfOf: room.onBehalfOf,
             delegatedUserRealmSessions: room.delegatedUserRealmSessions,
             realmPrefixes,
+            fetch: room.fetchRealmFile,
           },
         );
         return { commandRequestId, published };

@@ -10,7 +10,7 @@ import {
 
 const log = logger('allowed-proxy-destinations');
 
-export type AuthMethod = 'header' | 'url-parameter';
+export type AuthMethod = 'header' | 'raw-header' | 'url-parameter';
 
 // A request URL is allowed only when it targets the exact same origin as a
 // configured destination AND its path falls under the destination's path. A

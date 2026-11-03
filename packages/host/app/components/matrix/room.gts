@@ -93,7 +93,6 @@ import {
   type TurnFold,
 } from '@cardstack/host/lib/turn-summary';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { isReady } from '@cardstack/host/resources/file';
 import { isPendingMessage } from '@cardstack/host/resources/room';
 import type { RoomResource } from '@cardstack/host/resources/room';
 
@@ -955,36 +954,7 @@ export default class Room extends Component<Signature> {
       return [];
     }
 
-    let urls = [codePathUrl];
-
-    if (codePathUrl.endsWith('.json')) {
-      let openFile = this.operatorModeStateService.openFile?.current;
-      if (openFile && isReady(openFile)) {
-        try {
-          let fileContent = JSON.parse(openFile.content);
-          let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
-          if (adoptsFrom?.module) {
-            let moduleRef = adoptsFrom.module.endsWith('.gts')
-              ? adoptsFrom.module
-              : `${adoptsFrom.module}.gts`;
-            // The module may be prefix-form (`@cardstack/base/card-api`), so it
-            // is resolved through the virtual network rather than joined onto
-            // the open file's URL.
-            let moduleURLWithExtension = this.network.virtualNetwork.resolveURL(
-              moduleRef,
-              openFile.url,
-            );
-            if (!urls.includes(moduleURLWithExtension.href)) {
-              urls.push(moduleURLWithExtension.href);
-            }
-          }
-        } catch (_error) {
-          // If JSON parse fails, fall back to just the current file URL.
-        }
-      }
-    }
-
-    return urls;
+    return [codePathUrl];
   }
 
   private get autoAttachedFiles() {

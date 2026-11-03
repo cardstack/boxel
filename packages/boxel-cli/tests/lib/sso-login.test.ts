@@ -49,6 +49,24 @@ function sendRawRequest(port: number, target: string): Promise<string> {
 }
 
 describe('the wait for the browser', () => {
+  it('closes the loopback callback when a desktop sign-in is cancelled', async () => {
+    const controller = new AbortController();
+    let port: string | null = null;
+    const login = browserLogin({
+      matrixUrl: MATRIX_URL,
+      hostUrl: HOST_URL,
+      signal: controller.signal,
+      log: () => {},
+      openBrowserFn: async (url) => {
+        port = new URL(url).searchParams.get('port');
+        controller.abort();
+        return true;
+      },
+    });
+    await expect(login).rejects.toThrow('cancelled');
+    expect(port).not.toBeNull();
+    await expect(fetch(`http://127.0.0.1:${port}/callback`)).rejects.toThrow();
+  });
   // A password reset or a sign-up mid-flow links back to the same listener, so
   // the window has to outlast an interactive email round trip.
   it('lasts half an hour', () => {

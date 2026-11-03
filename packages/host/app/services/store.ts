@@ -2123,33 +2123,48 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     opts?: { linksOnly?: boolean },
   ): Promise<SearchEntryResults> {
-    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
-    // TODO remove this assertion after multi-realm server/federated identity is supported
-    this.realmServer.assertOwnRealmServer(realmServerURLs);
-    let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search', realmServerURL);
+    let publicReference = this.realmServer.publicReferenceSearchTarget(realms);
+    let realmServerURLs = publicReference
+      ? []
+      : this.realmServer.getRealmServersForRealms(realms);
+    if (!publicReference)
+      this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let searchURL =
+      publicReference?.url ?? new URL('_federated-search', realmServerURLs[0]);
     let response: Response;
     for (let attempt = 0; ; attempt++) {
-      response = await this.realmServer.maybeAuthedFetchForRealms(
-        searchURL.href,
-        realms,
-        {
-          method: 'QUERY',
-          headers: {
-            Accept: SupportedMimeType.CardJson,
-            'Content-Type': 'application/json',
-            ...duringPrerenderHeaders(),
-            ...consumingRealmHeader(),
-            ...jobIdHeader(),
-            ...jobPriorityHeader(),
-            ...loggingCorrelationIdHeader(),
-            ...(opts?.linksOnly
-              ? { [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only' }
-              : {}),
-          },
-          body: JSON.stringify({ ...query, realms }),
-        },
-      );
+      response = publicReference
+        ? await this.network.fetchPublicReference(searchURL, {
+            method: 'QUERY',
+            credentials: 'omit',
+            redirect: 'error',
+            referrerPolicy: 'no-referrer',
+            headers: {
+              Accept: SupportedMimeType.CardJson,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ...query, realms: publicReference.realms }),
+          })
+        : await this.realmServer.maybeAuthedFetchForRealms(
+            searchURL.href,
+            realms,
+            {
+              method: 'QUERY',
+              headers: {
+                Accept: SupportedMimeType.CardJson,
+                'Content-Type': 'application/json',
+                ...duringPrerenderHeaders(),
+                ...consumingRealmHeader(),
+                ...jobIdHeader(),
+                ...jobPriorityHeader(),
+                ...loggingCorrelationIdHeader(),
+                ...(opts?.linksOnly
+                  ? { [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only' }
+                  : {}),
+              },
+              body: JSON.stringify({ ...query, realms }),
+            },
+          );
       // A 429 is the realm-server shedding load: it is running its maximum
       // number of concurrent searches and turned this one away before doing
       // any work on it. The condition is transient by construction (slots free

@@ -42,6 +42,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { createRealmServerTransport } from '@cardstack/host/lib/realm-server-transport';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
 import {
@@ -618,6 +619,32 @@ export default class RealmServerService
     }
   }
 
+  publicReferenceSearchTarget(
+    realms: string[],
+  ): { url: URL; realms: string[] } | null {
+    if (!realms.length) return null;
+    let configured = new Set(
+      [
+        ENV.resolvedCatalogRealmURL,
+        ENV.resolvedSkillsRealmURL,
+        ENV.resolvedOpenRouterRealmURL,
+        ENV.resolvedPretuiRealmURL,
+      ]
+        .filter((value): value is string => typeof value === 'string')
+        .map(ensureTrailingSlash),
+    );
+    let resolved = realms.map((realm) =>
+      ensureTrailingSlash(
+        resolvedRealmURLHref(this.network.virtualNetwork, realm),
+      ),
+    );
+    if (!resolved.every((realm) => configured.has(realm))) return null;
+    let origins = new Set(resolved.map((realm) => new URL(realm).origin));
+    let [origin] = origins;
+    if (origins.size !== 1 || origin === this.url.origin) return null;
+    return { url: new URL('/_federated-search', origin), realms: resolved };
+  }
+
   getRealmServersForRealms(realms: string[]) {
     let sessionTokens = this.readSessionTokens();
 
@@ -681,7 +708,10 @@ export default class RealmServerService
         return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
       }
     }
-    return normalizedURL;
+    return createRealmServerTransport({
+      identityURL: ENV.realmServerURL,
+      transportURL: this.url.href,
+    }).normalizeServerURL(normalizedURL);
   }
 
   @cached
@@ -1542,7 +1572,9 @@ export default class RealmServerService
     timeoutMs?: number;
     signal?: AbortSignal;
   }) {
-    await this.login();
+    let publishedProxy =
+      ENV.publishedRealmURL && ENV.publishedRequestForwardURL;
+    if (!publishedProxy) await this.login();
 
     let { timeoutMs, signal: callerSignal, ...forwardedRequest } = args;
     let deadline: AbortController | undefined;
@@ -1559,15 +1591,21 @@ export default class RealmServerService
     let responded = false;
     try {
       const response = await this.network.fetch(
-        `${this.url.href}_request-forward`,
+        publishedProxy || `${this.url.href}_request-forward`,
         {
           method: 'POST',
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.token}`,
+            ...(!publishedProxy
+              ? { Authorization: `Bearer ${this.token}` }
+              : {}),
           },
-          body: JSON.stringify(forwardedRequest),
+          body: JSON.stringify(
+            publishedProxy
+              ? { ...forwardedRequest, realmURL: ENV.publishedRealmURL }
+              : forwardedRequest,
+          ),
           signal,
         },
       );
@@ -1730,6 +1768,7 @@ export default class RealmServerService
       realmServerURL: ensureTrailingSlash(this.url.href),
       config: {
         spaceDomain: ENV.publishedRealmBoxelSpaceDomain,
+        spaceBaseURL: ENV.publishedRealmBoxelSpaceBaseURL,
         siteDomain: ENV.publishedRealmBoxelSiteDomain,
       },
       authedFetch: (url, init) => this.authedFetch(url, init),

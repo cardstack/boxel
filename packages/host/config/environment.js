@@ -104,6 +104,10 @@ function environmentDefaults() {
 module.exports = function (environment) {
   let defaults = environmentDefaults();
   let skipCatalog = process.env.SKIP_CATALOG === 'true';
+  let clientTelemetryEnabled = process.env.CLIENT_TELEMETRY_ENABLED ?? 'true';
+  if (!['true', 'false'].includes(clientTelemetryEnabled)) {
+    throw new Error('CLIENT_TELEMETRY_ENABLED must be true or false');
+  }
 
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -114,6 +118,7 @@ module.exports = function (environment) {
     // overwrites this at serve time from its REALM_SENTRY_ENVIRONMENT; the
     // default covers local dev where the host isn't served through it.
     hostedEnvironment: 'local',
+    clientTelemetryEnabled: clientTelemetryEnabled === 'true',
     rootURL: '/',
     locationType: 'history',
     EmberENV: {
@@ -177,6 +182,8 @@ module.exports = function (environment) {
     secureOriginURL: process.env.BOXEL_ENVIRONMENT
       ? defaults.secureOriginURL
       : process.env.SECURE_ORIGIN_URL || defaults.secureOriginURL,
+    publishedRealmBoxelSpaceBaseURL:
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_BASE_URL,
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
@@ -188,6 +195,8 @@ module.exports = function (environment) {
     // a realm whose config card has hostRoutingRules; empty otherwise.
     hostRoutingMap: [],
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
+    publicReferenceCacheURL:
+      process.env.BOXEL_PUBLIC_REFERENCE_CACHE_URL || null,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: skipCatalog

@@ -345,3 +345,34 @@ The package uses esbuild to create a standalone executable that bundles all depe
 ## License
 
 MIT
+
+## Native local stack controls
+
+With Boxel Desktop or `boxel-local serve` running, the CLI and SDK control the
+same runtime. These commands require no hosted sign-in and never run in a Boxel
+page. `up` is idempotent; the runtime owns startup and shutdown.
+
+```sh
+boxel up
+boxel status --json
+boxel doctor --json
+boxel down
+```
+
+Pass an optional stack name, such as `boxel up work`, or `--endpoint` to select a
+native runtime. `BOXEL_RUNTIME_URL` supplies the default endpoint; otherwise it
+is `http://127.0.0.1:4243`. Only HTTP loopback origins are accepted and redirects
+are disabled. An absent runtime produces an actionable error; these commands do
+not yet provision bundled binaries or start the daemon.
+
+```ts
+import { BoxelRuntimeClient } from '@cardstack/boxel-cli/api';
+let runtime = new BoxelRuntimeClient();
+await runtime.up();
+let status = await runtime.status();
+await runtime.down();
+```
+
+The structured status contains every service's state and PID. It omits native
+filesystem paths and logs; hosted profile credentials are never read by this
+client. Runtime protocol version 1 is required.

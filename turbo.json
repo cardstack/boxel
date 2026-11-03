@@ -1,0 +1,181 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "env": [
+        "BOXEL_PUBLIC_SOURCE_NAMES",
+        "CLIENT_TELEMETRY_ENABLED",
+        "BOXEL_PUBLIC_REFERENCE_CACHE_URL",
+        "REALM_SERVER_DOMAIN",
+        "MATRIX_URL",
+        "MATRIX_SERVER_NAME",
+        "SECURE_ORIGIN_URL",
+        "ICONS_URL",
+        "RESOLVED_BASE_REALM_URL",
+        "RESOLVED_CATALOG_REALM_URL",
+        "RESOLVED_SKILLS_REALM_URL",
+        "RESOLVED_OPENROUTER_REALM_URL",
+        "RESOLVED_PRETUI_REALM_URL",
+        "SKIP_CATALOG",
+        "PUBLISHED_REALM_BOXEL_SPACE_BASE_URL"
+      ]
+    },
+    "build:production": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "env": [
+        "BOXEL_PUBLIC_SOURCE_NAMES",
+        "CLIENT_TELEMETRY_ENABLED",
+        "BOXEL_PUBLIC_REFERENCE_CACHE_URL",
+        "REALM_SERVER_DOMAIN",
+        "MATRIX_URL",
+        "MATRIX_SERVER_NAME",
+        "SECURE_ORIGIN_URL",
+        "ICONS_URL",
+        "RESOLVED_BASE_REALM_URL",
+        "RESOLVED_CATALOG_REALM_URL",
+        "RESOLVED_SKILLS_REALM_URL",
+        "RESOLVED_OPENROUTER_REALM_URL",
+        "RESOLVED_PRETUI_REALM_URL",
+        "SKIP_CATALOG",
+        "PUBLISHED_REALM_BOXEL_SPACE_BASE_URL"
+      ]
+    },
+    "lint:types": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "PGHOST",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE",
+        "PGPASSWORD"
+      ]
+    },
+    "test:external-pg": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "PGHOST",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE",
+        "PGPASSWORD",
+        "TEST_FILES",
+        "BOXEL_TEST_BROWSER_BINARY",
+        "TEST_MODULES",
+        "QUNIT_FILTER",
+        "LOG_LEVELS",
+        "MATRIX_REGISTRATION_SHARED_SECRET"
+      ]
+    },
+    "test:unit": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "test:realm-server-transport": {
+      "cache": false
+    },
+    "test:public-source-names": {
+      "cache": false
+    },
+    "ember-test-pre-built": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "CHROME_BIN",
+        "HOST_TEST_PARTITION",
+        "HOST_TEST_PARTITION_COUNT"
+      ]
+    },
+    "build:plugin": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "plugin/**"
+      ]
+    },
+    "build:local": {
+      "passThroughEnv": [
+        "BOXEL_NATIVE_INSTANCE",
+        "BOXEL_NATIVE_GATEWAY_PORT"
+      ],
+      "cache": false
+    },
+    "lint:js": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "//#test:dev-cleanup": {
+      "cache": false,
+      "inputs": [
+        "scripts/tests/dev-cleanup-test.mjs",
+        "mise-tasks/lib/orphaned-services.sh",
+        "mise-tasks/lib/dev-common.sh"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#build": {
+      "dependsOn": [
+        "@cardstack/host#build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#lint:types": {
+      "dependsOn": [
+        "@cardstack/boxel-local-runtime#build"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#package:runtime": {
+      "dependsOn": [
+        "@cardstack/boxel-local-runtime#build:local"
+      ],
+      "cache": false,
+      "passThroughEnv": [
+        "BOXEL_RUNTIME_OUTPUT"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#test:package": {
+      "cache": false,
+      "passThroughEnv": [
+        "BOXEL_TEST_POSTGRES_BIN"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#package:native-assets": {
+      "cache": false,
+      "passThroughEnv": [
+        "BOXEL_NATIVE_PROFILE",
+        "BOXEL_NATIVE_ASSETS_OUTPUT"
+      ]
+    },
+    "@cardstack/boxel-local-runtime#lint:js": {
+      "dependsOn": []
+    }
+  }
+}

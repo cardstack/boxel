@@ -31,6 +31,7 @@ interface SkillSpec {
 }
 
 const SKILL_SPECS: SkillSpec[] = [
+  { skill: 'local-runtime', commands: ['up', 'down', 'status', 'doctor'] },
   {
     skill: 'realm-sync',
     commands: [

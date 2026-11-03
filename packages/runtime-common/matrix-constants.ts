@@ -334,3 +334,20 @@ export const SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE: [number, number] = [
   0, 99,
 ];
 export const SLIDING_SYNC_TIMEOUT = 30000;
+
+export function boxelSlidingSyncRequiredState(): [string, string][] {
+  return [
+    ['*', '*'],
+    ['m.room.member', '*'],
+    ['m.room.create', ''],
+    ['m.room.name', ''],
+    ['m.room.avatar', ''],
+    ['m.room.power_levels', ''],
+    ['m.room.join_rules', ''],
+    ['m.room.history_visibility', ''],
+    ['m.room.encryption', ''],
+    [APP_BOXEL_ACTIVE_LLM, ''],
+    [APP_BOXEL_LLM_MODE, ''],
+    [APP_BOXEL_ROOM_SKILLS_EVENT_TYPE, ''],
+  ];
+}

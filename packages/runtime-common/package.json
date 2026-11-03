@@ -98,7 +98,7 @@
     "transform-modules-amd-plugin": "workspace:*",
     "uuid": "catalog:",
     "yaml": "catalog:",
-    "zod": "^3.24.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@babel/core": "catalog:",

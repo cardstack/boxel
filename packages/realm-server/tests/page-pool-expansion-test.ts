@@ -862,6 +862,33 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('dynamic contraction resumes after the browser pool is closed and reused', async function (assert) {
+      await withEnv(
+        {
+          PRERENDER_PAGE_POOL_MIN: '1',
+          PRERENDER_PAGE_POOL_MAX: '3',
+          PRERENDER_PAGE_POOL_INITIAL: '3',
+          PRERENDER_POOL_IDLE_CONTRACTION_MS: '20',
+        },
+        async () => {
+          const { pool } = track(
+            makeStubPool({ maxPages: 3, contractionTickMs: 5 }),
+          );
+          await pool.closeAll();
+          assert.strictEqual(pool.currentMaxPages, 3);
+          await pool.warmStandbys();
+          const deadline = Date.now() + 2000;
+          while (pool.currentMaxPages > 1 && Date.now() < deadline)
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          assert.strictEqual(
+            pool.currentMaxPages,
+            1,
+            'the reused pool still contracts to its idle floor',
+          );
+        },
+      );
+    });
+
     test('legacy fixed pool: contraction loop never starts (no timer leak)', async function (assert) {
       await withEnv(
         {

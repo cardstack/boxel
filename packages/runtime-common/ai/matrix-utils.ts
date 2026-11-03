@@ -32,6 +32,16 @@ function getLog() {
   return logger('ai-bot');
 }
 
+let publicErrorMessageFormatter = (message: string) => message;
+
+export function setPublicErrorMessageFormatter(
+  formatter: (message: string) => string,
+) {
+  let previous = publicErrorMessageFormatter;
+  publicErrorMessageFormatter = formatter;
+  return previous;
+}
+
 export async function sendMatrixEvent(
   client: MatrixClient,
   roomId: string,
@@ -98,7 +108,7 @@ export async function sendErrorEvent(
       eventIdToReplace,
       {
         isStreamingFinished: true,
-        errorMessage,
+        errorMessage: publicErrorMessageFormatter(errorMessage),
         [APP_BOXEL_RELOAD_BILLING_DATA_KEY]: opts?.reloadBillingData ?? false,
       },
     );
@@ -204,7 +214,7 @@ function getErrorMessage(error: any): string {
   if (typeof error === 'string') {
     return error;
   }
-  if (error?.message) {
+  if (typeof error?.message === 'string') {
     return error.message;
   }
   return 'Unknown error';

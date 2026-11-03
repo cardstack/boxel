@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 // Glint 2 emits `foo.gts.d.ts` for `foo.gts`; rollup emits `foo.js`. package.json#exports maps
 // `./foo` → `declarations/foo.d.ts`, so rename the declarations to match the JS.
 import {
@@ -35,4 +36,4 @@ function walk(dir) {
     import('node:fs').then(({ unlinkSync }) => unlinkSync(p + '.tmp'));
   }
 }
-walk(new URL('../declarations', import.meta.url).pathname);
+walk(fileURLToPath(new URL('../declarations', import.meta.url)));

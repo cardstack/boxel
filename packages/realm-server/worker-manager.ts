@@ -96,7 +96,7 @@ import {
   dispatchWorkerRequest,
   WORKER_REQUEST_IPC_PREFIX,
 } from './lib/worker-request-forwarder.ts';
-import { isDeployedServerURL } from './lib/outbound/client.ts';
+import { workerIsDeployed } from './lib/worker-deployment.ts';
 import { withCredentialHeadersMasked } from './lib/request-telemetry.ts';
 import { getInstanceId, INHERITED_INSTANCE_ID_ENV } from './lib/instance-id.ts';
 import {
@@ -714,7 +714,10 @@ let secretsKeyringMessage: string | undefined;
   // deployed origin.
   try {
     let unwrapped = await unwrapDataKeys({
-      deployed: urlMappings.some(([, to]) => isDeployedServerURL(to.href)),
+      deployed: workerIsDeployed(
+        urlMappings,
+        process.env.BOXEL_LOCAL_REALM_SERVER_URL,
+      ),
     });
     secretsKeyringMessage = encodeSecretsKeyringIpc(unwrapped);
     for (let { key } of unwrapped.keys) {
@@ -872,7 +875,7 @@ async function startWorker(
   opts?: { indexJobsOnly?: boolean },
 ) {
   let worker = spawn(
-    'node',
+    process.execPath,
     [
       // A command-line flag wins over the heap limit the child would
       // otherwise inherit through NODE_OPTIONS.

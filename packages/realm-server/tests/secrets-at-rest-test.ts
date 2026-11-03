@@ -660,6 +660,66 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('provisioned local key', function () {
+    test('a stack key survives restart and cannot open another stack secrets', async function (assert) {
+      let key = randomBytes(32).toString('base64');
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
+      await startSecretsAtRest({
+        deployed: false,
+        env: { SECRETS_LOCAL_DATA_KEY: key },
+      });
+      let sealed = secretsKeyring().seal(SECRET, binding);
+      resetSecretsAtRest();
+      await startSecretsAtRest({
+        deployed: false,
+        env: { SECRETS_LOCAL_DATA_KEY: key },
+      });
+      assert.strictEqual(secretsKeyring().open(sealed, binding), SECRET);
+      resetSecretsAtRest();
+      await startSecretsAtRest({
+        deployed: false,
+        env: { SECRETS_LOCAL_DATA_KEY: randomBytes(32).toString('base64') },
+      });
+      assert.throws(
+        () => secretsKeyring().open(sealed, binding),
+        SecretDecryptionError,
+      );
+    });
+
+    test('invalid or ambiguous configuration fails without echoing key material', function (assert) {
+      for (let value of [
+        '',
+        'not-base64',
+        randomBytes(31).toString('base64'),
+        randomBytes(33).toString('base64'),
+        randomBytes(32).toString('base64') + '\n',
+      ]) {
+        assert.throws(
+          () => secretsKeyProviderFromEnv({ SECRETS_LOCAL_DATA_KEY: value }),
+          /^Error: SECRETS_LOCAL_DATA_KEY must be canonical base64 for 32 bytes$/,
+        );
+      }
+      assert.throws(
+        () =>
+          secretsKeyProviderFromEnv({
+            SECRETS_LOCAL_DATA_KEY: randomBytes(32).toString('base64'),
+            SECRETS_KMS_KEY_ARN: '',
+          }),
+        /cannot be combined/,
+      );
+    });
+
+    test('a provisioned local key still cannot weaken a deployed server', async function (assert) {
+      await assert.rejects(
+        startSecretsAtRest({
+          deployed: true,
+          env: { SECRETS_LOCAL_DATA_KEY: randomBytes(32).toString('base64') },
+        }),
+        SecretsAtRestStartupError,
+      );
+    });
+  });
+
   module('startup self-check', function () {
     test('a deployed server refuses to start with the local provider', async function (assert) {
       let error: unknown;

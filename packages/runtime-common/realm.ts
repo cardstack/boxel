@@ -570,7 +570,11 @@ import {
 } from './content-hash.ts';
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
 
-import type { Utils } from './matrix-backend-authentication.ts';
+import type {
+  Utils,
+  MatrixRealmIdentityResolver,
+  MatrixOpenIdTokenVerifier,
+} from './matrix-backend-authentication.ts';
 import {
   MatrixBackendAuthentication,
   SessionUserNotFoundError,
@@ -2441,6 +2445,8 @@ export interface RealmEventDelivery {
 }
 
 export interface RealmAdapter {
+  verifyMatrixOpenIdToken: MatrixOpenIdTokenVerifier;
+  resolveMatrixRealmIdentity: MatrixRealmIdentityResolver;
   readdir(
     path: LocalPath,
     opts?: {
@@ -3682,7 +3688,12 @@ export class Realm {
   // caller with no account is refused with `SessionUserNotFoundError`; the
   // account and its room are made when a person signs in to Boxel, through the
   // realm server's own session.
-  async ensureSessionRoom(matrixUserId: string): Promise<string> {
+  // `roomUserId` is the Matrix user the room is made with, when a native local
+  // runtime signs `matrixUserId` in through a linked identity.
+  async ensureSessionRoom(
+    matrixUserId: string,
+    roomUserId = matrixUserId,
+  ): Promise<string> {
     let sessionRoom = await fetchSessionRoom(this.#dbAdapter, matrixUserId);
 
     if (!sessionRoom) {
@@ -3691,7 +3702,7 @@ export class Realm {
         throw new SessionUserNotFoundError(matrixUserId);
       }
       await this.#matrixClient.login();
-      sessionRoom = await this.#matrixClient.createDM(matrixUserId);
+      sessionRoom = await this.#matrixClient.createDM(roomUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
 
@@ -8865,9 +8876,14 @@ export class Realm {
             this.#realmSecretSeed,
           );
         },
-        ensureSessionRoom: async (userId: string) =>
-          this.ensureSessionRoom(userId),
+        ensureSessionRoom: async (
+          userId: string,
+          _registrationToken: string | undefined,
+          matrixUser: string,
+        ) => this.ensureSessionRoom(userId, matrixUser),
       } as Utils,
+      this.#adapter.resolveMatrixRealmIdentity,
+      this.#adapter.verifyMatrixOpenIdToken,
     );
 
     return await matrixBackendAuthentication.createSession(request);
@@ -12324,13 +12340,13 @@ export class Realm {
     } catch (e: any) {
       if (e?.constructor?.name === 'TokenExpiredError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
       if (e?.constructor?.name === 'JsonWebTokenError') {
         warnRefusal(
-          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
+          `JWT verification failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}): ${e.message}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }

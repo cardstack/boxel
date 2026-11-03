@@ -1328,7 +1328,7 @@ async function setUpFirstSignIn(
     // account data too, and doesn't count.
     let realmURL = realmURLFor(
       createRealmDeps.serverURL,
-      user,
+      createRealmDeps.ownerNamespace(user),
       PERSONAL_REALM_ENDPOINT,
     );
     if (Array.isArray(realms) && realms.includes(realmURL)) {

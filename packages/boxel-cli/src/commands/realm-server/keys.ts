@@ -19,7 +19,7 @@ export { readKeyValue, type KeyValueSource } from '../../lib/key-value.ts';
 // token was signed. A name in a note is as the operator typed it; nothing
 // verifies it.
 
-export type SystemKeyAuthMethod = 'header' | 'url-parameter';
+export type SystemKeyAuthMethod = 'header' | 'raw-header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
 
 export interface SystemKey {
@@ -665,7 +665,7 @@ export function registerKeysCommand(realmServer: Command): void {
       )
       .option(
         '--auth <method>',
-        'Where the key goes: header (the default) or url-parameter',
+        'Where the key goes: header (the default, as a Bearer token), raw-header, or url-parameter',
       )
       .option(
         '--param-name <name>',
@@ -718,8 +718,10 @@ export function registerKeysCommand(realmServer: Command): void {
           throw new Error('--credit-strategy must be openrouter or none');
         }
         let auth = options.auth ?? 'header';
-        if (!['header', 'url-parameter'].includes(auth)) {
-          throw new Error('--auth must be header or url-parameter');
+        if (!['header', 'raw-header', 'url-parameter'].includes(auth)) {
+          throw new Error(
+            '--auth must be header, raw-header, or url-parameter',
+          );
         }
         let seed = await seedOptions(options);
         let value = await readKeyValue(options);

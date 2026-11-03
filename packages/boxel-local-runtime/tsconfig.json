@@ -1,0 +1,5 @@
+{
+  "extends": "../realm-server/tsconfig.json",
+  "include": ["src/**/*.ts", "../base/**/*"],
+  "exclude": ["../base/**/__boxel/**"]
+}

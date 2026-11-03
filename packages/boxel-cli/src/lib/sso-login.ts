@@ -701,6 +701,7 @@ async function verifySession(
 }
 
 export interface BrowserLoginOptions {
+  signal?: AbortSignal;
   matrixUrl: string;
   // Origin of the host app serving the authorization page, opened when
   // `secureOriginUrl` is not given.
@@ -734,6 +735,7 @@ export type BrowserLoginResult = MatrixAuth & {
 export async function browserLogin(
   options: BrowserLoginOptions,
 ): Promise<BrowserLoginResult> {
+  options.signal?.throwIfAborted();
   const {
     matrixUrl,
     hostUrl,
@@ -747,8 +749,19 @@ export async function browserLogin(
   } = options;
 
   const callback = await startLoopbackCallback({ timeoutMs });
+  let rejectAbort: (reason: unknown) => void = () => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
+  aborted.catch(() => {});
+  const abort = () => {
+    callback.close();
+    rejectAbort(new Error('Browser sign-in cancelled'));
+  };
+  options.signal?.addEventListener('abort', abort, { once: true });
   let stopCopyKey: (() => void) | undefined;
   try {
+    options.signal?.throwIfAborted();
     const authUrl = secureOriginUrl
       ? buildSecureCliAuthUrl(secureOriginUrl, callback)
       : buildCliAuthUrl(hostUrl, callback);
@@ -770,7 +783,7 @@ export async function browserLogin(
           : 'Press Ctrl-C to stop.'),
     );
 
-    const result = await callback.waitForResult();
+    const result = await Promise.race([callback.waitForResult(), aborted]);
     if (result.kind === 'loginToken') {
       let auth;
       try {
@@ -791,6 +804,7 @@ export async function browserLogin(
     await verifySession(matrixUrl, result.session, fetchFn);
     return { ...result.session, matrixUrl };
   } finally {
+    options.signal?.removeEventListener('abort', abort);
     stopCopyKey?.();
     callback.close();
   }

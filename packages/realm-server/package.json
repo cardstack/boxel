@@ -95,7 +95,8 @@
     "wait-on": "^9.0.4",
     "wtfnode": "^0.10.1",
     "yaml": "catalog:",
-    "yargs": "catalog:"
+    "yargs": "catalog:",
+    "zod": "^4.6.7"
   },
   "scripts": {
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
@@ -152,7 +153,8 @@
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-stripe-products.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest",
-    "build:secure-origin": "pnpm --dir=../secure-origin build"
+    "build:secure-origin": "pnpm --dir=../secure-origin build",
+    "test:external-pg": "node tests/index.ts"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.1069.0",
@@ -160,7 +162,7 @@
     "@aws-sdk/lib-storage": "^3.1065.0",
     "@cardstack/secure-origin": "workspace:*",
     "morphdom": "^2.7.8",
-    "puppeteer": "^25.0.2",
+    "puppeteer": "^25.16.0",
     "tldts": "^6.1.86"
   }
 }

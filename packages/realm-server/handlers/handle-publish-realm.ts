@@ -15,6 +15,7 @@ import {
   userInitiatedPriority,
   deriveRealmName,
   publishedSpaceHost,
+  resolvePublishedRealmUrl,
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
@@ -529,13 +530,14 @@ export default function handlePublishRealm({
     }
 
     if (!overrideResult.applied) {
-      let validPublishedRealmDomains = Object.values(
-        domainsForPublishedRealms || {},
-      );
+      let validPublishedRealmDomains = [
+        domainsForPublishedRealms?.boxelSpace,
+        domainsForPublishedRealms?.boxelSite,
+      ].filter((domain): domain is string => typeof domain === 'string');
       try {
         let publishedURL = new URL(publishedRealmURL);
         if (
-          validPublishedRealmDomains &&
+          !domainsForPublishedRealms?.boxelSpaceBaseURL &&
           validPublishedRealmDomains.length > 0
         ) {
           let isValidDomain = validPublishedRealmDomains.some(
@@ -578,6 +580,27 @@ export default function handlePublishRealm({
       // path can't be hand-picked through a direct API call. Publishes to any
       // other host (claimed custom domains, etc.) are left permissive.
       let spaceDomain = domainsForPublishedRealms?.boxelSpace;
+      let spaceBaseURL = domainsForPublishedRealms?.boxelSpaceBaseURL;
+      let matrixUsername = getMatrixUsername(ownerUserId);
+      if (spaceBaseURL) {
+        let unlistedSlug = await getUnlistedSlug(dbAdapter, sourceRealmURL);
+        let permitted = [
+          deriveRealmName(sourceRealmURL),
+          ...(unlistedSlug ? [unlistedSlug] : []),
+        ].map((name) =>
+          resolvePublishedRealmUrl(
+            { type: 'subdirectory', name },
+            { matrixUsername, spaceBaseURL },
+          ),
+        );
+        if (!permitted.includes(publishedRealmURL)) {
+          await sendResponseForBadRequest(
+            ctxt,
+            'publishedRealmURL must use the configured local publishing address and the realm name or server-issued unlisted link',
+          );
+          return;
+        }
+      }
       let publishedURLForPath = new URL(publishedRealmURL);
       let ownerSpaceHost = spaceDomain
         ? publishedSpaceHost(getMatrixUsername(ownerUserId), spaceDomain)

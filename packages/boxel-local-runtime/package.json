@@ -1,0 +1,40 @@
+{
+  "name": "@cardstack/boxel-local-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./desktop-profiles": {
+      "types": "./dist/desktop-profiles.d.ts",
+      "default": "./dist/desktop-profiles.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "lint:types": "ember-tsc --noEmit",
+    "build:local": "node scripts/build-local.mjs",
+    "package:runtime": "node scripts/package-runtime.mjs",
+    "test:package": "node --test scripts/async-encryption.test.mjs scripts/package-tree.test.mjs scripts/bundled-profile.test.mjs scripts/postgres-socket.test.mjs scripts/hosted-models.test.mjs scripts/native-postgres.test.mjs scripts/managed-environments.test.mjs",
+    "package:native-assets": "node scripts/stage-native-assets.mjs",
+    "lint": "pnpm exec turbo run lint:js lint:types --filter=@cardstack/boxel-local-runtime --output-logs=errors-only",
+    "lint:js": "eslint src scripts --ext .ts,.mjs --report-unused-disable-directives"
+  },
+  "dependencies": {
+    "@cardstack/boxel-cli": "workspace:*",
+    "@cardstack/host": "workspace:*",
+    "@cardstack/realm-server": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "semver": "^7.7.2"
+  }
+}

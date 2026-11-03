@@ -22,7 +22,16 @@ export default function handleCreateSessionRequest({
   matrixClient,
   realmSecretSeed,
   dbAdapter,
-}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  resolveMatrixRealmIdentity,
+  verifyMatrixOpenIdToken,
+}: Pick<
+  CreateRoutesArgs,
+  | 'matrixClient'
+  | 'realmSecretSeed'
+  | 'dbAdapter'
+  | 'resolveMatrixRealmIdentity'
+  | 'verifyMatrixOpenIdToken'
+>): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   let matrixBackendAuthentication = new MatrixBackendAuthentication(
     matrixClient,
     {
@@ -51,9 +60,16 @@ export default function handleCreateSessionRequest({
             ? EXTENDED_SESSION_TOKEN_TTL
             : SESSION_TOKEN_TTL,
         ),
-      ensureSessionRoom: async (userId: string) =>
-        await ensureSessionRoom({ dbAdapter, matrixClient }, userId),
+      ensureSessionRoom: async (userId: string, matrixUser?: string) =>
+        await ensureSessionRoom(
+          { dbAdapter, matrixClient },
+          userId,
+          undefined,
+          matrixUser,
+        ),
     } as Utils,
+    resolveMatrixRealmIdentity,
+    verifyMatrixOpenIdToken,
   );
 
   return async function (ctxt: Koa.Context, _next: Koa.Next) {

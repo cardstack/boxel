@@ -40,6 +40,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 const log = logger('realm-server');
 
 export type CreateRealmDeps = {
+  ownerNamespace: (ownerUserId: string) => string;
   serverURL: URL;
   realms: Realm[];
   dbAdapter: DBAdapter;
@@ -78,11 +79,11 @@ interface RealmCreationJSON {
 // Where the realm an owner makes at an endpoint lives on this server.
 export function realmURLFor(
   serverURL: URL,
-  ownerUserId: string,
+  ownerNamespace: string,
   endpoint: string,
 ): string {
   return new URL(
-    `${serverURL.pathname.replace(/\/$/, '')}/${getMatrixUsername(ownerUserId)}/${endpoint}/`,
+    `${serverURL.pathname.replace(/\/$/, '')}/${ownerNamespace}/${endpoint}/`,
     serverURL,
   ).href;
 }
@@ -137,7 +138,8 @@ export async function createRealm(
   }
 
   let ownerUsername = getMatrixUsername(ownerUserId);
-  let url = realmURLFor(serverURL, ownerUserId, endpoint);
+  let ownerNamespace = deps.ownerNamespace(ownerUserId);
+  let url = realmURLFor(serverURL, ownerNamespace, endpoint);
 
   let existingRows = (await query(dbAdapter, [
     `SELECT url FROM realm_registry WHERE url =`,
@@ -152,7 +154,7 @@ export async function createRealm(
     throw errorWithStatus(400, `realm '${url}' already exists on this server`);
   }
 
-  let realmPath = resolve(join(realmsRootPath, ownerUsername, endpoint));
+  let realmPath = resolve(join(realmsRootPath, ownerNamespace, endpoint));
   ensureDirSync(realmPath);
 
   let info: Partial<RealmInfo> = {
@@ -242,7 +244,7 @@ export async function createRealm(
     // up the row, and the realm is lazy-mounted on first request.
     await insertSourceRealmInRegistry(dbAdapter, {
       url,
-      diskId: `${ownerUsername}/${endpoint}`,
+      diskId: `${ownerNamespace}/${endpoint}`,
       ownerUsername,
     });
   });
