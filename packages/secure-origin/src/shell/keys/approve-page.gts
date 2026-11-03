@@ -943,10 +943,20 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   // too, and approving writes the budget the field holds. So when the window
   // comes back into view, each budget field the user hasn't typed in takes the
   // budget in force, and approving never puts back one changed meanwhile. A
-  // budget the user typed is what they see, and stays.
-  private refreshBudgets = async () => {
+  // budget the user typed is what they see, and stays. Approving waits for a
+  // re-read under way: coming back to the window by clicking Approve starts
+  // one on that same click.
+  private budgetRefresh: Promise<void> | undefined;
+
+  private refreshBudgets = () => {
+    let refresh = this.readBudgetsInForce();
+    this.budgetRefresh = refresh;
+    return refresh;
+  };
+
+  private readBudgetsInForce = async () => {
     let state = this.choosing;
-    if (document.visibilityState !== 'visible' || !state) {
+    if (document.visibilityState !== 'visible' || !state || this.form.saving) {
       return;
     }
     let untyped = this.budgetShares.filter(
@@ -1166,7 +1176,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
-    await this.args.api.saving(() => this.approve(state));
+    await this.args.api.saving(async () => {
+      await this.budgetRefresh;
+      await this.approve(this.choosing ?? state);
+    });
   };
 
   private approve = async (state: ChoosingState) => {

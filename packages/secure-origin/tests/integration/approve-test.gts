@@ -1468,6 +1468,49 @@ module('Integration | approve pages', function (hooks) {
     );
   });
 
+  test('coming back to the window by clicking Approve approves the daily budget in force', async function (assert) {
+    serveFirstInteractiveShare();
+    let answer!: () => void;
+    let answered = new Promise<void>((resolve) => (answer = resolve));
+    serve({
+      'GET _key-shares/share-team/usage': async () => {
+        await answered;
+        return json(200, {
+          data: {
+            type: 'key-usage',
+            id: 'share-team',
+            attributes: {
+              limits: {
+                rateBurst: 25,
+                rateRefillPerMinute: 15,
+                dailyBudget: 300,
+                monthlyBudget: 72000,
+              },
+            },
+          },
+        });
+      },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+
+    // The click that brings the window back starts the re-read, and the
+    // approval goes out while it is still under way.
+    window.dispatchEvent(new Event('focus'));
+    let approving = click('[data-test-approve-save]');
+    answer();
+    await approving;
+    await settled();
+    let [approval] = approvals();
+    assert.deepEqual(
+      approval.dailyBudgets,
+      { 'share-team': 300 },
+      'the approval waits for the budget in force',
+    );
+  });
+
   test('a daily budget typed on the approve page stays when the window comes back into view', async function (assert) {
     serveFirstInteractiveShare();
     serve({
