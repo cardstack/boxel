@@ -13,6 +13,8 @@ import {
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
@@ -8276,6 +8278,27 @@ ${patchedFileSource}
 
       assert.deepEqual(imageUrls(prompt), [
         `data:image/png;base64,${Buffer.from('bytes-of-newest-copy').toString('base64')}`,
+      ]);
+    });
+
+    test('an answer split into parts and canceled by the follow-up leaves the turn open', async () => {
+      let sample = png('sample.png');
+      let firstPart = botAnswer('2', 2, 'first part of a long answer ');
+      (firstPart.content as any)[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] = true;
+      let lastPart = botAnswer('3', 3, 'and its end', { isCanceled: true });
+      (lastPart.content as any)[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] = '2';
+      let history = await constructHistory(
+        [
+          userMessage('1', 1, 'Build an app from this image', [sample]),
+          firstPart,
+          lastPart,
+          userMessage('4', 4, 'Put it in my other workspace'),
+        ] as any,
+        fakeMatrixClient as any,
+      );
+
+      assert.deepEqual(imageUrls(await buildPrompt(history)), [
+        dataUrlOf(sample),
       ]);
     });
 
