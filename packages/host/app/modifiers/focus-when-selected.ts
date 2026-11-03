@@ -1,5 +1,7 @@
 import { modifier } from 'ember-modifier';
 
+import { isOffScreen } from '@cardstack/host/lib/workspace-list';
+
 // The last selection state seen per element, so only the unselected ->
 // selected transition moves focus. Re-rendering an item that stays selected
 // must not pull focus back from a control the user just focused, like its
@@ -23,20 +25,19 @@ function focusIsAvailable(): boolean {
   );
 }
 
-// Less than half of it shows within the window and every scroller around it,
-// so a sliver at an edge still counts as off screen.
-function isOffScreen(element: HTMLElement): boolean {
-  let { top, bottom, height } = element.getBoundingClientRect();
-  let shownTop = Math.max(top, 0);
-  let shownBottom = Math.min(bottom, window.innerHeight);
-  for (let el = element.parentElement; el; el = el.parentElement) {
-    if (getComputedStyle(el).overflowY !== 'visible') {
-      let clip = el.getBoundingClientRect();
-      shownTop = Math.max(shownTop, clip.top);
-      shownBottom = Math.min(shownBottom, clip.bottom);
+// Focusable only while it holds focus, so a click on an empty part of the
+// page never takes the arrow keys from scrolling. Switching windows blurs it
+// too, and must not release it.
+function holdFocus(container: HTMLElement) {
+  container.tabIndex = -1;
+  let release = () => {
+    if (document.hasFocus()) {
+      container.removeAttribute('tabindex');
+      container.removeEventListener('blur', release);
     }
-  }
-  return shownBottom - shownTop < height / 2;
+  };
+  container.addEventListener('blur', release);
+  container.focus({ preventScroll: true });
 }
 
 // Focuses the item the keyboard cursor moves to. When an arrow key moved it
@@ -62,9 +63,10 @@ export default modifier(
     ) {
       let fromItem = !!document.activeElement?.closest('[data-nav-index]');
       if (!fromItem && scrollOnOpen === 'never' && isOffScreen(element)) {
-        element
-          .closest<HTMLElement>('[data-keyboard-cursor]')
-          ?.focus({ preventScroll: true });
+        let container = element.closest<HTMLElement>('[data-keyboard-cursor]');
+        if (container && document.activeElement !== container) {
+          holdFocus(container);
+        }
         return;
       }
       element.focus({ preventScroll: true });

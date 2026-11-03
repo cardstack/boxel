@@ -236,6 +236,10 @@ export class MockUtils {
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
   };
+  // The favorites the account starts with, read when the app logs in.
+  setWorkspaceFavorites = (realmURLs: string[]) => {
+    this.testState.opts!.workspaceFavorites = realmURLs;
+  };
   setLoginWithTokenInterceptor = (
     fn:
       | ((token: string, deviceId?: string) => Promise<MatrixSDK.LoginResponse>)

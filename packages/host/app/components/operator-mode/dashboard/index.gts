@@ -551,7 +551,6 @@ export default class Dashboard extends Component<Signature> {
     <section
       class={{cn 'dashboard' is-compact=@sections.isCompact}}
       aria-label='Dashboard'
-      tabindex='-1'
       data-theme='dark'
       data-keyboard-cursor
       {{on 'keydown' this.cursor.onKeydown}}
