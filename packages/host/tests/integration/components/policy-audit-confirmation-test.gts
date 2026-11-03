@@ -1,4 +1,4 @@
-import { click, settled, waitFor } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -20,12 +20,14 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 const POLICY_URL = 'http://test-realm/policy-audit/policies/team.json';
 
+const POLICY = 'http://test-realm/policy-audit/policies/team';
+
 const audit: PolicyShareAudit = {
-  policy: 'http://test-realm/policy-audit/policies/team',
   confirmation: 'confirmation-of-this-list',
   entries: [
     {
       realm: 'http://test-realm/policy-audit-team/',
+      policy: POLICY,
       share: 'share-alerts',
       label: 'Alerts key',
       owner: '@other:localhost',
@@ -36,6 +38,7 @@ const audit: PolicyShareAudit = {
     },
     {
       realm: 'http://test-realm/policy-audit-team/',
+      policy: POLICY,
       share: 'share-forecast',
       label: 'Forecast key',
       owner: '@owner:localhost',
@@ -52,7 +55,7 @@ module('Integration | policy audit confirmation', function (hooks) {
 
   // A realm that refuses a write of the policy card until it carries the
   // confirmation, recording each write it is sent.
-  function mountRefusingRealm() {
+  function mountRefusingRealm(shown: PolicyShareAudit = audit) {
     let writes: { confirmation: string | null }[] = [];
     let handler = async (request: Request) => {
       if (request.url !== POLICY_URL || request.method !== 'POST') {
@@ -70,7 +73,7 @@ module('Integration | policy audit confirmation', function (hooks) {
               status: 409,
               title: 'Confirm the shared keys this change opens',
               message: 'This change lets people who aren’t signed in…',
-              meta: { code: POLICY_OPENS_SHARES_CODE, audit },
+              meta: { code: POLICY_OPENS_SHARES_CODE, audit: shown },
             },
           ],
         }),
@@ -125,7 +128,7 @@ module('Integration | policy audit confirmation', function (hooks) {
     assert.dom('[data-test-policy-audit-modal]').doesNotExist();
   });
 
-  test('a declined list is not saved, and is not asked about again', async function (assert) {
+  test('a declined list is not saved, and the next save that is refused for it asks again', async function (assert) {
     let writes = mountRefusingRealm();
     await renderModal();
     let cardService = getService('card-service');
@@ -137,17 +140,77 @@ module('Integration | policy audit confirmation', function (hooks) {
     await waitFor('[data-test-policy-audit-modal]');
     await click('[data-test-policy-audit-cancel]');
     await refused;
-
-    let refusedAgain = assert.rejects(
-      cardService.saveSource(new URL(POLICY_URL), '{}', 'editor'),
-    );
-    await settled();
     assert.dom('[data-test-policy-audit-modal]').doesNotExist();
-    await refusedAgain;
+
+    let again = cardService.saveSource(new URL(POLICY_URL), '{}', 'editor');
+    await waitFor('[data-test-policy-audit-modal]');
+    assert.dom('[data-test-policy-audit-modal]').exists('it asks again');
+    await click('[data-test-policy-audit-confirm]');
+    assert.strictEqual((await again).status, 204);
     assert.deepEqual(
       writes.map((write) => write.confirmation),
-      [null, null],
-      'nothing is sent with a confirmation',
+      [null, null, audit.confirmation],
     );
+  });
+
+  test('a list just confirmed is not asked about again while the save it confirmed lands', async function (assert) {
+    let writes = mountRefusingRealm();
+    await renderModal();
+    let cardService = getService('card-service');
+    let first = cardService.saveSource(new URL(POLICY_URL), '{}', 'editor');
+    await waitFor('[data-test-policy-audit-modal]');
+    await click('[data-test-policy-audit-confirm]');
+    await first;
+    let second = await cardService.saveSource(
+      new URL(POLICY_URL),
+      '{}',
+      'editor',
+    );
+    assert.strictEqual(second.status, 204);
+    assert.dom('[data-test-policy-audit-modal]').doesNotExist();
+    assert.deepEqual(
+      writes.map((write) => write.confirmation),
+      [null, audit.confirmation, null, audit.confirmation],
+      'the second save is sent again with the confirmation without asking',
+    );
+  });
+
+  test('with nothing mounted to ask with, a refused save reports the refusal at once', async function (assert) {
+    let writes = mountRefusingRealm();
+    await assert.rejects(
+      getService('card-service').saveSource(
+        new URL(POLICY_URL),
+        '{}',
+        'editor',
+      ),
+    );
+    assert.deepEqual(writes, [{ confirmation: null }]);
+  });
+
+  test('a list without the share details names the workspace instead', async function (assert) {
+    mountRefusingRealm({
+      ...audit,
+      entries: audit.entries.map((entry) => ({
+        ...entry,
+        share: null,
+        label: null,
+        owner: null,
+      })),
+    });
+    await renderModal();
+    let refused = assert.rejects(
+      getService('card-service').saveSource(
+        new URL(POLICY_URL),
+        '{}',
+        'editor',
+      ),
+    );
+    await waitFor('[data-test-policy-audit-modal]');
+    assert
+      .dom('[data-test-policy-audit-starting] [data-test-policy-audit-entry]')
+      .containsText('A key shared into http://test-realm/policy-audit-team/')
+      .doesNotContainText('@owner:localhost');
+    await click('[data-test-policy-audit-cancel]');
+    await refused;
   });
 });

@@ -35,11 +35,16 @@ export const POLICY_OPENS_SHARES_CODE = 'policy-opens-shares-to-anonymous';
 export interface PolicyShareAuditEntry {
   // The realm the share is in, which the policy governs.
   realm: string;
-  // The share, by id and by its label in the realm.
-  share: string;
-  label: string;
-  // The share's owner, a Matrix user id.
-  owner: string;
+  // The policy card that realm would be governed by.
+  policy: string;
+  // The share, by id and by its label in the realm, and its owner, a Matrix
+  // user id. Null for a saver who can't see the realm's shares, who isn't one
+  // of its direct writers: a policy card in one realm can govern another, and
+  // only a realm's direct writers see what is shared into it. They are still
+  // shown how many keys the change opens there, and to which operations.
+  share: string | null;
+  label: string | null;
+  owner: string | null;
   // Whether the key the share holds allows people who aren't signed in to
   // use it. Visitors start using a key that does as soon as the change is
   // saved; one that doesn't refuses them until its owner allows it.
@@ -50,12 +55,11 @@ export interface PolicyShareAuditEntry {
 }
 
 export interface PolicyShareAudit {
-  // The policy card the change puts in force, or null where it removes one.
-  policy: string | null;
   // Sorted by realm, then label.
   entries: PolicyShareAuditEntry[];
   // What the write carries in `POLICY_AUDIT_CONFIRMATION_HEADER` to confirm
-  // this list.
+  // this list. It is computed from the list in full, so a saver shown it
+  // without the share details confirms the same list.
   confirmation: string;
 }
 
@@ -64,22 +68,33 @@ export interface PolicyShareAudit {
 export interface PolicyWriteAuditRequest {
   realmURL: string;
   paths: LocalPath[];
-  // The content `path` will hold once the write lands, as text. Read only for
-  // a path the auditor finds is a policy or a realm's config, since a write
-  // of another file can't change a policy.
+  // Who is writing: the list is shown to them as they may see it.
+  actor: string | null;
+  // The content `path` will hold once the write lands, as text.
   contentOf(path: LocalPath): Promise<string>;
-  // Whether the card stored at `path` is a policy card, as the realm's index
-  // records it. A card no realm can name yet, being new, governs nothing.
-  isPolicyCard(path: LocalPath): Promise<boolean>;
+  // Whether the card the write puts at `path` is a policy card: its
+  // `adoptsFrom`, as written, names RealmPolicy or a type descending from it.
+  // Decided from what is written rather than from what is stored, since a
+  // realm's pointer can name a card before the card exists.
+  writesPolicyCard(path: LocalPath): Promise<boolean>;
+}
+
+// An audit with entries: the list in full, for the notices, and as the saver
+// is shown it.
+export interface PolicyWriteAudit {
+  audit: PolicyShareAudit;
+  shown: PolicyShareAudit;
 }
 
 // Supplied by the server a realm runs in, which knows the realms it serves and
 // the shares in them. A realm without one audits nothing.
 export interface PolicyWriteAuditor {
   // The audit of a write, or undefined where it opens no share to visitors.
+  // Rejects when a realm the write would change the policy of can't be
+  // audited, so the write is refused rather than let through unaudited.
   audit(
     request: PolicyWriteAuditRequest,
-  ): Promise<PolicyShareAudit | undefined>;
+  ): Promise<PolicyWriteAudit | undefined>;
   // Records the notices a confirmed write owes the owners of the shares it
   // listed. Called once the write has landed.
   notify(audit: PolicyShareAudit, savedBy: string | null): Promise<void>;
@@ -145,9 +160,9 @@ function isPolicyShareAudit(value: unknown): value is PolicyShareAudit {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  let { policy, entries, confirmation } = value as Record<string, unknown>;
+  let { entries, confirmation } = value as Record<string, unknown>;
+  let stringOrNull = (v: unknown) => v === null || typeof v === 'string';
   return (
-    (policy === null || typeof policy === 'string') &&
     typeof confirmation === 'string' &&
     Array.isArray(entries) &&
     entries.every(
@@ -155,9 +170,10 @@ function isPolicyShareAudit(value: unknown): value is PolicyShareAudit {
         entry &&
         typeof entry === 'object' &&
         typeof entry.realm === 'string' &&
-        typeof entry.share === 'string' &&
-        typeof entry.label === 'string' &&
-        typeof entry.owner === 'string' &&
+        typeof entry.policy === 'string' &&
+        stringOrNull(entry.share) &&
+        stringOrNull(entry.label) &&
+        stringOrNull(entry.owner) &&
         typeof entry.keyAllowsAnonymous === 'boolean' &&
         Array.isArray(entry.operations) &&
         entry.operations.every((op: unknown) => typeof op === 'string'),

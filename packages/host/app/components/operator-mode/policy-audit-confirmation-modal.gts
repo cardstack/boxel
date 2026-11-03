@@ -1,6 +1,7 @@
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -19,14 +20,24 @@ function operationLabel(operation: string) {
 }
 
 const EntryItem: TOC<{ Args: { entry: PolicyShareAuditEntry } }> = <template>
-  <li class='entry' data-test-policy-audit-entry={{@entry.label}}>
-    <div class='label'>{{@entry.label}}</div>
-    <div class='detail'>
-      Shared by
-      {{@entry.owner}}
-      into
-      {{@entry.realm}}
-    </div>
+  <li
+    class='entry'
+    data-test-policy-audit-entry={{if @entry.label @entry.label @entry.realm}}
+  >
+    {{#if @entry.label}}
+      <div class='label'>{{@entry.label}}</div>
+      <div class='detail'>
+        Shared by
+        {{@entry.owner}}
+        into
+        {{@entry.realm}}
+      </div>
+    {{else}}
+      <div class='label'>A key shared into {{@entry.realm}}</div>
+      <div class='detail'>
+        Only that workspace's writers can see which key it is and who shared it.
+      </div>
+    {{/if}}
     <div class='operations'>
       {{#each @entry.operations as |operation|}}
         <code>{{operationLabel operation}}</code>
@@ -70,6 +81,20 @@ const EntryItem: TOC<{ Args: { entry: PolicyShareAuditEntry } }> = <template>
 export default class PolicyAuditConfirmationModal extends Component {
   @service
   declare private policyAuditConfirmation: PolicyAuditConfirmationService;
+
+  // While this is mounted the service can ask; without it, a refused save
+  // reports the refusal rather than waiting on an answer nobody can give.
+  private unregister: () => void;
+
+  constructor(owner: Owner, args: {}) {
+    super(owner, args);
+    this.unregister = this.policyAuditConfirmation.registerAsker();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.unregister();
+  }
 
   private get audit() {
     return this.policyAuditConfirmation.pending;

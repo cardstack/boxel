@@ -715,8 +715,6 @@ export function namesRealmPolicy(
   );
 }
 
-// The reference a `policy` value makes, or what is wrong with it in words for
-// the log.
 // The policy card a RealmConfig `policy` value names, as the realm reads it,
 // or undefined where it names none the realm would keep.
 export function realmPolicyCardNamed(
@@ -730,6 +728,8 @@ export function realmPolicyCardNamed(
   return 'problem' in reference ? undefined : reference.card;
 }
 
+// The reference a `policy` value makes, or what is wrong with it in words for
+// the log.
 function readRealmPolicyReference(
   policy: unknown,
   virtualNetwork: VirtualNetwork,
@@ -2134,7 +2134,13 @@ function policyShareAuditRefusal(audit: PolicyShareAudit): CardError {
   let starting = audit.entries.filter((entry) => entry.keyAllowsAnonymous);
   let refusing = audit.entries.filter((entry) => !entry.keyAllowsAnonymous);
   let names = (entries: PolicyShareAudit['entries']) =>
-    entries.map((entry) => `${entry.label} (${entry.realm})`).join(', ');
+    entries
+      .map((entry) =>
+        entry.label === null
+          ? `a key shared into ${entry.realm}`
+          : `${entry.label} (${entry.realm})`,
+      )
+      .join(', ');
   let parts = [
     `This change lets people who aren't signed in make calls that send a key shared into the workspace.`,
     ...(starting.length ? [`They will start using: ${names(starting)}.`] : []),
@@ -5235,30 +5241,83 @@ export class Realm {
     if (!auditor || !requested || files.size === 0) {
       return undefined;
     }
-    let audit = await auditor.audit({
+    let audited = await auditor.audit({
       realmURL: this.url,
       paths: [...files.keys()],
-      contentOf: async (path) => {
-        let content = files.get(path);
-        if (content === undefined) {
-          throw new Error(`${path} is not among the files being written`);
-        }
-        return await this.#writeContentText(content);
-      },
-      isPolicyCard: async (path) => {
-        let row = await this.#realmIndexQueryEngine.instanceSource(
-          this.paths.fileURL(path),
-        );
-        return Boolean(row?.types && this.#isPolicyCard(row.types));
-      },
+      actor: requested.actor,
+      contentOf: (path) => this.#auditedContentOf(files, path),
+      writesPolicyCard: async (path) =>
+        this.#writesPolicyCard(path, await this.#auditedContentOf(files, path)),
     });
-    if (!audit || audit.entries.length === 0) {
+    if (!audited || audited.audit.entries.length === 0) {
       return undefined;
     }
-    if (requested.confirmation !== audit.confirmation) {
-      throw policyShareAuditRefusal(audit);
+    if (requested.confirmation !== audited.audit.confirmation) {
+      throw policyShareAuditRefusal(audited.shown);
     }
-    return audit;
+    return audited.audit;
+  }
+
+  async #auditedContentOf(
+    files: Map<LocalPath, WriteContent>,
+    path: LocalPath,
+  ): Promise<string> {
+    let content = files.get(path);
+    if (content === undefined) {
+      throw new Error(`${path} is not among the files being written`);
+    }
+    return await this.#writeContentText(content);
+  }
+
+  // Whether `content`, written at `path`, is a policy card: its `adoptsFrom`
+  // names RealmPolicy or a type descending from it, resolved against the card
+  // as the realm resolves it. A document naming no type, or one that doesn't
+  // resolve, isn't one.
+  async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
+    if (!content.includes('adoptsFrom')) {
+      return false;
+    }
+    let adoptsFrom: unknown;
+    try {
+      adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
+    } catch {
+      return false;
+    }
+    if (
+      !adoptsFrom ||
+      typeof adoptsFrom !== 'object' ||
+      typeof (adoptsFrom as { module?: unknown }).module !== 'string' ||
+      typeof (adoptsFrom as { name?: unknown }).name !== 'string'
+    ) {
+      return false;
+    }
+    let { module, name } = adoptsFrom as { module: string; name: string };
+    // A type that doesn't resolve, or a deployment that maps no catalog for
+    // RealmPolicy to come from, names no policy card: no realm there can be
+    // governed by one.
+    try {
+      let codeRef = codeRefWithAbsoluteIdentifier(
+        { module: rri(module), name },
+        this.paths.fileURL(path),
+        undefined,
+        this.#virtualNetwork,
+      );
+      if (!isResolvedCodeRef(codeRef)) {
+        return false;
+      }
+      if (
+        this.#isPolicyCard([
+          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+        ])
+      ) {
+        return true;
+      }
+      return this.#isPolicyCard(
+        (await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
+      );
+    } catch {
+      return false;
+    }
   }
 
   // A notice that can't be recorded costs the write nothing: it has landed.

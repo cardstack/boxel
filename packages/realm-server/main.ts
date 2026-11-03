@@ -62,6 +62,7 @@ import {
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
 import {
   keyLimitDefaultsFromEnv,
@@ -802,6 +803,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
         ? findRealm(url, { realms, reconciler, dbAdapter })
         : Promise.resolve(undefined),
     virtualNetwork,
+    policyPointerOf: async (url: string) =>
+      reconciler
+        ? await realmPolicyPointer(url, {
+            reconciler,
+            realmsRootPath,
+            virtualNetwork,
+          })
+        : null,
   });
 
   // Construct the reconciler before the server so the server can hold a

@@ -10,12 +10,14 @@ import {
   sendConfirmingPolicyAudit,
 } from '../../src/lib/policy-audit.ts';
 
+const POLICY = 'https://app.example.test/org/policies/team';
+
 const audit: PolicyShareAudit = {
-  policy: 'https://app.example.test/org/policies/team',
   confirmation: 'abc123',
   entries: [
     {
       realm: 'https://app.example.test/team/',
+      policy: POLICY,
       share: 'share-1',
       label: 'Forecast key',
       owner: '@owner:example.test',
@@ -24,6 +26,7 @@ const audit: PolicyShareAudit = {
     },
     {
       realm: 'https://app.example.test/team/',
+      policy: POLICY,
       share: 'share-2',
       label: 'Alerts key',
       owner: '@other:example.test',
@@ -130,6 +133,15 @@ describe('confirmPolicyAuditFor', () => {
     });
     expect(await yes(audit)).toBe(true);
     expect(await no(audit)).toBe(false);
+  });
+
+  it('names the workspace for a key whose details the saver can’t see', () => {
+    let text = describePolicyAudit({
+      ...audit,
+      entries: [{ ...audit.entries[0], share: null, label: null, owner: null }],
+    }).join('\n');
+    expect(text).toContain('A key shared into https://app.example.test/team/');
+    expect(text).not.toContain('@owner:example.test');
   });
 
   it('describes a list of one kind only', () => {

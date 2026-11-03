@@ -190,25 +190,33 @@ entry isn't drawn. The host tools behind it are `list-realm-key-shares`,
 
 Whether people who aren't signed in may use a key is its owner's setting on
 the key; whether they can in a realm is its policy's. A write that would put
-a policy in force (the policy card a realm with shares names, or a realm's
-`realm.json` pointing at another card) is audited before anything is written,
-by `lib/policy-share-audit.ts`, which the realm reaches through its
-`policyWriteAuditor`. The audit lists each share whose bindings are for an
+a policy in force (a card whose written `adoptsFrom` is RealmPolicy, named by
+a realm with shares, or a realm's `realm.json` pointing at another card) is
+audited before anything is written, by `lib/policy-share-audit.ts`, which the
+realm reaches through its `policyWriteAuditor`. Only realms with an active,
+interactive binding on an active share are asked about, each one's pointer is
+read without mounting it, and only a realm whose pointer names a changed card
+is mounted. One that can't be mounted refuses the write 503.
+
+The audit lists each share whose active, interactive bindings are for an
 operation the new policy opens to visitors with a shared key and the policy in
 force doesn't, skipping keys that never serve visitors (a sign-in app's, a
 connection's). A listed write is refused 409 with
 `meta.code: 'policy-opens-shares-to-anonymous'` and the list in `meta.audit`,
 unless it carries the list's fingerprint in
-`X-Boxel-Policy-Audit-Confirmation`. Every write route takes it: the card+json
-verbs, `+source` and byte writes, `/_atomic` and `_operations`.
+`X-Boxel-Policy-Audit-Confirmation`. A saver who isn't a direct writer of a
+governed realm is shown its entries without the share, label and owner. Every
+write route takes the confirmation: the card+json verbs, `+source` and byte
+writes, `/_atomic` and `_operations`.
 
 Once a confirmed write lands, each listed share's owner gets a row in
 `key_policy_notices`: `visitors-use` for a key that allows anonymous use,
-`visitors-wanted` for one that doesn't. The owner reads their own, newest
-first, at `GET /_key-policy-notices`; the secure origin's key page lists them
-and offers to allow the key (`keys#anonymous=<key id>` opens that setting).
-A notice that can't be recorded is logged on `realm:policy-share-audit` and
-costs the write nothing.
+`visitors-wanted` for one that doesn't, unless their latest notice for the
+share already says the same. The owner reads their own, newest first, at
+`GET /_key-policy-notices`; the secure origin's key page lists them and offers
+to allow the key (`keys#anonymous=<key id>` opens that setting). A notice that
+can't be recorded is logged on `realm:policy-share-audit` and costs the write
+nothing.
 
 ```sql
 -- What a realm's policy opened, and to whom it was told.

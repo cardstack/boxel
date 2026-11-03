@@ -265,7 +265,13 @@ module(basename(import.meta.filename), function (hooks) {
       owner,
       label,
       anonymous,
-    }: { owner: string; label: string; anonymous: boolean },
+      interactive = true,
+    }: {
+      owner: string;
+      label: string;
+      anonymous: boolean;
+      interactive?: boolean;
+    },
   ) {
     let key = await addUserKey(dbAdapter, keyring, {
       owner,
@@ -319,8 +325,8 @@ module(basename(import.meta.filename), function (hooks) {
           type: 'key-binding-approval',
           attributes: {
             realm: TEAM,
-            interactive: true,
-            dailyBudgets: { [shareId]: 500 },
+            interactive,
+            ...(interactive ? { dailyBudgets: { [shareId]: 500 } } : {}),
             operations: [
               {
                 codeRef: WEATHER,
@@ -405,8 +411,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  test('a policy save that opens shared keys to visitors is refused with the shares it opens', async function (assert) {
-    let { forecast, alerts } = await shareBoth();
+  test('a policy save that opens shared keys to visitors is refused with the shares it opens, shown without the details of a realm the saver can’t see the shares of', async function (assert) {
+    await shareBoth();
     let response = await writeSource(
       org,
       ORG_ADMIN,
@@ -416,25 +422,34 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(response.status, 409, response.text);
     let audit = auditOf(response);
     assert.ok(audit, 'the refusal carries the audit');
-    assert.strictEqual(audit?.policy, TEAM_POLICY);
+    // The org admin writes the policy card but isn't a direct writer of the
+    // team realm, so its shares' ids, labels and owners are left out.
     assert.deepEqual(audit?.entries, [
       {
         realm: TEAM,
-        share: alerts.shareId,
-        label: 'Alerts key',
-        owner: OTHER_OWNER,
+        policy: TEAM_POLICY,
+        share: null,
+        label: null,
+        owner: null,
         keyAllowsAnonymous: false,
         operations: [ALERTS],
       },
       {
         realm: TEAM,
-        share: forecast.shareId,
-        label: 'Forecast key',
-        owner: OWNER,
+        policy: TEAM_POLICY,
+        share: null,
+        label: null,
+        owner: null,
         keyAllowsAnonymous: true,
         operations: [FORECAST],
       },
     ]);
+    for (let name of ['Forecast key', 'Alerts key', OWNER, OTHER_OWNER]) {
+      assert.notOk(
+        response.text.includes(name),
+        `nothing in the refusal names ${name}`,
+      );
+    }
     assert.strictEqual(
       await stored(org, 'policies/team.json'),
       policy(),
@@ -531,8 +546,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(again.status, 409, again.text);
     assert.deepEqual(
-      auditOf(again)?.entries.map((entry) => entry.label),
-      ['Alerts key', 'Forecast key'],
+      auditOf(again)?.entries.map((entry) => entry.operations),
+      [[ALERTS], [FORECAST]],
     );
     assert.notStrictEqual(auditOf(again)?.confirmation, confirmation);
   });
@@ -594,11 +609,24 @@ module(basename(import.meta.filename), function (hooks) {
     let refused = await writeSource(team, OWNER, 'realm.json', config);
     assert.strictEqual(refused.status, 409, refused.text);
     let audit = auditOf(refused);
-    assert.strictEqual(audit?.policy, OPEN_POLICY);
     assert.deepEqual(
-      audit?.entries.map(({ share, operations }) => ({ share, operations })),
-      [{ share: forecast.shareId, operations: [FORECAST] }],
-      'only the operation the policy it points at opens',
+      audit?.entries.map(({ share, label, owner, policy, operations }) => ({
+        share,
+        label,
+        owner,
+        policy,
+        operations,
+      })),
+      [
+        {
+          share: forecast.shareId,
+          label: 'Forecast key',
+          owner: OWNER,
+          policy: OPEN_POLICY,
+          operations: [FORECAST],
+        },
+      ],
+      'a direct writer of the realm sees each share, and only the operation the policy it points at opens',
     );
     let saved = await writeSource(
       team,
@@ -668,10 +696,78 @@ module(basename(import.meta.filename), function (hooks) {
       );
     assert.strictEqual(patched.status, 409, patched.text);
     assert.deepEqual(
-      auditOf(patched)?.entries.map((entry) => entry.label),
-      ['Alerts key'],
+      auditOf(patched)?.entries.map((entry) => entry.operations),
+      [[ALERTS]],
       'the card route answers with the audit',
     );
     assert.strictEqual(await stored(org, 'policies/team.json'), policy());
+  });
+  test('creating the card a realm already names is audited like changing it', async function (assert) {
+    await shareBoth();
+    let missing = `${ORG}policies/upcoming`;
+    let pointed = await writeSource(
+      team,
+      OWNER,
+      'realm.json',
+      realmConfigCardJSON({ name: 'Weather', policy: missing }),
+    );
+    assert.strictEqual(
+      pointed.status,
+      204,
+      'naming a card that doesn’t exist yet opens nothing',
+    );
+    let created = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/upcoming.json',
+      policy(['forecast']),
+    );
+    assert.strictEqual(created.status, 409, created.text);
+    assert.deepEqual(
+      auditOf(created)?.entries.map(({ policy, operations }) => ({
+        policy,
+        operations,
+      })),
+      [{ policy: missing, operations: [FORECAST] }],
+    );
+  });
+
+  test('a share bound for pipelines only is not listed, since it never serves a visitor', async function (assert) {
+    await sharedFor('forecast', {
+      owner: OWNER,
+      label: 'Forecast key',
+      anonymous: true,
+      interactive: false,
+    });
+    let response = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      policy(['forecast']),
+    );
+    assert.strictEqual(response.status, 204, response.text);
+  });
+
+  test('a save confirmed again owes no second notice', async function (assert) {
+    await shareBoth();
+    let opened = policy(['forecast']);
+    let refused = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+    );
+    let { confirmation } = auditOf(refused)!;
+    for (let i = 0; i < 2; i++) {
+      let saved = await writeSource(
+        org,
+        ORG_ADMIN,
+        'policies/team.json',
+        opened,
+        confirmation,
+      );
+      assert.strictEqual(saved.status, 204, saved.text);
+    }
+    assert.strictEqual((await notices(OWNER)).length, 1);
   });
 });

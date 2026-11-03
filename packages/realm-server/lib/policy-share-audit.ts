@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
+  CardError,
+  isDirectWriter,
   logger,
   param,
   query,
@@ -9,6 +11,7 @@ import {
   type LocalPath,
   type PolicyShareAudit,
   type PolicyShareAuditEntry,
+  type PolicyWriteAudit,
   type PolicyWriteAuditor,
   type PolicyWriteAuditRequest,
   type Realm,
@@ -23,36 +26,73 @@ import { servesVisitorsSQL } from './user-keys.ts';
 // in them it opens to people who aren't signed in, and the notices their
 // owners get once a confirmed change lands.
 //
-// Only a realm with a share in it can be affected, so those are the only
-// realms asked about. For each of them the write changes the policy in force
-// when it writes the realm's own `realm.json` and names another policy card
-// (or none), or when it writes the policy card the realm names. The policy
-// the realm would then be governed by is compiled by that realm, as it
-// compiles its own, from the bytes being written where the card is among
-// them, and compared with the policy in force. A share is listed when one of
-// its bindings is for an operation the new policy opens to visitors with a
-// shared key and the policy in force doesn't. A share whose key can never
-// serve visitors (a sign-in app's, or a connection's) isn't listed: no policy
-// puts it in front of them.
+// A write changes the policy a realm is governed by when it writes the
+// realm's own `realm.json` naming another policy card (or none), or writes a
+// policy card the realm names. A written card is a policy card when what is
+// written adopts from RealmPolicy, so a card a realm names before it exists,
+// or one deleted and written again, is audited like any other.
+//
+// Only a realm with a share bound to an operation can be affected, and only
+// through an active, interactive binding on an active share: that is the only
+// kind that ever serves a visitor (`checkSlot` in `key-bindings.ts`). So those
+// realms are the only ones asked about. Each one's pointer is read without
+// mounting it (`realmPolicyPointer`), and only a realm whose pointer names a
+// changed card is mounted, to compile the policy it would be governed by from
+// the bytes being written and compare it with the policy in force. A realm
+// that names a changed card and can't be mounted refuses the write: it can't
+// be audited, and letting the write through would open its shares unseen.
+//
+// A share is listed when one of its bindings is for an operation the new
+// policy opens to visitors with a shared key and the policy in force doesn't.
+// A share whose key can never serve visitors (a sign-in app's, or a
+// connection's) isn't listed: no policy puts it in front of them.
+//
+// The saver is shown the list as they may see it. A realm's shares are its
+// direct writers' to see (`key-shares.ts`), so for a realm the saver isn't a
+// direct writer of, each entry keeps its realm, policy, operations and whether
+// its key allows anonymous use, and leaves out the share, label and owner. The
+// confirmation is computed from the list in full either way.
 //
 // A refused write leaves the realm as it was, so the audit reads the stored
 // state of every realm but the bytes this write would put down.
 
 const log = logger('realm:policy-share-audit');
 
+// A realm's policy pointer, read without mounting it: the card it names,
+// undefined for none, or null where it can't be read that way.
+export type PolicyPointerReader = (
+  realmURL: string,
+) => Promise<string | undefined | null>;
+
 export function createPolicyWriteAuditor({
   dbAdapter,
   realmFor,
   virtualNetwork,
+  policyPointerOf = async () => null,
 }: {
   dbAdapter: DBAdapter;
   realmFor: (url: URL) => Promise<ServedRealm | undefined>;
   virtualNetwork: VirtualNetwork;
+  // Without it, each candidate realm is mounted to read its pointer.
+  policyPointerOf?: PolicyPointerReader;
 }): PolicyWriteAuditor {
   return {
     audit: (request) =>
-      auditPolicyWrite(request, { dbAdapter, realmFor, virtualNetwork }),
-    notify: (audit, savedBy) => recordPolicyNotices(dbAdapter, audit, savedBy),
+      auditPolicyWrite(request, {
+        dbAdapter,
+        realmFor,
+        virtualNetwork,
+        policyPointerOf,
+      }),
+    notify: async (audit, savedBy) => {
+      try {
+        await recordPolicyNotices(dbAdapter, audit, savedBy);
+      } catch (err: unknown) {
+        log.warn(
+          `could not record the notices of a policy change that opens shares to people who aren't signed in: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
   };
 }
 
@@ -68,12 +108,14 @@ async function auditPolicyWrite(
     dbAdapter,
     realmFor,
     virtualNetwork,
+    policyPointerOf,
   }: {
     dbAdapter: DBAdapter;
     realmFor: (url: URL) => Promise<ServedRealm | undefined>;
     virtualNetwork: VirtualNetwork;
+    policyPointerOf: PolicyPointerReader;
   },
-): Promise<PolicyShareAudit | undefined> {
+): Promise<PolicyWriteAudit | undefined> {
   let written = new Map<string, LocalPath>();
   for (let path of request.paths) {
     if (path.endsWith('.json')) {
@@ -81,36 +123,36 @@ async function auditPolicyWrite(
     }
   }
   let configWritten = request.paths.includes('realm.json');
-  // A card a realm can name already is an indexed policy card, so only those
-  // are changes of a policy in force; any other write is answered without
-  // asking which realms hold shares.
   let changedPolicies = new Set<string>();
   for (let [card, path] of written) {
-    if (path !== 'realm.json' && (await request.isPolicyCard(path))) {
+    if (path !== 'realm.json' && (await request.writesPolicyCard(path))) {
       changedPolicies.add(card);
     }
   }
   if (changedPolicies.size === 0 && !configWritten) {
     return undefined;
   }
-  let realmsWithShares = (
+  let candidates = (
     (await query(dbAdapter, [
-      `SELECT DISTINCT realm_url FROM key_shares WHERE key_id IS NOT NULL`,
+      `SELECT DISTINCT s.realm_url FROM key_shares s
+         JOIN key_bindings b ON b.share_id = s.id
+        WHERE s.key_id IS NOT NULL AND s.state = 'active'
+          AND b.interactive AND b.state = 'active'`,
       ...(changedPolicies.size === 0
-        ? [` AND realm_url = `, param(request.realmURL)]
+        ? [` AND s.realm_url = `, param(request.realmURL)]
         : []),
+      ` ORDER BY s.realm_url`,
     ])) as { realm_url: string }[]
   ).map((row) => row.realm_url);
-  if (realmsWithShares.length === 0) {
+  if (candidates.length === 0) {
     return undefined;
   }
 
-  // The attributes a written policy card will hold, or undefined where its
-  // bytes aren't a card document.
+  // The attributes a written policy card will hold.
   let attributesOf = async (path: LocalPath) => {
     try {
-      let doc = JSON.parse(await request.contentOf(path));
-      let attributes = doc?.data?.attributes;
+      let attributes = JSON.parse(await request.contentOf(path))?.data
+        ?.attributes;
       return attributes &&
         typeof attributes === 'object' &&
         !Array.isArray(attributes)
@@ -127,41 +169,58 @@ async function auditPolicyWrite(
     let path = written.get(stripJSON(card));
     return path ? { card, attributes: await attributesOf(path) } : { card };
   };
-
-  let targets: AuditTarget[] = [];
-  for (let realmURL of realmsWithShares) {
-    let served = await realmFor(new URL(realmURL));
-    if (!served || served.url !== realmURL) {
-      continue;
-    }
+  let mount = async (realmURL: string): Promise<Realm> => {
     let realm: Realm | undefined;
     try {
-      realm = await served.mount();
+      let served = await realmFor(new URL(realmURL));
+      realm = served?.url === realmURL ? await served.mount() : undefined;
     } catch (err: unknown) {
       log.warn(
         `could not mount ${realmURL} to audit a policy change against its shares: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
     if (!realm) {
-      continue;
+      throw new CardError(
+        `This change can't be saved now: it changes the policy of ${realmURL}, which keys are shared into, and that workspace can't be checked for what the change opens to people who aren't signed in. Try again shortly.`,
+        { status: 503, title: 'Policy change not checked' },
+      );
     }
-    let current = (await realm.getRealmPolicy())?.card;
-    let next = current;
-    if (realmURL === request.realmURL && request.paths.includes('realm.json')) {
+    return realm;
+  };
+
+  let targets: AuditTarget[] = [];
+  for (let realmURL of candidates) {
+    if (realmURL === request.realmURL && configWritten) {
+      let realm = await mount(realmURL);
+      let current = (await realm.getRealmPolicy())?.card;
       let config: unknown;
       try {
         config = JSON.parse(await request.contentOf('realm.json'));
       } catch {
         config = undefined;
       }
-      next = realmPolicyCardNamed(
+      let next = realmPolicyCardNamed(
         (config as { data?: { attributes?: { policy?: unknown } } } | undefined)
           ?.data?.attributes?.policy,
         virtualNetwork,
       );
+      if (next !== current || (next && changedPolicies.has(stripJSON(next)))) {
+        targets.push({ realm, next: await nextPolicy(next) });
+      }
+      continue;
     }
-    if (next !== current || (next && changedPolicies.has(stripJSON(next)))) {
-      targets.push({ realm, next: await nextPolicy(next) });
+    if (changedPolicies.size === 0) {
+      continue;
+    }
+    let pointer = await policyPointerOf(realmURL);
+    if (pointer === null) {
+      pointer = (await (await mount(realmURL)).getRealmPolicy())?.card;
+    }
+    if (pointer && changedPolicies.has(stripJSON(pointer))) {
+      targets.push({
+        realm: await mount(realmURL),
+        next: await nextPolicy(pointer),
+      });
     }
   }
   if (targets.length === 0) {
@@ -178,25 +237,44 @@ async function auditPolicyWrite(
   entries.sort(
     (a, b) =>
       a.realm.localeCompare(b.realm) ||
-      a.label.localeCompare(b.label) ||
-      a.share.localeCompare(b.share),
+      (a.label ?? '').localeCompare(b.label ?? '') ||
+      (a.share ?? '').localeCompare(b.share ?? ''),
   );
-  let policy = targets.find((target) => target.next)?.next?.card ?? null;
-  return {
-    policy,
-    entries,
-    confirmation: createHash('sha256')
-      .update(JSON.stringify({ policy, entries }))
-      .digest('hex'),
+  let confirmation = createHash('sha256')
+    .update(JSON.stringify(entries))
+    .digest('hex');
+  let audit: PolicyShareAudit = { entries, confirmation };
+  let visible = new Map<string, boolean>();
+  for (let realm of new Set(entries.map((entry) => entry.realm))) {
+    visible.set(
+      realm,
+      request.actor
+        ? await isDirectWriter(dbAdapter, new URL(realm), request.actor)
+        : false,
+    );
+  }
+  let shown: PolicyShareAudit = {
+    confirmation,
+    entries: entries.map((entry) =>
+      visible.get(entry.realm)
+        ? entry
+        : { ...entry, share: null, label: null, owner: null },
+    ),
   };
+  return { audit, shown };
 }
 
 // The shares in the target's realm that the policy it would be governed by
-// opens to visitors while the one in force doesn't.
+// opens to visitors while the one in force doesn't: those bound to such an
+// operation through an active, interactive binding on an active share, whose
+// key can serve visitors at all.
 async function openedShares(
   dbAdapter: DBAdapter,
   { realm, next }: AuditTarget,
 ): Promise<PolicyShareAuditEntry[]> {
+  if (!next) {
+    return [];
+  }
   let rows = (await query(dbAdapter, [
     `SELECT DISTINCT b.share_id, b.definition_url, b.export_name, b.operation_name,
             s.label, s.owner, k.anonymous
@@ -206,6 +284,7 @@ async function openedShares(
        LEFT JOIN oauth_clients c ON c.key_id = k.id
       WHERE b.realm_url = `,
     param(realm.url),
+    ` AND b.interactive AND b.state = 'active' AND s.state = 'active'`,
     ` AND ${servesVisitorsSQL('k', 'c')}`,
   ])) as {
     share_id: string;
@@ -247,6 +326,7 @@ async function openedShares(
     if (!entry) {
       entry = {
         realm: realm.url,
+        policy: next.card,
         share: row.share_id,
         label: row.label,
         owner: row.owner,
@@ -265,24 +345,45 @@ async function openedShares(
   return [...byShare.values()];
 }
 
+// One notice per listed share, unless the owner's latest notice for that share
+// already says the same: a save confirmed again before the first one's index
+// pass lands is audited against the policy it replaced, and owes no second
+// notice.
 async function recordPolicyNotices(
   dbAdapter: DBAdapter,
   audit: PolicyShareAudit,
   savedBy: string | null,
 ): Promise<void> {
   for (let entry of audit.entries) {
+    if (!entry.share) {
+      continue;
+    }
+    let reason = entry.keyAllowsAnonymous ? 'visitors-use' : 'visitors-wanted';
+    let operations = JSON.stringify(entry.operations);
     await query(dbAdapter, [
       `INSERT INTO key_policy_notices (owner, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations)
        SELECT s.owner, s.id, s.key_id, s.realm_url, s.label, `,
-      param(audit.policy),
+      param(entry.policy),
       `, `,
       param(savedBy),
       `, `,
-      param(entry.keyAllowsAnonymous ? 'visitors-use' : 'visitors-wanted'),
+      param(reason),
       `, `,
-      param(JSON.stringify(entry.operations)),
+      param(operations),
       `::jsonb FROM key_shares s WHERE s.id = `,
       param(entry.share),
+      ` AND NOT EXISTS (
+          SELECT 1 FROM (
+            SELECT reason, policy_card, operations FROM key_policy_notices
+             WHERE share_id = s.id ORDER BY created_at DESC, id DESC LIMIT 1
+          ) latest
+          WHERE latest.reason = `,
+      param(reason),
+      ` AND latest.policy_card IS NOT DISTINCT FROM `,
+      param(entry.policy),
+      ` AND latest.operations = `,
+      param(operations),
+      `::jsonb)`,
     ]);
   }
 }

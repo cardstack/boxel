@@ -48,7 +48,9 @@ export function describePolicyAudit(audit: PolicyShareAudit): string[] {
   let refusing = audit.entries.filter((entry) => !entry.keyAllowsAnonymous);
   let entryLines = (entries: PolicyShareAudit['entries']) =>
     entries.flatMap((entry) => [
-      `  ${entry.label} ${DIM}(${entry.realm}, shared by ${entry.owner})${RESET}`,
+      entry.label === null
+        ? `  A key shared into ${entry.realm} ${DIM}(only that workspace's writers can see which)${RESET}`
+        : `  ${entry.label} ${DIM}(${entry.realm}, shared by ${entry.owner})${RESET}`,
       ...entry.operations.map((operation) => `    ${DIM}${operation}${RESET}`),
     ]);
   if (starting.length) {
