@@ -366,7 +366,9 @@ What a card can and can't learn:
 - `needs-sign-in` on the `userKey` operation means the caller isn't signed
   in. Showing the shared answer is the most such a visitor can be offered.
 - A refusal reaches card code as an `OperationsError` carrying `code`,
-  `title`, `detail` and `retryAfterSeconds`, but no `meta`. Treat
+  `title`, `detail`, `retryAfterSeconds` and the card-actionable part of its
+  `meta` (`OperationsErrorMeta`); a share's suspension reason is not part of
+  it. Treat
   `rate-limited` and `over-budget` as a state ("try again shortly") rather
   than an error. `credential-rejected` stops the card until the key is
   replaced (`replace-key`).
