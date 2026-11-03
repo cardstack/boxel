@@ -7,8 +7,8 @@
  * a synchronous stretch of work. A run's first tick advances nothing and
  * stands every tween it started at the progress it had when the run
  * started, so a run compiled late in a long task does not open that far in,
- * with or without a cap. A run that replaces one still moving is the
- * exception: its first frame carries that motion on like any other frame.
+ * with or without a cap. A run that replaces one already moving on screen is
+ * the exception: its first frame carries that motion on like any other frame.
  * With `@maxFrameStep`, a long frame in the middle of a move advances it by
  * the cap at most, so a busy page slows a move rather than making it jump.
  */
@@ -258,6 +258,40 @@ module('Integration | choreo | run clock', function (hooks) {
     assert.true(
       step > 0 && step < 5,
       `the frame after a 150 ms stall moved ${step.toFixed(1)}px`,
+    );
+    await settled();
+  });
+
+  test('with @maxFrameStep, a run replaced before it paints still opens at its start', async function (assert) {
+    await render(
+      <template><Stage @seize={{seize}} @maxFrameStep={{16}} /></template>,
+    );
+    await nextFrame();
+    // eslint-disable-next-line ember/no-runloop -- both passes have to land before a frame, which only synchronous runs give
+    run(() => {
+      stage!.above = 200;
+    });
+    let first = ctx!.run;
+    // eslint-disable-next-line ember/no-runloop -- see above
+    run(() => {
+      stage!.above = 260;
+    });
+    let second = ctx!.run;
+    assert.true(
+      first !== undefined && second !== undefined && second !== first,
+      'the second pass replaced the run',
+    );
+    await painted();
+    let opened = offset();
+    // the first run never painted, so nothing was moving on screen: 16 ms
+    // of a 1 s linear move over 260 px would show 4 px gone
+    assert.true(
+      Math.abs(opened + 260) < 0.5,
+      `the replacement's first painted frame shows the move at its start (${opened.toFixed(1)}px of -260)`,
+    );
+    assert.true(
+      ctx!.run!.time < 0.001,
+      `the replacement's clock reads ${(ctx!.run!.time * 1000).toFixed(1)} ms on that frame`,
     );
     await settled();
   });

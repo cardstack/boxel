@@ -21,9 +21,10 @@ versions may change behavior until `1.0.0`.
   long render could open its tweens that far in: the first painted frame of a move already showed
   part of its travel. The run's own clock already started fresh; its tweens now do too, with or
   without `@maxFrameStep`, and a run resumed from a pause carries them on from where they were held
-  instead of restarting them. A run that replaces one still moving is the exception: its first
-  frame advances like any other, clock and tweens alike, so the motion on screen doesn't stand
-  still for a frame.
+  instead of restarting them. A run that replaces one already moving on screen is the exception:
+  its first frame advances like any other, clock and tweens alike, so that motion doesn't stand
+  still for a frame. A run replaced before it painted was never seen moving, and its replacement
+  opens at its start.
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
   or `@by='word'` delivery lands on its own platform animations, which can finish after the run's
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is

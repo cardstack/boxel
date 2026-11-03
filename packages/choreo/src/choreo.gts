@@ -1155,14 +1155,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // still going round: the replacement carries each on from where it is
     // rather than sending it back to the top — read before cancel stops them
     const loops = prior?.loopPhases();
-    // a run still playing its moves is motion on screen: its replacement
-    // carries that on through its first frame rather than standing still on
-    // it — read before cancel ends the run
-    const continuing =
-      prior !== undefined &&
-      !prior.isDone() &&
-      !prior.paused &&
-      prior.time < prior.duration;
+    // a run in flight is motion on screen: its replacement carries that on
+    // through its first frame rather than standing still on it — read
+    // before cancel ends the run
+    const continuing = prior?.inFlight ?? false;
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {

@@ -177,9 +177,9 @@ interface RunOptions {
   /** the element the camera transform drives (the region's scene wrapper) */
   cameraFrame?: HTMLElement;
   /**
-   * The run replaces one still playing its moves. What it moves is already
-   * moving on screen, so its first frame advances like any other instead of
-   * standing still.
+   * The run replaces one in flight (`ChoreoRun.inFlight`). What it moves is
+   * already moving on screen, so its first frame advances like any other
+   * instead of standing still.
    */
   continuing?: boolean;
   /**
@@ -492,11 +492,10 @@ export class ChoreoRun implements Run {
    */
   private freshClock = false;
   /**
-   * The run replaces one still playing its moves and has not painted yet.
-   * Its first frame continues a motion already on screen, so it advances
-   * like any other frame, the clock and its tweens alike: standing still
-   * there would draw the last frame twice. A later start (a resume, a gate)
-   * is from rest.
+   * The run replaces one in flight and has not painted yet. Its first frame
+   * continues a motion already on screen, so it advances like any other
+   * frame, the clock and its tweens alike: standing still there would draw
+   * the last frame twice. A later start (a resume, a gate) is from rest.
    */
   private continuing = false;
   /** the frame timestamp holdBack saw last; undefined before its first frame */
@@ -599,6 +598,21 @@ export class ChoreoRun implements Run {
 
   get time(): number {
     return this.master / this.scale / 1000;
+  }
+
+  /**
+   * The run's motion is under way on screen: it is playing, its clock has
+   * not reached its end, and it has painted a frame since it started or
+   * resumed, or carries on a run that had. A run compiled and replaced
+   * before any frame was never seen moving, so its replacement starts from
+   * rest.
+   */
+  get inFlight(): boolean {
+    return (
+      this.ticking &&
+      this.master < this.total &&
+      (this.lastStamp !== undefined || this.continuing)
+    );
   }
 
   set time(seconds: number) {
