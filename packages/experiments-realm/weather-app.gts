@@ -24,7 +24,7 @@ import { realmURL, type KeyReadiness } from '@cardstack/runtime-common';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
-import { Input } from '@cardstack/pretui/components/input';
+import { Input as TextInput } from '@cardstack/pretui/components/input';
 import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { Skeleton } from '@cardstack/pretui/components/skeleton';
 import ListRealmKeySharesTool from '@cardstack/boxel-host/tools/list-realm-key-shares';
@@ -1097,7 +1097,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
               >
                 {{this.ownMessage}}
                 {{#if this.ownNeedsConnect}}
-                  <span class='subscription-note'>{{SUBSCRIPTION_NOTE}}</span>
+                  <span
+                    class='subscription-note'
+                  >{{this.subscriptionNote}}</span>
                 {{/if}}
                 <:action>
                   {{#if this.ownNeedsConnect}}
@@ -1181,7 +1183,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
 
         {{#if this.canAddCity}}
           <form class='add-city' {{on 'submit' this.search}}>
-            <Input
+            <TextInput
               @value={{this.query}}
               @onInput={{this.setQuery}}
               placeholder='Add a city: Lisbon, Austin TX…'
@@ -1411,6 +1413,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       }
     </style>
   </template>
+
+  subscriptionNote = SUBSCRIPTION_NOTE;
 
   get refreshDisabled(): boolean {
     return !this.source;
