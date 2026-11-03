@@ -106,8 +106,11 @@ function milestoneDocument(title: string) {
 
 // Answers the realm server's prerender endpoints with the in-browser
 // prerenderer the test realm indexes with, and records the cards it is asked
-// to render.
-function mountPrerenderEndpoints() {
+// to render. With `failCardRenders`, a card render request answers 500 the way
+// the realm server does when it cannot reach a prerenderer.
+function mountPrerenderEndpoints({
+  failCardRenders = false,
+}: { failCardRenders?: boolean } = {}) {
   let localIndexer = getService('local-indexer');
   let realmServerURL = getService('realm-server').url;
   let renderedCards: string[] = [];
@@ -133,6 +136,19 @@ function mountPrerenderEndpoints() {
         attributes = await localIndexer.prerenderer.prerenderModule(args);
       } else {
         renderedCards.push(url);
+        if (failCardRenders) {
+          return new Response(
+            JSON.stringify({
+              errors: [
+                { status: '500', title: 'Error proxying prerender request' },
+              ],
+            }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/vnd.api+json' },
+            },
+          );
+        }
         attributes = (
           await localIndexer.prerenderer.prerenderVisit({
             ...args,
@@ -554,6 +570,22 @@ module('Integration | tools | check-correctness', function (hooks) {
       result.errors[0].includes('Invalid time value'),
       'the error carries the render error message',
     );
+  });
+
+  test('does not report a render request that fails', async function (assert) {
+    let renderedCards = mountPrerenderEndpoints({ failCardRenders: true });
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+    );
+
+    assert.deepEqual(
+      renderedCards,
+      [`${testRealmURL}Milestone/launch.json`],
+      'the instance render was requested',
+    );
+    assert.deepEqual(result.errors, [], 'the failed request is not an error');
+    assert.true(result.correct, 'the check passes');
   });
 
   test('passes a module edit whose instances render', async function (assert) {
