@@ -105,6 +105,10 @@ export type CardJsonAssembly =
 // the request-specific fields (`id`, the message's URL) come from whichever
 // request is rendering it rather than from whichever one assembled it.
 export interface CardJsonAssemblyError {
+  // Whether this is the card's own index row recording an error, as opposed
+  // to a refusal of the read that has no row behind it. Only the former is a
+  // statement about the card that a fix to its source can change.
+  fromIndexRow: boolean;
   status: number;
   title: string | undefined;
   message: string;
