@@ -1036,6 +1036,25 @@ return await realm.cards.get('Pet/unindexed');`,
     );
   });
 
+  test('realm.cards.get says a path that names a file is not a card', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let messages = [];
+for (let path of ['images/existing.png', 'notes/first.md']) {
+  try { await realm.cards.get(path); } catch (e) { messages.push(e.message); }
+}
+return messages;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'Not a card: images/existing.png is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+      'Not a card: notes/first.md is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+    ]);
+  });
+
   test('realm.cards.get does not blame the card for a read that failed for another reason', async function (assert) {
     let cardURL = `${testRealmURL}Pet/mango`;
     let cardService = getService('card-service') as any;

@@ -9,6 +9,7 @@ import {
   ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
+  isFileDefInstance,
   isPrefixForm,
   isRelativePath,
   isResolvedCodeRef,
@@ -350,10 +351,11 @@ type ReadCard = (id: string) => Promise<CardRead>;
 // index row is `indexing` while the realm is indexing, since the pass that is
 // running may add the row, and `unindexed` while it is not, since no pass is
 // coming to add it. `error` is a card whose index row records an error;
-// `unreadable` is a read that failed for any other reason.
+// `unreadable` is a read that failed for any other reason. `not-a-card` is a
+// path that names a file, such as an image, rather than a card instance.
 type CardRead =
   | { doc: LooseSingleCardDocument }
-  | { unread: 'indexing' | 'unindexed' | 'not-found' }
+  | { unread: 'indexing' | 'unindexed' | 'not-found' | 'not-a-card' }
   | { unread: 'error' | 'unreadable'; message: string };
 
 // Lists one directory. `entries` is empty unless `status` is 200.
@@ -2045,6 +2047,12 @@ class RealmFsSession {
         );
       case 'not-found':
         return `Card not found: ${id}`;
+      case 'not-a-card':
+        return (
+          `Not a card: ${this.relative(id)} is a file, so realm.cards.get ` +
+          `cannot read it; read it with realm.fs.readText if it is text, or ` +
+          `look at it with realm.capture`
+        );
       case 'error':
         return (
           `Card failed to index: ${id}: ${read.message.replace(/[.\s]+$/, '')}. ` +
@@ -3459,6 +3467,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     // The store's cached instance can lag a write this run just made, or hold
     // edits not saved yet, so the card is read from the realm.
     let card = await this.store.getWithoutCache(id);
+    // A path that holds a file rather than a card instance reads as the
+    // file's FileDef.
+    if (isFileDefInstance(card)) {
+      return { unread: 'not-a-card' };
+    }
     if (!isCardInstance(card)) {
       if (card.awaitingIndex) {
         // The realm holds the card's file and has no index row for it, which
