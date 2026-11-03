@@ -112,14 +112,14 @@ grants.
 ### 1.8. Realm history shows its authors
 
 Realm revision history records each change to a realm's files as a revision
-authored by the end user who made it. The history operations, `readHistory`
-with its list of pending writes, and the user interface built on them, MAY
+authored by the end user who made it. The operations that list a realm's
+revisions and its pending writes, and the user interface built on them, MAY
 reveal each revision author's Matrix id and display name to every caller the
-operations authorize. That includes a caller whose access comes through a
-`'*'` or `users` grant or through a policy grant (ADR 006 §1.3), and an author
-who no longer holds a grant on the realm. The documentation of realm policies
-MUST say that a policy which opens the history operations to such an audience
-publishes the realm's authors' Matrix ids.
+operations authorize. That includes a caller admitted by a `'*'` or `users`
+grant or by a policy grant (ADR 006 §1.3), and an author who no longer holds
+a grant on the realm. The `realm-policy-authoring` skill in the boxel-skills
+plugin MUST say that a policy, or a `'*'` or `users` grant, that opens the
+history operations publishes the realm's authors' Matrix ids.
 
 ## 2. Rationale
 
@@ -175,8 +175,7 @@ grant stays in history, because the change they made is still there. A policy
 can widen the operations to readers, and a `'*'` or `users` grant can admit
 anyone. §1.8 treats that like any other grant: whoever opens the realm's
 history chooses who learns its authors, and the documentation says so, so the
-choice is made knowingly. Filtering authors at read time was rejected (§3)
-because it would leave a reader looking at changes by no one.
+choice is made knowingly.
 
 ## 3. Considered options
 
@@ -194,9 +193,6 @@ because it would leave a reader looking at changes by no one.
   of each member's timeline, so end users could share a room without seeing
   each other. That is a large, ongoing undertaking, and it isn't planned now.
   If Boxel takes it on, a change to this ADR can relax §1.5.
-- **Show history's authors to every authorized caller (chosen, §1.8).** The
-  audience is the one a grant or a policy admitted, and the record keeps its
-  authors.
 - **Filter history's authors by §1.2 at read time.** A reader admitted by a
   `'*'`, `users` or policy grant would see every change made by no one, and
   an author who left the realm would vanish from the changes they made. The
