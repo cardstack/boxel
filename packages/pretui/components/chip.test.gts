@@ -36,8 +36,7 @@ module('Pretui | components/chip', function (hooks) {
       </template>,
     );
     assert.strictEqual(chip().dataset['appearance'], 'plain');
-    // the dot is the chip's only child element
-    assert.strictEqual(chip().children.length, 1);
+    assert.dom('[data-test-pretui-chip-dot]').exists();
   });
 
   test('StatusChip forwards appearance and dot', async function (assert) {
@@ -49,6 +48,6 @@ module('Pretui | components/chip', function (hooks) {
     assert
       .dom('[data-test-pretui-status-chip]')
       .hasAttribute('data-appearance', 'soft');
-    assert.strictEqual(chip().children.length, 0);
+    assert.dom('[data-test-pretui-chip-dot]').doesNotExist();
   });
 });

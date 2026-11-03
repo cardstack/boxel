@@ -1,6 +1,6 @@
 // Pretui — StatusChip: a Chip whose hue is derived from its status value, stable across cards.
 import Component from '@glimmer/component';
-import { Chip } from './chip';
+import { Chip, type PretuiChipAppearance } from './chip';
 import { statusHue } from '../internal/ink';
 import {
   PRETUI_TONES,
@@ -14,7 +14,7 @@ export interface StatusChipSignature {
     hue?: string;
     tone?: PretuiToneArg;
     /** passed to Chip: 'outlined' (default), 'soft' or 'plain' */
-    appearance?: 'outlined' | 'soft' | 'plain';
+    appearance?: PretuiChipAppearance;
     /** passed to Chip: false drops the dot (default true) */
     dot?: boolean;
   };
