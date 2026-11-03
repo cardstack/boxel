@@ -1248,4 +1248,48 @@ export class PRReviewWatcher extends CardDef {
   } satisfies OperationDeclaration;
 
   static isolated = PRReviewWatcherIsolated;
+
+  // Only what a person sets; the searches and the team's full slug are
+  // worked out from these.
+  static edit = class Edit extends Component<typeof PRReviewWatcher> {
+    <template>
+      <div class='settings' data-test-pr-review-watcher-edit>
+        <label class='setting'>
+          <span class='name'>Org</span>
+          <span class='hint'>The GitHub organization whose pull requests the
+            watcher lists, such as
+            <code>cardstack</code>.</span>
+          <@fields.org />
+        </label>
+        <label class='setting'>
+          <span class='name'>Team</span>
+          <span class='hint'>Optional. A team in that organization, by its slug,
+            such as
+            <code>boxel-developers</code>. A review requested from the team
+            counts as one requested from you.</span>
+          <@fields.team />
+        </label>
+      </div>
+      <style scoped>
+        .settings {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-lg);
+        }
+        .setting {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-4xs);
+        }
+        .name {
+          font-weight: 600;
+        }
+        .hint {
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
+        }
+      </style>
+    </template>
+  };
 }
