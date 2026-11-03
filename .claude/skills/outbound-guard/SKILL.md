@@ -437,7 +437,9 @@ week, per environment, from its size lines
 (`--filter 'key=system:<destination>'` with the `tail-logs` commands above),
 and give it the same headroom the path default has over its measurements:
 about twice the largest. The alerts suggest twice the key's current cap (near
-the cap) or twice the refused size (over it). Record the value and why in the
+the cap) or twice the refused size (over it), held at 1 GiB, the most the
+command accepts. A key already at 1 GiB can't go higher: a legitimate response
+that size belongs on a file-transfer path. Record the value and why in the
 key's note.
 
 ### The alerts
