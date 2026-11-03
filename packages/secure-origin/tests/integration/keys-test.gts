@@ -667,6 +667,37 @@ module('Integration | key pages', function (hooks) {
         .exists('allowing it opens the key’s own setting');
     });
 
+    test('a notice that a workspace wants visitors to use a key is settled once the key allows them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([{ ...KEYS[0], anonymous: true }, KEYS[1]])),
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '1',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-team-2',
+                  label: 'Team weather',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-wanted',
+                  operations: [`${REALM}weather#Weather.alerts`],
+                  createdAt: '2026-11-01T12:00:00.000Z',
+                },
+              },
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-policy-notices]').doesNotExist();
+    });
+
     test('a link naming a key opens its setting for people who aren’t signed in', async function (assert) {
       visitShell('keys#anonymous=key-2');
       await render(KeyPage);

@@ -49,14 +49,15 @@ const EntryItem: TOC<{ Args: { entry: PolicyShareAuditEntry } }> = <template>
       padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
     }
     .entry + .entry {
-      border-top: 1px solid var(--boxel-200);
+      border-top: 1px solid var(--border);
     }
     .label {
       font-weight: 600;
     }
     .detail {
-      color: var(--boxel-450);
-      font: var(--boxel-font-xs);
+      color: var(--muted-foreground);
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
       overflow-wrap: anywhere;
     }
     .operations {
@@ -66,8 +67,9 @@ const EntryItem: TOC<{ Args: { entry: PolicyShareAuditEntry } }> = <template>
       margin-top: var(--boxel-sp-xxxs);
     }
     code {
-      font: var(--boxel-font-xs);
-      background: var(--boxel-100);
+      font-size: var(--boxel-font-size-xs);
+      line-height: var(--boxel-line-height-xs);
+      background: var(--muted);
       padding: 0 var(--boxel-sp-xxxs);
       border-radius: var(--boxel-border-radius-xs);
     }
@@ -123,7 +125,6 @@ export default class PolicyAuditConfirmationModal extends Component {
         @isOpen={{true}}
         @onClose={{this.cancel}}
         style={{cssVar boxel-modal-offset-top='20vh'}}
-        data-theme='light'
       >
         <section class='policy-audit'>
           <header>
@@ -178,15 +179,19 @@ export default class PolicyAuditConfirmationModal extends Component {
     <style scoped>
       .policy-audit {
         padding: var(--boxel-sp-lg);
-        background-color: var(--boxel-light);
+        background-color: var(--card, var(--background));
+        color: var(--card-foreground, var(--foreground));
         border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);
-        font: var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
       h2 {
         margin: 0 0 var(--boxel-sp-xs);
-        font: 600 var(--boxel-font-lg);
+        font-size: var(--boxel-font-size-lg);
+        line-height: var(--boxel-line-height-lg);
+        font-weight: 600;
       }
       header p {
         margin: 0;
@@ -197,13 +202,15 @@ export default class PolicyAuditConfirmationModal extends Component {
       }
       h3 {
         margin: 0 0 var(--boxel-sp-xxs);
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
       }
       ul {
         margin: 0;
         padding: 0;
         list-style: none;
-        border: 1px solid var(--boxel-200);
+        border: 1px solid var(--border);
         border-radius: var(--boxel-border-radius);
       }
       footer {

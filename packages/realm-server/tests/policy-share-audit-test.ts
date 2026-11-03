@@ -770,4 +770,18 @@ module(basename(import.meta.filename), function (hooks) {
     }
     assert.strictEqual((await notices(OWNER)).length, 1);
   });
+  test('a browser on another origin may send the confirmation', async function (assert) {
+    let response = await request
+      .options(`${new URL(ORG).pathname}policies/team.json`)
+      .set('Origin', 'https://app.policy-share-audit.test')
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', POLICY_AUDIT_CONFIRMATION_HEADER);
+    let allowed = (response.headers['access-control-allow-headers'] ?? '')
+      .split(',')
+      .map((header: string) => header.trim().toLowerCase());
+    assert.true(
+      allowed.includes(POLICY_AUDIT_CONFIRMATION_HEADER),
+      `the preflight allows ${POLICY_AUDIT_CONFIRMATION_HEADER}`,
+    );
+  });
 });

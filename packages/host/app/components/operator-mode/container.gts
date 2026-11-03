@@ -45,7 +45,6 @@ import type MessageService from '@cardstack/host/services/message-service';
 
 import CardChooserModal from '../card-chooser/modal';
 import FileChooserModal from '../file-chooser/modal';
-
 import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
 import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
