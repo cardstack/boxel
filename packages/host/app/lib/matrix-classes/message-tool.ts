@@ -3,6 +3,8 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { waitForPromise } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
 import { cached, tracked } from '@glimmer/tracking';
 
 import {
@@ -25,6 +27,8 @@ import type { ClickReason } from '../host-base-tool';
 import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
+
+const SLOW_RESULT_CARD_LOAD_MS = 500;
 
 // A tool class's per-call click rule (HostBaseTool.neverAutoExecutesFor).
 export type NeverAutoExecutesFor = (
@@ -447,21 +451,43 @@ export default class MessageTool {
   async getCommandResultCard(): Promise<
     { card: CardDef; isRealmCard: boolean } | undefined
   > {
+    let startedAt = performance.now();
     let cardDoc = await this.commandResultCardDoc();
     if (!cardDoc) {
       return undefined;
     }
+    let downloadMs = performance.now() - startedAt;
     let id = cardDoc.data.id;
     if (id) {
       let live = await this.store.get(id);
       if (isCardInstance(live)) {
+        this.logSlowResultCardLoad(startedAt, downloadMs, true);
         return { card: live, isRealmCard: true };
       }
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
     let card = (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
+    this.logSlowResultCardLoad(startedAt, downloadMs, false);
     return { card, isRealmCard: !!id };
+  }
+
+  // A test waits on the result card, so a slow load is what turns into a
+  // timeout. Only a slow load is logged, split into the room-file download
+  // and the card load after it, so the line that explains a timeout is not
+  // buried under every fast load in the suite.
+  private logSlowResultCardLoad(
+    startedAt: number,
+    downloadMs: number,
+    isLiveCard: boolean,
+  ) {
+    let totalMs = performance.now() - startedAt;
+    if (!isTesting() || totalMs < SLOW_RESULT_CARD_LOAD_MS) {
+      return;
+    }
+    console.log(
+      `[tool-result-card] slow result card load for tool call ${this.toolRequest.id}: ${Math.round(totalMs)}ms (download ${Math.round(downloadMs)}ms, card load ${Math.round(totalMs - downloadMs)}ms, live card: ${isLiveCard})`,
+    );
   }
 }
 

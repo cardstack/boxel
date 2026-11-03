@@ -1,13 +1,11 @@
 // Pretui — Dock usage page.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import {
-  Copy,
-  Eye,
-  Folder,
-  Grid3x3,
-  IconGlobe,
-} from '@cardstack/boxel-ui/icons';
+import Copy from '@cardstack/boxel-icons/copy';
+import Eye from '@cardstack/boxel-icons/eye';
+import Folder from '@cardstack/boxel-icons/folder';
+import Grid3x3 from '@cardstack/boxel-icons/grid-3x3';
+import Globe from '@cardstack/boxel-icons/globe';
 import { FreestyleUsage } from './freestyle-usage';
 import { Dock } from './dock';
 
@@ -61,7 +59,7 @@ class DockUsage extends Component {
               <Grid3x3 width='100%' height='100%' />
             </d.Item>
             <d.Item @label='Publish' @onClick={{this.clickPublish}}>
-              <IconGlobe width='100%' height='100%' />
+              <Globe width='100%' height='100%' />
             </d.Item>
           </Dock>
           {{#if this.lastClicked}}

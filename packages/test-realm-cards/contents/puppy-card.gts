@@ -1,11 +1,11 @@
-import Base64ImageField from 'https://cardstack.com/base/base64-image';
+import Base64ImageField from '@cardstack/base/base64-image';
 import {
   MaybeBase64Field,
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class PuppyCard extends CardDef {
   static displayName = 'Puppy Card';

@@ -91,6 +91,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   prerenderer,
   createPrerenderAuth,
   matrixURL,
+  matrixServerName,
 }) =>
   async function (args) {
     let { jobInfo, realmURL, realmUsername, runAs, command, commandInput } =
@@ -108,6 +109,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
     let outcome = await prepareRunCommand({
       dbAdapter,
       matrixURL,
+      matrixServerName,
       createPrerenderAuth,
       realmURL,
       runAs,

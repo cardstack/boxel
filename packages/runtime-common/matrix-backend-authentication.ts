@@ -1,4 +1,5 @@
 import type { MatrixClient } from './matrix-client.ts';
+import { isMatrixServerName } from './matrix-server-name.ts';
 
 export interface Utils {
   badRequest(message: string): Response;
@@ -53,8 +54,9 @@ export class MatrixBackendAuthentication {
         JSON.stringify({ errors: [`Request body is not valid JSON`] }),
       );
     }
-    let { access_token, lifetime } = json as {
+    let { access_token, matrix_server_name, lifetime } = json as {
       access_token?: string;
+      matrix_server_name?: unknown;
       lifetime?: string;
     };
     if (!access_token) {
@@ -73,17 +75,39 @@ export class MatrixBackendAuthentication {
         }),
       );
     }
-    return await this.verifyToken(access_token, {
-      extendedLifetime: lifetime === 'extended',
-    });
+    // The homeserver that issued the token, as a Matrix OpenID token response
+    // names it. A client that sends none is a user of the paired homeserver.
+    if (
+      matrix_server_name != null &&
+      (typeof matrix_server_name !== 'string' ||
+        !isMatrixServerName(matrix_server_name))
+    ) {
+      return this.utils.badRequest(
+        JSON.stringify({
+          errors: [`'matrix_server_name' must be a Matrix server name`],
+        }),
+      );
+    }
+    return await this.verifyToken(
+      access_token,
+      matrix_server_name ?? this.matrixClient.serverName,
+      {
+        extendedLifetime: lifetime === 'extended',
+      },
+    );
   }
 
   private async verifyToken(
     openIdToken: string,
+    matrixServerName: string,
     opts?: { extendedLifetime?: boolean },
   ) {
-    // Check openID token using the federation endpoint
-    let user = await this.matrixClient.verifyOpenIdToken(openIdToken);
+    // Ask the issuing homeserver, through the federation endpoint, who the
+    // token vouches for (ADR 004 §1.3).
+    let user = await this.matrixClient.verifyOpenIdToken(
+      openIdToken,
+      matrixServerName,
+    );
     if (!user) {
       return this.utils.badRequest(
         JSON.stringify({

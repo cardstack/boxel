@@ -607,24 +607,36 @@ export default class RoomMessageTool extends Component<Signature> {
     });
     if (this.args.messageTool.toolResultFileDef) {
       isLoading = true;
-      this.args.messageTool.getCommandResultCard().then((result) => {
-        isLoading = false;
-        if (!result && isTesting()) {
-          console.log(
-            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+      let loadStartedAt = performance.now();
+      this.args.messageTool.getCommandResultCard().then(
+        (result) => {
+          isLoading = false;
+          if (!result && isTesting()) {
+            console.log(
+              `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+            );
+          }
+          if (isTornDown || !result) {
+            return;
+          }
+          let { card, isRealmCard } = result;
+          if (card.id) {
+            referencedId = card.id;
+            this.store.addReference(card.id);
+          }
+          state.isRealmCard = isRealmCard;
+          state.card = card;
+        },
+        (error) => {
+          isLoading = false;
+          // A load that throws leaves the result card hidden, so say so rather
+          // than leave a timed-out test with no trace of the failure.
+          console.warn(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} failed after ${Math.round(performance.now() - loadStartedAt)}ms:`,
+            error,
           );
-        }
-        if (isTornDown || !result) {
-          return;
-        }
-        let { card, isRealmCard } = result;
-        if (card.id) {
-          referencedId = card.id;
-          this.store.addReference(card.id);
-        }
-        state.isRealmCard = isRealmCard;
-        state.card = card;
-      });
+        },
+      );
     }
     return state;
   });

@@ -4,6 +4,7 @@ import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
+  enterWorkspace,
 } from '../helpers/index.ts';
 
 test.describe('Create Realm via Dashboard', () => {
@@ -26,7 +27,7 @@ test.describe('Create Realm via Dashboard', () => {
       page.locator('[data-test-create-workspace-modal]'),
     ).toHaveCount(0);
 
-    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await enterWorkspace(page, '1New Workspace');
     let newRealmURL = new URL(`${username}/new-workspace/`, serverIndexUrl)
       .href;
     await expect(

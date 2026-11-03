@@ -112,12 +112,14 @@ path). In order:
 JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 
 `userPermissions` on that last line is the **effective** set, never the raw
-per-username row: `effectiveRealmPermissions` unions the realm's `users` grant
-(gated on the matrix account existing), its `*` grant, and the user's own row.
-It is the single derivation — `RealmPermissionChecker.for` and
-`fetchEffectiveRealmPermissions` both call it, the latter resolving the `users`
-grant from a homeserver URL for callers that hold no matrix client. **Every mint
-site must produce that same union.** Minting the bare row is the standing bug in
+per-username row: `effectiveRealmPermissions` unions the realm's `users` grant,
+its `*` grant, and the user's own row. The `users` grant counts only for a user
+of the paired homeserver, named by `matrixServerName` (ADR 004 §1.4), whose
+matrix account exists. It is the single derivation —
+`RealmPermissionChecker.for` and `fetchEffectiveRealmPermissions` both call it,
+the latter resolving the `users` grant from a homeserver URL and the configured
+server name for callers that hold no matrix client. **Every mint site must
+produce that same union.** Minting the bare row is the standing bug in
 this area: on a realm with a shared grant it yields a token that can never match,
 and the failure is a flat `PermissionMismatch` 401 with nothing pointing at the
 minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops the
