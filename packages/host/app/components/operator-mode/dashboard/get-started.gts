@@ -26,7 +26,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
-import { AGENT_KINDS } from './agent-kinds';
+import { AGENT_KINDS, usesCodingAgent } from './agent-kinds';
 
 const log = logger('component:dashboard/get-started');
 
@@ -102,7 +102,7 @@ export default class GetStarted extends Component<Signature> {
   @cached
   private get steps(): Step[] {
     let { agentSetup } = this.matrixService.dashboardState;
-    return [
+    let steps: Step[] = [
       {
         id: 'open-card',
         title: 'Open a card in a workspace',
@@ -130,15 +130,20 @@ export default class GetStarted extends Component<Signature> {
           isHostedRealm(this.realm.info(url)),
         ),
       },
-      {
+    ];
+    // Only for users who have taken up a coding agent, so the checklist
+    // doesn't steer everyone else toward one.
+    if (usesCodingAgent(this.matrixService.dashboardAgent, agentSetup)) {
+      steps.push({
         id: 'agent',
         title: 'Connect your own agent',
         hint: 'Claude Code and others build in your workspaces through the Boxel plugin.',
         // Only listed agents: progress kept for one no longer offered
         // doesn't count.
         done: AGENT_KINDS.some(({ id }) => (agentSetup?.[id] ?? 0) > 0),
-      },
-    ];
+      });
+    }
+    return steps;
   }
 
   private get doneCount() {

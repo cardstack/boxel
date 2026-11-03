@@ -86,6 +86,21 @@ export function agentKindFor(agent: string | undefined): AgentKind {
   return AGENT_KINDS.find((kind) => kind.id === agent) ?? AGENT_KINDS[0]!;
 }
 
+// Whether the user has taken up a coding agent: picked one, or copied a
+// step of one's setup. Until then the dashboard shows Boxel AI Assistant
+// and keeps the coding agents behind one way in, so people who don't use
+// them aren't met with their setup.
+export function usesCodingAgent(
+  agent: string | undefined,
+  agentSetup: Partial<Record<string, number>> | undefined,
+): boolean {
+  return AGENT_KINDS.some(
+    (kind) =>
+      Boolean(kind.setup) &&
+      (kind.id === agent || (agentSetup?.[kind.id] ?? 0) > 0),
+  );
+}
+
 // The agent's own setup, then the steps typed into its chat: the plugin's
 // skills sign in, sync the workspace and open Boxel from there.
 export function setupStepsFor(

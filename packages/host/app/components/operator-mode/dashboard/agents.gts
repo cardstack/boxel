@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import Copy from '@cardstack/boxel-icons/copy';
 import X from '@cardstack/boxel-icons/x';
 import { Button } from '@cardstack/pretui/components/button';
@@ -16,6 +17,7 @@ import { RadioCard } from '@cardstack/pretui/components/radio-card';
 import { Select } from '@cardstack/pretui/components/select';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { restartableTask, timeout } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 
 import { add, cn } from '@cardstack/boxel-ui/helpers';
 
@@ -31,6 +33,7 @@ import {
   AGENT_KINDS,
   agentKindFor,
   setupStepsFor,
+  usesCodingAgent,
   type DashboardAgent,
 } from './agent-kinds';
 import AgentMark from './agent-mark';
@@ -60,7 +63,8 @@ interface Signature {
 // steps are copied into a terminal or its own chat; Boxel AI Assistant, built
 // in, gets a how-it-works card and a way to start. The pick and the setup
 // progress are kept in the dashboard's account data, so the rail's flyout and
-// Get started read the same state.
+// Get started read the same state. Until the user takes up a coding agent,
+// the section shows only Boxel AI Assistant and a way to the others.
 export default class Agents extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -76,6 +80,13 @@ export default class Agents extends Component<Signature> {
   // or copied from here, so a last copy doesn't fold the list away under the
   // user.
   @tracked private expandedAgent: DashboardAgent | null = null;
+  // Opened from the minimized section for this visit; a pick or a copy then
+  // keeps the full section open on later visits.
+  @tracked private showsCodingAgents = false;
+  // Shown once the coding agents are opened, until the user picks one: the
+  // stored pick there is Boxel AI Assistant or nothing.
+  @tracked private openedAgent: DashboardAgent | undefined;
+  private focusPicker = false;
 
   private stepsId = `${guidFor(this)}-steps`;
 
@@ -85,9 +96,38 @@ export default class Agents extends Component<Signature> {
     description: kind.hint,
   }));
 
-  private get kind() {
-    return agentKindFor(this.matrixService.dashboardAgent);
+  private get isMinimized() {
+    return (
+      !this.showsCodingAgents &&
+      !usesCodingAgent(
+        this.matrixService.dashboardAgent,
+        this.matrixService.dashboardState.agentSetup,
+      )
+    );
   }
+
+  private get kind() {
+    return agentKindFor(
+      this.isMinimized
+        ? 'boxel'
+        : (this.openedAgent ?? this.matrixService.dashboardAgent),
+    );
+  }
+
+  @action private showCodingAgents() {
+    this.showsCodingAgents = true;
+    this.openedAgent = AGENT_KINDS.find((kind) => kind.setup)?.id;
+    this.focusPicker = true;
+  }
+
+  // The button that opened the coding agents goes away, so focus moves to
+  // what it opened.
+  private focusIfOpened = modifier((element: HTMLElement) => {
+    if (this.focusPicker) {
+      this.focusPicker = false;
+      element.focus();
+    }
+  });
 
   private get copiedResult() {
     return this.copied?.agent === this.kind.id ? this.copied : null;
@@ -202,6 +242,7 @@ export default class Agents extends Component<Signature> {
     if (!kind) {
       return;
     }
+    this.openedAgent = undefined;
     try {
       await this.matrixService.pickDashboardAgent(kind.id);
     } catch (error) {
@@ -232,6 +273,16 @@ export default class Agents extends Component<Signature> {
       this.copied = copied;
       if (copied.ok) {
         this.saveProgress(agent, index);
+        // Copying from the opened agent's steps takes it up, so the next
+        // visit opens on it.
+        if (this.openedAgent === agent) {
+          this.openedAgent = undefined;
+          this.matrixService
+            .pickDashboardAgent(agent)
+            .catch((error: unknown) => {
+              log.warn(`saving the picked agent failed: ${error}`);
+            });
+        }
       }
       await timeout(COPIED_FEEDBACK_MS);
     } finally {
@@ -262,27 +313,34 @@ export default class Agents extends Component<Signature> {
 
   <template>
     <div class='agents' data-test-agents ...attributes>
-      <header class='pitch'>
-        <h3 class='pitch-title'>Build with the agent you already pay for</h3>
-        <p class='pitch-body'>
-          Add the Boxel plugin to your coding agent and it builds right in your
-          workspaces, or ask Boxel AI Assistant here.
-        </p>
-      </header>
+      {{#unless this.isMinimized}}
+        <header class='pitch'>
+          <h3
+            class='pitch-title'
+            tabindex='-1'
+            {{this.focusIfOpened}}
+            data-test-agents-pitch
+          >Build with the agent you already pay for</h3>
+          <p class='pitch-body'>
+            Add the Boxel plugin to your coding agent and it builds right in
+            your workspaces, or ask Boxel AI Assistant here.
+          </p>
+        </header>
 
-      <RadioCard
-        class='agent-picker'
-        @options={{this.agentOptions}}
-        @value={{this.kind.id}}
-        @onValueChange={{this.pickAgent}}
-        @orientation='horizontal'
-        @label='Your agent'
-        data-test-agent-picker
-      >
-        <:media as |option|>
-          <AgentMark @kind={{agentKindFor option.value}} />
-        </:media>
-      </RadioCard>
+        <RadioCard
+          class='agent-picker'
+          @options={{this.agentOptions}}
+          @value={{this.kind.id}}
+          @onValueChange={{this.pickAgent}}
+          @orientation='horizontal'
+          @label='Your agent'
+          data-test-agent-picker
+        >
+          <:media as |option|>
+            <AgentMark @kind={{agentKindFor option.value}} />
+          </:media>
+        </RadioCard>
+      {{/unless}}
 
       {{! The screencast of the picked agent takes the column before this
           panel, so the two read as watch it, then do it. }}
@@ -446,6 +504,23 @@ export default class Agents extends Component<Signature> {
           {{/if}}
         </section>
       </div>
+      {{#if this.isMinimized}}
+        <Button
+          class='show-coding-agents'
+          @appearance='link'
+          @size='s'
+          {{on 'click' this.showCodingAgents}}
+          data-test-agents-show-coding
+        >
+          Use Claude Code or Codex?
+          <ChevronRight
+            class='show-coding-agents-icon'
+            width='14'
+            height='14'
+            aria-hidden='true'
+          />
+        </Button>
+      {{/if}}
       {{! Rendered empty up front, so the copy is announced. }}
       <VisuallyHidden role='status' data-test-agent-copy-status>
         {{this.copiedMessage}}
@@ -622,6 +697,13 @@ export default class Agents extends Component<Signature> {
       }
       .describe-it {
         align-self: flex-start;
+      }
+      .show-coding-agents {
+        align-self: flex-start;
+      }
+      /* Centered on the label's line rather than sitting on its baseline. */
+      .show-coding-agents-icon {
+        vertical-align: middle;
       }
     </style>
   </template>
