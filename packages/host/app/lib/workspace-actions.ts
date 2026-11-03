@@ -281,17 +281,14 @@ export class WorkspaceActions {
           icon: ArchiveIcon,
           action: this.openArchiveModal,
         }),
+        new MenuItem({
+          label: 'Delete Workspace',
+          icon: IconTrash,
+          action: this.openDeleteModal,
+          dangerous: true,
+        }),
       );
     }
-    items.push(
-      new MenuItem({
-        label: 'Delete Workspace',
-        icon: IconTrash,
-        action: this.openDeleteModal,
-        dangerous: true,
-        disabled: !this.isRealmOwner,
-      }),
-    );
     return items;
   }
 

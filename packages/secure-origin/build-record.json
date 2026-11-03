@@ -119,7 +119,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 285907,
+      "bytes": 285952,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -313,6 +313,11 @@
         },
         {
           "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/destroyable/index.js",
+          "size": 349
+        },
+        {
+          "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/engine/instance.js",
           "size": 2409
         },
@@ -364,7 +369,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@ember/object/core.js",
-          "size": 5727
+          "size": 5731
         },
         {
           "package": "ember-source@6.10.1",
@@ -464,7 +469,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/destroyable/index.js",
-          "size": 2866
+          "size": 2868
         },
         {
           "package": "ember-source@6.10.1",
@@ -479,7 +484,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/manager/index.js",
-          "size": 13913
+          "size": 13917
         },
         {
           "package": "ember-source@6.10.1",
@@ -504,7 +509,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/@glimmer/runtime/index.js",
-          "size": 110107
+          "size": 110121
         },
         {
           "package": "ember-source@6.10.1",
@@ -554,7 +559,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/cache-DtDz7X5V.js",
-          "size": 24224
+          "size": 24226
         },
         {
           "package": "ember-source@6.10.1",
@@ -584,7 +589,7 @@
         {
           "package": "ember-source@6.10.1",
           "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
-          "size": 69690
+          "size": 69696
         },
         {
           "package": "ember-source@6.10.1",
@@ -649,7 +654,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 75346,
+      "bytes": 77266,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -797,10 +802,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/4f63ca210b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/525c77723c.css"
         },
         {
@@ -822,6 +823,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/8af1a8436f.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/9008ec9286.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -881,6 +886,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/e76a708c45.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/ef42dcf82f.css"
         },
         {
@@ -926,7 +935,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 349341,
+      "bytes": 357308,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1111,7 +1120,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 8603
+          "size": 8964
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1205,8 +1214,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-limit-notices.gts",
+          "size": 5577
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 24650
+          "size": 26260
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1226,7 +1240,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-usage-panel.gts",
-          "size": 3956
+          "size": 4430
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1311,7 +1325,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-limits-page.gts",
-          "size": 5693
+          "size": 7282
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1476,7 +1490,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/labels.ts",
-          "size": 2609
+          "size": 2660
         },
         {
           "package": "@cardstack/secure-origin",

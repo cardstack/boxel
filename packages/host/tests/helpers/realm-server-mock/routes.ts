@@ -685,18 +685,20 @@ function registerAuthRoutes() {
   });
 
   // The app asks how many key notices the user hasn't seen when a session
-  // starts. The mock keeps none, so the badge stays hidden unless a test
-  // stands in its own listing.
-  registerRealmServerRoute({
-    path: '/_key-policy-notices',
-    handler: async (req) =>
-      req.method === 'GET'
-        ? new Response(JSON.stringify({ data: [], meta: { unread: 0 } }), {
-            status: 200,
-            headers: { 'content-type': 'application/vnd.api+json' },
-          })
-        : null,
-  });
+  // starts, from both listings. The mock keeps none, so the badge stays
+  // hidden unless a test stands in its own listing.
+  for (let path of ['/_key-policy-notices', '/_key-limit-notices']) {
+    registerRealmServerRoute({
+      path,
+      handler: async (req) =>
+        req.method === 'GET'
+          ? new Response(JSON.stringify({ data: [], meta: { unread: 0 } }), {
+              status: 200,
+              headers: { 'content-type': 'application/vnd.api+json' },
+            })
+          : null,
+    });
+  }
 
   registerRealmServerRoute({
     path: '/_delete-realm',

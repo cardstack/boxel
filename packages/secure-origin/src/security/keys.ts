@@ -476,6 +476,50 @@ export async function markPolicyNoticesRead(
   });
 }
 
+// A notice the user is owed because a share's or personal key's use reached
+// a threshold this UTC day or month: `high-water` at the share of the budget
+// the platform warns at, `budget` once the budget is used up and calls are
+// refused until `periodEndsAt`. It goes to the key's owner (`yours`) and, for
+// a share, to each direct writer of its realm. A share's notice names its
+// realm; a key's names neither share nor realm. Listed until its period ends.
+export interface KeyLimitNotice {
+  id: string;
+  share: string | null;
+  key: string | null;
+  realm: string | null;
+  label: string;
+  yours: boolean;
+  period: 'day' | 'month';
+  periodEndsAt: string;
+  threshold: 'high-water' | 'budget';
+  budget: number;
+  // When this page first listed it; null while it is unread, which the app
+  // counts in the badge on the user's avatar.
+  readAt: string | null;
+  createdAt: string;
+}
+
+// The user's limit notices whose period hasn't ended, newest first.
+export async function limitNotices(config: Config): Promise<KeyLimitNotice[]> {
+  return resources<KeyLimitNotice>(
+    await authorizedRequest(config, '_key-limit-notices', { method: 'GET' }),
+  );
+}
+
+// Marks the limit notices this page has shown read, which takes them out of
+// the app's badge. Only the secure origin's own session may.
+export async function markLimitNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-limit-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-limit-notice', id })),
+    },
+  });
+}
+
 // The shares holding one of the user's keys: those deleting it suspends.
 export async function sharesOfKey(
   config: Config,
