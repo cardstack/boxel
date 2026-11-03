@@ -220,6 +220,7 @@ export async function sendCallApiRequest(
       headers: request.headers,
       ...(request.body !== undefined ? { body: request.body } : {}),
       sizePath: 'call-api',
+      destinationSetBy: 'user',
       scrubber,
       ...(credentials.length > 0
         ? {

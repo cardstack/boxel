@@ -484,6 +484,8 @@ async function exchange(
         assertion,
       }).toString(),
       sizePath: 'call-api',
+      // Google's own token endpoint, fixed by the platform.
+      destinationSetBy: 'platform',
       // The body carries the signed assertion, which a 307 or 308 to another
       // origin would resend there.
       sameOriginOnly: true,

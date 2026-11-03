@@ -419,7 +419,7 @@ FROM user_key_grant_notices WHERE grant_id = '<id>' ORDER BY recipient;
 ```
 
 The `boxel:key-grant` log channel carries one JSON line per event:
-`grant-rejected` (`grant`, `host`, `realm`, `share`), `grant-cleared`
+`grant-rejected` (`grant`, `key`, `host`, `realm`, `share`), `grant-cleared`
 (`reason`: `probe` or `key-replaced`), `probe` (`status`, or null when the
 probe got no answer) and `vendor-outcome` (`host`, `status`) for every
 `callApi` the vendor answered. Hosts and ids only, never a path or a value.
@@ -469,9 +469,14 @@ SELECT id, name, kind, rejected_at, last_probe_at
 FROM user_keys WHERE owner = '@someone:boxel.ai' AND state = 'rejected';
 ```
 
-The `boxel:key-grant` channel carries `key-rejected` (`key`, `realm`,
-`share`), `key-probe` (`minted`) and `key-cleared` (`reason`: `probe` or
-`key-replaced`).
+The `boxel:key-grant` channel carries `key-rejected` (`key`, `host` of the
+grant the refused call came through, `realm`, `share`), `key-probe`
+(`minted`) and `key-cleared` (`reason`: `probe` or `key-replaced`). Every
+call a minting key (a service account or an OAuth connection) couldn't mint a
+token for logs `mint-failed`: `key`, `kind`, the `host` of the grant it was
+minting for, `realm` and `reason` (`rejected`, `needs-admin` or
+`unavailable`). The Keys dashboard charts both by host; the
+`key-outage-triage` skill reads them.
 
 A user whose card shows Reconnect has a rejected grant or key. If the key is good
 (a vendor outage that answered 401), the next probe brings it back on its

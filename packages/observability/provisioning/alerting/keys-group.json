@@ -1,0 +1,534 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "keys-group",
+      "folder": "defd2d156sav4d",
+      "interval": "60s",
+      "rules": [
+        {
+          "uid": "keys-secret-open-failed",
+          "title": "Stored secret failed to open",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"boxel:secrets-at-rest\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:secrets-at-rest\" | event=\"open-failed\" [5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "annotations": {
+            "summary": "The realm server or worker could not open a stored secret in the last 5 minutes (boxel:secrets-at-rest, event open-failed). reason unknown-data-key: a process is missing a data key, usually a rotation step taken before the previous deploy finished, so roll the step back or finish the deploy. reason not-authentic: a sealed row was changed or moved outside the realm server; treat it as a database write nobody accounts for. The line names the field, the row id and the data key. See the secrets-at-rest skill.",
+            "runbook": "The key-outage-triage skill, and the Keys dashboard.",
+            "dashboard_uid": "boxel-keys"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "keys-unexpected-decrypt",
+          "title": "Secrets key Decrypt by an unexpected principal",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 1800,
+                "to": 0
+              },
+              "datasourceUid": "cef5x9o3yzawwf",
+              "model": {
+                "datasource": {
+                  "type": "cloudwatch",
+                  "uid": "cef5x9o3yzawwf"
+                },
+                "expression": "fields coalesce(detail.userIdentity.sessionContext.sessionIssuer.arn, detail.userIdentity.arn, \"unknown\") as principal\n| filter principal not like /^arn:aws:iam::${SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID}:role\\/boxel-(realm-server|worker)-${SECRETS_DECRYPTS_ENV}-ecs-task$/ or ispresent(detail.errorCode)\n| stats count() as unexpected by bin(5m)",
+                "id": "",
+                "intervalMs": 1000,
+                "logGroups": [
+                  {
+                    "accountId": "${SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID}:log-group:${SECRETS_DECRYPTS_LOG_GROUP_NAME}",
+                    "name": "${SECRETS_DECRYPTS_LOG_GROUP_NAME}"
+                  }
+                ],
+                "maxDataPoints": 43200,
+                "queryMode": "Logs",
+                "refId": "A",
+                "region": "default"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "sum",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "annotations": {
+            "summary": "Something other than this environment's realm-server or worker task role, in this account, called kms:Decrypt on the secrets key, or a Decrypt on it was denied, in the last 30 minutes (CloudTrail, copied by EventBridge into the decrypts log group). The window covers CloudTrail's delivery delay. Read the record on the Keys dashboard or in the log group: the principal, source IP and encryption context. A task role's Decrypt that is not at a task's startup is a shell opened in the task: look up ExecuteCommand in CloudTrail. See the secrets-at-rest skill's audit.",
+            "runbook": "The key-outage-triage skill, and the Keys dashboard.",
+            "dashboard_uid": "boxel-keys"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "keys-refusals-across-realms",
+          "title": "callApi failures of ours across realms or hosts",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "count(sum by (realm) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | outcome=\"failed\" or code=\"rate-limit-unavailable\" [10m]))) or vector(0)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "count(sum by (host) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | code=~\"internal-error|upstream-timeout\" | url!=\"\" | label_format host=`{{ regexReplaceAll \"^[a-z]+://([^/]+).*$\" .url \"${1}\" }}` [10m]))) or vector(0)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "B"
+              }
+            },
+            {
+              "refId": "RA",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "RA",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "RB",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "RB",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "$RA > 2 || $RB > 2",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "math"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "annotations": {
+            "summary": "callApi failed for a reason of ours in the last 10 minutes: either a send that broke (outcome failed) or rate-limit-unavailable (the limit counters' database) in three or more realms, or connection failures and timeouts (internal-error, upstream-timeout) at three or more distinct destination hosts. A dead destination or one vendor is one host, whatever number of realms call it, so those count by host; every other refusal code is a user's, owner's or card author's state and is left out. The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which. See the key-outage-triage skill.",
+            "runbook": "The key-outage-triage skill, and the Keys dashboard.",
+            "dashboard_uid": "boxel-keys"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "keys-guard-refused-platform-destination",
+          "title": "Outbound guard refused a platform destination",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=~\"realm-server|worker\"} |= \"outbound guard refused:\" |= \"destinationSetBy=platform\" [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "annotations": {
+            "summary": "The outbound guard refused a request to a destination the platform set (a proxy_endpoints row behind _request-forward or the OpenRouter passthrough, a platform OAuth client's token endpoint, Google's token endpoint) in the last 10 minutes. A refusal of one of those is ours: a row with an http: URL, one that resolves to a private address, or a vendor redirecting to one. A user's own OAuth client or a card's request is destinationSetBy=user and never fires this. The line names the host and reason. See the outbound-guard skill.",
+            "runbook": "The key-outage-triage skill, and the Keys dashboard.",
+            "dashboard_uid": "boxel-keys"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        },
+        {
+          "uid": "keys-many-grants-rejected-one-host",
+          "title": "Many keys rejected at one host",
+          "folderUID": "defd2d156sav4d",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max(count by (host) (sum by (host, key) (count_over_time({service=~\"realm-server|worker\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [10m]))))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "B",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "A",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "B",
+                "settings": {
+                  "mode": "replaceNN",
+                  "replaceWithValue": 0
+                },
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "C",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [2],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "B",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "C",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "for": "0s",
+          "annotations": {
+            "summary": "Grants or keys of three or more distinct keys at one destination host entered the rejected state in the last 10 minutes. Keys are counted, not grants: one key can hold several grants at one host (one per destination path), so one revoked key rejects them all and counts once. Three keys refused at one host at once is that vendor refusing every key (an outage, or a change to its auth) or a substitution bug of ours sending the wrong value. Check the vendor's status page, then whether keys at other hosts still work. Probes return the grants to active on their own once the vendor accepts them again. See the key-outage-triage skill.",
+            "runbook": "The key-outage-triage skill, and the Keys dashboard.",
+            "dashboard_uid": "boxel-keys"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": null
+        }
+      ]
+    }
+  ]
+}
