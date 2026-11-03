@@ -66,6 +66,7 @@ const KEYS = [
     updatedAt: '2026-10-01T12:00:00.000Z',
     anonymous: false,
     anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: ['github.com', 'openweathermap.org'],
     sharedInto: [
       {
@@ -101,6 +102,7 @@ const KEYS = [
     updatedAt: '2026-10-02T12:00:00.000Z',
     anonymous: false,
     anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: [] as string[],
     sharedInto: [] as {
       url: string;
@@ -591,6 +593,182 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Status"]').doesNotExist();
     });
 
+    test('lists what workspaces opened the user’s keys to people who aren’t signed in, and offers to allow a key that doesn’t', async function (assert) {
+      let notice = (
+        id: string,
+        attributes: Record<string, unknown>,
+      ): Record<string, unknown> => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          policy: `${REALM}policies/team`,
+          savedBy: '@admin:example.test',
+          createdAt: '2026-11-01T12:00:00.000Z',
+          ...attributes,
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('2', {
+                share: 'share-team-2',
+                label: 'Team weather',
+                key: 'key-1',
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+              notice('1', {
+                share: 'share-team-1',
+                label: 'Weather',
+                key: 'key-1',
+                reason: 'visitors-use',
+                operations: [`${REALM}weather#Weather.forecast`],
+              }),
+              notice('0', {
+                share: 'share-gone',
+                label: 'Deleted',
+                key: null,
+                reason: 'visitors-wanted',
+                operations: [`${REALM}weather#Weather.alerts`],
+              }),
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      assert
+        .dom('[data-test-key-policy-requests] [data-test-key-policy-notice]')
+        .exists(
+          { count: 1 },
+          'only the request still waiting on an answer asks for one: a deleted key’s is settled',
+        );
+      assert
+        .dom('[data-test-key-policy-requests]')
+        .containsText('Action needed')
+        .containsText('wants people who aren’t signed in to use your key')
+        .containsText('Team weather');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice="Weather"]',
+        )
+        .containsText('now use')
+        .containsText('Weather.forecast');
+      assert
+        .dom(
+          '[data-test-key-policy-notices] [data-test-key-policy-notice-allow]',
+        )
+        .doesNotExist('a key visitors already use asks for nothing');
+      await click('[data-test-key-policy-notice-allow]');
+      assert
+        .dom('[data-test-key-anonymous-use-form]')
+        .exists('allowing it opens the key’s own setting');
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked('already set to allow it, so one Save finishes it');
+    });
+
+    test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
+      let declined = false;
+      let request = {
+        type: 'key-policy-notice',
+        id: '7',
+        attributes: {
+          realm: REALM,
+          share: 'share-team-2',
+          label: 'Team weather',
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-wanted',
+          operations: [`${REALM}weather#Weather.alerts`],
+          declinedAt: null as string | null,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      };
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              declined
+                ? {
+                    ...request,
+                    attributes: {
+                      ...request.attributes,
+                      declinedAt: '2026-11-02T12:00:00.000Z',
+                    },
+                  }
+                : request,
+            ],
+          }),
+        'POST _key-policy-notices/7/decline': () => {
+          declined = true;
+          return json(200, { data: request });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-requests]');
+      await click('[data-test-key-policy-notice-decline]');
+      await settled();
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.deepEqual(
+        requests
+          .filter((r) => r.method === 'POST' && r.path.startsWith('_key'))
+          .map((r) => r.path),
+        ['_key-policy-notices/7/decline'],
+        'nothing about the key is changed',
+      );
+    });
+
+    test('a notice that a workspace wants visitors to use a key is settled once the key allows them', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(200, keyResources([{ ...KEYS[0], anonymous: true }, KEYS[1]])),
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '1',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-team-2',
+                  label: 'Team weather',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-wanted',
+                  operations: [`${REALM}weather#Weather.alerts`],
+                  createdAt: '2026-11-01T12:00:00.000Z',
+                },
+              },
+            ],
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Maps"]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+    });
+
+    test('a link naming a key opens its setting for people who aren’t signed in', async function (assert) {
+      visitShell('keys#anonymous=key-2');
+      await render(KeyPage);
+      await waitFor('[data-test-key-anonymous-use-form]');
+      assert.dom('[data-test-key-policy-requests]').doesNotExist();
+      assert.dom('[data-test-key-anonymous-use-form]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-key-anonymous-use-form] [data-test-anonymous-use-input]',
+        )
+        .isChecked();
+    });
+
     test('lists the keys, and replaces one with a ticket for that key', async function (assert) {
       serve({
         'GET _key-shares': () =>
@@ -698,7 +876,7 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings'],
+        ['GET _user-keys', 'GET _key-bindings', 'GET _key-policy-notices'],
         'the page asks nothing per key',
       );
     });
@@ -706,7 +884,12 @@ module('Integration | key pages', function (hooks) {
     test('each key says whether people who aren’t signed in can use it, and changes that with its own request', async function (assert) {
       let keys = [
         KEYS[0],
-        { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+        {
+          ...KEYS[1],
+          anonymous: true,
+          anonymousDailyCap: 50,
+          anonymousMonthlyCap: 1000,
+        },
       ];
       serve({
         'GET _user-keys': () => json(200, keyResources(keys)),
@@ -734,7 +917,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom(`${maps} [data-test-key-anonymous-use-summary]`)
         .hasText(
-          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day all together',
+          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day and 1000 a month all together',
         );
       assert
         .dom(`${weather} [data-test-key-anonymous-use-change]`)
@@ -750,6 +933,7 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-anonymous-use-agreement]')
         .hasText('Allow people who aren’t signed in to use this key');
       assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
+      assert.dom('[data-test-anonymous-monthly-cap-input]').doesNotExist();
       await click('[data-test-anonymous-use-input]');
       let capInput = find('[data-test-anonymous-cap-input]')!;
       let capName = capInput
@@ -759,9 +943,26 @@ module('Integration | key pages', function (hooks) {
         .join(' ');
       assert.strictEqual(
         capName,
-        'Anonymous cap (optional)',
+        'Daily anonymous cap (optional)',
         'the cap is named by its label alone',
       );
+      let monthlyInput = find('[data-test-anonymous-monthly-cap-input]')!;
+      assert.strictEqual(
+        monthlyInput
+          .getAttribute('aria-labelledby')!
+          .split(' ')
+          .map((id) => document.getElementById(id)?.textContent?.trim())
+          .join(' '),
+        'Monthly anonymous cap (optional)',
+        'so is the monthly cap',
+      );
+      assert
+        .dom(
+          document.getElementById(
+            monthlyInput.getAttribute('aria-describedby')!,
+          ),
+        )
+        .includesText('each calendar month (UTC)', 'its note describes it');
       assert
         .dom(
           document.getElementById(capInput.getAttribute('aria-describedby')!),
@@ -772,6 +973,11 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-key-anonymous-use-save]')
         .isDisabled('a cap is at least one call');
       await fillIn('[data-test-anonymous-cap-input]', '25');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '0');
+      assert
+        .dom('[data-test-key-anonymous-use-save]')
+        .isDisabled('a monthly cap is at least one call too');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '500');
       await click('[data-test-key-anonymous-use-save]');
       await waitFor(
         `${weather} [data-test-key-anonymous-use-summary]:not(:empty)`,
@@ -783,7 +989,11 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(put.body, {
         data: {
           type: 'anonymous-use',
-          attributes: { anonymous: true, anonymousDailyCap: 25 },
+          attributes: {
+            anonymous: true,
+            anonymousDailyCap: 25,
+            anonymousMonthlyCap: 500,
+          },
         },
       });
       assert.deepEqual(ticketRequests(), [], 'it takes no ticket');
@@ -791,7 +1001,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom(`${weather} [data-test-key-anonymous-use-summary]`)
         .hasText(
-          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day all together',
+          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day and 500 a month all together',
           'the list is read again',
         );
 
@@ -800,6 +1010,7 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-anonymous-use-input]')
         .isChecked('the panel starts from the key’s setting');
       assert.dom('[data-test-anonymous-cap-input]').hasValue('50');
+      assert.dom('[data-test-anonymous-monthly-cap-input]').hasValue('1000');
       await click('[data-test-anonymous-use-input]');
       await click('[data-test-key-anonymous-use-save]');
       await settled();
@@ -808,8 +1019,12 @@ module('Integration | key pages', function (hooks) {
           (r) =>
             r.method === 'PUT' && r.path === '_user-keys/key-2/anonymous-use',
         )!.body.data.attributes,
-        { anonymous: false, anonymousDailyCap: null },
-        'turning it off clears the cap',
+        {
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+        'turning it off clears both caps',
       );
       assert
         .dom(`${maps} [data-test-key-anonymous-use-summary]`)
@@ -1180,6 +1395,7 @@ module('Integration | key pages', function (hooks) {
                 name: 'Forecasts',
                 anonymous: true,
                 anonymousDailyCap: 100,
+                anonymousMonthlyCap: 2000,
               },
             },
           }),
@@ -1207,11 +1423,11 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-anonymous-use-input]');
       assert
         .dom('[data-test-anonymous-cap]')
-        .includesText('Anonymous cap (optional)');
+        .includesText('Daily anonymous cap (optional)');
       assert
         .dom('[data-test-anonymous-cap]')
         .includesText(
-          'How many calls people who aren’t signed in can make with this key each day, all together, in every workspace it’s shared into. Leave it empty for no cap.',
+          'How many calls people who aren’t signed in can make with this key each day (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
         );
       assert.dom('[data-test-anonymous-cap-input]').hasValue('');
       await fillIn('[data-test-anonymous-cap-input]', '1.5');
@@ -1219,6 +1435,19 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-enter-key-save]')
         .isDisabled('a cap is a whole number of calls');
       await fillIn('[data-test-anonymous-cap-input]', '100');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText('Monthly anonymous cap (optional)');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText(
+          'How many calls people who aren’t signed in can make with this key each calendar month (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
+        );
+      await fillIn('[data-test-anonymous-monthly-cap-input]', 'lots');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a monthly cap is a whole number of calls');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '2000');
       await click('[data-test-enter-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(
@@ -1230,6 +1459,7 @@ module('Integration | key pages', function (hooks) {
           value: 'sk-forecast',
           anonymous: true,
           anonymousDailyCap: 100,
+          anonymousMonthlyCap: 2000,
         },
       );
     });
@@ -1261,6 +1491,10 @@ module('Integration | key pages', function (hooks) {
       )!.body.data;
       assert.true(attributes.anonymous);
       assert.false('anonymousDailyCap' in attributes, 'the cap is optional');
+      assert.false(
+        'anonymousMonthlyCap' in attributes,
+        'so is the monthly cap',
+      );
     });
 
     test('opened for an operation, says what it is for, as the server describes it', async function (assert) {
@@ -2256,7 +2490,12 @@ module('Integration | key pages', function (hooks) {
             200,
             keyResources([
               KEYS[0],
-              { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+              {
+                ...KEYS[1],
+                anonymous: true,
+                anonymousDailyCap: 50,
+                anonymousMonthlyCap: 1500,
+              },
             ]),
           ),
         'POST _secure-window/context': () =>
@@ -2288,7 +2527,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-share-key-key-allows-text]')
         .hasText(
-          'This key allows it, up to 50 calls a day all together. Sharing it here means they will use it.',
+          'This key allows it, up to 50 calls a day and 1500 a month all together. Sharing it here means they will use it.',
         );
       assert.dom('[data-test-anonymous-use-input]').doesNotExist();
       assert.dom('[data-test-share-key-save]').isEnabled();

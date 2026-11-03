@@ -141,7 +141,7 @@ destination, with the caller's keys a slot can take and their shares in the
 realm, each with the batch's destinations its grants already cover. A share
 also says whether any binding of it is `interactive` yet, its
 `dailyBudget` in force, and whether the key it holds allows people who aren't
-signed in to use it (`anonymous`, with its `anonymousDailyCap`, read from
+signed in to use it (`anonymous`, with its `anonymousDailyCap` and `anonymousMonthlyCap`, read from
 `user_keys`); each
 slot's `approved` says whether its last approval was `interactive`. Each
 operation's `openToAnonymous` says whether the realm's policy opens it to
@@ -300,8 +300,8 @@ run up front.
 
 People who aren't signed in can use a shared key, for a public card such as a
 weather widget, where two decisions meet. Whether they may use a key is its
-owner's decision about the key itself (`user_keys.anonymous`, with an optional
-`anonymous_daily_cap`; see the `user-keys` skill). Whether they can use it in
+owner's decision about the key itself (`user_keys.anonymous`, with optional
+`anonymous_daily_cap` and `anonymous_monthly_cap`; see the `user-keys` skill). Whether they can use it in
 a realm is that realm's policy's to say. A binding never carries either.
 Three things must all hold before such a caller's `callApi` sends anything:
 
@@ -321,9 +321,10 @@ Three things must all hold before such a caller's `callApi` sends anything:
 3. **There is room in the limits for them** (see the `key-limits` skill): a
    bucket per client address at the share's per-person rate; their part of
    the share's daily budget (`KEY_ANONYMOUS_SHARE_PERCENT`, default 50), so
-   signed-in readers keep the rest; and, where the key's owner set one, the
-   key's anonymous cap, counted once across every realm the key is shared
-   into. Their calls spend the share's daily and monthly budgets too.
+   signed-in readers keep the rest; and, where the key's owner set them, the
+   key's daily and monthly anonymous caps, each counted once across every
+   realm the key is shared into, and once per call even when the call goes
+   through two shares of the key. Their calls spend the share's daily and monthly budgets too.
 
 The realm passes the caller's address (the anonymous limiter's `rateLimitKey`,
 an IPv6 caller's /64) as `callApiAnonymous` on the invocation; the lookup's
@@ -361,7 +362,7 @@ anonymous use, and otherwise they are asked to sign in.
 
 ```sql
 -- The shares that serve people who aren't signed in, and their keys' caps.
-SELECT s.id, s.label, s.realm_url, s.daily_budget, k.anonymous_daily_cap
+SELECT s.id, s.label, s.realm_url, s.daily_budget, k.anonymous_daily_cap, k.anonymous_monthly_cap
 FROM key_shares s JOIN user_keys k ON k.id = s.key_id
 WHERE k.anonymous
   AND EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive);
@@ -488,7 +489,7 @@ the application role.
   `callApi` (and warning about a `userKey` one), sharing into such a realm
   refused for a key that doesn't allow anonymous use, a
   visitor served through a share whose key allows it and refused by one whose
-  key doesn't, the per-address rate, the key's anonymous cap exhausting
+  key doesn't, the per-address rate, the key's daily and monthly anonymous caps exhausting
   without touching signed-in readers, a swapped-in key deciding for the share,
   a personal key refusing them `actor-required`, and readiness for each.
 - `packages/realm-server/tests/key-binding-batch-test.ts` — the batch: six

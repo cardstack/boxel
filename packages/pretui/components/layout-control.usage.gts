@@ -91,7 +91,7 @@ class LayoutControlUsage extends Component {
   <template>
     <FreestyleUsage
       @name='LayoutControl'
-      @description='A toolbar row that fits its controls to its own width. Each Slot lists the forms its control can take, richest first; the bar measures itself, steps slots down evenly (least important first on a tie), and folds what is left into one ⋯ menu. The pinned primary action never folds. Drag the box corner narrower, down to about 400px.'
+      @description='A toolbar row that fits its controls to its own width. Each Slot lists the forms its control can take, richest first; the bar measures itself, steps slots down evenly (least important first on a tie), and folds what is left into one ⋯ menu. The pinned primary action never folds. Drag the box corner narrower, down to about 400px or the page width.'
       @source={{this.usage}}
     >
       <:example>
@@ -276,7 +276,7 @@ class LayoutControlUsage extends Component {
     <style scoped>
       .lc-usage-box {
         inline-size: 60rem;
-        min-inline-size: 25rem;
+        min-inline-size: min(25rem, 100%);
         max-inline-size: 100%;
         resize: horizontal;
         overflow: hidden;

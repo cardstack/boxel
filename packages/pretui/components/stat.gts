@@ -5,11 +5,22 @@ import { Delta } from './delta';
 import { Odometer } from './odometer';
 import { formatNumber, toNumber } from '../internal/reading-format';
 import type { FormatOptionBag } from '../internal/reading-format';
+import {
+  PRETUI_TONES,
+  resolveTone,
+  type PretuiTone,
+  type PretuiToneArg,
+} from '../pretui-primitives';
 
 export interface StatSignature {
   Args: {
     /** the eyebrow above the number — a short noun phrase, set mono and uppercase */
     label: string;
+    /**
+     * Opt-in status dot before the label, in that tone's colour (Chip's tones).
+     * Decoration only: the label or hint must still say the status. Unset = no dot.
+     */
+    tone?: PretuiToneArg;
     /**
      * The headline value. A number is formatted through Intl using the format
      * knobs below; a string is used verbatim, so a pre-formatted value
@@ -101,6 +112,11 @@ export interface StatSignature {
 // cells and the text line box are the same height; letting a caller set them
 // apart is the one knob that CAN move the label.
 export class Stat extends Component<StatSignature> {
+  get tone(): PretuiTone | undefined {
+    return this.args.tone
+      ? resolveTone(this.args.tone, PRETUI_TONES, 'neutral')
+      : undefined;
+  }
   get hasDelta() {
     return this.args.delta !== undefined;
   }
@@ -147,7 +163,14 @@ export class Stat extends Component<StatSignature> {
   }
   <template>
     <div class='pretui-stat' data-test-pretui-stat ...attributes>
-      <span class='pretui-stat-label'>{{@label}}</span>
+      <span class='pretui-stat-label' data-test-pretui-stat-label>{{#if
+          this.tone
+        }}<span
+            class='pretui-stat-dot'
+            data-tone={{this.tone}}
+            aria-hidden='true'
+            data-test-pretui-stat-dot
+          ></span>{{/if}}{{@label}}</span>
       <span
         class='pretui-stat-value'
         style={{this.valueStyle}}
@@ -186,6 +209,34 @@ export class Stat extends Component<StatSignature> {
           letter-spacing: var(--track-eyebrow, 0.08em);
           text-transform: uppercase;
           color: var(--muted-foreground);
+        }
+        .pretui-stat-dot {
+          --pretui-stat-dot-hue: var(--muted-foreground);
+          display: inline-block;
+          width: 0.5rem;
+          height: 0.5rem;
+          margin-inline-end: 0.375rem;
+          border-radius: 50%;
+          background-color: var(--pretui-stat-dot-hue);
+          vertical-align: 0.0625rem;
+        }
+        .pretui-stat-dot[data-tone='primary'] {
+          --pretui-stat-dot-hue: var(--primary);
+        }
+        .pretui-stat-dot[data-tone='info'] {
+          --pretui-stat-dot-hue: var(--info);
+        }
+        .pretui-stat-dot[data-tone='success'] {
+          --pretui-stat-dot-hue: var(--success);
+        }
+        .pretui-stat-dot[data-tone='warning'] {
+          --pretui-stat-dot-hue: var(--warning);
+        }
+        .pretui-stat-dot[data-tone='danger'] {
+          --pretui-stat-dot-hue: var(--destructive);
+        }
+        .pretui-stat-dot[data-tone='attention'] {
+          --pretui-stat-dot-hue: var(--attention);
         }
         .pretui-stat-value {
           font-size: var(--text-stat, 25px);

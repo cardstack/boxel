@@ -61,6 +61,8 @@ import {
   startOutboundGuard,
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
+import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
 import {
   keyLimitDefaultsFromEnv,
@@ -792,6 +794,25 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
+  // One for every realm this process serves: a policy card in one realm can
+  // govern another, so the audit of a write looks across all of them.
+  let policyWriteAuditor = createPolicyWriteAuditor({
+    dbAdapter,
+    realmFor: (url: URL) =>
+      reconciler
+        ? findRealm(url, { realms, reconciler, dbAdapter })
+        : Promise.resolve(undefined),
+    virtualNetwork,
+    policyPointerOf: async (url: string) =>
+      reconciler
+        ? await realmPolicyPointer(url, {
+            reconciler,
+            realmsRootPath,
+            virtualNetwork,
+          })
+        : null,
+  });
+
   // Construct the reconciler before the server so the server can hold a
   // reference to it. The reconciler doesn't begin its background poll
   // loop until reconciler.start() is called below, after server.start()
@@ -856,6 +877,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           callApi: createCallApiSender(dbAdapter, {
             probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
           }),
+          policyWriteAuditor,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

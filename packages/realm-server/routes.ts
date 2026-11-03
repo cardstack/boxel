@@ -109,6 +109,7 @@ import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
   KEY_BINDINGS_PATH,
+  KEY_POLICY_NOTICES_PATH,
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
@@ -159,6 +160,8 @@ import {
   handleRevokeKeyBinding,
 } from './handlers/handle-key-bindings.ts';
 import {
+  handleDeclineKeyPolicyNotice,
+  handleListKeyPolicyNotices,
   handleListKeyShareNotices,
   handleListKeyShares,
   handleResumeKeyShare,
@@ -519,6 +522,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_SHARE_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShareNotices(args),
+  );
+  router.get(
+    KEY_POLICY_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyPolicyNotices(args),
+  );
+  router.post(
+    `${KEY_POLICY_NOTICES_PATH}/:id/decline`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeclineKeyPolicyNotice(args),
   );
   router.get(
     `${OAUTH_PATH}/clients`,

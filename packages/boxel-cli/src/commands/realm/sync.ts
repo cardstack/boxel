@@ -13,6 +13,10 @@ import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import {
+  confirmPolicyAuditFor,
+  type ConfirmPolicyAudit,
+} from '../../lib/policy-audit.ts';
 import { reconcileSkillsMirror } from '../../lib/claude-skills-mirror.ts';
 import {
   type SyncManifest,
@@ -549,6 +553,8 @@ export interface SyncCommandOptions {
    * batch. See `SyncOptions.waitForIndex` for the rationale.
    */
   waitForIndex?: boolean;
+  /** See `SyncOptions.confirmPolicyAudit`. */
+  confirmPolicyAudit?: ConfirmPolicyAudit;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -598,11 +604,16 @@ export function registerSyncCommand(realm: Command): Command {
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
+    .option(
+      '--confirm-shared-keys',
+      "Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking",
+    )
     .action(
       async (
         localDir: string,
         realmUrl: string,
         options: {
+          confirmSharedKeys?: boolean;
           preferLocal?: boolean;
           preferRemote?: boolean;
           preferNewest?: boolean;
@@ -623,6 +634,9 @@ export function registerSyncCommand(realm: Command): Command {
           dryRun: options.dryRun,
           claudeSkills: options.claudeSkills,
           realmSecretSeed,
+          confirmPolicyAudit: confirmPolicyAuditFor({
+            confirmed: options.confirmSharedKeys,
+          }),
         });
         let hasPartialResults =
           (Array.isArray(result.pushed) && result.pushed.length > 0) ||
@@ -701,6 +715,7 @@ export async function sync(
         dryRun: options.dryRun,
         claudeSkills: options.claudeSkills,
         waitForIndex: options.waitForIndex,
+        confirmPolicyAudit: options.confirmPolicyAudit,
       },
       authenticator,
     );

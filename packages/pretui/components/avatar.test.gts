@@ -433,4 +433,29 @@ module('Pretui | components/avatar', function (hooks) {
     assert.strictEqual(hue(el), '', 'the hue is dropped whole');
     assert.notOk(el.getAttribute('style')?.includes('url('), 'nothing from the rejected value reaches the element');
   });
+  test('initials skip words that open with a symbol', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Talent & Resource' data-test-amp />
+        <Avatar @name='Jean-Luc Picard' data-test-hyphen />
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-amp]').textContent?.trim(), 'TR');
+    assert.strictEqual(q('[data-test-hyphen]').textContent?.trim(), 'JP');
+  });
+
+  test('@shape writes data-shape for rounded and square, nothing for the circle', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada' data-test-default />
+        <Avatar @name='Ada' @shape='circle' data-test-circle />
+        <Avatar @name='Ada' @shape='rounded' data-test-rounded />
+        <Avatar @name='Ada' @shape='square' data-test-square />
+      </template>,
+    );
+    assert.notOk(q('[data-test-default]').hasAttribute('data-shape'));
+    assert.notOk(q('[data-test-circle]').hasAttribute('data-shape'));
+    assert.strictEqual(q('[data-test-rounded]').getAttribute('data-shape'), 'rounded');
+    assert.strictEqual(q('[data-test-square]').getAttribute('data-shape'), 'square');
+  });
 });

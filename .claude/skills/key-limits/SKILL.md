@@ -49,12 +49,18 @@ and monthly budgets, which their calls spend as everyone's do:
   under `["key-limit","share","<id>","anonymous"]` for each period (at least 1
   call). Signed-in readers always keep the rest of both, whatever cap the
   key's owner set, or none.
-- **The key's anonymous cap, where its owner set one**: a daily budget of
-  calls (`user_keys.anonymous_daily_cap`) every such caller draws from
-  together, counted once across every realm the key is shared into, under
-  `["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
+- **The key's anonymous caps, where its owner set them**: a daily and a
+  monthly budget of calls (`user_keys.anonymous_daily_cap`,
+  `user_keys.anonymous_monthly_cap`), each optional and independent of the
+  other, that every such caller draws from together, counted once across
+  every realm the key is shared into, under
+  `["key-limit","key","<key-id>","anonymous"]` for each period (UTC day, UTC
+  month), with no clamp per share. A key with no daily cap counts no day
+  there, and likewise for the month. A call through two shares of one key
+  counts once against each (`callBudgets` spends each counter once per
+  call).
 
-`budgetsOf` in `lib/key-limits.ts` adds both. Reaching either refuses only
+`budgetsOf` in `lib/key-limits.ts` adds all of them. Reaching any refuses only
 callers who aren't signed in, `over-budget` with a detail saying "the limit on
 its shared key for people who aren't signed in is reached"; it sends no
 notice of its own. The share's budgets notify as always.
@@ -181,6 +187,16 @@ The answer is the limits in force, defaults filled in. A share's listing
 (`GET /_key-shares`, for its owner and the realm's direct writers) and a key's
 (`GET /_user-keys`, for its owner) carry `limits` the same way.
 
+From the terminal, `boxel keys limits <name>` (a personal key) or
+`boxel keys limits <label> --realm <url>` (a share) shows the limits in force,
+and with `--rate <burst>/<refill>`, `--daily <n>` or `--monthly <n>` sets
+them; `default` for any of them is null, the platform's default. Setting
+them uses the profile's secure session (`boxel keys sign-in`), reading them
+the ordinary one. A share is looked up among the user's own shares, then in
+the realm's listing, so a writer who doesn't own it gets the realm server's
+403, not a local "no such share". `boxel keys usage`, with the same
+arguments, reads what the share or key has served (see [Usage](#usage)).
+
 ## Notices
 
 `key_limit_notices` holds one row per recipient when a period's use reaches
@@ -202,15 +218,20 @@ call nothing.
 ## Usage
 
 Each `callApi` invocation whose binding resolved to a share or a personal key
-is one row in `key_uses`, against that share (`share_id`) or key (`key_id`),
+is recorded in `key_uses`, against that share (`share_id`) or key (`key_id`),
 interactive and pipeline alike (`mode`), whether the vendor answered
 (`outcome` `sent`, with its `status` and `host`) or the call was refused
-(`refused`, with its `code`). A refusal raised while the slots were being
+(`refused`, with its `code`). A sent call is one row. Refusals are collapsed:
+those of one UTC minute (`refusal_window`) that match in share or key, realm,
+operation, caller, mode, code, status and host are one row, whose `count` is
+how many there were and whose `created_at` is the latest. A caller who keeps
+calling past a limit adds a row a minute, so read uses with `SUM(count)`,
+never `COUNT(*)`. A refusal raised while the slots were being
 filled is recorded against the one share or key that refused it; one raised
 before any binding was found (`binding-not-approved`) names no key and is only
 on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
-the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each write
-removes its subject's older rows. The code is `lib/key-uses.ts`. Like the other
+the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each
+realm-server process removes every older row, at most hourly, on a write. The code is `lib/key-uses.ts`. Like the other
 key tables, it's withheld from `readonly_role` and from the SQLite dump.
 
 `GET /_key-shares/:id/usage` (the share's realm's direct writers) and
@@ -225,7 +246,7 @@ into one entry, `withheld: true`.
 
 ```sql
 -- A share's refusals this month, by code.
-SELECT code, COUNT(*) FROM key_uses
+SELECT code, SUM(count) FROM key_uses
 WHERE share_id = '<share-id>' AND outcome = 'refused'
   AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
 GROUP BY code;

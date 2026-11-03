@@ -251,6 +251,7 @@ module(basename(import.meta.filename), function () {
         [
           'anonymous',
           'anonymousDailyCap',
+          'anonymousMonthlyCap',
           'createdAt',
           'kind',
           'limits',
