@@ -2708,6 +2708,41 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(ENTRY).isFocused('focus goes back to the entry');
         assert.dom('[data-test-ai-assistant-panel]').exists();
       });
+
+      // Agents sits too near the page's end to reach the top, so the jump
+      // must not hand the rest of the scroll to the ancestors around the
+      // dashboard, which have no way back.
+      test('jumping to Agents scrolls only the dashboard', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
+
+        await click(ENTRY);
+        // The jump is a smooth scroll: wait for it to start and come to rest.
+        let last = -1;
+        let restingPolls = 0;
+        await waitUntil(
+          () => {
+            let top = scroller.scrollTop;
+            restingPolls = top === last ? restingPolls + 1 : 0;
+            last = top;
+            return top > 0 && restingPolls >= 10;
+          },
+          { timeout: 3000 },
+        );
+
+        let scrolledAncestors: Element[] = [];
+        for (let el = scroller.parentElement; el; el = el.parentElement) {
+          if (el.scrollTop !== 0) {
+            scrolledAncestors.push(el);
+          }
+        }
+        assert.strictEqual(
+          scrolledAncestors.length,
+          0,
+          'no ancestor of the dashboard is scrolled',
+        );
+        assert.dom(ENTRY).hasAttribute('aria-current', 'location');
+      });
     });
 
     module('get started', function () {
