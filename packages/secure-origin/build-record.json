@@ -918,7 +918,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 336782,
+      "bytes": 338738,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1093,7 +1093,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/app-handoff.js",
-          "size": 1843
+          "size": 1874
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1103,7 +1103,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 7839
+          "size": 8063
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1127,13 +1127,18 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/anonymous-caps.ts",
+          "size": 565
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/anonymous-use-fields.gts",
-          "size": 3573
+          "size": 4688
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 8212
+          "size": 8251
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1178,7 +1183,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 16120
+          "size": 16591
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1193,7 +1198,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 22301
+          "size": 22822
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1288,7 +1293,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 15153
+          "size": 15034
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1298,7 +1303,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12177
+          "size": 12051
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1428,7 +1433,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/sign-out-page.gts",
-          "size": 774
+          "size": 893
         },
         {
           "package": "@cardstack/secure-origin",

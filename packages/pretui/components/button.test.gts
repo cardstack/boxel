@@ -6,6 +6,7 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Button } from './button';
+import PlusIcon from '@cardstack/boxel-icons/plus';
 
 function btn(sel = '[data-test-pretui-button]'): HTMLButtonElement {
   return document.querySelector(sel) as HTMLButtonElement;
@@ -324,5 +325,37 @@ module('Pretui | components/button', function (hooks) {
       'm',
       'falls back to the default size',
     );
+  });
+
+  test('@display: label, short and icon', async function (assert) {
+    class State {
+      @tracked display: 'label' | 'short' | 'icon' = 'label';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Button @display={{state.display}} @icon={{PlusIcon}} @label='Add task' @shortLabel='Add'>Add task</Button>
+      </template>,
+    );
+    assert.strictEqual(btn().textContent?.trim(), 'Add task');
+    assert.false(btn().hasAttribute('aria-label'), 'the visible label names it');
+    assert.ok(btn().querySelector('svg'), 'the icon sits before the label');
+
+    state.display = 'short';
+    await settled();
+    assert.strictEqual(btn().textContent?.trim(), 'Add');
+    assert.strictEqual(btn().getAttribute('title'), 'Add task', 'the full label is the title');
+
+    state.display = 'icon';
+    await settled();
+    assert.strictEqual(btn().textContent?.trim(), '', 'no text on the face');
+    assert.strictEqual(btn().getAttribute('aria-label'), 'Add task');
+    assert.strictEqual(btn().getAttribute('title'), 'Add task');
+  });
+
+  test("@display 'icon' without @icon or @label keeps the label", async function (assert) {
+    await render(<template><Button @display='icon'>Save</Button></template>);
+    assert.strictEqual(btn().textContent?.trim(), 'Save');
+    assert.false(btn().hasAttribute('aria-label'));
   });
 });
