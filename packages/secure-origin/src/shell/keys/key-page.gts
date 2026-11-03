@@ -14,9 +14,9 @@
 // changes there.
 // Each key that can be shared says whether people who aren't signed in can
 // use it, with its optional daily and monthly anonymous caps, and Change
-// opens a panel to turn that on or off and set the caps. It is the key's own setting, its owner's
-// decision whatever workspaces it is shared into; a workspace's policy says
-// only whether such people can use its cards there.
+// opens a panel to turn that on or off and set the caps. It is the key's own
+// setting, its owner's decision whatever workspaces it is shared into; a
+// workspace's policy says only whether such people can use its cards there.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and

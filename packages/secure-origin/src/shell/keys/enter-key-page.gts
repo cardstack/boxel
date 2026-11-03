@@ -22,8 +22,9 @@
 // decision about the key itself, not about any one workspace. Ticked, they
 // can use it wherever a workspace it is shared into lets them use its cards,
 // up to optional anonymous caps on their calls a day and a month, all
-// together, across every such workspace. It can be changed later on the key page. An OAuth app
-// isn't asked: people connect their own accounts through it.
+// together, across every such workspace. It can be changed later on the key
+// page. An OAuth app isn't asked: people connect their own accounts through
+// it.
 //
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
