@@ -6,6 +6,8 @@ import { Avatar } from './avatar';
 import { AvatarGroup } from './avatar-group';
 import { HUE_OPTIONS } from '../demo-ink-feedback';
 
+const SHAPE_OPTIONS = ['circle', 'rounded', 'square'];
+
 // ── Avatar ← avatar/usage.gts ────────────────────────────────────────────
 // Dropped knobs: userId (Pretui hue + initials derive from @name alone),
 // isReady (no async readiness gate — Avatar renders immediately).
@@ -14,9 +16,11 @@ class AvatarUsage extends GlimmerComponent {
   @tracked src = '';
   @tracked hue = '';
   @tracked size = 40;
+  @tracked shape = 'circle';
   setName = (v: string) => (this.name = v);
   setSrc = (v: string) => (this.src = v);
   setHue = (v: string) => (this.hue = v);
+  setShape = (v: string) => (this.shape = v);
   setSize = (v: number | null) => {
     if (v !== null) {
       this.size = v;
@@ -24,6 +28,9 @@ class AvatarUsage extends GlimmerComponent {
   };
   get srcVal() {
     return this.src || undefined;
+  }
+  get shapeVal() {
+    return this.shape as 'circle' | 'rounded' | 'square';
   }
   get hueVal() {
     return this.hue || undefined;
@@ -39,6 +46,7 @@ class AvatarUsage extends GlimmerComponent {
           @src={{this.srcVal}}
           @hue={{this.hueVal}}
           @size={{this.size}}
+          @shape={{this.shapeVal}}
         />
         <AvatarGroup>
           <Avatar @name='John Doe' @size={{28}} />
@@ -46,6 +54,8 @@ class AvatarUsage extends GlimmerComponent {
           <Avatar @name='Grace Hopper' @size={{28}} />
           <Avatar @name='Alan Turing' @size={{28}} />
         </AvatarGroup>
+        <Avatar @name='Talent & Resource' @shape='rounded' @size={{40}} />
+        <Avatar @name='Ops Team' @shape='square' @size={{40}} />
       </:example>
       <:api as |Args|>
         <Args.String
@@ -67,6 +77,14 @@ class AvatarUsage extends GlimmerComponent {
           @options={{HUE_OPTIONS}}
           @value={{this.hue}}
           @onInput={{this.setHue}}
+        />
+        <Args.String
+          @name='shape'
+          @description="The corner: 'circle' (an identity disc), 'rounded' (the theme's --radius, for an app or brand mark) or 'square'."
+          @options={{SHAPE_OPTIONS}}
+          @defaultValue='circle'
+          @value={{this.shape}}
+          @onInput={{this.setShape}}
         />
         <Args.Number
           @name='size'
