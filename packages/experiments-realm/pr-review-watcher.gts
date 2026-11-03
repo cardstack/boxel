@@ -77,9 +77,16 @@ const GITHUB_GRAPHQL = 'https://api.github.com/graphql';
 const AUTH = { authorization: 'Bearer {{userKey}}' };
 const ANSWER = bxl`{status: .status, viewer: .body.data.viewer.login, total: .body.data.search.issueCount, pullRequests: .body.data.search.nodes, errors: .body.errors}`;
 
-// What a person needs to give the card, said where it asks for the key.
-const TOKEN_ADVICE =
-  'a GitHub token that can read the private repositories and teams in your organization: a classic token with the repo and read:org scopes, or a fine-grained token for the organization (which the organization has to approve) with read access to pull requests and members';
+// The line the secure window shows as the card's reason for opening it.
+const SIGN_IN_REASON =
+  'PR review watcher lists the pull requests waiting on your review, as you, by signing in to GitHub';
+const TOKEN_REASON =
+  'PR review watcher needs a GitHub token that can read the pull requests in your organization: a fine-grained token with read-only Pull requests and Members, or a classic token with repo and read:org';
+
+// Boxel's own GitHub App, which a person signs in to GitHub through. It reads
+// an organization's private repositories only once it is installed there.
+const INSTALL_GITHUB_APP =
+  'https://github.com/apps/boxel-read-only/installations/new';
 
 interface SearchAnswer {
   status: number;
@@ -106,7 +113,7 @@ class TokenGuide extends Component<{
 
   <template>
     <Collapsible
-      @label='How to make a GitHub token'
+      @label='Or use a GitHub token: how to make one'
       @defaultOpen={{@defaultOpen}}
       class='token-guide'
       data-test-token-guide
@@ -153,8 +160,8 @@ class TokenGuide extends Component<{
         </li>
         <li>
           Back here, choose
-          <strong>Connect GitHub</strong>. In the window that opens, check that
-          its address bar shows Boxel's secure address, choose
+          <strong>Use a token instead</strong>. In the window that opens, check
+          that its address bar shows Boxel's secure address, choose
           <strong>Add a new key</strong>, and paste the token there. Never paste
           it into a card, a chat or a file.
         </li>
@@ -226,7 +233,6 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   // GitHub's errors for what it left out of an answer it otherwise gave.
   @tracked partial: string | undefined;
   openedWindow = false;
-  tokenAdvice = TOKEN_ADVICE;
 
   get record(): PRReviewWatcher {
     return this.args.model as PRReviewWatcher;
@@ -236,11 +242,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     return this.args.context?.keyReadiness?.('waitingOnMyReview', this.record);
   }
 
-  get blockedOnKey() {
-    return (
-      this.readiness === 'needs-connect' || this.readiness === 'needs-approval'
-    );
-  }
+  installApp = INSTALL_GITHUB_APP;
 
   get tabs() {
     return [
@@ -261,15 +263,20 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   };
 
   // The lists load when the watcher opens with its key ready, and again
-  // whenever readiness comes back to ready, such as after the token is
-  // replaced. With no key to send yet, the secure window opens once.
+  // whenever readiness comes back to ready, such as after the key is
+  // replaced. Opened with nothing to send yet, the watcher opens the secure
+  // window once, on the page that fixes it: signing in to GitHub when the
+  // person has no key for it, approving the watcher's requests when they
+  // have one.
   readinessChanged = (readiness: string) => {
     if (readiness === 'ready' && !this.loading) {
       this.load();
-    } else if (
-      (readiness === 'needs-connect' || readiness === 'needs-approval') &&
-      !this.openedWindow
-    ) {
+    } else if (this.openedWindow) {
+      return;
+    } else if (readiness === 'needs-connect') {
+      this.openedWindow = true;
+      this.openWindow('connect');
+    } else if (readiness === 'needs-approval') {
       this.openedWindow = true;
       this.openWindow('approve');
     }
@@ -331,7 +338,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
 
   // The secure window approves every operation on the card in one
   // confirmation, so it is opened for the one the card is blocked on.
-  openWindow = async (mode: 'approve' | 'review-changes' | 'replace-key') => {
+  openWindow = async (
+    mode: 'connect' | 'approve' | 'review-changes' | 'replace-key',
+  ) => {
     let toolContext = this.args.context?.toolContext;
     if (!toolContext || !this.record.id) {
       return;
@@ -341,16 +350,15 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         mode,
         cardId: this.record.id,
         operation: 'waitingOnMyReview',
-        reason:
-          mode === 'replace-key'
-            ? 'GitHub rejected your token. Replace it with ' + TOKEN_ADVICE
-            : 'PR review watcher needs ' + TOKEN_ADVICE,
+        reason: mode === 'connect' ? SIGN_IN_REASON : TOKEN_REASON,
       });
     } catch (e) {
       this.problem = e instanceof Error ? e.message : String(e);
     }
   };
-  connect = () => this.openWindow('approve');
+  signIn = () => this.openWindow('connect');
+  // The approve page's key choice adds a pasted key as well as choosing one.
+  allow = () => this.openWindow('approve');
   review = () => this.openWindow('review-changes');
   replace = () => this.openWindow('replace-key');
 
@@ -388,26 +396,59 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         {{/if}}
       </header>
 
-      {{#if this.blockedOnKey}}
+      {{#if (eq this.readiness 'needs-connect')}}
         <Alert
           @tone='info'
-          @title='Connect your GitHub token'
+          @title='Sign in to GitHub to see your pull requests'
           data-test-needs-key
         >
           <:default>
-            The watcher lists pull requests as you, with
-            {{this.tokenAdvice}}. You enter it in Boxel's secure window, never
-            in this card.
+            The watcher reads pull requests as you, with your own GitHub
+            account, so it lists exactly what you can see on GitHub. You sign in
+            on GitHub's own page, through Boxel's read-only GitHub app; nothing
+            is ever typed into this card. For
+            {{@model.org}}'s private repositories, the app has to be
+            <a
+              href={{this.installApp}}
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+              installed on
+              {{@model.org}}</a>
+            once, by one of its owners.
           </:default>
           <:action>
             <Button
               @tone='primary'
-              {{on 'click' this.connect}}
-              data-test-connect
-            >Connect GitHub</Button>
+              {{on 'click' this.signIn}}
+              data-test-sign-in
+            >Sign in with GitHub</Button>
+            <Button
+              @appearance='outlined'
+              {{on 'click' this.allow}}
+              data-test-use-token
+            >Use a token instead</Button>
           </:action>
         </Alert>
-        <TokenGuide @org={{@model.org}} @defaultOpen={{true}} />
+        <TokenGuide @org={{@model.org}} />
+      {{else if (eq this.readiness 'needs-approval')}}
+        <Alert
+          @tone='info'
+          @title='Allow the watcher to use your GitHub key'
+          data-test-needs-approval
+        >
+          <:default>
+            You have a GitHub key in Boxel. Allow the watcher's two requests to
+            send it, when you open the card, in Boxel's secure window.
+          </:default>
+          <:action>
+            <Button
+              @tone='primary'
+              {{on 'click' this.allow}}
+              data-test-allow
+            >Allow</Button>
+          </:action>
+        </Alert>
       {{else if (eq this.readiness 'needs-reapproval')}}
         <Alert @tone='warning' @title='The watcher changed what it sends'>
           <:default>
@@ -432,19 +473,20 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       {{#if (or this.rejected (eq this.readiness 'credential-rejected'))}}
         <Alert
           @tone='danger'
-          @title='GitHub rejected your token'
+          @title='GitHub rejected your key'
           data-test-credential-rejected
         >
           <:default>
-            It may have expired or been revoked. Replace it, or try again if you
-            fixed it on GitHub.
+            The token may have expired or been revoked, or your sign-in was
+            revoked on GitHub. Replace it, or try again if you fixed it on
+            GitHub.
           </:default>
           <:action>
             <Button
               @tone='primary'
               {{on 'click' this.replace}}
               data-test-replace-key
-            >Replace token</Button>
+            >Replace key</Button>
             <Button
               @appearance='outlined'
               {{on 'click' this.load}}
