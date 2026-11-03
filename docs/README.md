@@ -7,7 +7,7 @@
 - Per-ticket plans, investigation notes and status reports do not belong here. Put them on the ticket.
 - A decision that outlives its PR goes in an ADR.
 
-CI Lint enforces this with `scripts/check-docs-dir.mts`. It fails on a file named like a ticket or a plan, and on a Markdown file that this README does not link to.
+CI Lint enforces this with `scripts/check-docs-dir.mts`. It fails on a file named like a ticket or a plan, on a Markdown file that this README does not link to, and on a link in this README to a file that is not there.
 
 ## Concepts
 

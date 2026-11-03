@@ -5,7 +5,9 @@
 //
 //   - is named like a ticket or a plan (contains `cs-<digits>`, or ends in
 //     `-plan.md`), or
-//   - is a Markdown file that docs/README.md does not link to.
+//   - is a Markdown file that docs/README.md does not link to,
+//
+// and when docs/README.md links to a file under docs/ that is not tracked.
 //
 // Per-ticket plans, investigation notes and status reports belong on the
 // tracker ticket, not in the repo. A decision that outlives its PR belongs in
@@ -27,25 +29,32 @@ import { join, posix } from 'node:path';
 const repoRoot = join(import.meta.dirname, '..');
 const warnOnly = process.argv.includes('--warn');
 
-const TICKET_OR_PLAN_NAME = /cs-[0-9]+|-plan\.md$/i;
+// The ticket half needs a non-letter before `cs-`, so `docs-2.md` and
+// `ecs-2-task-sizing.md` pass.
+const TICKET_OR_PLAN_NAME = /(?:^|[^a-z])cs-[0-9]+|-plan\.md$/i;
+// A link with a scheme (`https:`, `mailto:`) points outside the repo.
+const EXTERNAL_LINK = /^[a-z][a-z0-9+.-]*:/i;
 const WHERE_IT_GOES =
   'Put a per-ticket plan, investigation notes or a status report on the ticket instead. ' +
   'A decision that outlives its PR goes in an ADR (docs/adr/, see ADR 001). ' +
   'A durable concept or operations doc goes in docs/ with a link from docs/README.md, ' +
   'and a doc about one package goes in that package.';
 
-let files = execFileSync('git', ['ls-files', '--', 'docs'], {
+let tracked = execFileSync('git', ['ls-files', '--', 'docs'], {
   cwd: repoRoot,
   encoding: 'utf8',
 })
   .split('\n')
-  .filter((file) => file && !file.startsWith('docs/adr/'));
+  .filter(Boolean);
+let trackedSet = new Set(tracked);
+let files = tracked.filter((file) => !file.startsWith('docs/adr/'));
 
 let readme = readFileSync(join(repoRoot, 'docs', 'README.md'), 'utf8');
 let linked = new Set(
-  [...readme.matchAll(/\]\(([^)\s#]+)(?:#[^)]*)?\)/g)].map(([, target]) =>
-    posix.normalize(posix.join('docs', target)),
-  ),
+  [...readme.matchAll(/\]\(([^)\s#]+)(?:#[^)]*)?\)/g)]
+    .map(([, target]) => target)
+    .filter((target) => !EXTERNAL_LINK.test(target))
+    .map((target) => posix.normalize(posix.join('docs', target))),
 );
 
 let problems: string[] = [];
@@ -58,6 +67,11 @@ for (let file of files) {
     !linked.has(file)
   ) {
     problems.push(`${file}: not linked from docs/README.md.`);
+  }
+}
+for (let target of linked) {
+  if (target.startsWith('docs/') && !trackedSet.has(target)) {
+    problems.push(`docs/README.md: links to ${target}, which is not tracked.`);
   }
 }
 

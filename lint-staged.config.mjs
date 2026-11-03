@@ -7,7 +7,7 @@
 // edit here. All routing goes through scripts/lint-autofix.mjs, which applies
 // fixes, re-stages, and warns without ever blocking the commit.
 import { getFileInfo } from 'prettier';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // pnpm owns these files: it (re)writes them with its own serializer, so no
@@ -59,7 +59,7 @@ const PRETTIER_IGNORE = join(
 );
 
 // The repo-root docs/ directory, which scripts/check-docs-dir.mts guards.
-const ROOT_DOCS = join(dirname(fileURLToPath(import.meta.url)), 'docs', '');
+const ROOT_DOCS = join(dirname(fileURLToPath(import.meta.url)), 'docs') + sep;
 const isUnderRootDocs = (file) => resolve(file).startsWith(ROOT_DOCS);
 
 // eslint also applies prettier formatting for these via eslint-plugin-prettier,
