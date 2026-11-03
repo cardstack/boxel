@@ -9,15 +9,20 @@ import {
   fetchGenerationCostWithBackoff,
   type GenerationCostLookupOptions,
 } from '@cardstack/billing/ai-billing';
-import { OutboundRefusedError, outboundFetch } from './outbound/client.ts';
+import {
+  OutboundRefusedError,
+  OutboundResponseTooLargeError,
+  outboundFetch,
+} from './outbound/client.ts';
 
 const log = logger('credit-strategies');
 
 // The cost lookup sends the system key, so it goes out through the guarded
 // outbound client like every other call that does. The client attaches the key
 // itself, under the name of the endpoint it belongs to, so the Authorization
-// header the billing lookup builds is left off. A refused destination is
-// refused the same way on every attempt, so it is not retried.
+// header the billing lookup builds is left off. A refused destination, and an
+// answer over the size cap, are refused the same way on every attempt, so
+// neither is retried.
 function guardedCostLookup(
   apiKey: string,
   keyName: string,
@@ -44,7 +49,11 @@ function guardedCostLookup(
           },
         },
       }),
-    isRetryable: (error) => !(error instanceof OutboundRefusedError),
+    isRetryable: (error) =>
+      !(
+        error instanceof OutboundRefusedError ||
+        error instanceof OutboundResponseTooLargeError
+      ),
   };
 }
 

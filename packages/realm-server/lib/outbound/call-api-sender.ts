@@ -25,6 +25,7 @@ import { recordKeyUses } from '../key-uses.ts';
 import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundTimeoutError,
   describeOutboundError,
   outboundFetch,
@@ -273,6 +274,18 @@ function refusalFor(error: unknown, described: string): OperationFailure {
       title: 'Destination refused',
       detail: error.message,
       meta: { reason: error.reason },
+    });
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    log.warn(
+      `callApi response refused for size: ${error.message} (${described})`,
+    );
+    return new OperationFailure({
+      status: 502,
+      code: 'response-too-large',
+      title: 'Response too large',
+      detail: error.message,
+      meta: { cap: error.cap, measured: error.measured },
     });
   }
   if (error instanceof OutboundTimeoutError) {

@@ -1209,7 +1209,7 @@
         },
         "id": 22,
         "panels": [],
-        "title": "Response size cap (observe mode)",
+        "title": "Response size cap",
         "type": "row"
       },
       {
@@ -1217,7 +1217,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Decompressed response sizes the outbound client measured (the outbound channel's \"outbound response size\" line), by path. The cap is observed, not enforced: choose enforced values from the max here. The dashed lines are each path's configured cap.",
+        "description": "Decompressed response sizes the outbound client measured (the outbound channel's \"outbound response size\" line), by path. The dashed lines are each path's configured cap; a max approaching one is a legitimate response the cap is about to refuse (see the outbound-guard skill for revisiting the caps).",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1343,7 +1343,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "The outbound channel's wouldRefuse warnings, by path and kind: declared-length (Content-Length over the cap) or stream-reached-cap (the decompressed body passed it). Any line here is a real response an enforced cap would break.",
+        "description": "Responses the outbound client refused for size (the outbound channel's \"over size cap\" warnings), by path and kind: declared-length (Content-Length over the cap, refused before reading) or stream-reached-cap (the decompressed body passed it, and the stream ended there). A callApi refusal reaches the card as response-too-large; a system-key one as a 502 or a reset response. A line here from a legitimate vendor means the cap is too low.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1396,13 +1396,13 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (path, wouldRefuse) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"wouldRefuse=\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) .*wouldRefuse=(?P<wouldRefuse>\\\\S+)\" [$__interval]))",
-            "legendFormat": "{{path}} {{wouldRefuse}}",
+            "expr": "sum by (path, refused) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"refused=\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) .*refused=(?P<refused>\\\\S+)\" [$__interval]))",
+            "legendFormat": "{{path}} {{refused}}",
             "refId": "A",
             "queryType": "range"
           }
         ],
-        "title": "Responses an enforced cap would refuse",
+        "title": "Responses refused for size",
         "type": "timeseries"
       },
       {
