@@ -254,7 +254,9 @@ measured by a render detector at the start of the render pass, and only `<Layout
 them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
 places. A `layoutId` hand-off needs one too: the outgoing element's box is only known if something
 measured it before it left. In development the first such element logs a console warning with the
-element attached. `<Presence>` measures only on a pass where its `@items` change, so it covers a
+element attached. The warning reads the element's DOM ancestors, so it also fires for an element
+rendered through a plain `{{#in-element}}` inside a group, which lands outside the group's DOM; a
+`<LayoutGroup>` inside the `{{#in-element}}` block quiets it. `<Presence>` measures only on a pass where its `@items` change, so it covers a
 list that reorders, adds or removes, but a row inside one that grows for any other reason still
 needs a `<LayoutGroup>`. The group goes around the `{{#each}}`, not inside each row: Glimmer moves a
 keyed row's DOM before it re-renders anything inside the row, so a group inside the row measures too

@@ -98,6 +98,12 @@ let warnedUngroupedLayout = false;
  * `layoutChange()` is the one other way to snapshot, and this cannot see it:
  * an element animated only through `layoutChange()` is warned about too, and
  * a <LayoutGroup> around it quiets the warning.
+ *
+ * The check reads the element's DOM ancestors, so it can warn about an element
+ * that is measured. One rendered through a plain `{{#in-element}}` inside a
+ * <LayoutGroup> lands outside the group's DOM, and only Motion's marked
+ * portals are exempt. A <LayoutGroup> inside the `{{#in-element}}` block
+ * quiets it.
  */
 export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
   if (
