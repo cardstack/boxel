@@ -684,6 +684,14 @@
     },
     {
       "entrypoint": "glimmer-motion",
+      "symbol": "RENDER_DETECTOR_ATTRIBUTE",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
       "symbol": "snapshotOnRender",
       "source": "packages/glimmer-motion/src/layout-group.gts",
       "kind": "value",

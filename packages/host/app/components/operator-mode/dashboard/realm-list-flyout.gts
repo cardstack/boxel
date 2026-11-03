@@ -22,7 +22,7 @@ import HostedPill from './hosted-pill';
 import type { SectionFlyoutSignature } from './sections';
 
 interface Signature {
-  Args: SectionFlyoutSignature['Args'] & {
+  Args: Omit<SectionFlyoutSignature['Args'], 'showSection'> & {
     title: string;
     realmURLs: string[];
     emptyMessage: string;

@@ -847,13 +847,30 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the secure window learns where to send the user for Google', async function (assert) {
-      let response = await request.get('/_secure-session/google');
+      let response = await request
+        .get('/_secure-session/google')
+        .set('Origin', secureOrigin);
       assert.strictEqual(response.status, 200);
       assert.deepEqual(response.body.data.attributes, {
         authorizationEndpoint: `${google.issuer}/authorize`,
         clientId: GOOGLE_CLIENT_ID,
         redirectURI: `${secureOriginURL.href}/google-callback`,
       });
+    });
+
+    test('where to send the user for Google is answered only for the secure origin', async function (assert) {
+      for (let origin of [APP_ORIGIN, 'null', null]) {
+        let req = request.get('/_secure-session/google');
+        if (origin !== null) {
+          req = req.set('Origin', origin);
+        }
+        let response = await req;
+        assert.strictEqual(
+          response.status,
+          403,
+          `it is refused (Origin: ${origin ?? 'none'})`,
+        );
+      }
     });
 
     test('signing in with Google gives a session for the linked account', async function (assert) {

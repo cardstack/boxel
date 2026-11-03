@@ -110,8 +110,9 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
           box-shadow var(--oc-snap),
           background-color var(--oc-snap);
       }
+      /* --hover is translucent, so it's laid over the card, not in place of it */
       .pretui-optioncard:hover {
-        background-color: var(--hover);
+        background-image: linear-gradient(var(--hover), var(--hover));
       }
       .pretui-optioncard[data-selected='true'] {
         box-shadow:

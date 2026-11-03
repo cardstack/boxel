@@ -18,7 +18,7 @@ source (`packages/glimmer-motion/src/index.ts`, `packages/choreo/src/index.ts`).
 ## Choose only the guidance needed
 
 - For an animation pattern, read `.claude/skills/motion-pattern/SKILL.md`, then
-  its selected specialist. The shared Glimmer invariants are the three rules in
+  its selected specialist. The shared Glimmer invariants are the four rules in
   `motion-element`; do not repeat them in every implementation note.
 - For gates, derived motion, commands, delivery or custom vocabulary, read
   [advanced-orchestration.md](references/advanced-orchestration.md).

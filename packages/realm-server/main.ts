@@ -61,6 +61,7 @@ import {
   startOutboundGuard,
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
+import { publishedMountOf } from './lib/published-realm.ts';
 import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
 import { setKeyLimitNoticeSender } from './lib/key-limits.ts';
 import { createSendEvent } from '@cardstack/runtime-common/send-event';
@@ -839,6 +840,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
         );
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      let publishedMount = publishedMountOf(row);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
         row.kind,
         FULL_INDEX_ON_STARTUP_OVERRIDE,
@@ -884,12 +886,15 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               : Promise.resolve(undefined),
           callApi: createCallApiSender(dbAdapter, {
             probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
+            ...(publishedMount.publishedFrom
+              ? { publishedFrom: publishedMount.publishedFrom }
+              : {}),
           }),
           policyWriteAuditor,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
-          ...(row.kind === 'published' ? { published: true as const } : {}),
+          ...publishedMount.realm,
           // The boot index is system-initiated work, so it inherits the same
           // per-realm tier the post-deploy sweep uses: the base realm above
           // the system tier, every other realm at it. Without this the base

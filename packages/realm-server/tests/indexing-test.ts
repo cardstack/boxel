@@ -6130,6 +6130,10 @@ module(basename(import.meta.filename), function () {
       });
 
       test('can tombstone deleted files when running fromScratch indexing', async function (assert) {
+        let prerenderBaseline = await maxPrerenderHtmlJobId(
+          testDbAdapter,
+          realm.url,
+        );
         await realm.write(
           'test-file.json',
           JSON.stringify({
@@ -6151,6 +6155,13 @@ module(basename(import.meta.filename), function () {
           new URL(`${testRealm}test-file`),
         );
         assert.strictEqual(testFile?.type, 'instance', 'test file was indexed');
+        // The write's render pass reads the file too. Removed behind the
+        // realm's back, the file would read as missing while the realm still
+        // records it as just created, and that pass would re-read it through
+        // its whole re-read budget (see WrittenFileRereads).
+        await settlePrerenderHtmlJobs(testDbAdapter, realm.url, {
+          afterJobId: prerenderBaseline,
+        });
 
         await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
         realm.__testOnlyClearCaches();

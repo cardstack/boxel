@@ -1664,11 +1664,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    */
   <template>
     {{this.renderDetector}}
+    {{! the render-detector marker goes after the splat, so a caller cannot drop it: glimmer-motion's ungrouped-layout check finds the region by it }}
     <div
       data-choreo={{if @id @id ''}}
       data-motion-host
       {{this.host}}
       ...attributes
+      data-motion-render-detector
     >
       <div
         data-choreo-orphans
