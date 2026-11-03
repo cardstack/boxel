@@ -237,8 +237,11 @@ export function buildQuerySections(
   // is the one the eye lands on.
   let inCurrent =
     opts.offerToCreate?.realmURL?.href ?? opts.offerToCreate?.relativeTo?.href;
+  // The longest match, so a workspace nested under another is still found.
   let current = inCurrent
-    ? sections.find((section) => inCurrent!.startsWith(section.realmUrl))
+    ? sections
+        .filter((section) => inCurrent!.startsWith(section.realmUrl))
+        .sort((a, b) => b.realmUrl.length - a.realmUrl.length)[0]
     : undefined;
   if (current) {
     current.isCurrent = true;

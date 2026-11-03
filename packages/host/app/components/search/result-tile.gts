@@ -119,6 +119,13 @@ export default class SearchResultTile extends Component<Signature> {
     return this.args.adornPositionLabel ?? noopPositionLabel;
   }
 
+  private get createNewLabel(): string {
+    let realmName = this.args.newCardRealmName;
+    return realmName
+      ? `Create New ${this.cardRefName} in ${realmName}`
+      : `Create New ${this.cardRefName}`;
+  }
+
   private get isNewCard(): boolean {
     return this.args.newCard != null;
   }
@@ -290,7 +297,11 @@ export default class SearchResultTile extends Component<Signature> {
           height='16'
           role='presentation'
         />
-        <span class='create-new-label' data-test-create-new-label>
+        <span
+          class='create-new-label'
+          title={{this.createNewLabel}}
+          data-test-create-new-label
+        >
           Create New
           {{this.cardRefName}}
           {{#if @newCardRealmName}}
@@ -356,8 +367,17 @@ export default class SearchResultTile extends Component<Signature> {
         justify-content: flex-start;
         letter-spacing: var(--boxel-lsp-xs);
       }
+      .plus-icon {
+        flex-shrink: 0;
+      }
       .plus-icon > :deep(path) {
         stroke: none;
+      }
+      .create-new-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .selection-indicator {
