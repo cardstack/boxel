@@ -570,7 +570,9 @@ module(basename(import.meta.filename), function () {
                 op: 'invoke',
                 'boxel:name': name,
                 href: '/cardstack',
-                ...(data ? { data } : {}),
+                // Every declared param needs a value; the first page's
+                // cursor is null.
+                data: data ?? { after: null },
               },
             ],
           }),

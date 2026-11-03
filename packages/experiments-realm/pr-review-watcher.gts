@@ -91,8 +91,8 @@ const ANSWER = bxl`{status: .status, viewer: .body.data.viewer.login, total: .bo
 // The line the secure window shows as the card's reason for opening it.
 const SIGN_IN_REASON =
   'PR review watcher lists the pull requests waiting on your review, as you, by signing in to GitHub';
-const TOKEN_REASON =
-  'PR review watcher needs a GitHub token that can read the pull requests in your organization: a fine-grained token with read-only Pull requests and Members, or a classic token with repo and read:org';
+const KEY_REASON =
+  'PR review watcher lists the pull requests waiting on your review, as you, with your GitHub sign-in or a GitHub token that can read pull requests and members';
 
 // Boxel's own GitHub App, which a person signs in to GitHub through. It reads
 // an organization's private repositories only once it is installed there.
@@ -577,9 +577,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     let viewer = '';
     let after: string | undefined;
     for (let page = 1; ; page++) {
-      // The first page sends no cursor, which GitHub reads as the start.
-      let call = ops[name] as (payload: { after?: string }) => Promise<unknown>;
-      let answer = (await call(after ? { after } : {})) as SearchAnswer;
+      // The first page sends a null cursor, which GitHub reads as the start.
+      let call = ops[name] as (payload: {
+        after: string | null;
+      }) => Promise<unknown>;
+      let answer = (await call({ after: after ?? null })) as SearchAnswer;
       if (answer.status !== 200 || !answer.pullRequests) {
         return {
           viewer,
@@ -624,7 +626,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         mode,
         cardId: this.record.id,
         operation: 'waitingOnMyReview',
-        reason: mode === 'connect' ? SIGN_IN_REASON : TOKEN_REASON,
+        reason: mode === 'connect' ? SIGN_IN_REASON : KEY_REASON,
       });
     } catch (e) {
       this.problem = e instanceof Error ? e.message : String(e);
