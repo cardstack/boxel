@@ -333,11 +333,17 @@ let answer = name && (await operations(model)[name]({ lat, lon }));
 
 It says which key it is using, and when neither is ready, it shows both
 answers and offers what fixes each. Opening the secure window does this:
-`enter-key`, `approve` or `review-changes` for the caller's own operation,
-`share-key` for a direct writer of a realm with no share, and `swap-key`
-for a direct writer of a realm whose share stopped. A call that a fix makes
-ready needs no reload: readiness is asked again when the user comes back from
-the window.
+`approve` for the caller's own operation at `needs-connect` or
+`needs-approval`, `review-changes` at `needs-reapproval`, `share-key` for a
+direct writer of a realm with no share, and `swap-key` for a direct writer of
+a realm whose share stopped. At `needs-connect`, open `approve` rather than
+`enter-key`: the approve page lets the user pick one of their keys or add one,
+and approving grants the key the operation's destination. A key saved through
+`enter-key` alone has no grant, so readiness stays `needs-connect`. The
+approve page starts on scheduled pipelines only; the user has to choose to
+let the operations run when a card is opened, which is what a card calling
+from its template needs. A call that a fix makes ready needs no reload:
+readiness is asked again when the user comes back from the window.
 
 Don't write one operation whose slot falls back from the realm's key to the
 user's. Who pays would be implicit: every share that was suspended or over

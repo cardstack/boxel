@@ -384,11 +384,19 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // see the realm's shares, so for anyone else this stays false.
   @tracked isWriter = false;
   @tracked share: ShareInfo | undefined;
+  // Whether the signed-in writer has an active share in this realm that
+  // isn't approved for the app yet: a share names no service until its owner
+  // approves it for an operation, so this is the share they might mean.
+  @tracked hasUnboundShare = false;
   @tracked query = '';
   @tracked matches: CityMatch[] = [];
   @tracked searchMessage: string | undefined;
   places = new TrackedMap<number, PlaceWeather>();
   #openedWindow = false;
+  // The key the app last started loading with, kept out of tracking: the
+  // modifier that starts a load must not re-run because the load changed
+  // state it read, or every load would start another.
+  #requestedFrom: KeySource | undefined;
 
   get units(): Units {
     return (
@@ -488,12 +496,18 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
 
   // Fetches once a key is ready, and again whenever the key in use changes:
   // the reader coming back from the secure window with their own key, say.
-  // A modifier runs after render, so no call is made while rendering.
+  // It reads nothing tracked but its arguments, so only a change of key or
+  // of problem re-runs it, and it starts a load only for a key it hasn't
+  // already started one for. A problem stops it until the reader refreshes
+  // or comes back from the secure window. A modifier runs after render, so
+  // no call is made while rendering.
   loadWhenReady = modifier(
-    (_element: Element, [source]: [KeySource | undefined]) => {
-      if (source && source !== this.loadedFrom && !this.problem) {
-        // Started outside the render that read this state, since the task
-        // writes it.
+    (
+      _element: Element,
+      [source, problem]: [KeySource | undefined, Problem | undefined],
+    ) => {
+      if (source && !problem && source !== this.#requestedFrom) {
+        this.#requestedFrom = source;
         queueMicrotask(() => this.load.perform(source));
       }
     },
@@ -509,6 +523,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     let back = () => {
       if (this.#openedWindow) {
         this.#openedWindow = false;
+        this.#requestedFrom = undefined;
         this.problem = undefined;
         this.loadShares.perform();
       }
@@ -542,16 +557,20 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             suspensionReason: share.suspensionReason,
           }
         : undefined;
+      this.hasUnboundShare = (result.shares ?? []).some(
+        (s: RealmKeyShareField) =>
+          s.own && s.state === 'active' && (s.operations ?? []).length === 0,
+      );
     } catch {
       // Someone who isn't signed in, or isn't a direct writer, is never
       // shown the realm's shares.
       this.isWriter = false;
       this.share = undefined;
+      this.hasUnboundShare = false;
     }
   });
 
   load = restartableTask(async (source: KeySource) => {
-    this.problem = undefined;
     let locations = this.args.model.locations;
     try {
       await Promise.all(
@@ -662,8 +681,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
 
   refresh = () => {
-    this.problem = undefined;
     let source = this.source;
+    this.#requestedFrom = source;
+    this.problem = undefined;
     if (source) {
       this.load.perform(source);
     }
@@ -730,7 +750,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     async (
       request:
         | {
-            mode: 'enter-key' | 'approve' | 'review-changes' | 'replace-key';
+            mode: 'approve' | 'review-changes' | 'replace-key';
             operation: string;
             reason: string;
           }
@@ -750,9 +770,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     },
   );
 
+  // The approve page lets the reader pick one of their keys or add one, and
+  // approving grants it the places the app sends it. Saving a key alone
+  // grants it nowhere, so readiness would still answer `needs-connect`.
   useOwnKey = () =>
     this.openWindow.perform({
-      mode: 'enter-key',
+      mode: 'approve',
       operation: OPERATION.current.own,
       reason: `Weather needs your OpenWeatherMap key. ${KEY_NOTE}`,
     });
@@ -845,6 +868,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       case 'needs-admin':
         if (this.sharedStopped) {
           return `The workspace’s weather key is unavailable. ${this.stoppedReason}`;
+        }
+        if (this.isWriter && !this.share && this.hasUnboundShare) {
+          return 'A key you shared with this workspace isn’t approved for this app yet.';
         }
         if (this.isWriter && !this.share) {
           return 'This workspace has no weather key.';
@@ -969,15 +995,26 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   get ownRejected() {
     return this.ownReadiness === 'credential-rejected';
   }
+  // The key's owner approves a share for the app: at `needs-approval`, or a
+  // writer whose own share isn't approved for any operation yet, which
+  // readiness can't tell from a realm with no share.
   get sharedNeedsApproval() {
-    return this.sharedReadiness === 'needs-approval';
+    return (
+      this.sharedReadiness === 'needs-approval' ||
+      (this.sharedReadiness === 'needs-admin' &&
+        !this.share &&
+        this.hasUnboundShare)
+    );
   }
   get sharedNeedsReapproval() {
     return this.sharedReadiness === 'needs-reapproval';
   }
   get offerShare() {
     return (
-      this.isWriter && !this.share && this.sharedReadiness === 'needs-admin'
+      this.isWriter &&
+      !this.share &&
+      !this.hasUnboundShare &&
+      this.sharedReadiness === 'needs-admin'
     );
   }
   get offerSwap() {
@@ -995,7 +1032,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       class='weather-app'
       data-test-weather-app
       {{this.watchShares}}
-      {{this.loadWhenReady this.source}}
+      {{this.loadWhenReady this.source this.problem}}
     >
       <header class='app-bar'>
         {{#if this.selectedLocation}}
@@ -1041,7 +1078,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           @title={{this.problemTitle}}
           data-test-weather-problem={{this.problem.code}}
         >
-          {{this.problemMessage}}
+          <:default>
+            {{this.problemMessage}}
+          </:default>
           <:action>
             {{#if this.problemIsRejection}}
               <Button
@@ -1057,9 +1096,40 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         </Alert>
       {{else if this.source}}
         {{#if this.sharedFallbackNote}}
-          <p class='fallback-note' data-test-weather-fallback>
-            {{this.sharedFallbackNote}}
-          </p>
+          <div class='fallback-note' data-test-weather-fallback>
+            <span>{{this.sharedFallbackNote}}</span>
+            {{#if this.offerShare}}
+              <Button
+                @size='sm'
+                @appearance='outlined'
+                {{on 'click' this.shareKey}}
+                data-test-weather-share-key
+              >Share a key with this workspace</Button>
+            {{/if}}
+            {{#if this.offerSwap}}
+              <Button
+                @size='sm'
+                @appearance='outlined'
+                {{on 'click' this.swapKey}}
+                data-test-weather-swap-key
+              >Swap in one of my keys</Button>
+            {{/if}}
+            {{#if this.sharedNeedsApproval}}
+              <Button
+                @size='sm'
+                @tone='primary'
+                {{on 'click' this.approveShared}}
+                data-test-weather-approve-shared
+              >Approve the shared key</Button>
+            {{/if}}
+            {{#if this.sharedNeedsReapproval}}
+              <Button
+                @size='sm'
+                @appearance='outlined'
+                {{on 'click' this.reviewShared}}
+              >Review the changes</Button>
+            {{/if}}
+          </div>
         {{/if}}
       {{else if this.checking}}
         <div class='checking'><Skeleton @height='1.5rem' /></div>
@@ -1098,7 +1168,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 'no-share'
               }}
             >
-              {{this.sharedMessage}}
+              <:default>
+                {{this.sharedMessage}}
+              </:default>
               <:action>
                 {{#if this.offerShare}}
                   <Button
@@ -1134,10 +1206,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 @title='Your own key'
                 data-test-weather-own={{this.ownReadiness}}
               >
-                {{this.ownMessage}}
-                {{#if this.ownNeedsConnect}}
-                  <span class='key-note'>{{this.keyNote}}</span>
-                {{/if}}
+                <:default>
+                  {{this.ownMessage}}
+                  {{#if this.ownNeedsConnect}}
+                    <span class='key-note'>{{this.keyNote}}</span>
+                  {{/if}}
+                </:default>
                 <:action>
                   {{#if this.ownNeedsConnect}}
                     <Button
@@ -1304,6 +1378,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         margin: 0;
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-sm);
+      }
+      .fallback-note {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
       .key-panel {
         display: grid;
@@ -2179,7 +2259,7 @@ function dayIn(offset: number, seconds: number): string {
 // Each day is the place's own calendar day: its low and high are the lowest
 // and highest of its steps (today's including the temperature now), its
 // chance of precipitation is its wettest step's, and its condition is the one
-// nearest midday.
+// nearest midday (today's is the condition now).
 function toWeather(
   current: CurrentResponse,
   forecast: ForecastResponse,
@@ -2220,8 +2300,7 @@ function toWeather(
         min: Math.min(...temps),
         max: Math.max(...temps),
         pop: Math.max(0, ...daySteps.map((s) => s.pop)),
-        condition:
-          day === today && !midday ? current.weather[0] : midday?.condition,
+        condition: day === today ? current.weather[0] : midday?.condition,
       };
     });
   return { offset, current, steps, days };
