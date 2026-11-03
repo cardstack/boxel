@@ -2540,10 +2540,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'cards, specs and files across realms with ' +
     'realm.entries.search, can look at cards and files with realm.capture ' +
     '(a path in the realm, or the URL of a card or file in any workspace ' +
-    `the user can read; a ${LOCAL_SOURCE_URL_PREFIX} URL names a file ` +
-    'attached to the chat or an image a capture took, which is in no ' +
-    'workspace, so realm.capture refuses it), can generate images into ' +
-    'the realm with ' +
+    `the user can read; a ${LOCAL_SOURCE_URL_PREFIX} URL names a file the ` +
+    'user attached from their computer or an image a capture took; neither ' +
+    'is in a workspace, so realm.capture refuses it), can generate images ' +
+    'into the realm with ' +
     'realm.images.generate, can save a file from a URL with ' +
     'realm.fs.download, can search the web with realm.web.search (Exa; ' +
     'returns [{ url, title, snippet }]), can read a web page as markdown ' +
