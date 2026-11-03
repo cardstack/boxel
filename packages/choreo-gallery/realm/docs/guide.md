@@ -269,9 +269,9 @@ the first such element logs a warning with the element attached. `<Presence>` me
 where its `@items` change, so a row inside one that grows for any other reason still needs a
 `<LayoutGroup>`. Wrap the `{{#each}}`, not each row: Glimmer moves a keyed row's DOM before it
 re-renders anything inside the row, so a group inside the row measures too late. Key its rows by a
-stable id: a key derived from
-position changes when the rows before it shift, and a row whose key changed is a new element with no
-earlier box to animate from.
+stable id. With `key='@index'` Glimmer keeps every element where it is and swaps its content, so
+nothing moves at all; a key built from a position, such as `${index}-${id}`, changes when the rows
+before it shift, and a row whose key changed is a new element with no earlier box to animate from.
 
 ```gts
 <LayoutGroup>

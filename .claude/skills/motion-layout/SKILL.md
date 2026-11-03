@@ -58,10 +58,12 @@ while their content keeps running).
     </ul>
   </LayoutGroup>
   ```
-- **Key moving rows by a stable id, never by position.** A key built from an
-  index changes when the rows before it shift (a removal, a sort), and
-  Glimmer replaces a row whose key changed with a new element, which has no
-  old box to animate from.
+- **Key moving rows by a stable id, never by position.** `key='@index'`
+  keeps every element where it is and swaps its content, so nothing moves at
+  all. A key built from a position, such as `${index}-${id}`, changes when
+  the rows before it shift (a removal, a sort), and Glimmer replaces a row
+  whose key changed with a new element, which has no old box to animate
+  from.
 - **Radius and shadow must go through the modifier.** Layout animation
   scales the element, corners included. The engine corrects `borderRadius`
   and `boxShadow` per frame — but only values it holds:

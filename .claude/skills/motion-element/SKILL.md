@@ -104,9 +104,10 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
    `<Presence>` measures only when its `@items` change, so anything else
    that moves inside it needs a `<LayoutGroup>` too. Wrap the `{{#each}}`, not
    each row (a group inside a row measures after the row has moved), and key
-   rows by a
-   stable id: a position-derived key changes when rows shift, and a changed
-   key is a new element with no old box to animate from. In development the
+   rows by a stable id. `key='@index'` keeps every element in place and swaps
+   its content, so nothing moves; a key built from a position changes when
+   rows shift, and a changed key is a new element with no old box to animate
+   from. In development the
    first unwrapped element logs a warning (see `motion-layout`).
 
 ## Canonical demos

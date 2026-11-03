@@ -259,9 +259,10 @@ list that reorders, adds or removes, but a row inside one that grows for any oth
 needs a `<LayoutGroup>`. The group goes around the `{{#each}}`, not inside each row: Glimmer moves a
 keyed row's DOM before it re-renders anything inside the row, so a group inside the row measures too
 late.
-Key the rows by a stable id as well: a key derived from position changes when the rows before it
-shift, and Glimmer replaces a row whose key changed with a new element, which has no earlier box to
-animate from.
+Key the rows by a stable id as well. With `key='@index'` Glimmer keeps every element where it is and
+swaps its content, so nothing moves at all. A key built from a position, such as `${index}-${id}`,
+changes when the rows before it shift, and Glimmer replaces a row whose key changed with a new
+element, which has no earlier box to animate from.
 
 ```gts
 {{! ✗ a sort lands in one frame: nothing measured the rows before they moved }}
