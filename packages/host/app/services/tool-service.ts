@@ -1630,13 +1630,14 @@ export default class ToolService extends Service {
           }
         };
 
-        // checkCorrectness legitimately waits out one index-invalidation
-        // window and then does prerender/refresh work that can take
-        // comparably long, so it gets that much headroom on top of the
-        // standard bound.
+        // checkCorrectness legitimately runs three steps in a row that are
+        // each bounded by the card render timeout: it waits out the write's
+        // index event, prerenders the module, and waits for or renders the
+        // module's instances. So it gets that much headroom on top of the
+        // standard bound, which covers its reads.
         let executeTimeoutMs =
           command.name === CHECK_CORRECTNESS_COMMAND_NAME
-            ? this.#toolExecuteTimeoutMs + 2 * ENV.cardRenderTimeout
+            ? this.#toolExecuteTimeoutMs + 3 * ENV.cardRenderTimeout
             : this.#toolExecuteTimeoutMs;
 
         [resultCard] = await all([
