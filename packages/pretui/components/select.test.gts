@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import { render, click, fillIn, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Select } from './select';
+import Globe from '@cardstack/boxel-icons/globe';
 import { Dialog } from './dialog';
 import { EditInPlace } from './edit-in-place';
 
@@ -156,6 +157,19 @@ module('Pretui | components/select', function (hooks) {
     );
   });
 
+  test('in icon mode a label pointing at @controlId names the trigger, then the value', async function (assert) {
+    await render(
+      <template>
+        <label for='tea-icon'>Tea</label>
+        <Select @options={{OPTIONS}} @controlId='tea-icon' @display='icon' @icon={{Globe}} @defaultValue='green' />
+      </template>,
+    );
+    let labelEl = document.querySelector('label[for="tea-icon"]') as HTMLElement;
+    let [labelId, valueId] = (trigger().getAttribute('aria-labelledby') ?? '').split(' ');
+    assert.strictEqual(labelId, labelEl.id, 'the label comes first');
+    assert.strictEqual(document.getElementById(valueId!)?.textContent?.trim(), 'Green', 'then the hidden value');
+  });
+
   test('a label wrapping the Select names it too', async function (assert) {
     await render(
       <template>
@@ -178,5 +192,38 @@ module('Pretui | components/select', function (hooks) {
       </template>,
     );
     assert.strictEqual(trigger().getAttribute('aria-labelledby'), 'tea-heading', 'an explicit name wins over the label');
+  });
+
+  test("@display 'icon' names the trigger with the current value and keeps the list", async function (assert) {
+    let chosen: string | undefined;
+    let onChange = (value: string) => (chosen = value);
+    await render(
+      <template>
+        <Select @options={{OPTIONS}} @label='Tea' @display='icon' @icon={{Globe}} @defaultValue='green' @onValueChange={{onChange}} />
+      </template>,
+    );
+    assert.strictEqual(trigger().getAttribute('aria-label'), 'Tea: Green');
+    assert.strictEqual(trigger().getAttribute('title'), 'Tea: Green');
+    assert.notOk(trigger().textContent?.includes('Green'), 'the face is the icon');
+    assert.ok(trigger().querySelector('svg'));
+
+    await click(trigger());
+    let options = Array.from(document.querySelectorAll('[data-test-pretui-select-option]'));
+    assert.deepEqual(options.map((o) => o.textContent?.trim()), ['Green', 'Oolong'], 'the list is unchanged');
+    await click(options[1] as HTMLElement);
+    assert.strictEqual(chosen, 'oolong');
+    assert.strictEqual(trigger().getAttribute('aria-label'), 'Tea: Oolong', 'the name follows the value');
+  });
+
+  test("@display 'icon' with @labelledBy reads the label, then the value", async function (assert) {
+    await render(
+      <template>
+        <span id='tea-heading'>Tea</span>
+        <Select @options={{OPTIONS}} @labelledBy='tea-heading' @display='icon' @icon={{Globe}} @defaultValue='green' />
+      </template>,
+    );
+    let ids = (trigger().getAttribute('aria-labelledby') ?? '').split(' ');
+    assert.strictEqual(ids[0], 'tea-heading', "the caller's label is kept");
+    assert.strictEqual(document.getElementById(ids[1] ?? '')?.textContent, 'Green', 'then the current value');
   });
 });

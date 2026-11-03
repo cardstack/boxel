@@ -5,13 +5,19 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
+import type { ComponentLike } from '@glint/template';
 import { slidingHighlight, SlidingHighlight } from './sliding-highlight';
 import { emit, firstDefined } from '../pretui-primitives';
 
 export interface SegmentOption {
   value: string;
   label: string;
+  /** shown before the label; @display 'selected-text' and 'icon' need it */
+  icon?: ComponentLike<{ Element: SVGSVGElement }>;
 }
+
+export const SEGMENTED_DISPLAYS = ['text', 'selected-text', 'icon'] as const;
+export type SegmentedDisplay = (typeof SEGMENTED_DISPLAYS)[number];
 
 export interface SegmentedControlSignature {
   Args: {
@@ -28,6 +34,10 @@ export interface SegmentedControlSignature {
      * the control. */
     label?: string;
     disabled?: boolean;
+    /** how much each segment shows: 'text' (default) every label, with its
+     * icon if it has one; 'selected-text' the label on the selected segment
+     * only; 'icon' icons only. A hidden label still names its radio. */
+    display?: SegmentedDisplay;
   };
   Element: HTMLDivElement;
 }
@@ -69,6 +79,15 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
     }
   };
   isActive = (option: SegmentOption) => this.value === option.value;
+  // an option without an icon always shows its label
+  hidesText = (option: SegmentOption) => {
+    let display = this.args.display;
+    return (
+      option.icon !== undefined &&
+      (display === 'icon' ||
+        (display === 'selected-text' && !this.isActive(option)))
+    );
+  };
   <template>
     <div
       class='pretui-seg'
@@ -84,6 +103,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
         <label
           class='pretui-seg-item'
           data-state={{if (this.isActive option) 'active'}}
+          title={{if (this.hidesText option) option.label}}
         >
           <input
             type='radio'
@@ -96,9 +116,18 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             {{on 'change' (fn this.pick option)}}
             data-test-pretui-segmented-option={{option.value}}
           />
+          {{#if option.icon}}
+            <option.icon
+              class='pretui-seg-icon'
+              width='1em'
+              height='1em'
+              aria-hidden='true'
+            />
+          {{/if}}
           <span
             class='pretui-seg-text'
             data-text={{option.label}}
+            data-hidden={{if (this.hidesText option) 'true'}}
           >{{option.label}}</span>
         </label>
       {{/each}}
@@ -137,7 +166,12 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           z-index: var(--pretui-z-raised, 1);
           display: inline-flex;
           align-items: center;
-          height: 1.5rem;
+          /* --pretui-seg-h: opt-in knob for the whole control; a segment is
+             that less the inset on both sides */
+          height: calc(
+            var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset))) -
+              2 * var(--pretui-seg-inset)
+          );
           padding: 0 var(--boxel-sp-sm);
           border-radius: var(--pretui-seg-radius);
           font-size: var(--boxel-ui-label-font-size);
@@ -177,6 +211,24 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
            width, so selecting one never shifts its neighbors or the pill */
         .pretui-seg-text {
           display: inline-grid;
+        }
+        .pretui-seg-icon {
+          flex: none;
+        }
+        .pretui-seg-icon + .pretui-seg-text:not([data-hidden]) {
+          margin-inline-start: var(--boxel-sp-4xs);
+        }
+        /* hidden from sight, still the radio's name */
+        .pretui-seg-text[data-hidden] {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+        .pretui-seg-item:has(.pretui-seg-text[data-hidden]) {
+          padding: 0 var(--boxel-sp-xs);
         }
         .pretui-seg-text::after {
           content: attr(data-text);
