@@ -292,6 +292,18 @@ export class Sidebar extends Component<SidebarSignature> {
   /** Last band the pane was measured in. Starts `full`, so a first wide
    * measurement leaves `@defaultOpen` and a persisted preference alone. */
   private band: 'full' | 'rail' | 'drawer' = 'full';
+  /** False until the pane's first non-zero width arrives. */
+  @tracked private measured = false;
+  /** With rail bands on, the rail stays invisible until the first
+   * measurement, so a pane that opens in the rail band doesn't flash the
+   * full rail for a frame first. */
+  get measuring(): boolean {
+    return (
+      !this.measured &&
+      this.railBreakpoint !== undefined &&
+      this.args.mobile === undefined
+    );
+  }
   railId = `${guidFor(this)}-rail`;
 
   get open(): boolean {
@@ -406,6 +418,9 @@ export class Sidebar extends Component<SidebarSignature> {
       this.drawerOpen = false;
     }
     this.narrowPane = narrow;
+    if (width > 0 && !this.measured) {
+      this.measured = true;
+    }
     // @mobile bypasses measurement, so it bypasses the rail bands too
     if (width === 0 || this.args.mobile !== undefined) {
       return;
@@ -552,6 +567,7 @@ export class Sidebar extends Component<SidebarSignature> {
           aria-label={{this.label}}
           data-state={{this.state}}
           data-mobile='false'
+          data-measuring={{if this.measuring 'true'}}
           data-test-pretui-sidebar-rail
         >
           {{#if (has-block 'header')}}
@@ -693,6 +709,9 @@ export class Sidebar extends Component<SidebarSignature> {
         }
         /* The drawer's own rail is not a grid child — it lives inside a
            <dialog> in the top layer. */
+        .pretui-sidebar-rail[data-measuring] {
+          visibility: hidden;
+        }
         .pretui-sidebar-rail[data-mobile='true'] {
           display: flex;
           block-size: 100%;

@@ -141,6 +141,13 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.notOk(document.querySelector('[data-test-pretui-sidebar] dialog[open]'), 'the drawer stays closed');
   });
 
+  test('@railBreakpoint: the rail stays hidden until the first measurement', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(800, () => state() === 'collapsed');
+    let rail = document.querySelector('[data-test-pretui-sidebar-rail]') as HTMLElement;
+    assert.notOk(rail.hasAttribute('data-measuring'), 'visible once measured, already in the icon rail');
+  });
+
   test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
     await render(<template><div data-test-pane><Sidebar @label='Library'><:nav>Lots</:nav></Sidebar></div></template>);
     pane().style.inlineSize = '800px';
