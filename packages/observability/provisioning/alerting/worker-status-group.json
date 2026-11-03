@@ -53,10 +53,7 @@
                 "region": "default",
                 "sqlExpression": "",
                 "statistic": "Average",
-                "statsGroups": [
-                  "bin(5m)",
-                  "priorityLabel"
-                ]
+                "statsGroups": ["bin(5m)", "priorityLabel"]
               }
             },
             {
@@ -71,10 +68,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [
-                        4,
-                        0
-                      ],
+                      "params": [4, 0],
                       "type": "gt"
                     },
                     "operator": {
@@ -114,10 +108,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [
-                        0,
-                        0
-                      ],
+                      "params": [0, 0],
                       "type": "gt"
                     },
                     "operator": {
@@ -149,7 +140,7 @@
           ],
           "updated": "2025-07-15T13:39:25Z",
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "30s",
           "provenance": "api",
           "isPaused": false,
@@ -201,9 +192,7 @@
                 "region": "default",
                 "sqlExpression": "",
                 "statistic": "Average",
-                "statsGroups": [
-                  "bin(5m)"
-                ]
+                "statsGroups": ["bin(5m)"]
               }
             },
             {
@@ -218,10 +207,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [
-                        1,
-                        0
-                      ],
+                      "params": [1, 0],
                       "type": "gt"
                     },
                     "operator": {
@@ -261,10 +247,7 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "params": [
-                        0,
-                        0
-                      ],
+                      "params": [0, 0],
                       "type": "gt"
                     },
                     "operator": {
@@ -299,7 +282,7 @@
           ],
           "updated": "2025-07-15T13:39:25Z",
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "30s",
           "provenance": "api",
           "isPaused": false,

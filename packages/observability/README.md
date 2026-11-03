@@ -220,8 +220,12 @@ made private, it would need Actions: Read-only on it.
 The staging alert "Actions Collector Silent in Loki"
 (`provisioning/alerting-hosted/staging/rules/actions-collector-group.json`)
 posts to the `alarms-staging-internal` Discord channel when Loki receives no
-collector lines for ten minutes. Its summary says how to tell a stalled log
-router from a stopped collector.
+collector lines for ten minutes. "Silent" means a query that completed and found
+no lines. Its summary says how to tell a stalled log router from a stopped
+collector. A query that Loki fails to run does not fire it. That arrives in the
+same channel as a `DatasourceError` alert for the rule, and the fault is Loki,
+not the collector (see [Alert rules: no data and query
+errors](#alert-rules-no-data-and-query-errors)).
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
@@ -509,6 +513,30 @@ once Loki has been load-bearing for a full release cycle.
 | `reject_old_samples` | `false` (so backfills work)                          | `true` (default, ~7d window)                                                  |
 | Auth                 | none                                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
 | Reachable from       | localhost only                                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
+
+## Alert rules: no data and query errors
+
+Each rule sets two states for evaluations that produce no number to compare:
+
+- `noDataState` is for a query that ran and returned no series. Set it to
+  `Alerting` when no series is the condition the rule exists to catch (a log
+  stream that has gone silent, a metric that stopped publishing), and to `OK`
+  when no series means nothing happened.
+- `execErrState` is for a query that failed: the data source timed out,
+  cancelled it or was unreachable. Every rule here sets it to `Error`. Grafana
+  then sends a separate alert named `DatasourceError`, with the rule's name in
+  its `rulename` label. The rule's own alert stays quiet, because its title
+  and summary state a fact about the service (it is silent, it has no healthy
+  targets, a secret failed to open) that a failed query does not show.
+
+A `DatasourceError` alert carries the rule's labels, including the routing
+labels that `notification_settings.receiver` adds, so it goes where the rule's
+own alert would: a rule with a receiver sends it to that contact point, and a
+rule without one sends it through the default notification policy. The rule's
+`for` period applies to it too, so a single failed evaluation sends nothing.
+When one arrives, look at the data source (for Loki, the Loki task and its
+`context canceled` / `context deadline exceeded` errors), not at the service
+the rule watches.
 
 ## Staging / production workflow
 

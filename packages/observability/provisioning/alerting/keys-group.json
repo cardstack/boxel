@@ -89,7 +89,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "annotations": {
             "summary": "The realm server or worker could not open a stored secret in the last 5 minutes (boxel:secrets-at-rest, event open-failed). reason unknown-data-key: a process is missing a data key, usually a rotation step taken before the previous deploy finished, so roll the step back or finish the deploy. reason not-authentic: a sealed row was changed or moved outside the realm server; treat it as a database write nobody accounts for. The line names the field, the row id and the data key. See the secrets-at-rest skill.",
@@ -192,7 +192,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "annotations": {
             "summary": "Something other than this environment's realm-server or worker task role, in this account, called kms:Decrypt on the secrets key, or a Decrypt on it was denied, in the last 30 minutes (CloudTrail, copied by EventBridge into the decrypts log group). The window covers CloudTrail's delivery delay. Read the record on the Keys dashboard or in the log group: the principal, source IP and encryption context. A task role's Decrypt that is not at a task's startup is a shell opened in the task: look up ExecuteCommand in CloudTrail. See the secrets-at-rest skill's audit.",
@@ -325,7 +325,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "annotations": {
             "summary": "callApi failed for a reason of ours in the last 10 minutes: either a send that broke (outcome failed) or rate-limit-unavailable (the limit counters' database) in three or more realms, or connection failures and timeouts (internal-error, upstream-timeout) at three or more distinct destination hosts. A dead destination or one vendor is one host, whatever number of realms call it, so those count by host; every other refusal code is a user's, owner's or card author's state and is left out. The Keys dashboard's \"callApi refusals by code\" and \"callApi outcomes by vendor host\" panels say which. See the key-outage-triage skill.",
@@ -420,7 +420,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "annotations": {
             "summary": "The outbound guard refused a request to a destination the platform set (a proxy_endpoints row behind _request-forward or the OpenRouter passthrough, a platform OAuth client's token endpoint, Google's token endpoint) in the last 10 minutes. A refusal of one of those is ours: a row with an http: URL, one that resolves to a private address, or a vendor redirecting to one. A user's own OAuth client or a card's request is destinationSetBy=user and never fires this. The line names the host and reason. See the outbound-guard skill.",
@@ -515,7 +515,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "annotations": {
             "summary": "Grants or keys of three or more distinct keys at one destination host entered the rejected state in the last 10 minutes. Keys are counted, not grants: one key can hold several grants at one host (one per destination path), so one revoked key rejects them all and counts once. Three keys refused at one host at once is that vendor refusing every key (an outage, or a change to its auth) or a substitution bug of ours sending the wrong value. Check the vendor's status page, then whether keys at other hosts still work. Probes return the grants to active on their own once the vendor accepts them again. See the key-outage-triage skill.",

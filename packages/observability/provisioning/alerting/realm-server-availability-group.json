@@ -117,7 +117,7 @@
             }
           ],
           "noDataState": "Alerting",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
@@ -231,7 +231,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
@@ -350,7 +350,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
@@ -469,7 +469,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
@@ -588,7 +588,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null
@@ -707,7 +707,7 @@
             }
           ],
           "noDataState": "OK",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "0s",
           "isPaused": false,
           "notification_settings": null

@@ -84,10 +84,10 @@
             }
           ],
           "noDataState": "Alerting",
-          "execErrState": "Alerting",
+          "execErrState": "Error",
           "for": "5m",
           "annotations": {
-            "summary": "Loki has received no lines from the GitHub Actions queue collector for at least 10 minutes, so the GitHub Actions Queue dashboard shows no data. The collector writes at least one line a minute. A stalled query returns no series rather than zero, so noDataState is Alerting. Compare with CloudWatch group ecs-boxel-actions-collector-staging: if lines still arrive there, the FireLens log router has stopped sending to Loki, and `aws ecs update-service --cluster staging --service boxel-actions-collector-staging --force-new-deployment` restores it. If CloudWatch is silent too, the collector itself has stopped."
+            "summary": "Loki has received no lines from the GitHub Actions queue collector for at least 10 minutes, so the GitHub Actions Queue dashboard shows no data. The collector writes at least one line a minute. This alert means the query ran and found no lines: a silent stream returns no series rather than zero, so noDataState is Alerting. Compare with CloudWatch group ecs-boxel-actions-collector-staging: if lines still arrive there, the FireLens log router has stopped sending to Loki, and `aws ecs update-service --cluster staging --service boxel-actions-collector-staging --force-new-deployment` restores it. If CloudWatch is silent too, the collector itself has stopped. A query that Loki fails to run does not fire this alert: execErrState is Error, so it arrives as a DatasourceError alert for this rule, in the same channel, and says nothing about the collector. Then the fault is Loki itself (overloaded, or down): check the Loki task and the context canceled and context deadline exceeded errors in /ecs/loki-staging."
           },
           "isPaused": false,
           "notification_settings": {
