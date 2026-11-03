@@ -14,7 +14,16 @@ import {
 import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
-import { module, skip, test } from 'qunit';
+import { module, skip, test as qunitTest } from 'qunit';
+
+// STRESS HACK (do not merge): register every test 25 times, so the
+// filtered run repeats the targeted tests with a fresh setup each time.
+const STRESS_REPEATS = 25;
+const test = ((name: string, callback: any) => {
+  for (let i = 0; i < STRESS_REPEATS; i++) {
+    qunitTest(`${name} #${i}`, callback);
+  }
+}) as typeof qunitTest;
 
 import {
   buildToolFunctionNameFromResolvedRef,
@@ -2630,6 +2639,36 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
+  // The declaring skill loads, but importing the tool's command module
+  // throws, so resolving the tool rejects rather than finding no command.
+  // Patched on the prototype so a loader reset mid-test is covered too.
+  function failCommandModuleImport() {
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    let importsRefused = 0;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        importsRefused++;
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    return {
+      get importsRefused() {
+        return importsRefused;
+      },
+      restore() {
+        loaderPrototype.import = originalImport;
+      },
+    };
+  }
+
   function finalEditWithHostTool(
     streamingEventId: string,
     body: string,
@@ -2951,23 +2990,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    // The declaring skill loads, but importing the tool's command module
-    // throws, so resolving the tool rejects rather than finding no command.
-    // Patched on the prototype so a loader reset mid-test is covered too.
-    let loaderPrototype = Object.getPrototypeOf(
-      getService('loader-service').loader,
-    );
-    let originalImport = loaderPrototype.import;
-    loaderPrototype.import = async function (
-      this: unknown,
-      moduleId: string,
-      ...rest: unknown[]
-    ) {
-      if (String(moduleId).includes('read-file-for-ai-assistant')) {
-        throw new Error('simulated command module load failure');
-      }
-      return originalImport.call(this, moduleId, ...rest);
-    };
+    let fail = failCommandModuleImport();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2976,7 +2999,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
       await settled();
     } finally {
-      loaderPrototype.import = originalImport;
+      fail.restore();
     }
 
     let hostToolResults = getRoomEvents(roomId).filter(
@@ -2999,6 +3022,61 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-call-apply="applying"]')
       .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test('a validation that times out and then finds the call invalid leaves only the failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // Hold the skill load past a short validation timeout, so the drain sends
+    // a failed result for the timeout. Then let the resolve continue into an
+    // import that throws, so the validation that kept running finds the call
+    // invalid after the drain has already answered it.
+    let hold = holdDiscoveredSkillLoads();
+    let toolService = getService('tool-service');
+    toolService.validateTimeoutMs = 200;
+    let fail = failCommandModuleImport();
+    let toolResults = () =>
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
+      );
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await waitUntil(() => toolResults().length > 0, {
+        timeout: 5000,
+        timeoutMessage: 'the drain never reported the validation timeout',
+      });
+    } finally {
+      hold.release();
+    }
+    try {
+      // `settled()` does not wait for a validation the drain stopped waiting
+      // for, so wait for it to end explicitly.
+      await waitUntil(() => toolService.validationsInFlight === 0, {
+        timeout: 10_000,
+        timeoutMessage: 'the timed-out validation never finished',
+      });
+      await settled();
+    } finally {
+      fail.restore();
+    }
+
+    assert.true(
+      fail.importsRefused > 0,
+      'the timed-out validation went on to the command module import',
+    );
+    assert.deepEqual(
+      toolResults().map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'only the timeout result, no contradictory invalid',
+    );
   });
 
   test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
