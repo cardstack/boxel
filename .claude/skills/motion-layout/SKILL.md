@@ -43,7 +43,9 @@ while their content keeps running).
   A keyed `{{#each}}` of `layout=true` rows with none of them above it moves
   its DOM nodes unmeasured, and the rows jump. A `layoutId` hand-off needs
   one too: the outgoing element's box is only known if something measured it
-  before it left. In development the first such element logs a console
+  before it left. `<Presence>` measures only on a pass where its `@items`
+  change: a row inside one that grows for any other reason still needs a
+  `<LayoutGroup>`. In development the first such element logs a console
   warning with the element attached.
   ```gts
   <LayoutGroup>

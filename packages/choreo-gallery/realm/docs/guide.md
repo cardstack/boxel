@@ -265,7 +265,9 @@ as it re-renders, before the DOM changes. Glimmer has no such hook, so the box a
 starts from is measured by a render detector at the start of each render pass, and only
 `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` and `<Choreo>` carry one. A sorted or filtered list of
 `layout=true` rows with none of them above it jumps, and so does a `layoutId` hand-off; in development
-the first such element logs a warning with the element attached. Wrap the list, and key its rows by a stable id: a key derived from
+the first such element logs a warning with the element attached. `<Presence>` measures only on a pass
+where its `@items` change, so a row inside one that grows for any other reason still needs a
+`<LayoutGroup>`. Wrap the list, and key its rows by a stable id: a key derived from
 position changes when the rows before it shift, and a row whose key changed is a new element with no
 earlier box to animate from.
 

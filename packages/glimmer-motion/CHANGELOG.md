@@ -18,7 +18,8 @@ versions may change behavior until `1.0.0`.
 
 - **A development-mode warning for a `layout` or `layoutId` element nothing will snapshot.** Both
   animate only when a render detector measures them before the DOM changes, and only
-  `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` and `<Choreo>` carry one. The first such element
+  `<LayoutGroup>`, `<Presence>` (on a pass where its `@items` change), `<ReorderGroup>` and
+  `<Choreo>` carry one. The first such element
   to mount with none of them above it logs a console warning with the element attached, so a keyed
   list that reorders, or a `layoutId` hand-off, that jumps instead of animating says why.
   Production builds skip it.

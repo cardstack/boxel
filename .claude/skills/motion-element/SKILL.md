@@ -101,7 +101,8 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
    `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` or `<Choreo>` is above it
    (or the change runs through `layoutChange()`). Without one, a keyed list
    that reorders, filters or sorts jumps, and so does a `layoutId` hand-off.
-   Wrap the list, and key rows by a
+   `<Presence>` measures only when its `@items` change, so anything else
+   that moves inside it needs a `<LayoutGroup>` too. Wrap the list, and key rows by a
    stable id: a position-derived key changes when rows shift, and a changed
    key is a new element with no old box to animate from. In development the
    first unwrapped element logs a warning (see `motion-layout`).

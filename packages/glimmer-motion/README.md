@@ -194,17 +194,17 @@ one.
 
 ### React → Glimmer
 
-| React                            | here                                                                                                    |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG                                                           |
-| `ref`                            | the element, or a `{current}` object filled by a modifier                                               |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                                                                         |
-| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                                                              |
-| `useIsPresent()`                 | `h.isPresent`                                                                                           |
-| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` or `<Choreo>`, or `layoutChange()` |
-| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element                                                    |
-| `useDragControls()`              | `createDragControls()`                                                                                  |
-| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                                                                      |
+| React                            | here                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG                                                                                            |
+| `ref`                            | the element, or a `{current}` object filled by a modifier                                                                                |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                                                                                                          |
+| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                                                                                               |
+| `useIsPresent()`                 | `h.isPresent`                                                                                                                            |
+| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, `<ReorderGroup>` or `<Choreo>`, a `<Presence>` pass that changes its `@items`, or `layoutChange()` |
+| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element                                                                                     |
+| `useDragControls()`              | `createDragControls()`                                                                                                                   |
+| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                                                                                                       |
 
 ### Four rules React does not need
 
@@ -254,7 +254,9 @@ measured by a render detector at the start of the render pass, and only `<Layout
 them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
 places. A `layoutId` hand-off needs one too: the outgoing element's box is only known if something
 measured it before it left. In development the first such element logs a console warning with the
-element attached.
+element attached. `<Presence>` measures only on a pass where its `@items` change, so it covers a
+list that reorders, adds or removes, but a row inside one that grows for any other reason still
+needs a `<LayoutGroup>`.
 Key the rows by a stable id as well: a key derived from position changes when the rows before it
 shift, and Glimmer replaces a row whose key changed with a new element, which has no earlier box to
 animate from.

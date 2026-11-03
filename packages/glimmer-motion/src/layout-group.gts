@@ -92,6 +92,9 @@ let warnedUngroupedLayout = false;
  * An element with none above it, and no <Presence> handle, moves to its new
  * place in a single frame: a keyed list it sits in reorders, filters or sorts
  * without animating, and a hand-off jumps instead of morphing.
+ * A <Presence> measures only on a pass where its `@items` change, which is
+ * the list change this warning is about, so an element under one is exempt;
+ * one that grows inside it for another reason still needs a <LayoutGroup>.
  * `layoutChange()` is the one other way to snapshot, and this cannot see it:
  * an element animated only through `layoutChange()` is warned about too, and
  * a <LayoutGroup> around it quiets the warning.
