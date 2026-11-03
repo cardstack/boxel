@@ -1134,9 +1134,57 @@ export async function logRealmIndexDiagnostics(
         );
       }
     }
+
+    await logUnreadableFileRows(dbAdapter, realmURL, label);
   } catch (e) {
     console.log(
       `[realm-index-diag ${label}] failed to gather diagnostics for ${realmURL}: ` +
+        `${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+// A file row that a file read (`getFile`, file search, a file-meta GET) cannot
+// see, while a raw `SELECT ... FROM boxel_index` still finds it. Those reads
+// skip a row that is tombstoned, that carries an index error, or whose
+// `prerendered_html` row holds a render error at or above the index row's
+// generation. A raw-SQL assertion passing beside a failing file read points
+// at one of these three, and this dump names which. Pure diagnostics: wrapped
+// so it can never affect a test result.
+export async function logUnreadableFileRows(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+  label: string,
+): Promise<void> {
+  try {
+    let rows = await dbAdapter.execute(
+      `SELECT i.url, i.generation, i.is_deleted, i.has_error,
+              i.error_doc->>'message' AS index_error,
+              ph.generation AS render_generation,
+              ph.error_doc->>'message' AS render_error
+       FROM boxel_index i
+       LEFT JOIN prerendered_html ph
+         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+       WHERE i.realm_url = $1 AND i.type = 'file'
+         AND (i.is_deleted = true
+              OR i.has_error = true
+              OR (ph.error_doc IS NOT NULL AND ph.generation >= i.generation))
+       ORDER BY i.url
+       LIMIT 25`,
+      { bind: [realmURL] },
+    );
+    for (let r of rows) {
+      console.log(
+        `[realm-index-diag ${label}]   file ${r.url} generation=${r.generation} ` +
+          `is_deleted=${r.is_deleted} has_error=${r.has_error} ` +
+          `index_error=${r.index_error ?? 'none'} ` +
+          `render_generation=${r.render_generation ?? 'none'} ` +
+          `render_error=${r.render_error ?? 'none'}`,
+      );
+    }
+  } catch (e) {
+    console.log(
+      `[realm-index-diag ${label}] failed to gather file-row diagnostics for ${realmURL}: ` +
         `${e instanceof Error ? e.message : String(e)}`,
     );
   }

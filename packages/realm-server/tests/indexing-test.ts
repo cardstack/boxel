@@ -39,6 +39,7 @@ import {
   waitUntil,
   cardInfo,
   getTestPrerenderer,
+  logUnreadableFileRows,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   searchCardsForTest,
@@ -502,6 +503,22 @@ module(basename(import.meta.filename), function () {
         testDbAdapter = dbAdapter;
         realm = testRealm;
       },
+    });
+
+    // The tests below share one realm, and several read the same file rows.
+    // When one fails, name the file rows a file read cannot see, so the log
+    // says whether a row was tombstoned or errored, and in which channel.
+    hooks.afterEach(async function () {
+      let current = QUnit.config.current as
+        | { assertions?: { result: boolean }[]; testName?: string }
+        | undefined;
+      if (current?.assertions?.some((a) => !a.result)) {
+        await logUnreadableFileRows(
+          testDbAdapter,
+          testRealm,
+          `read-only failure: ${current.testName}`,
+        );
+      }
     });
 
     // Guards the contract that a brand-new realm (empty boxel_index state)
@@ -1194,7 +1211,10 @@ module(basename(import.meta.filename), function () {
       let deletedEntryUrls = deletedEntries.map((row) => row.url);
 
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
-        assert.notOk(deletedEntryUrls.includes(file));
+        assert.notOk(
+          deletedEntryUrls.includes(`${testRealm}${file}`),
+          `${file} is not tombstoned`,
+        );
       });
     });
 
