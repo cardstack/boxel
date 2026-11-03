@@ -138,7 +138,7 @@ function pr(
 
 module(basename(import.meta.filename), function () {
   module('which pull requests are waiting on whom', function () {
-    test("a team request stays after GitHub drops the team from the PR's requested reviewers, until someone approves", function (assert) {
+    test("a team request stays after GitHub drops the team from the PR's requested reviewers, and an approved one is listed as approved", function (assert) {
       // GitHub drops the team as a requested reviewer once a member reviews; the
       // request is still in the PR's history, which is what the watcher reads.
       let commented = pr(1, {
@@ -158,9 +158,12 @@ module(basename(import.meta.filename), function () {
         TEAM,
       );
       assert.deepEqual(
-        waiting.map((p) => p.number),
-        [1],
-        'the commented one stays; the approved one and another team’s go',
+        waiting.map((p) => [p.number, p.approvedBy]),
+        [
+          [1, []],
+          [2, ['octo-reviewer']],
+        ],
+        'the commented one stays, the approved one is marked, and another team’s goes',
       );
       assert.deepEqual(waiting[0].requested, {
         at: '2026-10-02T00:00:00Z',
@@ -348,6 +351,40 @@ module(basename(import.meta.filename), function () {
         ),
         [51, 50],
       );
+    });
+
+    test('narrows to the pull requests not approved yet, or to the approved ones', function (assert) {
+      let waiting = waitingOnReviewBy(
+        [
+          pr(70, { requests: [{ at: '2026-10-01T00:00:00Z', team: TEAM }] }),
+          pr(71, {
+            requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
+            opinions: [{ state: 'APPROVED', by: 'octo-reviewer' }],
+          }),
+          pr(72, {
+            requests: [{ at: '2026-10-03T00:00:00Z', team: TEAM }],
+            opinions: [
+              { state: 'APPROVED', by: 'octo-author' },
+              { state: 'CHANGES_REQUESTED', by: 'octo-critic' },
+            ],
+          }),
+        ],
+        'octo-viewer',
+        TEAM,
+      );
+      let numbers = (approval?: 'unapproved' | 'approved') =>
+        arrange(waiting, {
+          sortBy: 'requested',
+          direction: 'asc',
+          approval,
+        }).map((p) => p.number);
+      assert.deepEqual(
+        numbers('unapproved'),
+        [70, 72],
+        "the author's own approval doesn't count",
+      );
+      assert.deepEqual(numbers('approved'), [71]);
+      assert.deepEqual(numbers(), [70, 71, 72]);
     });
 
     test('filters by author and repository together', function (assert) {

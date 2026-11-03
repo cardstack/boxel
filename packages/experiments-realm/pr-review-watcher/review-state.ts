@@ -179,8 +179,9 @@ function byLongestWaiting(a: WatchedPullRequest, b: WatchedPullRequest) {
 }
 
 // Open pull requests by others whose review was ever requested from `viewer`
-// or `team`, until someone approves them. The search that finds `nodes` keeps
-// them to open ones; a closed or merged one never reaches here.
+// or `team`, approved or not; `arrange` narrows them by approval. The search
+// that finds `nodes` keeps them to open ones; a closed or merged one never
+// reaches here.
 export function waitingOnReviewBy(
   nodes: PullRequestNode[],
   viewer: string,
@@ -189,7 +190,7 @@ export function waitingOnReviewBy(
   return nodes
     .filter((pr) => pr.author?.login !== viewer)
     .map((pr) => watched(pr, reviewRequestFor(pr, viewer, team)))
-    .filter((pr) => pr.requested && pr.approvedBy.length === 0)
+    .filter((pr) => pr.requested)
     .sort(byLongestWaiting);
 }
 
@@ -215,7 +216,12 @@ export interface Arrangement {
   author?: string;
   // An `owner/name`, or absent for every repository.
   repo?: string;
+  // Absent for every pull request.
+  approval?: Approval;
 }
+
+// Whether at least one reviewer's latest opinionated review approved it.
+export type Approval = 'unapproved' | 'approved';
 
 // The longest waiting first, and pull requests nobody has been asked to
 // review after every one that has.
@@ -232,7 +238,7 @@ function byRequestTime(a: WatchedPullRequest, b: WatchedPullRequest) {
 // waiting.
 export function arrange(
   prs: WatchedPullRequest[],
-  { sortBy, direction, author, repo }: Arrangement,
+  { sortBy, direction, author, repo, approval }: Arrangement,
 ): WatchedPullRequest[] {
   let sign = direction === 'asc' ? 1 : -1;
   let compare = (a: WatchedPullRequest, b: WatchedPullRequest) => {
@@ -252,6 +258,9 @@ export function arrange(
   return prs
     .filter((pr) => (author ? pr.author === author : true))
     .filter((pr) => (repo ? pr.repo === repo : true))
+    .filter((pr) =>
+      approval ? pr.approvedBy.length > 0 === (approval === 'approved') : true,
+    )
     .sort(compare);
 }
 

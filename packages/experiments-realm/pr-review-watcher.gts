@@ -34,6 +34,7 @@ import {
   choicesOf,
   mergeFirstPage,
   waitingOnReviewBy,
+  type Approval,
   type PullRequestNode,
   type SortDirection,
   type SortKey,
@@ -353,7 +354,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     return [
       {
         value: 'review',
-        label: `Waiting on my review (${this.waitingOnMe.length})`,
+        label: `Waiting on my review (${
+          this.waitingOnMe.filter((pr) => pr.approvedBy.length === 0).length
+        })`,
       },
       { value: 'mine', label: `My PRs (${this.mine.length})` },
     ];
@@ -364,6 +367,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   // Empty for every author or repository.
   @tracked authorFilter = '';
   @tracked repoFilter = '';
+  // "Waiting on my review" starts on the pull requests nobody has approved
+  // yet, the ones still waiting; empty for every one.
+  @tracked approvalFilter: Approval | '' = 'unapproved';
 
   // Every pull request is the viewer's own in "My PRs", so sorting or
   // filtering it by author would do nothing.
@@ -436,8 +442,27 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       : '';
   }
 
+  get approvalOptions() {
+    return [
+      { value: 'unapproved', label: 'Not approved yet' },
+      { value: 'approved', label: 'Approved' },
+      { value: '', label: 'All' },
+    ];
+  }
+
+  // Approval narrows only "Waiting on my review": every PR in "My PRs" shows
+  // whether it is approved already.
+  get activeApproval(): Approval | undefined {
+    return this.byAuthorApplies ? this.approvalFilter || undefined : undefined;
+  }
+
+  // Anything narrower than the list's own default.
   get filtering() {
-    return Boolean(this.activeAuthor || this.activeRepo);
+    return Boolean(
+      this.activeAuthor ||
+      this.activeRepo ||
+      (this.byAuthorApplies && this.approvalFilter !== 'unapproved'),
+    );
   }
 
   get shown() {
@@ -446,6 +471,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       direction: this.direction,
       author: this.activeAuthor || undefined,
       repo: this.activeRepo || undefined,
+      approval: this.activeApproval,
     });
   }
 
@@ -464,6 +490,10 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   clearFilters = () => {
     this.authorFilter = '';
     this.repoFilter = '';
+    this.approvalFilter = '';
+  };
+  selectApproval = (value: string) => {
+    this.approvalFilter = value as Approval | '';
   };
 
   selectTab = (value: string) => {
@@ -848,6 +878,13 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
                 data-test-direction
               />
               {{#if this.byAuthorApplies}}
+                <SegmentedControl
+                  @label='Approval'
+                  @options={{this.approvalOptions}}
+                  @value={{this.approvalFilter}}
+                  @onValueChange={{this.selectApproval}}
+                  data-test-approval-filter
+                />
                 <div class='filter'><NativeSelect
                     @label='Author'
                     @size='s'
@@ -939,7 +976,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           {{else if this.filtering}}
             <EmptyState
               @title='No pull requests match'
-              @message='Nothing in this list matches the author and repository chosen.'
+              @message='Nothing in this list matches the filters chosen.'
               data-test-empty='filtered'
             >
               <:action>
