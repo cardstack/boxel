@@ -3807,6 +3807,10 @@ const PATIENT_MODULE = `
       set: { ward: params('ward') },
     };
 
+    @operation static amend = { base: 'update' };
+
+    @operation static chart = { base: 'read' };
+
     @operation static northWard = {
       base: 'query',
       query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
@@ -5597,6 +5601,41 @@ try {
       );
     });
 
+    // An update-based entry is a patch of the card, so it travels as a card
+    // resource that names the card's type, in a batch as in a single call.
+    test('an update-based operation patches the card, alone and in a batch', async function (assert) {
+      await run(`
+await realm.operations.invoke('Patient/ana', 'amend', { attributes: { name: 'Ana B' } });
+await realm.operations.invokeBatchOperation([
+  { path: 'Patient/ben', operation: 'amend', payload: { attributes: { name: 'Ben C' } } },
+  { path: 'Patient/cleo', operation: 'recordVitals', payload: { reading: 'HR 64' } },
+]);`);
+
+      assert.strictEqual(
+        (await attributesOf('Patient/ana.json')).name,
+        'Ana B',
+      );
+      assert.strictEqual(
+        (await attributesOf('Patient/ben.json')).name,
+        'Ben C',
+      );
+      assert.strictEqual(
+        (await attributesOf('Patient/cleo.json')).lastVitals,
+        'HR 64',
+      );
+    });
+
+    test('a read-based operation answers the document', async function (assert) {
+      let result = await run(`
+let answer = await realm.operations.invoke('Patient/ana', 'chart');
+return { path: answer.path, id: answer.id, name: answer.document.data.attributes.name };`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        path: 'Patient/ana.json',
+        name: 'Ana',
+      });
+    });
+
     test('an operation the type does not declare is refused with the ones it does', async function (assert) {
       let result = await run(`
 try {
@@ -5608,7 +5647,7 @@ try {
 
       assert.strictEqual(
         JSON.parse(result.scriptResult!),
-        '"discharge" is not an operation Patient declares. It declares: recordVitals, transferTo',
+        '"discharge" is not an operation Patient declares. It declares: amend, chart, recordVitals, transferTo',
       );
     });
 
