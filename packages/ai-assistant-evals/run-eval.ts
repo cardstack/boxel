@@ -31,6 +31,7 @@ import {
 } from './eval-config.ts';
 import { grade, type RunResult } from './run-result.ts';
 import { canLogIn, evalUsers } from './ensure-users.ts';
+import { SHARE_OWNER } from './key-seed.ts';
 
 // One frontier model per lab that graded GOOD or ROUGH in the last sweep.
 // Override with the second argument.
@@ -377,6 +378,15 @@ async function main() {
   let credentials = await loginWithPassword(writer, password);
   let client = new RealmClient(credentials.accessToken, credentials.userId);
   let evaluation = await loadEvaluationBundle(client, args.evalCardUrl);
+  if (
+    evaluation.pipelineApprovals.some(({ keyFrom }) => keyFrom === 'share') &&
+    !(await canLogIn(SHARE_OWNER, evalPassword))
+  ) {
+    throw new Error(
+      `the evaluation's shares are made by ${SHARE_OWNER}, who cannot sign in. ` +
+        'Register them with `pnpm eval:users`, or name an account that exists with EVAL_SHARE_OWNER',
+    );
+  }
   let sessionId = args.sessionId ?? newSessionId(evaluation.name);
   let resultsDir = join(import.meta.dirname, 'eval-results', sessionId);
   await mkdir(resultsDir, { recursive: true });
