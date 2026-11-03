@@ -80,16 +80,18 @@ const PORTALLED = '[data-framer-portal-id]';
 let warnedUngroupedLayout = false;
 
 /**
- * Development only: warn, once per document, about a `layout` element that
- * nothing will snapshot.
+ * Development only: warn, once per document, about a `layout` or `layoutId`
+ * element that nothing will snapshot.
  *
  * A layout animation needs the element's box from BEFORE the DOM changed, and
- * in Glimmer the only thing that measures it then is a render detector. A
- * `layout` element with none above it, and no <Presence> handle, moves to its
- * new place in a single frame: a keyed list it sits in reorders, filters or
- * sorts without animating. `layoutChange()` is the one other way to snapshot,
- * and this cannot see it: an element animated only through `layoutChange()`
- * is warned about too, and a <LayoutGroup> around it quiets the warning.
+ * a `layoutId` hand-off needs the outgoing element's box from before it left.
+ * In Glimmer the only thing that measures either then is a render detector.
+ * An element with none above it, and no <Presence> handle, moves to its new
+ * place in a single frame: a keyed list it sits in reorders, filters or sorts
+ * without animating, and a hand-off jumps instead of morphing.
+ * `layoutChange()` is the one other way to snapshot, and this cannot see it:
+ * an element animated only through `layoutChange()` is warned about too, and
+ * a <LayoutGroup> around it quiets the warning.
  */
 export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
   if (
@@ -104,11 +106,12 @@ export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
   }
   warnedUngroupedLayout = true;
   console.warn(
-    'glimmer-motion: a {{motion layout}} element has no <LayoutGroup>, ' +
-      '<Presence>, <ReorderGroup> or <Choreo> above it. Those are what measure ' +
-      'a layout element before the DOM changes, so without one a list it sits ' +
-      'in reorders, filters or sorts in a single frame instead of animating. ' +
-      'Wrap the list or grid in a <LayoutGroup>, or make the change inside ' +
+    'glimmer-motion: a {{motion layout}} or layoutId element has no ' +
+      '<LayoutGroup>, <Presence>, <ReorderGroup> or <Choreo> above it. Those ' +
+      'are what measure it before the DOM changes, so without one a list it ' +
+      'sits in reorders, filters or sorts in a single frame, and a layoutId ' +
+      'hand-off jumps instead of morphing. Wrap the {{#each}} (or the ' +
+      'elements that hand off) in a <LayoutGroup>, or make the change inside ' +
       'layoutChange(() => …). The element:',
     el,
   );

@@ -24,13 +24,19 @@ import { setupFixtureViewport } from '../../helpers/layout-fixture';
  * its DOM nodes, nothing snapshots, and the rows land in their new places at
  * once.
  *
- * The first module pins that down; the second covers the development-mode
+ * A `layoutId` hand-off has the same dependency: the outgoing element's box is
+ * only known if something measured it before it left.
+ *
+ * The first two modules pin that down; the third covers the development-mode
  * warning an element raises when it registers with no such boundary above it.
  */
 const slow = { duration: 1, ease: 'linear' } as const;
 
 class Rows {
   @tracked order = ['a', 'b', 'c'];
+}
+class Toggle {
+  @tracked open = false;
 }
 const keyOf = (id: string) => id;
 
@@ -43,6 +49,19 @@ const frames = (n: number) =>
       left ? requestAnimationFrame(() => step(left - 1)) : resolve();
     step(n);
   });
+
+/**
+ * Swap one `layoutId` element for another 300px below it, and report how far
+ * the incoming one still sits from its own slot a few frames in. 0 means it
+ * jumped; close to 300 means it set off from the outgoing one's box.
+ */
+async function handOff(toggle: Toggle): Promise<number> {
+  await animationsSettled();
+  toggle.open = true;
+  await settled();
+  await frames(3);
+  return 300 - bounds(row('shared')).top;
+}
 
 /**
  * Move the last row to the top, and report how far it still sits from its new
@@ -135,6 +154,70 @@ module('Integration | motion | layout | render detector', function (hooks) {
   });
 });
 
+module(
+  'Integration | motion | layout | render detector, layoutId',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupMotion(hooks);
+    setupFixtureViewport(hooks);
+
+    test('a layoutId hand-off with no boundary above it does not animate', async function (assert) {
+      const toggle = new Toggle();
+      await render(
+        <template>
+          {{#if toggle.open}}
+            <div
+              data-row='shared'
+              style='position: absolute; top: 300px; left: 0; width: 40px; height: 40px'
+              {{motion layoutId='shared' transition=slow}}
+            ></div>
+          {{else}}
+            <div
+              data-row='shared'
+              style='position: absolute; top: 0; left: 0; width: 40px; height: 40px'
+              {{motion layoutId='shared' transition=slow}}
+            ></div>
+          {{/if}}
+        </template>,
+      );
+      const offset = await handOff(toggle);
+      assert.strictEqual(
+        Math.round(offset),
+        0,
+        'the incoming element is already in its own slot',
+      );
+    });
+
+    test('the same hand-off morphs inside a <LayoutGroup>', async function (assert) {
+      const toggle = new Toggle();
+      await render(
+        <template>
+          <LayoutGroup>
+            {{#if toggle.open}}
+              <div
+                data-row='shared'
+                style='position: absolute; top: 300px; left: 0; width: 40px; height: 40px'
+                {{motion layoutId='shared' transition=slow}}
+              ></div>
+            {{else}}
+              <div
+                data-row='shared'
+                style='position: absolute; top: 0; left: 0; width: 40px; height: 40px'
+                {{motion layoutId='shared' transition=slow}}
+              ></div>
+            {{/if}}
+          </LayoutGroup>
+        </template>,
+      );
+      const offset = await handOff(toggle);
+      assert.true(
+        offset > 250,
+        `the incoming element set off from the outgoing one's box (${offset.toFixed(0)}px away)`,
+      );
+    });
+  },
+);
+
 module('Integration | motion | layout | ungrouped warning', function (hooks) {
   setupRenderingTest(hooks);
   setupMotion(hooks);
@@ -155,7 +238,7 @@ module('Integration | motion | layout | ungrouped warning', function (hooks) {
     warnings.filter(
       ([message]) =>
         typeof message === 'string' &&
-        message.startsWith('glimmer-motion: a {{motion layout}} element'),
+        message.startsWith('glimmer-motion: a {{motion layout}} or layoutId'),
     );
 
   test('a layout element with no boundary above it warns once, naming the element', async function (assert) {
@@ -257,10 +340,20 @@ module('Integration | motion | layout | ungrouped warning', function (hooks) {
     assert.strictEqual(ungrouped().length, 0);
   });
 
-  test('layoutId and drag alone do not warn', async function (assert) {
+  test('a layoutId element with no boundary above it warns', async function (assert) {
     await render(
       <template>
-        <div {{motion layoutId='tab'}}></div>
+        <div class='tab' {{motion layoutId='tab'}}></div>
+      </template>,
+    );
+    const raised = ungrouped();
+    assert.strictEqual(raised.length, 1);
+    assert.strictEqual(raised[0]?.[1], document.querySelector('.tab'));
+  });
+
+  test('drag alone does not warn', async function (assert) {
+    await render(
+      <template>
         <div {{motion drag=true}}></div>
       </template>,
     );

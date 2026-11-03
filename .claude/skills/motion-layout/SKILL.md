@@ -41,8 +41,10 @@ while their content keeps running).
   patches the DOM, and only `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>`
   and `<Choreo>` do that measuring (`layoutChange(fn)` does it by hand).
   A keyed `{{#each}}` of `layout=true` rows with none of them above it moves
-  its DOM nodes unmeasured, and the rows jump. In development the first such
-  element logs a console warning with the element attached.
+  its DOM nodes unmeasured, and the rows jump. A `layoutId` hand-off needs
+  one too: the outgoing element's box is only known if something measured it
+  before it left. In development the first such element logs a console
+  warning with the element attached.
   ```gts
   <LayoutGroup>
     <ul>

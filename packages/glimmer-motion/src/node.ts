@@ -751,7 +751,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
           portalled ? undefined : (closestProjection(parent) as any),
         ) as unknown as IProjectionNode;
         ve.projection = projection;
-        if (props.layout) {
+        if (props.layout || props.layoutId) {
           warnIfNothingSnapshots(element, Boolean(presence));
         }
         // React's useLayoutId: a LayoutGroup id namespaces the layoutId; MeasureLayout adds the node to the group

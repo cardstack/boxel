@@ -252,7 +252,9 @@ Motion and every frame is corrected.
 measured by a render detector at the start of the render pass, and only `<LayoutGroup>`, `<Presence>`,
 `<ReorderGroup>` and `<Choreo>` carry one. A keyed `{{#each}}` of `layout=true` rows with none of
 them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
-places. In development the first such element logs a console warning with the element attached.
+places. A `layoutId` hand-off needs one too: the outgoing element's box is only known if something
+measured it before it left. In development the first such element logs a console warning with the
+element attached.
 Key the rows by a stable id as well: a key derived from position changes when the rows before it
 shift, and Glimmer replaces a row whose key changed with a new element, which has no earlier box to
 animate from.
