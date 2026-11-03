@@ -922,7 +922,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 340580,
+      "bytes": 340584,
       "modules": [
         {
           "package": "@cardstack/secure-origin",

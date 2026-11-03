@@ -68,6 +68,9 @@ export interface PolicyWriteAuditRequest {
   // a path the auditor finds is a policy or a realm's config, since a write
   // of another file can't change a policy.
   contentOf(path: LocalPath): Promise<string>;
+  // Whether the card stored at `path` is a policy card, as the realm's index
+  // records it. A card no realm can name yet, being new, governs nothing.
+  isPolicyCard(path: LocalPath): Promise<boolean>;
 }
 
 // Supplied by the server a realm runs in, which knows the realms it serves and

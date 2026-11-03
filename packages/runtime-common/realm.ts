@@ -5245,6 +5245,12 @@ export class Realm {
         }
         return await this.#writeContentText(content);
       },
+      isPolicyCard: async (path) => {
+        let row = await this.#realmIndexQueryEngine.instanceSource(
+          this.paths.fileURL(path),
+        );
+        return Boolean(row?.types && this.#isPolicyCard(row.types));
+      },
     });
     if (!audit || audit.entries.length === 0) {
       return undefined;

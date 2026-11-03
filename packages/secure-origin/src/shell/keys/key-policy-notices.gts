@@ -1,9 +1,9 @@
 // The notices a key's owner is owed when a workspace's policy comes to let
-// people who aren't signed in make calls with one of their shares there, as
+// people who aren’t signed in make calls with one of their shares there, as
 // the key page lists them above the keys, newest first.
 //
 // For a key that allows it, the notice says visitors now use it in that
-// workspace. For one that doesn't, it says the workspace wants visitors to use
+// workspace. For one that doesn’t, it says the workspace wants visitors to use
 // it, and offers to allow it for the key (`@onAllow`), which opens the key's
 // own setting with its optional cap. A notice whose key has since been deleted
 // or allowed offers nothing more.
@@ -38,7 +38,7 @@ function when(createdAt: string): string {
 }
 
 // The key a notice can still offer to allow: one of the user's, still there,
-// that doesn't allow it yet.
+// that doesn’t allow it yet.
 function allowable(
   notice: KeyPolicyNotice,
   keys: ListedKey[],
@@ -53,7 +53,7 @@ function allowable(
 const KeyPolicyNotices: TOC<Signature> = <template>
   {{#if @notices.length}}
     <section class='notices' data-test-key-policy-notices>
-      <h2>Workspaces opening your keys to people who aren't signed in</h2>
+      <h2>Workspaces opening your keys to people who aren’t signed in</h2>
       <ul>
         {{#each @notices key='id' as |notice|}}
           <li
@@ -63,14 +63,14 @@ const KeyPolicyNotices: TOC<Signature> = <template>
           >
             <p class='summary'>
               {{#if (eq notice.reason 'visitors-use')}}
-                People who aren't signed in now use
+                People who aren’t signed in now use
                 <strong>“{{notice.label}}”</strong>
                 in
                 {{addressOf notice.realm}}.
               {{else}}
                 {{addressOf notice.realm}}
-                wants people who aren't signed in to use
-                <strong>“{{notice.label}}”</strong>. The key doesn't allow it,
+                wants people who aren’t signed in to use
+                <strong>“{{notice.label}}”</strong>. The key doesn’t allow it,
                 so they are refused until you allow it.
               {{/if}}
             </p>

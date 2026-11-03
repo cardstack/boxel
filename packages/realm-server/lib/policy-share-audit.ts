@@ -80,12 +80,25 @@ async function auditPolicyWrite(
       written.set(cardIdOf(request.realmURL, path), path);
     }
   }
-  if (written.size === 0) {
+  let configWritten = request.paths.includes('realm.json');
+  // A card a realm can name already is an indexed policy card, so only those
+  // are changes of a policy in force; any other write is answered without
+  // asking which realms hold shares.
+  let changedPolicies = new Set<string>();
+  for (let [card, path] of written) {
+    if (path !== 'realm.json' && (await request.isPolicyCard(path))) {
+      changedPolicies.add(card);
+    }
+  }
+  if (changedPolicies.size === 0 && !configWritten) {
     return undefined;
   }
   let realmsWithShares = (
     (await query(dbAdapter, [
       `SELECT DISTINCT realm_url FROM key_shares WHERE key_id IS NOT NULL`,
+      ...(changedPolicies.size === 0
+        ? [` AND realm_url = `, param(request.realmURL)]
+        : []),
     ])) as { realm_url: string }[]
   ).map((row) => row.realm_url);
   if (realmsWithShares.length === 0) {
@@ -147,7 +160,7 @@ async function auditPolicyWrite(
         virtualNetwork,
       );
     }
-    if (next !== current || (next && written.has(stripJSON(next)))) {
+    if (next !== current || (next && changedPolicies.has(stripJSON(next)))) {
       targets.push({ realm, next: await nextPolicy(next) });
     }
   }

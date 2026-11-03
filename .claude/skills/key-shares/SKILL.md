@@ -1,6 +1,6 @@
 ---
 name: key-shares
-description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, how sharing follows whether the realm's policy opens shared-key calls to people who aren't signed in and whether the key allows them, who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `handlers/handle-key-shares.ts` or the triggers.
+description: Operate and diagnose shares — keys their owners have put into a realm for other people there to consume — the `key_shares` and `key_share_notices` tables and the `/_key-shares` and `/_key-share-notices` routes. Covers share states (`active`, `suspended`) and every suspension reason (`owner-lost-write`, `suspended-by-writer`, `key-deleted`), which change makes each, how a share resumes, the triggers on `realm_user_permissions` and `user_keys` that suspend shares however those rows change, who may share, unshare, suspend, resume and swap, how sharing follows whether the realm's policy opens shared-key calls to people who aren't signed in and whether the key allows them, the audit a policy save that opens shares to such people needs (`policy-opens-shares-to-anonymous`, `key_policy_notices`, `/_key-policy-notices`), who sees what, and every refusal the API answers with. Use when a user reports a share that stopped working or that they can't share, swap, suspend or see; when reading or querying `key_shares` / `key_share_notices` as an operator; or when changing `lib/key-shares.ts`, `lib/policy-share-audit.ts`, `handlers/handle-key-shares.ts` or the triggers.
 ---
 
 # Key shares (operators)
@@ -185,6 +185,37 @@ keys in open the secure window (`share-key`, `swap-key`), where the ticket is
 minted. For anyone who isn't a direct writer the listing answers 403 and the
 entry isn't drawn. The host tools behind it are `list-realm-key-shares`,
 `suspend-key-share` and `unshare-key` (`packages/host/app/tools/`).
+
+## A policy that opens shares to visitors
+
+Whether people who aren't signed in may use a key is its owner's setting on
+the key; whether they can in a realm is its policy's. A write that would put
+a policy in force (the policy card a realm with shares names, or a realm's
+`realm.json` pointing at another card) is audited before anything is written,
+by `lib/policy-share-audit.ts`, which the realm reaches through its
+`policyWriteAuditor`. The audit lists each share whose bindings are for an
+operation the new policy opens to visitors with a shared key and the policy in
+force doesn't, skipping keys that never serve visitors (a sign-in app's, a
+connection's). A listed write is refused 409 with
+`meta.code: 'policy-opens-shares-to-anonymous'` and the list in `meta.audit`,
+unless it carries the list's fingerprint in
+`X-Boxel-Policy-Audit-Confirmation`. Every write route takes it: the card+json
+verbs, `+source` and byte writes, `/_atomic` and `_operations`.
+
+Once a confirmed write lands, each listed share's owner gets a row in
+`key_policy_notices`: `visitors-use` for a key that allows anonymous use,
+`visitors-wanted` for one that doesn't. The owner reads their own, newest
+first, at `GET /_key-policy-notices`; the secure origin's key page lists them
+and offers to allow the key (`keys#anonymous=<key id>` opens that setting).
+A notice that can't be recorded is logged on `realm:policy-share-audit` and
+costs the write nothing.
+
+```sql
+-- What a realm's policy opened, and to whom it was told.
+SELECT created_at, owner, label, reason, operations, saved_by
+FROM key_policy_notices WHERE realm_url = 'https://app.boxel.ai/someone/realm/'
+ORDER BY created_at DESC;
+```
 
 ## The tables
 
