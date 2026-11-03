@@ -375,12 +375,41 @@ export default function handleRequestForward({
             'image/jpeg',
             'image/webp',
           ]);
+          // Speech comes back as raw audio, not JSON. It is the one binary
+          // reply a charged destination may send: OpenRouter names the
+          // generation in a header, and the credit strategy prices that id
+          // the way it prices a JSON reply that carries no inline cost.
+          const audioTypes = new Set([
+            'audio/mpeg',
+            'audio/mp3',
+            'audio/pcm',
+            'audio/wav',
+            'audio/x-wav',
+            'audio/ogg',
+            'audio/opus',
+            'audio/aac',
+            'audio/flac',
+          ]);
+          const chargesForUsage =
+            destinationConfig.creditStrategy.chargesForUsage;
+          const isAudio = Boolean(mediaType && audioTypes.has(mediaType));
           if (
-            !destinationConfig.creditStrategy.chargesForUsage &&
+            externalResponse.ok &&
+            externalResponse.body &&
             mediaType &&
-            binaryTypes.has(mediaType) &&
-            externalResponse.body
+            ((!chargesForUsage && binaryTypes.has(mediaType)) || isAudio)
           ) {
+            const generationId =
+              externalResponse.headers.get('x-generation-id') ?? undefined;
+            const charge =
+              chargesForUsage && generationId
+                ? { id: generationId, usage: { cost: undefined } }
+                : undefined;
+            if (chargesForUsage && !generationId) {
+              log.warn(
+                `Audio from ${json.url} carried no X-Generation-Id; nothing is charged for it`,
+              );
+            }
             ctxt.respond = false;
             ctxt.res.writeHead(externalResponse.status, {
               'Content-Type': mediaType,
@@ -400,10 +429,22 @@ export default function handleRequestForward({
                 reader.releaseLock();
               }
             };
-            await pipeline(Readable.from(chunks()), ctxt.res, {
-              signal: clientGone,
-            });
-            return undefined;
+            try {
+              await pipeline(Readable.from(chunks()), ctxt.res, {
+                signal: clientGone,
+              });
+            } catch (error) {
+              // The provider generated, and billed for, the audio once it
+              // answered, so a listener leaving partway is still charged.
+              if (charge) {
+                log.info(
+                  `Audio stream ended early (${error instanceof Error ? error.message : String(error)}); charging for generation ${charge.id}`,
+                );
+                return charge;
+              }
+              throw error;
+            }
+            return charge;
           }
 
           return await forwardJsonResponse(ctxt, externalResponse, {

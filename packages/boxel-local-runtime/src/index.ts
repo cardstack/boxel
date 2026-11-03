@@ -627,7 +627,15 @@ export async function startLocalBoxel(
         ]),
         ...mappings,
       ],
-      common,
+      {
+        ...common,
+        // Vendor keys the stack's owner places here are sealed as system keys
+        // at startup; see realm-server/lib/local-vendor-keys.ts.
+        BOXEL_LOCAL_VENDOR_KEYS_DIR: path.join(
+          profile.dataDirectory,
+          'vendor-keys',
+        ),
+      },
       {
         ...realmReferences,
         AI_BOT_DELEGATION_SECRET: 'BOXEL_SECRET_AI_DELEGATION',

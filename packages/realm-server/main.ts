@@ -95,6 +95,7 @@ import {
   matrixServerNameFromEnv,
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
+import { sealLocalVendorKeys } from './lib/local-vendor-keys.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -668,6 +669,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let queue = new PgQueuePublisher(dbAdapter);
   await reportPlaintextCensus(dbAdapter);
   await reportSealedCensus(dbAdapter, secretsKeyring());
+  await sealLocalVendorKeys(dbAdapter);
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a

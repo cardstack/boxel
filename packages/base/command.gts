@@ -1304,6 +1304,10 @@ export class SendRequestViaProxyInput extends CardDef {
   // host turns this into the abort signal on the request. Unset means wait
   // indefinitely.
   @field timeoutMs = contains(NumberField); // optional
+  // Ask the realm server to stream the upstream answer (SSE for chat
+  // completions). The result's response body is then read as it arrives.
+  // The destination must allow streaming.
+  @field stream = contains(BooleanField); // optional
 }
 
 export class SendRequestViaProxyResult extends CardDef {

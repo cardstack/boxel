@@ -1569,6 +1569,7 @@ export default class RealmServerService
     requestBody: string;
     headers?: Record<string, string>;
     multipart?: boolean;
+    stream?: boolean;
     timeoutMs?: number;
     signal?: AbortSignal;
   }) {

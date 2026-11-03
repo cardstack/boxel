@@ -42,6 +42,7 @@ export default class SendRequestViaProxyTool extends HostBaseTool<
         requestBody: input.requestBody,
         headers: input.headers,
         multipart: input.multipart,
+        ...(input.stream ? { stream: true } : {}),
         timeoutMs: input.timeoutMs,
       });
 
