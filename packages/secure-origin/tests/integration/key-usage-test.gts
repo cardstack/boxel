@@ -451,7 +451,7 @@ module('Integration | key usage and limits', function (hooks) {
       });
     }
 
-    test('a key that used its budget says so, and Change limits opens its limits on its tile', async function (assert) {
+    test('a key that used its budget says so, and See usage opens its usage and limits on its tile', async function (assert) {
       serveNotices([limitNotice('7', {})]);
       serve({
         'GET _user-keys/key-1/usage': () => usageResource('key-1', usage()),
@@ -472,7 +472,7 @@ module('Integration | key usage and limits', function (hooks) {
         .includesText('Raise the budget to keep it working');
       assert.dom('[data-test-key-usage]').doesNotExist('closed until asked');
 
-      await click('[data-test-key-limit-notice-change]');
+      await click('[data-test-key-limit-notice-usage]');
       await waitFor('[data-test-key-usage]');
       assert
         .dom('[data-test-key-usage-toggle]')
@@ -483,6 +483,9 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom('[data-test-key-usage-toggle]')
         .isFocused('focus moves to the panel it opened');
+      assert
+        .dom('[data-test-key-limit-notice-usage]')
+        .hasText('See usage…', 'the same action as on any other notice');
       assert.deepEqual(navigations, [], 'it stays on the page');
     });
 
@@ -493,7 +496,7 @@ module('Integration | key usage and limits', function (hooks) {
       visitShell('keys');
       await render(KeyPage);
       await waitFor('[data-test-key-limit-notice="Old key"]');
-      assert.dom('[data-test-key-limit-notice-change]').doesNotExist();
+      assert.dom('[data-test-key-limit-notice-usage]').doesNotExist();
     });
 
     test('a share of the user’s key nearing its budget opens the share’s limits, which come back here', async function (assert) {
@@ -518,7 +521,7 @@ module('Integration | key usage and limits', function (hooks) {
         .includesText(
           '“Team weather”, your key shared with realm-server.test/someone/workspace/, is close to its monthly budget of 72,000 calls.',
         );
-      await click('[data-test-key-limit-notice-change]');
+      await click('[data-test-key-limit-notice-usage]');
       assert.strictEqual(navigations.length, 1);
       let target = new URL(navigations[0].url!, window.location.href);
       assert.true(target.pathname.endsWith('/share-limits'));
@@ -570,7 +573,6 @@ module('Integration | key usage and limits', function (hooks) {
           '“Team weather” in realm-server.test/someone/workspace/, used its whole daily budget',
         )
         .includesText('Only the key’s owner can change its limits.');
-      assert.dom('[data-test-key-limit-notice-change]').doesNotExist();
       await click('[data-test-key-limit-notice-usage]');
       let target = new URL(navigations[0].url!, window.location.href);
       assert.true(target.pathname.endsWith('/share-limits'));

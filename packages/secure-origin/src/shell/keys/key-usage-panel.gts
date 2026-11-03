@@ -30,7 +30,7 @@ interface Signature {
     key: ListedKey;
     api: KeysWindowAPI;
     // Hands the key page a way to open this panel and bring it into view, as
-    // a limit notice about the key does; and takes it back when the panel
+    // a limit notice's See usage… does; and takes it back when the panel
     // goes.
     onRegister?: (keyId: string, show: (() => void) | undefined) => void;
   };

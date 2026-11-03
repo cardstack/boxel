@@ -127,9 +127,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           {{else}}
             <KeyLimitNotices
               @notices={{this.state.limitNotices}}
-              @canChangeKeyLimits={{this.canChangeKeyLimits}}
-              @onChangeKeyLimits={{this.showKeyLimits}}
-              @onOpenShareLimits={{this.openShareLimits}}
+              @showsKeyUsage={{this.showsKeyUsage}}
+              @onOpenKeyUsage={{this.showKeyUsage}}
+              @onOpenShareUsage={{this.openShareUsage}}
             />
             <KeyPolicyNotices
               @notices={{this.state.notices}}
@@ -756,20 +756,21 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
   };
 
-  // Whether the page shows this key's limits on its tile.
-  private canChangeKeyLimits = (keyId: string) => {
+  // Whether the page shows this key's usage and limits on its tile.
+  private showsKeyUsage = (keyId: string) => {
     let key = this.state.keys.find((candidate) => candidate.id === keyId);
     return !!key && this.hasUsage(key);
   };
 
-  // A personal key's limits are changed on its own tile.
-  private showKeyLimits = (keyId: string) => {
+  // A personal key's usage and limits are on its own tile.
+  private showKeyUsage = (keyId: string) => {
     this.usagePanels.get(keyId)?.();
   };
 
-  // A share's limits are changed on the share's own page, which says who can
-  // when the user can't. It comes back to this page when it is done.
-  private openShareLimits = (notice: KeyLimitNotice) => {
+  // A share's usage and limits are on the share's own page, where its key's
+  // owner changes them and anyone else is told who can. It comes back to this
+  // page when it is done.
+  private openShareUsage = (notice: KeyLimitNotice) => {
     if (!notice.realm || !notice.share) {
       return;
     }

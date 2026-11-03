@@ -4,12 +4,12 @@
 // budget used up comes first in weight: calls with that key are refused until
 // the period ends. Nearing one is quieter.
 //
-// Each entry says what to do about it. The key's owner changes its limits:
-// a personal key's on its own tile (`@onChangeKeyLimits`, which opens the
-// tile's usage and limits), a share's on its own page (`@onOpenShareLimits`).
-// A realm's other direct writers are told too, since a share in their realm
-// stops serving its cards. They can't change its limits, so their entry opens
-// the share's usage, which says who can.
+// Each entry offers one thing to do, See usage…: a personal key's usage and
+// limits on its own tile (`@onOpenKeyUsage`), a share's on its own page
+// (`@onOpenShareUsage`). Both put the limits under the usage, where the key's
+// owner changes them. A realm's other direct writers are told too, since a
+// share in their realm stops serving its cards; the share's page shows them
+// its usage and says only its owner changes its limits.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
@@ -22,10 +22,10 @@ import { addressOf } from './workspace-dropdown.gts';
 interface Signature {
   Args: {
     notices: KeyLimitNotice[];
-    // Whether the page shows this personal key's limits to change.
-    canChangeKeyLimits: (keyId: string) => boolean;
-    onChangeKeyLimits: (keyId: string) => void;
-    onOpenShareLimits: (notice: KeyLimitNotice) => void;
+    // Whether the page shows this personal key's usage on its tile.
+    showsKeyUsage: (keyId: string) => boolean;
+    onOpenKeyUsage: (keyId: string) => void;
+    onOpenShareUsage: (notice: KeyLimitNotice) => void;
   };
 }
 
@@ -130,28 +130,19 @@ const KeyLimitNotices: TOC<Signature> = <template>
                 {{/if}}
               </p>
               <div class='actions'>
-                {{#if notice.yours}}
-                  {{#if notice.realm}}
-                    <Button
-                      @kind='primary'
-                      @size='small'
-                      data-test-key-limit-notice-change
-                      {{on 'click' (fn @onOpenShareLimits notice)}}
-                    >Change limits…</Button>
-                  {{else if (if notice.key (@canChangeKeyLimits notice.key))}}
-                    <Button
-                      @kind='primary'
-                      @size='small'
-                      data-test-key-limit-notice-change
-                      {{on 'click' (fn @onChangeKeyLimits notice.key)}}
-                    >Change limits…</Button>
-                  {{/if}}
-                {{else}}
+                {{#if notice.realm}}
                   <Button
-                    @kind='secondary'
+                    @kind='primary'
                     @size='small'
                     data-test-key-limit-notice-usage
-                    {{on 'click' (fn @onOpenShareLimits notice)}}
+                    {{on 'click' (fn @onOpenShareUsage notice)}}
+                  >See usage…</Button>
+                {{else if (if notice.key (@showsKeyUsage notice.key))}}
+                  <Button
+                    @kind='primary'
+                    @size='small'
+                    data-test-key-limit-notice-usage
+                    {{on 'click' (fn @onOpenKeyUsage notice.key)}}
                   >See usage…</Button>
                 {{/if}}
               </div>
