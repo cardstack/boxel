@@ -9,6 +9,28 @@
 // (`#realm=<realm>`), it asks which of the user's keys; only a direct writer
 // of that realm may share into it, and anyone else is told an administrator
 // needs to set it up, with nothing to enter.
+//
+// The page makes no choice about who can use the key. Whether people who
+// aren't signed in may use a key is its owner's decision about the key itself,
+// made when adding it or on the key page; whether they can use it in a
+// workspace is that workspace's policy's to say. They are served only where
+// both allow it, and the page reflects the two, reading one of three ways:
+//
+// - Where the policy lets only signed-in people make a call that sends a
+//   shared key (`realm.opensToAnonymous` false in the window's context), the
+//   intro says only signed-in people can use it, and nothing more is said of
+//   anyone else.
+// - Where the policy lets people who aren't signed in make such a call,
+//   sharing a key there means they will use it, and the intro bolds that they
+//   will. A chosen key that allows them is shared as any other, with a line
+//   saying the key allows it, with its anonymous cap, and that sharing it here
+//   means they will use it.
+// - Where the policy lets them and the chosen key doesn't allow them, the key
+//   can't be shared there: the line says so and points to the key page, where
+//   its owner allows it, and Share key stays disabled. The realm server
+//   refuses such a share too.
+//
+// Choosing another key or workspace reads the page again.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -26,6 +48,7 @@ import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import Tag from '../../components/icons/tag.gts';
+import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -40,6 +63,7 @@ import {
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
+import { servesVisitors } from './anonymous-use-fields.gts';
 import KeyPicker from './key-picker.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
@@ -48,6 +72,7 @@ import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { openedForShare } from './opened-for.ts';
 import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
+import { anonymousCapsClause } from './anonymous-caps.ts';
 
 interface Realm {
   url: string;
@@ -65,7 +90,17 @@ type State =
       key?: UserKey;
       context?: WindowContext;
     }
-  | { name: 'done'; realm: string; share: KeyShare; key: string };
+  // `anonymous` is whether people who aren't signed in will use the key in
+  // the realm, with the key's anonymous cap.
+  | {
+      name: 'done';
+      realm: string;
+      share: KeyShare;
+      key: string;
+      anonymous: boolean;
+      anonymousDailyCap: number | null;
+      anonymousMonthlyCap: number | null;
+    };
 
 interface ShareKeyArgs {
   api: KeysWindowAPI;
@@ -92,17 +127,34 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         <strong>{{this.done.realm}}</strong>
         as
         <strong data-test-keys-done-label>{{this.done.share.label}}</strong>.
+        {{#if this.done.anonymous}}
+          <strong data-test-share-key-done-anonymous>People who aren’t signed in
+            will use it too</strong>{{anonymousCapsClause this.done}}.
+        {{/if}}
       </DonePage>
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.save}} data-test-share-key-form>
         <EditPage @heading='Share a key' data-test-share-key>
-          <:intro>People who can access the workspace can use the key in their
-            requests. They never see the key itself.
-            <strong>Only signed-in people</strong>
-            with access to this workspace can use it. People who aren’t signed
-            in can’t. Requests made by people who have access to this workspace
-            will consume your quota and/or be billed against your account with
-            this service provider.</:intro>
+          <:intro>
+            {{#if this.forAnyone}}
+              <span data-test-share-key-intro='anyone'>People who can access the
+                workspace can use the key in their requests,
+                <strong>and so will people who aren’t signed in</strong>: this
+                workspace lets anyone who opens its cards make calls with a
+                shared key. Nobody sees the key itself. Requests made by anyone
+                who opens those cards will consume your quota and/or be billed
+                against your account with this service provider.</span>
+            {{else}}
+              <span data-test-share-key-intro='signed-in'>People who can access
+                the workspace can use the key in their requests. They never see
+                the key itself.
+                <strong>Only signed-in people</strong>
+                with access to this workspace can use it. People who aren’t
+                signed in can’t. Requests made by people who have access to this
+                workspace will consume your quota and/or be billed against your
+                account with this service provider.</span>
+            {{/if}}
+          </:intro>
           <:default>
             {{#if this.choosing.context}}
               <OpenedForSummary
@@ -159,6 +211,41 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
                 data-test-share-label
               />
             </FieldContainer>
+            {{#if this.policyUnknown}}
+              {{! Asked of the workspace just chosen: which reading applies. }}
+            {{else if this.keyAllowsAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-share-key-key-allows
+              >
+                <p class='allows' data-test-share-key-key-allows-text>This key
+                  allows it{{anonymousCapsClause this.chosenKey}}. Sharing it
+                  here means they will use it.</p>
+              </FieldContainer>
+            {{else if this.keyRefusesAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-share-key-key-refuses
+              >
+                <div class='refuses'>
+                  <p class='allows' data-test-share-key-key-refuses-text>This
+                    workspace lets people who aren’t signed in use the keys
+                    shared into it, and this key doesn’t allow them. Allow it on
+                    your key page first.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-share-key-go-to-key
+                    {{on 'click' this.goToKeys}}
+                  >Go to your keys</Button>
+                </div>
+              </FieldContainer>
+            {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -195,6 +282,16 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
+      .refuses {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+      }
+      .allows {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
         font-size: var(--boxel-font-size-xs);
@@ -219,6 +316,9 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     label: '',
     // Whether the label was typed rather than filled in from the key's name.
     labelTyped: false,
+    // Whether the chosen realm's policy opens a call that sends a shared key
+    // to people who aren't signed in; undefined while it's being asked.
+    opensToAnonymous: undefined as boolean | undefined,
     saving: false,
     error: undefined as string | undefined,
   });
@@ -264,6 +364,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
           return;
         }
         this.form.realm = context.realm.url;
+        this.setOpensToAnonymous(context.realm.opensToAnonymous);
       } else {
         this.form.realms = await writableRealms(config);
         if (this.form.realms.length === 1) {
@@ -305,8 +406,59 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
       this.form.saving ||
       !this.form.key ||
       !this.form.realm ||
-      !this.form.label.trim()
+      !this.form.label.trim() ||
+      this.form.opensToAnonymous === undefined ||
+      this.keyRefusesAnonymous
     );
+  }
+
+  private get opensToAnonymous() {
+    return this.form.opensToAnonymous === true;
+  }
+
+  // The intro tells of people who aren't signed in where the policy lets them
+  // use a shared key: sharing a key there means they will use it, and only a
+  // key whose owner allows it on the key is shared there.
+  private get forAnyone() {
+    let key = this.chosenKey;
+    return this.opensToAnonymous && (!key || servesVisitors(key));
+  }
+
+  private get chosenKey(): UserKey | undefined {
+    return this.form.keys.find((k) => k.id === this.form.key);
+  }
+
+  // Where the policy lets people who aren't signed in use a shared key, and
+  // the chosen key allows them.
+  private get keyAllowsAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      key.anonymous === true
+    );
+  }
+
+  // Where the policy lets them and the chosen key doesn't: the key can't be
+  // shared there until its owner allows them on the key page.
+  private get keyRefusesAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      !key.anonymous
+    );
+  }
+
+  // Neither reading is drawn until the chosen workspace says which applies.
+  private get policyUnknown() {
+    return Boolean(this.form.realm) && this.form.opensToAnonymous === undefined;
+  }
+
+  private setOpensToAnonymous(opens: boolean) {
+    this.form.opensToAnonymous = opens;
   }
 
   private keyName(id: string | undefined): string {
@@ -335,9 +487,26 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     }
   };
 
-  private selectRealm = (url: string) => {
+  // A realm chosen here is asked whether its policy opens a shared key to
+  // people who aren't signed in, which sets how the page reads.
+  private selectRealm = async (url: string) => {
     this.form.realm = url;
     this.form.error = undefined;
+    this.form.opensToAnonymous = undefined;
+    try {
+      let context = await windowContext(this.args.api.config, { realm: url });
+      if (this.form.realm === url) {
+        this.setOpensToAnonymous(context.realm.opensToAnonymous);
+      }
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+        return;
+      }
+      if (this.form.realm === url) {
+        this.form.error = failureMessage(e);
+      }
+    }
   };
 
   private setLabel = (value: string) => {
@@ -366,6 +535,11 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
+    // Shared into a workspace that lets people who aren't signed in use it,
+    // the key allows them, so they will.
+    let anonymous = this.opensToAnonymous;
+    let anonymousDailyCap = this.chosenKey?.anonymousDailyCap ?? null;
+    let anonymousMonthlyCap = this.chosenKey?.anonymousMonthlyCap ?? null;
     try {
       let share = await shareKey(this.args.api.config, {
         keyId: key,
@@ -377,6 +551,9 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
         realm: this.realmName(realm),
         share,
         key: this.keyName(key),
+        anonymous,
+        anonymousDailyCap: anonymous ? anonymousDailyCap : null,
+        anonymousMonthlyCap: anonymous ? anonymousMonthlyCap : null,
       };
       if (!this.fromKeyPage) {
         this.args.api.close();

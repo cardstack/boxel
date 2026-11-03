@@ -1,10 +1,17 @@
 import { param, query, type DBAdapter } from '@cardstack/runtime-common';
+import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import {
   destinationCovers,
   type CallApiReadinessLookup,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
-import { bindingInstance, checkSlots, type SlotCheck } from './key-bindings.ts';
+import {
+  bindingInstance,
+  checkSlots,
+  limitSubjectOf,
+  type SlotCheck,
+} from './key-bindings.ts';
+import { limitReadiness } from './key-limits.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -24,6 +31,16 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // would treat it: sent, as that probe. A rejected key, such as a
 // service-account key Google refused, reads as `credential-rejected` whether
 // or not its probe is due: what brings it back is its owner replacing it.
+//
+// Slots that would be filled are then asked about the limits of the share or
+// key filling them, without counting anything: `over-budget` when a budget is
+// used up, `rate-limited` when the caller's bucket is empty.
+//
+// A caller who isn't signed in is asked about only where every slot takes a
+// shared key and the realm admitted them from an address: a share whose key
+// doesn't allow anonymous use answers `needs-sign-in`, and so does anything
+// with a `{{userKey}}` slot. Their limits are their address's bucket and the
+// key's anonymous cap.
 //
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
@@ -64,16 +81,22 @@ export async function keyReadiness(
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: { probeIntervalMs?: number } = {},
 ): Promise<KeyReadiness | undefined> {
-  let { request, caller } = lookup;
+  let { request } = lookup;
   if (request.slots.length === 0) {
     return 'ready';
   }
-  // A call that sends a credential and authenticated nobody is refused before
-  // any binding is looked at, so signing in is what fixes it whatever the
-  // slot is.
-  if (!caller) {
+  // A caller who isn't signed in is served only by shares whose keys allow
+  // anonymous use, and only where the realm admitted them from an address it
+  // can count. Otherwise the call is refused before any binding is looked at,
+  // so signing in is what fixes it, whatever the slot is.
+  let anonymous = lookup.caller ? undefined : lookup.anonymous;
+  if (
+    !lookup.caller &&
+    (!anonymous || request.slots.some(({ key }) => key === 'userKey'))
+  ) {
     return 'needs-sign-in';
   }
+  let caller = lookup.caller ?? ANONYMOUS_ACTOR;
   let instance = bindingInstance(request, lookup.instance);
   if (instance === undefined) {
     return undefined;
@@ -93,6 +116,18 @@ export async function keyReadiness(
       check.slot.key === 'userKey'
         ? await userKeyReadiness(check, callerCovers)
         : shareReadiness(check, caller),
+    );
+  }
+  let filled = checks.filter(
+    (check) => check.refused === undefined && !keyRejected(check),
+  );
+  if (filled.length > 0) {
+    answers.push(
+      await limitReadiness(dbAdapter, {
+        caller,
+        ...(anonymous ? { anonymous } : {}),
+        subjects: filled.map((check) => limitSubjectOf(check.binding!)),
+      }),
     );
   }
   return answers.reduce<KeyReadiness>(
@@ -123,6 +158,8 @@ async function userKeyReadiness(
       return 'needs-reapproval';
     case 'interactive-use-not-approved':
       return 'needs-approval';
+    case 'anonymous-use-not-approved':
+      return 'needs-sign-in';
     case 'credential-rejected':
     case 'key-rejected':
       return 'credential-rejected';
@@ -163,6 +200,10 @@ function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
       return theirs ? 'needs-reapproval' : 'needs-admin';
     case 'interactive-use-not-approved':
       return theirs ? 'needs-approval' : 'needs-admin';
+    // Only people who aren't signed in reach this, and signing in is what
+    // serves them.
+    case 'anonymous-use-not-approved':
+      return 'needs-sign-in';
     case 'credential-rejected':
     case 'key-rejected':
       // Every caller is refused `credential-rejected` at the call, so telling

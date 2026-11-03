@@ -1,3 +1,4 @@
+import { opensSharedKeysToAnonymous } from './anonymous-key-use.ts';
 import { getDomain } from 'tldts';
 import {
   codeRefWithAbsoluteIdentifier,
@@ -93,7 +94,15 @@ export interface SlotBound {
 }
 
 export interface SecureWindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    // Whether the realm's policy lets people who aren't signed in make a call
+    // that sends a shared key (`anonymous-key-use.ts`): sharing a key into it
+    // means they will use it, so only a key that allows it is shared there.
+    opensToAnonymous: boolean;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: SecureWindowOperation;
 }
@@ -211,6 +220,8 @@ export function validateContextRequest(
 
 export interface Deps {
   dbAdapter: DBAdapter;
+  // The paired homeserver's server name, which a `users` grant is judged by.
+  matrixServerName: string;
   // The realm a URL is in, found among every realm this server serves,
   // mounted or not, and without mounting it (`findRealm`).
   findRealm: (url: URL) => Promise<ServedRealm | undefined>;
@@ -247,9 +258,10 @@ async function realmNamed(
 
 // Read from the realm's permission rows, so a realm need not be mounted to be
 // asked about, by the rule every realm request is checked by. A secure session
-// is a registered Matrix user's, so the `users` row applies to it.
+// is a registered Matrix user's, so the `users` row applies to it when the
+// user is on the paired homeserver.
 async function mayRead(
-  dbAdapter: DBAdapter,
+  { dbAdapter, matrixServerName }: Pick<Deps, 'dbAdapter' | 'matrixServerName'>,
   realmURL: string,
   user: string,
 ): Promise<boolean> {
@@ -257,6 +269,7 @@ async function mayRead(
   let actions = await effectiveRealmPermissions(
     permissions,
     user,
+    matrixServerName,
     async () => true,
   );
   return actions.includes('read');
@@ -322,7 +335,7 @@ export async function resolveWindowRequest(
     let named = target?.kind === 'type' ? target.realm : request.realm;
     served = named ? await realmNamed(deps, named) : undefined;
   }
-  if (!served || !(await mayRead(dbAdapter, served.url, user))) {
+  if (!served || !(await mayRead(deps, served.url, user))) {
     throw notFound();
   }
   // A realm named beside a target must be the target's own. Any other realm
@@ -358,7 +371,7 @@ export async function resolveWindowRequest(
     codeRef.module as RealmResourceIdentifier,
   );
   let moduleRealm = moduleURL ? await findRealm(moduleURL) : undefined;
-  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm.url, user))) {
+  if (!moduleRealm || !(await mayRead(deps, moduleRealm.url, user))) {
     throw notFound();
   }
   // The definition is looked up among mounted realms.
@@ -398,6 +411,11 @@ export async function secureWindowContext(
         deps.dbAdapter,
         new URL(realm.url),
         user,
+      ),
+      // A policy that can't be read says nothing; the page reads as signed-in
+      // only, and a share made then serves signed-in people only.
+      opensToAnonymous: await opensSharedKeysToAnonymous(realm).catch(
+        () => false,
       ),
     },
   };
@@ -611,7 +629,7 @@ export async function realmCardsWithRequests(
     if (!readable.has(moduleRealm.url)) {
       readable.set(
         moduleRealm.url,
-        (await mayRead(dbAdapter, moduleRealm.url, user)) &&
+        (await mayRead(deps, moduleRealm.url, user)) &&
           Boolean(await moduleRealm.mount()),
       );
     }

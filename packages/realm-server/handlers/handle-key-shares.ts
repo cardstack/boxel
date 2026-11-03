@@ -15,6 +15,12 @@ import {
   type KeyShareNotice,
 } from '../lib/key-shares.ts';
 import { UserKeyError } from '../lib/user-keys.ts';
+import { realmOpensSharedKeysToAnonymous } from '../lib/anonymous-key-use.ts';
+import {
+  declinePolicyNotice,
+  listOwnPolicyNotices,
+} from '../lib/policy-share-audit.ts';
+import { secureClientOf } from './handle-user-key-grants.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import { secureSessionClient } from '../lib/secure-session.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
@@ -134,7 +140,43 @@ export function handleListKeyShareNotices({
   });
 }
 
-export function handleShareKey({ dbAdapter }: CreateRoutesArgs): Handler {
+// The notices the user is owed as a key's owner because a realm's policy came
+// to open one of their shares there to people who aren't signed in.
+export function handleListKeyPolicyNotices({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let notices = await listOwnPolicyNotices(dbAdapter, ownerOf(ctxt));
+    await sendJSON(ctxt, 200, {
+      data: notices.map(({ id, ...attributes }) => ({
+        type: 'key-policy-notice',
+        id,
+        attributes,
+      })),
+    });
+  });
+}
+
+// The owner declines a workspace's request that visitors use one of their
+// keys, from the secure origin only: card code holds the app's session, and
+// must not answer a request made of the key's owner.
+export function handleDeclineKeyPolicyNotice(args: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let user = ownerOf(ctxt);
+    await secureClientOf(ctxt, args, 'a request is declined');
+    let { id, ...attributes } = await declinePolicyNotice(
+      args.dbAdapter,
+      user,
+      ctxt.params.id,
+    );
+    await sendJSON(ctxt, 200, {
+      data: { type: 'key-policy-notice', id, attributes },
+    });
+  });
+}
+
+export function handleShareKey(args: CreateRoutesArgs): Handler {
+  let { dbAdapter } = args;
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SHARE_ATTRIBUTES);
@@ -143,6 +185,7 @@ export function handleShareKey({ dbAdapter }: CreateRoutesArgs): Handler {
       realm: attributes.realm,
       keyId: attributes.keyId,
       label: attributes.label,
+      opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       ticket,
     });
     await sendJSON(ctxt, 201, { data: serialize(share) });
@@ -187,10 +230,8 @@ export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
 // destinations, so it needs the session a grant does (see
 // `handle-user-key-grants.ts`); one into a share with none takes the ticket
 // alone. The answer lists the bindings it moved to the new key.
-export function handleSwapKeyIntoShare({
-  dbAdapter,
-  secureOriginURL,
-}: CreateRoutesArgs): Handler {
+export function handleSwapKeyIntoShare(args: CreateRoutesArgs): Handler {
+  let { dbAdapter, secureOriginURL } = args;
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
     let { attributes, ticket } = await readShareBody(ctxt, SWAP_ATTRIBUTES);
@@ -209,6 +250,7 @@ export function handleSwapKeyIntoShare({
         keyId: attributes.keyId,
         ticket,
         via,
+        opensToAnonymous: realmOpensSharedKeysToAnonymous(args),
       },
     );
     await sendJSON(ctxt, 200, {

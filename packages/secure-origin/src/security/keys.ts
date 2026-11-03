@@ -19,7 +19,15 @@ export interface DestinationDisplay {
 
 // The realm server's description of what a key page was opened for.
 export interface WindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  // `opensToAnonymous`: whether the realm's policy lets people who aren't
+  // signed in make a call that sends a shared key. A key is shared into such
+  // a realm only when it allows their using it.
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    opensToAnonymous: boolean;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: {
     name: string;
@@ -64,6 +72,23 @@ export type KeyValue =
       subject: string;
       scopes: string[];
     };
+
+// The attributes that let people who aren't signed in use a key, with
+// optional caps on their calls a day and a month; none when they may not.
+function anonymousAttributes(
+  anonymous: boolean,
+  anonymousDailyCap: number | undefined,
+  anonymousMonthlyCap: number | undefined,
+): Record<string, unknown> {
+  if (!anonymous) {
+    return {};
+  }
+  return {
+    anonymous: true,
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
+  };
+}
 
 // The attributes a key's value is sent as.
 function valueAttributes(entered: KeyValue): Record<string, unknown> {
@@ -127,6 +152,13 @@ export interface UserKey {
   state: string;
   createdAt: string;
   updatedAt: string;
+  // Whether its owner lets people who aren't signed in use the key, wherever
+  // a realm it is shared into lets them make a call that sends it, and the
+  // optional caps on their calls a day and a month, all together, across
+  // every such realm. Null where there is no cap.
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
   oauth?: OAuthKeyDescription;
   serviceAccount?: ServiceAccountDetails;
 }
@@ -217,9 +249,24 @@ export async function getKey(
   );
 }
 
+// Adds a key. `anonymous` lets people who aren't signed in use it, with
+// optional caps on their calls a day (`anonymousDailyCap`) and a month
+// (`anonymousMonthlyCap`); without it, only signed-in people can.
 export async function addKey(
   config: Config,
-  { name, entered }: { name: string; entered: KeyValue },
+  {
+    name,
+    entered,
+    anonymous = false,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  }: {
+    name: string;
+    entered: KeyValue;
+    anonymous?: boolean;
+    anonymousDailyCap?: number;
+    anonymousMonthlyCap?: number;
+  },
 ): Promise<UserKey> {
   let { ticket } = await mintKeyWriteTicket(config, { action: 'add' });
   return resource<UserKey>(
@@ -227,7 +274,16 @@ export async function addKey(
       body: {
         data: {
           type: 'user-key',
-          attributes: { name, kind: entered.kind, ...valueAttributes(entered) },
+          attributes: {
+            name,
+            kind: entered.kind,
+            ...valueAttributes(entered),
+            ...anonymousAttributes(
+              anonymous,
+              anonymousDailyCap,
+              anonymousMonthlyCap,
+            ),
+          },
         },
         meta: { ticket },
       },
@@ -307,6 +363,46 @@ export async function replaceKey(
   );
 }
 
+// Sets whether people who aren't signed in may use one of the user's keys,
+// and the optional caps on their calls a day and a month. It is the key's
+// own setting, whichever realms it is shared into, and needs no ticket: the
+// window's session is its owner's. Turning it off clears both caps. Answers
+// the key.
+export async function setAnonymousUse(
+  config: Config,
+  {
+    keyId,
+    anonymous,
+    anonymousDailyCap = null,
+    anonymousMonthlyCap = null,
+  }: {
+    keyId: string;
+    anonymous: boolean;
+    anonymousDailyCap?: number | null;
+    anonymousMonthlyCap?: number | null;
+  },
+): Promise<UserKey> {
+  return resource<UserKey>(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/anonymous-use`,
+      {
+        method: 'PUT',
+        body: {
+          data: {
+            type: 'anonymous-use',
+            attributes: {
+              anonymous,
+              anonymousDailyCap: anonymous ? anonymousDailyCap : null,
+              anonymousMonthlyCap: anonymous ? anonymousMonthlyCap : null,
+            },
+          },
+        },
+      },
+    ),
+  );
+}
+
 export async function deleteKey(
   config: Config,
   { keyId }: { keyId: string },
@@ -319,6 +415,48 @@ export async function deleteKey(
     method: 'DELETE',
     body: { meta: { ticket } },
   });
+}
+
+// A notice the user is owed as a key's owner: a workspace's policy came to
+// let people who aren't signed in make calls with one of their shares there.
+// `visitors-use` is for a key that allows it, which they now use there;
+// `visitors-wanted` for one that doesn't, which the workspace wants them to
+// use. `key` is null once the key is deleted.
+export interface KeyPolicyNotice {
+  id: string;
+  realm: string;
+  share: string;
+  label: string;
+  key: string | null;
+  policy: string | null;
+  savedBy: string | null;
+  reason: 'visitors-use' | 'visitors-wanted';
+  operations: string[];
+  // When the owner declined a `visitors-wanted` request; null otherwise.
+  declinedAt: string | null;
+  createdAt: string;
+}
+
+// The user's notices as a key's owner, newest first.
+export async function policyNotices(
+  config: Config,
+): Promise<KeyPolicyNotice[]> {
+  return resources<KeyPolicyNotice>(
+    await authorizedRequest(config, '_key-policy-notices', { method: 'GET' }),
+  );
+}
+
+// Declines a workspace's request that visitors use one of the user's keys.
+// The key is unchanged, and visitors there stay refused.
+export async function declinePolicyNotice(
+  config: Config,
+  noticeId: string,
+): Promise<void> {
+  await authorizedRequest(
+    config,
+    `_key-policy-notices/${encodeURIComponent(noticeId)}/decline`,
+    { method: 'POST' },
+  );
 }
 
 // The shares holding one of the user's keys: those deleting it suspends.
@@ -361,6 +499,10 @@ export async function realmShares(
   );
 }
 
+// Shares a key into a realm. Who can use it there is the realm's policy's to
+// say, and whether people who aren't signed in may is the key's own setting
+// (`setAnonymousUse`): a realm whose policy lets them make a call that sends a
+// shared key takes only a key that allows them.
 export async function shareKey(
   config: Config,
   { keyId, realm, label }: { keyId: string; realm: string; label: string },
@@ -373,7 +515,10 @@ export async function shareKey(
   return resource<KeyShare>(
     await authorizedRequest(config, '_key-shares', {
       body: {
-        data: { type: 'key-share', attributes: { realm, keyId, label } },
+        data: {
+          type: 'key-share',
+          attributes: { realm, keyId, label },
+        },
         meta: { ticket },
       },
     }),
@@ -539,20 +684,26 @@ export interface RequestSnapshot {
   bodyTemplate: string | null;
 }
 
-// One credential slot of an operation in a batch: why it needs approving
-// (`new`, never approved or no longer usable; `changed`, its request changed
-// since it was approved), the request it would approve and its fingerprint,
-// and what it was last approved with.
+// Why a slot needs approving: `new`, never approved or no longer usable;
+// `changed`, its request changed since it was approved; `pipelines-only`,
+// approved and unchanged, but for pipelines only (answered only when the
+// batch is asked for with `interactive`).
+export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
+
+// One credential slot of an operation in a batch: why it needs approving, the
+// request it would approve and its fingerprint, and what it was last approved
+// with.
 export interface BatchSlot {
   slot: string;
   key: 'userKey' | 'apiKey';
-  status: 'new' | 'changed';
+  status: BatchSlotStatus;
   snapshot: RequestSnapshot;
   fingerprint: string;
   approved?: {
     snapshot: RequestSnapshot;
     keyId: string | null;
     shareId: string | null;
+    interactive: boolean;
   };
 }
 
@@ -562,8 +713,11 @@ export interface BatchOperation {
   method: string;
   path: string;
   instance: string | null;
-  status: 'new' | 'changed';
+  status: BatchSlotStatus;
   slots: BatchSlot[];
+  // Whether the realm's policy opens it to people who aren't signed in, who
+  // are then served through a share whose key allows them.
+  openToAnonymous: boolean;
 }
 
 // A key a slot can take, or a share of the user's in the realm, with the
@@ -575,12 +729,23 @@ export interface BatchKey {
   state: string;
   covers: string[];
 }
+// A share also says whether any of its bindings allows interactive use yet,
+// and the daily budget in force: a share's first interactive approval names
+// its daily budget.
 export interface BatchShare {
   id: string;
   label: string;
   keyId: string;
   keyName: string;
   covers: string[];
+  interactive: boolean;
+  dailyBudget: number;
+  // Whether the share's key lets people who aren't signed in use it, and the
+  // key's optional caps on their calls a day and a month, counted across
+  // every realm the key is shared into. The share's budgets bound them too.
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
 }
 
 // Every operation on one card definition, in one realm, that needs the user's
@@ -594,6 +759,9 @@ export interface ApprovalBatch {
   // Operations left for after this confirmation, which takes at most so many
   // slots.
   remaining: number;
+  // Operations approved for pipelines only that didn't fit either, in a batch
+  // asked with `interactive`.
+  remainingPipelinesOnly: number;
   keys: BatchKey[];
   shares: BatchShare[];
 }
@@ -603,6 +771,8 @@ export async function approvalBatch(
   request: {
     target: NonNullable<WindowContextRequest['target']>;
     review: boolean;
+    // Also answer operations approved for pipelines only.
+    interactive?: boolean;
   },
 ): Promise<ApprovalBatch> {
   let json = await authorizedRequest(config, '_key-bindings/batch', {
@@ -627,28 +797,53 @@ export interface OperationApproval {
 
 // One confirmation: writes any grant a chosen key lacks for where an
 // operation sends, then a binding per operation and slot, in one batch. No
-// ticket: approving takes the window's own session.
+// ticket: approving takes the window's own session. With `interactive`, the
+// bindings also serve a card opened in the browser, the AI assistant and the
+// CLI; `dailyBudgets` sets the daily budget of each share named, which a
+// share's first interactive approval must.
 export async function approveOperations(
   config: Config,
-  { realm, operations }: { realm: string; operations: OperationApproval[] },
+  {
+    realm,
+    operations,
+    interactive = false,
+    dailyBudgets,
+  }: {
+    realm: string;
+    operations: OperationApproval[];
+    interactive?: boolean;
+    dailyBudgets?: Record<string, number>;
+  },
 ): Promise<void> {
   await authorizedRequest(config, '_key-bindings', {
     body: {
       data: {
         type: 'key-binding-approval',
-        attributes: { realm, operations },
+        attributes: {
+          realm,
+          operations,
+          ...(interactive ? { interactive: true } : {}),
+          ...(dailyBudgets && Object.keys(dailyBudgets).length > 0
+            ? { dailyBudgets }
+            : {}),
+        },
       },
     },
   });
 }
 
 // One of the user's approvals: an operation in a realm, a slot it fills, and
-// the grant it sends under.
+// the grant it sends under. It is named as the approve page names it: by its
+// operation's label and its card's display name, or, for a card the user
+// can't read, by the operation's name split into words and the card's export
+// name.
 export interface KeyBinding {
   id: string;
   realm: string;
   type: { module: string; name: string };
   operation: string;
+  operationLabel: string;
+  cardName: string;
   instance: string | null;
   slot: string;
   keyId: string | null;
@@ -709,4 +904,125 @@ export async function realmCardsWithRequests(
       attributes: { module: string; name: string; displayName: string };
     }) => attributes,
   );
+}
+
+// How much of a key anyone may spend: a burst of calls per caller, refilled
+// at a steady rate, and the calls the key or share serves in one UTC day and
+// month across every caller. The realm server fills in the platform's default
+// for any its owner left unset.
+export interface KeyLimits {
+  rateBurst: number;
+  rateRefillPerMinute: number;
+  dailyBudget: number;
+  monthlyBudget: number;
+}
+
+// A limit to change, or null to go back to the platform's default.
+export type KeyLimitChanges = Partial<Record<keyof KeyLimits, number | null>>;
+
+// Where a key may be sent, as its usage lists it, and whether the service
+// there rejected it (`rejected`) or last refused a request (`lastForbiddenAt`).
+export interface UsageGrant {
+  id: string;
+  host: string;
+  destination: string;
+  state: 'active' | 'rejected';
+  rejectedAt: string | null;
+  lastForbiddenAt: string | null;
+}
+
+// A key's or a share's use: what it spent against its budgets this UTC day
+// and month, and since the start of the month every call, the last one and by
+// whom, the callers who used it most, the calls refused by reason, and the
+// service's answers by status.
+export interface KeyUsage {
+  limits: KeyLimits;
+  budgets: Record<
+    'day' | 'month',
+    { used: number; budget: number; resetsAt: string }
+  >;
+  since: string;
+  calls: number;
+  lastUse: {
+    at: string;
+    caller: string | null;
+    // The caller is someone the user isn't shown.
+    withheld?: true;
+    operation: string;
+    outcome: 'sent' | 'refused' | 'failed';
+  } | null;
+  topCallers: { caller: string | null; calls: number; withheld?: true }[];
+  refusals: { code: string; count: number }[];
+  vendorOutcomes: {
+    status: number;
+    count: number;
+    outcome?: 'vendor-forbidden';
+  }[];
+  grants: UsageGrant[];
+  canEditLimits: boolean;
+}
+
+function usageOf(json: { data: Resource }): KeyUsage {
+  return json.data.attributes as unknown as KeyUsage;
+}
+
+export async function keyUsage(
+  config: Config,
+  keyId: string,
+): Promise<KeyUsage> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/usage`,
+      { method: 'GET' },
+    ),
+  );
+}
+
+export async function shareUsage(
+  config: Config,
+  shareId: string,
+): Promise<KeyUsage> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_key-shares/${encodeURIComponent(shareId)}/usage`,
+      { method: 'GET' },
+    ),
+  );
+}
+
+function limitsBody(changes: KeyLimitChanges) {
+  return { data: { type: 'key-limits', attributes: changes } };
+}
+
+// Changes one of the user's own keys' limits, answering the limits in force.
+// Only the window's session may: the realm server refuses the app's.
+export async function setKeyLimits(
+  config: Config,
+  keyId: string,
+  changes: KeyLimitChanges,
+): Promise<KeyLimits> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/limits`,
+      { method: 'PUT', body: limitsBody(changes) },
+    ),
+  ) as unknown as KeyLimits;
+}
+
+// Changes the limits of a share of one of the user's keys.
+export async function setShareLimits(
+  config: Config,
+  shareId: string,
+  changes: KeyLimitChanges,
+): Promise<KeyLimits> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_key-shares/${encodeURIComponent(shareId)}/limits`,
+      { method: 'PUT', body: limitsBody(changes) },
+    ),
+  ) as unknown as KeyLimits;
 }

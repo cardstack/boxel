@@ -85,11 +85,18 @@ Registration happens in two places:
   --fromUrl='@cardstack/catalog/' --toUrl="${CATALOG_REALM_URL}"
   ```
 
-A prefix's URL is whatever its mapping says, not a naming convention.
-`boxel-cli` still resolves `@cardstack/<realm>/` as `<realm-server>/<realm>/`
-without a VirtualNetwork (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
-ADR 002 §1.2 forbids that: a client without a VirtualNetwork builds one from
-the prefix map the realm server serves.
+A prefix's URL is whatever its mapping says, not a naming convention. A
+client with no VirtualNetwork of its own — `boxel-cli`, the VS Code extension
+— builds one from the prefix map the realm server serves at `/_prefix-realms`
+(ADR 002 §1.2): `prefixRealmNetworkFor(realmServerURL)` in
+`packages/runtime-common/prefix-realm-network.ts` reads the map once per
+process, within a 10 s budget, and registers each entry on a
+`PrefixRealmNetwork`, a dependency-light subset of VirtualNetwork. It resolves
+prefixes as VirtualNetwork does, but holds no URL mappings, so it names the
+base realm by the URL it is served at, never by its
+`https://cardstack.com/base/` alias. The realm server reads the map off its
+own VirtualNetwork, and the host's served index HTML carries the same map in
+`prefixRealmURLs`.
 
 Realms with no registered prefix — most user workspaces — are addressed by
 their URL, and that URL is their RRI. Nothing about the identifier system
@@ -105,6 +112,8 @@ whichever space the base is in.
 | ------------------------- | -------------------------------------- | -------------------------------------------- |
 | `@cardstack/base/string`  | —                                      | `@cardstack/base/string` (already absolute)  |
 | `@cardstack/base/string`  | `@cardstack/catalog/`                  | `@cardstack/base/string` (base ignored)      |
+| `@cardstack/base/a/../b`  | —                                      | `@cardstack/base/b` (dot segment folded)     |
+| `@cardstack/base/../x`    | —                                      | throws a `TypeError` (leaves its target)     |
 | `http://example.com/card` | anything                               | `http://example.com/card` (already absolute) |
 | `./string`                | `@cardstack/base/card-api`             | `@cardstack/base/string`                     |
 | `card`                    | `@cardstack/base/card-api`             | `@cardstack/base/card`                       |
@@ -122,8 +131,13 @@ mapping to know where that realm's root is, and throws if none matches.
 
 `/`-rooted and `~/` references are rejected because they have no meaning in
 prefix space. (`VirtualNetwork.resolveURL` does accept a `/`-rooted reference,
-because it is producing a URL and can join against the mapped realm URL — but
-that is a URL operation, not RRI resolution.)
+because it is producing a URL: it joins the reference to the base's mapped URL,
+so it lands at that origin's root, which can be another realm served from the
+same origin. That is a URL operation, not RRI resolution.)
+
+A reference under a registered prefix resolves as `toURL` resolves it: one whose
+path leaves the prefix's target throws, and a dot segment that stays inside is
+folded.
 
 Relative resolution against a prefix-form base round-trips through URL space
 internally: the base's prefix is swapped for its mapped URL, `new URL()` does
@@ -140,16 +154,16 @@ identifiers arriving there are already canonical and only need joining — see
 
 `VirtualNetwork` owns every conversion:
 
-| Method                    | Direction               | Use                                                                                                                                    |
-| ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `toURL(rri)`              | RRI → `URL`             | Resolve a prefix through its mapping, or parse a URL-form RRI. Throws for an unmapped bare identifier.                                 |
-| `toURLHref(rri)`          | RRI → `string`          | Same resolution, memoized, no `URL` object allocated.                                                                                  |
-| `toRealURLHref(id)`       | any spelling → `string` | Internal store key only. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key. |
-| `unresolveURL(url)`       | URL → RRI               | The inverse: rewrite a URL back to prefix form when a mapping matches. Chases through URL aliases first.                               |
-| `unresolveURLs(urls)`     | URL[] → RRI[]           | Canonicalize and dedupe a set (dependency lists, etc.).                                                                                |
-| `equivalentURLForms(url)` | URL → string[]          | Every known spelling of one resource — used to match index data written before a reference was canonicalized.                          |
-| `knownRealms()`           | —                       | The registered `RealmIdentifier`s.                                                                                                     |
-| `isRegisteredPrefix(ref)` | —                       | Whether a reference starts with one of this VN's prefixes.                                                                             |
+| Method                    | Direction               | Use                                                                                                                                                                                                               |
+| ------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toURL(rri)`              | RRI → `URL`             | Resolve a prefix through its mapping, or parse a URL-form RRI. Throws for an unmapped bare identifier, and with a `TypeError` for a path that resolves outside its prefix's target.                               |
+| `toURLHref(rri)`          | RRI → `string`          | Same resolution, memoized, no `URL` object allocated.                                                                                                                                                             |
+| `toRealURLHref(id)`       | any spelling → `string` | Internal store key only. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key.                                                                            |
+| `unresolveURL(url)`       | URL → RRI               | The inverse: rewrite a URL back to prefix form when a mapping matches, else through a URL alias that leads to one. The URL is matched in its parsed form, so the result is percent-encoded as `toURL` returns it. |
+| `unresolveURLs(urls)`     | URL[] → RRI[]           | Canonicalize and dedupe a set (dependency lists, etc.).                                                                                                                                                           |
+| `equivalentURLForms(url)` | URL → string[]          | Every known spelling of one resource — used to match index data written before a reference was canonicalized.                                                                                                     |
+| `knownRealms()`           | —                       | The registered `RealmIdentifier`s.                                                                                                                                                                                |
+| `isRegisteredPrefix(ref)` | —                       | Whether a reference starts with one of this VN's prefixes.                                                                                                                                                        |
 
 `toURLHref`, `unresolveURL`, and `toRealURLHref` are memoized because module
 graph walks and per-instance realm-membership checks resolve the same handful

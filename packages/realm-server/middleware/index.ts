@@ -231,7 +231,7 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // travel in a query string masked, because these lines ship to Loki: a
 // `token` (capture-URL tokens on `_capture/` GETs and full session JWTs on
 // `_download-realm` links) and a `loginToken` (the single-use Matrix login
-// token `boxel browse` and Synapse's SSO hand the app page). (ALB access logs
+// token `boxel browse` hands the app page). (ALB access logs
 // still record the raw request line; each token's single-URL scope or single
 // use and short TTL are the mitigation there.)
 const MASKED_QUERY_PARAMS = ['token', 'loginToken'];

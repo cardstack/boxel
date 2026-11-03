@@ -473,8 +473,6 @@ interface Signature {
     // A failed call the assistant has since retried with a call that
     // succeeded: it settles to "retried below" instead of staying red.
     isSuperseded?: boolean;
-    // the row stands for this many identical finished calls in a row
-    foldCount?: number;
   };
 }
 
@@ -607,24 +605,36 @@ export default class RoomMessageTool extends Component<Signature> {
     });
     if (this.args.messageTool.toolResultFileDef) {
       isLoading = true;
-      this.args.messageTool.getCommandResultCard().then((result) => {
-        isLoading = false;
-        if (!result && isTesting()) {
-          console.log(
-            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+      let loadStartedAt = performance.now();
+      this.args.messageTool.getCommandResultCard().then(
+        (result) => {
+          isLoading = false;
+          if (!result && isTesting()) {
+            console.log(
+              `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+            );
+          }
+          if (isTornDown || !result) {
+            return;
+          }
+          let { card, isRealmCard } = result;
+          if (card.id) {
+            referencedId = card.id;
+            this.store.addReference(card.id);
+          }
+          state.isRealmCard = isRealmCard;
+          state.card = card;
+        },
+        (error) => {
+          isLoading = false;
+          // A load that throws leaves the result card hidden, so say so rather
+          // than leave a timed-out test with no trace of the failure.
+          console.warn(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} failed after ${Math.round(performance.now() - loadStartedAt)}ms:`,
+            error,
           );
-        }
-        if (isTornDown || !result) {
-          return;
-        }
-        let { card, isRealmCard } = result;
-        if (card.id) {
-          referencedId = card.id;
-          this.store.addReference(card.id);
-        }
-        state.isRealmCard = isRealmCard;
-        state.card = card;
-      });
+        },
+      );
     }
     return state;
   });
@@ -911,9 +921,6 @@ export default class RoomMessageTool extends Component<Signature> {
       return description && description.trim() !== this.askQuestion.trim()
         ? plainTitle(description)
         : 'Your pick';
-    }
-    if (this.args.foldCount && this.args.foldCount > 1) {
-      return `${humanizeToolName(this.baseName)} ×${this.args.foldCount}`;
     }
     // a check names the file it checked, as the board does: "Checked
     // relaunch.gts", not the tool's sentence about a path
@@ -2908,6 +2915,7 @@ export default class RoomMessageTool extends Component<Signature> {
         is-error=@isError
         is-failed=(bool this.hasFailedState)
         compact=@isCompact
+        is-framed=this.isFramed
       }}
       {{! a participant in its message's motion region (motion/README.md) }}
       {{motion id=@messageTool.toolRequest.id role='row'}}
@@ -3464,8 +3472,9 @@ export default class RoomMessageTool extends Component<Signature> {
         margin-top: -6px;
         padding-inline-start: var(--step-32, 32px);
       }
-      .tool-call-reactions :deep(.pretui-reaction) {
-        background-color: var(--card, var(--boxel-ai-purple));
+      .tool-call-reactions {
+        --pretui-reaction-surface: var(--card, var(--boxel-ai-purple));
+        --pretui-reaction-mine-surface: var(--card, var(--boxel-ai-purple));
       }
       /* what a check found: lines in the body, the rows' own 4px apart */
       .check-outcome {
@@ -3475,9 +3484,12 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       /* a finished row recedes as one: its card pills take the row's
          settled ink instead of standing out bright over a gray row */
-      :deep(.pretui-toolrow[data-recede] .pretui-cardpill) {
-        color: var(--pretui-toolrow-settled-ink, var(--ink-2));
-        font-weight: 500;
+      .tool-row {
+        --pretui-toolrow-settled-pill-ink: var(
+          --pretui-toolrow-settled-ink,
+          var(--ink-2)
+        );
+        --pretui-toolrow-settled-pill-weight: 500;
       }
       /* a run's steps stop growing the row past about ten lines: the
          list scrolls in its box, and column-reverse keeps the newest step

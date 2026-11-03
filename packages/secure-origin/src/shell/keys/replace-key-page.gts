@@ -308,9 +308,9 @@ class SlotPanel extends Component<{
             {{#if this.unboundShared}}
               No key is shared into
               <strong>{{@context.realm.name}}</strong>
-              for this request yet.
+              for this call yet.
             {{else}}
-              None of your keys is approved for this request yet, so there is
+              None of your keys is approved for this call yet, so there is
               nothing to replace.
             {{/if}}
           </p>

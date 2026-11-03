@@ -68,10 +68,10 @@ interface WaveHost {
   onRegionReady: (region: WaveRegion | null) => void;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- the vendored bundle
-   ships no type declarations (the same trade `surfaces-preview.gts` makes for
-   `./surfaces/index.js`). The surface actually used is narrow and is described
-   by the two interfaces below, which is where the checking happens. */
+/* eslint-disable @typescript-eslint/no-explicit-any -- `../wavesurfer/index.d.ts`
+   declares the vendored instances opaque. The surface actually used is narrow
+   and is described by the two interfaces below, which is where the checking
+   happens. */
 type AnyEngine = any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 

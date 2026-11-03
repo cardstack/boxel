@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { logger } from '@cardstack/runtime-common';
 import {
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundSendError,
   OutboundTimeoutError,
   describeOutboundError,
@@ -449,6 +450,9 @@ function describe(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     return `the outbound guard refused it (${error.reason})`;
   }
+  if (error instanceof OutboundResponseTooLargeError) {
+    return 'its answer was larger than the outbound size cap';
+  }
   if (error instanceof OutboundSendError) {
     return 'the connection failed';
   }
@@ -484,6 +488,8 @@ async function exchange(
         assertion,
       }).toString(),
       sizePath: 'call-api',
+      // Google's own token endpoint, fixed by the platform.
+      destinationSetBy: 'platform',
       // The body carries the signed assertion, which a 307 or 308 to another
       // origin would resend there.
       sameOriginOnly: true,

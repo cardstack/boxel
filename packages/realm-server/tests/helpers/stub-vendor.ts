@@ -31,6 +31,9 @@ import zlib from 'node:zlib';
 //                           `releaseHeld()`. With `truncate`, the connection
 //                           is dropped where the usage would start
 //   /not-json               502 with an HTML body
+//   /graphql                a GitHub-shaped GraphQL answer: one open pull
+//                           request, `STUB_PULL_REQUEST`, under both
+//                           `user.pullRequests.nodes` and `search.nodes`
 //   /google-token           a stand-in for Google's OAuth token endpoint: a
 //                           JWT-bearer exchange answers the next of
 //                           `googleTokenAnswers` (each used once), or, with
@@ -116,6 +119,13 @@ async function respondAsSpecified(
     res.end();
   }
 }
+
+// The open pull request `/graphql` answers with.
+export const STUB_PULL_REQUEST = {
+  title: 'Retry the flaky inbox refresh',
+  url: 'https://github.com/example/inbox/pull/7',
+  updatedAt: '2026-10-30T12:00:00Z',
+};
 
 function numberParam(url: URL, name: string, fallback: number): number {
   let raw = url.searchParams.get(name);
@@ -269,6 +279,16 @@ export async function startStubVendor({
         }
         res.writeHead(answer.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(answer.body));
+      } else if (url.pathname === '/graphql') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            data: {
+              user: { pullRequests: { nodes: [STUB_PULL_REQUEST] } },
+              search: { nodes: [STUB_PULL_REQUEST] },
+            },
+          }),
+        );
       } else if (url.pathname === '/not-json') {
         res.writeHead(502, { 'content-type': 'text/html' });
         res.end('<html><body>Bad gateway</body></html>');

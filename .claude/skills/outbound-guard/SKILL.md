@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), what a Sentry event keeps of the incoming request (only the method and path on the proxy routes, and never the Authorization header or cookies on any route), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), the response size caps (what each refuses, the values chosen and how to revisit them), the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), what a Sentry event keeps of the incoming request (only the method and path on the proxy routes, and never the Authorization header or cookies on any route), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, when a call is refused `response-too-large` or a forward answers 502 "Response too large", when a "System key responses near the size cap" or "System key responses refused over the size cap" alert fires, when raising one system key's response size cap (`boxel realm-server keys set-response-cap`), or when revisiting the response size caps.
 ---
 
 # Outbound guard (operators)
@@ -27,13 +27,14 @@ always on, in every environment; local development gets a short allowlist, never
 
 ## What it refuses
 
-| Refusal                     | When                                                                                                                                                                                                              | Caller sees                                       |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `scheme`                    | the URL (or a redirect hop) is not `https:`, and its host is not on the development allowlist                                                                                                                     | 502 `Destination refused: Only https URLs …`      |
-| `address`                   | the host is, or resolves to, a non-public address: private, loopback, link-local, CGNAT, multicast, reserved, IPv4-mapped/embedded forms of those, and the metadata addresses `169.254.169.254` / `fd00:ec2::254` | 502 `Destination refused: … private or reserved`  |
-| `forbidden-header`          | a header named `X-Boxel-*` in the forwarded `headers`                                                                                                                                                             | 400, before any credit slot is taken              |
-| `too-many-redirects`        | more than 5 redirect hops                                                                                                                                                                                         | 502                                               |
-| timeout (`connect`/`total`) | no connection in 10 s, or the whole exchange (every hop and the body) not done in 10 min                                                                                                                          | 504; mid-stream, an SSE error frame then `[DONE]` |
+| Refusal                     | When                                                                                                                                                                                                              | Caller sees                                                                                                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scheme`                    | the URL (or a redirect hop) is not `https:`, and its host is not on the development allowlist                                                                                                                     | 502 `Destination refused: Only https URLs …`                                                                                                                                                |
+| `address`                   | the host is, or resolves to, a non-public address: private, loopback, link-local, CGNAT, multicast, reserved, IPv4-mapped/embedded forms of those, and the metadata addresses `169.254.169.254` / `fd00:ec2::254` | 502 `Destination refused: … private or reserved`                                                                                                                                            |
+| `forbidden-header`          | a header named `X-Boxel-*` in the forwarded `headers`                                                                                                                                                             | 400, before any credit slot is taken                                                                                                                                                        |
+| `too-many-redirects`        | more than 5 redirect hops                                                                                                                                                                                         | 502                                                                                                                                                                                         |
+| response size               | the response's declared length is over its path's cap (refused before reading), or its decompressed body passes the cap while streaming (the stream ends there with an error)                                     | 502 `Response too large: …` before the body starts; once a forwarded body has started, the response is reset; mid-stream, an SSE error frame then `[DONE]`; `callApi`: `response-too-large` |
+| timeout (`connect`/`total`) | no connection in 10 s, or the whole exchange (every hop and the body) not done in 10 min                                                                                                                          | 504; mid-stream, an SSE error frame then `[DONE]`                                                                                                                                           |
 
 Every hostname is resolved inside the socket's own lookup and the socket
 connects to exactly the addresses that were checked, so a DNS answer that
@@ -244,18 +245,18 @@ retried, and the usage goes uncharged. Search for these, in order:
 
 Read once at startup from the environment by `startOutboundGuard` in `main.ts`:
 
-| Variable                                 | Default  | Meaning                                                                                            |
-| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `OUTBOUND_DEV_ALLOWLIST`                 | empty    | comma-separated host names that may use `http:` and resolve locally                                |
-| `OUTBOUND_CONNECT_TIMEOUT_MS`            | 10000    | per connection                                                                                     |
-| `OUTBOUND_TOTAL_TIMEOUT_MS`              | 600000   | whole exchange, body included                                                                      |
-| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 33554432 | observe-mode cap for the system-key path (`_request-forward`, passthrough, generation-cost lookup) |
-| `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`   | 10485760 | observe-mode cap for `callApi`                                                                     |
+| Variable                                 | Default  | Meaning                                                                                                                                                                         |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OUTBOUND_DEV_ALLOWLIST`                 | empty    | comma-separated host names that may use `http:` and resolve locally                                                                                                             |
+| `OUTBOUND_CONNECT_TIMEOUT_MS`            | 10000    | per connection                                                                                                                                                                  |
+| `OUTBOUND_TOTAL_TIMEOUT_MS`              | 600000   | whole exchange, body included                                                                                                                                                   |
+| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 67108864 | response size cap for the system-key path (`_request-forward`, passthrough, generation-cost lookup, OAuth token requests); a system key with a cap of its own uses that instead |
+| `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`   | 10485760 | response size cap for `callApi` and Google service-account token requests                                                                                                       |
 
 The boot log carries one line with the effective settings:
 
 ```
-outbound guard: deployed=true devAllowlist=(none) connectTimeoutMs=10000 totalTimeoutMs=600000 maxRedirects=5 responseSizeCap.system-key=33554432 responseSizeCap.call-api=10485760 responseSizeCapMode=observe
+outbound guard: deployed=true devAllowlist=(none) connectTimeoutMs=10000 totalTimeoutMs=600000 maxRedirects=5 responseSizeCap.system-key=67108864 responseSizeCap.call-api=10485760
 ```
 
 ### The development allowlist and the self-check
@@ -276,41 +277,202 @@ To point a local stack at a vendor stub on loopback, start the realm server
 with `OUTBOUND_DEV_ALLOWLIST=localhost,127.0.0.1` and add the stub's
 `http://127.0.0.1:<port>/` to `proxy_endpoints`.
 
-## Reading the response size cap (observe mode)
+## Reading a refusal
 
-Nothing is refused for size yet. Every response logs its decompressed size
-when its body ends, on the `outbound` channel at `info`:
+Every request the guard refuses, on either path, logs one line on the
+`outbound` channel at `warn`, naming the host and never the path, which can
+hold a credential:
 
 ```
-outbound response size: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=33554432 bytes=48211 outcome=complete
+outbound guard refused: path=system-key host=10.0.0.1 reason=address destinationSetBy=platform
+```
+
+`reason` is the refusal's (`invalid-url`, `scheme`, `address`,
+`forbidden-header`, `too-many-redirects`). `destinationSetBy` is who chose the
+destination, which every caller of `outboundFetch` declares:
+
+- `platform`: a `proxy_endpoints` row (`_request-forward`, the OpenRouter
+  passthrough, the generation-cost lookup), a platform OAuth client's token
+  endpoint, or Google's token endpoint. A refusal is ours to fix, and the
+  "Outbound guard refused a platform destination" alert fires on it.
+- `user`: a card's declared `callApi` request, or the token URL of a user's
+  own or shared OAuth client. Anyone can make one of these refuse, so it is
+  never alerted on; a `callApi` one is also on that invocation's
+  `boxel:key-use` line as `guard-refused`.
+
+`path` says which size cap applies and nothing about who set the destination:
+a user's OAuth token request goes out on `system-key`. The Keys dashboard
+charts refusals by `destinationSetBy`, and its response-size panels read the
+lines below (see the `key-outage-triage` skill).
+
+## The response size cap
+
+Every response is counted, in decompressed bytes, against its cap: a system
+key's own cap when it has one (see [A system key's own cap](#a-system-keys-own-cap)),
+else its path's (`OUTBOUND_RESPONSE_CAP_*_BYTES` above):
+
+- A declared `Content-Length` over the cap is refused before any of the body
+  is read. With compression this is the compressed length.
+- Otherwise the body streams through until its count passes the cap. The
+  chunk that passed it is dropped, the upstream read is cancelled, and the
+  stream ends with `OutboundResponseTooLargeError`, so no caller ever reads a
+  body cut at the cap as if it were whole. A small compressed response that
+  trips this is a decompression bomb, or a very repetitive payload.
+- A response with no body (a `HEAD`, a 204 or 304) is never refused, whatever
+  length it declares.
+
+What the caller sees depends on the path:
+
+- `callApi`: the operation is refused `response-too-large` (502), with
+  `meta.cap` and `meta.measured` (`declared-length` / `stream-reached-cap`).
+  It is recorded on the key-use channel like any refusal.
+- `_request-forward` and the OpenRouter passthrough: 502
+  `Response too large: …` when refused before the body starts. A non-streamed
+  body that has already started is reset, as any body failing partway is, and
+  a charged call whose generation id was read is charged from that id. A
+  streamed call gets an SSE error frame, then `[DONE]`.
+- The generation-cost lookup: not retried, and the usage goes uncharged (the
+  lines listed under [Finding a send-path error by key name](#finding-a-send-path-error-by-key-name)).
+- Token requests (OAuth, Google service accounts): treated as an endpoint
+  that gave no usable answer, so the token is unavailable.
+
+### Reading it
+
+Every response logs its decompressed size when its body ends, on the
+`outbound` channel at `info`:
+
+```
+outbound response size: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=67108864 bytes=48211 outcome=complete key=system:https://openrouter.ai/api/v1/chat/completions
 ```
 
 `outcome` is `complete`, `cancelled` (the caller stopped reading, e.g. the
-browser left), or `error`. `overCap=true` is appended when the body passed the
-cap. Two `warn` lines say what an enforced cap would have refused:
+browser left), `error`, or `too-large`. Each refusal also logs at `warn`:
 
-- `wouldRefuse=declared-length` — the `Content-Length` was already over the cap
-  (an enforced cap refuses before reading). With compression this is the
-  compressed length.
-- `wouldRefuse=stream-reached-cap` — the decompressed byte count passed the cap
-  mid-body (an enforced cap ends the stream with `response-too-large`). A
-  small compressed response that trips this is a decompression bomb, or a very
-  repetitive payload.
+```
+outbound response over size cap: path=call-api destination=https://api.example.com/v1/export status=200 cap=10485760 declaredBytes=52428800 refused=declared-length key=(none)
+outbound response over size cap: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=67108864 bytesRead=67174400 refused=stream-reached-cap key=system:https://openrouter.ai/api/v1/chat/completions
+```
 
 The `destination` is the origin + path of the URL the caller sent, with no
-query string; on a redirected call it is still the original URL.
+query string; on a redirected call it is still the original URL. `cap` is the
+cap the response was held to. `key` comes last on both lines: the name of the
+key the call attached (`system:<proxy_endpoints.url>` for a system key), or
+`(none)` for a call that attaches no named key (`callApi`, a token request). The Keys
+dashboard's "Response size cap" row charts both (see `key-outage-triage`).
 
-To choose enforced values, pull the sizes per path over a representative
-window with the `tail-logs` skill and take the largest real responses:
+### The values, and revisiting them
+
+| Path         | Default             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system-key` | 64 MiB (`67108864`) | The largest responses on this path are OpenRouter image generations, which return each image as a base64 data URL inside the JSON body. From 2026-10-20 to 2026-11-03, staging's largest was 26.5 MiB (a run of 21–26 MiB `chat/completions` responses) and production's was 2.6 MiB. 64 MiB is about 2.4 times the largest seen: room for growth in beta (larger images, more per call) while still stopping an unbounded response. The generation-cost lookup, Firecrawl scrapes and token responses are kilobytes. |
+| `call-api`   | 10 MiB (`10485760`) | `callApi` carries vendor JSON (GitHub, Google and similar REST APIs), and the whole body is held in memory and handed to the card. A single page of such an API is well under a megabyte. 10 MiB lets a large page through and refuses an export or file download, which belongs on a file-transfer path rather than an operation result. Neither environment logged any `callApi` traffic from 2026-10-20 to 2026-11-03, so it is the first value to check against measured sizes.                                   |
+
+The measurements, per environment, from 2026-10-20 to 2026-11-03 (all the
+size lines Loki held):
+
+| Environment | Destination                             | Largest response | Responses |
+| ----------- | --------------------------------------- | ---------------- | --------- |
+| production  | `openrouter.ai/api/v1/chat/completions` | 2.6 MiB          | 1,550     |
+| production  | `api.firecrawl.dev/v2/scrape`           | 46 KB            | 16        |
+| staging     | `openrouter.ai/api/v1/chat/completions` | 26.5 MiB         | 2,032     |
+| staging     | `api.firecrawl.dev/v2/scrape`           | 0.14 MiB         | 109       |
+| staging     | `openrouter.ai/api/v1/generation`       | under 1 KB       | 94        |
+
+A Loki query over many days of these lines times out at the gateway (504).
+Ask for one day at a time with a metric query against `/loki/api/v1/query`,
+and retry the days that fail:
 
 ```
-./scripts/tail-logs.sh --env production --service realm-server --filter 'outbound response size: path=system-key' --since 2d --no-follow --confirm
-./scripts/tail-logs.sh --env production --service realm-server --filter 'wouldRefuse=' --since 2d --no-follow --confirm
+max by (dest) (max_over_time({env="production",service=~"realm-server|worker"} |= "outbound response size: path=system-key" | regexp `destination=(?P<dest>[^ ]+) .*bytes=(?P<bytes>[0-9]+)` | unwrap bytes [1d]))
 ```
 
-Any `wouldRefuse` line at the current caps names a real response the
-enforced cap would break; raise the cap above it or account for it before
-switching to enforcement.
+Revisit the caps when a `refused=` line names a legitimate vendor, or when a
+path's max on the dashboard closes on its dashed cap line. Pull each path's
+sizes over at least a week, separately for each environment, with the
+`tail-logs` skill:
+
+```
+./scripts/tail-logs.sh --env production --service realm-server --filter 'outbound response size: path=call-api' --since 7d --limit 5000 --no-follow --json --confirm
+./scripts/tail-logs.sh --env production --service realm-server --filter 'refused=' --since 7d --no-follow --confirm
+```
+
+Run the same against `--service worker`, which sends `callApi` from
+pipelines. When one system key outgrows the path's cap, raise that key's own
+cap (below), which needs no deploy. Change a path's cap in the task
+definition's environment (`OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` /
+`OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`) only when every key on the path
+needs it, and change the default in `DEFAULT_OUTBOUND_SETTINGS` only when the
+measured sizes move it for every environment. Record the new measurements
+here.
+
+### A system key's own cap
+
+Each system key can carry a response size cap of its own, in bytes
+(`proxy_endpoints.response_size_cap_bytes`). Every call the key makes is held
+to it in place of the system-key path's cap: `_request-forward`, the
+OpenRouter passthrough, streamed or not, and the generation-cost lookup its
+credit strategy makes. A key without one takes the path's cap. Token
+requests attach no system key, so they always take the path's cap.
+
+Set it, or clear it, with the CLI (the `system-keys` skill covers the seed and
+the operator note):
+
+```sh
+boxel realm-server keys set-response-cap --realm-server <url> --destination <key's destination> <bytes>
+boxel realm-server keys set-response-cap --realm-server <url> --destination <key's destination> --clear
+boxel realm-server keys show --realm-server <url> --destination <key's destination>   # prints its cap and the change history
+```
+
+`<bytes>` is a whole number of bytes (`134217728` is 128 MiB), at most 1 GiB:
+a cap is there to stop a runaway or a decompression bomb, and one past that
+stops neither. The realm server reads the cap with the key through its
+five-second endpoint cache, so it applies to the key's next call in every
+task, with no restart or deploy. Each change is a `set-response-cap` entry in
+`proxy_endpoint_history`, with the cap it set (null for a clear) and the
+operator's note.
+
+Choosing a value: first confirm the large responses are legitimate (below).
+Then take the largest legitimate response the key has seen over at least a
+week, per environment, from its size lines
+(`--filter 'key=system:<destination>'` with the `tail-logs` commands above),
+and give it the same headroom the path default has over its measurements:
+about twice the largest. The alerts suggest twice the key's current cap (near
+the cap) or twice the refused size (over it), held at 1 GiB, the most the
+command accepts. A key already at 1 GiB can't go higher: a legitimate response
+that size belongs on a file-transfer path. Record the value and why in the
+key's note.
+
+### The alerts
+
+Two rules in the `keys-group` rule group read the size lines of system keys
+and email techops@cardstack.com (the `Techops` contact point), one
+notification per key:
+
+- **System key responses near the size cap** fires when a response on a
+  system key passes 75% of the key's current cap within 10 minutes.
+- **System key responses refused over the size cap** fires on any refusal of a
+  response on a system key within 10 minutes, measured against the key's
+  current cap. Callers are already failing, so its title says `REFUSED`.
+
+Each names the environment, the key, the destination, the size (for a
+refusal, how it was measured and how many were refused), the key's current
+cap, and the `set-response-cap` command with a suggested value. Both compare
+against the cap on the key's most recent size line, so once the cap is
+raised, they resolve as soon as a response on the key succeeds under the new
+cap. `callApi` refusals never fire them. The `key-outage-triage` skill has the
+triage steps.
+
+Before raising a cap, check the response is legitimate rather than a runaway
+or a decompression bomb:
+
+- the destination is the vendor the key is for, and the size fits what it was
+  asked (an image generation's base64 data URLs, more images per call);
+- the size lines for the key show a trend (`max` creeping up over days on the
+  Keys dashboard's Response size cap row), not one response far past every
+  other;
+- `refused=stream-reached-cap` on a response whose compressed length was
+  small is a decompression bomb or a very repetitive payload. Leave the cap
+  where it is and look at what the vendor sent.
 
 ## Diagnosing a failing forward
 
@@ -402,8 +564,8 @@ one. The stream also keeps the last `holdbackBytes` it delivered as lookbehind,
 so a match split across any number of chunks is still recognized. Memory stays
 bounded by the chunk in hand plus the window.
 
-When the source stream fails partway (a dropped connection, or a size cap that
-ends the stream), the held tail is **discarded, never flushed**. Everything the
+When the source stream fails partway (a dropped connection, or the size cap
+ending the stream), the held tail is **discarded, never flushed**. Everything the
 caller received had already cleared the window, so no partial credential
 leaks.
 

@@ -105,6 +105,76 @@ export async function listRealmKeyShares(
   }));
 }
 
+// How much of a key anyone may spend, the platform's defaults filled in.
+export interface KeyLimits {
+  rateBurst: number;
+  rateRefillPerMinute: number;
+  dailyBudget: number;
+  monthlyBudget: number;
+}
+
+// A share's usage, as the realm server answers it for the realm's direct
+// writers: what it spent against its budgets this UTC day and month, and
+// since the start of the month every call, the last one and by whom, the top
+// callers, refusals by code and the service's answers by status; the grants
+// its operations send under; and whether the asker owns the key, and so may
+// change its limits in the secure window.
+export interface KeyShareUsage {
+  limits: KeyLimits;
+  budgets: Record<
+    'day' | 'month',
+    { used: number; budget: number; resetsAt: string }
+  >;
+  since: string;
+  calls: number;
+  lastUse: {
+    at: string;
+    caller: string | null;
+    // The caller is someone the user isn't shown.
+    withheld?: true;
+    operation: string;
+    outcome: 'sent' | 'refused' | 'failed';
+  } | null;
+  topCallers: { caller: string | null; calls: number; withheld?: true }[];
+  refusals: { code: string; count: number }[];
+  vendorOutcomes: {
+    status: number;
+    count: number;
+    outcome?: 'vendor-forbidden';
+  }[];
+  grants: {
+    id: string;
+    host: string;
+    destination: string;
+    state: 'active' | 'rejected';
+    rejectedAt: string | null;
+    lastForbiddenAt: string | null;
+  }[];
+  canEditLimits: boolean;
+}
+
+// A share's usage, or undefined when the user can't see the share: the realm
+// server answers 404 to anyone but the realm's direct writers.
+export async function keyShareUsage(
+  realmServer: RealmServerService,
+  shareId: string,
+): Promise<KeyShareUsage | undefined> {
+  let response = await realmServer.authedFetch(
+    sharesURL(realmServer, `/${encodeURIComponent(shareId)}/usage`),
+    { headers: { Accept: 'application/vnd.api+json' } },
+  );
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw await refusal(response);
+  }
+  let { data } = (await response.json()) as {
+    data: { attributes: KeyShareUsage };
+  };
+  return data.attributes;
+}
+
 export async function suspendKeyShare(
   realmServer: RealmServerService,
   shareId: string,

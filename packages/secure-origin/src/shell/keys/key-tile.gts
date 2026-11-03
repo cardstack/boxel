@@ -4,10 +4,14 @@
 // the name, so neither crowds the other however long the name. Nothing about
 // its value is shown. A secret pasted in is what a key is unless the tile
 // says otherwise: a Google service account, an OAuth app, or an account
-// connected through one.
+// connected through one. `@framed={{false}}` leaves its border and
+// background off, for a tile drawn inside a frame of its own, as a radio tile
+// is, whose chosen fill then shows through.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import KeyRound from '../../components/icons/key-round.gts';
+import cn from '../../helpers/cn.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 import type { UserKey } from './context.ts';
 
@@ -37,13 +41,13 @@ export function kindLabel(kind: string): string | undefined {
 }
 
 interface Signature {
-  Args: { key: UserKey };
+  Args: { key: UserKey; framed?: boolean };
   Blocks: { default: [] };
   Element: HTMLElement;
 }
 
 const KeyTile: TemplateOnlyComponent<Signature> = <template>
-  <div class='key-tile' ...attributes>
+  <div class={{cn 'key-tile' unframed=(eq @framed false)}} ...attributes>
     <span class='key-icon' aria-hidden='true'><KeyRound /></span>
     <div class='key-text'>
       <div
@@ -78,6 +82,10 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
       color: var(--card-foreground, var(--foreground));
       border-radius: var(--boxel-border-radius);
       box-shadow: 0 0 0 1px var(--border);
+    }
+    .unframed {
+      background-color: transparent;
+      box-shadow: none;
     }
     .key-icon {
       display: inline-flex;

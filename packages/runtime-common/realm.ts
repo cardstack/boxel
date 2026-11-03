@@ -225,6 +225,7 @@ import {
   isModuleResource,
   executableExtensions,
   hasExecutableExtension,
+  trimExecutableExtension,
   isNode,
   logger,
   fetchRealmPermissions,
@@ -547,6 +548,13 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import {
+  POLICY_OPENS_SHARES_CODE,
+  policyAuditOptionsFor,
+  type PolicyAuditOptions,
+  type PolicyShareAudit,
+  type PolicyWriteAuditor,
+} from './policy-share-audit.ts';
 import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
@@ -705,6 +713,19 @@ export function namesRealmPolicy(
     !namesNoRealmPolicy(policy) &&
     !('problem' in readRealmPolicyReference(policy, virtualNetwork))
   );
+}
+
+// The policy card a RealmConfig `policy` value names, as the realm reads it,
+// or undefined where it names none the realm would keep.
+export function realmPolicyCardNamed(
+  policy: unknown,
+  virtualNetwork: VirtualNetwork,
+): string | undefined {
+  if (namesNoRealmPolicy(policy)) {
+    return undefined;
+  }
+  let reference = readRealmPolicyReference(policy, virtualNetwork);
+  return 'problem' in reference ? undefined : reference.card;
 }
 
 // The reference a `policy` value makes, or what is wrong with it in words for
@@ -1672,6 +1693,9 @@ type ModuleLoadResult =
   | { kind: 'not-found'; response: ResponseWithNodeStream }
   | { kind: 'non-module'; response: ResponseWithNodeStream }
   | { kind: 'shimmed'; response: ResponseWithNodeStream }
+  // A module answered from the in-memory module cache for a caller the policy
+  // gate admitted. The entry is already cached, so there is nothing to fill.
+  | { kind: 'cache-hit'; response: ResponseWithNodeStream }
   | {
       kind: 'not-modified';
       canonicalPath: LocalPath;
@@ -2103,6 +2127,38 @@ async function readRangeBytes(
   return bytes;
 }
 
+// A write refused for want of the confirmation of what its policy change opens
+// to people who aren't signed in. The list goes in `meta` for a client to show
+// and confirm; the message says the same for a reader of the error alone.
+function policyShareAuditRefusal(audit: PolicyShareAudit): CardError {
+  let starting = audit.entries.filter((entry) => entry.keyAllowsAnonymous);
+  let refusing = audit.entries.filter((entry) => !entry.keyAllowsAnonymous);
+  let names = (entries: PolicyShareAudit['entries']) =>
+    entries
+      .map((entry) =>
+        entry.label === null
+          ? `a key shared into ${entry.realm}`
+          : `${entry.label} (${entry.realm})`,
+      )
+      .join(', ');
+  let parts = [
+    `This change lets people who aren't signed in make calls that send a key shared into the workspace.`,
+    ...(starting.length ? [`They will start using: ${names(starting)}.`] : []),
+    ...(refusing.length
+      ? [
+          `These keys don't allow it, and will refuse them until their owners allow it: ${names(refusing)}.`,
+        ]
+      : []),
+    `Confirm to save it; the keys' owners are told.`,
+  ];
+  let error = new CardError(parts.join(' '), {
+    status: 409,
+    title: 'Confirm the shared keys this change opens',
+  });
+  error.meta = { code: POLICY_OPENS_SHARES_CODE, audit };
+  return error;
+}
+
 // Which ceiling a write is held to. A card's `.json` and a description of one
 // are both cards; everything else is a file. Read once here so what a batch is
 // held to before it commits is what the commit applies.
@@ -2276,8 +2332,21 @@ export interface CommitBatchResult {
   indexPending?: true;
 }
 
+// Who an operations request is from, as the batch and its operations read it.
+interface OperationsCaller {
+  actor: string;
+  clientRequestId: string;
+  policyAudit?: PolicyAuditOptions;
+}
+
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // Set by a request that writes on a caller's behalf: the write is audited
+  // for the shares a policy it changes opens to people who aren't signed in,
+  // and refused unless it carries the confirmation of what the audit lists
+  // (see `policy-share-audit.ts`). A write the realm makes on its own account
+  // leaves it unset and is not audited.
+  policyAudit?: PolicyAuditOptions;
   // The cards among this write's own files whose content the caller supplied
   // verbatim, named the way the invalidation event names them. Reported on
   // that event so a client holding these cards can tell them from the ones
@@ -2858,12 +2927,6 @@ export class Realm {
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
   // promise's eventual settle.
-  // Compiles for callers the policy gate admitted, keyed by path and the
-  // validator of the version being compiled, so concurrent admitted callers
-  // share one and nothing outlives it (see `#moduleForGatedCaller`). Kept apart
-  // from `#inFlightTranspiles`, which a reader's request joins without the gate.
-  #inFlightGatedCompiles: Map<string, Promise<ModuleTranspileResult>> =
-    new Map();
   #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
     new Map();
   // Monotonic count of transpileJS invocations, used by the CS-11029
@@ -2897,6 +2960,7 @@ export class Realm {
   #virtualNetwork: VirtualNetwork;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
+  #policyWriteAuditor: PolicyWriteAuditor | undefined;
   // The requests the realm server handed to `handlePipeline`: runs it makes
   // on its own, never a request off the network, which is a new object every
   // time and so never in here.
@@ -3080,6 +3144,7 @@ export class Realm {
       realmFor,
       anonymousRateLimiter,
       callApi,
+      policyWriteAuditor,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -3123,6 +3188,10 @@ export class Realm {
       // outbound client. Without it, the realm sends no request outside
       // itself and refuses every `callApi`.
       callApi?: CallApiSender;
+      // Audits a write that may change a policy in force against the shares
+      // in the realms that policy governs (see `policy-share-audit.ts`).
+      // Without it, a write is never audited.
+      policyWriteAuditor?: PolicyWriteAuditor;
     },
     opts?: Options,
   ) {
@@ -3134,6 +3203,7 @@ export class Realm {
     this.#virtualNetwork = virtualNetwork;
     this.#realmFor = realmFor;
     this.#callApi = callApi;
+    this.#policyWriteAuditor = policyWriteAuditor;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -3141,7 +3211,7 @@ export class Realm {
     this.#matrixClient = matrixClient;
     this.#matrixClientUserId = userIdFromUsername(
       this.#matrixClient.username,
-      this.#matrixClient.matrixURL.href,
+      this.#matrixClient.serverName,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#transpileCoordinator = transpileCoordinator;
@@ -4671,6 +4741,15 @@ export class Realm {
     // about to be discarded by the generation guard); they install
     // their own pending against current source instead.
     this.#inFlightTranspiles.delete(path);
+    // A compile in flight is keyed by the name its request asked for, and an
+    // import names a module without its extension, so the compile of this
+    // file may sit under that name instead. Dropped too: a caller asking for
+    // the name after this point resolves it afresh, perhaps to a sibling with
+    // another extension, and must not be handed this file's old compile.
+    let extensionless = trimExecutableExtension(path);
+    if (extensionless !== path) {
+      this.#inFlightTranspiles.delete(extensionless);
+    }
     // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
     // because invalidateCache is sync (called from the LISTEN handler
     // among others). Best-effort by design — every peer's listener
@@ -5149,6 +5228,146 @@ export class Realm {
     }
   }
 
+  // The audit of a write that may change a policy in force, refusing it when
+  // the policy it puts in force opens shares to people who aren't signed in
+  // and the write doesn't carry the confirmation of that list. Undefined where
+  // the write isn't audited or opens nothing.
+  async #auditPolicyWrite(
+    files: Map<LocalPath, WriteContent>,
+    options: WriteOptions | undefined,
+  ): Promise<PolicyShareAudit | undefined> {
+    let auditor = this.#policyWriteAuditor;
+    let requested = options?.policyAudit;
+    if (!auditor || !requested || files.size === 0) {
+      return undefined;
+    }
+    let audited = await auditor.audit({
+      realmURL: this.url,
+      paths: [...files.keys()],
+      actor: requested.actor,
+      contentOf: (path) => this.#auditedContentOf(files, path),
+      writesPolicyCard: async (path) =>
+        this.#writesPolicyCard(path, await this.#auditedContentOf(files, path)),
+    });
+    if (!audited || audited.audit.entries.length === 0) {
+      return undefined;
+    }
+    if (requested.confirmation !== audited.audit.confirmation) {
+      throw policyShareAuditRefusal(audited.shown);
+    }
+    return audited.audit;
+  }
+
+  async #auditedContentOf(
+    files: Map<LocalPath, WriteContent>,
+    path: LocalPath,
+  ): Promise<string> {
+    let content = files.get(path);
+    if (content === undefined) {
+      throw new Error(`${path} is not among the files being written`);
+    }
+    return await this.#writeContentText(content);
+  }
+
+  // Whether `content`, written at `path`, is a policy card: its `adoptsFrom`
+  // names RealmPolicy or a type descending from it, resolved against the card
+  // as the realm resolves it. A document naming no type, or one that doesn't
+  // resolve, isn't one.
+  async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
+    if (!content.includes('adoptsFrom')) {
+      return false;
+    }
+    let adoptsFrom: unknown;
+    try {
+      adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
+    } catch {
+      return false;
+    }
+    if (
+      !adoptsFrom ||
+      typeof adoptsFrom !== 'object' ||
+      typeof (adoptsFrom as { module?: unknown }).module !== 'string' ||
+      typeof (adoptsFrom as { name?: unknown }).name !== 'string'
+    ) {
+      return false;
+    }
+    let { module, name } = adoptsFrom as { module: string; name: string };
+    // A type that doesn't resolve, or a deployment that maps no catalog for
+    // RealmPolicy to come from, names no policy card: no realm there can be
+    // governed by one.
+    try {
+      let codeRef = codeRefWithAbsoluteIdentifier(
+        { module: rri(module), name },
+        this.paths.fileURL(path),
+        undefined,
+        this.#virtualNetwork,
+      );
+      if (!isResolvedCodeRef(codeRef)) {
+        return false;
+      }
+      if (
+        this.#isPolicyCard([
+          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+        ])
+      ) {
+        return true;
+      }
+      return this.#isPolicyCard(
+        (await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // A notice that can't be recorded costs the write nothing: it has landed.
+  async #notifyPolicyShareAudit(
+    audit: PolicyShareAudit,
+    savedBy: string | null,
+  ): Promise<void> {
+    try {
+      await this.#policyWriteAuditor?.notify(audit, savedBy);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `could not record the notices of a policy change that opens shares to people who aren't signed in: ${stringifyErrorForLog(err)}`,
+      );
+    }
+  }
+
+  // What a write's content will be once written, as text. A splice is
+  // assembled from the stored file it edits; that is only ever asked of a
+  // policy card or a realm's config, which are small.
+  async #writeContentText(content: WriteContent): Promise<string> {
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (content instanceof Uint8Array) {
+      return new TextDecoder().decode(content);
+    }
+    let parts: Uint8Array[] = [];
+    for (let segment of content.segments) {
+      if (segment.kind === 'text') {
+        parts.push(segment.bytes);
+      } else if (segment.end > segment.start) {
+        parts.push(
+          await readRangeBytes(
+            this.#adapter,
+            content.path,
+            segment.start,
+            segment.end - segment.start,
+          ),
+        );
+      }
+    }
+    let bytes = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    let offset = 0;
+    for (let part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return new TextDecoder().decode(bytes);
+  }
+
   async #commitBatchUnlockedInner(
     batch: CommitBatch,
     options?: WriteOptions,
@@ -5183,6 +5402,9 @@ export class Realm {
       // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
+    // Audited once the drain has settled what the realm resolves against and
+    // before any byte is written, so a refusal leaves the realm as it was.
+    let policyShareAudit = await this.#auditPolicyWrite(files, options);
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: {
@@ -5726,6 +5948,12 @@ export class Realm {
     // its card, whichever pass runs first and whether or not the queue merged
     // the two.
     options?.onDurable?.();
+    if (policyShareAudit) {
+      await this.#notifyPolicyShareAudit(
+        policyShareAudit,
+        options?.policyAudit?.actor ?? null,
+      );
+    }
     // What each file this commit wrote now holds, named the way the event's
     // `invalidations` names a card. That spelling is not a second opinion about
     // it: the index reports its own row keys and `RealmIndexUpdater` maps them
@@ -6372,6 +6600,10 @@ export class Realm {
               waitForIndex,
               initiatingUser: requestContext.authenticatedUser ?? null,
               broadcastRealmEvents: !realmEventsSuppressed(request),
+              policyAudit: policyAuditOptionsFor(
+                request,
+                requestContext.authenticatedUser,
+              ),
             });
           } catch (e: any) {
             if (e instanceof CardError) {
@@ -6480,10 +6712,17 @@ export class Realm {
       // a program failing there answers 400 over a batch that landed. The
       // status is the same and what it says about the realm is not.
       let error = this.#refusalSeenBy(err.error, requestContext);
+      let retryAfterSeconds = error.meta?.retryAfterSeconds;
       return this.#operationsResponse(
         errorsDocument(error),
         error.status,
         requestContext,
+        // A refusal for a limit says when to come back, as the header a
+        // client's backoff reads as well as in `meta`.
+        (error.status === 429 || error.status === 503) &&
+          typeof retryAfterSeconds === 'number'
+          ? { 'Retry-After': String(retryAfterSeconds) }
+          : undefined,
       );
     }
   }
@@ -6771,6 +7010,9 @@ export class Realm {
               this.#pipelineRequests.has(request)
                 ? { callApiMode: 'pipeline' as const }
                 : {}),
+              ...(definition.base === 'callApi'
+                ? this.#callApiAnonymous(requestContext)
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -6825,6 +7067,7 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
+            ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
             // One request, several cards, and not all of them from the same
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
@@ -6912,7 +7155,7 @@ export class Realm {
   // them — see `card-operations/transforms.ts`.
   #transformContext(
     entry: EnvelopeEntry,
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
   ): TransformContext {
     return {
       name: entry.name,
@@ -7018,7 +7261,7 @@ export class Realm {
     }: {
       coarseDeclined: CoarseDeclined;
       tree: readonly EnvelopeNode[];
-      caller: { actor: string; clientRequestId: string };
+      caller: OperationsCaller;
     },
     resolved: readonly ResolvedEnvelopeEntry[],
     // The lock's decisions, for a batch that reached it.
@@ -7101,7 +7344,7 @@ export class Realm {
   async #rehearsedDecisions(
     tree: readonly EnvelopeNode[],
     resolved: readonly ResolvedEnvelopeEntry[],
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
     // The creates are rehearsed under the ids the batch itself mints them
     // under (see `#mintPosture`), so a card a write is judged by is the card
     // the lock would judge it by.
@@ -7160,7 +7403,7 @@ export class Realm {
   // `admit` is what decides it there, handed the card staging judges it by.
   async #stagedWrite(
     write: ResolvedEnvelopeEntry,
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
     admit: (
       pending: PendingWrite,
       judged: AdmissionSubject | undefined,
@@ -7200,6 +7443,7 @@ export class Realm {
     body: unknown,
     status: number,
     requestContext: RequestContext,
+    headers?: Record<string, string>,
   ): Response {
     return createResponse({
       body: JSON.stringify(body, null, 2),
@@ -7208,6 +7452,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.BoxelOperations,
           'cache-control': 'no-store',
+          ...headers,
         },
       },
       requestContext,
@@ -7268,6 +7513,7 @@ export class Realm {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
           anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
+          ...this.#callApiAnonymous(requestContext),
           ...lanes,
         },
       );
@@ -7372,6 +7618,9 @@ export class Realm {
           ? { writesDeclinedOutright: true as const }
           : {}),
         ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+        ...(writeCaller?.rateLimitKey
+          ? { callApiAnonymous: { address: writeCaller.rateLimitKey } }
+          : {}),
       };
     }
     return {
@@ -8023,6 +8272,16 @@ export class Realm {
     return anonymousRequest ? { anonymousRequest } : {};
   }
 
+  // Where a caller the realm admitted without a session called from, which a
+  // `callApi` filled from a share counts them by. Nothing for a signed-in
+  // caller, or for one whose address the realm server couldn't work out.
+  #callApiAnonymous(
+    requestContext: RequestContext,
+  ): Pick<RunOperationOptions, 'callApiAnonymous'> {
+    let address = requestContext.anonymousCaller?.rateLimitKey;
+    return address ? { callApiAnonymous: { address } } : {};
+  }
+
   // Who an operation dispatched from an HTTP request is running for. The actor
   // is the identity the realm authenticated, which is empty for an anonymous
   // caller — an operation that reads it has to treat "nobody" as a value
@@ -8032,10 +8291,14 @@ export class Realm {
   #callerOf(
     request: Request,
     requestContext: RequestContext,
-  ): { actor: string; clientRequestId: string } {
+  ): OperationsCaller {
     return {
       actor: requestContext.authenticatedUser ?? '',
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+      policyAudit: policyAuditOptionsFor(
+        request,
+        requestContext.authenticatedUser,
+      ),
     };
   }
 
@@ -9190,15 +9453,13 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    // A caller whose read the policy gate decides is never answered from the
-    // module cache, which holds what was compiled for a reader, and nothing
-    // compiled for them fills it (see `#moduleForGatedCaller`).
-    let moduleCachingDisabled =
-      this.#coarseDeclined(requestContext) === 'all' ||
-      this.#disableModuleCaching ||
-      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
+    // A caller whose read the policy gate decides is answered from the module
+    // cache only once the gate has admitted them, so the lookup below, which
+    // runs before any gate, is not theirs (see `#moduleForGatedCaller`).
+    let gated = this.#coarseDeclined(requestContext) === 'all';
+    let moduleCachingDisabled = this.#moduleCachingDisabled(request);
 
-    if (!moduleCachingDisabled) {
+    if (!moduleCachingDisabled && !gated) {
       // Answered from memory: these bytes were compiled from a read that
       // already happened, so nothing here reaches a file and no `readSource`
       // is dispatched for this request. Worth knowing wherever something is
@@ -9289,12 +9550,17 @@ export class Realm {
               dependencyKeys: result.dependencyKeys,
             });
           }
+          // The cache holds the module as a reader is served it; a gated
+          // caller's copy of it is marked private on the way out.
           response = createResponse({
             body: result.body,
             init: {
               status: 200,
               headers: {
                 ...result.headers,
+                ...(gated
+                  ? { 'cache-control': GRANTED_MODULE_CACHE_CONTROL }
+                  : {}),
                 [CACHE_HEADER]: CACHE_MISS_VALUE,
               },
             },
@@ -9338,10 +9604,15 @@ export class Realm {
           break;
         }
         case 'non-module':
-        case 'shimmed': {
+        case 'shimmed':
+        case 'cache-hit': {
           response = result.response;
           break;
         }
+      }
+      if (result.kind === 'cache-hit') {
+        this.#logRequestPerformance(request, start, 'cache hit');
+        return response;
       }
     } catch (err) {
       this.#logRequestPerformance(request, start, 'cache miss');
@@ -9350,6 +9621,15 @@ export class Realm {
 
     this.#logRequestPerformance(request, start, 'cache miss');
     return response;
+  }
+
+  // Whether this realm, or this request, opts out of the in-memory module
+  // cache.
+  #moduleCachingDisabled(request: Request): boolean {
+    return (
+      this.#disableModuleCaching ||
+      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'))
+    );
   }
   private async loadModuleFromDisk(
     localPath: LocalPath,
@@ -9454,6 +9734,7 @@ export class Realm {
       return await this.#moduleForGatedCaller(
         request,
         requestContext,
+        localPath,
         fileRef,
         notThere,
       );
@@ -9514,37 +9795,51 @@ export class Realm {
   }
 
   // A module for a caller the realm ACL declined, whose read the policy gate
-  // decides. Its source is read through the gate, as the card+source read
-  // reads it, and compiled for this caller alone: no module cache answers
-  // them, and nothing compiled for them is kept, so what a reader's compile
-  // left behind reaches nobody the gate refuses and what was compiled for a
-  // granted caller reaches nobody else. Their validator is compared only once
-  // the gate has admitted the read, so a reader's `ETag` tells them nothing
-  // either, and what they are served is marked `private`.
+  // decides. The gate decides first, on a read that asks for no bytes: a
+  // refused caller is answered as a path that holds nothing, before any cache
+  // is consulted, so nothing a reader compiled reaches them and a cache hit
+  // tells them nothing. Their validator is compared only once the gate has
+  // admitted the read, so a reader's `ETag` tells them nothing either.
   //
-  // Admitted callers asking for the same version of a module at once share one
-  // compile, joined only once the gate has admitted each of them (see
-  // `#inFlightGatedCompiles`). A browser that has the module revalidates it on
-  // its next import and is answered 304 without a compile.
+  // An admitted caller is then served from the same caches a reader is: the
+  // in-memory module cache, the transpile cache row, and the compile a reader's
+  // request may already have in flight. A compile is a function of the file's
+  // text alone, so the module compiled for one caller is byte for byte the
+  // module compiled for any other, and a cached compile of the version the
+  // gate admitted holds nothing beyond the source the grant opens. A miss
+  // compiles and fills those caches for whoever reads next. The compile reads
+  // the source for this caller without the gate, which has already decided
+  // this request, so the caller decides only who the read is recorded against,
+  // as a reader's does.
+  //
+  // What they are served is marked `private`. A shared cache answering in the
+  // realm's place would serve without the gate: past each grant's blocklist and
+  // rate limit, and after a grant is narrowed or removed.
   //
   // A shimmed module is served from the host's own bundle rather than the
   // realm's files, so no grant reaches it.
   async #moduleForGatedCaller(
     request: Request,
     requestContext: RequestContext,
+    localPath: LocalPath,
     fileRef: FileRef,
     notThere: () => ModuleLoadResult,
   ): Promise<ModuleLoadResult> {
     if (fileRef[Symbol.for('shimmed-module')]) {
       return notThere();
     }
-    let source: OperationSourceResult | undefined;
+    let caller = this.#callerOf(request, requestContext);
+    let admitted: OperationSourceResult | undefined;
     try {
-      source = await this.#readStoredSource(
-        this.#callerOf(request, requestContext),
-        fileRef.path,
-        { ...this.#gatedRead(requestContext), route: byteRoute('module') },
-      );
+      admitted = await this.#readStoredSource(caller, fileRef.path, {
+        ...this.#gatedRead(requestContext),
+        route: byteRoute('module'),
+        // Only the gate's decision is wanted here. The bytes are read by the
+        // compile, if one runs, and the validator is built from the file
+        // itself rather than from the realm's record of it.
+        headersOnly: true,
+        skipStoredFileMeta: true,
+      });
     } catch (e: unknown) {
       if (e instanceof CardError) {
         return {
@@ -9554,7 +9849,7 @@ export class Realm {
       }
       throw e;
     }
-    if (!source) {
+    if (!admitted) {
       return notThere();
     }
     let etag = buildEtag(
@@ -9565,7 +9860,8 @@ export class Realm {
       MODULE_ETAG_VARIANT,
     );
     // What the caller asked for is served from here on, so a caller who isn't
-    // signed in is counted against the realm's limit for it.
+    // signed in is counted against the realm's limit for it, a cache hit
+    // included.
     servedAnonymous(requestContext);
     if (etag && request.headers.get('if-none-match') === etag) {
       return {
@@ -9581,30 +9877,64 @@ export class Realm {
         },
       };
     }
-    let compileKey = `${fileRef.path}\n${etag ?? ''}`;
-    let compiling = this.#inFlightGatedCompiles.get(compileKey);
-    if (!compiling) {
-      let pending: Promise<ModuleTranspileResult>;
-      pending = fileContentToText({
-        content: source.body as FileRef['content'],
-      })
-        .then((text) => this.#compileModule(fileRef, text, etag))
-        .finally(() => {
-          if (this.#inFlightGatedCompiles.get(compileKey) === pending) {
-            this.#inFlightGatedCompiles.delete(compileKey);
-          }
-        });
-      compiling = pending;
-      this.#inFlightGatedCompiles.set(compileKey, pending);
+    // The entry has to be a compile of the file the gate judged, at the
+    // version it judged: an entry the name holds for another file, or for a
+    // version since overwritten, is compiled over like a miss.
+    let cached = this.#moduleCachingDisabled(request)
+      ? undefined
+      : this.#transpiledModuleCache.get(localPath);
+    if (
+      cached &&
+      cached.canonicalPath === fileRef.path &&
+      etag &&
+      cached.headers.etag === etag
+    ) {
+      return {
+        kind: 'cache-hit',
+        response: createResponse({
+          body: cached.body,
+          init: {
+            status: 200,
+            headers: {
+              ...cached.headers,
+              'cache-control': GRANTED_MODULE_CACHE_CONTROL,
+              [CACHE_HEADER]: CACHE_HIT_VALUE,
+            },
+          },
+          requestContext,
+        }),
+      };
     }
-    let compiled = await compiling;
-    return {
-      ...compiled,
-      headers: {
-        ...compiled.headers,
-        'cache-control': GRANTED_MODULE_CACHE_CONTROL,
-      },
-    };
+    // A compile in flight under the requested name may be of another file the
+    // name resolved to, or of an earlier version of this one, so what it
+    // produced is served only when it is a compile of what the gate judged.
+    // Anything else is compiled over, by the canonical path, which is what
+    // the transpile cache row is keyed and validated on. That includes a
+    // joined compile that failed: its error describes the file it was
+    // compiling, which may be one the gate never opened to this caller. A
+    // compile this request started itself fails with its own error.
+    let joined = this.#inFlightTranspiles.has(localPath);
+    let compiled: ModuleTranspileResult | undefined;
+    try {
+      compiled = await this.#transpileModuleDeduped(
+        localPath,
+        fileRef,
+        etag,
+        caller,
+      );
+    } catch (e: unknown) {
+      if (!joined) {
+        throw e;
+      }
+    }
+    if (
+      compiled &&
+      compiled.canonicalPath === fileRef.path &&
+      compiled.headers.etag === etag
+    ) {
+      return compiled;
+    }
+    return await this.#transpileWithLayers(fileRef, etag, caller);
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
@@ -11892,6 +12222,10 @@ export class Realm {
           actor: requestContext.authenticatedUser ?? undefined,
           waitForIndex: false,
           broadcastRealmEvents: !realmEventsSuppressed(request),
+          policyAudit: policyAuditOptionsFor(
+            request,
+            requestContext.authenticatedUser,
+          ),
         },
       );
     } catch (err: unknown) {
@@ -12916,6 +13250,10 @@ export class Realm {
         await commitBatch(this.batchCore, [entry], {
           ...admission.batch,
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          policyAudit: policyAuditOptionsFor(
+            request,
+            requestContext.authenticatedUser,
+          ),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
@@ -13443,6 +13781,10 @@ export class Realm {
           {
             ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            policyAudit: policyAuditOptionsFor(
+              request,
+              requestContext.authenticatedUser,
+            ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
               : {}),
@@ -17166,6 +17508,128 @@ export class Realm {
     return await this.#policyCache.anonymousAdmission();
   }
 
+  // The operations on `codeRef`'s cards that the realm's policy opens to
+  // callers who aren't signed in and that send a key shared with the realm: a
+  // live grant naming `"anonymous"` on such a `callApi`, in a rule for the
+  // type or one it descends from. The secure window reads it to say which
+  // calls such callers can make through a share. Empty for a realm whose
+  // policy opens none, or won't compile.
+  async sharedKeyOperationsOpenToAnonymous(
+    codeRef: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let policy = await this.getCompiledPolicy();
+    let rules = (policy?.anonymous ? policy.rules : []).filter((rule) =>
+      rule.grants.some((grant) => grant.anonymous?.sendsSharedKey),
+    );
+    if (rules.length === 0) {
+      return [];
+    }
+    let chain: string[];
+    try {
+      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
+    } catch {
+      return [];
+    }
+    let names = new Set<string>();
+    for (let rule of rules) {
+      let keys = await this.#realmIndexQueryEngine.typeKeysFor(rule.targetType);
+      if (!keys.some((key) => chain.includes(key))) {
+        continue;
+      }
+      for (let grant of rule.grants) {
+        if (grant.anonymous?.sendsSharedKey) {
+          names.add(grant.operation);
+        }
+      }
+    }
+    return [...names];
+  }
+
+  // Which of `asked` — operations on a card type, as a share's bindings name
+  // them — a policy would open to people who aren't signed in with a shared
+  // key while the realm's policy in force doesn't. `next` is the policy the
+  // realm would be governed by: a card it would name, with the attributes it
+  // would hold where those are being written (otherwise the card as stored),
+  // or null for none. Compiled as this realm compiles its own policy, and
+  // kept by nothing.
+  //
+  // An operation counts as opened where some live grant names `"anonymous"` on
+  // it with a shared-key slot, in a rule for its type or one the type descends
+  // from, as `sharedKeyOperationsOpenToAnonymous` reads the policy in force.
+  async sharedKeyOpeningsAdded(
+    next: { card: string; attributes?: Record<string, any> } | null,
+    asked: { codeRef: ResolvedCodeRef; operation: string }[],
+  ): Promise<boolean[]> {
+    if (!next || asked.length === 0) {
+      return asked.map(() => false);
+    }
+    let env = this.#policyCompileEnvironment();
+    let nextPolicy = next.attributes
+      ? (await compileDraftPolicy(next.card, next.attributes, env)).compiled
+      : (await compilePolicyCard(next.card, env)).compiled;
+    let currentPolicy = await this.getCompiledPolicy();
+    let openings = async (policy: CompiledRealmPolicy | undefined) => {
+      let found: { operation: string; typeKeys: string[] }[] = [];
+      for (let rule of policy?.anonymous ? policy.rules : []) {
+        let operations = rule.grants
+          .filter((grant) => grant.anonymous?.sendsSharedKey)
+          .map((grant) => grant.operation);
+        if (operations.length === 0) {
+          continue;
+        }
+        let typeKeys = await this.#realmIndexQueryEngine.typeKeysFor(
+          rule.targetType,
+        );
+        for (let operation of operations) {
+          found.push({ operation, typeKeys });
+        }
+      }
+      return found;
+    };
+    let [opened, alreadyOpen] = await Promise.all([
+      openings(nextPolicy),
+      openings(currentPolicy),
+    ]);
+    if (opened.length === 0) {
+      return asked.map(() => false);
+    }
+    let chains = new Map<string, string[]>();
+    let chainOf = async (codeRef: ResolvedCodeRef) => {
+      let key = `${codeRef.module}#${codeRef.name}`;
+      let chain = chains.get(key);
+      if (!chain) {
+        try {
+          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+            .types;
+        } catch {
+          chain = [];
+        }
+        chains.set(key, chain);
+      }
+      return chain;
+    };
+    let reaches = (
+      found: { operation: string; typeKeys: string[] }[],
+      operation: string,
+      chain: string[],
+    ) =>
+      found.some(
+        (opening) =>
+          opening.operation === operation &&
+          opening.typeKeys.some((key) => chain.includes(key)),
+      );
+    let answers: boolean[] = [];
+    for (let { codeRef, operation } of asked) {
+      let chain = await chainOf(codeRef);
+      answers.push(
+        reaches(opened, operation, chain) &&
+          !reaches(alreadyOpen, operation, chain),
+      );
+    }
+    return answers;
+  }
+
   __testOnlyPolicyCacheStats(): {
     compiles: number;
     revalidations: number;
@@ -17432,7 +17896,7 @@ export class Realm {
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
-        this.#matrixClient.matrixURL.href,
+        this.#matrixClient.serverName,
       ),
       publishable: metadata.publishable,
       lastPublishedAt,

@@ -21,9 +21,11 @@ import {
   recordVendorForbidden,
 } from '../key-grant-rejection.ts';
 import { keyReadiness } from '../key-readiness.ts';
+import { recordKeyUses } from '../key-uses.ts';
 import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundTimeoutError,
   describeOutboundError,
   outboundFetch,
@@ -88,6 +90,9 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // A request addressed to one of the platform's token endpoints is refused
 // before anything is sent, key or no key (see `tokenEndpointAt`).
+//
+// Each use of a share or key is recorded against it (`lib/key-uses.ts`): a
+// refusal raised while filling by `fill`, everything after by `recordUse`.
 export function createCallApiSender(
   dbAdapter: DBAdapter,
   {
@@ -99,6 +104,7 @@ export function createCallApiSender(
     fill: (lookup) =>
       fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
     readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
+    recordUse: (use) => recordKeyUses(dbAdapter, use),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(
@@ -220,6 +226,7 @@ export async function sendCallApiRequest(
       headers: request.headers,
       ...(request.body !== undefined ? { body: request.body } : {}),
       sizePath: 'call-api',
+      destinationSetBy: 'user',
       scrubber,
       ...(credentials.length > 0
         ? {
@@ -267,6 +274,18 @@ function refusalFor(error: unknown, described: string): OperationFailure {
       title: 'Destination refused',
       detail: error.message,
       meta: { reason: error.reason },
+    });
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    log.warn(
+      `callApi response refused for size: ${error.message} (${described})`,
+    );
+    return new OperationFailure({
+      status: 502,
+      code: 'response-too-large',
+      title: 'Response too large',
+      detail: error.message,
+      meta: { cap: error.cap, measured: error.measured },
     });
   }
   if (error instanceof OutboundTimeoutError) {

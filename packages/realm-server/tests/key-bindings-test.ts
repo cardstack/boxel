@@ -5,6 +5,7 @@ import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
+  DefinitionLookup,
   LooseSingleCardDocument,
   Realm,
   VirtualNetwork,
@@ -32,8 +33,10 @@ import {
   bindingSnapshot,
   fillSlots,
   fingerprintOf,
+  listOwnBindings,
   pipelineAdmission,
 } from '../lib/key-bindings.ts';
+import { bindingNames } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
 
 // ============================================================================
@@ -79,6 +82,7 @@ function inboxModule({
     import { operation, params, bxl } from "@cardstack/base/operations";
 
     export class Inbox extends CardDef {
+      static displayName = 'Team inbox';
       @field channel = contains(StringField);
 
       @operation static list = {
@@ -475,7 +479,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('an interactive invocation is refused, and nothing is sent', async function (assert) {
+  test('an interactive invocation of a binding approved for pipelines only is refused, and nothing is sent', async function (assert) {
     let key = await addKey();
     await approve(OWNER, [approval('list', { userKey: { keyId: key.id } })]);
     let response = await request
@@ -494,12 +498,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
 
-    let interactive = await approve(
+    let anonymous = await approve(
       OWNER,
       [approval('list', { userKey: { keyId: key.id } })],
-      { attributes: { interactive: true } },
+      { attributes: { interactive: true, anonymous: true } },
     );
-    assert.strictEqual(interactive.status, 403, 'nor can one be approved');
+    assert.strictEqual(anonymous.status, 403, 'anonymous use is not offered');
   });
 
   test('approving takes a session signed in on the secure origin, never the app session', async function (assert) {
@@ -768,9 +772,10 @@ module(basename(import.meta.filename), function (hooks) {
           instance: null,
           slot: 'apiKey',
           state: 'active',
+          destination: `${VENDOR}/echo/`,
         },
       ],
-      "the realm's writers see what the share is approved for",
+      "the realm's writers see what the share is approved for, and where it sends",
     );
 
     await dbAdapter.execute(
@@ -870,6 +875,133 @@ module(basename(import.meta.filename), function (hooks) {
     } finally {
       virtualNetwork.removeRealmMapping(prefix);
     }
+  });
+
+  test('the bindings listing narrows to a realm, type and operation, each named in prefix form or as a URL', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+      approval('note', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let auth = await secureSessionAuth(dbAdapter, OWNER);
+    let listed = async (query: Record<string, string>) => {
+      let response = await request
+        .get(`/_key-bindings?${new URLSearchParams(query)}`)
+        .set('Authorization', auth);
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data
+        .map(
+          (b: { attributes: { operation: string } }) => b.attributes.operation,
+        )
+        .sort();
+    };
+    let prefix = '@test/key-bindings/';
+    virtualNetwork.addRealmMapping(prefix, realmURL.href);
+    try {
+      assert.deepEqual(
+        await listed({
+          realm: prefix,
+          module: `${prefix}inbox`,
+          name: INBOX.name,
+        }),
+        ['list', 'note'],
+        'a realm and module in prefix form',
+      );
+      assert.deepEqual(
+        await listed({
+          realm: realmURL.href,
+          module: `${realmURL.href}inbox.gts`,
+          name: INBOX.name,
+          operation: 'note',
+        }),
+        ['note'],
+        'as URLs, the module with its extension',
+      );
+      assert.deepEqual(
+        await listed({ realm: realmURL.href, name: 'Elsewhere' }),
+        [],
+        'another type',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(prefix);
+    }
+  });
+
+  test('the bindings listing names each by its operation label and card display name, and by names alone once the owner can no longer read the card', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+      approval('note', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    async function listed() {
+      let response = await request
+        .get('/_key-bindings')
+        .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+      assert.strictEqual(response.status, 200);
+      return response.body.data.map(
+        ({
+          attributes: { operation, operationLabel, cardName },
+        }: {
+          attributes: Record<string, string>;
+        }) => [operation, operationLabel, cardName],
+      );
+    }
+
+    assert.deepEqual(
+      await listed(),
+      [
+        ['list', 'List your items', 'Team inbox'],
+        ['note', 'Note', 'Team inbox'],
+      ],
+      'a declared label and the display name; an operation with no label by its name in words',
+    );
+
+    // The card's module is in this realm, so taking the owner's read on the
+    // realm takes it on the module too.
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET read = false, write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, OWNER] },
+    );
+    assert.deepEqual(
+      await listed(),
+      [
+        ['list', 'List', 'Inbox'],
+        ['note', 'Note', 'Inbox'],
+      ],
+      "a card the owner can't read is named by its export name, and its operations by their names in words",
+    );
+  });
+
+  test('a type whose realm fails to mount is named from its binding row, and the listing still answers', async function (assert) {
+    let key = await addKey();
+    let approved = await approve(OWNER, [
+      approval('list', { userKey: { keyId: key.id } }),
+    ]);
+    assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    let bindings = await listOwnBindings(dbAdapter, OWNER);
+
+    // Finding a realm mounts it, so a mount that fails surfaces here, as an
+    // error that isn't a not-found.
+    let names = await bindingNames(
+      {
+        dbAdapter,
+        findRealm: async () => {
+          throw new Error('the realm failed to start');
+        },
+        definitionLookup: {
+          forRealm() {
+            throw new Error('a definition is never read for this type');
+          },
+        } as unknown as DefinitionLookup,
+        virtualNetwork,
+        matrixServerName: 'localhost',
+      },
+      OWNER,
+      bindings,
+    );
+    assert.deepEqual(names, [{ operationLabel: 'List', cardName: 'Inbox' }]);
   });
 
   test('an operation approved per instance serves only the card it was approved for', async function (assert) {

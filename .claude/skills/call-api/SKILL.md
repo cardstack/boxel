@@ -91,6 +91,21 @@ for a stored entry whatever produced it.
 | `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                                                                                                     |
 | `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, a `path` value written as text that is `''`, `.` or `..` or holds `/` or `\`, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
+**Before indexing, `boxel lint` reports the same issues.** The realm's `_lint`
+engine (`tasks/lint-engines.ts`) runs two rules from `tasks/lint-call-api.ts`,
+registered as the `@cardstack/boxel-operations` plugin. Each reads every
+`@operation static … = { base: 'callApi', … }` from source (string and
+template literals, objects, arrays, `params()`/`instance()`/`actor()`/
+`realmConfig()`/`card()`, `bxl`, and `const`s in the file), and hands it to
+`lowerCallApiRequest` in `lowering.ts`, the function lowering itself calls.
+`call-api` (error) reports each issue as `<code>: <message>` and a `label`
+lowering refuses; `call-api-advice` (warning) reports an operation with no
+`label` and a destination that isn't `https:`. A value source doesn't settle
+(an imported constant, another call) stands in as an opaque reference, and a
+request whose URL or whole member is one isn't lowered at all, so the rules
+never guess. A lint check that mirrors lowering belongs in lowering, where
+both pick it up.
+
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
 placement, at}` — so dispatch knows what a request needs without walking it.
@@ -162,9 +177,10 @@ refusal also writes a key-use line.
    destination, or Google's token endpoint refused the service-account key,
    and no probe is due; see the `user-keys` skill, _Rejected grants_ and
    _Rejected keys_).
-   Every invocation off the network is interactive, and every binding is
-   approved for pipelines only, so a slotted request is sent only from a
-   pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names
+   Every invocation off the network is interactive, and is served only by a
+   binding its owner approved for interactive use; a pipeline
+   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
    each slot with whose key fills it (`the credential slot "weather" for the
 invoking user's own key`, `… for the realm's key`, from `describeSlots`),
    because a caller that sees only the message, such as the AI assistant,
@@ -269,13 +285,13 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                  | Status                           | When                                                                                                                                                                                                                                                                  |
-| --------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`) |
-| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                            |
-| `response-too-large`  | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                                                                                                     |
-| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                      |
-| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                               |
+| Code                  | Status                           | When                                                                                                                                                                                                                                                                                                     |
+| --------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`       | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; the built request left its lowered destination; or it is addressed to a token endpoint (`meta.reason: 'platform-only'`)                                    |
+| `upstream-timeout`    | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                                                                                                                               |
+| `response-too-large`  | 502                              | the response passed the `call-api` size cap: its declared length was over it (nothing was read), or its decompressed body passed it while streaming (`meta.measured`: `declared-length` / `stream-reached-cap`; `meta.cap` in bytes). The card never gets a cut-off body. See the `outbound-guard` skill |
+| `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                                                         |
+| `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                                                                  |
 
 ## The key-use channel
 
@@ -305,6 +321,9 @@ null when the refusal came before a request was built. Tests capture it with
   one test per lowering check, lowered from plain data, and the normalized URL
   and destination.
 - `packages/host/tests/unit/call-api-destination-test.ts`: `destinationCovers`.
+- `packages/boxel-cli/tests/integration/file-lint.test.ts`: the lint rules
+  through the realm's `_lint`, one declaration per lowering issue, the
+  `http:` destination and the missing label.
 - `packages/realm-server/tests/realm-endpoints/call-api-test.ts`: end to end
   through `_operations` against the stub vendor on a fixed port, because the
   vendor URL is written into the card module.
@@ -322,3 +341,5 @@ the `agent-peer-collaboration` skill on serving your own dist.
 - **`operations-diagnosis`** — the `boxel:operations` channel around the call.
 - **`key-bindings`** — the bindings that fill slots, and their refusals.
 - **`secrets-at-rest`** — where a key a binding fills from is stored.
+- **`key-outage-triage`** — reading key-use lines across realms and hosts:
+  one key, one vendor, or us; the Keys dashboard and its alerts.

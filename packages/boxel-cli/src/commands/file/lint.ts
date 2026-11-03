@@ -63,7 +63,9 @@ export async function lint(
     };
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return { ok: false, error: resolvedRealm.error };
   }

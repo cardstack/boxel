@@ -197,10 +197,20 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
     );
     reportStatus(jobInfo as any, 'start');
 
-    const result = await lintArgs(
-      args,
-      (sharedLintThread ??= new LintThread()),
-    );
+    let thread = (sharedLintThread ??= new LintThread());
+    // A lint that starts the thread also loads the engines it uses, which is
+    // most of its time. Logging those lints, and only those, shows how often a
+    // save waits on an engine load and how long it takes on this host. A
+    // source rejected before it reaches the thread starts nothing, and a lint
+    // whose thread died is not timed.
+    let startsThread = !thread.isRunning;
+    let startedAt = Date.now();
+    const result = await lintArgs(args, thread);
+    if (startsThread && thread.isRunning) {
+      log.info(
+        `${jobIdentity(jobInfo as any)} lint-source started the lint thread: the first lint on it, of ${filename}, took ${Date.now() - startedAt} ms including loading the engines it used`,
+      );
+    }
 
     log.debug(
       `${jobIdentity(jobInfo as any)} completed lint-source: ${result.messages.length} message(s), fixed=${result.fixed}`,

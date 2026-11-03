@@ -4,7 +4,7 @@
     "attributes": {},
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/workspace",
+        "module": "@cardstack/base/workspace",
         "name": "Workspace"
       }
     }

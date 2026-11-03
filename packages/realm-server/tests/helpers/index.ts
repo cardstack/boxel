@@ -366,6 +366,11 @@ import {
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
 import { createCallApiSender } from '../../lib/outbound/call-api-sender.ts';
+import {
+  createPolicyWriteAuditor,
+  type PolicyPointerReader,
+} from '../../lib/policy-share-audit.ts';
+import { realmPolicyPointer } from '../../lib/realm-policy-pointer.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -1498,6 +1503,7 @@ export async function createRealm({
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
+  policyPointerOf,
   published,
 }: {
   dir: string;
@@ -1562,6 +1568,9 @@ export async function createRealm({
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
   realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
+  // A realm's policy pointer, read without mounting it, for the audit of a
+  // policy change.
+  policyPointerOf?: PolicyPointerReader;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1595,6 +1604,7 @@ export async function createRealm({
       queuePublisher: publisher,
       virtualNetwork,
       matrixURL: realmServerTestMatrix.url,
+      matrixServerName: 'localhost',
       secretSeed: realmSecretSeed,
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
@@ -1603,6 +1613,7 @@ export async function createRealm({
     });
   }
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1641,7 +1652,17 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
-      ...(realmFor ? { realmFor } : {}),
+      ...(realmFor
+        ? {
+            realmFor,
+            policyWriteAuditor: createPolicyWriteAuditor({
+              dbAdapter,
+              realmFor,
+              virtualNetwork,
+              ...(policyPointerOf ? { policyPointerOf } : {}),
+            }),
+          }
+        : {}),
       callApi: createCallApiSender(dbAdapter),
     },
     {
@@ -1759,6 +1780,7 @@ export async function runTestRealmServer({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName: 'localhost',
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1795,6 +1817,7 @@ export async function runTestRealmServer({
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -1937,6 +1960,7 @@ export async function runTestRealmServerWithRealms({
     queuePublisher: publisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName: 'localhost',
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
@@ -1979,6 +2003,14 @@ export async function runTestRealmServerWithRealms({
               dbAdapter,
             })
           : undefined,
+      policyPointerOf: async (url) =>
+        reconciler
+          ? await realmPolicyPointer(url, {
+              reconciler,
+              realmsRootPath,
+              virtualNetwork,
+            })
+          : null,
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -1987,6 +2019,7 @@ export async function runTestRealmServerWithRealms({
   }
 
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
@@ -2349,6 +2382,7 @@ export function setupMatrixRoom(
   },
 ) {
   let matrixClient = new MatrixClient({
+    serverName: 'localhost',
     matrixURL: realmServerTestMatrix.url,
     username: 'node-test_realm',
     seed: realmSecretSeed,
@@ -3312,6 +3346,7 @@ async function buildBaseRealmTemplate(
     virtualNetwork.mount(base.handle);
 
     let matrixClient = new MatrixClient({
+      serverName: 'localhost',
       matrixURL: realmServerTestMatrix.url,
       username: realmServerTestMatrix.username,
       seed: realmSecretSeed,

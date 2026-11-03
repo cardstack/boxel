@@ -31,12 +31,20 @@ boxel realm-server keys add     --realm-server <url> --destination <url> \
 boxel realm-server keys replace --realm-server <url> (--destination <url> | --id <id>) \
                                 [--stdin | --key-file <path>] [--note <text>]
 boxel realm-server keys delete  --realm-server <url> (--destination <url> | --id <id>) [--note <text>]
+boxel realm-server keys set-response-cap --realm-server <url> (--destination <url> | --id <id>) \
+                                (<bytes> | --clear) [--note <text>]
 ```
+
+`set-response-cap` gives the key a response size cap of its own, or clears it
+so the key takes the system-key path's; `show` prints it. The `outbound-guard`
+skill covers what the cap does and how to choose one.
 
 Every command takes `--json`. With `--kind oauth-client` the same commands
 manage the platform's OAuth clients instead, named by `--name`; the
 `oauth-connections` skill covers them, the Boxel (read-only) GitHub App among
-them. `boxel realm-server` is left out of the CLI's
+them. Their changes take an operator note by the same rules, are recorded in
+`platform_oauth_client_history` the way system keys' are in
+`proxy_endpoint_history`, and are logged on the `system-keys` channel too. `boxel realm-server` is left out of the CLI's
 general help (and out of boxel-skills); `boxel realm-server keys --help` shows
 the commands.
 
@@ -85,7 +93,7 @@ or longer than 8 KiB.
 
 ### The operator note
 
-Every `add`, `replace` and `delete` carries a note: who is making the change
+Every `add`, `replace`, `delete` and `set-response-cap` carries a note: who is making the change
 and why ("rotating the OpenRouter key after the vendor's incident — <your name>").
 The command prompts for it at a terminal; with `--stdin` or without a
 terminal, pass `--note`. The server refuses a change with no note, a note that
@@ -119,13 +127,14 @@ keys: treat the seed as a production credential.
 
 ## The endpoints
 
-| Route                      | Does                                                                                                  |
-| -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /_system-keys`        | List every key's metadata                                                                             |
-| `GET /_system-keys/:id`    | One key's metadata and its 20 most recent history entries, newest first                               |
-| `POST /_system-keys`       | Add: `destination`, `creditStrategy`, `authMethod`, `paramName`, `supportsStreaming`, `value`, `note` |
-| `PATCH /_system-keys/:id`  | Replace the value: `value`, `note`                                                                    |
-| `DELETE /_system-keys/:id` | Delete: `note`                                                                                        |
+| Route                                     | Does                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /_system-keys`                       | List every key's metadata                                                                             |
+| `GET /_system-keys/:id`                   | One key's metadata and its 20 most recent history entries, newest first                               |
+| `POST /_system-keys`                      | Add: `destination`, `creditStrategy`, `authMethod`, `paramName`, `supportsStreaming`, `value`, `note` |
+| `PATCH /_system-keys/:id`                 | Replace the value: `value`, `note`                                                                    |
+| `DELETE /_system-keys/:id`                | Delete: `note`                                                                                        |
+| `PUT /_system-keys/:id/response-size-cap` | Set the key's own response size cap: `bytes` (a whole number, or null to clear it), `note`            |
 
 **No route answers with a value.** A key's metadata reports `hasValue` and
 `keyId`, the data key its value is sealed under (null for a destination with
@@ -139,16 +148,17 @@ routes.
 Each change writes its `proxy_endpoints` row and a `proxy_endpoint_history`
 row in a single statement, so one never lands without the other:
 
-| Column            | Holds                                                                      |
-| ----------------- | -------------------------------------------------------------------------- |
-| `endpoint_id`     | the key's id (kept after the key is deleted)                               |
-| `url`             | its destination                                                            |
-| `action`          | `add`, `replace` or `delete`                                               |
-| `note`            | the operator's note                                                        |
-| `key_id`          | the data key the value was sealed under                                    |
-| `changed_at`      | when                                                                       |
-| `client_address`  | the caller's address, as the load balancer reports it (null when unknown)  |
-| `token_issued_at` | when the operator token was signed, in seconds since the epoch (its `iat`) |
+| Column                    | Holds                                                                      |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `endpoint_id`             | the key's id (kept after the key is deleted)                               |
+| `url`                     | its destination                                                            |
+| `action`                  | `add`, `replace`, `delete` or `set-response-cap`                           |
+| `response_size_cap_bytes` | for `set-response-cap`, the cap it set; null for a clear                   |
+| `note`                    | the operator's note                                                        |
+| `key_id`                  | the data key the value was sealed under                                    |
+| `changed_at`              | when                                                                       |
+| `client_address`          | the caller's address, as the load balancer reports it (null when unknown)  |
+| `token_issued_at`         | when the operator token was signed, in seconds since the epoch (its `iat`) |
 
 The note says who made a change only as its writer claims; the address and
 the token's signing time are what the server observed, and are what to check

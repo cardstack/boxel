@@ -1,0 +1,1535 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-keys"
+  },
+  "spec": {
+    "annotations": {
+      "list": []
+    },
+    "description": "API keys in operation: secrets that fail to open, Decrypts on the secrets key, minting failures, guard and limit refusals, rejected grants and keys by vendor, and the response size cap. Built on boxel:key-use, boxel:key-grant, boxel:key-limits, boxel:secrets-at-rest and the outbound channel. The key-outage-triage skill reads it.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [],
+    "panels": [
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "panels": [],
+        "title": "Is it us, one vendor, or one key?",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Stored secrets the keyring could not open in the selected range (boxel:secrets-at-rest, event open-failed). Any value above zero is a data key a process has not loaded or a sealed row that was changed outside the realm server. See the secrets-at-rest skill.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 1
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:secrets-at-rest\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:secrets-at-rest\" | event=\"open-failed\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Secrets that failed to open",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "kms:Decrypt calls on this environment's secrets key that came from anything but this environment's realm-server or worker task role in this account, or that were denied. Read from the CloudWatch log group the boxel-secrets-kms config feeds from CloudTrail.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short",
+            "noValue": "0"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 1
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "fields coalesce(detail.userIdentity.sessionContext.sessionIssuer.arn, detail.userIdentity.arn, \"unknown\") as principal\n| filter not (principal like /:role\\/boxel-(realm-server|worker)-$env-ecs-task$/ and detail.userIdentity.accountId = detail.recipientAccountId) or ispresent(detail.errorCode)\n| stats count() as unexpected",
+            "id": "",
+            "logGroupNames": [
+              "/aws/events/$env-boxel-secrets-decrypts"
+            ],
+            "queryMode": "Logs",
+            "refId": "A",
+            "region": "default"
+          }
+        ],
+        "title": "Decrypts by an unexpected principal",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Access tokens a minting key (a Google service account, an OAuth connection) could not mint for a call in the selected range (boxel:key-grant, event mint-failed).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 1
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=\"mint-failed\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Mints that failed",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Outbound requests the guard refused before sending, on every path (the outbound channel's \"outbound guard refused\" line), whoever set the destination. The Refusals row splits them.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 1
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound guard refused:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Guard refusals",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Grants a vendor rejected with a 401, and keys a token endpoint refused, in the selected range (boxel:key-grant, events grant-rejected and key-rejected). Each grant or key is counted once, when it enters the rejected state.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 1
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Grants and keys rejected",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Calls a key's owner-set rate limit or budget refused in the selected range (boxel:key-limits, event refused). These are the limits doing their job; rate-limit-unavailable among them is a database problem.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1000000000000
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 1
+        },
+        "id": 7,
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-limits\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-limits\" | realm=~\".*${realm}.*\" | event=\"refused\" [$__range])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "title": "Limit and budget refusals",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Every callApi invocation (boxel:key-use) by the destination host and outcome. One host turning red alone is that vendor; every host at once is us.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "id": 8,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (host, outcome) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | realm=~\".*${realm}.*\" | url!=\"\" | label_format host=`{{ regexReplaceAll \"^[a-z]+://([^/]+).*$\" .url \"${1}\" }}` [$__interval]))",
+            "legendFormat": "{{host}} {{outcome}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "callApi outcomes by vendor host",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The status every vendor answered a callApi with (boxel:key-grant, event vendor-outcome). A 401 from a host whose keys work elsewhere is one key; 401s from every key at a host is that vendor, or a substitution bug of ours.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 5
+        },
+        "id": 9,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (host, status) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=\"vendor-outcome\" [$__interval]))",
+            "legendFormat": "{{host}} {{status}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Vendor answers by host and status",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 13
+        },
+        "id": 10,
+        "panels": [],
+        "title": "Secrets and minting",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Stored secrets that failed to open (boxel:secrets-at-rest, event open-failed), by the column they live in and why: unknown-data-key (sealed under a data key this process did not load; a rotation step taken too early), not-authentic (the row was changed or moved outside the realm server), malformed.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 14
+        },
+        "id": 11,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (service, field, reason) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:secrets-at-rest\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:secrets-at-rest\" | event=\"open-failed\" [$__interval]))",
+            "legendFormat": "{{service}} {{field}} {{reason}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Decryption failures by field and reason",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Access tokens that could not be minted for a call (boxel:key-grant, event mint-failed), by key kind, the grant's destination host and reason: rejected (the vendor refused the key or connection), needs-admin (the OAuth client is broken) or unavailable (the token endpoint did not answer usefully).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 14
+        },
+        "id": 12,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (kind, host, reason) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=\"mint-failed\" [$__interval]))",
+            "legendFormat": "{{kind}} {{host}} {{reason}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Minting failures by vendor",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "Every kms:Decrypt on this environment's secrets key, by principal and outcome. The realm-server and worker task roles each Decrypt once per data key at startup, so their bars line up with deploys. Anything else is the alert \"Secrets key Decrypt by an unexpected principal\".",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 22
+        },
+        "id": 13,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "fields coalesce(detail.userIdentity.sessionContext.sessionIssuer.arn, detail.userIdentity.arn, \"unknown\") as principal, coalesce(detail.errorCode, \"ok\") as outcome\n| stats count() as decrypts by bin(1h), principal, outcome",
+            "id": "",
+            "logGroupNames": [
+              "/aws/events/$env-boxel-secrets-decrypts"
+            ],
+            "queryMode": "Logs",
+            "refId": "A",
+            "region": "default"
+          }
+        ],
+        "title": "Secrets key Decrypts by principal",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "id": 14,
+        "panels": [],
+        "title": "Refusals",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Invocations the realm or its outbound guard refused (boxel:key-use, outcome refused), by code. Most codes are a user's, owner's or card author's state and can rise in many realms at once when a shared card or key changes. internal-error, rate-limit-unavailable and upstream-timeout point at us or a vendor; credential-rejected at a vendor or a key (see the Rejected keys row).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 31
+        },
+        "id": 15,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (code) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | realm=~\".*${realm}.*\" | outcome=\"refused\" [$__interval]))",
+            "legendFormat": "{{code}}",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-use\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-use\" | realm=~\".*${realm}.*\" | outcome=\"failed\" [$__interval]))",
+            "legendFormat": "failed (not a refusal)",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "callApi refusals by code",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Requests the outbound guard refused before sending, by who chose the destination (platform: a proxy_endpoints row, a platform OAuth client, a vendor's fixed token endpoint; user: a card's declared request, a user's own OAuth client) and reason. A platform refusal is ours to fix; a user's can be made at will.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 31
+        },
+        "id": 16,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (destinationSetBy, reason) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound guard refused:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) host=(?P<host>\\\\S+) reason=(?P<reason>\\\\S+) destinationSetBy=(?P<destinationSetBy>\\\\S+)\" [$__interval]))",
+            "legendFormat": "{{destinationSetBy}} {{reason}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Guard refusals by who set the destination",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Calls refused by a key's rate limit or a share's budget (boxel:key-limits, event refused), by realm and code. Filter with the Realm box.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 39
+        },
+        "id": 17,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realm, code) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-limits\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-limits\" | realm=~\".*${realm}.*\" | event=\"refused\" [$__interval]))",
+            "legendFormat": "{{realm}} {{code}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Limit and budget refusals by realm",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Hosts the guard refused in the selected range, with who set the destination, the path and the reason. A user-set host is one card or one OAuth client pointing somewhere it may not; a platform-set one is ours.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 39
+        },
+        "id": 18,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Refusals"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (destinationSetBy, path, host, reason) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound guard refused:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) host=(?P<host>\\\\S+) reason=(?P<reason>\\\\S+) destinationSetBy=(?P<destinationSetBy>\\\\S+)\" [$__range]))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant",
+            "format": "table"
+          }
+        ],
+        "title": "Guard refusals by host",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "Value": "Refusals",
+                "Value #A": "Refusals"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 47
+        },
+        "id": 19,
+        "panels": [],
+        "title": "Rejected keys",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Grants a vendor rejected with a 401 (grant-rejected) and minting keys a token endpoint refused (key-rejected), by destination host, with the number of distinct keys behind them. One key can hold several grants at one host, so one revoked key can reject several at once; several keys at one host at once is that vendor's outage or a substitution bug of ours: the alert \"Many keys rejected at one host\".",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 48
+        },
+        "id": 20,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (event, host) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [$__interval]))",
+            "legendFormat": "{{host}} {{event}}",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (host) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=\"grant-cleared\" [$__interval]))",
+            "legendFormat": "{{host}} cleared",
+            "refId": "B",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "count by (host) (sum by (host, key) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|key-rejected\" [$__interval])))",
+            "legendFormat": "{{host}} distinct keys",
+            "refId": "C",
+            "queryType": "range"
+          }
+        ],
+        "title": "Keys and grants entering the rejected state, by vendor host",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Every grant and key entering or leaving the rejected state, and each probe (boxel:key-grant). Ids and hosts only.",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 48
+        },
+        "id": 21,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "{service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:key-grant\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | json | channel=\"boxel:key-grant\" | event=~\"grant-rejected|grant-cleared|probe|key-rejected|key-cleared|key-probe|mint-failed\"",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Key state changes",
+        "type": "logs"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 56
+        },
+        "id": 22,
+        "panels": [],
+        "title": "Response size cap",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Decompressed response sizes the outbound client measured (the outbound channel's \"outbound response size\" line), by path. The dashed lines are the largest cap any response on the path was held to: the path's own cap, or a system key's own cap when one is larger. A max approaching one is a legitimate response the cap is about to refuse; the Largest responses by destination table has each response's own cap (see the outbound-guard skill for revisiting the caps).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineWidth": 1,
+              "showPoints": "always",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "decbytes",
+            "min": 0
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byRegexp",
+                "options": ".* cap$"
+              },
+              "properties": [
+                {
+                  "id": "custom.lineStyle",
+                  "value": {
+                    "fill": "dash",
+                    "dash": [
+                      10,
+                      10
+                    ]
+                  }
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 57
+        },
+        "id": 23,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap bytes [$__interval]) by (path)",
+            "legendFormat": "{{path}} p50",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap bytes [$__interval]) by (path)",
+            "legendFormat": "{{path}} p95",
+            "refId": "B",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap bytes [$__interval]) by (path)",
+            "legendFormat": "{{path}} max",
+            "refId": "C",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap cap [$__interval]) by (path)",
+            "legendFormat": "{{path}} largest cap",
+            "refId": "D",
+            "queryType": "range"
+          }
+        ],
+        "title": "Response size by path (p50 / p95 / max)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Responses the outbound client refused for size (the outbound channel's \"over size cap\" warnings), by path and kind: declared-length (Content-Length over the cap, refused before reading) or stream-reached-cap (the decompressed body passed it, and the stream ended there). A callApi refusal reaches the card as response-too-large; a system-key one as a 502 or a reset response. A line here from a legitimate vendor means the cap is too low.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "pointSize": 6,
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short",
+            "min": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 57
+        },
+        "id": 24,
+        "interval": "1m",
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (path, refused) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"refused=\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) .*refused=(?P<refused>\\\\S+)\" [$__interval]))",
+            "legendFormat": "{{path}} {{refused}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Responses refused for size",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The largest decompressed response from each destination (origin and path) in the selected range, against the cap it was held to: its path's, or its system key's own.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Largest (bytes)"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "decbytes"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "cap"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "decbytes"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 65
+        },
+        "id": 25,
+        "options": {
+          "cellHeight": "sm",
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Largest (bytes)"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max by (path, destination, cap) (max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap bytes [$__range]))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant",
+            "format": "table"
+          }
+        ],
+        "title": "Largest responses by destination",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "Value": "Largest (bytes)",
+                "Value #A": "Largest (bytes)"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 41,
+    "tags": [
+      "keys",
+      "secrets",
+      "boxel"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Substring of a realm URL. Empty matches every realm. Applies to the callApi and limit panels.",
+          "hide": 0,
+          "label": "Realm",
+          "name": "realm",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "utc",
+    "title": "Keys",
+    "weekStart": ""
+  }
+}

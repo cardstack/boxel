@@ -501,6 +501,112 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a key's response size cap is set and cleared through the endpoint, shown with the key, and recorded in its history", async function (assert) {
+      let { key } = (await addKey()).body;
+      assert.strictEqual(
+        key.responseSizeCap,
+        null,
+        "a new key takes the path's cap",
+      );
+
+      let set = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: 134217728, note: 'image responses near the cap' });
+      assert.strictEqual(set.status, 200);
+      assert.strictEqual(set.body.key.responseSizeCap, 134217728);
+      let [stored] = await dbAdapter.execute(
+        `SELECT response_size_cap_bytes FROM proxy_endpoints WHERE id = $1`,
+        { bind: [key.id] },
+      );
+      assert.strictEqual(Number(stored.response_size_cap_bytes), 134217728);
+      let destination = await AllowedProxyDestinations.getInstance(
+        dbAdapter,
+      ).getDestinationConfig(`${addedDestination()}echo`);
+      assert.strictEqual(
+        destination?.responseSizeCap,
+        134217728,
+        'the proxy reads the cap with the key, at once',
+      );
+
+      let cleared = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: null, note: 'back to the default' });
+      assert.strictEqual(cleared.status, 200);
+      assert.strictEqual(cleared.body.key.responseSizeCap, null);
+
+      let show = await request
+        .get(`/_system-keys/${key.id}`)
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.deepEqual(
+        show.body.history.map((h: any) => [h.action, h.responseSizeCap]),
+        [
+          ['set-response-cap', null],
+          ['set-response-cap', 134217728],
+          ['add', null],
+        ],
+        'each change is recorded, newest first, with the cap it set',
+      );
+      assert.strictEqual(
+        (await forwardedCredential(vendor.alternateUrl)).authorization,
+        `Bearer ${ADDED_KEY}`,
+        'the key itself is unchanged',
+      );
+    });
+
+    test('a response size cap change that is refused changes nothing', async function (assert) {
+      let { key } = (await addKey()).body;
+      let cases: [string, Record<string, unknown>, number][] = [
+        ['no note', { bytes: 1000 }, 400],
+        ['no bytes', { note: 'raising it' }, 400],
+        ['a cap of zero', { bytes: 0, note: 'raising it' }, 400],
+        ['a negative cap', { bytes: -1, note: 'raising it' }, 400],
+        ['a fractional cap', { bytes: 1.5, note: 'raising it' }, 400],
+        ['a cap given as text', { bytes: '1000', note: 'raising it' }, 400],
+        [
+          'a cap over a gibibyte',
+          { bytes: 1024 * 1024 * 1024 + 1, note: 'raising it' },
+          400,
+        ],
+        [
+          'a note that repeats the value',
+          { bytes: 1000, note: `key is ${ADDED_KEY}` },
+          400,
+        ],
+      ];
+      for (let [label, body, status] of cases) {
+        let response = await request
+          .put(`/_system-keys/${key.id}/response-size-cap`)
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, status, `${label} is refused`);
+      }
+      let missing = await request
+        .put(
+          `/_system-keys/6c1f3f8e-4a0e-4b9e-9a51-3c1d2b7a9e10/response-size-cap`,
+        )
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: 1000, note: 'raising it' });
+      assert.strictEqual(missing.status, 404, 'an unknown key is 404');
+      let userCall = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${userSession()}`)
+        .send({ bytes: 1000, note: 'raising it' });
+      assert.strictEqual(userCall.status, 401, 'a user session is refused');
+
+      let [stored] = await dbAdapter.execute(
+        `SELECT response_size_cap_bytes FROM proxy_endpoints WHERE id = $1`,
+        { bind: [key.id] },
+      );
+      assert.strictEqual(stored.response_size_cap_bytes, null);
+      assert.deepEqual(
+        (await historyRows()).map((row) => row.action),
+        ['add'],
+        'nothing but the add is recorded',
+      );
+    });
+
     test('a replace or delete whose note contains the current value is refused', async function (assert) {
       let { key } = (await addKey()).body;
       let replaced = await request
@@ -544,7 +650,10 @@ module(basename(import.meta.filename), function () {
           if (
             hold &&
             typeof sql === 'string' &&
-            sql.includes('auth_parameter_name, encode(api_key_ciphertext')
+            // The endpoint cache's load is the one read of both a key's
+            // settings and its sealed value.
+            sql.includes('auth_parameter_name') &&
+            sql.includes('encode(api_key_ciphertext')
           ) {
             hold = false;
             held();
@@ -669,6 +778,204 @@ module(basename(import.meta.filename), function () {
         .set('Accept', 'application/vnd.api+json')
         .set('Authorization', `Bearer ${operatorToken()}`);
       assert.strictEqual(response.status, 401);
+    });
+
+    const CLIENT_SECRET = 'platform-client-secret-0001';
+    const ROTATED_CLIENT_SECRET = 'platform-client-secret-0002';
+
+    async function addPlatformClient(overrides: Record<string, unknown> = {}) {
+      return await request
+        .post('/_platform-oauth-clients')
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .set('Content-Type', 'application/json')
+        .send({
+          name: 'github',
+          label: 'Boxel (read-only)',
+          secret: CLIENT_SECRET,
+          oauth: {
+            clientId: 'Iv1.platform-client',
+            authorizeUrl: 'https://github.com/login/oauth/authorize',
+            tokenUrl: 'https://github.com/login/oauth/access_token',
+            apiHosts: ['https://api.github.com/'],
+          },
+          note: 'registering the GitHub App',
+          ...overrides,
+        });
+    }
+
+    async function platformClientHistory() {
+      return await dbAdapter.execute(
+        `SELECT platform_client_id, name, client_id, action, note, key_id FROM platform_oauth_client_history ORDER BY id`,
+      );
+    }
+
+    test('each change to a platform client is recorded with its note and the caller the server observed, never its secret', async function (assert) {
+      let iat = Math.floor(Date.now() / 1000) - 30;
+      let token = jsonwebtoken.sign(
+        { operator: 'system-keys', iat, exp: iat + 5 * 60 },
+        realmSecretSeed,
+        { audience: SERVER_ORIGIN },
+      );
+      let added = await addPlatformClient();
+      assert.strictEqual(added.status, 201);
+      let id = added.body.client.id;
+      let replaced = await request
+        .patch('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          secret: ROTATED_CLIENT_SECRET,
+          note: 'rotating the GitHub App secret',
+        });
+      assert.strictEqual(replaced.status, 200);
+
+      let shown = await request
+        .get('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(shown.status, 200);
+      assert.strictEqual(shown.body.client.id, id);
+      assert.deepEqual(
+        shown.body.history.map((change: any) => [change.action, change.note]),
+        [
+          ['replace', 'rotating the GitHub App secret'],
+          ['add', 'registering the GitHub App'],
+        ],
+        'the history is newest first',
+      );
+      let [rotation] = shown.body.history;
+      assert.strictEqual(rotation.clientId, 'Iv1.platform-client');
+      assert.strictEqual(rotation.keyId, 'local-development');
+      assert.true(
+        /127\.0\.0\.1|::1/.test(String(rotation.clientAddress)),
+        `the caller's address is recorded (${rotation.clientAddress})`,
+      );
+      assert.strictEqual(
+        rotation.tokenIssuedAt,
+        new Date(iat * 1000).toISOString(),
+        'the time the token was signed is recorded',
+      );
+
+      let deleted = await request
+        .delete('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ note: 'retiring the GitHub App' });
+      assert.strictEqual(deleted.status, 200);
+      let history = await platformClientHistory();
+      assert.deepEqual(
+        history,
+        [
+          ['add', 'registering the GitHub App'],
+          ['replace', 'rotating the GitHub App secret'],
+          ['delete', 'retiring the GitHub App'],
+        ].map(([action, note]) => ({
+          platform_client_id: id,
+          name: 'github',
+          client_id: 'Iv1.platform-client',
+          action,
+          note,
+          key_id: 'local-development',
+        })),
+        'a deleted client keeps its history',
+      );
+
+      let readded = await addPlatformClient({
+        oauth: {
+          clientId: 'Iv1.another-app',
+          authorizeUrl: 'https://github.com/login/oauth/authorize',
+          tokenUrl: 'https://github.com/login/oauth/access_token',
+          apiHosts: ['https://api.github.com/'],
+        },
+        note: 'registering a new GitHub App under the same name',
+      });
+      assert.strictEqual(readded.status, 201);
+      assert.notStrictEqual(readded.body.client.id, id, 'it has a new id');
+      let reshown = await request
+        .get('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.deepEqual(
+        reshown.body.history.map((change: any) => [
+          change.action,
+          change.clientId,
+        ]),
+        [
+          ['add', 'Iv1.another-app'],
+          ['delete', 'Iv1.platform-client'],
+          ['replace', 'Iv1.platform-client'],
+          ['add', 'Iv1.platform-client'],
+        ],
+        'a client added again under a name shows the earlier client’s history too',
+      );
+      let everything = JSON.stringify([
+        added.body,
+        replaced.body,
+        shown.body,
+        await dbAdapter.execute(`SELECT * FROM platform_oauth_client_history`),
+      ]);
+      assert.false(everything.includes(CLIENT_SECRET), 'no secret is shown');
+      assert.false(
+        everything.includes(ROTATED_CLIENT_SECRET),
+        'no rotated secret is shown',
+      );
+    });
+
+    test('a platform client change with no note, or a note holding a secret, is refused and changes nothing', async function (assert) {
+      assert.strictEqual(
+        (await addPlatformClient({ note: undefined })).status,
+        400,
+      );
+      assert.strictEqual(
+        (await addPlatformClient({ note: `secret ${CLIENT_SECRET}` })).status,
+        400,
+      );
+      assert.strictEqual(
+        (await addPlatformClient({ note: 'one\ntwo' })).status,
+        400,
+        'a note with a line break is refused',
+      );
+      assert.deepEqual(await platformClientHistory(), []);
+
+      assert.strictEqual((await addPlatformClient()).status, 201);
+      let refusals = [
+        { secret: ROTATED_CLIENT_SECRET },
+        { secret: ROTATED_CLIENT_SECRET, note: `to ${ROTATED_CLIENT_SECRET}` },
+        { secret: ROTATED_CLIENT_SECRET, note: `was ${CLIENT_SECRET}` },
+      ];
+      for (let body of refusals) {
+        let response = await request
+          .patch('/_platform-oauth-clients/github')
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, 400, JSON.stringify(body.note));
+      }
+      for (let body of [{}, { note: `was ${CLIENT_SECRET}` }]) {
+        let response = await request
+          .delete('/_platform-oauth-clients/github')
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, 400, JSON.stringify(body));
+      }
+      let bodiless = await request
+        .delete('/_platform-oauth-clients/github')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(bodiless.status, 400, 'a delete with no body');
+      assert.true(
+        bodiless.text.includes('an operator note is required'),
+        'a delete with no body is refused for its missing note',
+      );
+      assert.deepEqual(
+        (await platformClientHistory()).map(({ action }) => action),
+        ['add'],
+      );
+      let [stored] = await dbAdapter.execute(
+        `SELECT updated_at = created_at AS untouched FROM platform_oauth_clients WHERE name = 'github'`,
+      );
+      assert.true(Boolean(stored.untouched), 'the client is unchanged');
+    });
+
+    test('show answers 404 for a platform client that does not exist', async function (assert) {
+      let response = await request
+        .get('/_platform-oauth-clients/nothing-here')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(response.status, 404);
     });
   });
 });

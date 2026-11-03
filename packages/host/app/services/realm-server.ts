@@ -1336,12 +1336,7 @@ export default class RealmServerService
 
   private refreshSchedule = new TokenRefreshSchedule();
   private loggingIn: Promise<void> | undefined;
-  private pendingRegistrationToken: string | undefined;
-
-  async login(registrationToken?: string): Promise<void> {
-    if (registrationToken) {
-      this.pendingRegistrationToken = registrationToken;
-    }
+  async login(): Promise<void> {
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -1366,10 +1361,8 @@ export default class RealmServerService
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
-          registrationToken: this.pendingRegistrationToken,
         },
       );
-      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.refreshSchedule.minted(token);
       this.token = token;

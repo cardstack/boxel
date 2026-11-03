@@ -5,12 +5,13 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager.ts';
 import { cliLog } from '../../lib/cli-log.ts';
-import { DIM, FG_GREEN, FG_RED, RESET } from '../../lib/colors.ts';
+import { DIM, FG_GREEN, FG_RED, FG_YELLOW, RESET } from '../../lib/colors.ts';
 import {
   checkKeyValueSource,
   readKeyValue,
   type KeyValueSource,
 } from '../../lib/key-value.ts';
+import { destinationCovers } from '@cardstack/runtime-common/card-operations/destination-covers';
 import { openBrowser } from '../../lib/open-browser.ts';
 import { prompt } from '../../lib/prompt.ts';
 import {
@@ -28,35 +29,47 @@ import {
   addUserKey,
   canonicalRealmUrl,
   deleteUserKey,
+  findShare,
   findUserKey,
+  getKeyUsage,
   listConnectableClients,
   listOwnShares,
   listRealmShares,
   listUserKeys,
+  realmOpensToAnonymous,
   replaceUserKey,
+  setKeyLimits,
+  setUserKeyAnonymousUse,
+  anonymousCapsClause,
   shareUserKey,
   completeOAuthConnect,
   startOAuthConnect,
   swapKeyIntoShare,
   unshareUserKey,
   type ConnectableClient,
+  type KeyLimitChanges,
+  type KeyLimits,
   type KeyShare,
+  type KeyUsage,
   type OAuthClientSettings,
   type OAuthConnectOutcome,
   type ServiceAccountDetails,
   type UserKeyMetadata,
 } from '../../lib/user-keys.ts';
+import { finishInSecureWindow, windowTimeout } from './approve.ts';
 
 // The commands that manage the signed-in user's own keys and the shares that
 // put them into realms. Keys belong to the user, so only the share commands
 // name a realm.
 //
-// Reading (`list`, `show`, `shares`, `clients`) and unsharing use the
-// profile's ordinary realm-server session. A change that stores or hands out
-// a key (`add`, `replace`, `delete`, `share`, `swap`, `connect`) takes a key
-// write ticket for that change, which only a session signed in on the secure
-// origin can mint, so those commands first make sure the profile holds one,
-// opening the secure window's sign-in in the browser when it doesn't.
+// Reading (`list`, `show`, `shares`, `clients`, `usage`, and `limits` with
+// nothing to change) and unsharing use the profile's ordinary realm-server
+// session. A change that stores or hands out a key (`add`, `replace`,
+// `delete`, `share`, `swap`, `connect`) takes a key write ticket for that
+// change, which only a session signed in on the secure origin can mint, so
+// those commands first make sure the profile holds one, opening the secure
+// window's sign-in in the browser when it doesn't. Changing a key's limits
+// takes that session too, with no ticket.
 //
 // A key's value is typed at a masked prompt or read with `--stdin` or
 // `--key-file`, never taken as an argument, and nothing prints one. A refusal
@@ -83,7 +96,7 @@ export interface KeysCommandDeps {
   confirmFn?: (question: string) => Promise<boolean>;
 }
 
-interface Context {
+export interface Context {
   pm: ProfileManager;
   realmServerUrl: string;
   matrixUserId: string;
@@ -91,7 +104,10 @@ interface Context {
   deps: KeysCommandDeps;
 }
 
-function context(json: boolean | undefined, deps: KeysCommandDeps): Context {
+export function context(
+  json: boolean | undefined,
+  deps: KeysCommandDeps,
+): Context {
   let pm = deps.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
@@ -108,7 +124,7 @@ function context(json: boolean | undefined, deps: KeysCommandDeps): Context {
 
 // Progress for people. Under `--json` it goes to stderr, keeping stdout for
 // the JSON.
-function say(ctx: Context, message: string): void {
+export function say(ctx: Context, message: string): void {
   if (ctx.json) {
     console.error(message);
   } else {
@@ -116,7 +132,7 @@ function say(ctx: Context, message: string): void {
   }
 }
 
-function emit(ctx: Context, value: unknown, print: () => void): void {
+export function emit(ctx: Context, value: unknown, print: () => void): void {
   if (ctx.json) {
     cliLog.output(JSON.stringify(value, null, 2));
   } else {
@@ -165,7 +181,7 @@ export async function signInToManageKeys(
 // The profile's secure session, checked with the realm server, which ends
 // one early on sign-out or a password change. Without a live one, signs in
 // through the browser when someone is there to, and refuses otherwise.
-async function secureToken(ctx: Context): Promise<string> {
+export async function secureToken(ctx: Context): Promise<string> {
   let stored = ctx.pm.getSecureSession();
   if (stored) {
     try {
@@ -196,7 +212,7 @@ async function secureToken(ctx: Context): Promise<string> {
   return session.token;
 }
 
-async function ordinaryToken(ctx: Context): Promise<string> {
+export async function ordinaryToken(ctx: Context): Promise<string> {
   return await ctx.pm.getOrRefreshServerToken();
 }
 
@@ -231,6 +247,9 @@ function printKey(key: UserKeyMetadata): void {
   console.log(`  kind: ${key.kind}`);
   console.log(`  state: ${key.state}`);
   console.log(`  updated: ${key.updatedAt}`);
+  if (key.anonymous !== undefined) {
+    console.log(`  people who aren't signed in: ${anonymousUseOf(key)}`);
+  }
   let { client, connection } = key.oauth ?? {};
   if (client) {
     console.log(`  client id: ${client.clientId}`);
@@ -583,13 +602,30 @@ function keptByReplace(
 
 export async function keysAdd(
   name: string,
-  options: { json?: boolean } & KeyValueSource &
+  options: {
+    json?: boolean;
+    anonymous?: boolean;
+    anonymousCap?: string;
+    anonymousMonthlyCap?: string;
+  } & KeyValueSource &
     ServiceAccountOptions &
     OAuthClientOptions &
     KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   let kind = options.kind ?? 'static';
+  // A new key has no cap to remove, so these take numbers only.
+  let anonymousDailyCap =
+    anonymousCapOption(options.anonymous, options.anonymousCap) ?? undefined;
+  let anonymousMonthlyCap =
+    anonymousCapOption(options.anonymous, options.anonymousMonthlyCap, {
+      flag: '--anonymous-monthly-cap',
+    }) ?? undefined;
+  if (options.anonymous && kind === 'oauth-client') {
+    throw new Error(
+      "--anonymous isn't taken when adding an OAuth client: a sign-in app's people each connect their own account, so it never serves people who aren't signed in. For one that gets its own tokens (client_credentials), allow it after adding: `boxel keys anonymous <name> on`",
+    );
+  }
   checkAddKind(kind);
   checkKindOptions(kind, options);
   checkOAuthClientOptions(kind, options);
@@ -603,6 +639,9 @@ export async function keysAdd(
     value,
     ...serviceAccountAttributes(kind, options),
     ...oauthClientSettings(kind, options),
+    ...(options.anonymous ? { anonymous: true } : {}),
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   });
   emit(ctx, key, () => {
     if (kind === 'oauth-client' && options.grantType !== 'client_credentials') {
@@ -660,7 +699,10 @@ export async function keysReplace(
   return key;
 }
 
-async function confirm(ctx: Context, question: string): Promise<boolean> {
+export async function confirm(
+  ctx: Context,
+  question: string,
+): Promise<boolean> {
   if (ctx.deps.confirmFn) {
     return await ctx.deps.confirmFn(question);
   }
@@ -713,6 +755,12 @@ export async function keysDelete(
   return result;
 }
 
+// Sharing makes no choice about people who aren't signed in: that is the
+// key's own setting (`keys add --anonymous`, `keys anonymous`). The command
+// asks the realm first, as the secure window's share page does. Where the
+// realm's policy lets such people make calls that send a shared key, sharing
+// there means they will use the key: it warns so, and a key that doesn't
+// allow them isn't shared there until its owner allows it for the key.
 export async function keysShare(
   name: string,
   options: { realm: string; as?: string; json?: boolean } & KeysCommandDeps,
@@ -720,6 +768,12 @@ export async function keysShare(
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, name);
+  let opens = await warnWhereVisitorsWillUse(ctx, token, {
+    realm: options.realm,
+    key,
+    name,
+    doing: 'sharing',
+  });
   let share = await shareUserKey(ctx.realmServerUrl, token, {
     keyId: key.id,
     realm: options.realm,
@@ -729,8 +783,144 @@ export async function keysShare(
     console.log(
       `${FG_GREEN}Shared ${name} into ${share.realm} as ${share.label}.${RESET}`,
     );
+    if (opens) {
+      console.log(`People who aren't signed in will use it there.`);
+    }
   });
   return share;
+}
+
+// Whether a key can serve people who aren't signed in at all: a sign-in app
+// or a connection is each person's own sign-in, so it never does.
+function servesVisitors(key: UserKeyMetadata): boolean {
+  if (key.kind === 'oauth-connection') {
+    return false;
+  }
+  return (
+    key.kind !== 'oauth-client' ||
+    key.oauth?.client?.grantType === 'client_credentials'
+  );
+}
+
+// Sharing or swapping a key into a realm whose policy lets people who aren't
+// signed in make calls that send a shared key means they will use it, as the
+// secure window's share and swap pages say. This asks the realm, refuses a
+// key that doesn't allow anonymous use there (as the realm server does), and
+// warns before going on. Answers whether the realm opens such calls.
+async function warnWhereVisitorsWillUse(
+  ctx: Context,
+  token: string,
+  {
+    realm: given,
+    key,
+    name,
+    doing,
+  }: {
+    realm: string;
+    key: UserKeyMetadata;
+    name: string;
+    doing: 'sharing' | 'swapping';
+  },
+): Promise<boolean> {
+  if (!servesVisitors(key)) {
+    return false;
+  }
+  let realm = canonicalRealmUrl(given);
+  let opens = await realmOpensToAnonymous(ctx.realmServerUrl, token, realm);
+  if (!opens) {
+    return false;
+  }
+  if (!key.anonymous) {
+    throw new Error(
+      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls> a day and --monthly-cap <calls> a month)`,
+    );
+  }
+  console.error(
+    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${anonymousCapsClause(key)}.${RESET}`,
+  );
+  return true;
+}
+
+// An anonymous cap (`--anonymous-cap`, `--anonymous-monthly-cap`, or `--cap`
+// and `--monthly-cap` with `on`), given only with `--anonymous` (or `on`): a
+// whole number of calls, from 1. With `on`, `none` removes that cap (null)
+// and keeps anonymous use on.
+function anonymousCapOption(
+  anonymous: boolean | undefined,
+  cap: string | undefined,
+  {
+    flag = '--anonymous-cap',
+    with: withFlag = '--anonymous',
+    removable = false,
+  } = {},
+): number | null | undefined {
+  if (cap === undefined) {
+    return undefined;
+  }
+  if (!anonymous) {
+    throw new Error(`${flag} is given with ${withFlag}`);
+  }
+  if (removable && cap.trim().toLowerCase() === 'none') {
+    return null;
+  }
+  let calls = Number(cap);
+  if (!/^\d+$/.test(cap.trim()) || calls < 1 || calls > 2_147_483_647) {
+    throw new Error(
+      `${flag} is a whole number of calls, from 1 to 2147483647${removable ? ', or none' : ''}`,
+    );
+  }
+  return calls;
+}
+
+// How a key's setting for people who aren't signed in reads.
+function anonymousUseOf(key: UserKeyMetadata): string {
+  return key.anonymous
+    ? `allowed${anonymousCapsClause(key)}, wherever a realm's policy lets them make the call`
+    : 'not allowed';
+}
+
+// Whether people who aren't signed in may use one of the user's keys: its
+// owner's setting for the key itself, which every realm it is shared into
+// follows where that realm's policy lets them make the call. `off` clears
+// both caps; `on` keeps a cap it doesn't name, and removes one named `none`.
+export async function keysAnonymous(
+  name: string,
+  setting: string,
+  options: {
+    cap?: string;
+    monthlyCap?: string;
+    json?: boolean;
+  } & KeysCommandDeps = {},
+): Promise<UserKeyMetadata> {
+  if (setting !== 'on' && setting !== 'off') {
+    throw new Error('say on or off');
+  }
+  let anonymous = setting === 'on';
+  let anonymousDailyCap = anonymousCapOption(anonymous, options.cap, {
+    flag: '--cap',
+    with: 'on',
+    removable: true,
+  });
+  let anonymousMonthlyCap = anonymousCapOption(anonymous, options.monthlyCap, {
+    flag: '--monthly-cap',
+    with: 'on',
+    removable: true,
+  });
+  let ctx = context(options.json, options);
+  let token = await secureToken(ctx);
+  let key = await findUserKey(ctx.realmServerUrl, token, name);
+  let updated = await setUserKeyAnonymousUse(ctx.realmServerUrl, token, {
+    keyId: key.id,
+    anonymous,
+    ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
+  });
+  emit(ctx, updated, () => {
+    console.log(
+      `${FG_GREEN}People who aren't signed in: ${anonymousUseOf(updated)} for ${name}.${RESET}`,
+    );
+  });
+  return updated;
 }
 
 export async function keysUnshare(
@@ -754,18 +944,77 @@ export async function keysUnshare(
   return share;
 }
 
+// A swap moves every operation approved for the share to the new key, which
+// grants the key each destination they send to. A swap whose key already has
+// a grant covering each of them is made here; one that grants it a new
+// destination is confirmed in the secure window's swap page, as an approval
+// that does is (see `approve.ts`).
 export async function keysSwap(
   label: string,
-  options: { realm: string; key: string; json?: boolean } & KeysCommandDeps,
+  options: {
+    realm: string;
+    key: string;
+    timeout?: string;
+    json?: boolean;
+  } & KeysCommandDeps,
 ): Promise<KeyShare> {
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
   let key = await findUserKey(ctx.realmServerUrl, token, options.key);
-  let share = await swapKeyIntoShare(ctx.realmServerUrl, token, {
+  await warnWhereVisitorsWillUse(ctx, token, {
     realm: options.realm,
-    label,
-    keyId: key.id,
+    key,
+    name: options.key,
+    doing: 'swapping',
   });
+  let listed = (
+    await listRealmShares(ctx.realmServerUrl, token, options.realm)
+  ).find((s) => s.label === label);
+  // Every grant counts, a rejected one too: the realm server reuses a grant
+  // that covers the destination whatever its state, as an approval does.
+  let grants = key.grants ?? [];
+  let uncovered = [
+    ...new Set(
+      (listed?.operations ?? [])
+        .map((o) => o.destination)
+        .filter(
+          (d): d is string =>
+            d !== undefined &&
+            !grants.some((g) => destinationCovers(g.destination, d)),
+        ),
+    ),
+  ];
+  let share: KeyShare;
+  if (listed && listed.state === 'suspended' && uncovered.length > 0) {
+    let hosts = uncovered.map((d) => new URL(d).host).join(', ');
+    say(
+      ctx,
+      `${label} is approved for requests to ${hosts}, which ${key.name} has no grant for.`,
+    );
+    let outcome = await finishInSecureWindow(ctx, {
+      page: 'swap-key',
+      fragment: { realm: listed.realm, share: listed.id, key: key.id },
+      what: `sending ${key.name} to ${hosts}`,
+      timeoutMs: windowTimeout(options.timeout),
+    });
+    let after = (
+      await listRealmShares(ctx.realmServerUrl, token, options.realm)
+    ).find((s) => s.id === listed.id);
+    if (!after || after.state !== 'active' || after.keyId !== key.id) {
+      throw new Error(
+        outcome === 'cancelled'
+          ? `Not swapped: the secure window was closed without putting ${key.name} into ${label}`
+          : `The secure window closed without putting ${key.name} into ${label}`,
+      );
+    }
+    share = after;
+  } else {
+    share = await swapKeyIntoShare(ctx.realmServerUrl, token, {
+      realm: options.realm,
+      label,
+      keyId: key.id,
+    });
+  }
   emit(ctx, share, () => {
     console.log(
       `${FG_GREEN}${share.label} in ${share.realm} now holds ${key.name}.${RESET}`,
@@ -802,6 +1051,206 @@ export async function keysShares(
     }
   });
   return shares;
+}
+
+export interface LimitsOptions {
+  realm?: string;
+  // `<burst>/<refill per minute>`; either side may be `default`.
+  rate?: string;
+  daily?: string;
+  monthly?: string;
+  json?: boolean;
+}
+
+// A limit as typed: a number, or `default` for the platform's default. The
+// realm server says which numbers a limit takes.
+function limitValue(option: string, value: string): number | null {
+  if (value.trim().toLowerCase() === 'default') {
+    return null;
+  }
+  let number = Number(value);
+  if (value.trim() === '' || !Number.isFinite(number)) {
+    throw new Error(`${option} is a number, or default`);
+  }
+  return number;
+}
+
+function limitChanges(options: LimitsOptions): KeyLimitChanges {
+  let changes: KeyLimitChanges = {};
+  if (options.rate !== undefined) {
+    // A bare `default` puts both halves back, as `--daily default` does its one.
+    let parts =
+      options.rate.trim().toLowerCase() === 'default'
+        ? ['default', 'default']
+        : options.rate.split('/');
+    if (parts.length !== 2) {
+      throw new Error(
+        '--rate is <burst>/<refill per minute>, such as 25/15; either may be default, or default for both',
+      );
+    }
+    changes.rateBurst = limitValue('--rate burst', parts[0]!);
+    changes.rateRefillPerMinute = limitValue('--rate refill', parts[1]!);
+  }
+  if (options.daily !== undefined) {
+    changes.dailyBudget = limitValue('--daily', options.daily);
+  }
+  if (options.monthly !== undefined) {
+    changes.monthlyBudget = limitValue('--monthly', options.monthly);
+  }
+  return changes;
+}
+
+function printLimits(what: string, limits: KeyLimits): void {
+  console.log(`Limits on ${what}:`);
+  console.log(
+    `  rate: ${limits.rateBurst} calls at once per caller, refilled at ${limits.rateRefillPerMinute} a minute`,
+  );
+  console.log(`  daily budget: ${limits.dailyBudget} calls`);
+  console.log(`  monthly budget: ${limits.monthlyBudget} calls`);
+}
+
+// A share named by its label with `--realm`, or else one of the user's own
+// keys by name.
+async function limitedTarget(
+  ctx: Context,
+  token: string,
+  name: string,
+  realm: string | undefined,
+): Promise<{
+  what: string;
+  target: { shareId: string } | { keyId: string };
+  limits: KeyLimits | undefined;
+}> {
+  if (realm) {
+    let share = await findShare(ctx.realmServerUrl, token, {
+      realm,
+      label: name,
+    });
+    return {
+      what: `${share.label} in ${share.realm}`,
+      target: { shareId: share.id },
+      limits: share.limits,
+    };
+  }
+  let key = await findUserKey(ctx.realmServerUrl, token, name);
+  return { what: key.name, target: { keyId: key.id }, limits: key.limits };
+}
+
+// Shows or sets the limits on how much of a key interactive calls may spend:
+// on a personal key, or with `--realm` on a share of one in that realm. Only
+// the key's owner sets them, with a session signed in on the secure origin;
+// a realm's other direct writers can read a share's but are refused changing
+// them, by the realm server. Without a change, prints the limits in force.
+export async function keysLimits(
+  name: string,
+  options: LimitsOptions & KeysCommandDeps,
+): Promise<KeyLimits> {
+  let ctx = context(options.json, options);
+  let changes = limitChanges(options);
+  let changing = Object.keys(changes).length > 0;
+  let token = changing ? await secureToken(ctx) : await ordinaryToken(ctx);
+  let {
+    what,
+    target,
+    limits: current,
+  } = await limitedTarget(ctx, token, name, options.realm);
+  let limits = changing
+    ? await setKeyLimits(ctx.realmServerUrl, token, target, changes)
+    : current;
+  if (!limits) {
+    throw new Error(`The realm server didn't list the limits on ${what}`);
+  }
+  emit(ctx, limits, () => {
+    if (changing) {
+      console.log(`${FG_GREEN}Set the limits on ${what}.${RESET}`);
+    }
+    printLimits(what, limits);
+  });
+  return limits;
+}
+
+// The realm server names a caller only to someone who may see them in the
+// realm: one the reader can't see comes `withheld`, without a name, and a
+// call with no session comes without a name too.
+function callerName(
+  ctx: Context,
+  { caller, withheld }: { caller: string | null; withheld?: boolean },
+): string {
+  if (withheld) {
+    return "someone you can't see in the realm";
+  }
+  return caller === null
+    ? 'anonymous'
+    : caller === ctx.matrixUserId
+      ? 'you'
+      : caller;
+}
+
+function printBudget(label: string, use: KeyUsage['budgets']['day']): void {
+  console.log(
+    `  ${label}: ${use.used} of ${use.budget} calls ${DIM}(resets ${use.resetsAt})${RESET}`,
+  );
+}
+
+function printUsage(ctx: Context, what: string, usage: KeyUsage): void {
+  console.log(`Usage of ${what}:`);
+  printBudget('today', usage.budgets.day);
+  printBudget('this month', usage.budgets.month);
+  console.log(`  calls since ${usage.since}: ${usage.calls}`);
+  if (usage.lastUse) {
+    let { at, operation, outcome } = usage.lastUse;
+    console.log(
+      `  last use: ${at}, ${operation} by ${callerName(ctx, usage.lastUse)} (${outcome})`,
+    );
+  } else {
+    console.log('  last use: never');
+  }
+  if (usage.topCallers.length > 0) {
+    console.log('  top callers:');
+    for (let entry of usage.topCallers) {
+      console.log(`    ${callerName(ctx, entry)}: ${entry.calls}`);
+    }
+  }
+  if (usage.refusals.length > 0) {
+    console.log('  refusals:');
+    for (let { code, count } of usage.refusals) {
+      console.log(`    ${code}: ${count}`);
+    }
+  }
+  if (usage.vendorOutcomes.length > 0) {
+    console.log('  vendor answers:');
+    for (let { status, count, outcome } of usage.vendorOutcomes) {
+      console.log(`    ${status}${outcome ? ` (${outcome})` : ''}: ${count}`);
+    }
+  }
+  if (usage.grants.length > 0) {
+    console.log('  grants:');
+    for (let grant of usage.grants) {
+      let state =
+        grant.state === 'rejected'
+          ? `${FG_RED}rejected${RESET}${grant.rejectedAt ? ` ${grant.rejectedAt}` : ''}`
+          : grant.state;
+      console.log(`    ${grant.destination}: ${state}`);
+    }
+  }
+  printLimits(what, usage.limits);
+}
+
+// What a share or a personal key has served: its budgets' use this UTC day
+// and month, its last use, top callers, refusals by reason, the vendor's
+// answers and its grants. A personal key's usage is for its owner; a share's,
+// named by its label with `--realm`, for the realm's direct writers. Reading
+// needs no secure session.
+export async function keysUsage(
+  name: string,
+  options: { realm?: string; json?: boolean } & KeysCommandDeps,
+): Promise<KeyUsage> {
+  let ctx = context(options.json, options);
+  let token = await ordinaryToken(ctx);
+  let { what, target } = await limitedTarget(ctx, token, name, options.realm);
+  let usage = await getKeyUsage(ctx.realmServerUrl, token, target);
+  emit(ctx, usage, () => printUsage(ctx, what, usage));
+  return usage;
 }
 
 // How `connect --client` names a client: `platform:<name>` for one of

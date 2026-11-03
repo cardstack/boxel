@@ -7,10 +7,22 @@ import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
+import { modifier } from 'ember-modifier';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Avatar } from './avatar';
 import { statusHue } from '../internal/ink';
+
+// Writes each named argument onto the element's inline style as a custom
+// property, the way a sibling modifier sharing the style attribute would.
+const setCssVar = modifier(
+  (element: HTMLElement, _positional: [], named: Record<string, string | undefined>) => {
+    for (let [name, value] of Object.entries(named)) {
+      if (value !== undefined) {
+        element.style.setProperty(`--${name}`, value);
+      }
+    }
+  },
+);
 
 function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
@@ -420,5 +432,30 @@ module('Pretui | components/avatar', function (hooks) {
     let el = q('[data-test-pretui-avatar]');
     assert.strictEqual(hue(el), '', 'the hue is dropped whole');
     assert.notOk(el.getAttribute('style')?.includes('url('), 'nothing from the rejected value reaches the element');
+  });
+  test('initials skip words that open with a symbol', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Talent & Resource' data-test-amp />
+        <Avatar @name='Jean-Luc Picard' data-test-hyphen />
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-amp]').textContent?.trim(), 'TR');
+    assert.strictEqual(q('[data-test-hyphen]').textContent?.trim(), 'JP');
+  });
+
+  test('@shape writes data-shape for rounded and square, nothing for the circle', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada' data-test-default />
+        <Avatar @name='Ada' @shape='circle' data-test-circle />
+        <Avatar @name='Ada' @shape='rounded' data-test-rounded />
+        <Avatar @name='Ada' @shape='square' data-test-square />
+      </template>,
+    );
+    assert.notOk(q('[data-test-default]').hasAttribute('data-shape'));
+    assert.notOk(q('[data-test-circle]').hasAttribute('data-shape'));
+    assert.strictEqual(q('[data-test-rounded]').getAttribute('data-shape'), 'rounded');
+    assert.strictEqual(q('[data-test-square]').getAttribute('data-shape'), 'square');
   });
 });

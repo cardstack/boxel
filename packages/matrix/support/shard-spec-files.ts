@@ -5,7 +5,7 @@ import { join, relative, resolve } from 'path';
 //
 // Playwright's own `--shard` balances the number of tests, not their cost.
 // This suite's per-test cost spans three orders of magnitude — a
-// synapse-oidc-gating case is skipped in milliseconds while a host-mode case
+// synapse-templates case finishes in milliseconds while a host-mode case
 // boots a realm and a browser for the better part of a minute — so an
 // equal-count split leaves one shard running several times longer than
 // another. Assignment here instead bin-packs whole spec files by their

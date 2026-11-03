@@ -48,6 +48,21 @@ export function isPrefixForm(identifier: string): boolean {
 }
 
 /**
+ * Whether an identifier is absolute: an `http:`/`https:` URL or prefix form.
+ * A relative reference, a bare package specifier and any other scheme
+ * (`data:`, `blob:`, …) are not.
+ *
+ * Like `isPrefixForm`, it reads the spelling only.
+ */
+export function isAbsoluteIdentifier(identifier: string): boolean {
+  return (
+    identifier.startsWith('http://') ||
+    identifier.startsWith('https://') ||
+    isPrefixForm(identifier)
+  );
+}
+
+/**
  * The last path segment of an identifier in either form, without its query or
  * fragment: `photo.jpg` for both `https://example.test/r/photo.jpg` and
  * `@cardstack/catalog/photo.jpg`. A trailing slash is ignored. A URL's origin

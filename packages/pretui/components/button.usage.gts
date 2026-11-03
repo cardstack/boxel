@@ -3,8 +3,9 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { BUTTON_SHAPES, Button } from './button';
-import type { ButtonShape } from './button';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import { BUTTON_DISPLAYS, BUTTON_SHAPES, Button } from './button';
+import type { ButtonDisplay, ButtonShape } from './button';
 import {
   PRETUI_APPEARANCES,
   PRETUI_SIZES,
@@ -23,6 +24,7 @@ const TONES = [...PRETUI_TONES];
 const APPEARANCES = [...PRETUI_APPEARANCES];
 const SIZES = [...PRETUI_SIZES];
 const SHAPES = [...BUTTON_SHAPES];
+const DISPLAYS = [...BUTTON_DISPLAYS];
 
 export class ButtonUsage extends GlimmerComponent {
   @tracked tone = 'primary';
@@ -33,6 +35,12 @@ export class ButtonUsage extends GlimmerComponent {
   @tracked disabled = false;
   @tracked href = '';
   @tracked shape = 'rounded';
+  @tracked display = 'label';
+  plusIcon = PlusIcon;
+  setDisplay = (v: string) => (this.display = v);
+  get displayVal() {
+    return this.display as ButtonDisplay;
+  }
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
   setSize = (v: string) => (this.size = v);
@@ -64,6 +72,10 @@ export class ButtonUsage extends GlimmerComponent {
     if (this.disabled) bits.push('@disabled={{true}}');
     if (this.href) bits.push(`@href='${this.href}'`);
     if (this.shape !== 'rounded') bits.push(`@shape='${this.shape}'`);
+    if (this.display !== 'label')
+      bits.push(
+        `@display='${this.display}' @icon={{PlusIcon}} @label='Keep selling' @shortLabel='Sell'`,
+      );
     return `<Button ${bits.join(' ')}>Keep selling</Button>`;
   }
   <template>
@@ -82,6 +94,10 @@ export class ButtonUsage extends GlimmerComponent {
           @disabled={{this.disabled}}
           @href={{this.hrefVal}}
           @shape={{this.shapeVal}}
+          @display={{this.displayVal}}
+          @icon={{this.plusIcon}}
+          @label='Keep selling'
+          @shortLabel='Sell'
         >Keep selling</Button>
       </:example>
       <:api as |Args|>
@@ -142,6 +158,32 @@ export class ButtonUsage extends GlimmerComponent {
           @defaultValue='rounded'
           @description="Corner treatment. rounded is the theme's --radius less 2px; --pretui-button-radius overrides any shape per instance."
           @onInput={{this.setShape}}
+        />
+        <Args.String
+          @name='display'
+          @value={{this.display}}
+          @options={{DISPLAYS}}
+          @defaultValue='label'
+          @description="How much the face shows when a row runs short of room: label (the block, after @icon), short (@shortLabel, with @label as the title) or icon (@icon alone; @label becomes its aria-label and title, as on IconButton). LayoutControl steps it down; --pretui-button-h sets the height."
+          @onInput={{this.setDisplay}}
+        />
+        <Args.Base
+          @name='icon'
+          @typeLabel='Component'
+          @description='Icon component drawn before the label; @display icon shows it alone.'
+          @hideControls={{true}}
+        />
+        <Args.Base
+          @name='label'
+          @typeLabel='String'
+          @description="The button's full name as a string: its aria-label and title under @display icon, its title under short."
+          @hideControls={{true}}
+        />
+        <Args.Base
+          @name='shortLabel'
+          @typeLabel='String'
+          @description='The text @display short shows.'
+          @hideControls={{true}}
         />
         <Args.Base
           @name='variant'
