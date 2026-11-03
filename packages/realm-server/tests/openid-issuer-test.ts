@@ -123,12 +123,17 @@ module(basename(import.meta.filename), function () {
   // network: the paired homeserver and `other.example` answer the federation
   // endpoint, `other.example` publishes a well-known delegation, and the test
   // asserts which servers were asked and whose answers are trusted. The
-  // client federates with whichever servers `client()` is given.
+  // client federates with whichever servers `client()` is given. An answer
+  // marked `breaksOff` sends its status and then fails partway through its
+  // body, as a connection dropped mid-answer does.
   module('MatrixClient#verifyOpenIdToken', function (hooks) {
     const pairedURL = 'https://matrix.example.test/';
     let realFetch: typeof globalThis.fetch;
     let requested: string[];
-    let userinfo: Record<string, { status: number; body: unknown }>;
+    let userinfo: Record<
+      string,
+      { status: number; body: unknown; breaksOff?: boolean }
+    >;
 
     hooks.beforeEach(function () {
       realFetch = globalThis.fetch;
@@ -146,7 +151,18 @@ module(basename(import.meta.filename), function () {
         if (!base) {
           throw new TypeError('fetch failed');
         }
-        let { status, body } = userinfo[base];
+        let { status, body, breaksOff } = userinfo[base];
+        if (breaksOff) {
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"sub":'));
+                controller.error(new TypeError('terminated'));
+              },
+            }),
+            { status },
+          );
+        }
         return Response.json(body, { status });
       }) as typeof globalThis.fetch;
     });
@@ -255,6 +271,35 @@ module(basename(import.meta.filename), function () {
           'https://unreachable.example/_matrix/federation/v1/openid/userinfo?access_token=token',
         ],
         'every URL discovery names is tried',
+      );
+    });
+
+    test('an answer that breaks off is passed over like an unreachable URL', async function (assert) {
+      userinfo['https://federation.other.example:443/'] = {
+        status: 200,
+        body: { sub: OTHER_USER },
+        breaksOff: true,
+      };
+      userinfo[`https://${OTHER_SERVER}:8448/`] = {
+        status: 200,
+        body: { sub: OTHER_USER },
+      };
+      assert.strictEqual(
+        await client([OTHER_SERVER]).verifyOpenIdToken('token', OTHER_SERVER),
+        OTHER_USER,
+        'the next URL discovery names answers',
+      );
+      assert.deepEqual(requested, [
+        `https://${OTHER_SERVER}/.well-known/matrix/server`,
+        'https://federation.other.example:443/_matrix/federation/v1/openid/userinfo?access_token=token',
+        `https://${OTHER_SERVER}:8448/_matrix/federation/v1/openid/userinfo?access_token=token`,
+      ]);
+
+      delete userinfo[`https://${OTHER_SERVER}:8448/`];
+      assert.strictEqual(
+        await client([OTHER_SERVER]).verifyOpenIdToken('token', OTHER_SERVER),
+        undefined,
+        'with no URL answering in full, nobody is verified',
       );
     });
 

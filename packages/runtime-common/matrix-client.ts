@@ -100,7 +100,8 @@ export interface MatrixAccess {
 }
 
 // How long a federation `openid/userinfo` request to another server's
-// homeserver waits for an answer before the next discovered URL is tried.
+// homeserver waits for its whole answer, body included, before the next
+// discovered URL is tried.
 const OPENID_USERINFO_TIMEOUT_MS = 10_000;
 
 export class MatrixClient {
@@ -685,8 +686,8 @@ export class MatrixClient {
   // paired homeserver is asked at this client's URL; any other server is
   // found by Matrix server discovery, and only when `federationAllowlist`
   // names it. Undefined when the server is neither the paired one nor
-  // allowlisted, when the token is refused, when no server so named can be
-  // reached, or when the user it vouches for is not a user of that server:
+  // allowlisted, when the token is refused, when no server so named answers
+  // in full, or when the user it vouches for is not a user of that server:
   // the name is the caller's claim, and a server may only vouch for its own
   // users.
   async verifyOpenIdToken(
@@ -704,25 +705,29 @@ export class MatrixClient {
       return undefined;
     }
     let response: Response | undefined;
+    let text: string | undefined;
     if (paired) {
       response = await this.request(path, 'GET', undefined, false);
+      text = await response.text();
     } else {
       for (let baseURL of await federationBaseURLs(matrixServerName)) {
         try {
-          response = await fetch(`${baseURL}${path}`, {
+          let candidate = await fetch(`${baseURL}${path}`, {
             signal: AbortSignal.timeout(OPENID_USERINFO_TIMEOUT_MS),
           });
+          text = await candidate.text();
+          response = candidate;
           break;
         } catch {
-          // unreachable at this URL; try the next one discovery names
+          // unreachable at this URL, or its answer broke off or timed out;
+          // try the next one discovery names
         }
       }
-      if (!response) {
+      if (!response || text === undefined) {
         return undefined;
       }
     }
     let json: { sub?: unknown } | undefined;
-    const text = await response.text();
     try {
       json = JSON.parse(text);
     } catch (e) {
