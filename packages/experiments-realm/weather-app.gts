@@ -24,7 +24,6 @@ import { realmURL, type KeyReadiness } from '@cardstack/runtime-common';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
-import { Field } from '@cardstack/pretui/components/field';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input as TextInput } from '@cardstack/pretui/components/input';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
@@ -43,6 +42,7 @@ import CloudSunIcon from '@cardstack/boxel-icons/cloud-sun';
 import CloudyIcon from '@cardstack/boxel-icons/cloudy';
 import KeyIcon from '@cardstack/boxel-icons/key';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import MoonIcon from '@cardstack/boxel-icons/moon';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import SunIcon from '@cardstack/boxel-icons/sun';
@@ -51,6 +51,7 @@ import SunsetIcon from '@cardstack/boxel-icons/sunset';
 import TrashIcon from '@cardstack/boxel-icons/trash-2';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { guidFor } from '@ember/object/internals';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -111,6 +112,13 @@ const NEED_ORDER: Need[] = [
   'needs-reapproval',
   'needs-approval',
 ];
+
+// What the app does with a key, as the secure window tells the person
+// approving it. The window shows at most 200 characters of a reason.
+const OWN_KEY_USE =
+  'Weather uses your OpenWeatherMap key to get the current conditions, 5-day forecast and air quality for your saved places, and to find cities you add.';
+const SHARED_KEY_USE =
+  'Weather uses the shared key to get the current conditions, 5-day forecast and air quality for saved places, and to find cities, for everyone in this workspace.';
 
 const KEY_NOTE =
   'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
@@ -419,6 +427,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // isn't approved for the app yet: a share names no service until its owner
   // approves it for an operation, so this is the share they might mean.
   @tracked hasUnboundShare = false;
+  @tracked adding = false;
   @tracked query = '';
   @tracked matches: CityMatch[] = [];
   @tracked searchMessage: string | undefined;
@@ -808,8 +817,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       longitude: match.lon,
     });
     this.args.model.locations = [...this.args.model.locations, location];
-    this.matches = [];
-    this.query = '';
+    this.stopAdding();
     let source = this.loadedFrom ?? this.source;
     if (source) {
       this.load.perform(source);
@@ -860,35 +868,37 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.openWindow.perform({
       mode: 'approve',
       operation: this.ownOperation,
-      reason: `Weather needs your OpenWeatherMap key. ${KEY_NOTE}`,
+      reason: `${OWN_KEY_USE} Any OpenWeatherMap key works, even a free one.`,
     });
 
   approveOwn = () =>
     this.openWindow.perform({
       mode: 'approve',
       operation: this.ownOperation,
-      reason: 'Let Weather use your OpenWeatherMap key',
+      reason: OWN_KEY_USE,
     });
 
   reviewOwn = () =>
     this.openWindow.perform({
       mode: 'review-changes',
       operation: this.ownOperation,
-      reason: 'What Weather sends with your key has changed',
+      reason:
+        'Weather changed what it sends with your key to get the weather for your saved places. Review the changes.',
     });
 
   approveShared = () =>
     this.openWindow.perform({
       mode: 'approve',
       operation: this.sharedOperation,
-      reason: 'Let Weather use the key you shared with this workspace',
+      reason: SHARED_KEY_USE,
     });
 
   reviewShared = () =>
     this.openWindow.perform({
       mode: 'review-changes',
       operation: this.sharedOperation,
-      reason: 'What Weather sends with the shared key has changed',
+      reason:
+        'Weather changed what it sends with the shared key to get the weather for this workspace. Review the changes.',
     });
 
   replaceKey = () =>
@@ -899,13 +909,15 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         (this.problem?.source === 'shared'
           ? this.sharedOperation
           : this.ownOperation),
-      reason: `OpenWeatherMap rejected the key. ${KEY_NOTE}`,
+      reason:
+        'OpenWeatherMap turned down the key Weather uses to get the weather here. Replace it with one that works.',
     });
 
   shareKey = () =>
     this.openWindow.perform({
       mode: 'share-key',
-      reason: `Share an OpenWeatherMap key so everyone here sees the weather. ${KEY_NOTE}`,
+      reason:
+        'Share an OpenWeatherMap key so everyone in this workspace sees the weather for its saved places without a key of their own.',
     });
 
   swapKey = () => {
@@ -915,7 +927,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.openWindow.perform({
       mode: 'swap-key',
       share: this.share.shareId,
-      reason: `Swap one of your OpenWeatherMap keys into “${this.share.label}”. ${KEY_NOTE}`,
+      reason: `The workspace’s weather key “${this.share.label}” is unavailable. Swap in one of your OpenWeatherMap keys so everyone here sees the weather again.`,
     });
   };
 
@@ -1072,10 +1084,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           ? 'review-changes'
           : 'approve',
       operation: problem.operation,
-      reason:
-        problem.source === 'shared'
-          ? 'Let Weather use the key shared with this workspace'
-          : 'Let Weather use your OpenWeatherMap key',
+      reason: problem.source === 'shared' ? SHARED_KEY_USE : OWN_KEY_USE,
     });
   };
 
@@ -1183,6 +1192,17 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
               <KeyIcon width='1em' height='1em' aria-hidden='true' />
               {{this.sourceLabel}}
             </Chip>
+          {{/if}}
+          {{#if this.canAddCity}}
+            <Button
+              @size='sm'
+              @tone='primary'
+              {{on 'click' this.startAdding}}
+              data-test-weather-add-city-button
+            >
+              <PlusIcon width='16' height='16' aria-hidden='true' />
+              Add a city
+            </Button>
           {{/if}}
           <SegmentedControl
             @options={{this.unitOptions}}
@@ -1396,6 +1416,58 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           @units={{this.units}}
         />
       {{else}}
+        {{#if this.adding}}
+          <section class='add-city-panel' data-test-weather-add-city>
+            <form class='add-city' {{on 'submit' this.search}}>
+              <label for={{this.cityInputId}}>Add a city</label>
+              <div class='add-city-row'>
+                <TextInput
+                  @controlId={{this.cityInputId}}
+                  @value={{this.query}}
+                  @onInput={{this.setQuery}}
+                  placeholder='Lisbon, Austin TX…'
+                  data-test-weather-city-query
+                />
+                <Button
+                  @busy={{this.findCity.isRunning}}
+                  @disabled={{this.searchDisabled}}
+                  type='submit'
+                  data-test-weather-city-search
+                >Search</Button>
+                <Button
+                  @appearance='plain'
+                  {{on 'click' this.stopAdding}}
+                >Done</Button>
+              </div>
+            </form>
+            {{#if this.searchDisabled}}
+              <p class='search-message'>Weather needs a key to find cities. Use
+                your own key, or ask whoever manages this workspace to share
+                one.</p>
+            {{/if}}
+            {{#if this.searchMessage}}
+              <p class='search-message'>{{this.searchMessage}}</p>
+            {{/if}}
+            {{#if this.matches.length}}
+              <ul class='matches'>
+                {{#each this.matches as |match|}}
+                  <li>
+                    <Button
+                      @appearance='outlined'
+                      @size='sm'
+                      {{on 'click' (fn this.addCity match)}}
+                      data-test-weather-city-match={{match.name}}
+                    >
+                      <MapPinIcon width='16' height='16' aria-hidden='true' />
+                      {{match.name}}{{#if match.state}}, {{match.state}}{{/if}},
+                      {{match.country}}
+                    </Button>
+                  </li>
+                {{/each}}
+              </ul>
+            {{/if}}
+          </section>
+        {{/if}}
         <ul class='places' data-test-weather-places>
           {{#each this.rows as |row|}}
             <li>
@@ -1441,45 +1513,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           {{/each}}
         </ul>
 
-        {{#if this.canAddCity}}
-          <form class='add-city' {{on 'submit' this.search}}>
-            <Field @label='Add a city' as |controlId|>
-              <TextInput
-                @controlId={{controlId}}
-                @value={{this.query}}
-                @onInput={{this.setQuery}}
-                placeholder='Lisbon, Austin TX…'
-                data-test-weather-city-query
-              />
-            </Field>
-            <Button
-              @busy={{this.findCity.isRunning}}
-              type='submit'
-              data-test-weather-city-search
-            >Search</Button>
-          </form>
-          {{#if this.searchMessage}}
-            <p class='search-message'>{{this.searchMessage}}</p>
-          {{/if}}
-          {{#if this.matches.length}}
-            <ul class='matches'>
-              {{#each this.matches as |match|}}
-                <li>
-                  <Button
-                    @appearance='outlined'
-                    @size='sm'
-                    {{on 'click' (fn this.addCity match)}}
-                    data-test-weather-city-match={{match.name}}
-                  >
-                    <MapPinIcon width='16' height='16' aria-hidden='true' />
-                    {{match.name}}{{#if match.state}}, {{match.state}}{{/if}},
-                    {{match.country}}
-                  </Button>
-                </li>
-              {{/each}}
-            </ul>
-          {{/if}}
-        {{/if}}
       {{/if}}
 
       <footer class='app-footer'>
@@ -1628,12 +1661,28 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       .empty {
         color: var(--muted-foreground);
       }
+      .add-city-panel {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-lg);
+        background: var(--card);
+        color: var(--card-foreground);
+      }
       .add-city {
+        display: grid;
+        gap: var(--boxel-sp-4xs);
+      }
+      .add-city label {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+      }
+      .add-city-row {
         display: flex;
-        align-items: flex-end;
         gap: var(--boxel-sp-xs);
       }
-      .add-city > :first-child {
+      .add-city-row > :first-child {
         flex: 1;
       }
       .checking {
@@ -1650,14 +1699,32 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   </template>
 
   keyNote = KEY_NOTE;
+  cityInputId = `${guidFor(this)}-city`;
 
   get refreshDisabled(): boolean {
     return !this.source;
   }
 
+  // Anyone who can edit the card adds places to it. Finding a city is a call
+  // to the service too, so it waits for a key.
   get canAddCity(): boolean {
-    return Boolean(this.args.canEdit && (this.loadedFrom ?? this.source));
+    return Boolean(this.args.canEdit && this.selected === undefined);
   }
+
+  get searchDisabled(): boolean {
+    return !(this.loadedFrom ?? this.source);
+  }
+
+  startAdding = () => {
+    this.adding = true;
+  };
+
+  stopAdding = () => {
+    this.adding = false;
+    this.matches = [];
+    this.query = '';
+    this.searchMessage = undefined;
+  };
 
   // Said when the app is on the reader's own key because the workspace's
   // isn't ready, so whose key pays is never a surprise.
@@ -1673,7 +1740,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.openWindow.perform({
       mode: 'replace-key',
       operation: this.ownOperation,
-      reason: `OpenWeatherMap rejected your key. ${KEY_NOTE}`,
+      reason:
+        'OpenWeatherMap turned down your key, which Weather uses to get the weather for your saved places. Replace it with one that works.',
     });
 }
 
