@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { Badge } from '@cardstack/pretui/components/badge';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -550,28 +551,32 @@ export default class SubmodeLayout extends Component<Signature> {
               {{yield to='topBar'}}
             {{/if}}
 
-            <button
-              class='profile-icon-button'
-              {{on 'click' this.toggleProfileSummary}}
-              aria-label={{if
+            {{! The dot says the user has key notices they haven't seen; the
+                profile menu's API Keys item carries the count. }}
+            <Badge
+              class='profile-icon-badge'
+              @dot={{true}}
+              @circular={{true}}
+              @count={{this.keyNotices.unread}}
+              @label='unseen key notices'
+              @invisible={{not this.keyNotices.unread}}
+              data-test-profile-icon-key-notices-badge={{if
                 this.keyNotices.unread
-                'Profile, with key notices you haven’t seen'
-                'Profile'
+                'unread'
               }}
-              data-test-profile-icon-button
             >
-              <Avatar
-                @isReady={{this.matrixService.profile.isLoaded}}
-                @userId={{this.matrixService.userId}}
-                @displayName={{this.matrixService.profile.displayName}}
-              />
-              {{#if this.keyNotices.unread}}
-                <span
-                  class='profile-icon-badge'
-                  data-test-profile-icon-key-notices-badge
-                ></span>
-              {{/if}}
-            </button>
+              <button
+                class='profile-icon-button'
+                {{on 'click' this.toggleProfileSummary}}
+                data-test-profile-icon-button
+              >
+                <Avatar
+                  @isReady={{this.matrixService.profile.isLoaded}}
+                  @userId={{this.matrixService.userId}}
+                  @displayName={{this.matrixService.profile.displayName}}
+                />
+              </button>
+            </Badge>
           </div>
           {{! Ahead of the page, so Tab reaches the rail right after the top
               bar, as it reads. }}
@@ -829,26 +834,16 @@ export default class SubmodeLayout extends Component<Signature> {
         background: none;
 
         padding: 0;
-        margin-left: auto;
 
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
-        position: relative;
         z-index: var(--host-profile-z-index);
       }
-      /* Says the user has notices about their keys they haven't seen; the
-         API Keys item in the profile menu carries the count. */
+      /* The badge wraps the button, so it is the top bar's item. */
       .profile-icon-badge {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: var(--boxel-danger);
-        box-shadow: 0 0 0 2px var(--boxel-light);
-        pointer-events: none;
+        margin-left: auto;
+        z-index: var(--host-profile-z-index);
       }
 
       .workspace-button {

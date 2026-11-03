@@ -966,6 +966,46 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the unread count covers the notices the key page lists, so marking them read clears it', async function (assert) {
+    await shareBoth();
+    await saveOpenedPolicy();
+    // A hundred newer notices for the same share push the first one out of the
+    // listing's window.
+    await dbAdapter.execute(
+      `INSERT INTO key_policy_notices (owner, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, created_at)
+       SELECT owner, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, created_at + (n * interval '1 second')
+         FROM key_policy_notices, generate_series(1, 100) AS n
+        WHERE owner = $1`,
+      { bind: [OWNER] },
+    );
+    let listed = await request
+      .get('/_key-policy-notices')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+    assert.strictEqual(listed.body.data.length, 100);
+    assert.strictEqual(
+      listed.body.meta.unread,
+      100,
+      'an unread notice older than the listing is not counted',
+    );
+    let marked = await request
+      .post('/_key-policy-notices/read')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: (listed.body.data as { id: string }[]).map(({ id }) => ({
+          type: 'key-policy-notice',
+          id,
+        })),
+      });
+    assert.strictEqual(marked.status, 200, marked.text);
+    assert.deepEqual(
+      marked.body.meta,
+      { marked: 100, unread: 0 },
+      'marking what the page lists clears the count',
+    );
+  });
+
   test('recording a notice tells each owner one is waiting, once per notice', async function (assert) {
     let { forecast, alerts } = await shareBoth();
     let sent: { user: string; eventType: string }[] = [];

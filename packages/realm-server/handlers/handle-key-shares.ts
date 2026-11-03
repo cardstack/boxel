@@ -1,5 +1,6 @@
 import type Koa from 'koa';
-import type { VirtualNetwork } from '@cardstack/runtime-common';
+import { logger, type VirtualNetwork } from '@cardstack/runtime-common';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { setContextResponse } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
@@ -42,6 +43,8 @@ import {
 // log keeps only the method and path of these routes.
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
+
+const log = logger('realm-server:key-shares');
 
 function serialize(share: KeyShare) {
   let { id, ...attributes } = share;
@@ -194,6 +197,16 @@ export function handleMarkKeyPolicyNoticesRead(
       owner,
       data.map((entry) => (entry as { id?: unknown }).id),
     );
+    if (marked > 0) {
+      // The owner's other sessions show the badge too; tell them it changed.
+      try {
+        await args.sendEvent(owner, KEY_NOTICES_UPDATED_EVENT_TYPE);
+      } catch (err: unknown) {
+        log.warn(
+          `could not tell ${owner} their key notices were read: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     await sendJSON(ctxt, 200, {
       meta: {
         marked,

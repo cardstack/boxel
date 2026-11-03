@@ -435,7 +435,10 @@ export interface KeyPolicyNotice {
   createdAt: string;
 }
 
-// The user's notices as a key's owner, newest first, at most 100.
+// The most notices a listing returns, newest first.
+const MAX_LISTED = 100;
+
+// The user's notices as a key's owner, newest first, at most `MAX_LISTED`.
 export async function listOwnPolicyNotices(
   dbAdapter: DBAdapter,
   owner: string,
@@ -443,7 +446,7 @@ export async function listOwnPolicyNotices(
   let rows = (await query(dbAdapter, [
     `SELECT ${NOTICE_COLUMNS} FROM key_policy_notices WHERE owner = `,
     param(owner),
-    ` ORDER BY created_at DESC, id DESC LIMIT 100`,
+    ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_LISTED}`,
   ])) as Record<string, any>[];
   return rows.map(noticeOf);
 }
@@ -473,22 +476,25 @@ function noticeOf(row: Record<string, any>): KeyPolicyNotice {
   };
 }
 
-// How many of the owner's notices their key page hasn't listed yet: the count
-// the app shows on the user's avatar.
+// How many of the notices the owner's key page lists it hasn't marked read:
+// the count the app shows on the user's avatar. It counts within the listing's
+// own window, the newest `MAX_LISTED`, since the page marks read only what it
+// lists; an unread notice older than that can't be cleared, so it isn't
+// counted.
 export async function countUnreadPolicyNotices(
   dbAdapter: DBAdapter,
   owner: string,
 ): Promise<number> {
   let [row] = (await query(dbAdapter, [
-    `SELECT COUNT(*) AS unread FROM key_policy_notices WHERE owner = `,
+    `SELECT COUNT(*) AS unread FROM (SELECT read_at FROM key_policy_notices WHERE owner = `,
     param(owner),
-    ` AND read_at IS NULL`,
+    ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_LISTED}) listed WHERE read_at IS NULL`,
   ])) as { unread: number | string }[];
   return Number(row?.unread ?? 0);
 }
 
 // The most notices one request marks read: the most a listing returns.
-const MAX_MARKED_READ = 100;
+const MAX_MARKED_READ = MAX_LISTED;
 
 // Marks the owner's notices with these ids read, as their key page does once
 // it has shown them. Naming the ids, rather than marking everything, leaves a

@@ -105,12 +105,32 @@ module('Acceptance | key notices badge', function (hooks) {
     unread.count = 2;
     await visitApp();
     await waitFor('[data-test-profile-icon-key-notices-badge]');
+    let avatarSpoken = document.querySelector(
+      '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-spoken]',
+    );
+    assert.strictEqual(
+      avatarSpoken?.textContent?.trim(),
+      '2 unseen key notices',
+      'the avatar says what the dot means',
+    );
     assert
       .dom('[data-test-profile-icon-button]')
-      .hasAria('label', 'Profile, with key notices you haven’t seen');
+      .hasAttribute(
+        'aria-describedby',
+        avatarSpoken!.id,
+        'the avatar keeps its own name and is described by the dot',
+      );
+    assert
+      .dom('[data-test-profile-icon-button]')
+      .doesNotHaveAttribute('aria-label');
 
     await click('[data-test-profile-icon-button]');
-    assert.dom('[data-test-profile-api-keys-badge]').hasText('2');
+    assert
+      .dom('[data-test-profile-api-keys-badge] [data-test-pretui-badge-mark]')
+      .hasText('2');
+    assert
+      .dom('[data-test-profile-api-keys-badge] [data-test-pretui-badge-spoken]')
+      .hasText('2 unseen key notices');
 
     await click('[data-test-profile-api-keys-button]');
     assert.deepEqual(
@@ -124,7 +144,10 @@ module('Acceptance | key notices badge', function (hooks) {
     await visitApp();
     await waitUntil(() => api!.reads > 0);
     assert.dom('[data-test-profile-icon-key-notices-badge]').doesNotExist();
-    assert.dom('[data-test-profile-icon-button]').hasAria('label', 'Profile');
+    assert.dom('[data-test-pretui-badge-mark]').doesNotExist();
+    assert
+      .dom('[data-test-profile-icon-button]')
+      .doesNotHaveAttribute('aria-describedby');
     await click('[data-test-profile-icon-button]');
     assert.dom('[data-test-profile-api-keys-button]').hasText('API Keys');
     assert.dom('[data-test-profile-api-keys-badge]').doesNotExist();

@@ -4,6 +4,10 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { Badge } from '@cardstack/pretui/components/badge';
+
+import { Button } from '@cardstack/pretui/components/button';
+
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
@@ -113,33 +117,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       }
       .api-keys-item {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        width: 100%;
         margin-bottom: var(--boxel-sp);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-300);
-        border-radius: var(--boxel-border-radius);
-        background: var(--boxel-light);
-        color: var(--boxel-dark);
-        font: 600 var(--boxel-font-sm);
-        text-align: left;
-        cursor: pointer;
       }
-      .api-keys-item:hover,
-      .api-keys-item:focus-visible {
-        border-color: var(--boxel-dark);
-      }
-      .api-keys-badge {
-        min-width: 20px;
-        padding: 0 var(--boxel-sp-4xs);
-        border-radius: 10px;
-        background: var(--boxel-danger);
-        color: var(--boxel-light);
-        font: 700 var(--boxel-font-xs);
-        line-height: 20px;
-        text-align: center;
+      .api-keys-item :deep(button) {
+        width: 100%;
+        justify-content: flex-start;
       }
       .daily-grant-note {
         flex-basis: 100%;
@@ -178,20 +160,21 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
-      <button
-        type='button'
+      <Badge
         class='api-keys-item'
-        {{on 'click' this.keyNotices.openKeys}}
-        data-test-profile-api-keys-button
+        @count={{this.keyNotices.unread}}
+        @label='unseen key notices'
+        data-test-profile-api-keys-badge={{if
+          this.keyNotices.unread
+          this.keyNotices.unread
+        }}
       >
-        <span>API Keys</span>
-        {{#if this.keyNotices.unread}}
-          <span
-            class='api-keys-badge'
-            data-test-profile-api-keys-badge
-          >{{this.keyNotices.unread}}</span>
-        {{/if}}
-      </button>
+        <Button
+          @variant='outline'
+          {{on 'click' this.keyNotices.openKeys}}
+          data-test-profile-api-keys-button
+        >API Keys</Button>
+      </Badge>
       <WithSubscriptionData as |subscriptionData|>
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>

@@ -1,9 +1,9 @@
 import type RealmServerService from '../services/realm-server';
 
 // How many of the notices the realm server keeps for the user, as the owner of
-// their keys, they haven't seen yet. The notices themselves are read, and
-// marked read, on the secure origin's key page; the app asks only for the
-// count, under the user's own realm-server session.
+// their keys, they haven't seen yet. The notices are shown, and marked read,
+// on the secure origin's key page. The app reads only the count, `meta.unread`
+// on the listing it asks for under the user's own realm-server session.
 export async function unreadKeyNoticeCount(
   realmServer: RealmServerService,
 ): Promise<number> {
