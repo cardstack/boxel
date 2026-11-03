@@ -8,6 +8,9 @@ import {
   isAudioContentType,
   isVideoContentType,
   isTextBasedContentType,
+  isSvgTooLargeForText,
+  formatKilobytes,
+  MAX_SVG_TEXT_BYTES,
 } from '@cardstack/runtime-common/ai/modality';
 
 module('modality helpers', () => {
@@ -41,6 +44,7 @@ module('modality helpers', () => {
     assert.strictEqual(requiredModality('text/plain'), undefined);
     assert.strictEqual(requiredModality('application/json'), undefined);
     assert.strictEqual(requiredModality('application/octet-stream'), undefined);
+    assert.strictEqual(requiredModality('image/svg+xml'), undefined);
     assert.strictEqual(requiredModality(undefined), undefined);
   });
 
@@ -85,6 +89,7 @@ module('modality helpers', () => {
     assert.true(isTextBasedContentType('text/typescript+glimmer'));
     assert.true(isTextBasedContentType('application/vnd.card+json'));
     assert.true(isTextBasedContentType('application/vnd.card+source'));
+    assert.true(isTextBasedContentType('image/svg+xml'));
     assert.false(isTextBasedContentType('application/json'));
     assert.false(
       isTextBasedContentType(
@@ -93,5 +98,43 @@ module('modality helpers', () => {
     );
     assert.false(isTextBasedContentType('application/zip'));
     assert.false(isTextBasedContentType(undefined));
+  });
+
+  test('isSvgTooLargeForText judges an SVG by its bytes, or its declared size', () => {
+    let svg = 'image/svg+xml';
+    assert.false(
+      isSvgTooLargeForText({
+        contentType: svg,
+        contentSize: MAX_SVG_TEXT_BYTES,
+      }),
+      'at the limit it is sent',
+    );
+    assert.true(
+      isSvgTooLargeForText({
+        contentType: svg,
+        contentSize: MAX_SVG_TEXT_BYTES + 1,
+      }),
+      'over the declared limit it is not',
+    );
+    assert.false(
+      isSvgTooLargeForText({ contentType: svg }),
+      'with no declared size only the download can tell',
+    );
+    assert.true(
+      isSvgTooLargeForText({ contentType: svg }, MAX_SVG_TEXT_BYTES + 1),
+      'the downloaded bytes decide when given',
+    );
+    assert.false(
+      isSvgTooLargeForText({
+        contentType: 'text/plain',
+        contentSize: MAX_SVG_TEXT_BYTES * 4,
+      }),
+      'only an SVG has the limit',
+    );
+  });
+
+  test('formatKilobytes rounds up to whole KB', () => {
+    assert.strictEqual(formatKilobytes(MAX_SVG_TEXT_BYTES), '256 KB');
+    assert.strictEqual(formatKilobytes(MAX_SVG_TEXT_BYTES + 1), '257 KB');
   });
 });

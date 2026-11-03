@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import {
   formatRelativeTime,
   formatUpdatedTime,
-} from '@cardstack/host/components/operator-mode/workspace-chooser/workspace';
+} from '@cardstack/host/lib/workspace-actions';
 
 // Both formatters are relative to "now", so every case is expressed as an
 // offset from a fixed instant that stands in for the current time.

@@ -1335,7 +1335,14 @@ async function postToTokenEndpoint(
     }
     throw new TokenEndpointError(null, null);
   }
-  let text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    // A body that broke partway, or passed the outbound size cap, is an
+    // answer with nothing usable in it, the same as no answer at all.
+    throw new TokenEndpointError(null, null);
+  }
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(text);
