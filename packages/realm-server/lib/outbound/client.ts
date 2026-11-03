@@ -74,12 +74,12 @@ export const DEFAULT_OUTBOUND_SETTINGS: Readonly<OutboundSettings> =
     // minutes, so the bound sits well above the longest of those.
     totalTimeoutMs: 10 * 60_000,
     maxRedirects: 5,
-    // Each sits above the largest legitimate response its path is expected
-    // to carry: system-key carries OpenRouter image generations, which
-    // arrive as base64 data URLs of several megabytes each, and `callApi`
-    // carries vendor JSON. The `outbound-guard` skill records the reasoning
-    // and how to revisit them against measured sizes.
-    responseSizeCaps: { 'system-key': 32 * MiB, 'call-api': 10 * MiB },
+    // Each sits above the largest legitimate response its path carries, with
+    // room to grow. System-key carries OpenRouter image generations, base64
+    // data URLs that have reached the mid-20s of MiB; `callApi` carries
+    // vendor JSON. The `outbound-guard` skill records the measured sizes and
+    // how to revisit them.
+    responseSizeCaps: { 'system-key': 64 * MiB, 'call-api': 10 * MiB },
   });
 
 let settings: OutboundSettings = { ...DEFAULT_OUTBOUND_SETTINGS };

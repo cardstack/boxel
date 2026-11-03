@@ -250,13 +250,13 @@ Read once at startup from the environment by `startOutboundGuard` in `main.ts`:
 | `OUTBOUND_DEV_ALLOWLIST`                 | empty    | comma-separated host names that may use `http:` and resolve locally                                                       |
 | `OUTBOUND_CONNECT_TIMEOUT_MS`            | 10000    | per connection                                                                                                            |
 | `OUTBOUND_TOTAL_TIMEOUT_MS`              | 600000   | whole exchange, body included                                                                                             |
-| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 33554432 | response size cap for the system-key path (`_request-forward`, passthrough, generation-cost lookup, OAuth token requests) |
+| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 67108864 | response size cap for the system-key path (`_request-forward`, passthrough, generation-cost lookup, OAuth token requests) |
 | `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`   | 10485760 | response size cap for `callApi` and Google service-account token requests                                                 |
 
 The boot log carries one line with the effective settings:
 
 ```
-outbound guard: deployed=true devAllowlist=(none) connectTimeoutMs=10000 totalTimeoutMs=600000 maxRedirects=5 responseSizeCap.system-key=33554432 responseSizeCap.call-api=10485760
+outbound guard: deployed=true devAllowlist=(none) connectTimeoutMs=10000 totalTimeoutMs=600000 maxRedirects=5 responseSizeCap.system-key=67108864 responseSizeCap.call-api=10485760
 ```
 
 ### The development allowlist and the self-check
@@ -341,7 +341,7 @@ Every response logs its decompressed size when its body ends, on the
 `outbound` channel at `info`:
 
 ```
-outbound response size: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=33554432 bytes=48211 outcome=complete
+outbound response size: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=67108864 bytes=48211 outcome=complete
 ```
 
 `outcome` is `complete`, `cancelled` (the caller stopped reading, e.g. the
@@ -349,7 +349,7 @@ browser left), `error`, or `too-large`. Each refusal also logs at `warn`:
 
 ```
 outbound response over size cap: path=call-api destination=https://api.example.com/v1/export status=200 cap=10485760 declaredBytes=52428800 refused=declared-length
-outbound response over size cap: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=33554432 bytesRead=33619968 refused=stream-reached-cap
+outbound response over size cap: path=system-key destination=https://openrouter.ai/api/v1/chat/completions status=200 cap=67108864 bytesRead=67174400 refused=stream-reached-cap
 ```
 
 The `destination` is the origin + path of the URL the caller sent, with no
@@ -358,15 +358,29 @@ dashboard's "Response size cap" row charts both (see `key-outage-triage`).
 
 ### The values, and revisiting them
 
-| Path         | Default             | Why                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `system-key` | 32 MiB (`33554432`) | The largest responses on this path are OpenRouter image generations, which return each image as a base64 data URL inside the JSON body. One image runs to several megabytes, and a call may return more than one. 32 MiB leaves room for a multi-image response while still stopping an unbounded one. Chat completions, the generation-cost lookup and token responses are kilobytes. |
-| `call-api`   | 10 MiB (`10485760`) | `callApi` carries vendor JSON (GitHub, Google and similar REST APIs), and the whole body is held in memory and handed to the card. A single page of such an API is well under a megabyte. 10 MiB lets a large page through and refuses an export or file download, which belongs on a file-transfer path rather than an operation result.                                              |
+| Path         | Default             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system-key` | 64 MiB (`67108864`) | The largest responses on this path are OpenRouter image generations, which return each image as a base64 data URL inside the JSON body. Over the 30 days before the caps were enforced, staging's largest was 26.5 MiB (a run of 21–26 MiB `chat/completions` responses) and production's was 2.6 MiB. 64 MiB is about 2.4 times the largest seen: room for growth in beta (larger images, more per call) while still stopping an unbounded response. The generation-cost lookup, Firecrawl scrapes and token responses are kilobytes. |
+| `call-api`   | 10 MiB (`10485760`) | `callApi` carries vendor JSON (GitHub, Google and similar REST APIs), and the whole body is held in memory and handed to the card. A single page of such an API is well under a megabyte. 10 MiB lets a large page through and refuses an export or file download, which belongs on a file-transfer path rather than an operation result. No `callApi` traffic had been logged in either environment when this was chosen, so it is the first value to check against measured sizes.                                                   |
 
-When the caps were switched on, neither environment had live integration
-traffic to measure, so these values come from the payloads each path is
-expected to carry rather than from a measured distribution. The first week
-of real traffic is the first chance to check them.
+The measurements, per environment, over the 30 days before enforcement (the
+size lines reached back 14 days in each):
+
+| Environment | Destination                             | Largest response | Responses |
+| ----------- | --------------------------------------- | ---------------- | --------- |
+| production  | `openrouter.ai/api/v1/chat/completions` | 2.6 MiB          | 1,550     |
+| production  | `api.firecrawl.dev/v2/scrape`           | 46 KB            | 16        |
+| staging     | `openrouter.ai/api/v1/chat/completions` | 26.5 MiB         | 2,032     |
+| staging     | `api.firecrawl.dev/v2/scrape`           | 0.14 MiB         | 109       |
+| staging     | `openrouter.ai/api/v1/generation`       | under 1 KB       | 94        |
+
+A Loki query over many days of these lines times out at the gateway (504).
+Ask for one day at a time with a metric query against `/loki/api/v1/query`,
+and retry the days that fail:
+
+```
+max by (dest) (max_over_time({env="production",service=~"realm-server|worker"} |= "outbound response size: path=system-key" | regexp `destination=(?P<dest>[^ ]+) .*bytes=(?P<bytes>[0-9]+)` | unwrap bytes [1d]))
+```
 
 Revisit the caps when a `refused=` line names a legitimate vendor, or when a
 path's max on the dashboard closes on its dashed cap line. Pull each path's
