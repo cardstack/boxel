@@ -2,9 +2,12 @@
 // key it holds to change the limits. Realm config's API Keys entry opens it,
 // since changing a limit is a key-owner action that only this window's
 // session may take: the app's session, which card code holds, can't raise a
-// limit. A direct writer of the realm who doesn't own the share sees its
-// numbers in realm config and is told here that only its owner changes them;
-// anyone else, who can't see the share, is told the link names none.
+// limit. The key page opens it too, from a notice that the share's use
+// reached a limit (`#…&then=keys`), and then offers a way back to it. A direct
+// writer of the realm who doesn't own the share sees its usage here and is
+// told that only its owner changes the limits; anyone else, who can't see the
+// share, is told the link names none.
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -20,6 +23,9 @@ import {
   type KeyUsage,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
+import Button from '../../components/button.gts';
+import { navigation } from '../navigation.js';
+import { pageURL } from '../urls.js';
 
 import {
   failureMessage,
@@ -42,7 +48,12 @@ type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'needs-admin'; context: WindowContext }
-  | { name: 'not-owner'; context: WindowContext; share: KeyShare }
+  | {
+      name: 'not-owner';
+      context: WindowContext;
+      share: KeyShare;
+      usage: KeyUsage;
+    }
   | {
       name: 'editing';
       context: WindowContext;
@@ -72,6 +83,18 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
           <strong>{{this.notOwner.context.realm.name}}</strong>
           holds someone else’s key. Only they change its limits. If you think
           it’s being overused, suspend it from the workspace’s settings.</:intro>
+        <:default>
+          <UsageSummary @usage={{this.notOwner.usage}} />
+        </:default>
+        <:actions>
+          {{#if this.returnsToKeys}}
+            <Button
+              @kind='secondary'
+              data-test-share-limits-back
+              {{on 'click' this.backToKeys}}
+            >Back to your keys</Button>
+          {{/if}}
+        </:actions>
       </EditPage>
     {{else if this.editing}}
       <EditPage
@@ -94,6 +117,15 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
             @onSave={{this.saveLimits}}
           />
         </:default>
+        <:actions>
+          {{#if this.returnsToKeys}}
+            <Button
+              @kind='secondary'
+              data-test-share-limits-back
+              {{on 'click' this.backToKeys}}
+            >Back to your keys</Button>
+          {{/if}}
+        </:actions>
       </EditPage>
     {{/if}}
     <style scoped>
@@ -104,6 +136,13 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
   </template>
 
   private opened = openedFor();
+
+  // Opened from the key page, which it goes back to.
+  private returnsToKeys =
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
+    'keys';
+
+  private backToKeys = () => navigation.back(pageURL('keys'));
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -158,7 +197,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       let usage = await shareUsage(config, share.id);
       this.page.state = usage.canEditLimits
         ? { name: 'editing', context, share, usage }
-        : { name: 'not-owner', context, share };
+        : { name: 'not-owner', context, share, usage };
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {

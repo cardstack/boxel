@@ -24,6 +24,8 @@ import {
   MAX_KEY_LIMIT,
   type KeyLimits,
 } from './key-limit-settings.ts';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { SendEvent } from '@cardstack/runtime-common/send-event';
 import { refusedFrom } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
@@ -51,6 +53,9 @@ import { UserKeyError } from './user-keys.ts';
 // - **Notices.** When a period's use reaches the high-water mark, and when it
 //   reaches the budget, the key's owner and, for a share, the realm's direct
 //   writers each get one notice for that period (`key_limit_notices`).
+//   Each recipient a notice was recorded for is sent
+//   `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a session they have open shows that
+//   one is waiting.
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
 // - **Callers who aren't signed in**, served by a share whose key allows
@@ -130,6 +135,15 @@ export function setKeyLimitSink(
   next: ((event: KeyLimitEvent) => void) | undefined,
 ): void {
   sink = next;
+}
+
+// Tells a recipient a limit notice was recorded for them. The realm server
+// installs one at startup; without one, a notice is recorded and its recipient
+// sees it the next time their session asks.
+let noticeSender: SendEvent | undefined;
+
+export function setKeyLimitNoticeSender(next: SendEvent | undefined): void {
+  noticeSender = next;
 }
 
 let channelLog: ReturnType<typeof logger> | undefined;
@@ -647,6 +661,9 @@ async function noticeThresholds(
     return;
   }
   let { subject } = limited;
+  // Filled as each notice is recorded, so a recipient whose notice was
+  // recorded before a later one failed is still told.
+  let told = new Set<string>();
   try {
     let recipients = new Set([limited.owner]);
     if (limited.realmURL) {
@@ -668,7 +685,7 @@ async function noticeThresholds(
         used,
       });
       for (let recipient of recipients) {
-        await query(dbAdapter, [
+        let recorded = await query(dbAdapter, [
           `INSERT INTO key_limit_notices (share_id, key_id, realm_url, label, recipient, owner, period, period_ends_at, threshold, budget) VALUES (`,
           param(subject.kind === 'share' ? subject.id : null),
           `, `,
@@ -689,14 +706,28 @@ async function noticeThresholds(
           param(threshold),
           `, `,
           param(limit),
-          `) ON CONFLICT DO NOTHING`,
+          `) ON CONFLICT DO NOTHING RETURNING id`,
         ]);
+        if (recorded.length > 0) {
+          told.add(recipient);
+        }
       }
     }
   } catch (error) {
     log.warn(
       `could not record the ${thresholds.join(' and ')} notice for ${subject.kind} ${subject.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+  for (let recipient of told) {
+    try {
+      await noticeSender?.(recipient, KEY_NOTICES_UPDATED_EVENT_TYPE);
+    } catch (error) {
+      // The notice is recorded either way; the recipient sees it the next
+      // time their session asks.
+      log.warn(
+        `could not tell ${recipient} a key limit notice is waiting: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }
 

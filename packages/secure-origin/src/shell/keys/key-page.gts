@@ -12,6 +12,10 @@
 // asking, on the approve page. Usage and limits opens what the key spent
 // against its budgets, who used it and how, and its limits, which the owner
 // changes there.
+// Above the keys, where a share's or key's use reached its high-water mark or
+// its budget this day or month, each with what to do about it (see
+// `key-limit-notices.gts`), and what workspaces' policies did with the user's
+// shared keys. Listing them marks them read, which clears the app's badge.
 // Each key that can be shared says whether people who aren't signed in can
 // use it, with its optional daily and monthly anonymous caps, and Change
 // opens a panel to turn that on or off and set the caps. It is the key's own
@@ -32,7 +36,9 @@ import {
   deleteKey,
   listBindings,
   declinePolicyNotice,
+  limitNotices,
   listKeys,
+  markLimitNoticesRead,
   markPolicyNoticesRead,
   policyNotices,
   removeGrant,
@@ -42,6 +48,7 @@ import {
   unshare,
   type KeyBinding,
   type KeyGrant,
+  type KeyLimitNotice,
   type KeyPolicyNotice,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
@@ -75,6 +82,7 @@ import type {
 import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyGrants from './key-grants.gts';
+import KeyLimitNotices from './key-limit-notices.gts';
 import KeyPolicyNotices from './key-policy-notices.gts';
 import KeyTile from './key-tile.gts';
 import ServiceAccountDetails from './service-account-details.gts';
@@ -117,6 +125,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           {{#if this.state.loading}}
             <BusyMessage @title='Loading…' />
           {{else}}
+            <KeyLimitNotices
+              @notices={{this.state.limitNotices}}
+              @onChangeKeyLimits={{this.showKeyLimits}}
+              @onOpenShareLimits={{this.openShareLimits}}
+            />
             <KeyPolicyNotices
               @notices={{this.state.notices}}
               @keys={{this.state.keys}}
@@ -150,7 +163,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           @onRemove={{this.removeGrant}}
                         />
                         {{#if (this.hasUsage key)}}
-                          <KeyUsagePanel @key={{key}} @api={{@api}} />
+                          <KeyUsagePanel
+                            @key={{key}}
+                            @api={{@api}}
+                            @onRegister={{this.registerUsagePanel}}
+                          />
                         {{/if}}
                         <div class='tile-actions'>
                           {{#unless (eq key.kind 'oauth-connection')}}
@@ -494,6 +511,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     // What workspaces' policies opened the user's shares to people who aren't
     // signed in. Empty when there are none, or when they can't be read.
     notices: [] as KeyPolicyNotice[],
+    // Where the user's shares and keys reached a limit this day or month.
+    // Empty when there are none, or when they can't be read.
+    limitNotices: [] as KeyLimitNotice[],
     // The request being declined, while it is.
     declining: undefined as string | undefined,
     error: undefined as string | undefined,
@@ -538,8 +558,10 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       this.state.keys = await listKeys(this.args.api.config);
       this.state.bindings = await this.readBindings();
       this.state.notices = await this.readNotices();
+      this.state.limitNotices = await this.readLimitNotices();
       this.args.api.visit.loaded();
       this.markNoticesRead();
+      this.markLimitNoticesRead();
       this.openAnonymousUseFromFragment();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -688,6 +710,66 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       console.warn(`Could not mark the key notices read: ${e}`);
     });
   }
+
+  // The keys are the page; limit notices that can't be read are left out.
+  private readLimitNotices = async (): Promise<KeyLimitNotice[]> => {
+    try {
+      return await limitNotices(this.args.api.config);
+    } catch (e) {
+      if (isSignedOut(e)) {
+        throw e;
+      }
+      return [];
+    }
+  };
+
+  // As for policy notices: what this page lists has been seen.
+  private markLimitNoticesRead() {
+    let unread = this.state.limitNotices
+      .filter((notice) => !notice.readAt)
+      .map((notice) => notice.id);
+    if (unread.length === 0) {
+      return;
+    }
+    markLimitNoticesRead(this.args.api.config, unread).catch((e) => {
+      console.warn(`Could not mark the key limit notices read: ${e}`);
+    });
+  }
+
+  // Each key's usage panel, by key id, so a limit notice about the key can
+  // open it.
+  private usagePanels = new Map<string, () => void>();
+
+  private registerUsagePanel = (
+    keyId: string,
+    show: (() => void) | undefined,
+  ) => {
+    if (show) {
+      this.usagePanels.set(keyId, show);
+    } else {
+      this.usagePanels.delete(keyId);
+    }
+  };
+
+  // A personal key's limits are changed on its own tile.
+  private showKeyLimits = (keyId: string) => {
+    this.usagePanels.get(keyId)?.();
+  };
+
+  // A share's limits are changed on the share's own page, which says who can
+  // when the user can't. It comes back to this page when it is done.
+  private openShareLimits = (notice: KeyLimitNotice) => {
+    if (!notice.realm || !notice.share) {
+      return;
+    }
+    navigation.assign(
+      `${pageURL('share-limits')}#${new URLSearchParams({
+        realm: notice.realm,
+        share: notice.share,
+        then: 'keys',
+      })}`,
+    );
+  };
 
   // Declining a workspace's request leaves the key as it is; the request
   // isn't shown again.

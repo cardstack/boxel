@@ -215,6 +215,28 @@ FROM key_limit_notices WHERE share_id = '<id>' ORDER BY created_at DESC;
 A notice that can't be recorded is logged on `realm:key-limits` and costs the
 call nothing.
 
+Each recipient a notice was recorded for is sent `key-notices-updated` to their
+session room (the sender `setKeyLimitNoticeSender` installs at startup), so the
+app's API Keys badge counts it at once. A send that fails is logged and the
+notice waits for the next time the app asks.
+
+`GET /_key-limit-notices` (`lib/key-limit-notices.ts`, any of the user's
+sessions) lists the user's notices whose period hasn't ended, newest first,
+with `yours` (whether they own the key) and `meta.unread`; a notice whose
+period has ended is neither listed nor counted. The app adds that count to the
+policy notices' for its badge. The secure origin's key page shows them above
+the keys, one per share or key and period, with what to do: the key's owner
+changes a personal key's limits on its tile and a share's on `share-limits`;
+a direct writer who doesn't own the key is sent to `share-limits` to see its
+usage and is told only the owner changes it. Listing marks them read through
+`POST /_key-limit-notices/read`, which only a secure session may call.
+
+```sql
+SELECT id, threshold, period, period_ends_at, read_at, label
+FROM key_limit_notices WHERE recipient = '<user>' AND period_ends_at > NOW()
+ORDER BY created_at DESC;
+```
+
 ## Usage
 
 Each `callApi` invocation whose binding resolved to a share or a personal key

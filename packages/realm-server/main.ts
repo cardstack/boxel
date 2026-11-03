@@ -62,6 +62,7 @@ import {
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { setKeyLimitNoticeSender } from './lib/key-limits.ts';
 import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
@@ -795,6 +796,11 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
+  // Tells a user a notice about their keys was recorded for them, so a session
+  // they have open shows that one is waiting.
+  let sendKeyNoticeEvent = createSendEvent({ matrixClient, dbAdapter });
+  setKeyLimitNoticeSender(sendKeyNoticeEvent);
+
   // One for every realm this process serves: a policy card in one realm can
   // govern another, so the audit of a write looks across all of them.
   let policyWriteAuditor = createPolicyWriteAuditor({
@@ -812,7 +818,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             virtualNetwork,
           })
         : null,
-    sendEvent: createSendEvent({ matrixClient, dbAdapter }),
+    sendEvent: sendKeyNoticeEvent,
   });
 
   // Construct the reconciler before the server so the server can hold a
