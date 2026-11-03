@@ -41,6 +41,7 @@ module('modality helpers', () => {
     assert.strictEqual(requiredModality('text/plain'), undefined);
     assert.strictEqual(requiredModality('application/json'), undefined);
     assert.strictEqual(requiredModality('application/octet-stream'), undefined);
+    assert.strictEqual(requiredModality('image/svg+xml'), undefined);
     assert.strictEqual(requiredModality(undefined), undefined);
   });
 
@@ -85,6 +86,7 @@ module('modality helpers', () => {
     assert.true(isTextBasedContentType('text/typescript+glimmer'));
     assert.true(isTextBasedContentType('application/vnd.card+json'));
     assert.true(isTextBasedContentType('application/vnd.card+source'));
+    assert.true(isTextBasedContentType('image/svg+xml'));
     assert.false(isTextBasedContentType('application/json'));
     assert.false(
       isTextBasedContentType(

@@ -23,7 +23,9 @@ import {
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
+  isSvgContentType,
   isTextBasedContentType,
+  MAX_SVG_TEXT_BYTES,
   modalityLabel,
   requiredModality,
 } from './modality.ts';
@@ -853,6 +855,15 @@ export async function getAttachedFiles(
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (file: SerializedFileDef) => {
+      if (
+        isSvgContentType(file.contentType) &&
+        (file.contentSize ?? 0) > MAX_SVG_TEXT_BYTES
+      ) {
+        return {
+          ...toFileDefMetadata(file),
+          error: `SVG markup not sent: the file is ${file.contentSize} bytes, over the ${MAX_SVG_TEXT_BYTES}-byte limit`,
+        };
+      }
       if (isTextBasedContentType(file.contentType)) {
         return downloadTextContent(client, file);
       }

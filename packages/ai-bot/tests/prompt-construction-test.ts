@@ -44,6 +44,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
+  attachedFilesToMessage,
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
@@ -51,6 +52,7 @@ import {
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
   MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+  getAttachedFiles,
   getPromptParts,
   getRelevantCards,
   getTools,
@@ -714,6 +716,60 @@ Current date and time: 2025-06-11T11:43:00.533Z
         "Username must be a full id, e.g. '@aibot:localhost'",
       );
     }
+  });
+
+  test('an attached SVG is sent as its markup', async () => {
+    let svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    mockResponses.set('mxc://mock-server/logo-svg', { ok: true, text: svg });
+    let files = await getAttachedFiles(
+      fakeMatrixClient as any,
+      {
+        content: {
+          data: {
+            attachedFiles: [
+              {
+                url: 'mxc://mock-server/logo-svg',
+                sourceUrl: 'http://localhost:4201/experiments/logo.svg',
+                name: 'logo.svg',
+                contentType: 'image/svg+xml',
+                contentSize: svg.length,
+              },
+            ],
+          },
+        },
+      } as any,
+    );
+    assert.strictEqual(files[0].content, svg);
+    assert.true(
+      attachedFilesToMessage(files).includes('<circle r="4"/>'),
+      'the prompt holds the SVG markup',
+    );
+  });
+
+  test('an attached SVG over the size limit is sent as metadata only', async () => {
+    let files = await getAttachedFiles(
+      fakeMatrixClient as any,
+      {
+        content: {
+          data: {
+            attachedFiles: [
+              {
+                url: 'mxc://mock-server/huge-svg',
+                sourceUrl: 'http://localhost:4201/experiments/huge.svg',
+                name: 'huge.svg',
+                contentType: 'image/svg+xml',
+                contentSize: 10 * 1024 * 1024,
+              },
+            ],
+          },
+        },
+      } as any,
+    );
+    assert.strictEqual(files[0].content, undefined);
+    assert.true(
+      attachedFilesToMessage(files).includes('SVG markup not sent'),
+      'the prompt says why the markup is missing',
+    );
   });
 
   test('Gets only the latest version of cards uploaded', () => {

@@ -56,8 +56,19 @@ export function isTextBasedContentType(contentType?: string): boolean {
   if (contentType.includes('text/')) return true;
   if (contentType.includes('application/vnd.card+json')) return true;
   if (contentType.includes('application/vnd.card+source')) return true; // .gts card definitions
+  // Providers don't take SVG as image input, but it is XML markup the model
+  // can read and edit.
+  if (isSvgContentType(contentType)) return true;
   return false;
 }
+
+export function isSvgContentType(contentType?: string): boolean {
+  return !!contentType && contentType.includes('image/svg+xml');
+}
+
+// An exported SVG can be mostly path data. Above this size only the file's
+// metadata is sent, so one drawing can't fill the context window.
+export const MAX_SVG_TEXT_BYTES = 256 * 1024;
 
 export {
   isImageContentType,
