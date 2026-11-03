@@ -19,15 +19,21 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { Collapsible } from '@cardstack/pretui/components/collapsible';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
+import { NativeSelect } from '@cardstack/pretui/components/native-select';
+import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { RelativeTime } from '@cardstack/pretui/components/relative-time';
 import { Spinner } from '@cardstack/pretui/components/spinner';
 import { Tabs } from '@cardstack/pretui/components/tabs';
 import { and, eq } from '@cardstack/pretui/helpers';
 
 import {
+  arrange,
   authoredBy,
+  choicesOf,
   waitingOnReviewBy,
   type PullRequestNode,
+  type SortDirection,
+  type SortKey,
   type WatchedPullRequest,
 } from './pr-review-watcher/review-state';
 
@@ -302,9 +308,107 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     ];
   }
 
-  get shown() {
+  @tracked sortBy: SortKey = 'requested';
+  @tracked direction: SortDirection = 'asc';
+  // Empty for every author or repository.
+  @tracked authorFilter = '';
+  @tracked repoFilter = '';
+
+  // Every pull request is the viewer's own in "My PRs", so sorting or
+  // filtering it by author would do nothing.
+  get byAuthorApplies() {
+    return this.tab === 'review';
+  }
+
+  get unfiltered() {
     return this.tab === 'review' ? this.waitingOnMe : this.mine;
   }
+
+  get sortOptions() {
+    return [
+      { value: 'requested', label: 'Requested' },
+      ...(this.byAuthorApplies ? [{ value: 'author', label: 'Author' }] : []),
+      { value: 'repo', label: 'Repository' },
+    ];
+  }
+
+  get activeSort(): SortKey {
+    return this.sortBy === 'author' && !this.byAuthorApplies
+      ? 'requested'
+      : this.sortBy;
+  }
+
+  get directionLabel() {
+    if (this.activeSort === 'requested') {
+      return this.direction === 'asc' ? 'Oldest first' : 'Newest first';
+    }
+    return this.direction === 'asc' ? 'A to Z' : 'Z to A';
+  }
+
+  get authorOptions() {
+    return [
+      { value: '', label: 'All authors' },
+      ...choicesOf(this.unfiltered, 'author').map((a) => ({
+        value: a,
+        label: a,
+      })),
+    ];
+  }
+
+  get repoOptions() {
+    return [
+      { value: '', label: 'All repositories' },
+      ...choicesOf(this.unfiltered, 'repo').map((r) => ({
+        value: r,
+        label: r,
+      })),
+    ];
+  }
+
+  // A filter whose value isn't in this list (the other tab's author, or one
+  // whose last pull request closed) filters nothing.
+  get activeAuthor() {
+    return this.byAuthorApplies &&
+      choicesOf(this.unfiltered, 'author').includes(this.authorFilter)
+      ? this.authorFilter
+      : '';
+  }
+
+  get activeRepo() {
+    return choicesOf(this.unfiltered, 'repo').includes(this.repoFilter)
+      ? this.repoFilter
+      : '';
+  }
+
+  get filtering() {
+    return Boolean(this.activeAuthor || this.activeRepo);
+  }
+
+  get shown() {
+    return arrange(this.unfiltered, {
+      sortBy: this.activeSort,
+      direction: this.direction,
+      author: this.activeAuthor || undefined,
+      repo: this.activeRepo || undefined,
+    });
+  }
+
+  selectSort = (value: string) => {
+    this.sortBy = value as SortKey;
+  };
+  flipDirection = () => {
+    this.direction = this.direction === 'asc' ? 'desc' : 'asc';
+  };
+  selectAuthor = (value: string) => {
+    this.authorFilter = value;
+  };
+  selectRepo = (value: string) => {
+    this.repoFilter = value;
+  };
+  clearFilters = () => {
+    this.authorFilter = '';
+    this.repoFilter = '';
+  };
 
   selectTab = (value: string) => {
     this.tab = value as Tab;
@@ -498,6 +602,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
             is ever typed into this card. For
             {{@model.org}}'s private repositories, the app has to be
             <a
+              class='inline-link'
               href={{this.installApp}}
               target='_blank'
               rel='noopener noreferrer'
@@ -609,6 +714,41 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
             {{this.partial}}
           </Alert>
         {{/if}}
+        {{#if this.unfiltered.length}}
+          <div class='arrange' data-test-arrange>
+            <SegmentedControl
+              @label='Sort by'
+              @options={{this.sortOptions}}
+              @value={{this.activeSort}}
+              @onValueChange={{this.selectSort}}
+              data-test-sort
+            />
+            <Button
+              @appearance='outlined'
+              @size='s'
+              {{on 'click' this.flipDirection}}
+              data-test-direction
+            >{{this.directionLabel}}</Button>
+            {{#if this.byAuthorApplies}}
+              <NativeSelect
+                @label='Author'
+                @size='s'
+                @options={{this.authorOptions}}
+                @value={{this.activeAuthor}}
+                @onValueChange={{this.selectAuthor}}
+                data-test-author-filter
+              />
+            {{/if}}
+            <NativeSelect
+              @label='Repository'
+              @size='s'
+              @options={{this.repoOptions}}
+              @value={{this.activeRepo}}
+              @onValueChange={{this.selectRepo}}
+              data-test-repo-filter
+            />
+          </div>
+        {{/if}}
         {{#if this.truncated}}
           <p class='note'>Showing the 100 most recently updated of each search.</p>
         {{/if}}
@@ -672,6 +812,20 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
               </li>
             {{/each}}
           </ul>
+        {{else if this.filtering}}
+          <EmptyState
+            @title='No pull requests match'
+            @message='Nothing in this list matches the author and repository chosen.'
+            data-test-empty='filtered'
+          >
+            <:action>
+              <Button
+                @appearance='outlined'
+                {{on 'click' this.clearFilters}}
+                data-test-clear-filters
+              >Show all</Button>
+            </:action>
+          </EmptyState>
         {{else if (eq this.tab 'review')}}
           <EmptyState
             @title='Nothing is waiting on your review'
@@ -727,6 +881,12 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         gap: var(--boxel-sp-xs);
         font-size: var(--boxel-font-size-xs);
       }
+      .arrange {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: var(--boxel-sp-sm);
+      }
       .prs {
         list-style: none;
         margin: 0;
@@ -755,6 +915,10 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         color: var(--foreground);
         font-weight: 600;
         text-decoration: none;
+      }
+      .inline-link {
+        color: inherit;
+        text-decoration: underline;
       }
       .title:hover {
         text-decoration: underline;

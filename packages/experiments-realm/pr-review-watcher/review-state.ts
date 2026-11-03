@@ -201,3 +201,59 @@ export function authoredBy(
     .map((pr) => watched(pr, firstReviewRequest(pr)))
     .sort(byLongestWaiting);
 }
+
+export type SortKey = 'requested' | 'author' | 'repo';
+export type SortDirection = 'asc' | 'desc';
+
+export interface Arrangement {
+  sortBy: SortKey;
+  // Ascending is the oldest request first, or A to Z.
+  direction: SortDirection;
+  // A login, or absent for every author.
+  author?: string;
+  // An `owner/name`, or absent for every repository.
+  repo?: string;
+}
+
+function byRequestTime(a: WatchedPullRequest, b: WatchedPullRequest) {
+  return (a.requested?.at ?? '').localeCompare(b.requested?.at ?? '');
+}
+
+// A list as the watcher shows it: filtered by author and repository, then
+// sorted. Pull requests nobody has been asked to review have no request time
+// and go last either way. Ties on an author or repository go to the longest
+// waiting.
+export function arrange(
+  prs: WatchedPullRequest[],
+  { sortBy, direction, author, repo }: Arrangement,
+): WatchedPullRequest[] {
+  let sign = direction === 'asc' ? 1 : -1;
+  let compare = (a: WatchedPullRequest, b: WatchedPullRequest) => {
+    if (sortBy === 'requested') {
+      if (!a.requested || !b.requested) {
+        return a.requested ? -1 : b.requested ? 1 : 0;
+      }
+      return sign * byRequestTime(a, b);
+    }
+    let field = sortBy === 'author' ? 'author' : 'repo';
+    return (
+      sign *
+        a[field].localeCompare(b[field], undefined, { sensitivity: 'base' }) ||
+      byRequestTime(a, b)
+    );
+  };
+  return prs
+    .filter((pr) => (author ? pr.author === author : true))
+    .filter((pr) => (repo ? pr.repo === repo : true))
+    .sort(compare);
+}
+
+// The distinct values of `field` in a list, sorted, for its filter menu.
+export function choicesOf(
+  prs: WatchedPullRequest[],
+  field: 'author' | 'repo',
+): string[] {
+  return [...new Set(prs.map((pr) => pr[field]))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }),
+  );
+}
