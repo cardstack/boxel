@@ -13,6 +13,12 @@ class SearchInputUsage extends Component {
   @tracked placeholder = 'Search components…';
   @tracked clearable = true;
   @tracked disabled = false;
+  @tracked display = 'field';
+  displays = ['field', 'collapsed'];
+  setDisplay = (v: string) => (this.display = v);
+  get displayVal() {
+    return this.display as 'field' | 'collapsed';
+  }
   setValue = (v: string) => (this.value = v);
   setPlaceholder = (v: string) => (this.placeholder = v);
   setClearable = (v: boolean) => (this.clearable = v);
@@ -21,6 +27,7 @@ class SearchInputUsage extends Component {
     let bits = [`@value='${this.value}'`];
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (!this.clearable) bits.push('@clearable={{false}}');
+    if (this.display !== 'field') bits.push(`@display='${this.display}'`);
     bits.push('@onInput={{this.setValue}}');
     return `<SearchInput ${bits.join(' ')} />`;
   }
@@ -36,6 +43,7 @@ class SearchInputUsage extends Component {
           @placeholder={{this.placeholder}}
           @clearable={{this.clearable}}
           @disabled={{this.disabled}}
+          @display={{this.displayVal}}
           @onInput={{this.setValue}}
         />
         <p class='pretui-demo-readout' data-test-search-readout>
@@ -43,6 +51,14 @@ class SearchInputUsage extends Component {
         </p>
       </:example>
       <:api as |Args|>
+        <Args.String
+          @name='display'
+          @value={{this.display}}
+          @options={{this.displays}}
+          @defaultValue='field'
+          @description="field is the whole field. collapsed is a square button, as wide as the field is high, showing only the magnifier; a click or Tab opens the full field over the row (--pretui-search-open-w, 15rem by default), Escape closes it and returns focus to the button, and the value carries across. --pretui-field-h sets the height."
+          @onInput={{this.setDisplay}}
+        />
         <Args.Bool
           @name='clearable'
           @defaultValue={{true}}

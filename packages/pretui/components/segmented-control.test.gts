@@ -11,6 +11,7 @@ import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { SegmentedControl } from './segmented-control';
 import type { SegmentOption } from './segmented-control';
+import List from '@cardstack/boxel-icons/list';
 
 const VIEWS: SegmentOption[] = [
   { value: 'grid', label: 'Grid' },
@@ -138,5 +139,31 @@ module('Pretui | components/segmented-control', function (hooks) {
       host.remove();
     }
   });
-});
 
+  test("@display 'selected-text' and 'icon' hide labels but keep each radio named", async function (assert) {
+    const ICONS: SegmentOption[] = VIEWS.map((v) => ({ ...v, icon: List }));
+    await render(
+      <template><SegmentedControl @options={{ICONS}} @defaultValue='list' @display='selected-text' /></template>,
+    );
+    let hidden = () =>
+      Array.from(root().querySelectorAll('[data-hidden]')).map((t) => t.textContent);
+    assert.deepEqual(hidden(), ['Grid', 'Board'], 'only the selected label shows');
+    assert.strictEqual(root().querySelectorAll('svg').length, 3, 'every segment draws its icon');
+    assert.deepEqual(
+      inputs().map((i) => i.labels?.[0]?.textContent?.trim()),
+      ['Grid', 'List', 'Board'],
+      'a hidden label still names its radio',
+    );
+    await click(inputs()[2] as HTMLElement);
+    assert.deepEqual(hidden(), ['Grid', 'List'], 'the label follows the selection');
+  });
+
+  test("@display 'icon' shows no label, and a label without an icon stays", async function (assert) {
+    const MIXED: SegmentOption[] = [{ ...VIEWS[0]!, icon: List }, VIEWS[1]!];
+    await render(<template><SegmentedControl @options={{MIXED}} @display='icon' /></template>);
+    let labels = Array.from(root().querySelectorAll('label'));
+    assert.strictEqual(labels[0]?.getAttribute('title'), 'Grid', 'the hidden label is the title');
+    assert.ok(labels[0]?.querySelector('[data-hidden]'));
+    assert.notOk(labels[1]?.querySelector('[data-hidden]'), 'no icon, so the label stays');
+  });
+});

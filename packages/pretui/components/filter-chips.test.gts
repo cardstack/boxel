@@ -197,4 +197,35 @@ module('Pretui | components/filter-chips', function (hooks) {
     await render(<template><FilterChips @options={{STATES}} @defaultValue='blocked' /></template>);
     assert.deepEqual(activeLabels(), ['Blocked 3'], 'exactly one chip is active in single-select');
   });
+
+  test("@display 'few' shows the first chips and the selected one, the rest in a menu", async function (assert) {
+    const MORE: FilterChipOption[] = [
+      ...STATES,
+      { value: 'review', label: 'Review' },
+      { value: 'draft', label: 'Draft' },
+    ];
+    let picked: string | undefined;
+    let onChange = (v: string) => (picked = v);
+    await render(
+      <template>
+        <FilterChips @options={{MORE}} @display='few' @visibleCount={{2}} @defaultValue='draft' @onValueChange={{onChange}} />
+      </template>,
+    );
+    assert.deepEqual(inputs().map((i) => i.value), ['open', 'blocked', 'draft'], 'first two plus the selected one');
+    let more = root().querySelector('[data-test-pretui-filter-chips-more]') as HTMLElement;
+    assert.strictEqual(more.getAttribute('aria-label'), '2 more filters');
+
+    await click(more);
+    let items = Array.from(document.querySelectorAll("[role='menuitemradio']"));
+    assert.deepEqual(items.map((i) => i.textContent?.trim()), ['Shipped', 'Review']);
+    await click(items[1] as HTMLElement);
+    assert.strictEqual(picked, 'review', 'a menu pick is a chip pick');
+    assert.deepEqual(activeLabels(), ['Review'], 'and the picked chip joins the row');
+  });
+
+  test("@display 'all' (default) has no overflow menu", async function (assert) {
+    await render(<template><FilterChips @options={{STATES}} @visibleCount={{1}} /></template>);
+    assert.strictEqual(inputs().length, 3);
+    assert.notOk(root().querySelector('[data-test-pretui-filter-chips-more]'));
+  });
 });

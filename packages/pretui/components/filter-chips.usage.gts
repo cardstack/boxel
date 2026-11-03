@@ -22,13 +22,20 @@ export class FilterChipsUsage extends Component {
   @tracked value = 'javascript';
   @tracked multiple = false;
   @tracked values: string[] = ['javascript'];
+  @tracked display = 'all';
+  displays = ['all', 'few'];
+  setDisplay = (v: string) => (this.display = v);
+  get displayVal() {
+    return this.display as 'all' | 'few';
+  }
   setValue = (v: string) => (this.value = v);
   setValues = (v: string[]) => (this.values = v);
   setMultiple = (v: boolean) => (this.multiple = v);
   get usage() {
-    return this.multiple
-      ? `<FilterChips @options={{this.tags}} @multiple={{true}} @values={{this.values}} @onValuesChange={{this.setValues}} @label='Filter by tag' />`
-      : `<FilterChips @options={{this.tags}} @value='${this.value}' @onValueChange={{this.setValue}} @label='Filter by tag' />`;
+    let display = this.display === 'few' ? " @display='few'" : '';
+    return (this.multiple
+      ? `<FilterChips @options={{this.tags}} @multiple={{true}} @values={{this.values}} @onValuesChange={{this.setValues}} @label='Filter by tag'${display} />`
+      : `<FilterChips @options={{this.tags}} @value='${this.value}' @onValueChange={{this.setValue}} @label='Filter by tag'${display} />`);
   }
   <template>
     <FreestyleUsage
@@ -45,6 +52,7 @@ export class FilterChipsUsage extends Component {
           @values={{this.values}}
           @onValueChange={{this.setValue}}
           @onValuesChange={{this.setValues}}
+          @display={{this.displayVal}}
         />
       </:example>
       <:api as |Args|>
@@ -71,6 +79,18 @@ export class FilterChipsUsage extends Component {
           @value={{this.values}}
           @description='Selected values in multi-select mode; pairs with onValuesChange.'
           @onInput={{this.setValues}}
+        />
+        <Args.String
+          @name='display'
+          @value={{this.display}}
+          @options={{this.displays}}
+          @defaultValue='all'
+          @description="all shows every chip, wrapping as needed. few keeps one line: the first @visibleCount chips plus any selected one, and the rest behind a '+N' Menu that picks the same way. --pretui-filterchip-h sets the chip height."
+          @onInput={{this.setDisplay}}
+        />
+        <Args.Number
+          @name='visibleCount'
+          @description='Chips shown under @display few (default 3).'
         />
         <Args.String
           @name='label'

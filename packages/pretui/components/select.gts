@@ -9,11 +9,28 @@ import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import { POPUPS_IN_PLACE } from '../internal/overlay';
 import type { ControlNotifyArgs } from '../pretui-primitives';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { ComponentLike } from '@glint/template';
 
 export interface SelectOption {
   value: string;
   label: string;
 }
+
+export const SELECT_DISPLAYS = ['full', 'icon'] as const;
+export type SelectDisplay = (typeof SELECT_DISPLAYS)[number];
+type SelectIcon = ComponentLike<{ Element: SVGSVGElement }>;
+
+// The trigger's face under @display 'icon'; the list keeps its labels.
+const SelectIconFace: TemplateOnlyComponent<{ Args: { icon: SelectIcon } }> =
+  <template>
+    <@icon
+      class='pretui-select-icon'
+      width='1.25em'
+      height='1.25em'
+      aria-hidden='true'
+    />
+  </template>;
 
 export interface SelectSignature {
   Args: ControlNotifyArgs & {
@@ -40,6 +57,12 @@ export interface SelectSignature {
     labelledBy?: string;
     /** alias — React Aria / Base UI spelling of @disabled */
     isDisabled?: boolean;
+    /** 'full' (default) shows the chosen label on the trigger; 'icon' shows
+     * @icon alone, with the current value in the trigger's name and title.
+     * The list opens unchanged. Needs @icon. */
+    display?: SelectDisplay;
+    /** the trigger's icon under @display 'icon' */
+    icon?: SelectIcon;
   };
   Element: HTMLDivElement;
 }
@@ -74,6 +97,7 @@ interface PoweredSelectSignature {
     renderInPlace?: boolean;
     ariaLabel?: string;
     ariaLabelledBy?: string;
+    selectedItemComponent?: unknown;
   };
   Blocks: { default: [SelectOption] };
   Element: HTMLElement;
@@ -251,7 +275,29 @@ export class Select extends Component<SelectSignature> {
     return () => wrap.removeEventListener('mousedown', onPress);
   });
   get explicitName(): boolean {
-    return this.args.label !== undefined || this.args.labelledBy !== undefined;
+    return (
+      this.iconFace !== undefined ||
+      this.args.label !== undefined ||
+      this.args.labelledBy !== undefined
+    );
+  }
+  get iconFace(): SelectIcon | undefined {
+    return this.args.display === 'icon' ? this.args.icon : undefined;
+  }
+  // with no visible value, the name and title say it: 'Region: Europe'
+  get iconName(): string | undefined {
+    if (!this.iconFace) {
+      return undefined;
+    }
+    let current =
+      this.selectedOption?.label ?? this.args.placeholder ?? 'Select…';
+    return this.args.label ? `${this.args.label}: ${current}` : current;
+  }
+  get placeholder() {
+    if (this.iconFace) {
+      return undefined;
+    }
+    return this.args.placeholder ? this.args.placeholder : 'Select…';
   }
 
   get options(): SelectOption[] {
@@ -280,6 +326,7 @@ export class Select extends Component<SelectSignature> {
   <template>
     <div
       class='pretui-selectwrap'
+      data-display={{if this.iconFace 'icon'}}
       {{nameFromLabel @controlId this.explicitName}}
       {{this.keepFocusInList}}
       data-test-pretui-select
@@ -293,7 +340,7 @@ export class Select extends Component<SelectSignature> {
         @options={{this.options}}
         @selected={{this.selectedOption}}
         @onChange={{this.choose}}
-        @placeholder={{if @placeholder @placeholder 'Select…'}}
+        @placeholder={{this.placeholder}}
         @disabled={{this.disabled}}
         @searchEnabled={{@searchEnabled}}
         @searchField='label'
@@ -301,8 +348,13 @@ export class Select extends Component<SelectSignature> {
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
         @renderInPlace={{this.popupsInPlace}}
-        @ariaLabel={{@label}}
-        @ariaLabelledBy={{@labelledBy}}
+        @ariaLabel={{if this.iconFace this.iconName @label}}
+        @ariaLabelledBy={{unless this.iconFace @labelledBy}}
+        @selectedItemComponent={{if
+          this.iconFace
+          (component SelectIconFace icon=this.iconFace)
+        }}
+        title={{this.iconName}}
         data-pretui-select-trigger
         data-test-pretui-select-trigger
         as |option|
@@ -312,10 +364,11 @@ export class Select extends Component<SelectSignature> {
     </div>
     <style scoped>
       @layer PretComponent {
+        /* the icon and the caret, no wider */
+        .pretui-selectwrap[data-display='icon'] {
+          inline-size: max-content;
+        }
         .pretui-selectwrap {
-          /* per-instance knob: the trigger's height */
-          --pretui-select-h: var(--boxel-form-control-height-sm);
-
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
              ones and the radius travel to the wormhole, values resolved. */
@@ -359,7 +412,8 @@ export class Select extends Component<SelectSignature> {
            these reach its trigger, dressed to match Input. */
         .pretui-selectwrap :deep(.pretui-selecttrigger) {
           align-items: center;
-          height: var(--pretui-select-h);
+          /* per-instance knob, inherited (LayoutControl sets it) */
+          height: var(--pretui-select-h, var(--boxel-form-control-height-sm));
           border: 1px solid var(--input);
           width: 100%;
           text-align: start;

@@ -2,25 +2,33 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { SegmentedControl } from './segmented-control';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import List from '@cardstack/boxel-icons/list';
+import Kanban from '@cardstack/boxel-icons/kanban';
+import { SEGMENTED_DISPLAYS, SegmentedControl } from './segmented-control';
+import type { SegmentedDisplay } from './segmented-control';
 
 const VIEW_OPTIONS = [
-  { value: 'card', label: 'Card' },
-  { value: 'strip', label: 'Strip' },
-  { value: 'grid', label: 'Grid' },
+  { value: 'card', label: 'Card', icon: Kanban },
+  { value: 'strip', label: 'Strip', icon: List },
+  { value: 'grid', label: 'Grid', icon: LayoutGrid },
 ];
 const VIEW_VALUES = VIEW_OPTIONS.map((o) => o.value);
+const DISPLAYS = [...SEGMENTED_DISPLAYS];
 // ── SegmentedControl ← view-selector/usage.gts ───────────────────────────
-// Dropped knobs: @disabled (not in SegmentedControlSignature), icon items
-// (options are {value, label} text — ViewSelector's icon components have no
-// slot in wave-0).
 export class SegmentedControlUsage extends Component {
   viewOptions = VIEW_OPTIONS;
   viewValues = VIEW_VALUES;
   @tracked value = 'card';
+  @tracked display = 'text';
+  displays = DISPLAYS;
+  setDisplay = (v: string) => (this.display = v);
+  get displayVal() {
+    return this.display as SegmentedDisplay;
+  }
   setValue = (v: string) => (this.value = v);
   get usage() {
-    return `<SegmentedControl @options={{this.views}} @value='${this.value}' @onValueChange={{this.setValue}} />`;
+    return `<SegmentedControl @options={{this.views}} @value='${this.value}' @onValueChange={{this.setValue}}${this.display === 'text' ? '' : ` @display='${this.display}'`} />`;
   }
   <template>
     <FreestyleUsage
@@ -33,13 +41,15 @@ export class SegmentedControlUsage extends Component {
           @options={{this.viewOptions}}
           @value={{this.value}}
           @onValueChange={{this.setValue}}
+          @display={{this.displayVal}}
+          @label='View'
         />
       </:example>
       <:api as |Args|>
         <Args.Object
           @name='options'
           @required={{true}}
-          @description="Items with a value and a label to render on the selector — boxel-ui ViewSelector's @items took icon components."
+          @description="Items with a value, a label and an optional icon component to render on the selector."
           @value={{this.viewOptions}}
         />
         <Args.String
@@ -50,6 +60,14 @@ export class SegmentedControlUsage extends Component {
           @options={{this.viewValues}}
           @description="Id of the currently selected item — boxel-ui ViewSelector's @selectedId."
           @onInput={{this.setValue}}
+        />
+        <Args.String
+          @name='display'
+          @value={{this.display}}
+          @options={{this.displays}}
+          @defaultValue='text'
+          @description="How much each segment shows: text (every label, after its icon), selected-text (the label on the selected segment only) or icon (icons only). A hidden label still names its radio and is its title; an option without an icon always shows its label. --pretui-seg-h sets the control's height."
+          @onInput={{this.setDisplay}}
         />
         <Args.Action
           @name='onValueChange'

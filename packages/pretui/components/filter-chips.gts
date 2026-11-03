@@ -7,6 +7,8 @@ import { htmlSafe } from '@ember/template';
 import { guidFor } from '@ember/object/internals';
 import { cssNumber, cssStyle } from '../pretui-css';
 import { emit, firstDefined } from '../pretui-primitives';
+import { Menu } from './menu';
+import type { MenuEntry } from '../internal/menu';
 
 export interface FilterChipOption {
   value: string;
@@ -52,6 +54,12 @@ export interface FilterChipsSignature {
     reserveCounts?: boolean;
     /** width of the reserved count slot, in digits (default 2) */
     countDigits?: number;
+    /** 'all' (default) every chip, wrapping as needed; 'few' the first
+     * @visibleCount chips plus any selected one, on one line, with the rest
+     * behind a '+N' menu */
+    display?: 'all' | 'few';
+    /** chips shown under @display 'few' (default 3) */
+    visibleCount?: number;
   };
   Element: HTMLDivElement;
 }
@@ -100,6 +108,37 @@ export class FilterChips extends Component<FilterChipsSignature> {
     this.args.multiple
       ? this.values.includes(option.value)
       : this.value === option.value;
+  get few() {
+    return this.args.display === 'few';
+  }
+  private shown = (option: FilterChipOption, index: number) =>
+    index < (this.args.visibleCount ?? 3) || this.isActive(option);
+  get visibleOptions(): FilterChipOption[] {
+    return this.few ? this.options.filter(this.shown) : this.options;
+  }
+  get hiddenOptions(): FilterChipOption[] {
+    return this.few
+      ? this.options.filter((o, i) => !this.shown(o, i))
+      : [];
+  }
+  get overflowItems(): MenuEntry[] {
+    return this.hiddenOptions.map((option) =>
+      this.args.multiple
+        ? {
+            kind: 'toggle' as const,
+            label: option.label,
+            checked: false,
+            onSelect: () => this.pick(option),
+          }
+        : {
+            kind: 'radio' as const,
+            group: this.name,
+            label: option.label,
+            checked: false,
+            onSelect: () => this.pick(option),
+          },
+    );
+  }
   // `option.hue` is caller data reaching an inline style — validated against
   // the kit allowlist so it cannot carry its own declarations.
   dotStyle = (option: FilterChipOption) => cssStyle('background', option.hue);
@@ -120,10 +159,11 @@ export class FilterChips extends Component<FilterChipsSignature> {
       role={{if @multiple 'group' 'radiogroup'}}
       aria-label={{@label}}
       style={{this.rowStyle}}
+      data-display={{if this.few 'few'}}
       data-test-pretui-filter-chips
       ...attributes
     >
-      {{#each this.options as |option|}}
+      {{#each this.visibleOptions as |option|}}
         <label
           class='pretui-filterchip'
           data-state={{if (this.isActive option) 'active'}}
@@ -151,6 +191,30 @@ export class FilterChips extends Component<FilterChipsSignature> {
           {{#if this.showCounts}}<span class='pretui-filterchip-count'>{{option.count}}</span>{{/if}}
         </label>
       {{/each}}
+      {{#if this.hiddenOptions.length}}
+        <Menu @items={{this.overflowItems}} @label={{if @label @label 'More filters'}}>
+          <:trigger as |_open toggle|>
+            <button
+              type='button'
+              class='pretui-filterchip pretui-filterchip-more'
+              aria-label='{{this.hiddenOptions.length}} more filters'
+              {{on 'click' toggle}}
+              data-test-pretui-filter-chips-more
+            >+{{this.hiddenOptions.length}}<svg
+                width='8'
+                height='8'
+                viewBox='0 0 8 8'
+                aria-hidden='true'
+              ><path
+                  d='M1.5 3l2.5 2.5L6.5 3'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='1.25'
+                  stroke-linecap='round'
+                /></svg></button>
+          </:trigger>
+        </Menu>
+      {{/if}}
     </div>
     <style scoped>
       @layer PretComponent {
@@ -160,12 +224,19 @@ export class FilterChips extends Component<FilterChipsSignature> {
           gap: 4px;
           flex-wrap: wrap;
         }
+        .pretui-filterchips[data-display='few'] {
+          flex-wrap: nowrap;
+        }
+        .pretui-filterchip-more {
+          gap: var(--boxel-sp-5xs);
+        }
         .pretui-filterchip {
           display: inline-flex;
           align-items: center;
           gap: 6px;
           position: relative;
-          height: 26px;
+          /* --pretui-filterchip-h: opt-in height knob (LayoutControl sets it) */
+          height: var(--pretui-filterchip-h, 1.625rem);
           border-radius: 13px;
           padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
           border: 0;
