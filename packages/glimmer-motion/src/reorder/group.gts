@@ -132,6 +132,7 @@ export class ReorderGroup<V> extends Component<Signature<V>> {
     {{this.renderDetector}}
     <ul
       ...attributes
+      data-reorder-group
       {{captureGroup this.groupRef}}
       {{motion style=this.style layout=@layout transition=@transition}}
     >

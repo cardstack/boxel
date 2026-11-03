@@ -42,6 +42,7 @@ import { rootProjectionNode } from 'motion-dom';
 
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
+import { resetUngroupedLayoutWarning } from '../layout-group.gts';
 import { setMotionSpeed } from '../speed.ts';
 
 export { isMotionIdle, whatIsBusy } from '../activity.ts';
@@ -231,6 +232,7 @@ export function registerMotionReset(reset: () => void): () => void {
 export function resetMotion() {
   setMotionSpeed(1);
   resetLayoutLoopGuard();
+  resetUngroupedLayoutWarning();
   unblockLayout();
   for (const reset of resets) {
     reset();

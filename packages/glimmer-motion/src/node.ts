@@ -47,7 +47,7 @@ import {
   requestSettle,
   setMountFlusher,
 } from './layout.ts';
-import { closestLayoutGroup } from './layout-group.gts';
+import { closestLayoutGroup, warnIfNothingSnapshots } from './layout-group.gts';
 import {
   closestMotionConfig,
   type MotionConfigContext,
@@ -751,6 +751,9 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
           portalled ? undefined : (closestProjection(parent) as any),
         ) as unknown as IProjectionNode;
         ve.projection = projection;
+        if (props.layout) {
+          warnIfNothingSnapshots(element, Boolean(presence));
+        }
         // React's useLayoutId: a LayoutGroup id namespaces the layoutId; MeasureLayout adds the node to the group
         const group = closestLayoutGroup(element);
         const layoutId =

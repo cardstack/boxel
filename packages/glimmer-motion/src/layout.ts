@@ -76,7 +76,7 @@ const BURST_LIMIT = 60;
  * should not have fired is cheap, and a silent hang is not.
  */
 declare const process: { env?: { NODE_ENV?: string } } | undefined;
-const isDev = () =>
+export const isDev = () =>
   typeof process === 'undefined' || process?.env?.NODE_ENV !== 'production';
 let burst = 0;
 let frameBooked = false;
