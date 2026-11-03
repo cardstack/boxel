@@ -135,6 +135,22 @@ async function tileWrites(count = 10) {
   return writes;
 }
 
+/**
+ * Waits for the tiles to go a run of painted frames without a write, and
+ * returns how many writes the last run took. A tile's entrance, which Motion
+ * springs by script, can still be settling when the page opens over the grid,
+ * and it stops on its own. A loop still running under the cover writes every
+ * frame and never goes quiet.
+ */
+async function gridQuiet(timeout = 2500) {
+  let until = performance.now() + timeout;
+  let writes = await tileWrites();
+  while (writes > 0 && performance.now() < until) {
+    writes = await tileWrites();
+  }
+  return writes;
+}
+
 module('Acceptance | Choreo gallery | covered by a demo', function () {
   module('in interact mode', function (hooks) {
     setupApplicationTest(hooks);
@@ -195,7 +211,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         'and its own loop asks for no frames',
       );
       assert.strictEqual(
-        await tileWrites(),
+        await gridQuiet(),
         0,
         'and nothing in the grid is written to, frame after frame',
       );
@@ -283,7 +299,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         'and its own loop asks for no frames',
       );
       assert.strictEqual(
-        await tileWrites(),
+        await gridQuiet(),
         0,
         'and nothing in the grid is written to, frame after frame',
       );
