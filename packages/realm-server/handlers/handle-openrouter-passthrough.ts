@@ -185,6 +185,7 @@ export default function handleOpenRouterPassthrough({
             body: finalBody,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
             credential,
             scrubber,
           });

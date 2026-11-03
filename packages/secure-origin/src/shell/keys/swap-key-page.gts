@@ -24,6 +24,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
+import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
@@ -37,6 +38,7 @@ import {
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
+import { servesVisitors } from './anonymous-use-fields.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
@@ -123,6 +125,42 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @onSelect={{this.select}}
               @onGoToKeys={{this.goToKeys}}
             />
+            {{#if this.keyAllowsAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-swap-key-key-allows
+              >
+                <p class='visitors'>This workspace lets people who aren’t signed
+                  in use the keys shared into it, so
+                  <strong>they will use this key</strong>{{#if
+                    this.chosenKey.anonymousDailyCap
+                  }}, up to
+                    {{this.chosenKey.anonymousDailyCap}}
+                    calls a day all together{{/if}}. It allows them.</p>
+              </FieldContainer>
+            {{else if this.keyRefusesAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-swap-key-key-refuses
+              >
+                <div class='refuses'>
+                  <p class='visitors'>This workspace lets people who aren’t
+                    signed in use the keys shared into it, and this key doesn’t
+                    allow them. Allow it on your key page first.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-swap-key-go-to-key
+                    {{on 'click' this.goToKeys}}
+                  >Go to your keys</Button>
+                </div>
+              </FieldContainer>
+            {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -165,6 +203,16 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         background-color: var(--card, var(--background));
         box-shadow: 0 0 0 1px var(--border);
         overflow-wrap: anywhere;
+      }
+      .refuses {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+      }
+      .visitors {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
       }
       .share-label {
         font-size: var(--boxel-font-size-sm);
@@ -278,7 +326,39 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   };
 
   private get submitDisabled() {
-    return this.form.saving || !this.form.selected;
+    return this.form.saving || !this.form.selected || this.keyRefusesAnonymous;
+  }
+
+  private get chosenKey(): UserKey | undefined {
+    return this.form.keys.find((k) => k.id === this.form.selected);
+  }
+
+  // Swapping a key in puts it where sharing would, so it is held to the same
+  // rule: where the workspace's policy lets people who aren't signed in use a
+  // shared key, they will use this one, and a key that doesn't allow them
+  // isn't swapped in until its owner allows it on the key page.
+  private get opensToAnonymous() {
+    return this.choosing?.context.realm.opensToAnonymous === true;
+  }
+
+  private get keyAllowsAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      key.anonymous === true
+    );
+  }
+
+  private get keyRefusesAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      !key.anonymous
+    );
   }
 
   private select = (selected: string) => {

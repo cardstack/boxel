@@ -100,6 +100,10 @@ export interface BatchOperation {
   instance: string | null;
   status: BatchSlotStatus;
   slots: BatchSlot[];
+  // Whether the realm's policy opens it to people who aren't signed in, who
+  // are then served through a share whose key allows anonymous use
+  // (`Realm.sharedKeyOperationsOpenToAnonymous`).
+  openToAnonymous: boolean;
 }
 
 export interface BatchGroup {
@@ -120,7 +124,8 @@ export interface BatchKey {
 // A share of the caller's in the realm, for an `{{apiKey}}` slot, with
 // whether any binding of it is approved for interactive use yet, and the
 // daily budget in force. The first interactive approval of a share names its
-// daily budget.
+// daily budget. Whether people who aren't signed in may use the share, and
+// their cap, are the key's, as its owner set them.
 export interface BatchShare {
   id: string;
   label: string;
@@ -129,6 +134,8 @@ export interface BatchShare {
   covers: string[];
   interactive: boolean;
   dailyBudget: number;
+  anonymous: boolean;
+  anonymousDailyCap: number | null;
 }
 
 export interface ApprovalBatch {
@@ -236,6 +243,9 @@ export async function approvalBatch(
     : null;
 
   let rows = await bindingRows(dbAdapter, realmURL.href, type, user);
+  let openToAnonymous = new Set(
+    await realm.sharedKeyOperationsOpenToAnonymous(resolvedType),
+  );
   let ownShares = await sharesIn(dbAdapter, realmURL.href, user);
 
   let groups = new Map<string, BatchGroup>();
@@ -309,6 +319,7 @@ export async function approvalBatch(
           ? 'new'
           : 'pipelines-only',
       slots,
+      openToAnonymous: openToAnonymous.has(name),
     });
   }
 
@@ -572,7 +583,7 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -583,7 +594,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget
+      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -594,6 +605,9 @@ async function sharesIn(
     grants: grantList(row.grants),
     interactive: Boolean(row.interactive),
     dailyBudget: limitsOf(row).dailyBudget,
+    anonymous: Boolean(row.anonymous),
+    anonymousDailyCap:
+      row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
   }));
 }
 

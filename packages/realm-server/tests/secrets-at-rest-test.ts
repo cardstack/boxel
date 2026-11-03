@@ -12,6 +12,8 @@ import {
   receiveSecretsKeyring,
   resetSecretsAtRest,
   SecretDecryptionError,
+  setSecretOpenFailureSink,
+  type SecretOpenFailedEvent,
   secretEncryptionContext,
   SecretsAtRestStartupError,
   SecretsKeyring,
@@ -280,6 +282,53 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.true(error instanceof SecretDecryptionError);
       assert.true(String((error as Error).message).includes('k1'));
+    });
+
+    test('every value that fails to open is recorded with the field, row, data key and reason, never the owner or value', function (assert) {
+      let events: SecretOpenFailedEvent[] = [];
+      setSecretOpenFailureSink((event) => events.push(event));
+      try {
+        let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
+        let ring = keyring('k1');
+        let sealed = ring.seal(SECRET, binding);
+        openError(keyring('k2'), sealed, binding);
+        openError(ring, { ...sealed, tag: flip(sealed.tag) }, binding);
+        openError(
+          ring,
+          { ...sealed, nonce: sealed.nonce.subarray(0, 4) },
+          binding,
+        );
+        assert.strictEqual(ring.open(sealed, binding), SECRET);
+        assert.deepEqual(events, [
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'unknown-data-key',
+          },
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'not-authentic',
+          },
+          {
+            event: 'open-failed',
+            field: FIELD,
+            id: ROW_ID,
+            keyId: 'k1',
+            reason: 'malformed',
+          },
+        ]);
+        assert.false(
+          JSON.stringify(events).includes(OWNER),
+          'no event names the owner',
+        );
+      } finally {
+        setSecretOpenFailureSink(undefined);
+      }
     });
 
     test('a key id swapped onto a value sealed under another key does not open', function (assert) {

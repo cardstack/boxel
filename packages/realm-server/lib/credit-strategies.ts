@@ -33,6 +33,7 @@ function guardedCostLookup(
           ),
         ),
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential: {
           name: keyName,
           value: apiKey,

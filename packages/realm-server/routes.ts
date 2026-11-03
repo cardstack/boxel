@@ -30,6 +30,7 @@ import {
 } from './handlers/handle-system-keys.ts';
 import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handlePrefixRealmsRequest from './handlers/handle-prefix-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
@@ -135,6 +136,7 @@ import {
 } from './handlers/handle-secure-session.ts';
 import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
+import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   handleAddUserKey,
@@ -167,6 +169,7 @@ import {
 import {
   handleSetKeyShareLimits,
   handleSetUserKeyLimits,
+  handleSetUserKeyAnonymousUse,
 } from './handlers/handle-key-limits.ts';
 import {
   handleSecureWindowContext,
@@ -296,6 +299,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get(`/${PREFIX_REALMS_ENDPOINT}`, handlePrefixRealmsRequest(args));
   router.get(
     '/_public-realms',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -420,6 +424,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId/limits`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSetUserKeyLimits(args),
+  );
+  router.put(
+    `${USER_KEYS_PATH}/:keyId/anonymous-use`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetUserKeyAnonymousUse(args),
   );
   router.post(
     USER_KEY_GRANTS_PATH,

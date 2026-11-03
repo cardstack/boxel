@@ -565,6 +565,7 @@ export async function handleStreamingRequest(
       body: requestBody,
       signal,
       sizePath: 'system-key',
+      destinationSetBy: 'platform',
       credential,
       scrubber,
     });

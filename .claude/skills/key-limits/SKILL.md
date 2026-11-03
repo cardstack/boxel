@@ -1,6 +1,6 @@
 ---
 name: key-limits
-description: Operate and diagnose the limits a key's owner sets on how much of it anyone spends — the per-caller token bucket and the daily and monthly call budgets on each share (`key_shares`) and personal key (`user_keys`), the platform defaults (`KEY_RATE_LIMIT_BURST`, `KEY_RATE_LIMIT_REFILL_PER_MINUTE`, `KEY_DAILY_BUDGET`, `KEY_BUDGET_HIGH_WATER_PERCENT`), the `PUT /_key-shares/:id/limits` and `PUT /_user-keys/:id/limits` routes, the high-water and budget notices in `key_limit_notices`, the `boxel:key-limits` log channel, and the `rate-limited` / `over-budget` / `rate-limit-unavailable` refusals a `callApi` gets and what readiness answers. Use when a user reports a card refused `rate-limited` or `over-budget`, a 503 `rate-limit-unavailable` from an operation, a limit they can't change, a notice they did or didn't get, when reading the limits or counters as an operator, or when changing `lib/key-limits.ts` or `lib/key-limit-settings.ts`.
+description: Operate and diagnose the limits a key's owner sets on how much of it anyone spends — the per-caller token bucket and the daily and monthly call budgets on each share (`key_shares`) and personal key (`user_keys`), the platform defaults (`KEY_RATE_LIMIT_BURST`, `KEY_RATE_LIMIT_REFILL_PER_MINUTE`, `KEY_DAILY_BUDGET`, `KEY_BUDGET_HIGH_WATER_PERCENT`, `KEY_ANONYMOUS_SHARE_PERCENT`), the `PUT /_key-shares/:id/limits` and `PUT /_user-keys/:id/limits` routes, the high-water and budget notices in `key_limit_notices`, the `boxel:key-limits` log channel, and the `rate-limited` / `over-budget` / `rate-limit-unavailable` refusals a `callApi` gets and what readiness answers. Use when a user reports a card refused `rate-limited` or `over-budget`, a 503 `rate-limit-unavailable` from an operation, a limit they can't change, a notice they did or didn't get, when reading the limits or counters as an operator, or when changing `lib/key-limits.ts` or `lib/key-limit-settings.ts`.
 ---
 
 # Key limits (operators)
@@ -32,18 +32,49 @@ read). The counters are the shared rate-limit store (see the
 These are call budgets, not money budgets: the platform can count calls, not
 what a vendor charges for one.
 
+## People who aren't signed in
+
+A share whose key allows anonymous use (`user_keys.anonymous`, its owner's
+setting for the key itself; see the `user-keys`, `key-shares` and
+`key-bindings` skills) limits such callers alongside the share's own daily
+and monthly budgets, which their calls spend as everyone's do:
+
+- **Per address**: a bucket for each client address the realm admitted them
+  from (the anonymous limiter's `rateLimitKey`: the IPv4 address, or an IPv6
+  caller's /64), at the share's per-person rate. It is keyed apart from any
+  signed-in caller's: `["key-limit","share","<id>","anonymous","<address>"]`.
+- **Their part of each share's daily and monthly budgets**: all of them
+  together spend at most `anonymousSharePercent` (`KEY_ANONYMOUS_SHARE_PERCENT`,
+  default 50) of the share's daily budget, and of its monthly budget, counted
+  under `["key-limit","share","<id>","anonymous"]` for each period (at least 1
+  call). Signed-in readers always keep the rest of both, whatever cap the
+  key's owner set, or none.
+- **The key's anonymous cap, where its owner set one**: a daily budget of
+  calls (`user_keys.anonymous_daily_cap`) every such caller draws from
+  together, counted once across every realm the key is shared into, under
+  `["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
+
+`budgetsOf` in `lib/key-limits.ts` adds both. Reaching either refuses only
+callers who aren't signed in, `over-budget` with a detail saying "the limit on
+its shared key for people who aren't signed in is reached"; it sends no
+notice of its own. The share's budgets notify as always.
+
+Refusals for them log `"caller":"anonymous"` and never the address; a cap's
+`limit` carries `"anonymousCap": true`.
+
 ## Defaults
 
 A null column is the platform's default, so a share or key nobody set limits
 on is still limited.
 
-| Setting                            | Default                        | Derivation                                                          |
-| ---------------------------------- | ------------------------------ | ------------------------------------------------------------------- |
-| `KEY_RATE_LIMIT_BURST`             | 25                             | One whole refresh of a pull-request inbox: 25 calls every 5 minutes |
-| `KEY_RATE_LIMIT_REFILL_PER_MINUTE` | 15                             | Three open tabs on that schedule: 3 × 25 / 5                        |
-| `KEY_DAILY_BUDGET`                 | 2400                           | That inbox open through an 8-hour working day                       |
-| `KEY_BUDGET_HIGH_WATER_PERCENT`    | 80                             | The share of a budget at which owners are told use is high          |
-| monthly budget                     | 30 × the daily budget in force | Not a setting; an owner who sets the daily budget moves it too      |
+| Setting                            | Default                        | Derivation                                                                                                        |
+| ---------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `KEY_RATE_LIMIT_BURST`             | 25                             | One whole refresh of a pull-request inbox: 25 calls every 5 minutes                                               |
+| `KEY_RATE_LIMIT_REFILL_PER_MINUTE` | 15                             | Three open tabs on that schedule: 3 × 25 / 5                                                                      |
+| `KEY_DAILY_BUDGET`                 | 2400                           | That inbox open through an 8-hour working day                                                                     |
+| `KEY_BUDGET_HIGH_WATER_PERCENT`    | 80                             | The share of a budget at which owners are told use is high                                                        |
+| `KEY_ANONYMOUS_SHARE_PERCENT`      | 50                             | The most of a share's daily budget people who aren't signed in spend together, so signed-in readers keep the rest |
+| monthly budget                     | 30 × the daily budget in force | Not a setting; an owner who sets the daily budget moves it too                                                    |
 
 A value that isn't a limit stops the realm server at startup rather than
 leaving keys unlimited.

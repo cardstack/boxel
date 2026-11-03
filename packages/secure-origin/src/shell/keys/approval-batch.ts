@@ -394,6 +394,17 @@ export function firstInteractiveShares(
   operations: BatchOperation[],
   chosen: Record<string, string | undefined>,
 ): { id: string; label: string; dailyBudget: number }[] {
+  return chosenShares(batch, operations, chosen)
+    .filter((share) => !share.interactive)
+    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
+}
+
+// The shares the operations send, as chosen for their slots.
+export function chosenShares(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): ApprovalBatch['shares'] {
   let ids = new Set(
     operations.flatMap((o) =>
       o.slots
@@ -401,9 +412,44 @@ export function firstInteractiveShares(
         .flatMap((s) => chosen[s.slot] ?? []),
     ),
   );
-  return batch.shares
-    .filter((share) => ids.has(share.id) && !share.interactive)
-    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
+  return batch.shares.filter((share) => ids.has(share.id));
+}
+
+// Who besides signed-in people the operations serve once approved for
+// interactive use, by the shares they send. Of the operations the realm's
+// policy opens to people who aren't signed in (`openToAnonymous`), `anyone`
+// are the shares whose keys allow them, and `signedInOnly` the ones whose keys
+// don't, which such people are asked to sign in for. Both are empty where the policy opens none of them.
+export function sharesForVisitors(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): { anyone: ApprovalBatch['shares']; signedInOnly: ApprovalBatch['shares'] } {
+  let open = operations.filter((o) => o.openToAnonymous);
+  if (open.length === 0) {
+    return { anyone: [], signedInOnly: [] };
+  }
+  let shares = chosenShares(batch, open, chosen);
+  return {
+    anyone: shares.filter((share) => share.anonymous),
+    signedInOnly: shares.filter((share) => !share.anonymous),
+  };
+}
+
+// What the user confirms besides `INTERACTIVE_CONFIRMATION` when the shares
+// they approve serve people who aren't signed in, with each key's anonymous
+// cap.
+export function anonymousConfirmation(
+  shares: { label: string; anonymousDailyCap: number | null }[],
+): string {
+  let capped = shares.filter((share) => share.anonymousDailyCap !== null);
+  let caps =
+    capped.length === 0
+      ? ''
+      : shares.length === 1
+        ? `, up to ${capped[0].anonymousDailyCap} calls a day all together`
+        : `, up to each key’s anonymous cap (${capped.map((s) => `${s.label}: ${s.anonymousDailyCap} a day`).join(', ')})`;
+  return `Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
 }
 
 // A daily budget as typed: a whole number of calls, at least one.

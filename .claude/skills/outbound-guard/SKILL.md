@@ -276,6 +276,34 @@ To point a local stack at a vendor stub on loopback, start the realm server
 with `OUTBOUND_DEV_ALLOWLIST=localhost,127.0.0.1` and add the stub's
 `http://127.0.0.1:<port>/` to `proxy_endpoints`.
 
+## Reading a refusal
+
+Every request the guard refuses, on either path, logs one line on the
+`outbound` channel at `warn`, naming the host and never the path, which can
+hold a credential:
+
+```
+outbound guard refused: path=system-key host=10.0.0.1 reason=address destinationSetBy=platform
+```
+
+`reason` is the refusal's (`invalid-url`, `scheme`, `address`,
+`forbidden-header`, `too-many-redirects`). `destinationSetBy` is who chose the
+destination, which every caller of `outboundFetch` declares:
+
+- `platform`: a `proxy_endpoints` row (`_request-forward`, the OpenRouter
+  passthrough, the generation-cost lookup), a platform OAuth client's token
+  endpoint, or Google's token endpoint. A refusal is ours to fix, and the
+  "Outbound guard refused a platform destination" alert fires on it.
+- `user`: a card's declared `callApi` request, or the token URL of a user's
+  own or shared OAuth client. Anyone can make one of these refuse, so it is
+  never alerted on; a `callApi` one is also on that invocation's
+  `boxel:key-use` line as `guard-refused`.
+
+`path` says which size cap applies and nothing about who set the destination:
+a user's OAuth token request goes out on `system-key`. The Keys dashboard
+charts refusals by `destinationSetBy`, and its response-size panels read the
+lines below (see the `key-outage-triage` skill).
+
 ## Reading the response size cap (observe mode)
 
 Nothing is refused for size yet. Every response logs its decompressed size

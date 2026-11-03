@@ -81,6 +81,7 @@ function operation(
     path: '/graphql',
     instance: null,
     status: 'new',
+    openToAnonymous: false,
     slots: [
       {
         slot: 'userKey',
@@ -164,7 +165,12 @@ function context() {
     data: {
       type: 'secure-window-context',
       attributes: {
-        realm: { url: REALM, name: 'Team Workspace', directWriter: true },
+        realm: {
+          url: REALM,
+          name: 'Team Workspace',
+          directWriter: true,
+          opensToAnonymous: false,
+        },
         card: { name: 'PR Inbox', module: MODULE, exportName: 'Inbox' },
         operation: {
           name: 'listPRs',
@@ -1334,6 +1340,8 @@ module('Integration | approve pages', function (hooks) {
                   covers: [GRAPHQL],
                   interactive: false,
                   dailyBudget: 2400,
+                  anonymous: false,
+                  anonymousDailyCap: null,
                 },
               ],
             }),
@@ -1376,5 +1384,157 @@ module('Integration | approve pages', function (hooks) {
     let [approval] = approvals();
     assert.true(approval.interactive);
     assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
+  });
+
+  // Serves a batch of two operations a share fills, in a realm whose policy
+  // does or doesn't open the first to people who aren't signed in; it never
+  // opens the second.
+  function serveShareBatch({
+    opensToAnonymous,
+    share,
+  }: {
+    opensToAnonymous: boolean;
+    share: Record<string, unknown>;
+  }) {
+    let asShared = (o: ReturnType<typeof operation>) => ({
+      ...o,
+      slots: o.slots.map((s) => ({ ...s, slot: 'apiKey', key: 'apiKey' })),
+    });
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    asShared(
+                      operation('listTeamIssues', 'List the team’s issues'),
+                    ),
+                    asShared(
+                      operation(
+                        'listTeamPRs',
+                        'List the team’s pull requests',
+                        {
+                          openToAnonymous: opensToAnonymous,
+                        },
+                      ),
+                    ),
+                  ],
+                },
+              ],
+              keys: [],
+              shares: [
+                {
+                  id: 'share-team',
+                  label: 'Team GitHub',
+                  keyId: 'key-gh',
+                  keyName: 'GitHub token',
+                  covers: [GRAPHQL],
+                  interactive: false,
+                  dailyBudget: 2400,
+                  anonymous: false,
+                  anonymousDailyCap: null,
+                  ...share,
+                },
+              ],
+            }),
+          },
+        }),
+    });
+  }
+
+  test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows them says so, with the key’s anonymous cap', async function (assert) {
+    serveShareBatch({
+      opensToAnonymous: true,
+      share: { anonymous: true, anonymousDailyCap: 100 },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-anonymous-note]')
+      .doesNotExist('a pipeline serves nobody who opens the card');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-anonymous-note]')
+      .hasText(
+        'Anyone can use it for requests to github.com (api.github.com/graphql/), including people who aren’t signed in.',
+      );
+    assert
+      .dom('[data-test-approve-anonymous-note] strong')
+      .hasText('including people who aren’t signed in');
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 2 });
+    assert
+      .dom('[data-test-approve-interactive]')
+      .includesText(
+        'Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with this key, up to 100 calls a day all together.',
+      );
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"]')
+      .doesNotIncludeText(
+        'people who aren’t signed in',
+        'the cap is the key’s, across every workspace, so the budget isn’t held to it',
+      );
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '50');
+    assert
+      .dom('[data-test-approve-save]')
+      .isEnabled('a daily budget below the anonymous cap is sent');
+
+    await click('[data-test-approve-tick="listTeamPRs"]');
+    assert
+      .dom('[data-test-approve-anonymous-note]')
+      .doesNotExist(
+        'the operation left ticked is one the policy keeps for signed-in people',
+      );
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
+    await click('[data-test-approve-tick="listTeamPRs"]');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.strictEqual(
+      approval.anonymous,
+      undefined,
+      'the approval itself never asks for anonymous use',
+    );
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
+  });
+
+  test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows signed-in people only says they’re asked to sign in', async function (assert) {
+    serveShareBatch({ opensToAnonymous: true, share: {} });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
+    assert
+      .dom('[data-test-approve-signed-in-only-note]')
+      .hasText(
+        'This workspace lets people who aren’t signed in make these calls, but the key shared as Team GitHub allows signed-in people only, so they’re asked to sign in.',
+      );
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
+  });
+
+  test('where the workspace lets nobody who isn’t signed in use a shared key, nothing is said of them', async function (assert) {
+    serveShareBatch({
+      opensToAnonymous: false,
+      share: { anonymous: true, anonymousDailyCap: null },
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-anonymous-note]').doesNotExist();
+    assert.dom('[data-test-approve-signed-in-only-note]').doesNotExist();
+    assert.dom('[data-test-approve-confirmation]').exists({ count: 1 });
   });
 });

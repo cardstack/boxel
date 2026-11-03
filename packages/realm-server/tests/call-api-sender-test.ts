@@ -214,12 +214,24 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a destination the guard refuses is refused as guard-refused', async function (assert) {
-    let refusal = await refusalOf(
-      sendCallApiRequest(request({ url: 'https://10.0.0.1/items' }), []),
-    );
-    assert.strictEqual(refusal.error.code, 'guard-refused');
-    assert.strictEqual(refusal.error.status, 502);
+    let refusal: Awaited<ReturnType<typeof refusalOf>> | undefined;
+    let lines = await logLinesDuring(['outbound'], async () => {
+      refusal = await refusalOf(
+        sendCallApiRequest(request({ url: 'https://10.0.0.1/items' }), []),
+      );
+    });
+    assert.strictEqual(refusal!.error.code, 'guard-refused');
+    assert.strictEqual(refusal!.error.status, 502);
     assert.strictEqual(vendor.requests.length, 0);
+    assert.deepEqual(
+      lines
+        .filter((line) => line.message.startsWith('outbound guard refused'))
+        .map((line) => line.message),
+      [
+        'outbound guard refused: path=call-api host=10.0.0.1 reason=address destinationSetBy=user',
+      ],
+      'the refusal is logged with its path, host and reason',
+    );
   });
 
   test('a vendor that does not answer in time is refused as upstream-timeout', async function (assert) {
