@@ -10,6 +10,7 @@ import {
   bounds,
   setupMotion,
 } from 'glimmer-motion/test-support';
+import { visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
 import { setupRenderingTest } from '../../helpers';
@@ -55,6 +56,18 @@ const frames = (n: number) =>
   });
 
 /**
+ * Stop every row's layout animation once it has been measured. Unmounting an
+ * element leaves its layout animation running, so a 10s glide would keep the
+ * frame loop ticking through the tests that follow and shift their first
+ * frames.
+ */
+function stopGlides() {
+  for (const el of document.querySelectorAll('[data-row]')) {
+    visualElementStore.get(el)?.projection?.currentAnimation?.stop();
+  }
+}
+
+/**
  * Swap one `layoutId` element for another 300px below it, and report how far
  * the incoming one still sits from its own slot a few frames in. 0 means it
  * jumped; close to 300 means it set off from the outgoing one's box.
@@ -64,7 +77,9 @@ async function handOff(toggle: Toggle): Promise<number> {
   toggle.open = true;
   await settled();
   await frames(3);
-  return 300 - bounds(row('shared')).top;
+  const distance = 300 - bounds(row('shared')).top;
+  stopGlides();
+  return distance;
 }
 
 /**
@@ -79,7 +94,9 @@ async function promoteLast(rows: Rows): Promise<number> {
   rows.order = ['c', 'a', 'b'];
   await settled();
   await frames(3);
-  return (bounds(row('c')).top - slot) / rowHeight;
+  const offset = (bounds(row('c')).top - slot) / rowHeight;
+  stopGlides();
+  return offset;
 }
 
 module('Integration | motion | layout | render detector', function (hooks) {

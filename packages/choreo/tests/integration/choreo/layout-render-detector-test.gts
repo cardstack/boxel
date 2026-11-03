@@ -11,6 +11,7 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { motion } from 'glimmer-motion';
 import { animationsSettled, bounds } from 'glimmer-motion/test-support';
+import { visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
@@ -25,6 +26,18 @@ class Rows {
 
 function row(id: string) {
   return document.querySelector<HTMLElement>(`[data-row="${id}"]`)!;
+}
+
+/**
+ * Stop every row's layout animation once it has been measured. Unmounting an
+ * element leaves its layout animation running, so a 10s glide would keep the
+ * frame loop ticking through the tests that follow and shift their first
+ * frames.
+ */
+function stopGlides() {
+  for (const el of document.querySelectorAll('[data-row]')) {
+    visualElementStore.get(el)?.projection?.currentAnimation?.stop();
+  }
 }
 
 module('Integration | choreo | layout render detector', function (hooks) {
@@ -71,6 +84,7 @@ module('Integration | choreo | layout render detector', function (hooks) {
     await nextFrame();
     await nextFrame();
     const offset = (bounds(row('c')).top - slot) / rowHeight;
+    stopGlides();
     assert.true(
       offset > 1.5,
       `the promoted row set off from its old slot (${offset.toFixed(2)} rows away)`,
