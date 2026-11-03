@@ -2,10 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "cardInfo": {
-        "name": "Weather",
-        "summary": "Current conditions, the 5-day forecast, air quality and a radar map for the places you save, from OpenWeatherMap with the workspace's shared key or your own."
-      },
+      "cardTitle": "Weather",
+      "cardDescription": "Current conditions, the 5-day forecast, air quality and a radar map for the places you save, from OpenWeatherMap with the workspace's shared key or your own.",
       "specType": "card",
       "ref": {
         "module": "../weather-app",
