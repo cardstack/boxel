@@ -3,6 +3,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Sidebar, SidebarGroup, SidebarItem, SidebarTrigger } from './sidebar';
 import type { ShellPlacementAlias, SidebarCollapsible } from './sidebar';
+import Folder from '@cardstack/boxel-icons/folder';
+import Globe from '@cardstack/boxel-icons/globe';
+import Eye from '@cardstack/boxel-icons/eye';
+import Copy from '@cardstack/boxel-icons/copy';
 import { FreestyleUsage } from './freestyle-usage';
 import { Toolbar } from './toolbar';
 import { LIBRARY, ORIGINS } from '../internal/structure-shell-fixtures';
@@ -21,8 +25,9 @@ export class SidebarUsage extends Component {
 
   collapsibleOptions = ['rail', 'offcanvas', 'none'];
   placementOptions = ['start', 'end'];
-  library = LIBRARY;
-  origins = ORIGINS;
+  // A different glyph per row: `<:icon>` takes any icon, not only a dot.
+  library = LIBRARY.map((row, i) => ({ ...row, icon: [Folder, Eye, Copy][i % 3] }));
+  origins = ORIGINS.map((row, i) => ({ ...row, icon: [Globe, Copy][i % 2] }));
 
   setOpen = (v: boolean) => {
     this.open = v;
@@ -111,7 +116,7 @@ export class SidebarUsage extends Component {
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
                   >
-                    <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
+                    <:icon><row.icon aria-hidden='true' /></:icon>
                   </SidebarItem>
                 {{/each}}
               </SidebarGroup>
@@ -124,7 +129,7 @@ export class SidebarUsage extends Component {
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
                   >
-                    <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
+                    <:icon><row.icon aria-hidden='true' /></:icon>
                   </SidebarItem>
                 {{/each}}
                 <SidebarItem
@@ -132,7 +137,7 @@ export class SidebarUsage extends Component {
                   @disabled={{true}}
                   @collapsed={{bar.collapsed}}
                 >
-                  <:icon><span class='shell-dot' aria-hidden='true'></span></:icon>
+                  <:icon><Folder aria-hidden='true' /></:icon>
                 </SidebarItem>
               </SidebarGroup>
             </:nav>
@@ -336,13 +341,6 @@ export class SidebarUsage extends Component {
         text-overflow: ellipsis;
         white-space: nowrap;
         font-weight: 600;
-      }
-      .shell-dot {
-        inline-size: 0.5em;
-        block-size: 0.5em;
-        border-radius: 50%;
-        background: currentColor;
-        opacity: 0.6;
       }
       .shell-foot {
         margin: 0;

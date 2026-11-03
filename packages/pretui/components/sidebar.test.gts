@@ -95,6 +95,26 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.strictEqual(state(), 'expanded', 'crossing back hands control to the automatic choice');
   });
 
+  test('@railBreakpoint: a controlled @open receives the band change and stays in charge', async function (assert) {
+    let calls: boolean[] = [];
+    let onOpenChange = (v: boolean) => calls.push(v);
+    await render(<template><div data-test-pane><Sidebar @label='Library' @open={{true}} @onOpenChange={{onOpenChange}} @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(800, () => calls.length > 0);
+    assert.deepEqual(calls, [false], 'the caller is told to close');
+    assert.strictEqual(state(), 'expanded', 'the sidebar waits for the caller to apply it');
+  });
+
+  test('@railBreakpoint: hysteresis keeps the icon rail just above the breakpoint', async function (assert) {
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(800, () => state() === 'collapsed');
+    pane().style.inlineSize = '1030px';
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await settled();
+    assert.strictEqual(state(), 'collapsed', 'still the icon rail within 16px of the edge');
+    await resizeTo(1050, () => state() === 'expanded');
+    assert.strictEqual(state(), 'expanded', 'full once clearly past the edge');
+  });
+
   test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
     await render(<template><div data-test-pane><Sidebar @label='Library'><:nav>Lots</:nav></Sidebar></div></template>);
     pane().style.inlineSize = '800px';
