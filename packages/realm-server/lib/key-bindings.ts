@@ -1386,12 +1386,15 @@ async function checkedBindings(
           ),
         );
       case 'anonymous-use-not-approved':
-        throw refusal(
-          401,
-          'anonymous-use-not-approved',
-          'Anonymous use not approved',
-          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a key whose owner hasn't allowed people who aren't signed in to use it, so it is used only for signed-in callers. Sign in to use it`,
-          slot,
+        throw refusedFrom(
+          limitSubjectOf(check.binding),
+          refusal(
+            401,
+            'anonymous-use-not-approved',
+            'Anonymous use not approved',
+            `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a key whose owner hasn't allowed people who aren't signed in to use it, so it is used only for signed-in callers. Sign in to use it`,
+            slot,
+          ),
         );
       case 'credential-rejected':
         throw refusedFrom(

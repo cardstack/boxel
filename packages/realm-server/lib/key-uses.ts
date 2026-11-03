@@ -11,6 +11,7 @@ import type {
   CallApiUseSubject,
   OperationFailure,
 } from '@cardstack/runtime-common/card-operations';
+import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import { budgetUse, type BudgetUse } from './key-limits.ts';
 import {
   KEY_LIMIT_COLUMNS,
@@ -135,6 +136,13 @@ export async function sweepExpiredKeyUses(dbAdapter: DBAdapter): Promise<void> {
   ]);
 }
 
+// The caller a use is recorded under: a signed-in caller by their Matrix ID,
+// and null for a caller who isn't signed in, whom a lookup names by the
+// anonymous actor rather than leaving unset.
+function recordedCaller(caller: string | undefined): string | null {
+  return caller && caller !== ANONYMOUS_ACTOR ? caller : null;
+}
+
 // Records a refusal raised while a call's slots were being filled, against
 // the share or key that raised it. A record that can't be written is logged
 // and costs the caller nothing: they get the refusal either way.
@@ -151,7 +159,7 @@ export async function recordFillRefusal(
     await recordKeyUses(dbAdapter, {
       realmURL: lookup.realmURL,
       operation: lookup.operation,
-      caller: lookup.caller || null,
+      caller: recordedCaller(lookup.caller),
       mode: lookup.mode,
       url: null,
       outcome: 'refused',
