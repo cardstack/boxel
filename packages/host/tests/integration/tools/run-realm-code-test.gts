@@ -1036,6 +1036,49 @@ return await realm.cards.get('Pet/unindexed');`,
     );
   });
 
+  test('realm.cards.get does not blame the card for a read that failed for another reason', async function (assert) {
+    let cardURL = `${testRealmURL}Pet/mango`;
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    // The realm answers the card's read with a 500 of its own, with no index
+    // row behind it.
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (String(url) === cardURL) {
+        let err = new Error('realm failure') as any;
+        err.status = 500;
+        err.responseText = JSON.stringify({
+          errors: [
+            {
+              id: cardURL,
+              status: 500,
+              title: 'Internal Server Error',
+              message: 'the database is unavailable',
+            },
+          ],
+        });
+        throw err;
+      }
+      return originalFetchJSON(url, args);
+    };
+    let result;
+    try {
+      result = await new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      ).execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/mango'),
+      });
+    } finally {
+      delete cardService.fetchJSON;
+    }
+
+    assert.strictEqual(
+      JSON.parse(result.scriptResult!),
+      `Unable to read card ${cardURL}: the database is unavailable`,
+    );
+  });
+
   test('the tool description names the call that indexes a card that is not indexed, and rules out editing the card for it', function (assert) {
     let { description } = new RunRealmCodeTool(
       getService('tool-service').toolContext,

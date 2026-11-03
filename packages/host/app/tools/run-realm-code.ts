@@ -35,7 +35,6 @@ import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
-import { isGatewayFailureStatus } from '@cardstack/runtime-common/error';
 
 import {
   recordCatalogSearch,
@@ -350,9 +349,8 @@ type ReadCard = (id: string) => Promise<CardRead>;
 // What reading a card found. A card whose file the realm holds without an
 // index row is `indexing` while the realm is indexing, since the pass that is
 // running may add the row, and `unindexed` while it is not, since no pass is
-// coming to add it. `error` is a card the realm cannot serve, most often
-// because its index row records an error; `unreadable` is a read the user or
-// the network refused.
+// coming to add it. `error` is a card whose index row records an error;
+// `unreadable` is a read that failed for any other reason.
 type CardRead =
   | { doc: LooseSingleCardDocument }
   | { unread: 'indexing' | 'unindexed' | 'not-found' }
@@ -3477,16 +3475,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (card.status === 404) {
         return { unread: 'not-found' };
       }
-      // Refused by the realm's permissions, or by the network between this
-      // tab and the realm: nothing about the card itself to fix.
-      if (
-        card.status === 401 ||
-        card.status === 403 ||
-        isGatewayFailureStatus(card.status)
-      ) {
-        return { unread: 'unreadable', message: card.message };
-      }
-      return { unread: 'error', message: card.message };
+      // The realm marks the error its index row records, whatever status the
+      // row carries. Any other failure (permissions, the network, the realm
+      // itself) says nothing about the card's source.
+      return {
+        unread: card.meta?.indexError ? 'error' : 'unreadable',
+        message: card.message,
+      };
     }
     let { default: Base64ImageField } = await this.loaderService.loader.import<{
       default: typeof Base64ImageFieldType;

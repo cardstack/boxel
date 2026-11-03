@@ -15356,6 +15356,10 @@ export class Realm {
           cardTitle: error.cardTitle,
           scopedCssUrls: error.scopedCssUrls,
           stack: error.stack,
+          // The card's index row records this error, whatever its status, so
+          // a client can tell a card to fix from a read that failed for
+          // another reason.
+          ...(error.fromIndexRow ? { indexError: true } : {}),
         },
       },
     });
@@ -18486,6 +18490,7 @@ function cardJsonAssemblyFromFailure(
     return {
       kind: 'error',
       error: {
+        fromIndexRow: false,
         status: error.status,
         title: error.title,
         message: error.detail,
@@ -18502,6 +18507,7 @@ function cardJsonAssemblyFromFailure(
   return {
     kind: 'error',
     error: {
+      fromIndexRow: true,
       status: row.status,
       title: row.title,
       message: row.message,
