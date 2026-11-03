@@ -213,6 +213,10 @@ export interface DataTableSignature<T> {
     rowLabel?: (row: T, index: number) => string;
     /** zebra striping (default true) */
     striped?: boolean;
+    /** drop the table's own frame (ring, radius, header fill) and its outer
+     * cell inset, for a table inside a Panel or card that already frames it
+     * (default false) */
+    flush?: boolean;
     /** header sticks while the body scrolls (default true) */
     stickyHeader?: boolean;
     /** minimum table width before the scroller takes over (any CSS length).
@@ -911,6 +915,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       data-actions={{if (has-block 'actions') 'true'}}
       data-striped={{this.striped}}
       data-sticky={{this.sticky}}
+      data-flush={{if @flush 'true'}}
       aria-busy={{this.busy}}
       ...attributes
     >
@@ -1411,6 +1416,22 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         th[aria-sort='ascending'] .pretui-dt-mark,
         th[aria-sort='descending'] .pretui-dt-mark {
           opacity: 1;
+        }
+        /* @flush: the surrounding Panel or card is the frame */
+        .pretui-dt[data-flush] .pretui-dt-scroll {
+          border-radius: 0;
+          background: none;
+          box-shadow: none;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table,
+        .pretui-dt[data-flush] .pretui-dt-table th {
+          background: none;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
+          padding-inline-start: 0;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table :is(th, td):last-child {
+          padding-inline-end: 0;
         }
         .pretui-dt-table td {
           height: 2.56em;
