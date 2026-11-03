@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Weather",
+      "units": "metric",
+      "locations": [
+        {
+          "name": "Lisbon",
+          "region": "Lisbon",
+          "country": "PT",
+          "latitude": 38.7077507,
+          "longitude": -9.1365919
+        },
+        {
+          "name": "New York",
+          "region": "New York",
+          "country": "US",
+          "latitude": 40.7127281,
+          "longitude": -74.0060152
+        },
+        {
+          "name": "Tokyo",
+          "region": "Tokyo",
+          "country": "JP",
+          "latitude": 35.6828387,
+          "longitude": 139.7594549
+        }
+      ],
+      "cardInfo": {
+        "name": "Weather"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../weather-app",
+        "name": "WeatherApp"
+      }
+    }
+  }
+}
