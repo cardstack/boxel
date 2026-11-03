@@ -70,6 +70,25 @@ export function isSvgContentType(contentType?: string): boolean {
 // metadata is sent, so one drawing can't fill the context window.
 export const MAX_SVG_TEXT_BYTES = 256 * 1024;
 
+// Whether an SVG is too large to send as markup. With `bytes` it judges the
+// downloaded text; without, the size the file declares, which may be missing
+// (then only the download can tell).
+export function isSvgTooLargeForText(
+  file: { contentType?: string; contentSize?: number },
+  bytes: number | undefined = file.contentSize,
+): boolean {
+  return (
+    isSvgContentType(file.contentType) &&
+    bytes !== undefined &&
+    bytes > MAX_SVG_TEXT_BYTES
+  );
+}
+
+// "256 KB", as the host warning and the prompt both say it
+export function formatKilobytes(bytes: number): string {
+  return `${Math.ceil(bytes / 1024)} KB`;
+}
+
 export {
   isImageContentType,
   isPdfContentType,

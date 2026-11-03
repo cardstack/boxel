@@ -23,7 +23,8 @@ import {
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
-  isSvgContentType,
+  formatKilobytes,
+  isSvgTooLargeForText,
   isTextBasedContentType,
   MAX_SVG_TEXT_BYTES,
   modalityLabel,
@@ -127,8 +128,11 @@ function getLog() {
  *
  * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json,
- *      application/vnd.card+source) → content downloaded and displayed
- *      with line numbers, in the history message that attached them.
+ *      application/vnd.card+source, image/svg+xml) → content downloaded
+ *      and displayed with line numbers, in the history message that
+ *      attached them. An SVG over MAX_SVG_TEXT_BYTES (by its declared
+ *      size, or by the downloaded text when it declares none) is sent as
+ *      metadata with a note that its markup was left out.
  *    - Media types are listed in history as metadata ([contentType,
  *      contentSize bytes]); their bodies are embedded only for the
  *      current turn — the current human message's attachments and those
@@ -855,21 +859,35 @@ export async function getAttachedFiles(
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (file: SerializedFileDef) => {
-      if (
-        isSvgContentType(file.contentType) &&
-        (file.contentSize ?? 0) > MAX_SVG_TEXT_BYTES
-      ) {
-        return {
-          ...toFileDefMetadata(file),
-          error: `SVG markup not sent: the file is ${file.contentSize} bytes, over the ${MAX_SVG_TEXT_BYTES}-byte limit`,
-        };
+      // the declared size skips the download; the downloaded text is the
+      // check that holds, since the client declares the size, or may not
+      if (isSvgTooLargeForText(file)) {
+        return svgTooLarge(file, file.contentSize!);
       }
       if (isTextBasedContentType(file.contentType)) {
-        return downloadTextContent(client, file);
+        let result = await downloadTextContent(client, file);
+        let bytes =
+          result.content === undefined
+            ? undefined
+            : new TextEncoder().encode(result.content).length;
+        if (isSvgTooLargeForText(file, bytes)) {
+          return svgTooLarge(file, bytes!);
+        }
+        return result;
       }
       return toFileDefMetadata(file);
     }),
   );
+}
+
+function svgTooLarge(
+  file: SerializedFileDef,
+  bytes: number,
+): SerializedFileDef {
+  return {
+    ...toFileDefMetadata(file),
+    error: `SVG markup not sent: the file is ${formatKilobytes(bytes)}, over the ${formatKilobytes(MAX_SVG_TEXT_BYTES)} limit`,
+  };
 }
 
 export function attachedFilesToMessage(

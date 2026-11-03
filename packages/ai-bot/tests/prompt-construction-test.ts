@@ -42,6 +42,7 @@ import {
   skillCardRef,
   rri,
 } from '@cardstack/runtime-common';
+import { MAX_SVG_TEXT_BYTES } from '@cardstack/runtime-common/ai/modality';
 import {
   absolutizeSkillLinks,
   attachedFilesToMessage,
@@ -770,6 +771,87 @@ Current date and time: 2025-06-11T11:43:00.533Z
       attachedFilesToMessage(files).includes('SVG markup not sent'),
       'the prompt says why the markup is missing',
     );
+    assert.strictEqual(
+      files[0].error,
+      'SVG markup not sent: the file is 10240 KB, over the 256 KB limit',
+    );
+  });
+
+  // one SVG attached to a message, as the bot reads it
+  function attachSvg(url: string, name: string, contentSize?: number) {
+    return getAttachedFiles(
+      fakeMatrixClient as any,
+      {
+        content: {
+          data: {
+            attachedFiles: [
+              {
+                url,
+                sourceUrl: `http://localhost:4201/experiments/${name}`,
+                name,
+                contentType: 'image/svg+xml',
+                ...(contentSize === undefined ? {} : { contentSize }),
+              },
+            ],
+          },
+        },
+      } as any,
+    );
+  }
+
+  // an SVG of exactly `bytes` bytes of ASCII markup
+  function svgOfSize(bytes: number) {
+    let open = '<svg xmlns="http://www.w3.org/2000/svg"><!--';
+    let close = '--></svg>';
+    return open + 'x'.repeat(bytes - open.length - close.length) + close;
+  }
+
+  test('an attached SVG that declares no size is sent as its markup when the download is under the limit', async () => {
+    let svg = svgOfSize(1024);
+    mockResponses.set('mxc://mock-server/unsized-svg', { ok: true, text: svg });
+    let files = await attachSvg('mxc://mock-server/unsized-svg', 'unsized.svg');
+    assert.strictEqual(files[0].content, svg);
+  });
+
+  test('an attached SVG that declares no size is sent as metadata when the download is over the limit', async () => {
+    mockResponses.set('mxc://mock-server/unsized-huge-svg', {
+      ok: true,
+      text: svgOfSize(MAX_SVG_TEXT_BYTES + 1),
+    });
+    let files = await attachSvg(
+      'mxc://mock-server/unsized-huge-svg',
+      'unsized-huge.svg',
+    );
+    assert.strictEqual(files[0].content, undefined);
+    assert.strictEqual(
+      files[0].error,
+      'SVG markup not sent: the file is 257 KB, over the 256 KB limit',
+    );
+  });
+
+  test('an attached SVG that declares a small size but downloads over the limit is sent as metadata', async () => {
+    mockResponses.set('mxc://mock-server/understated-svg', {
+      ok: true,
+      text: svgOfSize(MAX_SVG_TEXT_BYTES + 1),
+    });
+    let files = await attachSvg(
+      'mxc://mock-server/understated-svg',
+      'understated.svg',
+      100,
+    );
+    assert.strictEqual(files[0].content, undefined);
+    assert.true(files[0].error?.startsWith('SVG markup not sent'));
+  });
+
+  test('an attached SVG exactly at the limit is sent as its markup', async () => {
+    let svg = svgOfSize(MAX_SVG_TEXT_BYTES);
+    mockResponses.set('mxc://mock-server/limit-svg', { ok: true, text: svg });
+    let files = await attachSvg(
+      'mxc://mock-server/limit-svg',
+      'limit.svg',
+      MAX_SVG_TEXT_BYTES,
+    );
+    assert.strictEqual(files[0].content, svg);
   });
 
   test('Gets only the latest version of cards uploaded', () => {
