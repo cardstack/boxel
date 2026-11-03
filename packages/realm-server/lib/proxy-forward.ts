@@ -563,7 +563,13 @@ export async function handleStreamingRequest(
   {
     credential,
     scrubber,
-  }: { credential: OutboundCredential; scrubber: CredentialScrubber },
+    responseSizeCap,
+  }: {
+    credential: OutboundCredential;
+    scrubber: CredentialScrubber;
+    // The system key's own response size cap, when it has one.
+    responseSizeCap?: number;
+  },
 ): Promise<StreamUsage | undefined> {
   let usage: StreamUsage | undefined;
   // Read from the stream as it passes, and kept outside the `try` so a body
@@ -580,6 +586,7 @@ export async function handleStreamingRequest(
       body: requestBody,
       signal,
       sizePath: 'system-key',
+      responseSizeCap,
       destinationSetBy: 'platform',
       credential,
       scrubber,

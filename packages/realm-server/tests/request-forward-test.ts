@@ -31,6 +31,7 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { setSystemKeyResponseCap } from '../lib/system-keys.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
 import {
   configureOutbound,
@@ -2423,6 +2424,125 @@ module(basename(import.meta.filename), function () {
           0,
           'the slot is given back',
         );
+      });
+
+      test("a system key's own response size cap applies to its next call, and clearing it returns the key to the path's cap", async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+        });
+        let [{ id }] = await dbAdapter.execute(
+          `SELECT id FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        let forward = () =>
+          request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/large?bytes=50000`,
+              method: 'POST',
+              requestBody: JSON.stringify({}),
+            });
+
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: 60_000,
+          note: 'raising the cap for a larger response, test',
+        });
+        let lines = await logLinesDuring(['outbound'], async () => {
+          let raised = await forward();
+          assert.strictEqual(
+            raised.status,
+            200,
+            "a response over the path's cap passes under the key's own",
+          );
+        });
+        assert.true(
+          lines.some(
+            (line) =>
+              line.message.startsWith('outbound response size:') &&
+              line.message.includes('cap=60000 bytes=50000') &&
+              line.message.endsWith(`key=system:${vendor.url}/`),
+          ),
+          "the size line carries the key's cap and its name",
+        );
+
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: null,
+          note: 'back to the path cap, test',
+        });
+        let cleared = await forward();
+        assert.strictEqual(
+          cleared.status,
+          502,
+          "with its own cap cleared, the key is held to the path's cap",
+        );
+        assert.true(
+          JSON.stringify(cleared.body).includes('Response too large'),
+          'the caller is told the response was too large',
+        );
+      });
+
+      test("a system key's own response size cap holds a streamed forward", async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 64 * 1024, 'call-api': 64 * 1024 },
+        });
+        let [{ id }] = await dbAdapter.execute(
+          `SELECT id FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: 256 * 1024,
+          note: 'raising the cap for larger streams, test',
+        });
+        let heldToKeyCap = (lines: { message: string }[]) =>
+          lines.some(
+            (line) =>
+              line.message.startsWith('outbound response size:') &&
+              line.message.includes(`cap=${256 * 1024} `) &&
+              line.message.endsWith(`key=system:${vendor.url}/`),
+          );
+        let lines = await logLinesDuring(['outbound'], async (captured) => {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/respond`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+                chunks: [
+                  'data: {"id":"gen-stream-key-cap","choices":[{"delta":{"content":"Hi"}}]}\n\n',
+                  `data: {"choices":[{"delta":{"content":"${'x'.repeat(96 * 1024)}"}}]}\n\n`,
+                  'data: {"usage":{"cost":0.004}}\n\n',
+                  'data: [DONE]\n\n',
+                ],
+              }),
+              stream: true,
+            });
+          assert.false(
+            response.text.includes('Response too large'),
+            "a stream over the path's cap passes under the key's own",
+          );
+          assert.true(response.text.trimEnd().endsWith('data: [DONE]'));
+          // The forward stops reading at `[DONE]`, so the stream's size line
+          // is logged once the upstream read is cancelled, which can be after
+          // the caller's response has ended.
+          await waitUntil(async () => heldToKeyCap(captured), {
+            timeoutMessage: "the stream's size line should name the key's cap",
+          });
+        });
+        assert.true(heldToKeyCap(lines), "the stream is held to the key's cap");
+        // 0.004 USD × 1000 = 4 credits, from the usage the stream carried.
+        await waitUntil(async () => (await extraCredits()) === 46, {
+          timeoutMessage: 'the stream should be charged (50 - 4 = 46)',
+        });
       });
 
       test('a JSON response that passes the cap mid-body resets the caller and is charged for the generation', async function (assert) {

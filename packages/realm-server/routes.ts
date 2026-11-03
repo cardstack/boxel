@@ -26,6 +26,7 @@ import {
   handleDeleteSystemKey,
   handleListSystemKeys,
   handleReplaceSystemKey,
+  handleSetSystemKeyResponseCap,
   handleShowSystemKey,
 } from './handlers/handle-system-keys.ts';
 import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
@@ -753,6 +754,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_system-keys/:id',
     systemKeysAuthorization,
     handleDeleteSystemKey(args),
+  );
+  router.put(
+    '/_system-keys/:id/response-size-cap',
+    systemKeysAuthorization,
+    handleSetSystemKeyResponseCap(args),
   );
   // The OAuth clients Boxel registers itself, which connect mode offers
   // everyone. The same operator token as system keys reaches these.
