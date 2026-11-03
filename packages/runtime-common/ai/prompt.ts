@@ -82,6 +82,7 @@ import {
   READ_REALM_FILE_TOOL_NAME,
   SKILL_INSTRUCTIONS_MESSAGE,
   SYSTEM_MESSAGE,
+  VIEW_ATTACHMENT_TOOL_NAME,
 } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
@@ -153,6 +154,10 @@ function getLog() {
  *      would rewrite an older message's bytes as history grows and reset
  *      the cache prefix. The trailing message is rebuilt every turn, so
  *      it can carry the current media without touching history bytes.
+ *      A media file a user attached to an earlier, answered message comes
+ *      back only when the model calls viewAttachment for it: the tool's
+ *      result attaches the same stored file again, so it rides the trailing
+ *      message as tool-result media under the same limits.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
  *    (from the active LLM's model configuration), the current turn's
@@ -901,8 +906,17 @@ function svgTooLarge(
 export const MEDIA_NOT_IN_HISTORY_NOTE =
   '(its content is not in this message; you can see it only if the last message of this request includes it)';
 
+// MEDIA_NOT_IN_HISTORY_NOTE for a media file attached to a message someone
+// sent, which the viewAttachment tool can bring back into the current turn.
+// A tool result's media keep the plain note: the tool shows only files a
+// user attached to a message. The tool is offered only in rooms with one
+// human, and the note can't follow that without depending on more than the
+// message itself, so it names the tool only for a model that has it.
+export const ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE = `(its content is not in this message; you can see it only if the last message of this request includes it, and if it doesn't and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with this file's URL to see it)`;
+
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
+  mediaNote: string = MEDIA_NOT_IN_HISTORY_NOTE,
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
@@ -932,7 +946,7 @@ export function attachedFilesToMessage(
           .filter(Boolean)
           .join(', ');
         return requiredModality(f.contentType)
-          ? `${hyperlink}: [${meta}] ${MEDIA_NOT_IN_HISTORY_NOTE}`
+          ? `${hyperlink}: [${meta}] ${mediaNote}`
           : `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
@@ -2773,7 +2787,9 @@ function hasAppliedChanges(
 // message is the current one: the rendering becomes part of the cached
 // prompt prefix, and any retroactive change re-bills everything after it
 // (see getAttachedCards). Media bodies are handled separately, by
-// buildCurrentTurnMediaParts.
+// buildCurrentTurnMediaParts. A message's media are listed with the note
+// that names the viewAttachment tool, a tool result's with the plain one;
+// the choice rests on the event's own type, which never changes.
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
@@ -2787,6 +2803,9 @@ export const buildAttachmentsMessagePart = async (
   if (attachedFiles.length > 0) {
     text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
       attachedFiles,
+      matrixEvent.type === 'm.room.message'
+        ? ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE
+        : MEDIA_NOT_IN_HISTORY_NOTE,
     )}\n`;
   }
   return text;
@@ -2899,6 +2918,9 @@ function currentTurnHumanMessages(
 // A file attached to more than one of the turn's messages (the host attaches
 // the file open in code mode to every message) is sent once, as its newest
 // attachment, which history already tells the model supersedes the others.
+// A file a tool result of the turn attaches again (viewAttachment) is sent
+// once too, but that is settled at download time (see
+// buildCurrentTurnMediaParts), once it is known which copy arrived.
 export function currentTurnMessageMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -2921,7 +2943,7 @@ export function currentTurnMessageMedia(
       .filter((file) => file.url && requiredModality(file.contentType))
       .map(toFileDefMetadata);
     for (let file of mediaFiles.reverse()) {
-      let identity = file.sourceUrl || file.url!;
+      let identity = mediaIdentity(file);
       if (newerAttachments.has(identity)) {
         continue;
       }
@@ -2960,9 +2982,11 @@ export function currentTurnMessageMedia(
 // takes the position of its latest result. Files the active model cannot
 // take (per `inputModalities`, when given) are left out before the limits
 // apply, so they never use up a slot or budget a sendable file could have.
-// The rest are chosen newest first within the limits above; a file with no recorded size is left out, since
-// its bytes cannot be counted against the budget. Text-based attachments are
-// excluded: their content rides in the tool message itself.
+// The rest are chosen newest first within the limits above. A file
+// toolResultMediaRefusal refuses is left out first: one that names no Matrix
+// media item, one over the per-file limit, and one with no recorded size,
+// since its bytes cannot be counted against the budget. Text-based
+// attachments are excluded: their content rides in the tool message itself.
 export function currentTurnToolResultMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -2997,20 +3021,17 @@ export function currentTurnToolResultMedia(
   let omitted: CurrentTurnMedia['omitted'] = [];
   let totalBytes = 0;
   for (let file of [...candidates].reverse()) {
+    // Read only once toolResultMediaRefusal has let the file through, which
+    // it does only for a file with a recorded size.
     let size = file.contentSize;
-    let modality = requiredModality(file.contentType);
-    let reason: string | undefined;
-    if (inputModalities && modality && !inputModalities.includes(modality)) {
-      reason = `the active model does not accept ${modalityLabel(modality)}`;
-    } else if (typeof size !== 'number') {
-      reason = 'its size is unknown';
-    } else if (size > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
-      reason = `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
-    } else if (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA) {
-      reason = `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`;
-    } else if (totalBytes + size > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
-      reason = `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`;
-    }
+    let reason =
+      toolResultMediaRefusal(file, inputModalities) ??
+      (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA
+        ? `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`
+        : undefined) ??
+      (totalBytes + size! > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES
+        ? `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`
+        : undefined);
     if (reason) {
       omitted.unshift({ file, reason });
     } else {
@@ -3019,6 +3040,39 @@ export function currentTurnToolResultMedia(
     }
   }
   return { included, omitted };
+}
+
+const NOT_STORED_IN_CONVERSATION =
+  'it is not a file stored in this conversation';
+
+// Why a tool result's media file can never be sent, whatever else the turn
+// holds: the active model doesn't take its kind of media (per
+// `inputModalities`, when given), its URL names no Matrix media item, its
+// size is unknown, or it is over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Undefined
+// when only the turn's shared count and byte limits can still leave it out.
+// The viewAttachment tool refuses the same files, so it never reports a file
+// as shown that the next request leaves out on its own account.
+export function toolResultMediaRefusal(
+  file: Pick<SerializedFileDef, 'url' | 'contentSize' | 'contentType'>,
+  inputModalities?: string[],
+): string | undefined {
+  let modality = requiredModality(file.contentType);
+  if (inputModalities && modality && !inputModalities.includes(modality)) {
+    return `the active model does not accept ${modalityLabel(modality)}`;
+  }
+  if (
+    !file.url ||
+    !canonicalizeMatrixMediaKey(file.url)?.startsWith('mxc://')
+  ) {
+    return NOT_STORED_IN_CONVERSATION;
+  }
+  if (typeof file.contentSize !== 'number') {
+    return 'its size is unknown';
+  }
+  if (file.contentSize > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+    return `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
+  }
+  return undefined;
 }
 
 function formatMiB(bytes: number): string {
@@ -3068,6 +3122,11 @@ function toolResultMediaDownloadUrl(
 // anyway (it carries the current time), so the current media can ride there
 // without touching a single history byte; history lists the same files as
 // stable metadata (see buildAttachmentsMessagePart).
+// A file both a message and a tool result attach (viewAttachment attaches a
+// user's file again) rides once. Message media download first, so the
+// message's copy is the one sent whenever it arrives, and a tool result's
+// copy fills in only for a message copy that was left out or failed to
+// download. A file the request carries is never named as left out.
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
   messageMedia: CurrentTurnMedia = { included: [], omitted: [] },
@@ -3090,8 +3149,13 @@ export const buildCurrentTurnMediaParts = async (
   // The bytes tool-result media actually downloaded this turn; declared
   // sizes chose the files, but the budget holds on what arrives.
   let toolResultBytes = 0;
+  // The files whose bytes this request carries, by mediaIdentity.
+  let carried = new Set<string>();
   for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
+      continue;
+    }
+    if (fromToolResult && carried.has(mediaIdentity(f))) {
       continue;
     }
     let downloadUrl = f.url;
@@ -3100,7 +3164,7 @@ export const buildCurrentTurnMediaParts = async (
       if (!mediaUrl) {
         omittedAtDownload.push({
           file: f,
-          reason: 'it is not a file stored in this conversation',
+          reason: NOT_STORED_IN_CONVERSATION,
         });
         continue;
       }
@@ -3192,6 +3256,7 @@ export const buildCurrentTurnMediaParts = async (
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
     if (mediaParts.length > partCountBefore) {
+      carried.add(mediaIdentity(f));
       mediaParts.splice(partCountBefore, 0, {
         type: 'text',
         text: `${fromToolResult ? 'Attached to a tool result' : 'Attached to a user message'}: ${mediaFileLabel(f)}`,
@@ -3212,12 +3277,15 @@ export const buildCurrentTurnMediaParts = async (
       `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
     );
   }
-  if (messageMedia.omitted.length > 0) {
-    let fileList = messageMedia.omitted
+  let messageOmitted = messageMedia.omitted.filter(
+    ({ file }) => !carried.has(mediaIdentity(file)),
+  );
+  if (messageOmitted.length > 0) {
+    let fileList = messageOmitted
       .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
       .join('; ');
     notes.push(
-      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one, ask the user to attach it again.`,
+      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with the file's URL, and otherwise ask the user to attach it again.`,
     );
   }
   let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];
@@ -3240,6 +3308,12 @@ function base64DataUrlByteLength(dataUrl: string): number {
   let base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
   let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
   return (base64.length * 3) / 4 - padding;
+}
+
+// Which file a media attachment is, across the messages and tool results of
+// a turn: its source URL, or its stored URL when it has none.
+function mediaIdentity(file: SerializedFileDef): string {
+  return file.sourceUrl || file.url!;
 }
 
 function mediaFileLabel(file: SerializedFileDef): string {
@@ -3504,6 +3578,15 @@ export const isToolResultStatusApplied = (event?: MatrixEvent) => {
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
+
+// The input modalities of the room's active model, as the prompt builder
+// gates media on them. Undefined when the model doesn't say, and then every
+// modality passes.
+export function activeModelInputModalities(
+  eventlist: DiscreteMatrixEvent[],
+): string[] | undefined {
+  return getActiveLLMDetails(eventlist).inputModalities;
+}
 
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;

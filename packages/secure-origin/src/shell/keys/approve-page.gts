@@ -621,7 +621,15 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         cursor: pointer;
       }
       .label {
+        flex: 1;
+        min-width: 0;
         font-weight: 600;
+      }
+      /* A badge keeps its words on one line; the label beside it wraps. */
+      .changed,
+      .pipelines-only {
+        flex-shrink: 0;
+        white-space: nowrap;
       }
       .changed {
         padding: 0 var(--boxel-sp-4xs);

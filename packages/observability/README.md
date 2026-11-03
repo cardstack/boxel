@@ -226,8 +226,12 @@ made private, it would need Actions: Read-only on it.
 The staging alert "Actions Collector Silent in Loki"
 (`provisioning/alerting-hosted/staging/rules/actions-collector-group.json`)
 posts to the `alarms-staging-internal` Discord channel when Loki receives no
-collector lines for ten minutes. Its summary says how to tell a stalled log
-router from a stopped collector.
+collector lines for ten minutes. "Silent" means a query that completed and found
+no lines. Its summary says how to tell a stalled log router from a stopped
+collector. A query that Loki fails to run does not fire it. That arrives in the
+same channel as a `DatasourceError` alert for the rule, and the fault is Loki,
+not the collector (see [Alert rules: no data and query
+errors](#alert-rules-no-data-and-query-errors)).
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
@@ -542,6 +546,53 @@ once Loki has been load-bearing for a full release cycle.
 | `reject_old_samples` | `false` (so backfills work)                          | `true` (default, ~7d window)                                                  |
 | Auth                 | none                                                 | bearer token at the Grafana ALB (`/loki*` path rule); SG-only on internal NLB |
 | Reachable from       | localhost only                                       | Grafana ECS tasks + FireLens log_router sidecars; laptops via the public path |
+
+## Alert rules: no data and query errors
+
+Each rule sets two states for evaluations that produce no number to compare:
+
+- `noDataState` is for a query that ran and returned no series. Set it to
+  `Alerting` when no series is the condition the rule exists to catch (a log
+  stream that has gone silent, a metric that stopped publishing), and to `OK`
+  when no series means nothing happened.
+- `execErrState` is for a query that failed: the data source timed out,
+  cancelled it or was unreachable. Every rule here sets it to `Error`. Grafana
+  then sends a separate alert named `DatasourceError`, with the rule's name in
+  its `rulename` label. The rule's own alert stays quiet, because its title
+  and summary state a fact about the service (it is silent, it has no healthy
+  targets, a secret failed to open) that a failed query does not show.
+
+A `DatasourceError` alert carries the rule's labels, including the routing
+labels that `notification_settings.receiver` adds, so it goes where the rule's
+own alert would: a rule with a receiver sends it to that contact point, and a
+rule without one sends it through the default notification policy. The rule's
+`for` period applies to it too: a rule with `for: 0s` sends one on the first
+failed query, as it fired its own alert before. When one arrives, look at the data source (for Loki, the Loki task and its
+`context canceled` / `context deadline exceeded` errors), not at the service
+the rule watches.
+
+A `DatasourceError` alert also carries the rule's annotations, and the
+notification shows them. So a summary that states the condition must not read
+as true when the query failed:
+
+- With `noDataState: OK`, wrap the summary in
+  `{{ if $values }}…{{ else }}…{{ end }}`. A failed query has no values, and
+  for these rules no data never notifies, so the `else` text is what a
+  `DatasourceError` shows: say the query failed and what to check, naming
+  the rule's own data source (Loki or CloudWatch). Do the
+  same for every other annotation the rule's contact point shows: the
+  `Techops` email uses `title` as its subject and `description` as its body.
+- With `noDataState: Alerting`, a rule that found no data has no values
+  either, so the `else` text cannot tell the two apart: give both cases there,
+  keyed on the alert name (`DatasourceError` or the rule's title). When the
+  rule's usual firing case has a value, put that text in the `if` branch. When
+  no data is the firing case, as for a log stream gone silent, there is no
+  `if` branch to use: open the summary with both cases.
+
+A resolved notification keeps the text from the last evaluation that had
+values. When a rule moves to Normal through no data, Grafana copies the
+alert's state and does not expand its annotations again, so the `else` text
+does not appear on a rule's resolved notice.
 
 ## Staging / production workflow
 
