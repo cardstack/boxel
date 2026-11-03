@@ -121,6 +121,20 @@ const KEY_USE =
 const KEY_NOTE =
   'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
 
+// The key requests the secure window already opened for by itself, by card,
+// for as long as the page is open. Kept here rather than on the component:
+// the same card can render more than once, and re-renders when its module or
+// its file changes, and each of those would otherwise open another window.
+const ASKED = new Set<string>();
+
+// This module, as a share's approvals name it: they're made per module, so a
+// copy of the app in another realm needs its own.
+const HERE = withoutExtension(import.meta.url);
+
+function withoutExtension(url: string | undefined): string | undefined {
+  return url?.replace(/\.(gts|ts|gjs|js)$/, '');
+}
+
 // A place's country, spelled out ("Portugal" for "PT"), so two cities with
 // the same name can't be confused. Left out when it would repeat the city's
 // own name, as for Singapore.
@@ -471,8 +485,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // The operation each refused call invoked, so a fix opens the secure window
   // for the call that needs it.
   #failedOperation = new WeakMap<object, string>();
-  // The key requests already opened in the secure window by themselves.
-  #asked = new Set<string>();
 
   get units(): Units {
     return (
@@ -662,12 +674,14 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         realm,
       });
       this.isWriter = Boolean(result.visible);
-      let share = (result.shares ?? []).find((s: RealmKeyShareField) =>
+      let servesHere = (s: RealmKeyShareField) =>
         (s.operations ?? []).some(
           (o: RealmKeyShareOperationField) =>
-            o.operation && SHARED_OPERATIONS.includes(o.operation),
-        ),
-      );
+            Boolean(o.operation) &&
+            SHARED_OPERATIONS.includes(o.operation!) &&
+            withoutExtension(o.module) === HERE,
+        );
+      let share = (result.shares ?? []).find(servesHere);
       this.share = share
         ? {
             shareId: share.shareId,
@@ -989,11 +1003,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       if (!request) {
         return;
       }
-      let key = `${request.mode}|${request.operation}`;
-      if (this.#asked.has(key)) {
+      let key = `${this.args.model.id ?? ''}|${request.mode}|${request.operation}`;
+      if (ASKED.has(key)) {
         return;
       }
-      this.#asked.add(key);
+      ASKED.add(key);
       queueMicrotask(() => this.openKeyRequest());
     },
   );
@@ -1133,9 +1147,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
   get offerShare() {
     return (
-      this.isWriter &&
-      !this.share &&
-      this.sharedReadiness === 'needs-admin'
+      this.isWriter && !this.share && this.sharedReadiness === 'needs-admin'
     );
   }
 
