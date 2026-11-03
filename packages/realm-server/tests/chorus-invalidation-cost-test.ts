@@ -17,7 +17,7 @@ import {
 // every Profile; a SocialHome linking its viewer, their Profile, the
 // Analytics card and a Feed. Every card adopts from `social` and links the
 // Chorus theme. Rows carry the dependencies the indexer records for those
-// links, at `CHORUS_PEOPLE` people (default 2,000, about 13,000 posts). The
+// links, at `CHORUS_PEOPLE` people (default 400, about 2,600 posts). The
 // edits measured are the ones Chorus makes: a reaction on a post, a person
 // edit, a theme edit and a definition edit. Each result is checked against
 // the closure computed here from the same graph; with
@@ -238,7 +238,7 @@ module(basename(import.meta.filename), function (hooks) {
         `invalidation-cost chorus-${people} ${label} split=${split} reached=${reached.size} statements=${statements} ms=${ms.toFixed(1)}${rttMs ? ` rtt=${rttMs}` : ''}${slowest.length ? `\n  ${slowest.join('\n  ')}` : ''}`,
       );
     }
-    return reached;
+    return { reached, statements };
   }
 
   for (let [label, changed] of [
@@ -250,7 +250,12 @@ module(basename(import.meta.filename), function (hooks) {
     test(`a ${label} reaches exactly its dependents`, async function (assert) {
       let expected = expectedClosure(changed);
       for (let split of [false, true]) {
-        let reached = await measure(label, changed, split);
+        let { reached, statements } = await measure(label, changed, split);
+        // Both walks reach the same cards; the count shows which one ran.
+        assert.ok(
+          statements <= 15,
+          `split=${split}: one query (${statements} statements)`,
+        );
         assert.strictEqual(
           reached.size,
           expected.size,

@@ -11,6 +11,7 @@ import {
   logger,
 } from './index.ts';
 import { rri } from './realm-identifiers.ts';
+import { executableExtensions } from './constants.ts';
 import { isUrlLike, type VirtualNetwork } from './virtual-network.ts';
 import { normalizeDependencyForLookup } from './index-runner/dependency-normalization.ts';
 import {
@@ -4468,6 +4469,63 @@ export class Batch {
     return [...new Set([url.href, ...matchedURLs])];
   }
 
+  // `invalidationSeeds` for every URL of a fan-out at once. A from-scratch
+  // pass over an existing index, and a commit's validation round, fan out
+  // from every changed file in one call, so asking per URL costs two
+  // statements a file before the walk starts. On Postgres this asks the staged
+  // rows and the committed ones once each, and keeps the per-URL rule: a URL
+  // this batch has staged rows for matches those, and only a URL it hasn't
+  // falls back to the committed rows. SQLite asks per URL.
+  async #invalidationSeedsFor(urls: URL[]): Promise<string[][]> {
+    if (this.#dbAdapter.kind !== 'pg' || urls.length <= 1) {
+      return await Promise.all(
+        urls.map(async (url) => await this.invalidationSeeds(url)),
+      );
+    }
+    let hrefs = [...new Set(urls.map((url) => url.href))];
+    let matching = async (
+      table: 'boxel_index_pending' | 'boxel_index',
+    ): Promise<Map<string, string[]>> => {
+      let seeds: Expression = [
+        '(SELECT jsonb_array_elements_text(CAST(',
+        param(JSON.stringify(hrefs)),
+        'AS jsonb)))',
+      ];
+      let rows = (await this.#query([
+        `SELECT DISTINCT url, file_alias FROM ${table} WHERE realm_url =`,
+        param(this.realmURL.href),
+        ...(table === 'boxel_index_pending'
+          ? ['AND staging_id =', param(this.#stagingId)]
+          : []),
+        'AND (url IN',
+        ...seeds,
+        'OR file_alias IN',
+        ...seeds,
+        ')',
+      ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'file_alias'>[];
+      let bySeed = new Map<string, string[]>();
+      let wanted = new Set(hrefs);
+      for (let { url, file_alias } of rows) {
+        for (let seed of new Set([url, file_alias])) {
+          if (seed && wanted.has(seed)) {
+            let matched = bySeed.get(seed) ?? [];
+            matched.push(url);
+            bySeed.set(seed, matched);
+          }
+        }
+      }
+      return bySeed;
+    };
+    let staged = await matching('boxel_index_pending');
+    let committed = await matching('boxel_index');
+    return urls.map((url) => [
+      ...new Set([
+        url.href,
+        ...(staged.get(url.href) ?? committed.get(url.href) ?? []),
+      ]),
+    ]);
+  }
+
   async invalidate(urls: URL[]): Promise<void> {
     if (this.#prerenderHtmlOnly) {
       // The dependency fan-out already ran once in the spawning index pass
@@ -4546,8 +4604,8 @@ export class Batch {
     let invalidations = new Set<string>();
     let renderInvalidations = new Set<string>();
     let aliases: string[] = [];
-    for (let url of urls) {
-      for (let seed of await this.invalidationSeeds(url)) {
+    for (let seedsOfURL of await this.#invalidationSeedsFor(urls)) {
+      for (let seed of seedsOfURL) {
         let alias = trimExecutableExtension(rri(seed));
         if (!this.nodeResolvedInvalidations.includes(alias)) {
           invalidations.add(seed);
@@ -5119,8 +5177,13 @@ export class Batch {
       }
     }
     // A node is what `invalidationTraversalAlias` recurses through.
+    // Spelled from `executableExtensions`, with its `.d.ts` exception, so it
+    // agrees with the `hasExecutableExtension` the node-by-node walk uses.
+    let executable = executableExtensions
+      .map((extension) => extension.slice(1))
+      .join('|');
     let nextNode = `CASE WHEN e.type = 'instance' THEN e.url
-      WHEN e.file_alias IS NOT NULL AND e.url ~ '\\.(js|gjs|ts|gts)$' AND e.url !~ '\\.d\\.ts$' THEN e.file_alias
+      WHEN e.file_alias IS NOT NULL AND e.url ~ '\\.(${executable})$' AND e.url !~ '\\.d\\.ts$' THEN e.file_alias
       ELSE e.url END`;
     // The walk's rows are (node, spelling, url): the node to recurse through,
     // its second spelling, and the dependent that led to it. UNION drops a

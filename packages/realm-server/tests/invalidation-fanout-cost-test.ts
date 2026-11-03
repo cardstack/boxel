@@ -80,8 +80,10 @@ module(basename(import.meta.filename), function (hooks) {
   // Two conditions, chosen by environment. By default the neighbours have
   // just been written, as under a write stream; with
   // `INVALIDATION_COST_VACUUMED` the GIN pending lists are flushed first, as
-  // after a VACUUM. `INVALIDATION_COST_FASTUPDATE_ON` restores the GIN
-  // `fastupdate` default first, which is the index setting main has.
+  // after a VACUUM. `INVALIDATION_COST_GIN_DEFAULTS` restores GIN's default
+  // pending list first, so the walk can be measured against it, and
+  // `INVALIDATION_COST_FASTUPDATE_OFF` turns `fastupdate` off instead, the
+  // alternative to a small pending list.
   async function neighbours(templatePath: string) {
     let template = new URL(templatePath, testRealm).href;
     let gin = (
@@ -89,9 +91,22 @@ module(basename(import.meta.filename), function (hooks) {
         `SELECT indexname FROM pg_indexes WHERE indexdef ILIKE '%USING gin%'`,
       )) as { indexname: string }[]
     ).map(({ indexname }) => indexname);
-    if (process.env.INVALIDATION_COST_FASTUPDATE_ON) {
-      for (let index of gin) {
+    for (let index of gin) {
+      if (process.env.INVALIDATION_COST_GIN_DEFAULTS) {
+        await adapter.execute(
+          `ALTER INDEX ${index} RESET (gin_pending_list_limit, fastupdate)`,
+        );
+      } else if (process.env.INVALIDATION_COST_FASTUPDATE_OFF) {
+        await adapter.execute(
+          `ALTER INDEX ${index} RESET (gin_pending_list_limit)`,
+        );
+        await adapter.execute(`ALTER INDEX ${index} SET (fastupdate = off)`);
+      } else {
+        // What the migration sets, whatever the database was seeded with.
         await adapter.execute(`ALTER INDEX ${index} RESET (fastupdate)`);
+        await adapter.execute(
+          `ALTER INDEX ${index} SET (gin_pending_list_limit = 256)`,
+        );
       }
     }
     for (let table of ['boxel_index', 'prerendered_html']) {
@@ -120,7 +135,7 @@ module(basename(import.meta.filename), function (hooks) {
   // with the statements and time the walk cost.
   async function measure(
     label: string,
-    changed: string,
+    changed: string | string[],
     splitPrerenderHtml: boolean,
   ) {
     let batch = await indexWriter.createBatch(
@@ -149,7 +164,11 @@ module(basename(import.meta.filename), function (hooks) {
     let start = process.hrtime.bigint();
     let reached: string[];
     try {
-      await batch.invalidate([new URL(changed, testRealm)]);
+      await batch.invalidate(
+        (Array.isArray(changed) ? changed : [changed]).map(
+          (path) => new URL(path, testRealm),
+        ),
+      );
       reached = [...batch.invalidations, ...batch.renderOnlyInvalidations];
     } finally {
       adapter.execute = execute;
@@ -160,8 +179,17 @@ module(basename(import.meta.filename), function (hooks) {
         `invalidation-cost ${label} split=${splitPrerenderHtml} reached=${reached.length} statements=${statements} ms=${ms.toFixed(1)}\n  ${slowest.join('\n  ')}`,
       );
     }
-    return new Set(reached.map((url) => url.slice(testRealm.length)));
+    return {
+      reached: new Set(reached.map((url) => url.slice(testRealm.length))),
+      statements,
+    };
   }
+
+  // The one-query walk takes a handful of statements whatever it reaches; the
+  // node-by-node walk takes several per card. Bounding the count is what shows
+  // a realm with no registered prefix took the one-query path, since both
+  // walks reach the same cards.
+  const ONE_QUERY_STATEMENTS = 15;
 
   test('a module that 600 cards adopt from', async function (assert) {
     let cards = Array.from({ length: 600 }, (_, i) => ({
@@ -170,9 +198,40 @@ module(basename(import.meta.filename), function (hooks) {
     }));
     await seed(cards);
     for (let split of [false, true]) {
-      let reached = await measure('module-fan', 'card.gts', split);
+      let { reached, statements } = await measure(
+        'module-fan',
+        'card.gts',
+        split,
+      );
       assert.strictEqual(reached.size, 601, `split=${split}: module and cards`);
       assert.ok(reached.has('cards/599.json'));
+      assert.ok(
+        statements <= ONE_QUERY_STATEMENTS,
+        `split=${split}: one query (${statements} statements)`,
+      );
+    }
+  });
+
+  // A from-scratch pass over an existing index, and a commit's validation
+  // round, invalidate every changed file in one call, so the walk starts from
+  // a realm-sized seed list rather than from one URL.
+  test('a module and the 600 cards that adopt from it, invalidated together', async function (assert) {
+    let cards = Array.from({ length: 600 }, (_, i) => ({
+      path: `cards/${i}.json`,
+      deps: ['card'],
+    }));
+    await seed(cards);
+    for (let split of [false, true]) {
+      let { reached, statements } = await measure(
+        'many-seeds',
+        ['card.gts', ...cards.map(({ path }) => path)],
+        split,
+      );
+      assert.strictEqual(reached.size, 601, `split=${split}: module and cards`);
+      assert.ok(
+        statements <= ONE_QUERY_STATEMENTS,
+        `split=${split}: one query (${statements} statements)`,
+      );
     }
   });
 
@@ -186,7 +245,15 @@ module(basename(import.meta.filename), function (hooks) {
     }
     await seed(entries);
     for (let split of [false, true]) {
-      let reached = await measure('link-tree', 'hub.json', split);
+      let { reached, statements } = await measure(
+        'link-tree',
+        'hub.json',
+        split,
+      );
+      assert.ok(
+        statements <= ONE_QUERY_STATEMENTS,
+        `split=${split}: one query (${statements} statements)`,
+      );
       assert.strictEqual(
         reached.size,
         631,
@@ -203,8 +270,16 @@ module(basename(import.meta.filename), function (hooks) {
     }));
     await seed(entries);
     for (let split of [false, true]) {
-      let reached = await measure('chain', 'chain/0.json', split);
+      let { reached, statements } = await measure(
+        'chain',
+        'chain/0.json',
+        split,
+      );
       assert.strictEqual(reached.size, 80, `split=${split}: the whole chain`);
+      assert.ok(
+        statements <= ONE_QUERY_STATEMENTS,
+        `split=${split}: one query (${statements} statements)`,
+      );
     }
   });
 
@@ -214,7 +289,7 @@ module(basename(import.meta.filename), function (hooks) {
       { path: 'other.json', deps: ['card'] },
     ]);
     for (let split of [false, true]) {
-      let reached = await measure('leaf-edit', 'lonely.json', split);
+      let { reached } = await measure('leaf-edit', 'lonely.json', split);
       assert.deepEqual([...reached], ['lonely.json'], `split=${split}`);
     }
   });
@@ -242,8 +317,16 @@ module(basename(import.meta.filename), function (hooks) {
       'the dependency is stored in prefix form',
     );
     for (let split of [false, true]) {
-      let reached = await measure('prefixed-realm', 'hub.json', split);
+      let { reached, statements } = await measure(
+        'prefixed-realm',
+        'hub.json',
+        split,
+      );
       assert.strictEqual(reached.size, 26, `split=${split}: hub, mids, leaves`);
+      assert.ok(
+        statements > ONE_QUERY_STATEMENTS,
+        `split=${split}: node by node (${statements} statements)`,
+      );
     }
   });
 });
