@@ -149,8 +149,19 @@ async function initTemplateLinter(): Promise<any> {
   const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
   const tlModule = hostRequire('ember-template-lint');
   const TemplateLinter = (tlModule as any).default ?? tlModule;
-  // Host's config, minus no-whitespace-for-layout. That rule trims each
-  // line of a text node before matching, so what it flags is adjacent
+  // Host's config, with two realm-content adjustments.
+  //
+  // no-nested-interactive ignores <details>. Upstream counts <details> as an
+  // interactive parent, so it rejects every control in a disclosure's open
+  // panel, which is valid, accessible HTML. Only the <summary> is the
+  // disclosure's control. Ignoring <details> leaves the <summary> as the
+  // interactive parent, so a control inside the <summary> is still reported,
+  // as is any control nested in another interactive element. What goes
+  // unreported is a <details> element itself inside another control; a
+  // <summary> in it is still reported there.
+  //
+  // no-whitespace-for-layout is off. That rule trims each line of a text
+  // node before matching, so what it flags is adjacent
   // "space or &nbsp;" pairs in the authored text — never the newline plus
   // indentation that prettier's wrapping (the pass right before this one)
   // introduces. In realm content those &nbsp; runs are deliberate visual
@@ -168,6 +179,7 @@ async function initTemplateLinter(): Promise<any> {
       ...hostTemplateLintConfig,
       rules: {
         ...hostTemplateLintConfig.rules,
+        'no-nested-interactive': { ignoredTags: ['details'] },
         'no-whitespace-for-layout': false,
       },
     },
