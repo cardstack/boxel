@@ -773,6 +773,72 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.false(result.correct, 'the check fails');
   });
 
+  test("a render wait counts only renders at or past each file's generation", async function (assert) {
+    let toolService = getService('tool-service');
+    let messageService = getService('message-service');
+    // tracking a module write starts the realm's render watch
+    toolService.trackAiAssistantCardRequest({
+      action: 'test',
+      roomId: '!room:example.com',
+      fileUrl: `${testRealmURL}milestone.gts`,
+    });
+    let a = `${testRealmURL}Milestone/a.json`;
+    let b = `${testRealmURL}Milestone/b.json`;
+    let announce = (generation: number, invalidations: string[]) =>
+      messageService.relayRealmEvent({
+        eventName: 'prerender_html',
+        invalidations,
+        generation,
+        realmURL: testRealmURL,
+      });
+    let wait = async (files: [string, number][], timeoutMs: number) => [
+      ...(await toolService.waitForRenderedHTML(
+        testRealmURL,
+        new Map(files),
+        timeoutMs,
+      )),
+    ];
+
+    announce(4, [a]);
+    assert.deepEqual(
+      await wait([[a, 5]], 50),
+      [],
+      "a render below the file's generation does not count",
+    );
+
+    announce(5, [a]);
+    let start = Date.now();
+    assert.deepEqual(
+      await wait([[a, 5]], 10_000),
+      [a],
+      "a render at the file's generation counts",
+    );
+    assert.ok(
+      Date.now() - start < 1_000,
+      'a wait already satisfied returns at once',
+    );
+
+    assert.deepEqual(
+      await wait(
+        [
+          [a, 5],
+          [b, 5],
+        ],
+        50,
+      ),
+      [a],
+      'a wait that times out returns the files rendered so far',
+    );
+
+    let waiting = wait([[b, 6]], 10_000);
+    announce(6, [b]);
+    assert.deepEqual(
+      await waiting,
+      [b],
+      'a render announced during the wait ends it',
+    );
+  });
+
   test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;
