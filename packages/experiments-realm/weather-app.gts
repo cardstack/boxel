@@ -111,12 +111,12 @@ const NEED_ORDER: Need[] = [
   'needs-approval',
 ];
 
-// What the app does with a key, as the secure window tells the person
-// approving it. The window shows at most 200 characters of a reason.
-const OWN_KEY_USE =
-  'Weather uses your OpenWeatherMap key to get the current conditions, 5-day forecast and air quality for your saved places, and to find cities you add.';
-const SHARED_KEY_USE =
-  'Weather uses the shared key to get the current conditions, 5-day forecast and air quality for saved places, and to find cities, for everyone in this workspace.';
+// What the app's calls do with a key, as the secure window shows it as the
+// card's reason. It says only what the card does; who else may use a key,
+// and on whose behalf, is the secure window's to say. The window shows at
+// most 200 characters of a reason.
+const KEY_USE =
+  'Weather uses this key to get the current conditions, 5-day forecast and air quality for its saved places, and to find cities to add.';
 
 const KEY_NOTE =
   'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
@@ -573,9 +573,14 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         tone: weather
           ? temperatureTone(weather.current.main.temp, this.units)
           : 'unknown',
-        season: weather
-          ? seasonAt(location.latitude, weather.offset, weather.current.dt)
-          : 'none',
+        theme: weather
+          ? themeAt(
+              location.latitude,
+              location.longitude,
+              weather.offset,
+              weather.current.dt,
+            )
+          : NO_THEME,
       };
     });
   }
@@ -869,14 +874,13 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           ? this.sharedOperation
           : this.ownOperation),
       reason:
-        'OpenWeatherMap turned down the key Weather uses to get the weather here. Replace it with one that works.',
+        'OpenWeatherMap turned down the key Weather uses to get the weather for its saved places. Replace it with one that works.',
     });
 
   shareKey = () =>
     this.openWindow.perform({
       mode: 'share-key',
-      reason:
-        'Share an OpenWeatherMap key so everyone in this workspace sees the weather for its saved places without a key of their own.',
+      reason: KEY_USE,
     });
 
   // ---- asking for a key ---------------------------------------------------
@@ -903,10 +907,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       return {
         mode: 'approve',
         operation: this.sharedOperation,
-        reason: SHARED_KEY_USE,
+        reason: KEY_USE,
         title: 'Approve the key you shared',
-        message:
-          'Approve it for this app so everyone in this workspace sees the weather.',
+        message: 'Approve it for this app to get the weather.',
         action: 'Approve',
       };
     }
@@ -918,7 +921,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         mode: 'review-changes',
         operation: this.sharedOperation,
         reason:
-          'Weather changed what it sends with the shared key to get the weather for this workspace. Review the changes.',
+          'Weather changed the calls it makes with this key to get the weather for its saved places. Review the changes.',
         title: 'The app’s calls changed',
         message: 'Review what it sends with the workspace’s key.',
         action: 'Review the changes',
@@ -928,7 +931,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       return {
         mode: 'approve',
         operation: this.ownOperation,
-        reason: `${OWN_KEY_USE} Any OpenWeatherMap key works, even a free one.`,
+        reason: `${KEY_USE} Any OpenWeatherMap key works, even a free one.`,
         title: 'Weather needs an OpenWeatherMap key',
         message:
           'Add your key to see the weather here. Any OpenWeatherMap key works, even a free one.',
@@ -940,7 +943,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         mode: 'review-changes',
         operation: this.ownOperation,
         reason:
-          'Weather changed what it sends with your key to get the weather for your saved places. Review the changes.',
+          'Weather changed the calls it makes with this key to get the weather for its saved places. Review the changes.',
         title: 'The app’s calls changed',
         message: 'Review what it sends with your key.',
         action: 'Review the changes',
@@ -1053,7 +1056,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           ? 'review-changes'
           : 'approve',
       operation: problem.operation,
-      reason: problem.source === 'shared' ? SHARED_KEY_USE : OWN_KEY_USE,
+      reason: KEY_USE,
     });
   };
 
@@ -1366,7 +1369,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 layout, which none of Button's appearances draws. }}
               <button
                 type='button'
-                class='place temp-{{row.tone}} season-{{row.season}}'
+                class='place temp-{{row.tone}}
+                  season-{{row.theme.season}}
+                  motif-{{row.theme.motif}}'
                 {{on 'click' (fn this.select row.index)}}
                 data-test-weather-place={{row.location.name}}
               >
@@ -1434,64 +1439,37 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         --_weather-temp-unknown: #4b5866;
         --_weather-temp-unknown-end: #5c6978;
         --_weather-on-tone: #ffffff;
-        /* A motif for the season where each place is, laid over its
-           temperature color: blossom, sun rays, falling leaves or snow, and
-           a lush glow near the equator or an aurora near the poles. Kept
-           faint, so white text keeps its contrast. */
-        --_weather-season-spring:
-          radial-gradient(
-            circle at 88% 12%,
-            rgb(255 160 200 / 0.26),
-            transparent 45%
-          ),
-          radial-gradient(
-            circle at 6% 105%,
-            rgb(255 214 236 / 0.2),
-            transparent 50%
-          );
-        --_weather-season-summer:
-          radial-gradient(
-            circle at 90% 8%,
-            rgb(255 214 102 / 0.3),
-            transparent 42%
-          ),
-          repeating-conic-gradient(
-            from 200deg at 90% 8%,
-            rgb(255 235 170 / 0.1) 0deg 6deg,
-            transparent 6deg 18deg
-          );
-        --_weather-season-autumn:
-          radial-gradient(
-            circle at 86% 14%,
-            rgb(255 140 50 / 0.32),
-            transparent 45%
-          ),
-          repeating-linear-gradient(
-            120deg,
-            rgb(255 200 120 / 0.08) 0 0.625rem,
-            transparent 0.625rem 1.625rem
-          );
-        --_weather-season-winter:
-          radial-gradient(
-            circle at 86% 10%,
-            rgb(220 240 255 / 0.3),
-            transparent 45%
-          ),
-          radial-gradient(rgb(255 255 255 / 0.22) 1px, transparent 1.5px) 0 0 /
-            0.875rem 0.875rem,
-          radial-gradient(rgb(255 255 255 / 0.14) 1px, transparent 1.5px)
-            0.4375rem 0.4375rem / 0.875rem 0.875rem;
-        --_weather-season-tropical:
-          radial-gradient(
-            circle at 86% 14%,
-            rgb(120 255 200 / 0.26),
-            transparent 45%
-          ),
-          repeating-radial-gradient(
-            circle at 50% 170%,
-            rgb(255 255 255 / 0.07) 0 0.375rem,
-            transparent 0.375rem 1.375rem
-          );
+        /* Each place gets a glow for its season and a sparse, faint motif
+           for the season where it is: flowers or cherry blossoms in spring,
+           a beach in summer, leaves in autumn, snowmen in winter, palms in
+           the tropics, dunes in the desert belt and snowflakes under the
+           polar aurora. White at low opacity, so white text keeps its
+           contrast. */
+        --_weather-season-spring: radial-gradient(
+          circle at 88% 12%,
+          rgb(255 160 200 / 0.24),
+          transparent 42%
+        );
+        --_weather-season-summer: radial-gradient(
+          circle at 90% 8%,
+          rgb(255 214 102 / 0.28),
+          transparent 40%
+        );
+        --_weather-season-autumn: radial-gradient(
+          circle at 86% 14%,
+          rgb(255 140 50 / 0.28),
+          transparent 44%
+        );
+        --_weather-season-winter: radial-gradient(
+          circle at 86% 10%,
+          rgb(220 240 255 / 0.26),
+          transparent 44%
+        );
+        --_weather-season-tropical: radial-gradient(
+          circle at 86% 14%,
+          rgb(120 255 200 / 0.24),
+          transparent 44%
+        );
         --_weather-season-polar: linear-gradient(
           170deg,
           transparent 8%,
@@ -1500,6 +1478,22 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           rgb(190 120 255 / 0.22) 60%,
           transparent 76%
         );
+        --_weather-motif-leaves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Cpath d='M12 1c6 4 9 9 7 15-2 5-7 7-13 7 0-6 1-12 6-22z'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Cpath d='M12 1c6 4 9 9 7 15-2 5-7 7-13 7 0-6 1-12 6-22z'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Cpath d='M12 1c6 4 9 9 7 15-2 5-7 7-13 7 0-6 1-12 6-22z'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Cpath d='M12 1c6 4 9 9 7 15-2 5-7 7-13 7 0-6 1-12 6-22z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-flowers: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Ccircle cx='12.0' cy='7.4' r='3.3'/%3E%3Ccircle cx='16.4' cy='10.6' r='3.3'/%3E%3Ccircle cx='14.7' cy='15.7' r='3.3'/%3E%3Ccircle cx='9.3' cy='15.7' r='3.3'/%3E%3Ccircle cx='7.6' cy='10.6' r='3.3'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Ccircle cx='12.0' cy='7.4' r='3.3'/%3E%3Ccircle cx='16.4' cy='10.6' r='3.3'/%3E%3Ccircle cx='14.7' cy='15.7' r='3.3'/%3E%3Ccircle cx='9.3' cy='15.7' r='3.3'/%3E%3Ccircle cx='7.6' cy='10.6' r='3.3'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Ccircle cx='12.0' cy='7.4' r='3.3'/%3E%3Ccircle cx='16.4' cy='10.6' r='3.3'/%3E%3Ccircle cx='14.7' cy='15.7' r='3.3'/%3E%3Ccircle cx='9.3' cy='15.7' r='3.3'/%3E%3Ccircle cx='7.6' cy='10.6' r='3.3'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Ccircle cx='12.0' cy='7.4' r='3.3'/%3E%3Ccircle cx='16.4' cy='10.6' r='3.3'/%3E%3Ccircle cx='14.7' cy='15.7' r='3.3'/%3E%3Ccircle cx='9.3' cy='15.7' r='3.3'/%3E%3Ccircle cx='7.6' cy='10.6' r='3.3'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-blossoms: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%2872 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28144 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28216 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28288 12 12%29'/%3E%3Ccircle cx='12' cy='12' r='1.6'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%2872 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28144 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28216 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28288 12 12%29'/%3E%3Ccircle cx='12' cy='12' r='1.6'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%2872 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28144 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28216 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28288 12 12%29'/%3E%3Ccircle cx='12' cy='12' r='1.6'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%2872 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28144 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28216 12 12%29'/%3E%3Cellipse cx='12' cy='6' rx='2.7' ry='4.4' transform='rotate%28288 12 12%29'/%3E%3Ccircle cx='12' cy='12' r='1.6'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-snowmen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Ccircle cx='12' cy='17.5' r='5.2'/%3E%3Ccircle cx='12' cy='9' r='3.7'/%3E%3Crect x='8.6' y='4.4' width='6.8' height='1.3'/%3E%3Crect x='9.9' y='1' width='4.2' height='3.6'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Ccircle cx='12' cy='17.5' r='5.2'/%3E%3Ccircle cx='12' cy='9' r='3.7'/%3E%3Crect x='8.6' y='4.4' width='6.8' height='1.3'/%3E%3Crect x='9.9' y='1' width='4.2' height='3.6'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Ccircle cx='12' cy='17.5' r='5.2'/%3E%3Ccircle cx='12' cy='9' r='3.7'/%3E%3Crect x='8.6' y='4.4' width='6.8' height='1.3'/%3E%3Crect x='9.9' y='1' width='4.2' height='3.6'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Ccircle cx='12' cy='17.5' r='5.2'/%3E%3Ccircle cx='12' cy='9' r='3.7'/%3E%3Crect x='8.6' y='4.4' width='6.8' height='1.3'/%3E%3Crect x='9.9' y='1' width='4.2' height='3.6'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-beach: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Cpath d='M2 12a10 9 0 0 1 20 0z'/%3E%3Crect x='11.4' y='12' width='1.2' height='9'/%3E%3Cpath d='M0 23q3-2.4 6 0t6 0 6 0 6 0v1H0z'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Cpath d='M2 12a10 9 0 0 1 20 0z'/%3E%3Crect x='11.4' y='12' width='1.2' height='9'/%3E%3Cpath d='M0 23q3-2.4 6 0t6 0 6 0 6 0v1H0z'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Cpath d='M2 12a10 9 0 0 1 20 0z'/%3E%3Crect x='11.4' y='12' width='1.2' height='9'/%3E%3Cpath d='M0 23q3-2.4 6 0t6 0 6 0 6 0v1H0z'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Cpath d='M2 12a10 9 0 0 1 20 0z'/%3E%3Crect x='11.4' y='12' width='1.2' height='9'/%3E%3Cpath d='M0 23q3-2.4 6 0t6 0 6 0 6 0v1H0z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-palms: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Cpath d='M11 23c0-6 1-11 3-14l1.2.4C13.6 13 12.6 18 12.4 23z'/%3E%3Cpath d='M14 9C10 5 5 5 2 8c4-1 8 0 12 1z'/%3E%3Cpath d='M14 9c3-4 7-5 10-3-3 0-7 1-10 3z'/%3E%3Cpath d='M14 9c-1-4-4-7-8-8 3 2 6 5 8 8z'/%3E%3Cpath d='M14 9c2-3 3-6 2-9-1 3-2 6-2 9z'/%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Cpath d='M11 23c0-6 1-11 3-14l1.2.4C13.6 13 12.6 18 12.4 23z'/%3E%3Cpath d='M14 9C10 5 5 5 2 8c4-1 8 0 12 1z'/%3E%3Cpath d='M14 9c3-4 7-5 10-3-3 0-7 1-10 3z'/%3E%3Cpath d='M14 9c-1-4-4-7-8-8 3 2 6 5 8 8z'/%3E%3Cpath d='M14 9c2-3 3-6 2-9-1 3-2 6-2 9z'/%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Cpath d='M11 23c0-6 1-11 3-14l1.2.4C13.6 13 12.6 18 12.4 23z'/%3E%3Cpath d='M14 9C10 5 5 5 2 8c4-1 8 0 12 1z'/%3E%3Cpath d='M14 9c3-4 7-5 10-3-3 0-7 1-10 3z'/%3E%3Cpath d='M14 9c-1-4-4-7-8-8 3 2 6 5 8 8z'/%3E%3Cpath d='M14 9c2-3 3-6 2-9-1 3-2 6-2 9z'/%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Cpath d='M11 23c0-6 1-11 3-14l1.2.4C13.6 13 12.6 18 12.4 23z'/%3E%3Cpath d='M14 9C10 5 5 5 2 8c4-1 8 0 12 1z'/%3E%3Cpath d='M14 9c3-4 7-5 10-3-3 0-7 1-10 3z'/%3E%3Cpath d='M14 9c-1-4-4-7-8-8 3 2 6 5 8 8z'/%3E%3Cpath d='M14 9c2-3 3-6 2-9-1 3-2 6-2 9z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-dunes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Ccircle cx='17' cy='6' r='3.2'/%3E%3Cg fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 17c4-4 8-4 11 0s7 4 11 0'/%3E%3Cpath d='M4 22c3-2.5 6-2.5 9 0'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Ccircle cx='17' cy='6' r='3.2'/%3E%3Cg fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 17c4-4 8-4 11 0s7 4 11 0'/%3E%3Cpath d='M4 22c3-2.5 6-2.5 9 0'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Ccircle cx='17' cy='6' r='3.2'/%3E%3Cg fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 17c4-4 8-4 11 0s7 4 11 0'/%3E%3Cpath d='M4 22c3-2.5 6-2.5 9 0'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Ccircle cx='17' cy='6' r='3.2'/%3E%3Cg fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 17c4-4 8-4 11 0s7 4 11 0'/%3E%3Cpath d='M4 22c3-2.5 6-2.5 9 0'/%3E%3C/g%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
+        --_weather-motif-snowflakes: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='110'%3E%3Cg fill='white' fill-opacity='0.12' stroke-opacity='0.14'%3E%3Cg transform='translate%2810 12%29 rotate%28-18 12 12%29 scale%280.9%29'%3E%3Cg fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10'/%3E%3Cpath d='M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2894 56%29 rotate%2816 12 12%29 scale%281.05%29'%3E%3Cg fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10'/%3E%3Cpath d='M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%28134 8%29 rotate%288 12 12%29 scale%280.7%29'%3E%3Cg fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10'/%3E%3Cpath d='M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5'/%3E%3C/g%3E%3C/g%3E%3Cg transform='translate%2850 74%29 rotate%28-28 12 12%29 scale%280.62%29'%3E%3Cg fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10'/%3E%3Cpath d='M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5'/%3E%3C/g%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+          0 0 / 10rem 6.875rem repeat;
         display: grid;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-lg);
@@ -1555,6 +1549,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         text-align: left;
         cursor: pointer;
         background:
+          var(--_motif, linear-gradient(transparent, transparent)),
           var(--_season, linear-gradient(transparent, transparent)),
           linear-gradient(135deg, var(--_tone), var(--_tone-end));
       }
@@ -1611,6 +1606,30 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       }
       .season-polar {
         --_season: var(--_weather-season-polar);
+      }
+      .motif-leaves {
+        --_motif: var(--_weather-motif-leaves);
+      }
+      .motif-flowers {
+        --_motif: var(--_weather-motif-flowers);
+      }
+      .motif-blossoms {
+        --_motif: var(--_weather-motif-blossoms);
+      }
+      .motif-snowmen {
+        --_motif: var(--_weather-motif-snowmen);
+      }
+      .motif-beach {
+        --_motif: var(--_weather-motif-beach);
+      }
+      .motif-palms {
+        --_motif: var(--_weather-motif-palms);
+      }
+      .motif-dunes {
+        --_motif: var(--_weather-motif-dunes);
+      }
+      .motif-snowflakes {
+        --_motif: var(--_weather-motif-snowflakes);
       }
       .place-main,
       .place-side {
@@ -1710,7 +1729,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       mode: 'replace-key',
       operation: this.ownOperation,
       reason:
-        'OpenWeatherMap turned down your key, which Weather uses to get the weather for your saved places. Replace it with one that works.',
+        'OpenWeatherMap turned down the key Weather uses to get the weather for its saved places. Replace it with one that works.',
     });
 }
 
@@ -1759,10 +1778,15 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
     return iconFor(this.condition);
   }
 
-  get season() {
+  get theme() {
     return this.current
-      ? seasonAt(this.args.location.latitude, this.offset, this.current.dt)
-      : 'none';
+      ? themeAt(
+          this.args.location.latitude,
+          this.args.location.longitude,
+          this.offset,
+          this.current.dt,
+        )
+      : NO_THEME;
   }
 
   get tone() {
@@ -1887,7 +1911,11 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
 
   <template>
     <article class='place-view' data-test-weather-place-view>
-      <section class='hero temp-{{this.tone}} season-{{this.season}}'>
+      <section
+        class='hero temp-{{this.tone}}
+          season-{{this.theme.season}}
+          motif-{{this.theme.motif}}'
+      >
         <h2>{{@location.name}}</h2>
         {{#if this.current}}
           <div class='hero-temp' data-test-weather-current-temp>
@@ -1995,6 +2023,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         border-radius: var(--boxel-border-radius-xl);
         color: var(--_weather-on-tone);
         background:
+          var(--_motif, linear-gradient(transparent, transparent)),
           var(--_season, linear-gradient(transparent, transparent)),
           linear-gradient(180deg, var(--_tone), var(--_tone-end));
       }
@@ -2047,6 +2076,30 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
       }
       .season-polar {
         --_season: var(--_weather-season-polar);
+      }
+      .motif-leaves {
+        --_motif: var(--_weather-motif-leaves);
+      }
+      .motif-flowers {
+        --_motif: var(--_weather-motif-flowers);
+      }
+      .motif-blossoms {
+        --_motif: var(--_weather-motif-blossoms);
+      }
+      .motif-snowmen {
+        --_motif: var(--_weather-motif-snowmen);
+      }
+      .motif-beach {
+        --_motif: var(--_weather-motif-beach);
+      }
+      .motif-palms {
+        --_motif: var(--_weather-motif-palms);
+      }
+      .motif-dunes {
+        --_motif: var(--_weather-motif-dunes);
+      }
+      .motif-snowflakes {
+        --_motif: var(--_weather-motif-snowflakes);
       }
       h2 {
         font-size: var(--boxel-font-size-xl);
@@ -2412,24 +2465,41 @@ function temperatureTone(temp: number, units: Units): string {
   return 'hot';
 }
 
-// The season where a place is, on its own calendar date: by hemisphere in
-// the temperate bands, and as its climate band near the equator and the
-// poles, where the four seasons don't describe the year.
-function seasonAt(
+// How a place is decorated: a glow for its season, and a motif for the
+// season where it is.
+interface Theme {
+  season: string;
+  motif: string;
+}
+
+const NO_THEME: Theme = { season: 'none', motif: 'none' };
+
+// The season where a place is, on its own calendar date, by hemisphere in
+// the temperate bands, and its climate band near the equator and the poles,
+// where the four seasons don't describe the year. The motif follows the
+// season and, where the landscape says something different, the region:
+// cherry blossoms for an East Asian spring, dunes across the desert belt from
+// the Sahara to Arabia, palms in the tropics, snowflakes near the poles.
+function themeAt(
   latitude: number | undefined,
+  longitude: number | undefined,
   offset: number,
   seconds: number,
-): string {
+): Theme {
   if (latitude === undefined) {
-    return 'none';
+    return NO_THEME;
   }
-  if (Math.abs(latitude) < 23.5) {
-    return 'tropical';
-  }
-  if (Math.abs(latitude) > 66.5) {
-    return 'polar';
-  }
+  let lon = longitude ?? 0;
   let month = atOffset(offset, seconds).getUTCMonth();
+  if (Math.abs(latitude) > 66.5) {
+    let polarWinter =
+      latitude > 0 ? month >= 9 || month <= 2 : month >= 3 && month <= 8;
+    return { season: 'polar', motif: polarWinter ? 'snowflakes' : 'flowers' };
+  }
+  let desert = latitude >= 15 && latitude <= 35 && lon >= -17 && lon <= 60;
+  if (Math.abs(latitude) < 23.5) {
+    return { season: 'tropical', motif: desert ? 'dunes' : 'palms' };
+  }
   let northern = [
     'winter',
     'winter',
@@ -2454,7 +2524,21 @@ function seasonAt(
         autumn: 'spring',
       }[season] ?? season;
   }
-  return season;
+  if (desert) {
+    return { season, motif: 'dunes' };
+  }
+  let eastAsia = latitude >= 20 && latitude <= 50 && lon >= 100 && lon <= 150;
+  let motif =
+    season === 'spring'
+      ? eastAsia
+        ? 'blossoms'
+        : 'flowers'
+      : season === 'summer'
+        ? 'beach'
+        : season === 'autumn'
+          ? 'leaves'
+          : 'snowmen';
+  return { season, motif };
 }
 
 // The service gives each place's offset from UTC rather than its time zone,
