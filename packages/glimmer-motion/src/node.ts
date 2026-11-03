@@ -752,6 +752,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
         ) as unknown as IProjectionNode;
         ve.projection = projection;
         if (props.layout || props.layoutId) {
+          // `presence` reaches this node only through motion elements carrying the handle
           warnIfNothingSnapshots(element, Boolean(presence));
         }
         // React's useLayoutId: a LayoutGroup id namespaces the layoutId; MeasureLayout adds the node to the group

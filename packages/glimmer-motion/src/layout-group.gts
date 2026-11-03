@@ -103,7 +103,12 @@ let warnedUngroupedLayout = false;
  * that is measured. One rendered through a plain `{{#in-element}}` inside a
  * <LayoutGroup> lands outside the group's DOM, and only Motion's marked
  * portals are exempt. A <LayoutGroup> inside the `{{#in-element}}` block
- * quiets it.
+ * quiets it. A <Presence> renders no element, so an element counts as under
+ * one only through the yielded handle, which reaches it through motion
+ * elements: the handle on the element itself or on a motion element above it.
+ * A `layout` element inside a row that doesn't carry `{{motion presence=p}}`
+ * warns, although the Presence measures it on an `@items` change; the handle
+ * on the row's element quiets it.
  */
 export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
   if (
