@@ -5,6 +5,8 @@ import {
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
 } from '@cardstack/runtime-common';
 import {
   constructHistory,
@@ -730,5 +732,75 @@ module('constructHistory', (hooks) => {
         },
       } as unknown as CardMessageEvent,
     ]);
+  });
+
+  test('a split answer takes whether it finished and whether it was canceled from its last part', async () => {
+    // The publisher sends every part but the last as finished and not
+    // canceled; only the last part records how the answer ended.
+    let part = (
+      eventId: string,
+      ts: number,
+      body: string,
+      content: Record<string, unknown>,
+    ): IRoomEvent => ({
+      event_id: eventId,
+      room_id: 'room-id',
+      type: 'm.room.message',
+      sender: '@aibot:localhost',
+      origin_server_ts: ts,
+      content: {
+        body,
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        ...content,
+      },
+    });
+
+    let [canceled] = await constructHistory(
+      [
+        part('1', 1, 'first ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        }),
+        part('2', 2, 'second ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '1',
+        }),
+        part('3', 3, 'third', {
+          isStreamingFinished: true,
+          isCanceled: true,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '2',
+        }),
+      ],
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      (canceled.content as { body?: string }).body,
+      'first second third',
+    );
+    assert.true(
+      (canceled.content as { isCanceled?: boolean }).isCanceled,
+      'an answer whose last part was canceled reads as canceled',
+    );
+
+    let [streaming] = await constructHistory(
+      [
+        part('1', 1, 'first ', {
+          isStreamingFinished: true,
+          [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        }),
+        part('2', 2, 'second', {
+          isStreamingFinished: false,
+          [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: '1',
+        }),
+      ],
+      fakeMatrixClient,
+    );
+    assert.false(
+      (streaming.content as { isStreamingFinished?: boolean })
+        .isStreamingFinished,
+      'an answer whose last part is still streaming reads as unfinished',
+    );
   });
 });

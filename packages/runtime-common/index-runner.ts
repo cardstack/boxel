@@ -108,6 +108,7 @@ const REMOVAL_READ_CONCURRENCY = 8;
 // A module every realm depends on and none owns. When consecutive renders
 // have timed out idle, whether this renders decides between a stack that
 // cannot render anything and cards that happen to hang on their own.
+// eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- names the canary module by the base realm's registered URL
 const CANARY_MODULE_URL = new URL('card-api', baseRealm.url).href;
 
 // Whether a visit's render timed out with nothing in flight. The timeout error

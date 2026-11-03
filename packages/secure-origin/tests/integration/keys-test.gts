@@ -672,6 +672,94 @@ module('Integration | key pages', function (hooks) {
         .isChecked('already set to allow it, so one Save finishes it');
     });
 
+    test('the notices the page lists are marked read, so the app’s badge for them clears', async function (assert) {
+      let notice = (id: string, readAt: string | null) => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          share: `share-${id}`,
+          label: `Shared ${id}`,
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-use',
+          operations: [`${REALM}weather#Weather.forecast`],
+          declinedAt: null,
+          readAt,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('9', null),
+              notice('8', null),
+              notice('4', '2026-10-30T09:00:00.000Z'),
+            ],
+            meta: { unread: 2 },
+          }),
+        'POST _key-policy-notices/read': () =>
+          json(200, { meta: { marked: 2, unread: 0 } }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      let marked = requests.filter(
+        (r) => r.method === 'POST' && r.path === '_key-policy-notices/read',
+      );
+      assert.deepEqual(
+        marked.map((r) => r.body),
+        [
+          {
+            data: [
+              { type: 'key-policy-notice', id: '9' },
+              { type: 'key-policy-notice', id: '8' },
+            ],
+          },
+        ],
+        'the unread notices it lists, and only those, are marked once',
+      );
+    });
+
+    test('a page whose notices are all read marks nothing', async function (assert) {
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '4',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-4',
+                  label: 'Shared 4',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-use',
+                  operations: [`${REALM}weather#Weather.forecast`],
+                  declinedAt: null,
+                  readAt: '2026-10-30T09:00:00.000Z',
+                  createdAt: '2026-10-30T08:00:00.000Z',
+                },
+              },
+            ],
+            meta: { unread: 0 },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      assert.false(
+        requests.some((r) => r.path === '_key-policy-notices/read'),
+        'nothing is sent',
+      );
+    });
+
     test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
       let declined = false;
       let request = {
@@ -687,6 +775,7 @@ module('Integration | key pages', function (hooks) {
           reason: 'visitors-wanted',
           operations: [`${REALM}weather#Weather.alerts`],
           declinedAt: null as string | null,
+          readAt: '2026-11-01T12:05:00.000Z',
           createdAt: '2026-11-01T12:00:00.000Z',
         },
       };
@@ -876,7 +965,12 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings', 'GET _key-policy-notices'],
+        [
+          'GET _user-keys',
+          'GET _key-bindings',
+          'GET _key-policy-notices',
+          'GET _key-limit-notices',
+        ],
         'the page asks nothing per key',
       );
     });

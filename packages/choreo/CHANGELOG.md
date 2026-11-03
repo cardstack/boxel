@@ -14,6 +14,14 @@ versions may change behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- **A region renders `data-motion-render-detector`.** A region snapshots every projecting element
+  before a render pass patches the DOM, so `{{motion layout=true}}` inside it animates without a
+  `<LayoutGroup>`. The marker (glimmer-motion's `RENDER_DETECTOR_ATTRIBUTE`) tells glimmer-motion's
+  development-mode check for an ungrouped `layout` or `layoutId` element that the elements inside a
+  region are measured.
+
 ### Fixed
 
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
