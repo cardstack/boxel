@@ -87,6 +87,7 @@ function usage(overrides: Record<string, unknown> = {}) {
       { caller: null, calls: 52, withheld: true },
     ],
     refusals: [{ code: 'over-budget', count: 4 }],
+    realms: [],
     vendorOutcomes: [
       { status: 200, count: 340 },
       { status: 403, count: 8, outcome: 'vendor-forbidden' },
@@ -707,6 +708,53 @@ module('Integration | key usage and limits', function (hooks) {
       let put = requests.find((r) => r.method === 'PUT')!;
       assert.strictEqual(put.path, '_key-shares/share-1/limits');
       assert.deepEqual(put.body.data.attributes, { rateRefillPerMinute: 7.5 });
+    });
+
+    test('says where a share was used once a site published from its workspace uses it', async function (assert) {
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource(
+            'share-1',
+            usage({
+              realms: [
+                {
+                  realm: 'https://published.test/workspace-site/',
+                  calls: 40,
+                  published: true,
+                },
+                { realm: REALM, calls: 12 },
+              ],
+            }),
+          ),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-key-usage-realms]');
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-key-usage-realm]')].map(
+          (el) => el.textContent!.replace(/\s+/g, ' ').trim(),
+        ),
+        ['Published site published.test/workspace-site 40', 'The workspace 12'],
+        'each site with its calls this month, the workspace named as such',
+      );
+    });
+
+    test('draws no breakdown while every call is the workspace’s', async function (assert) {
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource(
+            'share-1',
+            usage({ realms: [{ realm: REALM, calls: 12 }] }),
+          ),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-key-usage-details]');
+      assert.dom('[data-test-key-usage-realms]').doesNotExist();
     });
 
     test('tells a direct writer who doesn’t own the share that only its owner changes its limits', async function (assert) {

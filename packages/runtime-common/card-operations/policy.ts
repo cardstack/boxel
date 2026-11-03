@@ -260,6 +260,9 @@ export interface PolicyCompileEnvironment {
   // does, so while it reads the same, `instanceTypesUnder` would answer as it
   // did. An edit to a card leaves it as it was.
   instanceTypeKeys(): Promise<string[]>;
+  // Set for a published realm: the policy keeps only its grants on a
+  // `callApi` whose every credential slot takes a key shared with the realm.
+  sharedKeyCallsOnly?: boolean;
 }
 
 // The environment the cache needs beyond compiling: which card the realm's
@@ -1366,6 +1369,15 @@ async function compileDocument(
         );
         continue;
       }
+      // A published realm is a read-only snapshot, so of its policy it keeps
+      // only the grants that let a caller use a key shared with its source:
+      // each a `callApi` whose every credential slot takes a shared key. Such
+      // a call sends a request outside the realm and writes nothing in it.
+      // Every other grant is left out without an issue, since the source's
+      // own copy of the policy is where its author reads them.
+      if (env.sharedKeyCallsOnly && !sendsOnlySharedKeys(granted)) {
+        continue;
+      }
       // Authorization infrastructure is outside the grant model, and the gate
       // refuses it whatever a compiled policy holds: an operation flagged
       // non-grantable, and any operation on a policy card. So a grant of either
@@ -1910,6 +1922,26 @@ function grantedOperation(
         sendsSharedKey: false,
       }
     : undefined;
+}
+
+// Whether an operation is a `callApi` every credential slot of which takes a
+// key shared with the realm: one that sends a key and none of them the
+// invoking user's own.
+//
+// What a published realm keeps of its policy. A keyless `callApi` writes
+// nothing either, and is still left out: every request a published site sends
+// is then one a key's owner approved for the realm, counted against that
+// share's budgets and the key's caps, whereas a keyless call has no approval
+// and no budget behind it, only its grant's rate limit, on a site anyone can
+// open.
+function sendsOnlySharedKeys(
+  granted: NonNullable<ReturnType<typeof grantedOperation>>,
+): boolean {
+  return (
+    granted.base === 'callApi' &&
+    granted.sendsSharedKey &&
+    !granted.sendsUserKey
+  );
 }
 
 // The declaration a definition entry holds under `name`. The entry has been

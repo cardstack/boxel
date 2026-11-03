@@ -225,6 +225,11 @@ export interface KeyUsage {
     count: number;
     outcome?: 'vendor-forbidden';
   }[];
+  // Where the calls this month were made, most first: each realm, and each
+  // published site (`published`), whose cards used it. A published site's
+  // calls are recorded under its own URL and spend the same budgets as the
+  // calls in the realm it was published from.
+  realms: { realm: string; calls: number; published?: true }[];
   grants: UsageGrant[];
   canEditLimits: boolean;
 }
@@ -323,6 +328,20 @@ async function usageOf(
     ...where(),
     ` AND status IS NOT NULL GROUP BY status ORDER BY status`,
   ]);
+  // A share is used in its own realm and on the sites published from it,
+  // which its writers publish and anyone can open. A key is used by its owner,
+  // in realms they use it in or shared it into, and on those realms' sites.
+  // Naming them tells the viewer nothing about anyone else.
+  let realms = await query(dbAdapter, [
+    `SELECT u.realm_url, SUM(u.count) AS calls,
+            BOOL_OR(r.kind = 'published') AS published
+       FROM key_uses u LEFT JOIN realm_registry r ON r.url = u.realm_url
+      WHERE u.${subjectColumn(subject)} = `,
+    param(subject.id),
+    ` AND u.created_at >= `,
+    param(since),
+    ` GROUP BY u.realm_url ORDER BY calls DESC, u.realm_url`,
+  ]);
   return {
     limits,
     budgets: await budgetUse(dbAdapter, subject, limits),
@@ -342,6 +361,11 @@ async function usageOf(
         ...(status === 403 ? { outcome: 'vendor-forbidden' as const } : {}),
       };
     }),
+    realms: realms.map((row) => ({
+      realm: row.realm_url as string,
+      calls: Number(row.calls),
+      ...(row.published ? { published: true as const } : {}),
+    })),
     grants,
     canEditLimits,
   };

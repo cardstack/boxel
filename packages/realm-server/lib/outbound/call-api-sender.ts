@@ -1,15 +1,22 @@
 import {
   logger,
+  RealmPaths,
+  sameResourceIn,
   type CallApiResponse,
+  type RealmResourceIdentifier,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import {
   OperationFailure,
   type CallApiCredential,
   type CallApiGrantUse,
+  type CallApiReadinessLookup,
   type CallApiRequest,
   type CallApiSender,
+  type CallApiSlotLookup,
+  type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
+import type { PublishedFrom } from '../published-realm.ts';
 import { fillSlots } from '../key-bindings.ts';
 import {
   clearGrantRejection,
@@ -93,17 +100,32 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // Each use of a share or key is recorded against it (`lib/key-uses.ts`): a
 // refusal raised while filling by `fill`, everything after by `recordUse`.
+//
+// A published realm's sender (`publishedFrom`) reads the bindings of the realm
+// it was published from: see `onSource`.
 export function createCallApiSender(
   dbAdapter: DBAdapter,
   {
     // How long a grant the vendor rejected waits between probes.
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
-  }: { probeIntervalMs?: number } = {},
+    publishedFrom,
+  }: { probeIntervalMs?: number; publishedFrom?: PublishedFrom } = {},
 ): CallApiSender {
+  let source = publishedFrom ? onSource(publishedFrom) : undefined;
   return {
     fill: (lookup) =>
-      fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
-    readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
+      fillSlots(dbAdapter, secretsKeyring, source?.lookup(lookup) ?? lookup, {
+        probeIntervalMs,
+        ...(publishedFrom ? { publishedRealmURL: publishedFrom.realmURL } : {}),
+      }),
+    readiness: async (lookup) => {
+      let answer = await keyReadiness(
+        dbAdapter,
+        source?.lookup(lookup) ?? lookup,
+        { probeIntervalMs },
+      );
+      return source ? fixableOnPublishedRealm(answer) : answer;
+    },
     recordUse: (use) => recordKeyUses(dbAdapter, use),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
@@ -137,6 +159,49 @@ export function createCallApiSender(
       return response;
     },
   };
+}
+
+// A published realm holds no share or binding of its own: its owner shares a
+// key into the realm it was published from, and approves that realm's
+// operations there. The copy serves the source's cards and modules at other
+// URLs, so a lookup the published realm makes names its own realm, the type's
+// module and the card under its own URL. Each is read at the same path in the
+// source, where the bindings were approved; a module in any other realm is
+// read as it is. Everything a caller is told, and every use recorded, names
+// the published realm (`publishedRealmURL`), so a visitor to the site never
+// learns the source's URL, and the share's usage says where it was used.
+function onSource({ realmURL, sourceRealmURL }: PublishedFrom) {
+  let published = new RealmPaths(new URL(realmURL));
+  let source = new RealmPaths(new URL(sourceRealmURL));
+  let rebase = (id: string) =>
+    sameResourceIn(published, source, id as RealmResourceIdentifier) ?? id;
+  return {
+    lookup<T extends CallApiSlotLookup | CallApiReadinessLookup>(lookup: T): T {
+      return {
+        ...lookup,
+        realmURL: rebase(lookup.realmURL),
+        type: { ...lookup.type, module: rebase(lookup.type.module) },
+        ...(lookup.instance !== undefined
+          ? { instance: rebase(lookup.instance) }
+          : {}),
+      };
+    },
+  };
+}
+
+// What a card on a published realm is told. Nobody shares or approves into a
+// published realm, and its copy of the source's code changes only when it is
+// published again, so an answer whose fix is to connect, approve or approve
+// again is one only the source's writers can act on, which a card reads as
+// `needs-admin`. Every other answer is the source's.
+function fixableOnPublishedRealm(
+  answer: KeyReadiness | undefined,
+): KeyReadiness | undefined {
+  return answer === 'needs-connect' ||
+    answer === 'needs-approval' ||
+    answer === 'needs-reapproval'
+    ? 'needs-admin'
+    : answer;
 }
 
 // The grants a request's credentials were opened under, each once.
