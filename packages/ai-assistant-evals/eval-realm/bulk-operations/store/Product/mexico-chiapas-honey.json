@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Mexico Chiapas Honey",
+      "category": "coffee",
+      "origin": "Chiapas, Mexico",
+      "variants": [
+        {
+          "sku": "CF-080-250",
+          "size": "250 g",
+          "price": 19.9
+        },
+        {
+          "sku": "CF-080-500",
+          "size": "500 g",
+          "price": 37.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

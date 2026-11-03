@@ -106,6 +106,14 @@ function notInWorkspace(reference: string): VisualCaptureError {
   );
 }
 
+function capturedImage(reference: string): VisualCaptureError {
+  return new VisualCaptureError(
+    `Cannot capture ${reference}: it is an image a capture took, not a card ` +
+      'or file in a workspace. To look at it again, capture the card or ' +
+      'file it shows.',
+  );
+}
+
 // The workspace that holds `reference`, as the URL the capture endpoint is
 // given for it, and `reference` as a URL under that workspace. A workspace can
 // be known by any of its identifier forms (a `@scope/name/` prefix, a virtual
@@ -147,6 +155,9 @@ export async function resolveViewTarget(
   let trimmed = reference?.trim();
   if (!trimmed) {
     throw new VisualCaptureError('A URL to view is required.');
+  }
+  if (trimmed.startsWith(CAPTURE_SOURCE_URL_PREFIX)) {
+    throw capturedImage(trimmed);
   }
   if (
     trimmed.startsWith(LOCAL_SOURCE_URL_PREFIX) ||

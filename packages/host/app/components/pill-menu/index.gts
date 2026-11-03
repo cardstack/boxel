@@ -28,7 +28,7 @@ interface Signature {
   Blocks: {
     headerIcon: [];
     headerDetail: [];
-    content: [];
+    content: [collapseMenu: () => void];
     contentActions: [];
   };
 }
@@ -74,7 +74,7 @@ export default class PillMenu extends Component<Signature> {
         </Header>
         <div class='menu-content'>
           <div class='menu-content-scroll'>
-            {{yield to='content'}}
+            {{yield this.collapseMenu to='content'}}
 
             {{#if (has-block 'contentActions')}}
               <div class='menu-content-actions'>

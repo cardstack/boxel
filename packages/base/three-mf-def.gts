@@ -1,5 +1,8 @@
 import PrinterIcon from '@cardstack/boxel-icons/printer';
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+} from '@cardstack/runtime-common';
 import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
 import {
   FileContentMismatchError,
@@ -8,7 +11,6 @@ import {
 } from './file-api';
 import {
   ThreeDModelDef,
-  getExtension,
   model3dAttributes,
   type SerializedModel3d,
 } from './three-d-model-def';
@@ -54,7 +56,7 @@ export class ThreeMfDef extends ThreeDModelDef {
       fileSizeLimitBytes?: number;
     } = {},
   ): Promise<SerializedFile<Partial<{ model3d: SerializedModel3d }>>> {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (extension !== '.3mf') {
       throw new FileContentMismatchError(
         `Expected .3mf file extension, got "${extension || 'none'}"`,

@@ -1,6 +1,6 @@
 # The UI lens
 
-Runs in any review of a UI change: a card or field template, a component defined in a realm, a component in `packages/host`, `packages/pretui`, `packages/boxel-ui` or `packages/catalog`, or the scoped styles of any of them. It adds two lenses to the review's own: the `boxel-ui-guidelines` UI review procedure, and better-interface's six domains. Their findings are classified, written and reported like any other finding of the review that loads this file (`pr-review`, `review-branch`, or a code review asked to run it); this file covers only what to load and what to look for.
+Runs in any review of a UI change: a card or field template, a component defined in a realm, a component in `packages/host`, `packages/pretui`, `packages/boxel-ui` or `packages/catalog`, or the scoped styles of any of them. It adds two lenses to the review's own: the `boxel-ui-guidelines` UI review procedure, and better-interface's six domains. Their findings are classified, written and reported like any other finding of the review that loads this file (`pr-review`, `review-branch`, `ui-code-review`, or a code review asked to run it); this file covers only what to load and what to look for.
 
 Host app chrome (`packages/host/app/components/**`) isn't user-themed: no card or user theme reaches it, so the `font:` shorthand and raw palette shades (`--boxel-800`, `--boxel-light`) are its house style and aren't findings. A host component that uses contract tokens under `data-theme='light'` or `'dark'` (the dashboard, the sign-in screens) follows the token rules for those tokens.
 
@@ -10,7 +10,7 @@ A PR in `cardstack/boxel-catalog` or `cardstack/boxel-home` is realm code, and i
 
 Load `gts-component-conventions` when the scope has a `.gts` file.
 
-Load `interfaces:better-interface`, and through it every domain skill in its order: `better-accessibility`, `better-layout`, `better-writing`, `better-typography`, `better-colors`, `better-ui`. When the `interfaces` plugin isn't installed, say so where the review states what it covered, and run the guidelines procedure alone. Mark any single domain that fails to load as not reviewed.
+Load `interfaces:better-interface`, and through it every domain skill in its order: `better-accessibility`, `better-layout`, `better-writing`, `better-typography`, `better-colors`, `better-ui`. When the `interfaces` plugin isn't installed, say, where the review states what it covered, that `better-interface` wasn't reviewed, and run the guidelines procedure alone. Mark any single domain that fails to load as not reviewed.
 
 Skip better-interface's §2 ("Send a change to `interface-review`"). It refuses to resolve a change scope and asks the user to run `interface-review`, which only the user can start. This lens takes `interface-review`'s place instead: read the plugin's `installPath` for `interfaces@interfaces` from `installed_plugins.json` in the plugins root (`$CLAUDE_CODE_PLUGIN_CACHE_DIR`, or `$HOME/.claude/plugins` when it's unset), then read `skills/interface-review/SKILL.md`, `scope-resolution.md` and `removed-signals.md` under that path, and use them to resolve the change scope and the removed signals. Don't pick a version from the cache directory, which keeps old versions. Its report format, severity ladder and verdict don't apply; the review's own classes and blocking calls do.
 
@@ -33,4 +33,4 @@ Run both lenses over **every touched UI file, whole file, not just the diff**, a
 - **Rendering.** Render only an app that serves the code under review: the working tree, only when the review is of the working tree; for a branch or a PR, an environment running its head (a preview the author or reviewer started). Don't start or switch a dev server for the review. A check that needs rendering and has no such app is not a finding; ask it as a question only when the answer changes what the author does.
 - **Measure, don't assert.** Compute contrast from the values in `theme.css`/`variables.css` against the boxel default theme, light and dark, and give the ratio in the finding.
 
-Where the review states what it covered (pr-review's lens sentence, review-branch's overall assessment), it names the UI lenses that ran, and any domain that didn't.
+Where the review states what it covered (pr-review's lens sentence, review-branch's overall assessment, ui-code-review's scope line), it names the UI lenses that ran, and any domain that didn't.

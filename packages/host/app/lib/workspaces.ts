@@ -59,7 +59,7 @@ export async function createWorkspace(
 }
 
 // Deletes a workspace (realm) the current user owns, with the same result as
-// "Delete Workspace" in the workspace chooser tile menu: the realm and all of
+// "Delete Workspace" in a workspace's menu: the realm and all of
 // its content are removed on the realm server (published copies included), it
 // leaves the user's realm list, and the app falls back to the workspace
 // chooser if the deleted workspace — or one of its published copies — was

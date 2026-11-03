@@ -53,6 +53,9 @@ export interface TaskArgs {
   virtualNetwork: VirtualNetwork;
   log: LoggerInstance;
   matrixURL: string;
+  // The name of the Matrix server the paired homeserver serves, which every
+  // realm user a job names by localpart is on (ADR 004 §1.2).
+  matrixServerName: string;
   // The MediaCache's object store. Optional: a worker process without one
   // configured still registers media-cache jobs, whose tasks then no-op.
   mediaCacheAdapter?: MediaCacheAdapter;

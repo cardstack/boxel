@@ -1048,7 +1048,7 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
-  test('a module a code grant opens to a caller who is not signed in is served privately, and counted', async function (assert) {
+  test('a module a code grant opens to a caller who is not signed in is served privately from the module cache, and counted', async function (assert) {
     // The newsroom's rule on its articles, and one beside it that opens every
     // module to such callers, two requests at a time.
     await org.write(
@@ -1088,6 +1088,13 @@ module(basename(import.meta.filename), function (hooks) {
       }
       return req;
     };
+    // A reader's import compiles the module.
+    let read = await request
+      .get(`${new URL(NEWSROOM).pathname}article`)
+      .set('Accept', '*/*')
+      .set('Authorization', `Bearer ${createJWT(newsroom, READER, ['read'])}`);
+    assert.strictEqual(read.status, 200, 'a reader imports the module');
+    let compiles = newsroom.__testOnlyGetTranspileCallCount();
     let served = await importModule();
     assert.strictEqual(served.status, 200, 'the module is served');
     assert.strictEqual(served.get('content-type'), 'text/javascript');
@@ -1095,6 +1102,17 @@ module(basename(import.meta.filename), function (hooks) {
       /^private\b/.test(served.get('cache-control') ?? ''),
       'privately',
     );
+    assert.strictEqual(
+      served.get('x-boxel-cache'),
+      'hit',
+      "from the module cache the reader's import filled",
+    );
+    assert.strictEqual(
+      newsroom.__testOnlyGetTranspileCallCount() - compiles,
+      0,
+      'without a compile',
+    );
+    assert.strictEqual(served.text, read.text, 'the module the reader imports');
     let revalidated = await importModule({
       'If-None-Match': served.get('etag')!,
     });
@@ -1111,7 +1129,12 @@ module(basename(import.meta.filename), function (hooks) {
         { outcome: 'admitted', grant: 'rules[1].grants[0]' },
         { outcome: 'rate-limited', grant: 'rules[1].grants[0]' },
       ],
-      'and recorded against the code grant',
+      'and recorded against the code grant, the cache hit included',
+    );
+    assert.strictEqual(
+      newsroom.__testOnlyGetTranspileCallCount() - compiles,
+      0,
+      'and the request over the limit compiled nothing',
     );
   });
 

@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { allSettled, restartableTask } from 'ember-concurrency';
+import { allSettled, didCancel, restartableTask } from 'ember-concurrency';
 import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
@@ -44,6 +44,10 @@ import type { Message } from '../lib/matrix-classes/message';
 import type { CardDef, Format } from '@cardstack/base/card-api';
 import type * as CommandModule from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
+
+// The name a session is created with. The bot renames a session once it has
+// answered in it.
+export const NEW_SESSION_NAME = 'New AI Assistant Chat';
 
 export interface SessionRoomData {
   roomId: string;
@@ -264,6 +268,20 @@ export default class AiAssistantPanelService extends Service {
     }
   }
 
+  // Opens the panel on a new session. A second press while the first is still
+  // opening restarts the panel's tasks and cancels the first, which is
+  // superseded rather than failed.
+  async openNewSession() {
+    try {
+      await this.openPanel();
+      await this.createNewSession();
+    } catch (error) {
+      if (!didCancel(error)) {
+        throw error;
+      }
+    }
+  }
+
   @action
   async createNewSession(
     opts: {
@@ -288,7 +306,7 @@ export default class AiAssistantPanelService extends Service {
       return;
     }
 
-    await this.doCreateRoom.perform('New AI Assistant Chat', opts);
+    await this.doCreateRoom.perform(NEW_SESSION_NAME, opts);
   }
 
   private get newSessionId() {
@@ -399,7 +417,7 @@ export default class AiAssistantPanelService extends Service {
 
   private doCreateRoom = restartableTask(
     async (
-      name: string = 'New AI Assistant Chat',
+      name: string = NEW_SESSION_NAME,
       opts: {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;
@@ -655,12 +673,18 @@ export default class AiAssistantPanelService extends Service {
     return this.loadRoomsTask.isRunning;
   }
 
-  private loadRoomsTask = restartableTask(async () => {
+  // Resolves once the sync's first pass is processed, so aiSessionRooms lists
+  // every session the user has.
+  async waitForSessionRooms() {
     await this.matrixService.waitForInitialSync();
     await this.matrixService.flushAll;
     await allSettled(
       [...this.matrixService.roomResources.values()].map((r) => r.processing),
     );
+  }
+
+  private loadRoomsTask = restartableTask(async () => {
+    await this.waitForSessionRooms();
     await this.enterRoomInitially();
   });
 

@@ -4,12 +4,17 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { Badge } from '@cardstack/pretui/components/badge';
+
+import { Button } from '@cardstack/pretui/components/button';
+
 import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 
 import type BillingService from '@cardstack/host/services/billing-service';
+import type KeyNoticesService from '@cardstack/host/services/key-notices';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 interface ProfileInfoPopoverSignature {
@@ -110,6 +115,13 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       :deep(.buy-more-credits.out-of-credit .size-base) {
         --boxel-button-min-height: 39px;
       }
+      .api-keys-item {
+        display: flex;
+        margin-bottom: var(--boxel-sp);
+      }
+      .api-keys-button {
+        inline-size: 100%;
+      }
       .daily-grant-note {
         flex-basis: 100%;
         color: var(--boxel-500);
@@ -147,6 +159,23 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       </header>
 
       <ProfileInfo />
+      <Badge
+        class='api-keys-item'
+        @count={{this.keyNotices.unread}}
+        @label='unseen key notices'
+        data-test-profile-api-keys-badge={{if
+          this.keyNotices.unread
+          this.keyNotices.unread
+        }}
+      >
+        <Button
+          class='api-keys-button'
+          @tone='neutral'
+          @appearance='outlined'
+          {{on 'click' this.keyNotices.openKeys}}
+          data-test-profile-api-keys-button
+        >API Keys</Button>
+      </Badge>
       <WithSubscriptionData as |subscriptionData|>
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
@@ -200,6 +229,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
 
   @service declare matrixService: MatrixService;
   @service declare billingService: BillingService;
+  @service declare private keyNotices: KeyNoticesService;
 
   @action private logout() {
     this.matrixService.signOut();

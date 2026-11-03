@@ -26,6 +26,20 @@ class DummyCardWithCustomTemplates extends DummyCard {
   static hasCustomIsolatedTemplate = true;
 }
 
+async function copiedBy(item: MenuItemOptions | undefined) {
+  let original = navigator.clipboard.writeText;
+  let copied: string | undefined;
+  navigator.clipboard.writeText = async (text: string) => {
+    copied = text;
+  };
+  try {
+    await item?.action?.();
+  } finally {
+    navigator.clipboard.writeText = original;
+  }
+  return copied;
+}
+
 module('Unit | CardDef menu items', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -58,6 +72,26 @@ module('Unit | CardDef menu items', function (hooks) {
       'contains New Card of This Type',
     );
     assert.ok(texts.includes('Delete'), 'contains Delete');
+  });
+
+  test('Copy Card URL copies the URL a browser can open', async function (assert: Assert) {
+    let id = '@cardstack/base/Person/1';
+    let card = new DummyCard(id, 'One') as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: false,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      toolContext: {} as any,
+    });
+
+    let copied = await copiedBy(
+      items.find((i: MenuItemOptions) => i.label === 'Copy Card URL'),
+    );
+    assert.ok(copied?.startsWith('http'), `copied ${copied}`);
+    assert.strictEqual(
+      copied,
+      getService('network').virtualNetwork.keyForIdentifier(id),
+    );
   });
 
   test('interact edit format includes unchecked "Toggle Standard View" for card with custom template', function (assert: Assert) {

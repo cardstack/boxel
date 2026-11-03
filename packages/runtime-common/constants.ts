@@ -1,22 +1,14 @@
 import { RealmPaths } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
-import {
-  ri,
-  rri,
-  type RealmIdentifier,
-  type RealmResourceIdentifier,
-} from './realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { RealmPermissions } from './index.ts';
+import { baseRealmAliasURL, baseRealmRRI } from './realm-prefixes.ts';
 
-export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const baseRealm = new RealmPaths(new URL(baseRealmAliasURL));
 
-/**
- * The base realm's canonical RRI prefix. Use this when building code
- * refs that should match what `Loader.identify` / `identifyCard` emit
- * for base-realm classes (which canonicalise via `vn.unresolveURL`
- * to the registered `@cardstack/base/` prefix).
- */
-export const baseRealmRRI: RealmIdentifier = ri('@cardstack/base/');
+// Declared beside the prefix declaration, which dependency-light consumers can
+// import; re-exported here for everything else.
+export { baseRealmRRI };
 
 /**
  * Build a `RealmResourceIdentifier` for a module inside the base realm.
@@ -124,6 +116,10 @@ export interface Permissions {
 }
 
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
+// What one US dollar of model cost is billed as, in Boxel credits. The
+// billing ledger and the assistant's usage line both read this, so what the
+// chat shows is what the account is charged.
+export const CREDITS_PER_USD = 1000;
 
 // Default max card payload size, in bytes.
 export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB

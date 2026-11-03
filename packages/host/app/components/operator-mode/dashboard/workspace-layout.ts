@@ -4,13 +4,10 @@
 export const RECENT_WORKSPACE_ROWS = 3;
 export const COLLAPSED_WORKSPACE_ROWS = 10;
 
-// Fills the recent rows exactly, less the cells New Workspace and its
-// pending spinner take; a dozen tiles until the grid has been measured.
-export function recentWorkspaceCount(
-  columns: number,
-  reservedCells = 1,
-): number {
-  return (columns ? columns * RECENT_WORKSPACE_ROWS : 13) - reservedCells;
+// Fills the recent rows exactly, less the cell New Workspace takes; a dozen
+// tiles until the grid has been measured.
+export function recentWorkspaceCount(columns: number): number {
+  return (columns ? columns * RECENT_WORKSPACE_ROWS : 13) - 1;
 }
 
 // Most recently updated first. Workspaces with no update time keep their list

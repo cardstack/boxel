@@ -1,4 +1,5 @@
 import { getOwner, setOwner } from '@ember/owner';
+
 import type Owner from '@ember/owner';
 
 import { debounce } from '@ember/runloop';
@@ -10,7 +11,7 @@ import Ajv from 'ajv';
 
 import { task, timeout, all } from 'ember-concurrency';
 
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedMap, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { Command, ToolContext } from '@cardstack/runtime-common';
@@ -27,6 +28,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import {
+  APPROVE_REACTION_KEY,
+  DECLINE_REACTION_KEY,
+} from '@cardstack/runtime-common/ai/approval-reaction';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
@@ -36,12 +41,15 @@ import {
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
+import type { ChangedFile } from '@cardstack/host/lib/turn-summary';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
+import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
 import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
+import { runDeliveryId } from '../lib/run-delivery';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
@@ -54,7 +62,10 @@ import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
 import type MessageTool from '../lib/matrix-classes/message-tool';
+import type { RealmFileEdit } from '../lib/realm-runner/edits';
 import type { RoomResource } from '../resources/room';
+import type { ScriptAsk } from '../tools/run-realm-code';
+import type { EntrySummary } from '../tools/search-entries';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -157,6 +168,34 @@ async function withExtendableTimeout<T>(
   }
 }
 
+// A step of a tool validation, and when the validation entered it.
+interface ValidationStep {
+  step: string;
+  at: number;
+}
+
+// e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at +2950ms
+// (still running at +3000ms)"
+function describeValidationSteps(
+  steps: ValidationStep[],
+  lastStep: 'threw' | 'still running',
+): string {
+  if (!steps.length) {
+    return 'none started';
+  }
+  let start = steps[0].at;
+  let now = performance.now();
+  return steps
+    .map(({ step, at }, i) => {
+      let next = steps[i + 1];
+      let span = next
+        ? `${Math.round(next.at - at)}ms`
+        : `${lastStep} at +${Math.round(now - start)}ms`;
+      return `${step} at +${Math.round(at - start)}ms (${span})`;
+    })
+    .join('; ');
+}
+
 // Every tool module the host provides is registered under this specifier.
 const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
 
@@ -234,6 +273,48 @@ function coerceToSchema(
   return { value, changed: false };
 }
 
+// The last lines a running call recorded: enough for the transcript, never
+// the whole log.
+const MAX_PROGRESS_LINES = 12;
+
+export interface ToolProgressSnapshot {
+  progress?: {
+    step: number;
+    of: number;
+    label: string;
+    // the steps a script named with realm.plan
+    plan?: string[];
+    // progress inside the current step
+    count?: number;
+    countOf?: number;
+  };
+  lines: string[];
+}
+type ToolProgressListener = (entry: {
+  line: string;
+  progress?: ToolProgressSnapshot['progress'];
+}) => void;
+
+// How long a script's question waits for the reader.
+const SCRIPT_ASK_MAX_MS = 10 * 60 * 1000;
+
+// A wait as a person reads it: whole minutes, or milliseconds when shorter.
+function describeWait(ms: number): string {
+  if (ms < 60_000) {
+    return `${ms} ms`;
+  }
+  let minutes = Math.round(ms / 60_000);
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+interface ScriptAnswer {
+  answer: string;
+  label: string;
+}
+
+// A call the reader denied at its gate, as its result says it.
+export const DENIED_BY_USER = 'Denied by you';
+
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -243,7 +324,140 @@ export default class ToolService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private session: SessionService;
   @service declare private store: StoreService;
+  // How long a tool may run, and how long a script's question waits for the
+  // reader. Only __setWaitsForTesting changes them.
+  #toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
+  #scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
+  // The room each running call runs for, by tool call id.
+  private executingToolRooms = new TrackedMap<string, string>();
+  // What a running call has said about itself so far, by tool call id: the
+  // step it is on and the lines it recorded. Filled by tools that report
+  // progress (the Realm Runner), read by the transcript while the call runs.
+  // It lives only in the tab that runs the call; the result carries the
+  // finished record.
+  toolProgress = new TrackedMap<string, ToolProgressSnapshot>();
+  // What a finished Realm Runner call changed, by tool call id: each file's
+  // full text before and after. Only the tab that ran the call has it; the
+  // result carries a compact diff for every other tab and after a reload.
+  toolEdits = new TrackedMap<string, RealmFileEdit[]>();
+  // What each run's searches found, best match first (realm.entries.search),
+  // for the row to show.
+  toolFound = new TrackedMap<string, EntrySummary[]>();
+  // Calls the reader stopped, by tool call id. A stop is asked once.
+  stoppedToolRequestIds = new TrackedSet<string>();
+  // The running tools that can be stopped, by tool call id, with the room
+  // each one runs for.
+  private stoppableTools = new TrackedMap<
+    string,
+    { roomId: string; stop: () => void }
+  >();
+  // Calls that stand for a background run still under way, reported by
+  // their rows. A turn holding one is live work, so it never folds away.
+  liveRunToolIds = new TrackedSet<string>();
+  // Questions a running script put to its reader (realm.ask), by tool call
+  // id: the row shows the picker, and the pick settles the script's wait.
+  scriptAsks = new TrackedMap<
+    string,
+    {
+      request: ScriptAsk;
+      answer: (value: string) => void;
+      cancel: () => void;
+    }
+  >();
+
+  // Shortens the tool deadline and the wait for a script's question, so a
+  // test can reach them. Refused outside tests.
+  __setWaitsForTesting(waits: {
+    toolExecuteTimeoutMs?: number;
+    scriptAskMaxMs?: number;
+  }) {
+    if (!isTesting()) {
+      throw new Error('__setWaitsForTesting is only for tests');
+    }
+    this.#toolExecuteTimeoutMs =
+      waits.toolExecuteTimeoutMs ?? this.#toolExecuteTimeoutMs;
+    this.#scriptAskMaxMs = waits.scriptAskMaxMs ?? this.#scriptAskMaxMs;
+  }
+
+  private askFromScript(
+    toolRequestId: string,
+    request: ScriptAsk,
+  ): Promise<ScriptAnswer> {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        this.scriptAsks.delete(toolRequestId);
+        reject(
+          new Error(
+            `No answer came within ${describeWait(this.#scriptAskMaxMs)}`,
+          ),
+        );
+      }, this.#scriptAskMaxMs);
+      this.scriptAsks.set(toolRequestId, {
+        request,
+        answer: (value: string) => {
+          clearTimeout(timer);
+          this.scriptAsks.delete(toolRequestId);
+          let option = request.options.find((o) => o.value === value);
+          resolve({ answer: value, label: option?.label ?? value });
+        },
+        cancel: () => {
+          clearTimeout(timer);
+          this.scriptAsks.delete(toolRequestId);
+          reject(new Error('The run ended before an answer came'));
+        },
+      });
+    });
+  }
+
+  // Click-required calls the reader allowed for the rest of a session, by
+  // room: "Always for this session" on a script's gate. Kept for the tab.
+  private alwaysAllowed = new TrackedMap<string, Set<string>>();
+
+  isAlwaysAllowed(roomId: string, call: string) {
+    return this.alwaysAllowed.get(roomId)?.has(call) ?? false;
+  }
+
+  allowAlways(roomId: string, calls: string[]) {
+    this.alwaysAllowed.set(
+      roomId,
+      new Set([...(this.alwaysAllowed.get(roomId) ?? []), ...calls]),
+    );
+  }
+
+  // The reader said no to a call that waited on their click: its result
+  // says so, so the call has an outcome and the model reads why. A decline
+  // does not resume the assistant, so it never lifts a Stop.
+  async denyTool(messageTool: MessageTool) {
+    let roomId = messageTool.message.roomId;
+    if (!messageTool.id) {
+      return;
+    }
+    await this.matrixService.sendToolResultEvent({
+      roomId,
+      invokedToolFromEventId:
+        this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+        messageTool.eventId,
+      toolCallId: messageTool.id,
+      status: 'canceled',
+      failureReason: DENIED_BY_USER,
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
+  // What each settled call changed in source files, reported by its row:
+  // the turn's footer sums them into one diff chip.
+  toolDiffStats = new TrackedMap<
+    string,
+    {
+      files: number;
+      added: number;
+      removed: number;
+      perFile?: ChangedFile[];
+    }
+  >();
+  // Background runs whose result this tab has posted to their room, by run
+  // card id: a run is delivered once.
+  private deliveredRuns = new Set<string>();
   executedToolRequestIds = new TrackedSet<string>();
   // Requests the auto-execution flow has claimed for resolution. Drain
   // passes can overlap, and the records above are written only after
@@ -285,6 +499,7 @@ export default class ToolService extends Service {
 
   resetState() {
     this.currentlyExecutingToolRequestIds.clear();
+    this.executingToolRooms.clear();
     this.executedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
@@ -631,20 +846,37 @@ export default class ToolService extends Service {
           // tool in the tab stops. Bound it like execute, and log what it is
           // waiting on if it is slow, so the stuck step can be named.
           let isValid = false;
+          // This run's own timeline. A validation that times out keeps
+          // running, so it writes only to this array and never to the map
+          // entry of a later validation of the same request.
+          let steps: ValidationStep[] = [];
+          if (messageTool.id) {
+            this.validationSteps.set(messageTool.id, steps);
+          }
+          let validationSettled = false;
           let watchdog = setTimeout(
-            () => this.logSlowValidation(messageTool),
+            () => this.logSlowValidation(messageTool, steps),
             VALIDATE_WATCHDOG_MS,
           );
           try {
             isValid = await withTimeout(
-              this.validate(messageTool),
-              VALIDATE_TIMEOUT_MS,
+              this.validate(messageTool, steps).finally(() => {
+                validationSettled = true;
+              }),
+              this.validateTimeoutMs,
               `Validating tool "${messageTool.name}"`,
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
+            // The message and step timeline go in the text itself: a test
+            // runner's console capture can render an Error argument as
+            // "[object Object]". The error argument is still passed for its
+            // stack.
             console.error(
-              `Tool processing failed for "${messageTool.name}" (${messageTool.id}):`,
+              `Tool processing failed for "${messageTool.name}" (${messageTool.id}): ${error.message} [validation steps: ${describeValidationSteps(
+                steps,
+                validationSettled ? 'threw' : 'still running',
+              )}]`,
               e,
             );
             try {
@@ -676,7 +908,10 @@ export default class ToolService extends Service {
             continue;
           } finally {
             clearTimeout(watchdog);
-            if (messageTool.id) {
+            if (
+              messageTool.id &&
+              this.validationSteps.get(messageTool.id) === steps
+            ) {
               this.validationSteps.delete(messageTool.id);
             }
           }
@@ -871,6 +1106,89 @@ export default class ToolService extends Service {
   // wins (handles the streaming → m.replace shape: the original streaming
   // event and later replace events both carry the toolRequests array; the
   // latest replace is the one ai-bot's /messages view agrees on).
+  private recordToolProgress(
+    toolRequestId: string,
+    entry: { line: string; progress?: ToolProgressSnapshot['progress'] },
+  ) {
+    let previous = this.toolProgress.get(toolRequestId);
+    let progress = entry.progress ?? previous?.progress;
+    // a plan named mid-run keeps the step the run is already on
+    if (entry.progress?.step === 0 && previous?.progress?.step) {
+      progress = {
+        ...previous.progress,
+        plan: entry.progress.plan,
+        of: entry.progress.of,
+      };
+    }
+    this.toolProgress.set(toolRequestId, {
+      progress,
+      lines: [...(previous?.lines ?? []), entry.line].slice(
+        -MAX_PROGRESS_LINES,
+      ),
+    });
+  }
+
+  // Asks a running call to stop. Only a tool that knows how to stop (the
+  // Realm Runner) can; what it already did stays and its result says so.
+  stopTool(toolRequestId: string) {
+    let tool = this.stoppableTools.get(toolRequestId);
+    if (!tool || this.stoppedToolRequestIds.has(toolRequestId)) {
+      return;
+    }
+    this.stoppedToolRequestIds.add(toolRequestId);
+    // A question the run put to its reader is withdrawn with it.
+    this.scriptAsks.get(toolRequestId)?.cancel();
+    tool.stop();
+  }
+
+  // The calls running in this tab for one room.
+  executingToolIdsInRoom(roomId: string): string[] {
+    return [...this.executingToolRooms]
+      .filter(([, room]) => room === roomId)
+      .map(([id]) => id);
+  }
+
+  // Stops every running call of one room: Stop in a room ends its own work
+  // only.
+  stopToolsInRoom(roomId: string) {
+    for (let [id, tool] of [...this.stoppableTools]) {
+      if (tool.roomId === roomId) {
+        this.stopTool(id);
+      }
+    }
+  }
+
+  canStopTool(toolRequestId: string) {
+    return (
+      this.stoppableTools.has(toolRequestId) &&
+      !this.stoppedToolRequestIds.has(toolRequestId)
+    );
+  }
+
+  // Posts a finished background run into its room, so the assistant gets a
+  // turn with the result: "I'll tell you when it's done" then happens. The
+  // message carries the run card and a client id derived from it, which
+  // both marks it as a delivery in the transcript and lets every tab see it
+  // has been sent.
+  async deliverRunResult(roomId: string, run: CardDef, title: string) {
+    if (!run.id || this.deliveredRuns.has(run.id)) {
+      return;
+    }
+    this.deliveredRuns.add(run.id);
+    try {
+      await new SendAiAssistantMessageTool(this.toolContext).execute({
+        roomId,
+        prompt: `The background run "${title}" finished. Summarize the attached result for me. Do not repeat the work.`,
+        clientGeneratedId: runDeliveryId(run.id),
+        attachedCards: [run],
+      });
+    } catch (e) {
+      // a delivery that did not land may be tried again
+      this.deliveredRuns.delete(run.id);
+      console.error(`could not deliver background run ${run.id}`, e);
+    }
+  }
+
   private getCurrentEventIdForCommandRequest(
     roomId: string | undefined,
     commandRequestId: string | undefined,
@@ -931,18 +1249,27 @@ export default class ToolService extends Service {
     },
   );
 
+  // An answer goes out twice. The result event is the answer ai-bot acts
+  // on, whatever its version; the 👍 or 👎 on the bot message is the answer
+  // people see (see runtime-common/ai/approval-reaction.ts), so every
+  // member's client shows who answered. ai-bot runs a call once however many
+  // answers it sees. A reaction answers every held call on its message, so a
+  // call that shares its message with another one still waiting gets no
+  // reaction of its own.
   private async sendApprovalAnswer(
     command: MessageTool,
     callId: string,
     answer: 'approve' | 'decline',
   ) {
+    let roomId = command.message.roomId;
     let invokedToolFromEventId =
-      this.getCurrentEventIdForCommandRequest(
-        command.message.roomId,
-        command.toolRequest.id,
-      ) ?? command.eventId;
+      this.getCurrentEventIdForCommandRequest(roomId, command.toolRequest.id) ??
+      command.eventId;
+    let othersWaiting = command.message.tools.some(
+      (tool) => tool !== command && tool.awaitsApproval,
+    );
     await this.matrixService.sendToolResultEvent({
-      roomId: command.message.roomId,
+      roomId,
       invokedToolFromEventId,
       toolCallId: callId,
       // Approving asks for the call to go ahead, which lifts a stop; declining
@@ -957,6 +1284,32 @@ export default class ToolService extends Service {
           }),
       context: await this.operatorModeStateService.getSummaryForAIBot(),
     });
+    if (othersWaiting) {
+      return;
+    }
+    try {
+      await this.matrixService.sendReactionEvent(
+        roomId,
+        this.originalEventId(roomId, invokedToolFromEventId),
+        answer === 'approve' ? APPROVE_REACTION_KEY : DECLINE_REACTION_KEY,
+      );
+    } catch (e) {
+      // the answer is in; only the reaction people see is missing
+      console.warn(`could not react to held tool call ${callId}`, e);
+    }
+  }
+
+  // A reaction annotates the message itself, never one of its edits: ai-bot
+  // reads the room without edits, and a client draws reactions on the
+  // message.
+  private originalEventId(roomId: string, eventId: string): string {
+    let events = this.matrixService.roomResources.get(roomId)?.events ?? [];
+    let event = events.find((e: any) => e?.event_id === eventId) as any;
+    let relation = event?.content?.['m.relates_to'];
+    return relation?.rel_type === 'm.replace' &&
+      typeof relation.event_id === 'string'
+      ? relation.event_id
+      : eventId;
   }
 
   // Runs a host tool and posts its result. `auto` says the tool drain started
@@ -965,7 +1318,10 @@ export default class ToolService extends Service {
   // says so, which lifts a stop they pressed.
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(
-    async (command: MessageTool, { auto = false }: { auto?: boolean } = {}) => {
+    async (
+      command: MessageTool,
+      { auto = false, answer }: { auto?: boolean; answer?: string } = {},
+    ) => {
       // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
       // run. Guards the manual "Try Anyway" path as well as any auto-execution.
       if (command.executedBy === AI_BOT_EXECUTOR) {
@@ -1006,6 +1362,7 @@ export default class ToolService extends Service {
       try {
         this.matrixService.failedToolState.delete(commandRequestId!);
         this.currentlyExecutingToolRequestIds.add(commandRequestId!);
+        this.executingToolRooms.set(commandRequestId!, command.message.roomId);
 
         // The timeout brackets everything between claiming the request and
         // having a result in hand: module resolution and input construction
@@ -1037,6 +1394,11 @@ export default class ToolService extends Service {
 
           if (toolToRun) {
             let attributes = payload?.attributes;
+            // The user's pick for a tool that asks them (ask-user): it comes
+            // from the click, never from the model's arguments.
+            if (answer !== undefined) {
+              attributes = { ...attributes, answer };
+            }
             if (
               (toolToRun.constructor as { bindsToInvokingRoom?: boolean })
                 .bindsToInvokingRoom
@@ -1052,6 +1414,38 @@ export default class ToolService extends Service {
             ).extraExecuteTimeMsFor;
             if (typeof extraTimeFor === 'function') {
               extendTimeout(extraTimeFor(attributes));
+            }
+            if (
+              commandRequestId &&
+              (toolToRun.constructor as { reportsProgress?: boolean })
+                .reportsProgress
+            ) {
+              let requestId = commandRequestId;
+              (toolToRun as { onProgress?: ToolProgressListener }).onProgress =
+                (entry) => this.recordToolProgress(requestId, entry);
+              (
+                toolToRun as { onEdits?: (edits: RealmFileEdit[]) => void }
+              ).onEdits = (edits) => this.toolEdits.set(requestId, edits);
+              (
+                toolToRun as {
+                  onFound?: (found: EntrySummary[]) => void;
+                }
+              ).onFound = (found) => this.toolFound.set(requestId, found);
+              (
+                toolToRun as {
+                  onAsk?: (request: ScriptAsk) => Promise<ScriptAnswer>;
+                }
+              ).onAsk = (request) => {
+                extendTimeout(this.#scriptAskMaxMs);
+                return this.askFromScript(requestId, request);
+              };
+              let stoppable = toolToRun as { stop?: () => void };
+              if (typeof stoppable.stop === 'function') {
+                this.stoppableTools.set(requestId, {
+                  roomId: command.message.roomId,
+                  stop: stoppable.stop,
+                });
+              }
             }
             let typedInput = await this.instantiateToolInput(
               toolToRun,
@@ -1112,8 +1506,8 @@ export default class ToolService extends Service {
         // standard bound.
         let executeTimeoutMs =
           command.name === CHECK_CORRECTNESS_COMMAND_NAME
-            ? TOOL_EXECUTE_TIMEOUT_MS + 2 * ENV.cardRenderTimeout
-            : TOOL_EXECUTE_TIMEOUT_MS;
+            ? this.#toolExecuteTimeoutMs + 2 * ENV.cardRenderTimeout
+            : this.#toolExecuteTimeoutMs;
 
         [resultCard] = await all([
           withExtendableTimeout(
@@ -1254,6 +1648,10 @@ export default class ToolService extends Service {
           this.store.dropReference(pinnedInputId);
         }
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
+        this.executingToolRooms.delete(commandRequestId!);
+        this.stoppableTools.delete(commandRequestId!);
+        // A question the run left open has no one waiting for its answer.
+        this.scriptAsks.get(commandRequestId!)?.cancel();
         toolRunWaiter.endAsync(waiterToken);
       }
     },
@@ -1281,29 +1679,32 @@ export default class ToolService extends Service {
       .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
-  // Which step each in-flight validation is on, for the slow-validation log.
-  private validationSteps = new Map<string, string>();
+  // The validation timeout. Tests that deliberately hold a validation raise
+  // it, so the hold does not use up the time the rest of the validation has.
+  validateTimeoutMs = VALIDATE_TIMEOUT_MS;
 
-  private markValidationStep(command: MessageTool, step: string) {
-    if (command.id) {
-      this.validationSteps.set(command.id, step);
-    }
-  }
+  // The step timeline of each in-flight validation, by tool call id.
+  private validationSteps = new Map<string, ValidationStep[]>();
 
-  private logSlowValidation(command: MessageTool) {
-    let step = command.id ? this.validationSteps.get(command.id) : undefined;
+  private logSlowValidation(command: MessageTool, steps: ValidationStep[]) {
+    let step = steps.at(-1)?.step;
     let moduleImports = this.loaderService.loader.inFlightModuleImports;
     let queryLoads = this.store.queryLoadsInFlight();
     console.warn(
       `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
         step ?? 'before the first load'
-      }. Loader imports in flight: ${JSON.stringify(
+      }. Tool still resolving: ${command.isResolving}. Loader imports in flight: ${JSON.stringify(
         moduleImports,
       )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
     );
   }
 
-  async validate(command: MessageTool): Promise<boolean> {
+  async validate(
+    command: MessageTool,
+    steps: ValidationStep[] = [],
+  ): Promise<boolean> {
+    let markStep = (step: string) =>
+      steps.push({ step, at: performance.now() });
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
     // class to resolve, and never runs it, so there is nothing to validate.
@@ -1330,7 +1731,7 @@ export default class ToolService extends Service {
     // inside validation's own timeout. A name that resolved to no command is
     // tried again: the skill declaring it may have loaded since.
     if (!error && command.name !== CHECK_CORRECTNESS_COMMAND_NAME) {
-      this.markValidationStep(command, `resolve tool ${command.name}`);
+      markStep(`resolve tool ${command.name}`);
       try {
         await command.resolve({ retryUnresolved: true });
       } catch (e) {
@@ -1350,10 +1751,7 @@ export default class ToolService extends Service {
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
-      this.markValidationStep(
-        command,
-        `load tool module ${toolCodeRef.module}`,
-      );
+      markStep(`load tool module ${toolCodeRef.module}`);
       let ToolConstructor = (await getClass(
         toolCodeRef,
         this.loaderService.loader,
@@ -1371,9 +1769,9 @@ export default class ToolService extends Service {
           'service:loader-service',
         ) as LoaderService
       ).loader;
-      this.markValidationStep(command, 'load basic field mappings');
+      markStep('load basic field mappings');
       let mappings = await basicMappings(loader);
-      this.markValidationStep(command, 'build input JSON schema');
+      markStep('build input JSON schema');
       // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
       // so it is not required here even though the tool definition given to
       // the model lists it as required.

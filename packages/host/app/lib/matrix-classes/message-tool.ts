@@ -1,8 +1,10 @@
-import { setOwner } from '@ember/owner';
+import { getOwner, setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { waitForPromise } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
 import { cached, tracked } from '@glimmer/tracking';
 
 import {
@@ -10,6 +12,7 @@ import {
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import type { ApprovalVerdict } from '@cardstack/runtime-common/ai/approval-reaction';
 import {
   AI_BOT_EXECUTOR,
   type ToolRequest,
@@ -24,6 +27,8 @@ import type { ClickReason } from '../host-base-tool';
 import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
+
+const SLOW_RESULT_CARD_LOAD_MS = 500;
 
 // A tool class's per-call click rule (HostBaseTool.neverAutoExecutesFor).
 export type NeverAutoExecutesFor = (
@@ -91,10 +96,36 @@ export type ToolResolver = (
 export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
   @tracked toolCallStatus?: ToolCallStatus;
+  // A held call's answer given as a reaction on its message (see
+  // runtime-common/ai/approval-reaction.ts): who gave it, and which way.
+  // The first one wins; ai-bot then posts the call's real result.
+  @tracked approvalAnswer?: { verdict: ApprovalVerdict; name: string };
   @tracked toolResultFileDef?: SerializedFile;
   // origin_server_ts of the event whose chunk last wrote toolRequest, so
   // builder passes finishing out of order can't regress it to stale data.
   toolRequestEventTs = 0;
+  // origin_server_ts of the call's result event, once there is one: with
+  // toolRequestEventTs it says how long the call took
+  @tracked toolResultEventTs: number | undefined;
+  // The reader's click ran the call (the result says it resumes the
+  // assistant): its time is mostly the wait for that click.
+  @tracked ranOnReadersClick = false;
+
+  // Seconds from the request's last chunk to its result. A call that waited
+  // on the reader (an approval, a pick) measures the wait, so it has none.
+  get durationSeconds(): number | undefined {
+    if (
+      !this.toolResultEventTs ||
+      !this.toolRequestEventTs ||
+      this.ranOnReadersClick ||
+      this.awaitsApproval ||
+      this.clickReasons.length > 0
+    ) {
+      return undefined;
+    }
+    let seconds = (this.toolResultEventTs - this.toolRequestEventTs) / 1000;
+    return seconds >= 0 && seconds < 3600 ? seconds : undefined;
+  }
 
   constructor(
     public message: Message,
@@ -263,7 +294,20 @@ export default class MessageTool {
     if (resolution?.neverAutoExecutes) {
       return true;
     }
-    return resolution?.neverAutoExecutesFor?.(this.#callAttributes) === true;
+    if (resolution?.neverAutoExecutesFor?.(this.#callAttributes) !== true) {
+      return false;
+    }
+    // the reader allowed every one of these calls for this session
+    let reasons = this.clickReasons;
+    let tools = getOwner(this)?.lookup('service:tool-service') as
+      | { isAlwaysAllowed?: (roomId: string, call: string) => boolean }
+      | undefined;
+    return !(
+      reasons.length > 0 &&
+      reasons.every((reason) =>
+        tools?.isAlwaysAllowed?.(this.message.roomId, reason.call),
+      )
+    );
   }
 
   // Why this call waits for the user's click, read from the current
@@ -348,6 +392,7 @@ export default class MessageTool {
       this.isBotExecuted &&
       this.toolRequest.approvalRequired === true &&
       this.toolCallStatus === 'applying' &&
+      !this.approvalAnswer &&
       !this.toolService.answeredApprovalIds.has(this.id!)
     );
   }
@@ -406,21 +451,43 @@ export default class MessageTool {
   async getCommandResultCard(): Promise<
     { card: CardDef; isRealmCard: boolean } | undefined
   > {
+    let startedAt = performance.now();
     let cardDoc = await this.commandResultCardDoc();
     if (!cardDoc) {
       return undefined;
     }
+    let downloadMs = performance.now() - startedAt;
     let id = cardDoc.data.id;
     if (id) {
       let live = await this.store.get(id);
       if (isCardInstance(live)) {
+        this.logSlowResultCardLoad(startedAt, downloadMs, true);
         return { card: live, isRealmCard: true };
       }
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
     let card = (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
+    this.logSlowResultCardLoad(startedAt, downloadMs, false);
     return { card, isRealmCard: !!id };
+  }
+
+  // A test waits on the result card, so a slow load is what turns into a
+  // timeout. Only a slow load is logged, split into the room-file download
+  // and the card load after it, so the line that explains a timeout is not
+  // buried under every fast load in the suite.
+  private logSlowResultCardLoad(
+    startedAt: number,
+    downloadMs: number,
+    isLiveCard: boolean,
+  ) {
+    let totalMs = performance.now() - startedAt;
+    if (!isTesting() || totalMs < SLOW_RESULT_CARD_LOAD_MS) {
+      return;
+    }
+    console.log(
+      `[tool-result-card] slow result card load for tool call ${this.toolRequest.id}: ${Math.round(totalMs)}ms (download ${Math.round(downloadMs)}ms, card load ${Math.round(totalMs - downloadMs)}ms, live card: ${isLiveCard})`,
+    );
   }
 }
 

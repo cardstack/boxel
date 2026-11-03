@@ -18,7 +18,7 @@ import { provide } from 'ember-provide-consume-context';
 
 import stringify from 'safe-stable-stringify';
 
-import { or, not } from '@cardstack/boxel-ui/helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
@@ -32,13 +32,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import AccountSwitchFailed from '@cardstack/host/components/matrix/account-switch-failed';
-import Auth from '@cardstack/host/components/matrix/auth';
 import SecureSignIn from '@cardstack/host/components/matrix/secure-sign-in';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
-import { signInOnSecureOrigin } from '@cardstack/host/lib/secure-sign-in';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
@@ -52,6 +50,7 @@ import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
+import PolicyAuditConfirmationModal from './policy-audit-confirmation-modal';
 
 import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
@@ -176,6 +175,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,
       // populated alongside toolContext for content still reading the
@@ -209,12 +209,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  // Read when the page renders, so a deployment's setting applies without a
-  // rebuild (see `lib/secure-sign-in`).
-  private get signInOnSecureOrigin() {
-    return signInOnSecureOrigin();
-  }
-
   private get isCodeMode() {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
@@ -226,6 +220,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     <div class='operator-mode' ...attributes>
       <FileChooserModal />
+      <PolicyAuditConfirmationModal />
       <CreateListingModal />
       <CardChooserModal />
       <MarkdownEmbedChooserModal />
@@ -235,17 +230,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         this.operatorModeStateService.operatorModeController.accountSwitchFailed
       }}
         <AccountSwitchFailed @onBackToHome={{this.backToHome}} />
-      {{else if
-        (or
-          (not this.matrixService.isLoggedIn)
-          this.matrixService.isInitializingNewUser
-        )
-      }}
-        {{#if this.signInOnSecureOrigin}}
-          <SecureSignIn />
-        {{else}}
-          <Auth />
-        {{/if}}
+      {{else if (not this.matrixService.isLoggedIn)}}
+        <SecureSignIn />
       {{else if this.isCodeMode}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else if this.isHostMode}}

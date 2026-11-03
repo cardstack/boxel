@@ -7,6 +7,10 @@ import {
   isBinaryContentType,
   isBinaryFilename,
 } from '@cardstack/runtime-common/infer-content-type';
+import {
+  sendConfirmingPolicyAudit,
+  type ConfirmPolicyAudit,
+} from './policy-audit.ts';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
@@ -107,6 +111,13 @@ export interface SyncOptions {
   realmEvents?: boolean;
   /** Files per /_atomic request. Defaults to ATOMIC_BATCH_SIZE. */
   atomicBatchSize?: number;
+  /**
+   * Asked when the realm refuses a write because it saves a policy change
+   * that lets people who aren't signed in use keys shared into a workspace;
+   * agreeing sends that write again with the confirmation. Without it, the
+   * refusal is the answer.
+   */
+  confirmPolicyAudit?: ConfirmPolicyAudit;
 }
 
 const REMOTE_CONCURRENCY = 10;
@@ -467,14 +478,19 @@ export abstract class RealmSyncBase {
     const content = await fs.readFile(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.authenticator.authedRealmFetch(url, {
-      method: 'POST',
-      headers: this.writeHeaders({
-        'Content-Type': 'text/plain;charset=UTF-8',
-        Accept: SupportedMimeType.CardSource,
-      }),
-      body: content,
-    });
+    const response = await sendConfirmingPolicyAudit(
+      (confirmation) =>
+        this.authenticator.authedRealmFetch(url, {
+          method: 'POST',
+          headers: this.writeHeaders({
+            ...confirmation,
+            'Content-Type': 'text/plain;charset=UTF-8',
+            Accept: SupportedMimeType.CardSource,
+          }),
+          body: content,
+        }),
+      this.options.confirmPolicyAudit,
+    );
 
     if (!response.ok) {
       await throwUploadError(response, relativePath);
@@ -740,14 +756,19 @@ export abstract class RealmSyncBase {
       : `${this.normalizedRealmUrl}_atomic`;
     let response: Response;
     try {
-      response = await this.authenticator.authedRealmFetch(url, {
-        method: 'POST',
-        headers: this.writeHeaders({
-          'Content-Type': 'application/vnd.api+json',
-          Accept: 'application/vnd.api+json',
-        }),
-        body: JSON.stringify({ 'atomic:operations': operations }),
-      });
+      response = await sendConfirmingPolicyAudit(
+        (confirmation) =>
+          this.authenticator.authedRealmFetch(url, {
+            method: 'POST',
+            headers: this.writeHeaders({
+              ...confirmation,
+              'Content-Type': 'application/vnd.api+json',
+              Accept: 'application/vnd.api+json',
+            }),
+            body: JSON.stringify({ 'atomic:operations': operations }),
+          }),
+        this.options.confirmPolicyAudit,
+      );
     } catch (err) {
       // fetch reports a timeout or a dropped connection as "fetch failed",
       // with what happened in its cause.

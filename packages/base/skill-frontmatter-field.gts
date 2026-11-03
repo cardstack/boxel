@@ -178,7 +178,7 @@ async function generateToolDefinitions(
     };
   }
 
-  let skillURL = new URL(fileURL);
+  let skillId = rri(fileURL);
   // Tools are independent; the loader dedupes concurrent module imports, so
   // enriching in parallel overlaps the per-tool module fetches.
   let results = await Promise.all(
@@ -206,7 +206,7 @@ async function generateToolDefinitions(
         // specifiers pass through verbatim.
         let resolvedRef = codeRefWithAbsoluteIdentifier(
           { module: rri(module), name },
-          skillURL,
+          skillId,
           undefined,
         ) as ResolvedCodeRef;
         try {

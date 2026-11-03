@@ -1,0 +1,275 @@
+---
+name: key-limits
+description: Operate and diagnose the limits a key's owner sets on how much of it anyone spends — the per-caller token bucket and the daily and monthly call budgets on each share (`key_shares`) and personal key (`user_keys`), the platform defaults (`KEY_RATE_LIMIT_BURST`, `KEY_RATE_LIMIT_REFILL_PER_MINUTE`, `KEY_DAILY_BUDGET`, `KEY_BUDGET_HIGH_WATER_PERCENT`, `KEY_ANONYMOUS_SHARE_PERCENT`), the `PUT /_key-shares/:id/limits` and `PUT /_user-keys/:id/limits` routes, the high-water and budget notices in `key_limit_notices`, the `boxel:key-limits` log channel, and the `rate-limited` / `over-budget` / `rate-limit-unavailable` refusals a `callApi` gets and what readiness answers. Use when a user reports a card refused `rate-limited` or `over-budget`, a 503 `rate-limit-unavailable` from an operation, a limit they can't change, a notice they did or didn't get, when reading the limits or counters as an operator, or when changing `lib/key-limits.ts` or `lib/key-limit-settings.ts`.
+---
+
+# Key limits (operators)
+
+No credits change hands for a user's key, so a caller's balance limits
+nothing. The key's owner sets limits instead, and they do the whole job of
+bounding how much of the key anyone spends. The code is
+`packages/realm-server/lib/key-limits.ts` (enforcement, notices, setting
+them) and `lib/key-limit-settings.ts` (the defaults and how a row's limits
+read). The counters are the shared rate-limit store (see the
+`rate-limit-store` skill).
+
+## What is limited, and what isn't
+
+- **Interactive `callApi` calls only**: an invocation carrying a user's
+  session — a card in the browser, the AI assistant, the CLI. A pipeline (a
+  run the realm server makes as its payer, `Realm.handlePipeline`) counts
+  against nothing; it is bounded by its schedule's payer and caps.
+- **Against the share or the key filling each slot.** An `{{apiKey}}` slot
+  counts against the share it is filled from; a `{{userKey}}` slot against
+  the caller's own key. A binding carries no limits. A call whose two slots
+  are filled from one share counts once.
+- **Two limits each:**
+  - a **token bucket per caller**: `rate_burst` calls at once, refilled at
+    `rate_refill_per_minute`;
+  - a **daily and a monthly budget** of calls, across every caller, in UTC
+    days and months (`daily_budget`, `monthly_budget`).
+
+These are call budgets, not money budgets: the platform can count calls, not
+what a vendor charges for one.
+
+## People who aren't signed in
+
+A share whose key allows anonymous use (`user_keys.anonymous`, its owner's
+setting for the key itself; see the `user-keys`, `key-shares` and
+`key-bindings` skills) limits such callers alongside the share's own daily
+and monthly budgets, which their calls spend as everyone's do:
+
+- **Per address**: a bucket for each client address the realm admitted them
+  from (the anonymous limiter's `rateLimitKey`: the IPv4 address, or an IPv6
+  caller's /64), at the share's per-person rate. It is keyed apart from any
+  signed-in caller's: `["key-limit","share","<id>","anonymous","<address>"]`.
+- **Their part of each share's daily and monthly budgets**: all of them
+  together spend at most `anonymousSharePercent` (`KEY_ANONYMOUS_SHARE_PERCENT`,
+  default 50) of the share's daily budget, and of its monthly budget, counted
+  under `["key-limit","share","<id>","anonymous"]` for each period (at least 1
+  call). Signed-in readers always keep the rest of both, whatever cap the
+  key's owner set, or none.
+- **The key's anonymous caps, where its owner set them**: a daily and a
+  monthly budget of calls (`user_keys.anonymous_daily_cap`,
+  `user_keys.anonymous_monthly_cap`), each optional and independent of the
+  other, that every such caller draws from together, counted once across
+  every realm the key is shared into, under
+  `["key-limit","key","<key-id>","anonymous"]` for each period (UTC day, UTC
+  month), with no clamp per share. A key with no daily cap counts no day
+  there, and likewise for the month. A call through two shares of one key
+  counts once against each (`callBudgets` spends each counter once per
+  call).
+
+`budgetsOf` in `lib/key-limits.ts` adds all of them. Reaching any refuses only
+callers who aren't signed in, `over-budget` with a detail saying "the limit on
+its shared key for people who aren't signed in is reached"; it sends no
+notice of its own. The share's budgets notify as always.
+
+Refusals for them log `"caller":"anonymous"` and never the address; a cap's
+`limit` carries `"anonymousCap": true`.
+
+## Defaults
+
+A null column is the platform's default, so a share or key nobody set limits
+on is still limited.
+
+| Setting                            | Default                        | Derivation                                                                                                        |
+| ---------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `KEY_RATE_LIMIT_BURST`             | 25                             | One whole refresh of a pull-request inbox: 25 calls every 5 minutes                                               |
+| `KEY_RATE_LIMIT_REFILL_PER_MINUTE` | 15                             | Three open tabs on that schedule: 3 × 25 / 5                                                                      |
+| `KEY_DAILY_BUDGET`                 | 2400                           | That inbox open through an 8-hour working day                                                                     |
+| `KEY_BUDGET_HIGH_WATER_PERCENT`    | 80                             | The share of a budget at which owners are told use is high                                                        |
+| `KEY_ANONYMOUS_SHARE_PERCENT`      | 50                             | The most of a share's daily budget people who aren't signed in spend together, so signed-in readers keep the rest |
+| monthly budget                     | 30 × the daily budget in force | Not a setting; an owner who sets the daily budget moves it too                                                    |
+
+A value that isn't a limit stops the realm server at startup rather than
+leaving keys unlimited.
+
+## How a call is counted
+
+Once every slot has passed its other checks (binding, fingerprint,
+interactive approval, grant, rejection), and before any rejected grant's
+probe is claimed or any key is opened:
+
+1. each share's or key's daily and monthly budgets are **read** (nothing
+   spent);
+2. the caller's **bucket is taken from**;
+3. the **budgets are spent**, and a spend that reaches the high-water mark or
+   the budget records the notices.
+
+A call refused at any step is counted against nothing: what it already took or
+spent from another share or key is put back (`DBRateLimitStore.refund`,
+`unspend`), and a refused call uses up no probe. The notices are recorded only
+once every spend has gone through.
+
+## Refusals
+
+| Code                     | Status | When                                                    | `Retry-After`                            |
+| ------------------------ | ------ | ------------------------------------------------------- | ---------------------------------------- |
+| `rate-limited`           | 429    | The caller's bucket for that share or key is empty      | Seconds until one call has refilled      |
+| `over-budget`            | 429    | The share's or key's daily or monthly budget is used up | Seconds until the UTC day or month turns |
+| `rate-limit-unavailable` | 503    | The counters couldn't be read or written; nothing sent  | 5                                        |
+
+Each carries `meta.retryAfterSeconds` as well as the header. A share's
+refusal never names its budget, its count or its owner: a reader is told only
+that the realm's limit is reached and when it resets.
+
+**Readiness** (`lib/key-readiness.ts`) asks the same counters without
+spending: `over-budget` when a budget is used up, `rate-limited` when the
+caller's bucket is empty (`DBRateLimitStore.peek`). Counters that can't be
+read answer `ready` there, since readiness is advisory and the call refuses
+`rate-limit-unavailable` itself.
+
+A `rate-limit-unavailable` is a database problem, not a limit: check the
+`rate-limit-store` channel's warnings (`couldn't … for …, refusing`) and the
+`rate_limit_buckets` / `rate_limit_budgets` tables.
+
+## Reading a refusal
+
+Every refusal is one JSON line on the `boxel:key-limits` channel:
+
+```json
+{
+  "channel": "boxel:key-limits",
+  "event": "refused",
+  "code": "over-budget",
+  "share": "<id>",
+  "key": null,
+  "caller": "@someone:boxel.ai",
+  "realm": "https://…/",
+  "operation": "listPRs",
+  "limit": { "period": "day", "budget": 2400 },
+  "retryAfterSeconds": 3600
+}
+```
+
+`share` or `key` names what the call counted against; `limit` is the limit
+that refused it (`{rateBurst, rateRefillPerMinute}` or `{period, budget}`),
+absent for `rate-limit-unavailable`. A threshold crossing logs
+`"event":"threshold"` with `threshold` (`high-water` or `budget`), `period`,
+`budget` and `used`.
+
+The counters themselves, under keys built with `counterKey`:
+
+```sql
+-- A share's budget use this period. budget_key is ["key-limit","share","<id>"].
+SELECT period, period_start, count, expires_at
+FROM rate_limit_budgets WHERE budget_key = '["key-limit","share","<share-id>"]';
+
+-- One caller's bucket for a personal key.
+SELECT tokens, refilled_at FROM rate_limit_buckets
+WHERE bucket_key = '["key-limit","key","<key-id>","@someone:boxel.ai"]';
+```
+
+## Who changes them
+
+A share's first interactive approval also sets its daily budget, in the same
+transaction (see the `key-bindings` skill): from then on every reader of the
+realm can spend it, so its owner names the budget as they allow it.
+
+Only the key's owner — for a share, the owner of the key it holds — and only
+with a session signed in on the secure origin, from a request whose `Origin`
+is the secure origin or absent (the CLI), as for approving a binding. The
+app's session, which card code holds, is refused 403, so a card can't raise
+a limit. A realm's other direct writers are refused 403 on a share's limits;
+they suspend a share they think is being abused. Anyone who can't see the
+share, or another user's key, gets 404.
+
+| Route                         | Body                                       |
+| ----------------------------- | ------------------------------------------ |
+| `PUT /_key-shares/:id/limits` | `{data: {type: 'key-limits', attributes}}` |
+| `PUT /_user-keys/:id/limits`  | the same                                   |
+
+`attributes` holds any of `rateBurst`, `rateRefillPerMinute`, `dailyBudget`,
+`monthlyBudget`: a whole number of at least one (a positive number for the
+refill), or null to go back to the default. One left out keeps what it was.
+The answer is the limits in force, defaults filled in. A share's listing
+(`GET /_key-shares`, for its owner and the realm's direct writers) and a key's
+(`GET /_user-keys`, for its owner) carry `limits` the same way.
+
+From the terminal, `boxel keys limits <name>` (a personal key) or
+`boxel keys limits <label> --realm <url>` (a share) shows the limits in force,
+and with `--rate <burst>/<refill>`, `--daily <n>` or `--monthly <n>` sets
+them; `default` for any of them is null, the platform's default. Setting
+them uses the profile's secure session (`boxel keys sign-in`), reading them
+the ordinary one. A share is looked up among the user's own shares, then in
+the realm's listing, so a writer who doesn't own it gets the realm server's
+403, not a local "no such share". `boxel keys usage`, with the same
+arguments, reads what the share or key has served (see [Usage](#usage)).
+
+## Notices
+
+`key_limit_notices` holds one row per recipient when a period's use reaches
+the high-water mark and when it reaches the budget: the key's owner and, for a
+share, each direct writer of the share's realm. A unique index on (share or
+key, recipient, period, period end, threshold, budget) keeps it to one each per
+period and budget, however many calls cross together. The label is copied, so it reads
+after a rename. Withheld from `readonly_role` and the SQLite dump, like the
+other key tables.
+
+```sql
+SELECT created_at, threshold, period, period_ends_at, budget, recipient, label, realm_url
+FROM key_limit_notices WHERE share_id = '<id>' ORDER BY created_at DESC;
+```
+
+A notice that can't be recorded is logged on `realm:key-limits` and costs the
+call nothing.
+
+Each recipient a notice was recorded for is sent `key-notices-updated` to their
+session room (the sender `setKeyLimitNoticeSender` installs at startup), so the
+app's API Keys badge counts it at once. A send that fails is logged and the
+notice waits for the next time the app asks.
+
+`GET /_key-limit-notices` (`lib/key-limit-notices.ts`, any of the user's
+sessions) lists the user's notices whose period hasn't ended, newest first,
+with `yours` (whether they own the key) and `meta.unread`; a notice whose
+period has ended is neither listed nor counted. The app adds that count to the
+policy notices' for its badge. The secure origin's key page shows them above
+the keys, one per share or key and period, with what to do: the key's owner
+changes a personal key's limits on its tile and a share's on `share-limits`;
+a direct writer who doesn't own the key is sent to `share-limits` to see its
+usage and is told only the owner changes it. Listing marks them read through
+`POST /_key-limit-notices/read`, which only a secure session may call.
+
+```sql
+SELECT id, threshold, period, period_ends_at, read_at, label
+FROM key_limit_notices WHERE recipient = '<user>' AND period_ends_at > NOW()
+ORDER BY created_at DESC;
+```
+
+## Usage
+
+Each `callApi` invocation whose binding resolved to a share or a personal key
+is recorded in `key_uses`, against that share (`share_id`) or key (`key_id`),
+interactive and pipeline alike (`mode`), whether the vendor answered
+(`outcome` `sent`, with its `status` and `host`) or the call was refused
+(`refused`, with its `code`). A sent call is one row. Refusals are collapsed:
+those of one UTC minute (`refusal_window`) that match in share or key, realm,
+operation, caller, mode, code, status and host are one row, whose `count` is
+how many there were and whose `created_at` is the latest. A caller who keeps
+calling past a limit adds a row a minute, so read uses with `SUM(count)`,
+never `COUNT(*)`. A refusal raised while the slots were being
+filled is recorded against the one share or key that refused it; one raised
+before any binding was found (`binding-not-approved`) names no key and is only
+on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
+the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each
+realm-server process removes every older row, at most hourly, on a write. The code is `lib/key-uses.ts`. Like the other
+key tables, it's withheld from `readonly_role` and from the SQLite dump.
+
+`GET /_key-shares/:id/usage` (the share's realm's direct writers) and
+`GET /_user-keys/:id/usage` (the key's owner) answer, for the current UTC
+month: calls, the last use, the top five callers, refusals by code and the
+vendor's answers by status (a 403 marked `vendor-forbidden`), plus the budgets
+spent from the limiter's own counters, the grants and the limits. Anyone else
+gets 404, including the owner of a share suspended because they lost write. A
+share's caller is named only to a viewer whom a permission row in the share's
+realm names together with that caller (ADR 011). Every other caller is merged
+into one entry, `withheld: true`.
+
+```sql
+-- A share's refusals this month, by code.
+SELECT code, SUM(count) FROM key_uses
+WHERE share_id = '<share-id>' AND outcome = 'refused'
+  AND created_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
+GROUP BY code;
+```

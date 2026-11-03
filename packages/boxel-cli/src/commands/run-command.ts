@@ -38,7 +38,9 @@ export async function runCommand(
     );
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return { status: 'error', error: resolvedRealm.error };
   }

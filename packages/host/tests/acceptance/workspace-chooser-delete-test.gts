@@ -18,6 +18,7 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
+import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
@@ -131,25 +132,41 @@ export class Person extends CardDef {}
     window.localStorage.removeItem(SessionLocalStorageKey);
   });
 
-  test('delete workspace is enabled only for a workspace the current user owns', async function (assert) {
-    await visitOperatorMode({ workspaceChooserOpened: true });
-
+  async function assertDeleteOnlyOnOwnedWorkspaces(assert: Assert) {
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
-      .doesNotHaveAttribute('disabled');
+      .exists('an owned workspace offers Delete');
 
     await click(`[data-test-workspace-menu-trigger="${sharedRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
-      .hasAttribute('disabled');
+      .doesNotExist('a workspace the user does not own has no Delete');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
+      .exists('the rest of the menu still renders for non-owners');
 
     await click(
       `[data-test-workspace-menu-trigger="${delegatedOwnerRealmURL}"]`,
     );
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
-      .doesNotHaveAttribute('disabled');
+      .exists('a workspace the user co-owns offers Delete');
+  }
+
+  test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await assertDeleteOnlyOnOwnedWorkspaces(assert);
+  });
+
+  module('on the dashboard', function (hooks) {
+    setupFeatureFlag(hooks, 'DASHBOARD_V2');
+
+    test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert.dom('[data-test-dashboard]').exists();
+      await assertDeleteOnlyOnOwnedWorkspaces(assert);
+    });
   });
 
   test('can delete a workspace the current user owns from the chooser', async function (assert) {

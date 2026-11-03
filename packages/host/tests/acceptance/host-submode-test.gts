@@ -18,6 +18,7 @@ import {
   baseRealm,
   param,
   query,
+  ReadinessTimeoutError,
   type PublishProgress,
 } from '@cardstack/runtime-common';
 
@@ -1035,6 +1036,99 @@ module('Acceptance | host submode', function (hooks) {
           .hasAttribute('target', '_blank');
       });
 
+      // The space domain is served under a one-level wildcard certificate, so
+      // a dotted username's Boxel Space has to stay one label deep.
+      test('publishes a dotted username to a single-label Boxel Space host', async function (assert) {
+        let matrixService = getService('matrix-service');
+        Object.defineProperty(matrixService, 'userName', {
+          configurable: true,
+          get: () => 'first.last',
+        });
+        let publishedURLs: string[] = [];
+        let realmServer = getService('realm-server');
+        let publishRealm = realmServer.publishRealm;
+        realmServer.publishRealm = async (
+          sourceRealmURL: string,
+          publishedRealmURL: string,
+        ) => {
+          publishedURLs.push(publishedRealmURL);
+          return publishRealm(sourceRealmURL, publishedRealmURL);
+        };
+        publishDeferred.fulfill();
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          assert
+            .dom('[data-test-publish-realm-modal]')
+            .containsText(`https://first-last.${publishedSpaceHost}/test/`);
+          assert
+            .dom('[data-test-publish-realm-modal]')
+            .doesNotContainText(`first.last.${publishedSpaceHost}`);
+
+          await click('[data-test-default-domain-checkbox]');
+          await click('[data-test-publish-button]');
+          await waitUntil(() => publishedURLs.length > 0);
+
+          assert.deepEqual(publishedURLs, [
+            `https://first-last.${publishedSpaceHost}/test/`,
+          ]);
+        } finally {
+          delete (matrixService as unknown as Record<string, unknown>).userName;
+        }
+      });
+
+      test('an existing publication at a dotted two-label host preselects the single-label target', async function (assert) {
+        let matrixService = getService('matrix-service');
+        Object.defineProperty(matrixService, 'userName', {
+          configurable: true,
+          get: () => 'first.last',
+        });
+        let publishedURLs: string[] = [];
+        let realmServer = getService('realm-server');
+        let publishRealm = realmServer.publishRealm;
+        realmServer.publishRealm = async (
+          sourceRealmURL: string,
+          publishedRealmURL: string,
+        ) => {
+          publishedURLs.push(publishedRealmURL);
+          return publishRealm(sourceRealmURL, publishedRealmURL);
+        };
+        publishDeferred.fulfill();
+        let restoreRealmInfo = withUpdatedTestRealmInfo({
+          lastPublishedAt: {
+            [`https://first.last.${publishedSpaceHost}/test/`]: String(
+              Date.now(),
+            ),
+          },
+        });
+
+        try {
+          await visitOperatorMode({
+            submode: 'host',
+            trail: [`${testRealmURL}Person/1.json`],
+          });
+
+          await click('[data-test-publish-realm-button]');
+          await waitFor('[data-test-publish-realm-modal]');
+          assert.dom('[data-test-default-domain-checkbox]').isChecked();
+
+          await click('[data-test-publish-button]');
+          await waitUntil(() => publishedURLs.length > 0);
+
+          assert.deepEqual(publishedURLs, [
+            `https://first-last.${publishedSpaceHost}/test/`,
+          ]);
+        } finally {
+          restoreRealmInfo();
+          delete (matrixService as unknown as Record<string, unknown>).userName;
+        }
+      });
+
       // Indexing and prerendering a realm take minutes, and a bare spinner
       // can't tell slow progress from a hang. The popover is where a publish in
       // flight is inspected, so it has to name the pass and count through it.
@@ -1824,6 +1918,66 @@ module('Acceptance | host submode', function (hooks) {
 
         // Verify the modal stays open when there's an error
         assert.dom('[data-test-publish-realm-modal]').exists();
+      });
+
+      test('a publish whose HTML is still rendering when the wait times out says so and records its publish time', async function (assert) {
+        getService('realm-server').waitForRealmReady = async () => {
+          throw new ReadinessTimeoutError(
+            'Timed out after 300000ms waiting for the realm to pass readiness check',
+            { stage: 'prerender-html' },
+          );
+        };
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        await waitFor(`[data-test-domain-publish-error="${defaultUrl}"]`);
+
+        assert
+          .dom(`[data-test-domain-publish-error="${defaultUrl}"] .error-text`)
+          .hasText(
+            'Published, but the site is taking longer than usual to finish rendering. It goes live when rendering finishes.',
+          );
+        assert
+          .dom('[data-test-last-published-at]')
+          .containsText('Published', 'the accepted publish keeps its time');
+      });
+
+      test('a readiness timeout after rendering stalls shows its own reason', async function (assert) {
+        let reason =
+          'Timed out after 300000ms waiting for the realm to pass readiness check, with no progress for the last 300000ms: HTTP 503 (not ready: prerender-html)';
+        getService('realm-server').waitForRealmReady = async () => {
+          throw new ReadinessTimeoutError(reason, {
+            stage: 'prerender-html',
+            stalled: true,
+          });
+        };
+        publishDeferred.fulfill();
+
+        await visitOperatorMode({
+          submode: 'host',
+          trail: [`${testRealmURL}Person/1.json`],
+        });
+
+        await click('[data-test-publish-realm-button]');
+        await click('[data-test-default-domain-checkbox]');
+        await click('[data-test-publish-button]');
+
+        let defaultUrl = `https://testuser.${publishedSpaceHost}/test/`;
+        await waitFor(`[data-test-domain-publish-error="${defaultUrl}"]`);
+
+        assert
+          .dom(`[data-test-domain-publish-error="${defaultUrl}"] .error-text`)
+          .hasText(reason);
+        assert.dom('[data-test-last-published-at]').containsText('Published');
       });
 
       test('shows inline error for failed domain while allowing successful ones', async function (assert) {

@@ -163,6 +163,13 @@ export interface CompiledAnonymousGrant {
   id: string;
   // Whether the grant's operation writes.
   writes: boolean;
+  // Set where the grant's operation is a `callApi`, which sends a request
+  // outside the realm and so travels in the write lane, as a write does,
+  // without writing anything.
+  sendsOutside?: true;
+  // Set where that `callApi` sends a key shared with the realm: such a
+  // caller is served only through a share whose key allows anonymous use.
+  sendsSharedKey?: true;
   // For a grant on a write: who such a caller's writes are made as. Settled
   // for each write, once the target is known. A write grant without one admits
   // no write by such a caller.
@@ -1413,18 +1420,21 @@ async function compileDocument(
       // one, so a grant written for signed-in callers never starts admitting
       // anyone, whatever its `where` would say for one.
       let opensToAnonymous = outcome?.namesAnonymous ?? false;
-      // Set where the grant names such a caller but its operation reads
-      // `actor()`. The grant opens nothing to them for that reason alone, so
-      // what it says about them is reported once, against the operation.
-      let readsActorForAnonymous = false;
+      // Set where the grant names such a caller but its operation can't run
+      // for one: it reads `actor()`, or it sends the invoking user's own key.
+      // The grant opens nothing to them for that reason alone, so what it
+      // says about them is reported once, against the operation.
+      let operationRefusesAnonymous = false;
       if (opensToAnonymous) {
         // A named query runs a stored query on the search lane, where a
         // grant's filter is all that scopes it, so it stays a contract for
-        // signed-in callers. Every other operation is one invocation of its
-        // base, and is eligible when its base is.
+        // signed-in callers. A `callApi` is eligible on its own terms, below.
+        // Every other operation is one invocation of its base, and is
+        // eligible when its base is.
         if (
           (granted.base === 'query' && operation !== 'query') ||
-          !ANONYMOUS_ELIGIBLE_OPERATIONS.includes(granted.base)
+          (granted.base !== 'callApi' &&
+            !ANONYMOUS_ELIGIBLE_OPERATIONS.includes(granted.base))
         ) {
           issue(
             'anonymous-not-base-operation',
@@ -1447,7 +1457,20 @@ async function compileDocument(
             `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` uses \`actor()\`, which a caller who isn't signed in can't run, so it never admits one. It still applies to signed-in callers. To open it to anyone, declare an operation that doesn't read \`actor()\`; a write such a caller makes is made as the user \`actingUser\` names`,
           );
           opensToAnonymous = false;
-          readsActorForAnonymous = true;
+          operationRefusesAnonymous = true;
+        } else if (granted.sendsUserKey) {
+          // A `callApi` sends only keys whose owners approved it. A
+          // `{{userKey}}` slot is filled with the invoking user's own key, and
+          // a caller who isn't signed in has none, so the realm refuses them
+          // before anything is sent. A shared key (`{{apiKey}}`) can serve
+          // them, where its owner allowed anonymous use of it.
+          issue(
+            'anonymous-grant-user-key',
+            `${grantPath}.operation`,
+            `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` sends the invoking user's own key (\`{{userKey}}\`), which a caller who isn't signed in doesn't have, so it never admits one. It still applies to signed-in callers. To open it to anyone, send a key shared with the realm (\`{{apiKey}}\`), from a key whose owner allows anonymous use`,
+          );
+          opensToAnonymous = false;
+          operationRefusesAnonymous = true;
         }
       }
       let expressions = await compileExpressions(grant, grantPath);
@@ -1479,6 +1502,10 @@ async function compileDocument(
             ]) ?? '',
           ),
           writes: isWrite(granted.base),
+          ...(granted.base === 'callApi'
+            ? { sendsOutside: true as const }
+            : {}),
+          ...(granted.sendsSharedKey ? { sendsSharedKey: true as const } : {}),
           ...(isWrite(granted.base) && expressions.actingUser
             ? { actingUser: expressions.actingUser }
             : {}),
@@ -1495,7 +1522,7 @@ async function compileDocument(
       }
       if (
         expressions.actingUser &&
-        !readsActorForAnonymous &&
+        !operationRefusesAnonymous &&
         !(anonymous?.actingUser && isWrite(granted.base))
       ) {
         issue(
@@ -1852,6 +1879,10 @@ function grantedOperation(
       nonGrantable: boolean;
       invalid: boolean;
       readsActor: boolean;
+      // A `callApi` with a credential slot for the invoking user's own key.
+      sendsUserKey: boolean;
+      // A `callApi` with a credential slot for a key shared with the realm.
+      sendsSharedKey: boolean;
     }
   | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
@@ -1863,6 +1894,10 @@ function grantedOperation(
       nonGrantable: declared.nonGrantable === true,
       invalid: declared.invalid === true,
       readsActor: declared.readsActor === true,
+      sendsUserKey:
+        declared.callApi?.slots.some(({ key }) => key === 'userKey') ?? false,
+      sendsSharedKey:
+        declared.callApi?.slots.some(({ key }) => key !== 'userKey') ?? false,
     };
   }
   return carriesBuiltIn(definition.type, name)
@@ -1871,6 +1906,8 @@ function grantedOperation(
         nonGrantable: false,
         invalid: false,
         readsActor: false,
+        sendsUserKey: false,
+        sendsSharedKey: false,
       }
     : undefined;
 }

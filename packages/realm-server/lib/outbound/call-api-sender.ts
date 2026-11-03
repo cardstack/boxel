@@ -1,18 +1,39 @@
-import { logger, type CallApiResponse } from '@cardstack/runtime-common';
+import {
+  logger,
+  type CallApiResponse,
+  type DBAdapter,
+} from '@cardstack/runtime-common';
 import {
   OperationFailure,
   type CallApiCredential,
+  type CallApiGrantUse,
   type CallApiRequest,
   type CallApiSender,
 } from '@cardstack/runtime-common/card-operations';
+import { fillSlots } from '../key-bindings.ts';
+import {
+  clearGrantRejection,
+  credentialRejected,
+  DEFAULT_PROBE_INTERVAL_MS,
+  emitKeyGrantEvent,
+  hostOf,
+  markGrantRejected,
+  recordVendorForbidden,
+} from '../key-grant-rejection.ts';
+import { keyReadiness } from '../key-readiness.ts';
+import { recordKeyUses } from '../key-uses.ts';
+import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundTimeoutError,
   describeOutboundError,
   outboundFetch,
+  recordedURL,
   sendContext,
 } from './client.ts';
 import { CredentialScrubber } from './scrubber.ts';
+import { tokenEndpointAt } from './token-endpoints.ts';
 import { scrubError } from './scrub-error.ts';
 
 const log = logger('call-api');
@@ -50,9 +71,12 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
   return safe;
 }
 
-// Sends a `callApi` operation's request through the guarded outbound client.
+// Fills a `callApi` request's slots from the bindings approved for it, and
+// sends it through the guarded outbound client. Answers, too, whether those
+// bindings would fill it for a card's caller (`key-readiness.ts`).
 //
-// The request arrives as declared, every credential slot still a token, and
+// Each slot is filled from its binding's grant (`lib/key-bindings.ts`), and
+// nothing is filled for a slot no binding serves. The request arrives as declared, every credential slot still a token, and
 // that is the request the guard checks and every record describes. The
 // credentials are filled in by the client after its destination check, are
 // registered with the scrubber first so the vendor cannot echo them back, and
@@ -60,46 +84,170 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // Whatever the vendor answers is the answer: a 404 or a 500 is a response the
 // card reads. Only a refusal by the guard, a timeout, or a send that broke
-// before any response arrived is a refusal of the operation.
-export const callApiSender: CallApiSender = {
-  async send(
-    request: CallApiRequest,
-    credentials: CallApiCredential[],
-  ): Promise<CallApiResponse> {
-    let scrubber = new CredentialScrubber();
-    for (let { value } of credentials) {
-      scrubber.register(value);
+// before any response arrived is a refusal of the operation — and a 401 to a
+// request that carried a credential, which rejects the grants it was sent
+// under and is refused `credential-rejected` (see `key-grant-rejection.ts`).
+//
+// A request addressed to one of the platform's token endpoints is refused
+// before anything is sent, key or no key (see `tokenEndpointAt`).
+//
+// Each use of a share or key is recorded against it (`lib/key-uses.ts`): a
+// refusal raised while filling by `fill`, everything after by `recordUse`.
+export function createCallApiSender(
+  dbAdapter: DBAdapter,
+  {
+    // How long a grant the vendor rejected waits between probes.
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
+  }: { probeIntervalMs?: number } = {},
+): CallApiSender {
+  return {
+    fill: (lookup) =>
+      fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
+    readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
+    recordUse: (use) => recordKeyUses(dbAdapter, use),
+    send: async (request, credentials) => {
+      if (await tokenEndpointAt(dbAdapter, request.url)) {
+        log.warn(
+          `callApi refused: ${recordedURL(request.url)} is one of the platform's token endpoints`,
+        );
+        throw new OperationFailure({
+          status: 502,
+          code: 'guard-refused',
+          title: 'Destination refused',
+          detail: `the request is addressed to a token endpoint that only the platform calls`,
+          meta: { reason: 'platform-only' },
+        });
+      }
+      let grants = grantsOf(credentials);
+      let response: CallApiResponse;
+      try {
+        response = await sendCallApiRequest(request, credentials);
+      } catch (error) {
+        for (let grant of grants.filter(({ probe }) => probe)) {
+          emitKeyGrantEvent({
+            event: 'probe',
+            grant: grant.id,
+            host: hostOf(request.url),
+            status: null,
+          });
+        }
+        throw error;
+      }
+      await actOnVendorAnswer(dbAdapter, request, grants, response.status);
+      return response;
+    },
+  };
+}
+
+// The grants a request's credentials were opened under, each once.
+function grantsOf(credentials: CallApiCredential[]): CallApiGrantUse[] {
+  let grants = new Map<string, CallApiGrantUse>();
+  for (let { grant } of credentials) {
+    if (grant && !grants.has(grant.id)) {
+      grants.set(grant.id, grant);
     }
-    let context = sendContext(undefined, request.url);
+  }
+  return [...grants.values()];
+}
+
+// What the vendor's status means for the grants the request was sent under.
+// A 401 rejects every one of them: the vendor doesn't say which credential it
+// refused, and each was sent to the destination it answered for. A 403 is
+// recorded and changes nothing. A probe the vendor answers below 400 clears its
+// grant; any other answer leaves it as it was.
+async function actOnVendorAnswer(
+  dbAdapter: DBAdapter,
+  request: CallApiRequest,
+  grants: CallApiGrantUse[],
+  status: number,
+): Promise<void> {
+  let host = hostOf(request.url);
+  emitKeyGrantEvent({ event: 'vendor-outcome', host, status });
+  for (let grant of grants.filter(({ probe }) => probe)) {
+    emitKeyGrantEvent({ event: 'probe', grant: grant.id, host, status });
+  }
+  if (grants.length === 0) {
+    return;
+  }
+  if (status === 401) {
+    // The card is told the key was rejected whether or not recording it
+    // succeeds; a failure to record only means the next call reaches the
+    // vendor and is refused again.
     try {
-      let response = await outboundFetch({
-        url: request.url,
-        method: request.method,
-        headers: request.headers,
-        ...(request.body !== undefined ? { body: request.body } : {}),
-        sizePath: 'call-api',
-        scrubber,
-        ...(credentials.length > 0
-          ? {
-              substitutions: credentials.map(({ token, value }) => ({
-                token,
-                value,
-              })),
-            }
-          : {}),
-      });
-      let text = await response.text();
-      return {
-        status: response.status,
-        headers: safeResponseHeaders(response.headers),
-        body: bodyOf(text, response.headers.get('content-type')),
-      };
+      for (let grant of grants) {
+        await markGrantRejected(dbAdapter, {
+          grantId: grant.id,
+          realmURL: grant.realmURL,
+          ...(grant.shareId ? { shareId: grant.shareId } : {}),
+          copy: grant.copy,
+        });
+      }
     } catch (error) {
-      scrubError(error, scrubber);
-      throw refusalFor(error, describeOutboundError(error, context));
+      log.error(
+        `could not record the vendor's 401 for grants ${grants.map(({ id }) => id).join(', ')}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-  },
-};
+    throw credentialRejected(undefined, grants[0].slot, grants[0].destination);
+  }
+  // Neither of these may cost the card the answer it already has.
+  try {
+    if (status === 403) {
+      for (let grant of grants) {
+        await recordVendorForbidden(dbAdapter, grant.id, host);
+      }
+    } else if (status < 400) {
+      for (let grant of grants.filter(({ probe }) => probe)) {
+        await clearGrantRejection(dbAdapter, grant.id);
+      }
+    }
+  } catch (error) {
+    log.error(
+      `could not record the vendor's ${status} for grants ${grants.map(({ id }) => id).join(', ')}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export async function sendCallApiRequest(
+  request: CallApiRequest,
+  credentials: CallApiCredential[],
+): Promise<CallApiResponse> {
+  let scrubber = new CredentialScrubber();
+  for (let { value, raw } of credentials) {
+    scrubber.register(value);
+    if (raw !== undefined) {
+      scrubber.register(raw);
+    }
+  }
+  let context = sendContext(undefined, request.url);
+  try {
+    let response = await outboundFetch({
+      url: request.url,
+      method: request.method,
+      headers: request.headers,
+      ...(request.body !== undefined ? { body: request.body } : {}),
+      sizePath: 'call-api',
+      destinationSetBy: 'user',
+      scrubber,
+      ...(credentials.length > 0
+        ? {
+            substitutions: credentials.map(({ token, value }) => ({
+              token,
+              value,
+            })),
+          }
+        : {}),
+    });
+    let text = await response.text();
+    return {
+      status: response.status,
+      headers: safeResponseHeaders(response.headers),
+      body: bodyOf(text, response.headers.get('content-type')),
+    };
+  } catch (error) {
+    scrubError(error, scrubber);
+    throw refusalFor(error, describeOutboundError(error, context));
+  }
+}
 
 function bodyOf(text: string, contentType: string | null) {
   if (text.length === 0) {
@@ -126,6 +274,18 @@ function refusalFor(error: unknown, described: string): OperationFailure {
       title: 'Destination refused',
       detail: error.message,
       meta: { reason: error.reason },
+    });
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    log.warn(
+      `callApi response refused for size: ${error.message} (${described})`,
+    );
+    return new OperationFailure({
+      status: 502,
+      code: 'response-too-large',
+      title: 'Response too large',
+      detail: error.message,
+      meta: { cap: error.cap, measured: error.measured },
     });
   }
   if (error instanceof OutboundTimeoutError) {

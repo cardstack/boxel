@@ -19,6 +19,20 @@ class DummyFile {
   constructor(public id?: string) {}
 }
 
+async function copiedBy(item: MenuItemOptions | undefined) {
+  let original = navigator.clipboard.writeText;
+  let copied: string | undefined;
+  navigator.clipboard.writeText = async (text: string) => {
+    copied = text;
+  };
+  try {
+    await item?.action?.();
+  } finally {
+    navigator.clipboard.writeText = original;
+  }
+  return copied;
+}
+
 module('Unit | FileDef menu items', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -44,6 +58,26 @@ module('Unit | FileDef menu items', function (hooks) {
 
     let texts = items.map((i: MenuItemOptions) => i.label);
     assert.ok(texts.includes('Copy File URL'), 'contains Copy File URL');
+  });
+
+  test('Copy File URL copies the URL a browser can open', async function (assert: Assert) {
+    let id = '@cardstack/base/files/notes.md';
+    let file = new DummyFile(id) as unknown as FileDef;
+    let items = getDefaultFileMenuItems(file, {
+      canEdit: false,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      toolContext: {} as any,
+    });
+
+    let copied = await copiedBy(
+      items.find((i: MenuItemOptions) => i.label === 'Copy File URL'),
+    );
+    assert.ok(copied?.startsWith('http'), `copied ${copied}`);
+    assert.strictEqual(
+      copied,
+      getService('network').virtualNetwork.keyForIdentifier(id),
+    );
   });
 
   test('interact context mirrors the CardDef action set (Copy as Markdown, Open in Code Mode, Delete)', function (assert: Assert) {

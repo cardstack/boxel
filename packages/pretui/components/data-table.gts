@@ -213,6 +213,10 @@ export interface DataTableSignature<T> {
     rowLabel?: (row: T, index: number) => string;
     /** zebra striping (default true) */
     striped?: boolean;
+    /** drop the table's own frame (ring, radius, header fill) and its outer
+     * cell inset, for a table inside a Panel or card that already frames it
+     * (default false) */
+    flush?: boolean;
     /** header sticks while the body scrolls (default true) */
     stickyHeader?: boolean;
     /** minimum table width before the scroller takes over (any CSS length).
@@ -911,6 +915,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       data-actions={{if (has-block 'actions') 'true'}}
       data-striped={{this.striped}}
       data-sticky={{this.sticky}}
+      data-flush={{if @flush 'true'}}
       aria-busy={{this.busy}}
       ...attributes
     >
@@ -1412,6 +1417,30 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         th[aria-sort='descending'] .pretui-dt-mark {
           opacity: 1;
         }
+        /* @flush: the surrounding Panel or card is the frame */
+        .pretui-dt[data-flush] .pretui-dt-scroll {
+          border-radius: 0;
+          background: none;
+          box-shadow: none;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table {
+          background: none;
+        }
+        /* opaque, so body rows don't show through a stuck header */
+        .pretui-dt[data-flush] .pretui-dt-table th {
+          background: var(--card);
+        }
+        /* 4px, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips */
+        /* the caption lines up with the first column's flush edge */
+        .pretui-dt[data-flush] .pretui-dt-caption {
+          padding-inline: 4px;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
+          padding-inline-start: 4px;
+        }
+        .pretui-dt[data-flush] .pretui-dt-table :is(th, td):last-child {
+          padding-inline-end: 4px;
+        }
         .pretui-dt-table td {
           height: 2.56em;
           padding: 0.4em 0.8em;
@@ -1583,7 +1612,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-noresults {
           padding: var(--space-4, 11px) 0;
         }
+        /* the pager's selected page is a filled box; room above it keeps it
+           off the last row's rule */
         .pretui-dt-foot {
+          padding-block-start: var(--boxel-sp-xs);
           display: flex;
           flex-wrap: wrap;
           align-items: center;

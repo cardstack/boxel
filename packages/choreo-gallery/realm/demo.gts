@@ -23,8 +23,7 @@ import type { ChoreoGallery } from './gallery';
 import type { FilmLink } from './lib/film-link';
 import { pointerOnly } from './lib/focus';
 import { labSlug, LabState } from './lib/lab';
-import { MotionHold, wakeOnTouch } from './lib/motion-hold';
-import { restWhenOff } from './lib/onstage';
+import { MotionHold } from './lib/motion-hold';
 import { openThroughHost, ownClicks, ownControlClicks } from './lib/pointer';
 import { realmFile } from './lib/realm-url';
 import { requestTheater, takeTheaterRequest, Theater } from './lib/theater';
@@ -32,6 +31,7 @@ import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
 import { DemoStage } from './shell/demo-stage';
 import { GuideLink } from './shell/guide-link';
+import { HeldStage } from './shell/held-stage';
 import { LabPanel } from './shell/lab-panel';
 import { LabToggle } from './shell/lab-toggle';
 import { MotionToggle } from './shell/motion-toggle';
@@ -190,11 +190,9 @@ class Embedded extends Component<typeof GalleryDemo> {
 
   <template>
     <ChoreoRoot class='tile' data-test-demo-tile>
-      <div
+      <HeldStage
         class='tile-stage'
-        data-motion-hold={{this.hold.state}}
-        {{restWhenOff}}
-        {{wakeOnTouch this.hold}}
+        @hold={{this.hold}}
         {{ownClicks}}
         data-test-tile-stage
       >
@@ -203,7 +201,7 @@ class Embedded extends Component<typeof GalleryDemo> {
             <DemoStage @demo={{this.demo}} @face='tile' />
           </MotionConfig>
         {{/each}}
-      </div>
+      </HeldStage>
       <div class='tile-meta'>
         <span class='tile-group'>{{@model.group}}</span>
         <span class='tile-title' data-test-tile-title>{{@model.title}}</span>
@@ -242,13 +240,6 @@ class Embedded extends Component<typeof GalleryDemo> {
         container-name: platter;
         container-type: size;
         background: var(--canvas);
-      }
-
-      /* a stage nobody can see, or one waiting to be asked to move, holds
-         its animations where they stand */
-      .tile-stage.is-resting,
-      .tile-stage.is-resting :deep(*) {
-        animation-play-state: paused !important;
       }
 
       .tile-meta {
@@ -384,17 +375,15 @@ class Fitted extends Component<typeof GalleryDemo> {
         {{! the stage is the pointer's: the keyboard and a screen reader go
           from the title link to the guide link, and use the stage on the
           demo's page }}
-        <div
+        <HeldStage
           class='tile-stage'
-          data-motion-hold={{this.hold.state}}
-          {{restWhenOff}}
-          {{wakeOnTouch this.hold}}
+          @hold={{this.hold}}
           {{ownControlClicks}}
           {{pointerOnly}}
           data-test-tile-stage
         >
           <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
-        </div>
+        </HeldStage>
       {{/if}}
       <div class='tile-meta'>
         <span class='tile-group'>
@@ -450,14 +439,6 @@ class Fitted extends Component<typeof GalleryDemo> {
             transparent 62%
           ),
           var(--canvas);
-      }
-
-      /* A tile nobody can see, or one waiting to be asked to move, holds
-         its animations where they stand — paused, so coming back does not
-         restart every loop */
-      .tile-stage.is-resting,
-      .tile-stage.is-resting :deep(*) {
-        animation-play-state: paused !important;
       }
 
       .tile-meta {

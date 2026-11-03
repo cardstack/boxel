@@ -81,6 +81,7 @@ Labels are sorted alphabetically inside the brackets. With `--json`, you get the
 - The hosted Loki has a 7-day default `reject_old_samples_max_age`. Queries beyond that window will return zero results even if S3 still has the chunks.
 - Production retention is 180 days (S3 lifecycle); local has no retention enforcement and `reject_old_samples=false`.
 - The dual-ship to CloudWatch is still on through the Phase 7 migration bake — for very long forensics windows or AWS-internal debug, query CloudWatch via `aws logs tail` instead of this skill.
+- Every query against hosted Loki shares one small task with the alert rules. Loki reads every line of the service in the window before the filter discards most of them, so the cost is the window: 0.3–2.4 GB for a day of realm-server and worker lines. A `--since 2d` scan, or a `[1d]` query sent from a loop, can make Loki cancel the alert rules' queries. Keep `--since` as short as the question allows, and never poll Loki on a timer with a window of hours or days. For counts over days, use Logs Insights on the CloudWatch group. The README's "Query cost on hosted Loki" has the measurements.
 - `--filter` uses literal substring match; `--regex` uses Loki's RE2 dialect. Anchors (`^`, `$`) work; lookarounds don't.
 
 ## See also

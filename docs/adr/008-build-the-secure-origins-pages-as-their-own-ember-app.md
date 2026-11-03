@@ -16,11 +16,7 @@ scope:
   - mise-tasks/services/realm-server
   - mise-tasks/test-services/**
   - packages/host/app/components/matrix/account-switch-failed.gts
-  - packages/host/app/components/matrix/auth.gts
-  - packages/host/app/components/matrix/cli-auth.gts
-  - packages/host/app/components/matrix/login.gts
-  - packages/host/app/components/matrix/register-user.gts
-  - packages/host/app/components/matrix/forgot-password.gts
+  - packages/host/app/components/matrix/secure-sign-in.gts
   - packages/boxel-ui/src/styles/variables.css
   - packages/boxel-ui/src/styles/theme.css
 ---
@@ -40,11 +36,6 @@ records that boundary and why the pages don't follow the rest of the UI
 architecture.
 
 ## 1. Decision
-
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
 
 ### 1.1. A package of their own
 

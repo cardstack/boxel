@@ -11,6 +11,7 @@ import {
   resolveRRIReference,
 } from '../index.ts';
 import {
+  isAbsoluteIdentifier,
   isPrefixForm,
   rri,
   type RealmResourceIdentifier,
@@ -55,17 +56,13 @@ export function serialize(
     base = opts.relativeTo;
   } else if (
     typeof opts.relativeTo === 'string' &&
-    (opts.relativeTo.startsWith('http://') ||
-      opts.relativeTo.startsWith('https://') ||
-      isPrefixForm(opts.relativeTo))
+    isAbsoluteIdentifier(opts.relativeTo)
   ) {
     base = rri(opts.relativeTo);
   } else if (
     doc?.data?.id &&
     typeof doc.data.id === 'string' &&
-    (doc.data.id.startsWith('http://') ||
-      doc.data.id.startsWith('https://') ||
-      isPrefixForm(doc.data.id))
+    isAbsoluteIdentifier(doc.data.id)
   ) {
     base = rri(doc.data.id);
   }
@@ -126,12 +123,12 @@ function codeRefAdjustments(
   // math — no VirtualNetwork. `resolveRRIReference` joins a relative module
   // against either a URL-form base or a prefix-form RRI base, and returns
   // absolute (URL- or prefix-form) references unchanged.
-  let finalize = (module: string) => {
+  let finalize = (module: RealmResourceIdentifier) => {
     if (opts?.trimExecutableExtension) {
-      module = trimExecutableExtension(rri(module));
+      module = rri(trimExecutableExtension(module));
     }
     if (opts?.allowRelative && opts?.maybeRelativeReference) {
-      module = opts.maybeRelativeReference(module);
+      module = rri(opts.maybeRelativeReference(module));
     }
     return { module };
   };
@@ -143,9 +140,9 @@ function codeRefAdjustments(
     // card and defeat the portability the RRI exists to provide. (No
     // `maybeRelativeReference` — a scoped RRI is already portable.)
     if (isPrefixForm(codeRef.module)) {
-      let module: string = codeRef.module;
+      let module = codeRef.module;
       if (opts?.trimExecutableExtension) {
-        module = trimExecutableExtension(rri(module));
+        module = rri(trimExecutableExtension(module));
       }
       return { module };
     }
@@ -157,7 +154,7 @@ function codeRefAdjustments(
     // URL-form or `./`/`../`/`/`-relative module. Resolve in RRI space so a
     // relative module resolves against a prefix-form RRI base (e.g. `./person`
     // relative to `@cardstack/catalog/specs/foo`) as well as a URL base.
-    return finalize(resolveRRIReference(codeRef.module, relativeTo));
+    return finalize(rri(resolveRRIReference(codeRef.module, relativeTo)));
   }
   return {};
 }

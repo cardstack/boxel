@@ -4,6 +4,7 @@ date: 2026-10-20
 scope:
   - packages/host/app/**/*motion*
   - packages/host/app/components/operator-mode/**
+  - packages/host/app/components/host-mode/**
   - packages/host/app/components/search-sheet/**
   - packages/host/app/components/pill-menu/**
   - packages/host/app/services/operator-mode-state-service.ts
@@ -33,11 +34,6 @@ caller. This ADR sets the architecture and the quality bar any host motion
 must meet.
 
 ## 1. Decision
-
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
 
 ### 1.1. State never depends on motion
 
@@ -211,15 +207,7 @@ it cannot, it uses live-DOM motion.
 
 ## 5. Remediation
 
-- `packages/host/app/components/operator-mode/stack.gts` breaks §1.1: it
-  awaits the closing animations before it closes the cards.
-- `packages/host/app/components/operator-mode/stack-item.gts` breaks §1.2: it
-  runs its own animations, tracks which one is playing, and changes its
-  behavior on that.
-- `packages/host/app/components/pill-menu/index.gts` breaks §1.1: the menu
-  collapses only on `animationend`.
-- `packages/pretui/components/toaster.gts` breaks §1.1: a toast is removed on
-  `animationend`, so with motion off it is never removed by its timer.
+Known gaps are listed in [remediation/007.md](remediation/007.md).
 
 ## 6. Sources
 

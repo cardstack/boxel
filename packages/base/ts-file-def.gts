@@ -1,4 +1,8 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extensionOfIdentifier,
+  nameWithoutExtension,
+} from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GlimmerComponent from '@glimmer/component';
@@ -22,22 +26,6 @@ import { highlightTs } from './ts-highlight';
 export { highlightTs } from './ts-highlight';
 
 const EXCERPT_MAX_LENGTH = 500;
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
-
-function fileNameWithoutExtension(name: string): string {
-  return name.replace(/\.[^/.]+$/, '');
-}
 
 function truncateExcerpt(text: string): string {
   if (text.length <= EXCERPT_MAX_LENGTH) {
@@ -269,7 +257,7 @@ export class TsFileDef extends FileDef {
       lineCount: number;
     }>
   > {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (!this.validExtensions.has(extension)) {
       throw new FileContentMismatchError(
         `Expected ${[...this.validExtensions].join(' or ')} file extension, got "${extension || 'none'}"`,
@@ -285,7 +273,7 @@ export class TsFileDef extends FileDef {
     let base = await FileDef.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
     let source = new TextDecoder().decode(bytes);
-    let fallbackTitle = fileNameWithoutExtension(base.name ?? '');
+    let fallbackTitle = nameWithoutExtension(base.name ?? '');
 
     return {
       ...base,

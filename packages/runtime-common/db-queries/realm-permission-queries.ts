@@ -141,27 +141,31 @@ export async function fetchRealmPermissions(
  * One user's effective permissions in one realm — what `Realm#checkPermission`
  * will compute for them, so this is the set to mint a session token from.
  *
- * Takes a homeserver URL rather than a matrix client because the callers that
- * need it most are worker tasks, which run in a child process that holds no
- * client. The URL is used only to resolve a `users` grant, and only when the
- * realm actually carries one.
+ * Takes a homeserver URL and the paired homeserver's server name rather than
+ * a matrix client because the callers that need it most are worker tasks,
+ * which run in a child process that holds no client. The URL is used only to
+ * resolve a `users` grant, and only when the realm actually carries one and
+ * the user is on the paired homeserver (ADR 004 §1.4).
  */
 export async function fetchEffectiveRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
   username: string,
   matrixURL: string,
+  matrixServerName: string,
 ): Promise<RealmAction[]> {
   let realmPermissions = await fetchRealmPermissions(dbAdapter, realmURL);
   return await effectiveRealmPermissions(
     realmPermissions,
     username,
+    matrixServerName,
     async () => !!(await fetchMatrixProfile(new URL(matrixURL), username)),
   );
 }
 
 // The permission rows that grant to many accounts at once: `*` (everyone,
-// matrix account or not) and `users` (any registered matrix user).
+// matrix account or not) and `users` (any registered user of the paired
+// homeserver).
 const wildcardUsernames = new Set(['*', 'users']);
 
 // The platform's service accounts, by matrix localpart.
@@ -272,7 +276,35 @@ export async function fetchDirectWriterRealms(
   dbAdapter: DBAdapter,
   userId: string,
 ): Promise<DirectWriterRealm[]> {
-  let rows = (await query(dbAdapter, [
+  return (await fetchNamedRealmRows(dbAdapter, userId, 'write'))
+    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .map(({ realm_url, name }) => ({ url: realm_url, name }));
+}
+
+/**
+ * The realms `userId` can read by a permission row of their own, named and
+ * filtered as `fetchDirectWriterRealms` does. A realm readable by everyone
+ * (`*`) or by every signed-in user (`users`) isn't one of theirs, so it isn't
+ * listed. In URL order.
+ */
+export async function fetchOwnReadableRealms(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<DirectWriterRealm[]> {
+  return (await fetchNamedRealmRows(dbAdapter, userId, 'read')).map(
+    ({ realm_url, name }) => ({ url: realm_url, name }),
+  );
+}
+
+// The user's own permission rows granting `action`, with each realm's name
+// from its indexed `realm.json`, leaving out archived realms and published
+// snapshots.
+async function fetchNamedRealmRows(
+  dbAdapter: DBAdapter,
+  userId: string,
+  action: 'read' | 'write',
+) {
+  return (await query(dbAdapter, [
     `SELECT rup.realm_url, rup.username, rup.write,
             config.pristine_doc->'attributes'->'cardInfo'->>'name' AS name
      FROM realm_user_permissions rup
@@ -283,7 +315,7 @@ export async function fetchDirectWriterRealms(
       AND config.realm_url = rup.realm_url
       AND config.type = 'instance'
       AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
-     WHERE rr.url IS NULL AND rup.write = true AND rup.username =`,
+     WHERE rr.url IS NULL AND rup.${action} = true AND rup.username =`,
     param(userId),
     `AND rup.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
      ORDER BY rup.realm_url`,
@@ -293,9 +325,6 @@ export async function fetchDirectWriterRealms(
     write: boolean;
     name: string | null;
   }[];
-  return rows
-    .filter(({ username, write }) => isDirectWriterRow(username, write))
-    .map(({ realm_url, name }) => ({ url: realm_url, name }));
 }
 
 export async function fetchUserPermissions(

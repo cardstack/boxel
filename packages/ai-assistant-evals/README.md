@@ -41,7 +41,16 @@ endpoint is the URL.
   runner brings it to the top of the stack before that prompt, since only a
   stack's top card goes into the message context),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
-  and a query-backed `sessionReports` list.
+  `pipelineApprovals` naming operations of seeded cards to approve for
+  scheduled pipelines only before the first prompt (each with `card`, one of
+  `initialCards`, its `operation`, and `keyFrom`: `own-key` for the eval
+  user's own key, or `share` for a key `EVAL_SHARE_OWNER` shares into the test
+  workspace; the assistant's invocation of the operation is then refused
+  "Interactive use not approved"), `expectsNoWrites` marking a
+  conversation-only evaluation (the run passes when every prompt was sent and
+  nothing was written, with no card to render; any write fails it, as does a
+  seeded card that no longer holds its seed data), and a query-backed
+  `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
   calls, notes, the screenshot, the skills the room had). A judge fills
@@ -52,7 +61,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Eighteen evaluations ship. `hello-world` is the smallest build there is, one
+Fifteen evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -85,6 +94,19 @@ the skills say nothing or a tool silently does the wrong thing (the phone in
 the sample data, the mixed-type list, and the list whose items link to
 cards); their notes say so, and they are expected to fail there until it is
 fixed.
+The two `bulk-*` evaluations change many cards from one prompt, one task per
+prompt in a single session. `bulk-vendors-invoices` sets all 45 vendors to
+NET 30 (6 already are) past customer cards with the same field, lists the
+unpaid invoices more than 60 days overdue as of a date the prompt names, and
+makes every vendor adopt from a subclass, which takes more files than one
+`run-realm-code` call can write. `bulk-records` raises the variant prices of 60 coffee products, more
+than a search returns when it names no page size, and reassigns a leaving
+agent's open tickets, which is a link change. Their seeds live under
+`eval-realm/bulk-operations/`. Their `expectedChangedCards` list a sample of
+each task's targets, and the judge checks the rest from the workspace
+snapshot. Keep a bulk task under about 100 changed cards: each card a run
+changes adds a correctness check to one Matrix event, and about 100 take that
+event past Matrix's 64 KB limit, which breaks the room.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
@@ -122,7 +144,8 @@ where setup creates the workspace.
 ## Run
 
 Start the dev stack first (`mise run dev-all` with `OPENROUTER_API_KEY` set for
-the ai-bot). Then, from `packages/ai-assistant-evals`:
+the ai-bot), with a host built without `DASHBOARD_V2`: the runner drives the
+workspace chooser, which the dashboard replaces. Then, from `packages/ai-assistant-evals`:
 
 ```sh
 EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models
@@ -150,6 +173,14 @@ every model as a tab of one headed browser and runs them at once.
   state, so two browsers signed in as one account race over it and a prompt
   can land in the other model's room. A run that puts more models than users
   on screen at once stops before it opens a browser.
+- `EVAL_SHARE_OWNER` — the local matrix user whose share fills a
+  `pipelineApprovals` entry with `keyFrom: share`, made a writer of the test
+  workspace to share into it. Default `ai-assistant-eval-key-sharer`;
+  `pnpm eval:users` registers it with the eval users.
+- `EVAL_PG_CONTAINER`, `EVAL_PG_DATABASE`, `EVAL_REALM_SECRET_SEED` — where
+  the runner writes the secure-origin session it seeds `pipelineApprovals`
+  with, and the seed it signs that session's token with. Default `boxel-pg`,
+  `boxel`, and the local stack's seed.
 - `EVAL_HOST_URL`, `EVAL_MATRIX_URL` — default `https://localhost:4200`,
   `http://localhost:8008`.
 - `EVAL_MAX_MINUTES` (default 15) is a safety net only: a run still going after

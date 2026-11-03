@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Earl Grey Bergamot",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-007-050",
+          "size": "50 g",
+          "price": 12.99
+        },
+        {
+          "sku": "TE-007-100",
+          "size": "100 g",
+          "price": 24.9
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

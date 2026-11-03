@@ -5,7 +5,8 @@ A compact row of mutually exclusive options, all visible, with a pill that slide
 ## The contract
 
 ```
-@options?: { value, label }[]   (or @items, the same list)
+@options?: { value, label, icon? }[]   (or @items, the same list)
+@display? 'text' (default) | 'selected-text' | 'icon'   (the last two need each option's icon)
 @value?, @defaultValue?, @onValueChange?(value: string)   (or @onChange)
 @label?       — the group's accessible name
 @disabled?    — disables every segment
@@ -32,7 +33,7 @@ Pretui's improvement is the shared traveling highlight. shadcn's Tabs-as-segment
 
 ## Theming
 
-The rail is an `--inset` surface with `--foreground`, edged in `--border`. Labels are set in the ui-label role (`--boxel-ui-label-*`) in `--muted-foreground`; the selected one takes `--card-foreground`, since it sits on the pill's `--card` face, at weight 600 (`--pretui-seg-active-weight`). The pill itself is **SlidingHighlight**'s: `--card` with a `--border-strong` edge and `--shadow-sm`. `--pretui-seg-radius` (Button's corner, `--radius` less 2px) rounds the segments and the pill, and `--pretui-seg-inset` (`--boxel-sp-6xs`) sets the rail's gap, its padding and the radius it adds on top, which keeps the pill's corner concentric with the rail's.
+The rail is an `--inset` surface with `--foreground`, edged in `--border`. Labels are set in the ui-label role (`--boxel-ui-label-*`) in `--muted-foreground`; the selected one takes `--card-foreground`, since it sits on the pill's `--card` face, at weight 600 (`--pretui-seg-active-weight`). The pill itself is **SlidingHighlight**'s: `--card` with a `--border-strong` edge and `--shadow-sm`. `--pretui-seg-h` sets the whole control's height (`1.5rem` plus the rail's inset on both sides by default), where Button, Select and SearchInput size the element itself. `--pretui-seg-radius` (Button's corner, `--radius` less 2px) rounds the segments and the pill, and `--pretui-seg-inset` (`--boxel-sp-6xs`) sets the rail's gap, its padding and the radius it adds on top, which keeps the pill's corner concentric with the rail's.
 
 Because the selection is carried by the pill, the ink shift and the weight, a theme whose `--card` and `--inset` are close leaves the pill's edge doing the work. Check the pill against the rail background, not against the page.
 

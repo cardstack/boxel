@@ -4,6 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { ReadinessTimeoutError } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -260,6 +261,26 @@ module('Integration | tools | publish-realm', function (hooks) {
     );
     assert.deepEqual(publishedURLs, ['https://mysite.example.com/']);
     assert.strictEqual(result.results[0].status, 'published');
+  });
+
+  test('reports an accepted publish still rendering as published-pending', async function (assert) {
+    let realmServer = getService('realm-server');
+    let realmURL = new URL('test/', realmServer.url).href;
+    realmServer.waitForRealmReady = async () => {
+      throw new ReadinessTimeoutError(
+        'Timed out after 300000ms waiting for the realm to pass readiness check',
+        { stage: 'prerender-html' },
+      );
+    };
+
+    let result = await makeCommand().execute({
+      realmURL,
+      targets: [
+        new PublishTarget({ type: 'custom', name: 'mysite.example.com' }),
+      ],
+    });
+
+    assert.strictEqual(result.results[0].status, 'published-pending');
   });
 
   test('reports an error when the publish request fails', async function (assert) {

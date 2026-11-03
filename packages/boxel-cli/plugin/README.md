@@ -44,13 +44,16 @@ claude --plugin-dir packages/boxel-cli/plugin --plugin-dir /path/to/boxel-skills
 ### OpenAI Codex
 
 Codex discovers the plugin through the marketplace manifest at
-`.agents/plugins/marketplace.json` in the repo root:
+`.agents/plugins/marketplace.json` in the repo root. In a terminal:
 
-```text
-/plugin marketplace add cardstack/boxel
-/plugin install boxel-cli@cardstack-boxel
-/plugin install boxel-skills@cardstack-boxel
+```bash
+codex plugin marketplace add cardstack/boxel
+codex plugin add boxel-cli@cardstack-boxel
+codex plugin add boxel-skills@cardstack-boxel
 ```
+
+Or, after adding the marketplace, open `/plugins` in Codex and add both from
+there. Start a new chat afterwards so Codex loads the skills.
 
 Codex has no plugin dependencies, so install `boxel-skills` yourself — without
 it you get the CLI skills but none of the card-building ones.

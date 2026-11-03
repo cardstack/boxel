@@ -32,6 +32,18 @@ function uniqueRealmName(prefix: string) {
 // hash of its code ref.
 const RUN_REALM_CODE_TOOL_NAME = 'run-realm-code_6b92';
 
+// How long a run-realm-code call that writes a .gts module may take to reach
+// `applied`. The host lints each .gts/.ts write before saving it, and the lint
+// runs in a per-worker thread that exits once it has been idle, so a write
+// that lands on a worker whose thread has gone idle loads the lint engines
+// first. On a busy CI runner that load plus the lint takes 9-20 s, which can
+// spend the default 15 s expect timeout on its own. This budget covers the
+// slowest of those more than twice over. It is narrower than the tool's own
+// limits (55 s for the run, 100 s for the call), so a save slower than this
+// fails here, naming the state the call was stuck in, rather than running on
+// to the test timeout.
+const GTS_WRITE_APPLY_TIMEOUT_MS = 45_000;
+
 // Attaches a skill that declares run-realm-code without requiring approval.
 // The room's default skill (the skills index) may declare the same tool, and
 // the host resolves a tool request against the first skill that declares it,
@@ -87,6 +99,7 @@ async function runRealmCode({
   realmURL,
   code,
   touchedFiles,
+  applyTimeout,
 }: {
   page: Page;
   username: string;
@@ -97,6 +110,8 @@ async function runRealmCode({
   realmURL: string;
   code: string;
   touchedFiles: string[];
+  // Overrides the expect timeout for each wait on the apply state.
+  applyTimeout?: number;
 }) {
   let toolCallId = `run-realm-code-${Date.now()}-${Math.random()
     .toString(36)
@@ -127,14 +142,44 @@ async function runRealmCode({
     ],
   });
 
+  let startedAt = Date.now();
   let toolCall = page.locator(`[data-test-tool-call-id="${toolCallId}"]`);
-  let ready = toolCall.locator('[data-test-apply-state="ready"]');
-  let applied = toolCall.locator('[data-test-apply-state="applied"]');
-  await ready.or(applied).first().waitFor();
-  if (await ready.isVisible()) {
-    await ready.locator('button').click();
+  // the apply state is a hidden marker on the row, so it is waited for as
+  // attached, not visible
+  let applyState = toolCall.locator('[data-test-tool-call-apply]');
+  let gate: string | null = null;
+  try {
+    // A call that needs no approval reads `applying` until it has run, so
+    // this first wait can span the whole run, not just the gate.
+    await expect(applyState).toHaveAttribute(
+      'data-test-tool-call-apply',
+      /^(ready|applied)$/,
+      { timeout: applyTimeout },
+    );
+    gate = await applyState.getAttribute('data-test-tool-call-apply');
+    if (gate === 'ready') {
+      await toolCall
+        .locator('[data-test-pretui-tool-gate-action="apply"]')
+        .click();
+    }
+    await expect(applyState).toHaveAttribute(
+      'data-test-tool-call-apply',
+      'applied',
+      { timeout: applyTimeout },
+    );
+  } finally {
+    // One line per call. When the apply runs long, the worker's
+    // `lint-source` lines for the same window show whether its lint thread
+    // started cold, and the realm server's `_lint` line shows the request's
+    // duration.
+    console.log(
+      `[run-realm-code] request=${toolCallId} gate=${gate} elapsedMs=${
+        Date.now() - startedAt
+      } finalState=${await applyState
+        .getAttribute('data-test-tool-call-apply', { timeout: 1_000 })
+        .catch(() => 'unknown')}`,
+    );
   }
-  await applied.waitFor();
 
   let toolResultEvent: any;
   await expect(async () => {
@@ -283,16 +328,16 @@ test.describe('Correctness Checks', () => {
 
     // Wait for the command to auto-apply
     await commandContainer
-      .locator('[data-test-apply-state="applied"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied"]')
+      .waitFor({ state: 'attached' });
 
     // Verify the command didn't fail
     await expect(commandContainer).not.toHaveClass(/is-failed/);
 
-    // Verify the command description is displayed
-    await expect(commandContainer.locator('.tool-description')).toContainText(
-      'Check correctness',
-    );
+    // A check's row names what it checked: the last segment of the target
+    await expect(
+      commandContainer.locator('[data-test-pretui-tool-row-title]'),
+    ).toContainText(`Checked ${cardId.split('/').pop()}`);
 
     // Verify the command result event was dispatched with correct data
     let toolResultEvent: any;
@@ -415,8 +460,8 @@ test.describe('Correctness Checks', () => {
     await failingCommandContainer.waitFor();
 
     await failingCommandContainer
-      .locator('[data-test-apply-state="applied-with-error"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied-with-error"]')
+      .waitFor({ state: 'attached' });
 
     let failingCommandResultEvent: any;
     await expect(async () => {
@@ -532,8 +577,8 @@ test.describe('Correctness Checks', () => {
     );
     await finalCommandContainer.waitFor();
     await finalCommandContainer
-      .locator('[data-test-apply-state="applied"]')
-      .waitFor();
+      .locator('[data-test-tool-call-apply="applied"]')
+      .waitFor({ state: 'attached' });
 
     let finalCommandResultEvent: any;
     await expect(async () => {
@@ -679,6 +724,7 @@ export class ImportCheck extends CardDef {
       realmURL,
       code: replaceScript(moduleUrl, originalImport, brokenImport),
       touchedFiles: [moduleUrl],
+      applyTimeout: GTS_WRITE_APPLY_TIMEOUT_MS,
     });
 
     // The run-realm-code result says the module was saved, not that the realm
@@ -737,9 +783,9 @@ export class ImportCheck extends CardDef {
         );
         await commandContainer
           .locator(
-            '[data-test-apply-state="applied"], [data-test-apply-state="applied-with-error"]',
+            '[data-test-tool-call-apply="applied"], [data-test-tool-call-apply="applied-with-error"]',
           )
-          .waitFor();
+          .waitFor({ state: 'attached' });
 
         let toolResultEvent: any;
         await expect(async () => {
@@ -786,7 +832,7 @@ export class ImportCheck extends CardDef {
         expect(resultJson.data.attributes.correct).toBe(expectCorrect);
         await expect(
           commandContainer.locator(
-            `[data-test-apply-state="${
+            `[data-test-tool-call-apply="${
               expectCorrect ? 'applied' : 'applied-with-error'
             }"]`,
           ),
@@ -826,6 +872,7 @@ export class ImportCheck extends CardDef {
         `'@cardstack/base/card-api'`,
       ),
       touchedFiles: [moduleUrl],
+      applyTimeout: GTS_WRITE_APPLY_TIMEOUT_MS,
     });
 
     let fixedResult = await runCorrectnessCommand(

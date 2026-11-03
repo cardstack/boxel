@@ -46,17 +46,19 @@ function serializeGrant(grant: UserKeyGrant) {
 }
 
 // The client of the secure-origin session this request carries. Creating or
-// removing a grant takes such a session, from a request the same rule as
-// minting a key write ticket admits: the secure origin's `Origin`, or none, as
-// the CLI sends. The app's session never carries the claim, from any origin.
-async function secureClientOf(
+// removing a grant, and approving or revoking a binding, take such a session,
+// from a request the same rule as minting a key write ticket admits: the
+// secure origin's `Origin`, or none, as the CLI sends. The app's session never
+// carries the claim, from any origin.
+export async function secureClientOf(
   ctxt: Koa.Context,
   { dbAdapter, secureOriginURL }: CreateRoutesArgs,
+  what = 'grants are changed',
 ): Promise<SecureSessionClient> {
   if (!mayMintKeyWriteTicket(ctxt, secureOriginURL)) {
     throw new UserKeyError(
       403,
-      'grants are changed only from the secure window and the CLI',
+      `${what} only from the secure window and the CLI`,
     );
   }
   let client = await secureSessionClient(
@@ -66,13 +68,13 @@ async function secureClientOf(
   if (!client) {
     throw new UserKeyError(
       403,
-      'grants are changed only by a session signed in on the secure origin',
+      `${what} only by a session signed in on the secure origin`,
     );
   }
   return client;
 }
 
-function codeRefOf(value: unknown): ResolvedCodeRef {
+export function codeRefOf(value: unknown): ResolvedCodeRef {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -168,10 +170,11 @@ export function handleCreateUserKeyGrant(args: CreateRoutesArgs): Handler {
 export function handleRemoveUserKeyGrant(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    await secureClientOf(ctxt, args);
+    let via = await secureClientOf(ctxt, args);
     let { revokedBindings } = await removeGrant(args.dbAdapter, {
       owner,
       grantId: ctxt.params.grantId,
+      via,
     });
     await sendJSON(ctxt, 200, { meta: { revokedBindings } });
   });

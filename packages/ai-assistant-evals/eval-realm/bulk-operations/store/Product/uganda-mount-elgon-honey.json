@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Uganda Mount Elgon Honey",
+      "category": "coffee",
+      "origin": "Mount Elgon, Uganda",
+      "variants": [
+        {
+          "sku": "CF-104-250",
+          "size": "250 g",
+          "price": 20.0
+        },
+        {
+          "sku": "CF-104-500",
+          "size": "500 g",
+          "price": 37.79
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

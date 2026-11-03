@@ -7,6 +7,7 @@ import QuickJSWasmURL from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
 import WorkerURL from './worker?worker&url';
 
 import type {
+  RealmScriptErrorInfo,
   RealmRunnerCallHandler,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -39,6 +40,15 @@ function resolveAssetURL(assetURL: string): URL {
   return new URL(assetURL, base);
 }
 
+// A call's answer that also says how long it waited on a person
+// (realm.ask): the script's own clock, and the host's, skip that time.
+export class DeadlineExtension {
+  constructor(
+    readonly value: unknown,
+    readonly ms: number,
+  ) {}
+}
+
 function makeRealmWorker(absoluteURL: URL): Worker {
   if (absoluteURL.origin === window.location.origin) {
     return new Worker(absoluteURL, { type: 'module' });
@@ -57,6 +67,17 @@ function makeRealmWorker(absoluteURL: URL): Worker {
     return new Worker(blobURL, { type: 'module' });
   } finally {
     URL.revokeObjectURL(blobURL);
+  }
+}
+
+// What a run rejects with when the script itself failed: `scriptError` says
+// which error, where, and whether it was a compile error.
+export class RealmScriptError extends Error {
+  constructor(
+    message: string,
+    readonly scriptError: RealmScriptErrorInfo,
+  ) {
+    super(message);
   }
 }
 
@@ -113,24 +134,71 @@ export default function runRealmCode(
     }, BOOT_TIMEOUT_MS);
 
     let answer = (message: RealmRunnerRequest) => worker.postMessage(message);
+    // The host's backstop for the script's time limit, re-armed when a
+    // question to a person paused it.
+    let scriptEndsAt = 0;
+    let waitingOnPerson = 0;
+    let armScriptTimer = () => {
+      window.clearTimeout(timer);
+      if (waitingOnPerson > 0) {
+        return;
+      }
+      timer = window.setTimeout(
+        () => {
+          settle(() =>
+            reject(
+              new Error(
+                `Realm code exceeded the ${request.timeoutMs}ms time limit`,
+              ),
+            ),
+          );
+        },
+        Math.max(0, scriptEndsAt - Date.now()) + 1000,
+      );
+    };
 
     worker.onmessage = (event: MessageEvent<RealmRunnerResponse>) => {
       let message = event.data;
       if (message.type === 'call') {
         let { id, method, args } = message;
+        let asksPerson = method === 'ask';
+        if (asksPerson) {
+          waitingOnPerson++;
+          window.clearTimeout(timer);
+        }
+        let askedAt = Date.now();
+        let done = () => {
+          if (asksPerson) {
+            waitingOnPerson--;
+            scriptEndsAt += Date.now() - askedAt;
+            if (scriptEndsAt > 0) {
+              armScriptTimer();
+            }
+          }
+        };
         onCall(method, args).then(
-          (value) =>
+          (value) => {
+            done();
+            let extension =
+              value instanceof DeadlineExtension ? value : undefined;
             answer({
               type: 'callResult',
               id,
-              value: JSON.stringify(value ?? null),
-            }),
-          (error: unknown) =>
+              value: JSON.stringify(
+                (extension ? extension.value : value) ?? null,
+              ),
+              extendMs: extension?.ms,
+            });
+          },
+          (error: unknown) => {
+            done();
             answer({
               type: 'callResult',
               id,
               error: error instanceof Error ? error.message : String(error),
-            }),
+              extendMs: asksPerson ? Date.now() - askedAt : undefined,
+            });
+          },
         );
         return;
       }
@@ -139,21 +207,20 @@ export default function runRealmCode(
         // extra second covers the message round trip; QuickJS enforces
         // `timeoutMs` on the script itself and reports a clearer error, so
         // this timer should only fire if the worker stops answering.
-        window.clearTimeout(timer);
-        timer = window.setTimeout(() => {
-          settle(() =>
-            reject(
-              new Error(
-                `Realm code exceeded the ${request.timeoutMs}ms time limit`,
-              ),
-            ),
-          );
-        }, request.timeoutMs + 1000);
+        scriptEndsAt = Date.now() + request.timeoutMs;
+        armScriptTimer();
         return;
       }
       settle(() => {
-        if (message.type === 'error') reject(new Error(message.error));
-        else resolve(message.result);
+        if (message.type === 'error') {
+          reject(
+            message.scriptError
+              ? new RealmScriptError(message.error, message.scriptError)
+              : new Error(message.error),
+          );
+        } else {
+          resolve(message.result);
+        }
       });
     };
 

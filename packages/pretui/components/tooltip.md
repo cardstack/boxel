@@ -43,7 +43,7 @@ Do not ship a tooltip as the only name for an icon button until the association 
 
 ## Theming
 
-`--tooltip` and `--tooltip-foreground` (the always-dark pair a theme must define for _both_ modes, not just light), `--shadow-ink-strong`, `--text-ui-sm`. Radius (6px), padding and the 6px offset are hard-coded. A theme that defines only a light value for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
+`--tooltip` and `--tooltip-foreground` (the always-dark pair a theme must define for _both_ modes, not just light), `--shadow-lg`, and the `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` steps. The 0.375rem offset is fixed. A theme that defines only a light value for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

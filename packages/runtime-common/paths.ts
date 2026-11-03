@@ -80,16 +80,28 @@ export class RealmPaths {
       }
 
       if (opts.preserveQuerystring !== true) {
-        // strip query params
-        input = new URL(decodeURI(input.pathname), input);
+        // Strip the query and fragment by re-reading the decoded pathname,
+        // which also normalizes what decoding exposed (`\` becomes `/`, tabs
+        // and newlines are dropped) the way `fileURL` does. It is read under
+        // the realm's origin: resolved against the URL itself, a pathname that
+        // starts with `//` would name another host. Decoding can expose dot
+        // segments, so the result is checked against the realm again.
+        input = new URL(input.origin + decodeURI(input.pathname));
+        if (!this.inRealm(input)) {
+          let error = new Error(
+            `realm ${this.url} does not contain ${input.href}`,
+          );
+          (error as any).status = 404;
+          throw error;
+        }
       }
 
-      // this will always remove a leading slash because our constructor ensures
-      // this.#realm has a trailing slash.
       let local = decodeURI(input.href).slice(this.url.length);
 
-      // this will remove any trailing slashes
-      local = local.replace(/\/+$/, '');
+      // this will remove any leading and trailing slashes. The realm URL ends
+      // in a slash, so a leading one is left only by a pathname with an extra
+      // slash after the realm's, like `//x.json`.
+      local = local.replace(/^\/+|\/+$/g, '');
 
       // the LocalPath has no leading nor trailing slashes
       return local;
@@ -100,7 +112,7 @@ export class RealmPaths {
       throw error;
     }
     let local = decodeURI(input).slice(this.url.length);
-    return local.replace(/\/+$/, '');
+    return local.replace(/^\/+|\/+$/g, '');
   }
 
   fileURL(local: LocalPath): URL {

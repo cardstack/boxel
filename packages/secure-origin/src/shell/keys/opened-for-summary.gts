@@ -61,11 +61,7 @@ const OpenedForSummary: TemplateOnlyComponent<Signature> = <template>
     </p>
   </FieldContainer>
   {{#if @context.operation.destination}}
-    <FieldContainer
-      @tag='div'
-      @label='This request sends it to'
-      @icon={{Globe}}
-    >
+    <FieldContainer @tag='div' @label='This call sends it to' @icon={{Globe}}>
       <Destination
         @destination={{@context.operation.destination}}
         @method={{@context.operation.method}}

@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ecuador Loja Decaf",
+      "category": "coffee",
+      "origin": "Loja, Ecuador",
+      "variants": [
+        {
+          "sku": "CF-031-250",
+          "size": "250 g",
+          "price": 13.0
+        },
+        {
+          "sku": "CF-031-500",
+          "size": "500 g",
+          "price": 24.29
+        },
+        {
+          "sku": "CF-031-1KG",
+          "size": "1 kg",
+          "price": 43.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

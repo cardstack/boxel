@@ -27,11 +27,6 @@ merely not doing so.
 
 ## 1. Decision
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
-"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
-document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
-and only when, they appear in all capitals, as shown here.
-
 ### 1.1. Where beacons go
 
 The secure origin's pages MUST beacon to the realm server's
@@ -64,10 +59,14 @@ MUST be matched, never copied, and a query string MUST NOT be read. A page
 MUST be named by a label from a fixed list, never by its address. An error's
 message MUST be scrubbed before it is recorded: a refused request's message
 replaced by its status and code, and anything quoted, any URL and any Matrix
-ID or email address cut. Its stack MUST keep only its frames. Tests MUST
-drive every page that takes a credential, a secret or a private name (the key
-pages, sign-in, the CLI pages, registration and password reset) with known
-values, and check that no beacon carries what was typed, sent or answered.
+ID or email address cut. Its stack MUST keep only its frames. A main-thread
+freeze MUST be attributed only by each blocking script's URL, reduced to its
+origin and path and dropped unless the path is a script file's, its function
+name and the type of what invoked it, never by the invoker itself, which can
+name an element or a URL with its query. Tests MUST drive every page that
+takes a credential, a secret or a private name (the key pages, sign-in, the CLI
+pages, registration and password reset) with known values, and check that no
+beacon carries what was typed, sent or answered.
 
 ### 1.4. Telemetry never fails a page
 
@@ -121,4 +120,4 @@ does.
 
 ## 5. Remediation
 
-No known gaps.
+Known gaps are listed in [remediation/014.md](remediation/014.md).

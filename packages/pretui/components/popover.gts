@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
-import { listenDocumentCapture } from '../focus';
+import { FOCUSABLE, listenDocumentCapture } from '../focus';
 import { emit } from '../pretui-primitives';
 import { resolvePlacement, resolveOpen } from '../internal/overlay';
 import type { PopupPlacement, PlacementArgs, OpenArgs } from '../internal/overlay';
@@ -26,13 +26,6 @@ export interface PopoverSignature {
   };
   Element: HTMLSpanElement;
 }
-
-// Anything that can hold focus inside the anchor. Used to hand focus back to
-// the control the panel was opened from — the panel's trigger is a caller
-// block, so the component cannot capture the button directly the way
-// MorphingPopover does.
-const FOCUSABLE =
-  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Anchored floating panel: Popup positioning + the generalized backdrop-close
