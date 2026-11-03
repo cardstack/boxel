@@ -58,6 +58,7 @@ import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type AssistantQuickLookService from '../../services/assistant-quick-look';
+import type KeyNoticesService from '../../services/key-notices';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
@@ -145,6 +146,7 @@ export default class SubmodeLayout extends Component<Signature> {
   });
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
+  @service declare private keyNotices: KeyNoticesService;
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service('assistant-quick-look')
@@ -551,6 +553,11 @@ export default class SubmodeLayout extends Component<Signature> {
             <button
               class='profile-icon-button'
               {{on 'click' this.toggleProfileSummary}}
+              aria-label={{if
+                this.keyNotices.unread
+                'Profile, with key notices you haven’t seen'
+                'Profile'
+              }}
               data-test-profile-icon-button
             >
               <Avatar
@@ -558,6 +565,12 @@ export default class SubmodeLayout extends Component<Signature> {
                 @userId={{this.matrixService.userId}}
                 @displayName={{this.matrixService.profile.displayName}}
               />
+              {{#if this.keyNotices.unread}}
+                <span
+                  class='profile-icon-badge'
+                  data-test-profile-icon-key-notices-badge
+                ></span>
+              {{/if}}
             </button>
           </div>
           {{! Ahead of the page, so Tab reaches the rail right after the top
@@ -821,7 +834,21 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
+        position: relative;
         z-index: var(--host-profile-z-index);
+      }
+      /* Says the user has notices about their keys they haven't seen; the
+         API Keys item in the profile menu carries the count. */
+      .profile-icon-badge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--boxel-danger);
+        box-shadow: 0 0 0 2px var(--boxel-light);
+        pointer-events: none;
       }
 
       .workspace-button {

@@ -147,6 +147,10 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
 // list. Deliberately a bare signal — the host re-fetches authoritatively rather
 // than trusting any payload.
 export const REALMS_LIST_UPDATED_EVENT_TYPE = 'realms-list-updated';
+// The same kind of signal, sent to a key's owner when a notice about their
+// keys is recorded for them, so the app can show that they have one waiting.
+// It carries nothing; the app asks the realm server how many are unread.
+export const KEY_NOTICES_UPDATED_EVENT_TYPE = 'key-notices-updated';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_REALM_SERVERS_EVENT_TYPE = 'app.boxel.realm-servers';
