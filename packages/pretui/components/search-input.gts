@@ -56,7 +56,9 @@ export class SearchInput extends Component<SearchInputSignature> {
     return this.current ? `${name}: ${this.current}` : name;
   }
   expand = () => {
-    if (this.returning || this.disabled) {
+    // focus and click both fire on one activation; writing open twice in
+    // one render is an autotracking error
+    if (this.open || this.returning || this.disabled) {
       return;
     }
     this.open = true;
