@@ -501,6 +501,112 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a key's response size cap is set and cleared through the endpoint, shown with the key, and recorded in its history", async function (assert) {
+      let { key } = (await addKey()).body;
+      assert.strictEqual(
+        key.responseSizeCap,
+        null,
+        "a new key takes the path's cap",
+      );
+
+      let set = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: 134217728, note: 'image responses near the cap' });
+      assert.strictEqual(set.status, 200);
+      assert.strictEqual(set.body.key.responseSizeCap, 134217728);
+      let [stored] = await dbAdapter.execute(
+        `SELECT response_size_cap_bytes FROM proxy_endpoints WHERE id = $1`,
+        { bind: [key.id] },
+      );
+      assert.strictEqual(Number(stored.response_size_cap_bytes), 134217728);
+      let destination = await AllowedProxyDestinations.getInstance(
+        dbAdapter,
+      ).getDestinationConfig(`${addedDestination()}echo`);
+      assert.strictEqual(
+        destination?.responseSizeCap,
+        134217728,
+        'the proxy reads the cap with the key, at once',
+      );
+
+      let cleared = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: null, note: 'back to the default' });
+      assert.strictEqual(cleared.status, 200);
+      assert.strictEqual(cleared.body.key.responseSizeCap, null);
+
+      let show = await request
+        .get(`/_system-keys/${key.id}`)
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.deepEqual(
+        show.body.history.map((h: any) => [h.action, h.responseSizeCap]),
+        [
+          ['set-response-cap', null],
+          ['set-response-cap', 134217728],
+          ['add', null],
+        ],
+        'each change is recorded, newest first, with the cap it set',
+      );
+      assert.strictEqual(
+        (await forwardedCredential(vendor.alternateUrl)).authorization,
+        `Bearer ${ADDED_KEY}`,
+        'the key itself is unchanged',
+      );
+    });
+
+    test('a response size cap change that is refused changes nothing', async function (assert) {
+      let { key } = (await addKey()).body;
+      let cases: [string, Record<string, unknown>, number][] = [
+        ['no note', { bytes: 1000 }, 400],
+        ['no bytes', { note: 'raising it' }, 400],
+        ['a cap of zero', { bytes: 0, note: 'raising it' }, 400],
+        ['a negative cap', { bytes: -1, note: 'raising it' }, 400],
+        ['a fractional cap', { bytes: 1.5, note: 'raising it' }, 400],
+        ['a cap given as text', { bytes: '1000', note: 'raising it' }, 400],
+        [
+          'a cap over a gibibyte',
+          { bytes: 1024 * 1024 * 1024 + 1, note: 'raising it' },
+          400,
+        ],
+        [
+          'a note that repeats the value',
+          { bytes: 1000, note: `key is ${ADDED_KEY}` },
+          400,
+        ],
+      ];
+      for (let [label, body, status] of cases) {
+        let response = await request
+          .put(`/_system-keys/${key.id}/response-size-cap`)
+          .set('Authorization', `Bearer ${operatorToken()}`)
+          .send(body);
+        assert.strictEqual(response.status, status, `${label} is refused`);
+      }
+      let missing = await request
+        .put(
+          `/_system-keys/6c1f3f8e-4a0e-4b9e-9a51-3c1d2b7a9e10/response-size-cap`,
+        )
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ bytes: 1000, note: 'raising it' });
+      assert.strictEqual(missing.status, 404, 'an unknown key is 404');
+      let userCall = await request
+        .put(`/_system-keys/${key.id}/response-size-cap`)
+        .set('Authorization', `Bearer ${userSession()}`)
+        .send({ bytes: 1000, note: 'raising it' });
+      assert.strictEqual(userCall.status, 401, 'a user session is refused');
+
+      let [stored] = await dbAdapter.execute(
+        `SELECT response_size_cap_bytes FROM proxy_endpoints WHERE id = $1`,
+        { bind: [key.id] },
+      );
+      assert.strictEqual(stored.response_size_cap_bytes, null);
+      assert.deepEqual(
+        (await historyRows()).map((row) => row.action),
+        ['add'],
+        'nothing but the add is recorded',
+      );
+    });
+
     test('a replace or delete whose note contains the current value is refused', async function (assert) {
       let { key } = (await addKey()).body;
       let replaced = await request

@@ -35,7 +35,7 @@ const log = logger('system-keys');
 
 export type SystemKeyAuthMethod = 'header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
-export type SystemKeyAction = 'add' | 'replace' | 'delete';
+export type SystemKeyAction = 'add' | 'replace' | 'delete' | 'set-response-cap';
 
 export const SYSTEM_KEY_AUTH_METHODS: readonly SystemKeyAuthMethod[] = [
   'header',
@@ -56,6 +56,10 @@ function creditStrategyFromRow(stored: string): string {
 }
 
 export const MAX_SYSTEM_KEY_VALUE_LENGTH = 8 * 1024;
+// The largest response size cap a key may be given. A cap is there to stop a
+// runaway or a decompression bomb; one past this stops neither, and is more
+// likely a mistyped value than a measured one.
+export const MAX_SYSTEM_KEY_RESPONSE_SIZE_CAP = 1024 * 1024 * 1024;
 export const MAX_SYSTEM_KEY_NOTE_LENGTH = 1000;
 const HISTORY_SHOWN = 20;
 
@@ -70,6 +74,9 @@ export interface SystemKey {
   // The data key the value is sealed under, or null while it is in plain text
   // only.
   keyId: string | null;
+  // The key's own response size cap in bytes, or null when its responses are
+  // held to the system-key path's cap.
+  responseSizeCap: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +86,9 @@ export interface SystemKeyChange {
   destination: string;
   note: string;
   keyId: string | null;
+  // For a `set-response-cap` entry, the cap it set; null for one that cleared
+  // it, and for every other action.
+  responseSizeCap: number | null;
   changedAt: string;
   // The caller's address and the time its operator token was signed, as the
   // server observed them; null where it couldn't tell.
@@ -203,7 +213,12 @@ export function operatorNoteRefusal(note: unknown): string | undefined {
 
 const SYSTEM_KEY_COLUMNS = `id, url, auth_method, auth_parameter_name,
   credit_strategy, supports_streaming, api_key_ciphertext IS NOT NULL AS has_value,
-  api_key_key_id, created_at, updated_at`;
+  api_key_key_id, response_size_cap_bytes, created_at, updated_at`;
+
+// A bigint column reads as a string.
+function capFromRow(stored: unknown): number | null {
+  return stored == null ? null : Number(stored);
+}
 
 function toSystemKey(row: Record<string, unknown>): SystemKey {
   return {
@@ -215,6 +230,7 @@ function toSystemKey(row: Record<string, unknown>): SystemKey {
     supportsStreaming: Boolean(row.supports_streaming),
     hasValue: Boolean(row.has_value),
     keyId: (row.api_key_key_id as string | null) ?? null,
+    responseSizeCap: capFromRow(row.response_size_cap_bytes),
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
   };
@@ -251,8 +267,8 @@ async function history(
   id: string,
 ): Promise<SystemKeyChange[]> {
   let rows = await dbAdapter.execute(
-    `SELECT action, url, note, key_id, changed_at, client_address,
-       token_issued_at
+    `SELECT action, url, note, key_id, response_size_cap_bytes, changed_at,
+       client_address, token_issued_at
      FROM proxy_endpoint_history
      WHERE endpoint_id = $1 ORDER BY changed_at DESC, id DESC LIMIT ${HISTORY_SHOWN}`,
     { bind: [id] },
@@ -262,6 +278,7 @@ async function history(
     destination: String(row.url),
     note: String(row.note),
     keyId: (row.key_id as string | null) ?? null,
+    responseSizeCap: capFromRow(row.response_size_cap_bytes),
     changedAt: new Date(row.changed_at as string).toISOString(),
     clientAddress: (row.client_address as string | null) ?? null,
     tokenIssuedAt:
@@ -317,6 +334,8 @@ function recordChange(
   keyId: string | null,
   note: string,
   caller: SystemKeyCaller,
+  // What a `set-response-cap` set the cap to.
+  responseSizeCap?: string,
 ): void {
   AllowedProxyDestinations.invalidate();
   let signed =
@@ -324,7 +343,7 @@ function recordChange(
       ? 'unknown'
       : new Date(caller.tokenIssuedAt * 1000).toISOString();
   log.info(
-    `system key ${action}: ${destination} (id ${id}${keyId ? `, data key ${keyId}` : ''}) from ${caller.clientAddress ?? 'an unknown address'}, token signed ${signed}. Note: ${JSON.stringify(note)}`,
+    `system key ${action}: ${destination} (id ${id}${keyId ? `, data key ${keyId}` : ''}${responseSizeCap ? `, response size cap ${responseSizeCap}` : ''}) from ${caller.clientAddress ?? 'an unknown address'}, token signed ${signed}. Note: ${JSON.stringify(note)}`,
   );
 }
 
@@ -513,4 +532,65 @@ export async function deleteSystemKey(
   }
   recordChange('delete', id, existing.destination, null, note, caller);
   return existing;
+}
+
+// Sets a system key's own response size cap in bytes, or with `null` clears
+// it, so the key's responses are held to the system-key path's cap again. The
+// realm server reads it with the key, so it applies to the next call, in
+// every process within the endpoint cache's lifetime, with no restart.
+export async function setSystemKeyResponseCap(
+  dbAdapter: DBAdapter,
+  id: string,
+  {
+    bytes,
+    note,
+    caller = UNKNOWN_CALLER,
+  }: { bytes: number | null; note: string; caller?: SystemKeyCaller },
+): Promise<SystemKey> {
+  if (
+    bytes !== null &&
+    (!Number.isSafeInteger(bytes) ||
+      bytes <= 0 ||
+      bytes > MAX_SYSTEM_KEY_RESPONSE_SIZE_CAP)
+  ) {
+    throw new SystemKeyError(
+      400,
+      `the response size cap must be a whole number of bytes from 1 to ${MAX_SYSTEM_KEY_RESPONSE_SIZE_CAP}, or null to clear it`,
+    );
+  }
+  validateNote(note);
+  let { key: existing } = await getSystemKey(dbAdapter, id);
+  await refuseNoteWithCurrentValue(dbAdapter, id, note);
+  let [row] = await dbAdapter.execute(
+    `WITH capped AS (
+       UPDATE proxy_endpoints SET
+         response_size_cap_bytes = $2,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING id, url, api_key_key_id, response_size_cap_bytes
+     ), recorded AS (
+       INSERT INTO proxy_endpoint_history (
+         endpoint_id, url, action, note, key_id, response_size_cap_bytes,
+         client_address, token_issued_at
+       )
+       SELECT id, url, 'set-response-cap', $3, api_key_key_id,
+         response_size_cap_bytes, $4, $5
+       FROM capped
+     )
+     SELECT id FROM capped`,
+    { bind: [id, bytes, note, ...callerBindings(caller)] },
+  );
+  if (!row) {
+    throw new SystemKeyError(404, 'no system key has that id');
+  }
+  recordChange(
+    'set-response-cap',
+    id,
+    existing.destination,
+    null,
+    note,
+    caller,
+    bytes === null ? 'cleared' : `${bytes} bytes`,
+  );
+  return (await getSystemKey(dbAdapter, id)).key;
 }

@@ -506,6 +506,9 @@ export interface OutboundRequest {
   // The caller's cancellation, e.g. its client going away.
   signal?: AbortSignal;
   sizePath: ResponseSizePath;
+  // The response size cap for this call in place of its path's, such as a
+  // system key's own cap.
+  responseSizeCap?: number;
   // Who chose the destination: the platform (a `proxy_endpoints` row, a
   // platform OAuth client, a vendor's fixed token endpoint) or a user (a
   // card's declared request, a user's own OAuth client). A guard refusal of a
@@ -815,6 +818,9 @@ async function send(
       let capped = await capResponseSize(response, {
         destination: recordedURL(request.url),
         sizePath: request.sizePath,
+        cap:
+          request.responseSizeCap ??
+          settings.responseSizeCaps[request.sizePath],
         timeout,
         hostname,
         callerSignal: request.signal,
@@ -873,8 +879,8 @@ function leavesOrigin(location: string, current: URL): boolean {
 
 // --- Response size cap -----------------------------------------------------
 
-// Hands back `response` with its body counted as it streams, against the
-// cap for `sizePath`. Decompression has already happened inside fetch, chunk
+// Hands back `response` with its body counted as it streams, against `cap`:
+// the call's own cap, else its path's. Decompression has already happened inside fetch, chunk
 // by chunk, so the count is of decompressed bytes and nothing is held beyond
 // the chunk in hand.
 //
@@ -897,6 +903,7 @@ async function capResponseSize(
   {
     destination,
     sizePath,
+    cap,
     timeout,
     hostname,
     callerSignal,
@@ -905,6 +912,7 @@ async function capResponseSize(
   }: {
     destination: string;
     sizePath: ResponseSizePath;
+    cap: number;
     timeout: AbortSignal;
     hostname: string;
     callerSignal: AbortSignal | undefined;
@@ -912,19 +920,23 @@ async function capResponseSize(
     context: OutboundErrorContext;
   },
 ): Promise<Response> {
-  let cap = settings.responseSizeCaps[sizePath];
   let describe = `path=${sizePath} destination=${destination} status=${response.status} cap=${cap}`;
+  // Last on the line, so a reader that parses the fields before it is
+  // unaffected. `(none)` for a call that attaches no named key.
+  let key = `key=${context.keyName ?? '(none)'}`;
 
   let source = response.body;
   if (!source) {
-    log.info(`outbound response size: ${describe} bytes=0 outcome=complete`);
+    log.info(
+      `outbound response size: ${describe} bytes=0 outcome=complete ${key}`,
+    );
     return response;
   }
 
   let declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > cap) {
     log.warn(
-      `outbound response over size cap: ${describe} declaredBytes=${declared} refused=declared-length`,
+      `outbound response over size cap: ${describe} declaredBytes=${declared} refused=declared-length ${key}`,
     );
     await source.cancel().catch(() => undefined);
     throw new OutboundResponseTooLargeError(hostname, cap, 'declared-length');
@@ -939,7 +951,7 @@ async function capResponseSize(
     }
     ended = true;
     log.info(
-      `outbound response size: ${describe} bytes=${bytes} outcome=${outcome}`,
+      `outbound response size: ${describe} bytes=${bytes} outcome=${outcome} ${key}`,
     );
   };
 
@@ -968,7 +980,7 @@ async function capResponseSize(
       bytes += result.value.byteLength;
       if (bytes > cap) {
         log.warn(
-          `outbound response over size cap: ${describe} bytesRead=${bytes} refused=stream-reached-cap`,
+          `outbound response over size cap: ${describe} bytesRead=${bytes} refused=stream-reached-cap ${key}`,
         );
         finish('too-large');
         reader.cancel().catch(() => undefined);

@@ -31,6 +31,7 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { setSystemKeyResponseCap } from '../lib/system-keys.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
 import {
   configureOutbound,
@@ -2422,6 +2423,65 @@ module(basename(import.meta.filename), function () {
           await inFlightReservations(),
           0,
           'the slot is given back',
+        );
+      });
+
+      test("a system key's own response size cap applies to its next call, and clearing it returns the key to the path's cap", async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+        });
+        let [{ id }] = await dbAdapter.execute(
+          `SELECT id FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        let forward = () =>
+          request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/large?bytes=50000`,
+              method: 'POST',
+              requestBody: JSON.stringify({}),
+            });
+
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: 60_000,
+          note: 'raising the cap for a larger response, test',
+        });
+        let lines = await logLinesDuring(['outbound'], async () => {
+          let raised = await forward();
+          assert.strictEqual(
+            raised.status,
+            200,
+            "a response over the path's cap passes under the key's own",
+          );
+        });
+        assert.true(
+          lines.some(
+            (line) =>
+              line.message.startsWith('outbound response size:') &&
+              line.message.includes('cap=60000 bytes=50000') &&
+              line.message.endsWith(`key=system:${vendor.url}/`),
+          ),
+          "the size line carries the key's cap and its name",
+        );
+
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: null,
+          note: 'back to the path cap, test',
+        });
+        let cleared = await forward();
+        assert.strictEqual(
+          cleared.status,
+          502,
+          "with its own cap cleared, the key is held to the path's cap",
+        );
+        assert.true(
+          JSON.stringify(cleared.body).includes('Response too large'),
+          'the caller is told the response was too large',
         );
       });
 
