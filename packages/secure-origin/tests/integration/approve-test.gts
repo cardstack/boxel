@@ -1302,7 +1302,9 @@ module('Integration | approve pages', function (hooks) {
       .includesText('You approve these calls once, for this card.');
   });
 
-  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+  // Serves a batch of one operation a share fills, approved for open cards
+  // for the first time, with the share's daily budget in force at 2400.
+  function serveFirstInteractiveShare() {
     let shared = operation('listTeamPRs', 'List the team’s pull requests');
     serve({
       'POST _key-bindings/batch': () =>
@@ -1348,6 +1350,10 @@ module('Integration | approve pages', function (hooks) {
           },
         }),
     });
+  }
+
+  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+    serveFirstInteractiveShare();
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
@@ -1378,7 +1384,15 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-budget-more]')
       .includesText('how fast each person can make calls')
       .includesText(
-        'how many calls the key makes in a month, in total across everyone',
+        'how many calls this share makes in a month, in total across everyone',
+      );
+    assert
+      .dom(
+        '[data-test-approve-budget="Team GitHub"] [data-test-approve-budget-limits-link]',
+      )
+      .hasText(
+        'Open the limits for Team GitHub in a new tab',
+        'the link names the share it opens, and that it opens a tab',
       );
     let link = find(
       '[data-test-approve-budget="Team GitHub"] [data-test-approve-budget-limits-link]',
@@ -1406,6 +1420,91 @@ module('Integration | approve pages', function (hooks) {
     let [approval] = approvals();
     assert.true(approval.interactive);
     assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
+  });
+
+  test('coming back to the window takes a daily budget changed on the limits page', async function (assert) {
+    serveFirstInteractiveShare();
+    let inForce = 2400;
+    serve({
+      'GET _key-shares/share-team/usage': () =>
+        json(200, {
+          data: {
+            type: 'key-usage',
+            id: 'share-team',
+            attributes: {
+              limits: {
+                rateBurst: 25,
+                rateRefillPerMinute: 15,
+                dailyBudget: inForce,
+                monthlyBudget: 72000,
+              },
+            },
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('2400');
+
+    // The owner lowers the budget on the share's limits page, in another
+    // tab, and comes back to this window.
+    inForce = 300;
+    window.dispatchEvent(new Event('focus'));
+    await settled();
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('300', 'the field takes the budget in force');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.deepEqual(
+      approval.dailyBudgets,
+      { 'share-team': 300 },
+      'approving keeps the budget set on the limits page',
+    );
+  });
+
+  test('a daily budget typed on the approve page stays when the window comes back into view', async function (assert) {
+    serveFirstInteractiveShare();
+    serve({
+      'GET _key-shares/share-team/usage': () =>
+        json(200, {
+          data: {
+            type: 'key-usage',
+            id: 'share-team',
+            attributes: {
+              limits: {
+                rateBurst: 25,
+                rateRefillPerMinute: 15,
+                dailyBudget: 300,
+                monthlyBudget: 72000,
+              },
+            },
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '800');
+    window.dispatchEvent(new Event('focus'));
+    await settled();
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('800', 'what the user typed is what is approved');
+    assert.false(
+      requests.some((r) => r.path === '_key-shares/share-team/usage'),
+      'a typed field asks nothing',
+    );
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 800 });
   });
 
   // Serves a batch of two operations a share fills, in a realm whose policy

@@ -24,7 +24,9 @@
 // for a workspace's share, and asks for the daily budget of a share approved
 // for interactive use for the first time, linking to the share's
 // `share-limits` page, in a new tab, for its other limits: each person's rate
-// and the key's monthly budget. An operation approved for pipelines
+// and the share's monthly budget. That page changes the daily budget too, so
+// coming back to this window re-reads the budget in force for a field the
+// user hasn't typed in. An operation approved for pipelines
 // only is in the batch only for that second choice. The choice starts on
 // interactive use when the batch is already approved for it, or holds nothing
 // else. An operation last approved for interactive use is marked, and
@@ -60,6 +62,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import {
   approvalBatch,
   approveOperations,
+  shareUsage,
   windowContext,
   type ApprovalBatch,
   type BatchOperation,
@@ -469,16 +472,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     class='note budget-note budget-more'
                     data-test-approve-budget-more
                   >
-                    Change its other limits on
                     <a
                       class='limits-link'
                       href={{this.shareLimitsURL share}}
                       target='_blank'
                       rel='noopener noreferrer'
                       data-test-approve-budget-limits-link
-                    >its limits page</a>, which opens in a new tab: how fast
-                    each person can make calls, and how many calls the key makes
-                    in a month, in total across everyone.</span>
+                    >Open the limits for {{share.label}} in a new tab</a>
+                    to change its others: how fast each person can make calls,
+                    and how many calls this share makes in a month, in total
+                    across everyone.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -802,6 +805,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   constructor(owner: Owner, args: ApproveArgs) {
     super(owner, args);
     this.load();
+    document.addEventListener('visibilitychange', this.refreshBudgets);
+    window.addEventListener('focus', this.refreshBudgets);
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    document.removeEventListener('visibilitychange', this.refreshBudgets);
+    window.removeEventListener('focus', this.refreshBudgets);
   }
 
   private get heading() {
@@ -926,6 +937,48 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     return realm
       ? `${pageURL('share-limits')}#${new URLSearchParams({ realm, share: share.id })}`
       : undefined;
+  };
+
+  // The share-limits page this page links to changes a share's daily budget
+  // too, and approving writes the budget the field holds. So when the window
+  // comes back into view, each budget field the user hasn't typed in takes the
+  // budget in force, and approving never puts back one changed meanwhile. A
+  // budget the user typed is what they see, and stays.
+  private refreshBudgets = async () => {
+    let state = this.choosing;
+    if (document.visibilityState !== 'visible' || !state) {
+      return;
+    }
+    let untyped = this.budgetShares.filter(
+      (share) => this.form.budgets[share.id] === undefined,
+    );
+    let { config } = this.args.api;
+    let inForce = new Map<string, number>();
+    await Promise.all(
+      untyped.map(async (share) => {
+        try {
+          let { limits } = await shareUsage(config, share.id);
+          inForce.set(share.id, limits.dailyBudget);
+        } catch {
+          // The field keeps the budget it has; a session that ended is the
+          // window's to notice.
+        }
+      }),
+    );
+    if (inForce.size === 0 || this.page.state !== state) {
+      return;
+    }
+    this.page.state = {
+      ...state,
+      batch: {
+        ...state.batch,
+        shares: state.batch.shares.map((share) =>
+          inForce.has(share.id)
+            ? { ...share, dailyBudget: inForce.get(share.id)! }
+            : share,
+        ),
+      },
+    };
   };
 
   private setBudget = (shareId: string, value: string) => {
