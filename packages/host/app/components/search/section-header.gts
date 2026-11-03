@@ -20,6 +20,7 @@ interface Signature {
     realmURL?: string;
     urlInRealm?: string;
     title: string;
+    isCurrent?: boolean;
     totalCount?: number;
     showOnlyLabel?: string;
     showOnlyChecked?: boolean;
@@ -56,6 +57,11 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
         {{/if}}
       </div>
       <div class='title'>{{@title}}</div>
+      {{#if @isCurrent}}
+        <span class='current' data-test-search-sheet-section-current>
+          Current workspace
+        </span>
+      {{/if}}
       {{#unless @hideCount}}
         {{! A section's result count reflects how many cards the realm holds,
         so in a Percy snapshot it changes every time someone adds a card to
@@ -133,6 +139,16 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
       }
       .show-only-label {
         user-select: none;
+      }
+      .current {
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-sm);
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        line-height: var(--boxel-line-height-xs);
+        white-space: nowrap;
       }
     </style>
   </template>

@@ -1,12 +1,12 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import {
   executeReadRealmFile,
   readRealmFileTool,
-  fileLabelFromUrl,
+  fileLabelFromIdentifier,
   readFilesLabel,
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
@@ -189,6 +189,19 @@ module('urlsFromReadRealmFileArguments', () => {
     ]);
   });
 
+  test('recovers prefix-form identifiers from arguments cut off mid-list', () => {
+    let truncated = `{"urls":["@cardstack/skills/trip-planner/SKILL.md","${FILE_URL}","@cardstack/base/card-a`;
+    assert.deepEqual(urlsFromReadRealmFileArguments(truncated), [
+      '@cardstack/skills/trip-planner/SKILL.md',
+      FILE_URL,
+    ]);
+  });
+
+  test('recovery keeps quotes paired across empty and non-identifier entries', () => {
+    let truncated = `{"urls":["","notes.md","${FILE_URL}","${RAW_FILE_URL}`;
+    assert.deepEqual(urlsFromReadRealmFileArguments(truncated), [FILE_URL]);
+  });
+
   test('malformed arguments without a url list yield nothing', () => {
     assert.deepEqual(urlsFromReadRealmFileArguments('{not json'), []);
     assert.deepEqual(
@@ -241,7 +254,7 @@ module('selectReadRealmFileUrls', () => {
   test('a call within the cap drops nothing', () => {
     assert.deepEqual(
       selectReadRealmFileUrls(JSON.stringify({ urls: [FILE_URL] })),
-      { urls: [FILE_URL], dropped: [] },
+      { urls: [rri(FILE_URL)], dropped: [] },
     );
   });
 });
@@ -771,10 +784,10 @@ module('classifyToolCalls', () => {
   });
 });
 
-module('fileLabelFromUrl', () => {
+module('fileLabelFromIdentifier', () => {
   test('keeps the skill folder for a SKILL.md', () => {
     assert.strictEqual(
-      fileLabelFromUrl(FILE_URL),
+      fileLabelFromIdentifier(FILE_URL),
       'trip-planner/SKILL.md',
       'a skill reads as <name>/SKILL.md',
     );
@@ -782,13 +795,36 @@ module('fileLabelFromUrl', () => {
 
   test('falls back to the file name otherwise', () => {
     assert.strictEqual(
-      fileLabelFromUrl('https://localhost:4201/user/jane/notes.md'),
+      fileLabelFromIdentifier('https://localhost:4201/user/jane/notes.md'),
       'notes.md',
     );
   });
 
+  test('labels a prefix-form identifier the same way', () => {
+    assert.strictEqual(
+      fileLabelFromIdentifier('@cardstack/skills/trip-planner/SKILL.md'),
+      'trip-planner/SKILL.md',
+    );
+    assert.strictEqual(
+      fileLabelFromIdentifier('@cardstack/base/card-api.gts'),
+      'card-api.gts',
+    );
+    assert.strictEqual(
+      fileLabelFromIdentifier('@cardstack/skills/SKILL.md'),
+      'SKILL.md',
+      "the prefix's namespace is not a skill folder",
+    );
+  });
+
+  test('an identifier with no path is its own label', () => {
+    assert.strictEqual(
+      fileLabelFromIdentifier('@cardstack/skills/'),
+      '@cardstack/skills/',
+    );
+  });
+
   test('undefined url → undefined label', () => {
-    assert.strictEqual(fileLabelFromUrl(undefined), undefined);
+    assert.strictEqual(fileLabelFromIdentifier(undefined), undefined);
   });
 });
 

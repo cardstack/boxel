@@ -1,0 +1,22 @@
+{
+  "apiVersion": 1,
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "Techops",
+      "receivers": [
+        {
+          "uid": "techops-email",
+          "type": "email",
+          "disableResolveMessage": false,
+          "settings": {
+            "addresses": "techops@example.com",
+            "singleEmail": true,
+            "subject": "{{ if eq .Status \"resolved\" }}[RESOLVED] {{ end }}{{ if .CommonAnnotations.title }}{{ .CommonAnnotations.title }}{{ else }}{{ template \"default.title\" . }}{{ end }}",
+            "message": "{{ range .Alerts.Firing }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}\nDashboard: {{ .PanelURL }}\n\n{{ end }}{{ if .Alerts.Resolved }}Resolved: {{ range .Alerts.Resolved }}{{ .Labels.alertname }} on {{ .Labels.key }} at {{ .Labels.destination }}. {{ end }}{{ end }}"
+          }
+        }
+      ]
+    }
+  ]
+}

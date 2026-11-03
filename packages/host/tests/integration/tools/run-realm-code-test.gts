@@ -10,6 +10,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   CAPTURE_SOURCE_URL_PREFIX,
   DEFAULT_FALLBACK_MODELS,
+  LOCAL_SOURCE_URL_PREFIX,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
@@ -806,6 +807,57 @@ return { show: 'Pet/missing' };`,
       /not in a workspace the user can read/,
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.capture refuses a file attached to the chat, and says how to see it again', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let attachment = `${LOCAL_SOURCE_URL_PREFIX}00000000-0000-4000-8000-000000000001/photo.jpg`;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('${attachment}');`,
+      }),
+      (error: Error) =>
+        error.message.includes(`Cannot capture ${attachment}`) &&
+        error.message.includes('attach it again'),
+    );
+    assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.capture refuses the image a capture took, and says to capture what it shows', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let captured = `${CAPTURE_SOURCE_URL_PREFIX}0000000000000001/mango.png`;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('${captured}');`,
+      }),
+      (error: Error) =>
+        error.message.includes(`Cannot capture ${captured}`) &&
+        error.message.includes('capture the card or file it shows') &&
+        !error.message.includes('attach it again'),
+    );
+    assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('the description says realm.capture refuses a file attached to the chat', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    assert.true(
+      command.description.includes(`a ${LOCAL_SOURCE_URL_PREFIX} URL`),
+      'the description names the prefix of a file attached from the computer',
+    );
+    assert.true(
+      command.description.includes('so realm.capture refuses it'),
+      'a model choosing a capture target reads that such a file is not one',
+    );
   });
 
   test('realm.capture finds the workspace of a prefixed id, whatever form the workspace is known by', async function (assert) {

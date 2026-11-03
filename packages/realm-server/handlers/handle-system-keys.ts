@@ -7,6 +7,7 @@ import {
   getSystemKey,
   listSystemKeys,
   replaceSystemKey,
+  setSystemKeyResponseCap,
   SystemKeyError,
   type SystemKeyCaller,
   type SystemKeyCreditStrategy,
@@ -175,5 +176,28 @@ export function handleDeleteSystemKey({ dbAdapter }: CreateRoutesArgs) {
       caller: operatorCaller(ctxt),
     });
     return { status: 200, body: { deleted: key } };
+  });
+}
+
+// Body: `bytes`, a whole number of bytes or null to clear the key's own cap,
+// and `note`.
+export function handleSetSystemKeyResponseCap({ dbAdapter }: CreateRoutesArgs) {
+  return handle(async (ctxt) => {
+    let body = await readJSONBody(ctxt);
+    if (
+      !('bytes' in body) ||
+      (body.bytes !== null && typeof body.bytes !== 'number')
+    ) {
+      throw new SystemKeyError(
+        400,
+        'bytes is required: a whole number of bytes, or null to clear the cap',
+      );
+    }
+    let key = await setSystemKeyResponseCap(dbAdapter, ctxt.params.id, {
+      bytes: body.bytes,
+      note: body.note,
+      caller: operatorCaller(ctxt),
+    });
+    return { status: 200, body: { key } };
   });
 }

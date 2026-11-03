@@ -2412,6 +2412,10 @@ export type {
   SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 export { OperationsError } from '@cardstack/runtime-common';
+export type {
+  CredentialRejectedReason,
+  OperationsErrorMeta,
+} from '@cardstack/runtime-common';
 
 // The payload an operation takes, as an argument list. A declaration's own
 // `params` schema is the single source for it, so an operation that declares

@@ -221,9 +221,21 @@ which sets `declined_at` and changes nothing about the key. A notice that
 can't be recorded is logged on `realm:policy-share-audit` and costs the write
 nothing.
 
+Recording a notice sends `key-notices-updated` to the owner's session room,
+and the app shows the count on the user's avatar and on the profile
+menu's API Keys item. The count is `meta.unread` on `GET /_key-policy-notices`:
+the notices among the newest 100 whose `read_at` is null. The key page marks
+the ones it lists read with `POST /_key-policy-notices/read`
+(`data: [{ type: 'key-policy-notice', id }]`). Only a secure session may call
+it, so card code in the app page can read the count but not clear it. Marking
+read sends `key-notices-updated` again, so the owner's other sessions clear
+the badge too. A badge that won't clear is the owner's key page failing to
+mark read; it logs `Could not mark the key notices read` in the browser
+console.
+
 ```sql
--- What a realm's policy opened, and to whom it was told.
-SELECT created_at, owner, label, reason, operations, saved_by
+-- What a realm's policy opened, to whom it was told, and whether they saw it.
+SELECT created_at, owner, label, reason, operations, saved_by, read_at
 FROM key_policy_notices WHERE realm_url = 'https://app.boxel.ai/someone/realm/'
 ORDER BY created_at DESC;
 ```
@@ -272,6 +284,8 @@ method and path of these routes.
 | `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
 | `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
 | `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
+| `GET /_key-policy-notices`            | The user's policy notices as a key's owner; `meta.unread` is the badge's count |
+| `POST /_key-policy-notices/read`      | Mark listed notices read: `data: [{type, id}]`, from a secure session          |
 | `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
 
 | Status | Means                                                                                                                                                                                                                                                                                                                                       |
