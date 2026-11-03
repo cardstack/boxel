@@ -28,6 +28,11 @@ export interface WrittenFileRereadResult<T> {
   removed: boolean;
 }
 
+export interface WrittenFileRereadLog {
+  info(message: string): void;
+  warn(message: string): void;
+}
+
 // One per pass. The window opens at the pass's first re-read and spans the sum
 // of the delays, and every later re-read in the pass shares what is left of
 // it. A bulk write whose files all read as missing (a new directory the
@@ -51,6 +56,48 @@ export class WrittenFileRereads {
     this.#sleep =
       opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.#now = opts.now ?? Date.now;
+  }
+
+  // Reads a file the pass visits. When `read` finds nothing, re-reads it
+  // through the window while `realmRecordsFile` holds, and logs what the
+  // re-reads came to. `label` leads each log line and names the file;
+  // `ifMissing` says what the pass does with a file that stays missing.
+  async readVisitedFile<T>(
+    read: () => Promise<T | undefined>,
+    {
+      realmRecordsFile,
+      label,
+      ifMissing,
+      log,
+    }: {
+      realmRecordsFile: () => Promise<boolean>;
+      label: string;
+      ifMissing: string;
+      log: WrittenFileRereadLog;
+    },
+  ): Promise<T | undefined> {
+    let first = await read();
+    if (first !== undefined) {
+      return first;
+    }
+    let { value, rereads, waitedMs, removed } = await this.reread(
+      read,
+      realmRecordsFile,
+    );
+    if (value !== undefined) {
+      log.info(
+        `${label} read on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
+      );
+    } else if (!removed) {
+      log.warn(
+        `${label} is recorded by the realm but still reads as missing after ${rereads} re-reads over ${waitedMs}ms; ${ifMissing}`,
+      );
+    } else if (rereads > 0) {
+      log.info(
+        `${label} was removed after ${rereads} re-reads over ${waitedMs}ms; ${ifMissing}`,
+      );
+    }
+    return value;
   }
 
   // Calls `read` after each delay until it returns a file or the pass's window

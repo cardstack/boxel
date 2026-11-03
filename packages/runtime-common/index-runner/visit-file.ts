@@ -175,27 +175,14 @@ export async function renderFileForIndexing({
   let readFile = async () =>
     (await reader.readFile(url)) ??
     (await reader.readFile(new URL(encodeURI(localPath), url)));
-  let fileRef = await readFile();
-  if (!fileRef && writtenFileRereads) {
-    let { value, rereads, waitedMs, removed } = await writtenFileRereads.reread(
-      readFile,
-      () => batch.realmRecordsFile(localPath),
-    );
-    fileRef = value;
-    if (fileRef) {
-      logInfo(
-        `${jobIdentity(jobInfo)} read ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
-      );
-    } else if (!removed) {
-      logWarn(
-        `${jobIdentity(jobInfo)} ${url.href} is recorded by the realm but still reads as missing after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
-      );
-    } else if (rereads > 0) {
-      logInfo(
-        `${jobIdentity(jobInfo)} ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
-      );
-    }
-  }
+  let fileRef = writtenFileRereads
+    ? await writtenFileRereads.readVisitedFile(readFile, {
+        realmRecordsFile: () => batch.realmRecordsFile(localPath),
+        label: `${jobIdentity(jobInfo)} ${url.href}`,
+        ifMissing: 'indexing it as removed',
+        log: { info: logInfo, warn: logWarn },
+      })
+    : await readFile();
   if (!fileRef) {
     let error = new CardError(`missing file ${url.href}`, { status: 404 });
     error.deps = [url.href];

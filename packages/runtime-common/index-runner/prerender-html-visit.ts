@@ -1047,32 +1047,19 @@ async function visitForPrerenderedHtml({
   let readFile = async () =>
     (await reader.readFile(url)) ??
     (await reader.readFile(new URL(encodeURI(localPath), url)));
-  let fileRef = await readFile();
   // A file the committed index holds was read by the index pass that
   // published its row, so while the realm still records it, a miss here is
   // this read landing on a stale view of the realm (see WrittenFileRereads),
   // not a removal. A URL the index holds as a tombstone, or not at all, is a
   // removal and is taken as one at once.
-  if (!fileRef && batch.indexHoldsLiveRow(url.href)) {
-    let { value, rereads, waitedMs, removed } = await writtenFileRereads.reread(
-      readFile,
-      () => batch.realmRecordsFile(localPath),
-    );
-    fileRef = value;
-    if (fileRef) {
-      log.info(
-        `${jobIdentity(jobInfo)} read indexed file ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
-      );
-    } else if (!removed) {
-      log.warn(
-        `${jobIdentity(jobInfo)} indexed file ${url.href} still reads as missing after ${rereads} re-reads over ${waitedMs}ms; rendering nothing for it`,
-      );
-    } else if (rereads > 0) {
-      log.info(
-        `${jobIdentity(jobInfo)} indexed file ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; rendering nothing for it`,
-      );
-    }
-  }
+  let fileRef = batch.indexHoldsLiveRow(url.href)
+    ? await writtenFileRereads.readVisitedFile(readFile, {
+        realmRecordsFile: () => batch.realmRecordsFile(localPath),
+        label: `${jobIdentity(jobInfo)} indexed file ${url.href}`,
+        ifMissing: 'rendering nothing for it',
+        log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
+      })
+    : await readFile();
   if (!fileRef) {
     // Unreadable file — the same outcome as the index visit's
     // missing-file handling: write nothing, so the up-front tombstone
