@@ -15,7 +15,6 @@ import {
   localId as localIdSymbol,
   mintedIdentities,
   OperationsError,
-  operationsErrorMeta,
   rri,
   stampBaseVersion,
   SKIP_INDEX_WAIT_HEADER,
@@ -699,7 +698,7 @@ export async function refusal(response: Response): Promise<Error> {
     ...(typeof meta.retryAfterSeconds === 'number'
       ? { retryAfterSeconds: meta.retryAfterSeconds }
       : {}),
-    meta: operationsErrorMeta(code, meta),
+    meta,
   });
 }
 

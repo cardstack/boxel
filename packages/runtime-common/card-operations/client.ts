@@ -302,7 +302,9 @@ export class OperationsError extends Error {
     entry?: number | string;
     id?: string;
     retryAfterSeconds?: number;
-    meta?: OperationsErrorMeta;
+    // The refusal's `meta` as the realm sent it; only what
+    // `OperationsErrorMeta` allows for `code` is kept.
+    meta?: Record<string, unknown>;
   }) {
     super(
       [args.title, args.detail].filter(Boolean).join(': ') ||
@@ -316,7 +318,7 @@ export class OperationsError extends Error {
     this.entry = args.entry;
     this.id = args.id;
     this.retryAfterSeconds = args.retryAfterSeconds;
-    this.meta = Object.freeze({ ...args.meta });
+    this.meta = Object.freeze(operationsErrorMeta(args.code, args.meta));
   }
 }
 
@@ -356,7 +358,7 @@ export interface OperationsErrorMeta {
 // member is kept only on the code it belongs to and only when its value is
 // one the type allows, so a card reads either a value it can act on or
 // nothing.
-export function operationsErrorMeta(
+function operationsErrorMeta(
   code: string | undefined,
   meta: Record<string, unknown> | undefined,
 ): OperationsErrorMeta {

@@ -171,6 +171,21 @@ module('Unit | operations refusal', function () {
     assert.deepEqual(error.meta, {});
   });
 
+  test('an OperationsError built directly keeps only what its code allows', function (assert) {
+    let error = new OperationsError({
+      status: 502,
+      code: 'guard-refused',
+      meta: { reason: 'rejected', cap: 10 },
+    });
+    assert.deepEqual(error.meta, {});
+    let sized = new OperationsError({
+      status: 502,
+      code: 'response-too-large',
+      meta: { reason: 'rejected', cap: 10 },
+    });
+    assert.deepEqual(sized.meta, { cap: 10 });
+  });
+
   test("a refusal's meta can't be changed by the card that catches it", async function (assert) {
     let error = (await refusal(
       refused(424, {
