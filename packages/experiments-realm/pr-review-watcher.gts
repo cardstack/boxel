@@ -248,6 +248,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   // Signing in leaves a connection that isn't approved for the watcher's
   // calls yet, and readiness reads the same until it is.
   @tracked signedIn = false;
+  // The GitHub login the key belongs to.
+  @tracked viewer = '';
   // Calls wait until then after a refusal for the key's limits.
   pausedUntil = 0;
   poller: ReturnType<typeof setInterval> | undefined;
@@ -459,6 +461,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         return;
       }
       let viewer = review.viewer ?? '';
+      this.viewer = viewer;
       let team = this.record.teamSlug ?? '';
       let nodesOf = (a: SearchAnswer) =>
         (a.pullRequests ?? []).filter(
@@ -730,23 +733,23 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
               data-test-direction
             >{{this.directionLabel}}</Button>
             {{#if this.byAuthorApplies}}
-              <NativeSelect
-                @label='Author'
-                @size='s'
-                @options={{this.authorOptions}}
-                @value={{this.activeAuthor}}
-                @onValueChange={{this.selectAuthor}}
-                data-test-author-filter
-              />
+              <div class='filter'><NativeSelect
+                  @label='Author'
+                  @size='s'
+                  @options={{this.authorOptions}}
+                  @value={{this.activeAuthor}}
+                  @onValueChange={{this.selectAuthor}}
+                  data-test-author-filter
+                /></div>
             {{/if}}
-            <NativeSelect
-              @label='Repository'
-              @size='s'
-              @options={{this.repoOptions}}
-              @value={{this.activeRepo}}
-              @onValueChange={{this.selectRepo}}
-              data-test-repo-filter
-            />
+            <div class='filter'><NativeSelect
+                @label='Repository'
+                @size='s'
+                @options={{this.repoOptions}}
+                @value={{this.activeRepo}}
+                @onValueChange={{this.selectRepo}}
+                data-test-repo-filter
+              /></div>
           </div>
         {{/if}}
         {{#if this.truncated}}
@@ -788,7 +791,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
                       />
                       {{#if (eq this.tab 'review')}}
                         from
-                        {{pr.requested.from}}
+                        {{if
+                          (eq pr.requested.from this.viewer)
+                          'you'
+                          pr.requested.from
+                        }}
                       {{/if}}
                     </span>
                   {{else}}
@@ -884,8 +891,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       .arrange {
         display: flex;
         flex-wrap: wrap;
-        align-items: end;
+        align-items: center;
         gap: var(--boxel-sp-sm);
+      }
+      .filter {
+        width: 11rem;
       }
       .prs {
         list-style: none;

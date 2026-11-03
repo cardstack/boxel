@@ -18,7 +18,9 @@ import {
 } from '../lib/secrets-at-rest/index.ts';
 import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import {
+  arrange,
   authoredBy,
+  choicesOf,
   commentCount,
   waitingOnReviewBy,
   type PullRequestNode,
@@ -252,6 +254,121 @@ module(basename(import.meta.filename), function () {
           [10, false, TEAM],
           [9, true, undefined],
         ],
+      );
+    });
+  });
+
+  module('sorting and filtering a list', function () {
+    let list = () =>
+      authoredBy(
+        [
+          pr(20, {
+            author: 'octo-viewer',
+            requests: [{ at: '2026-10-03T00:00:00Z', team: TEAM }],
+          }),
+          pr(21, {
+            author: 'octo-viewer',
+            requests: [{ at: '2026-10-01T00:00:00Z', team: TEAM }],
+          }),
+          pr(22, { author: 'octo-viewer' }),
+        ],
+        'octo-viewer',
+      );
+
+    test('by request time either way, with nobody asked to review last both ways', function (assert) {
+      assert.deepEqual(
+        arrange(list(), { sortBy: 'requested', direction: 'asc' }).map(
+          (p) => p.number,
+        ),
+        [21, 20, 22],
+      );
+      assert.deepEqual(
+        arrange(list(), { sortBy: 'requested', direction: 'desc' }).map(
+          (p) => p.number,
+        ),
+        [20, 21, 22],
+      );
+    });
+
+    test('by author or repository, A to Z or Z to A, ties going to the longest waiting', function (assert) {
+      let waiting = waitingOnReviewBy(
+        [
+          pr(30, {
+            author: 'octo-builder',
+            requests: [{ at: '2026-10-04T00:00:00Z', team: TEAM }],
+          }),
+          pr(31, {
+            author: 'Octo-Author',
+            requests: [{ at: '2026-10-05T00:00:00Z', team: TEAM }],
+          }),
+          pr(32, {
+            author: 'octo-builder',
+            requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
+          }),
+        ],
+        'octo-viewer',
+        TEAM,
+      );
+      assert.deepEqual(
+        arrange(waiting, { sortBy: 'author', direction: 'asc' }).map(
+          (p) => p.number,
+        ),
+        [31, 32, 30],
+        'letter case does not split the order',
+      );
+      assert.deepEqual(
+        arrange(waiting, { sortBy: 'author', direction: 'desc' }).map(
+          (p) => p.number,
+        ),
+        [32, 30, 31],
+      );
+      assert.deepEqual(choicesOf(waiting, 'author'), [
+        'Octo-Author',
+        'octo-builder',
+      ]);
+    });
+
+    test('filters by author and repository together', function (assert) {
+      let other = {
+        ...pr(40, {
+          author: 'octo-builder',
+          requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
+        }),
+        repository: { nameWithOwner: 'cardstack/boxel-skills' },
+      };
+      let waiting = waitingOnReviewBy(
+        [
+          pr(41, {
+            author: 'octo-builder',
+            requests: [{ at: '2026-10-01T00:00:00Z', team: TEAM }],
+          }),
+          other,
+          pr(42, {
+            author: 'octo-author',
+            requests: [{ at: '2026-10-03T00:00:00Z', team: TEAM }],
+          }),
+        ],
+        'octo-viewer',
+        TEAM,
+      );
+      assert.deepEqual(choicesOf(waiting, 'repo'), [
+        'cardstack/boxel',
+        'cardstack/boxel-skills',
+      ]);
+      assert.deepEqual(
+        arrange(waiting, {
+          sortBy: 'requested',
+          direction: 'asc',
+          author: 'octo-builder',
+          repo: 'cardstack/boxel',
+        }).map((p) => p.number),
+        [41],
+      );
+      assert.deepEqual(
+        arrange(waiting, { sortBy: 'repo', direction: 'desc' }).map(
+          (p) => p.number,
+        ),
+        [40, 41, 42],
       );
     });
   });

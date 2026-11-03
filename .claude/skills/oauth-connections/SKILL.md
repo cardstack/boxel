@@ -284,10 +284,13 @@ anything that names the platform's GitHub client finds it.
 
 Its settings on GitHub:
 
-- **Permissions**, repository only, all **read-only**: Contents, Pull
-  requests, Checks, Issues, and Metadata (which GitHub requires). No
-  organization or account permissions, and no write access of any kind. A
-  card that needs to write registers its own app.
+- **Permissions**, all **read-only**: the repository permissions Contents,
+  Pull requests, Checks, Issues, and Metadata (which GitHub requires), and the
+  organization permission Members. Without Members, GitHub hides every team
+  from the app: a pull request's review requested from a team comes back with
+  no reviewer and a `Resource not accessible by integration` error in the
+  answer. No account permissions, and no write access of any kind. A card that
+  needs to write registers its own app.
 - **Callback URLs**, one per realm server (the `redirect_uri` is always
   `<realm server>/_oauth/callback`): `https://app.boxel.ai/_oauth/callback`,
   `https://realms-staging.stack.cards/_oauth/callback` and
