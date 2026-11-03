@@ -23,6 +23,20 @@ import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
+async function copiedBy(selector: string) {
+  let original = navigator.clipboard.writeText;
+  let copied: string | undefined;
+  navigator.clipboard.writeText = async (text: string) => {
+    copied = text;
+  };
+  try {
+    await click(selector);
+  } finally {
+    navigator.clipboard.writeText = original;
+  }
+  return copied;
+}
+
 module('Integration | operator-mode | ui', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
 
@@ -71,7 +85,16 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     await waitFor('[data-test-more-options-button]');
     await click('[data-test-more-options-button]');
-    await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
+    let copied = await copiedBy(
+      '[data-test-boxel-menu-item-text="Copy Card URL"]',
+    );
+    assert.strictEqual(
+      copied,
+      getService('network').virtualNetwork.keyForIdentifier(
+        `${testRealmURL}Person/burcu`,
+      ),
+      'copies the URL the realm serves the card from',
+    );
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 

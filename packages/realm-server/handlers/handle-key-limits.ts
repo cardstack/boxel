@@ -68,9 +68,9 @@ export function handleSetKeyShareLimits(args: CreateRoutesArgs): Handler {
 }
 
 // Setting whether people who aren't signed in may use one of the user's keys,
-// and the optional cap on their calls a day: like its limits, its owner's to
-// set, from the secure window or the CLI only. The body is
-// `{ data: { type: 'anonymous-use', attributes: { anonymous, anonymousDailyCap? } } }`,
+// and the optional caps on their calls a day and a month: like its limits, its
+// owner's to set, from the secure window or the CLI only. The body is
+// `{ data: { type: 'anonymous-use', attributes: { anonymous, anonymousDailyCap?, anonymousMonthlyCap? } } }`,
 // and the answer is the key.
 export function handleSetUserKeyAnonymousUse(args: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
@@ -85,7 +85,11 @@ export function handleSetUserKeyAnonymousUse(args: CreateRoutesArgs): Handler {
     }
     let attributes = data.attributes ?? {};
     for (let name of Object.keys(attributes)) {
-      if (name !== 'anonymous' && name !== 'anonymousDailyCap') {
+      if (
+        name !== 'anonymous' &&
+        name !== 'anonymousDailyCap' &&
+        name !== 'anonymousMonthlyCap'
+      ) {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
     }
@@ -94,6 +98,7 @@ export function handleSetUserKeyAnonymousUse(args: CreateRoutesArgs): Handler {
       keyId: ctxt.params.keyId,
       anonymous: attributes.anonymous,
       anonymousDailyCap: attributes.anonymousDailyCap,
+      anonymousMonthlyCap: attributes.anonymousMonthlyCap,
     });
     let { id, ...rest } = key;
     await sendJSON(ctxt, 200, {

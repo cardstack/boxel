@@ -366,6 +366,11 @@ import {
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
 import { createCallApiSender } from '../../lib/outbound/call-api-sender.ts';
+import {
+  createPolicyWriteAuditor,
+  type PolicyPointerReader,
+} from '../../lib/policy-share-audit.ts';
+import { realmPolicyPointer } from '../../lib/realm-policy-pointer.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -1498,6 +1503,7 @@ export async function createRealm({
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
+  policyPointerOf,
   published,
 }: {
   dir: string;
@@ -1562,6 +1568,9 @@ export async function createRealm({
   // The other realms the realm can reach, for an explain on its policy card
   // that asks about a target in one of them.
   realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
+  // A realm's policy pointer, read without mounting it, for the audit of a
+  // policy change.
+  policyPointerOf?: PolicyPointerReader;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1643,7 +1652,17 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
-      ...(realmFor ? { realmFor } : {}),
+      ...(realmFor
+        ? {
+            realmFor,
+            policyWriteAuditor: createPolicyWriteAuditor({
+              dbAdapter,
+              realmFor,
+              virtualNetwork,
+              ...(policyPointerOf ? { policyPointerOf } : {}),
+            }),
+          }
+        : {}),
       callApi: createCallApiSender(dbAdapter),
     },
     {
@@ -1984,6 +2003,14 @@ export async function runTestRealmServerWithRealms({
               dbAdapter,
             })
           : undefined,
+      policyPointerOf: async (url) =>
+        reconciler
+          ? await realmPolicyPointer(url, {
+              reconciler,
+              realmsRootPath,
+              virtualNetwork,
+            })
+          : null,
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);

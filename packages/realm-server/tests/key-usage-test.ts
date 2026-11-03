@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { randomBytes } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -34,6 +35,7 @@ import { shareKey } from '../lib/key-shares.ts';
 import { setKeyLimitStore } from '../lib/key-limits.ts';
 import {
   KEY_USE_RETENTION_DAYS,
+  recordKeyUses,
   sweepExpiredKeyUses,
 } from '../lib/key-uses.ts';
 import { setKeyLimitDefaults } from '../lib/key-limit-settings.ts';
@@ -490,6 +492,111 @@ module(basename(import.meta.filename), function (hooks) {
       (await keyUsage(key.id)).body.data.attributes.calls,
       0,
       'a call through the share is the share’s use, not the key’s',
+    );
+  });
+
+  test('a caller refused over and over adds a row a minute, and every refusal is still counted', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    for (let i = 0; i < LIMITS.rateBurst; i++) {
+      assert.strictEqual((await call('shared', OWNER)).status, 200);
+    }
+    // The limiter's clock stands still, so the caller's bucket never refills.
+    // Ten at a time, so refusals of one minute race for its row.
+    let refusals = 1000;
+    let codes = new Set<string | undefined>();
+    let minutes = new Set<number>();
+    for (let sent = 0; sent < refusals; sent += 10) {
+      minutes.add(Math.floor(Date.now() / 60_000));
+      let batch = await Promise.all(
+        Array.from({ length: 10 }, () => call('shared', OWNER)),
+      );
+      batch.forEach((refused) => codes.add(refused.code));
+      minutes.add(Math.floor(Date.now() / 60_000));
+    }
+    assert.deepEqual([...codes], ['rate-limited'], 'every call was refused');
+    assert.strictEqual(
+      (await call('shared', WRITER)).status,
+      200,
+      'another caller’s bucket is their own',
+    );
+
+    let rows = (await dbAdapter.execute(
+      `SELECT caller, outcome, code, count FROM key_uses WHERE share_id = $1 AND outcome = 'refused' ORDER BY id`,
+      { bind: [shared.id] },
+    )) as { caller: string; outcome: string; code: string; count: number }[];
+    assert.true(
+      rows.length <= minutes.size,
+      `${rows.length} rows for refusals over ${minutes.size} minute(s)`,
+    );
+    assert.strictEqual(
+      rows.reduce((sum, row) => sum + Number(row.count), 0),
+      refusals,
+      'the rows count every refusal',
+    );
+    assert.strictEqual(
+      (await useRows()).length,
+      LIMITS.rateBurst + rows.length + 1,
+      'each sent call is a row of its own',
+    );
+
+    let { attributes } = (await shareUsage(shared.id)).body.data;
+    assert.deepEqual(attributes.refusals, [
+      { code: 'rate-limited', count: refusals },
+    ]);
+    assert.strictEqual(attributes.calls, LIMITS.rateBurst + refusals + 1);
+    assert.deepEqual(attributes.topCallers, [
+      { caller: OWNER, calls: LIMITS.rateBurst + refusals },
+      { caller: WRITER, calls: 1 },
+    ]);
+    assert.deepEqual(
+      [attributes.lastUse.caller, attributes.lastUse.outcome],
+      [WRITER, 'sent'],
+    );
+
+    assert.strictEqual((await call('shared', OWNER)).code, 'rate-limited');
+    let latest = (await shareUsage(shared.id)).body.data.attributes.lastUse;
+    assert.deepEqual(
+      [latest.caller, latest.outcome],
+      [OWNER, 'refused'],
+      'a refusal counted on an earlier row is the last use',
+    );
+  });
+
+  test('a refusal of an operation with a very long name is still recorded and collapsed', async function (assert) {
+    let key = await addKey();
+    // Longer than a B-tree index row may be, were the names indexed as is.
+    // Random, because Postgres compresses a value before it puts it in an
+    // index row, and a repetitive one would fit however long it is.
+    let long = () => randomBytes(2000).toString('hex');
+    let operation = long();
+    let refusal = {
+      realmURL: `${realmURL.href}${long()}/`,
+      operation,
+      caller: `@${long()}:localhost`,
+      mode: 'interactive' as const,
+      url: null,
+      outcome: 'refused' as const,
+      code: 'rate-limited',
+      countsAgainst: [{ kind: 'key' as const, id: key.id }],
+    };
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, { ...refusal, caller: null });
+    let rows = (await dbAdapter.execute(
+      `SELECT caller, count FROM key_uses WHERE key_id = $1 ORDER BY id`,
+      { bind: [key.id] },
+    )) as { caller: string | null; count: number }[];
+    assert.deepEqual(
+      rows.map((row) => [row.caller === null, Number(row.count)]),
+      [
+        [false, 2],
+        [true, 1],
+      ],
+      'the two identical refusals share a row; the anonymous one has its own',
     );
   });
 

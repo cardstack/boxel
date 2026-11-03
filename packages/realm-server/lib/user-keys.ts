@@ -111,10 +111,11 @@ export interface UserKeyMetadata {
   limits: KeyLimits;
   // Whether its owner lets people who aren't signed in use it, through a
   // share, wherever a realm's policy lets them make the call; and the
-  // optional cap on their calls a UTC day, all together, in every realm it
-  // is shared into. Null where none is set.
+  // optional caps on their calls a UTC day and a UTC month, all together, in
+  // every realm it is shared into. Null where none is set.
   anonymous: boolean;
   anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
 }
 
 // What a google-service-account key acts as, none of it secret: the service
@@ -461,7 +462,7 @@ export function grantCopyBinding({
 // sealed value: they carry the `updated_at` of the statement that wrote them,
 // and anything that seals a new value without writing them moves `updated_at`
 // past that stamp.
-const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current, anonymous, anonymous_daily_cap, ${KEY_LIMIT_COLUMNS}`;
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current, anonymous, anonymous_daily_cap, anonymous_monthly_cap, ${KEY_LIMIT_COLUMNS}`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
@@ -475,6 +476,10 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     anonymous: Boolean(row.anonymous),
     anonymousDailyCap:
       row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
+    anonymousMonthlyCap:
+      row.anonymous_monthly_cap == null
+        ? null
+        : Number(row.anonymous_monthly_cap),
     ...(typeof row.service_account_email === 'string' &&
     row.service_account_current
       ? {
@@ -489,48 +494,61 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
 }
 
 // Whether people who aren't signed in may use a key, as its owner sets it:
-// `anonymous` true or false, and an optional `anonymousDailyCap`, a whole
-// number of calls a day, given only with anonymous use. `cap` is undefined
-// where none was named, and null where one was cleared.
+// `anonymous` true or false, and two optional caps, `anonymousDailyCap` and
+// `anonymousMonthlyCap`, each a whole number of calls a UTC day or month,
+// given only with anonymous use. A cap is undefined where none was named,
+// and null where one was cleared.
 export interface AnonymousUse {
   anonymous: boolean;
-  cap: number | null | undefined;
+  dailyCap: number | null | undefined;
+  monthlyCap: number | null | undefined;
+}
+
+function validateAnonymousCap(
+  anonymous: unknown,
+  cap: unknown,
+  which: 'daily' | 'monthly',
+): number | null | undefined {
+  if (cap === undefined || cap === null) {
+    return cap;
+  }
+  if (anonymous !== true) {
+    throw new UserKeyError(
+      400,
+      `a ${which} anonymous cap is set with anonymous use: people who aren't signed in may use the key`,
+    );
+  }
+  if (
+    typeof cap !== 'number' ||
+    !Number.isInteger(cap) ||
+    cap < 1 ||
+    cap > MAX_KEY_LIMIT
+  ) {
+    throw new UserKeyError(
+      400,
+      `the ${which} anonymous cap is a whole number of calls, from 1 to ${MAX_KEY_LIMIT}`,
+    );
+  }
+  return cap;
 }
 
 export function validateAnonymousUse({
   anonymous,
   anonymousDailyCap,
+  anonymousMonthlyCap,
 }: {
   anonymous?: unknown;
   anonymousDailyCap?: unknown;
+  anonymousMonthlyCap?: unknown;
 }): AnonymousUse {
   if (anonymous !== undefined && typeof anonymous !== 'boolean') {
     throw new UserKeyError(400, 'anonymous is true or false');
   }
-  if (anonymousDailyCap === undefined) {
-    return { anonymous: anonymous === true, cap: undefined };
-  }
-  if (anonymousDailyCap === null) {
-    return { anonymous: anonymous === true, cap: null };
-  }
-  if (anonymous !== true) {
-    throw new UserKeyError(
-      400,
-      "an anonymous cap is set with anonymous use: people who aren't signed in may use the key",
-    );
-  }
-  if (
-    typeof anonymousDailyCap !== 'number' ||
-    !Number.isInteger(anonymousDailyCap) ||
-    anonymousDailyCap < 1 ||
-    anonymousDailyCap > MAX_KEY_LIMIT
-  ) {
-    throw new UserKeyError(
-      400,
-      `the anonymous cap is a whole number of calls, from 1 to ${MAX_KEY_LIMIT}`,
-    );
-  }
-  return { anonymous: true, cap: anonymousDailyCap };
+  return {
+    anonymous: anonymous === true,
+    dailyCap: validateAnonymousCap(anonymous, anonymousDailyCap, 'daily'),
+    monthlyCap: validateAnonymousCap(anonymous, anonymousMonthlyCap, 'monthly'),
+  };
 }
 
 // Whether a key can serve people who aren't signed in at all: one sent as it
@@ -543,13 +561,13 @@ export function servesVisitorsSQL(key: string, client: string): string {
 }
 
 // Writes whether people who aren't signed in may use one of the owner's keys,
-// in the caller's transaction. Turning it off clears the cap; turning it on
+// in the caller's transaction. Turning it off clears both caps; turning it on
 // without naming a cap keeps the one the key has.
 export async function writeAnonymousUseIn(
   txQuery: Querier,
   owner: string,
   keyId: string,
-  { anonymous, cap }: AnonymousUse,
+  { anonymous, dailyCap, monthlyCap }: AnonymousUse,
 ): Promise<UserKeyMetadata> {
   let [key] = await txQuery([
     `SELECT ${servesVisitorsSQL('k', 'c')} AS serves_visitors FROM user_keys k LEFT JOIN oauth_clients c ON c.key_id = k.id WHERE k.id = `,
@@ -567,15 +585,15 @@ export async function writeAnonymousUseIn(
       "a sign-in app or connection is each person's own sign-in, so it never serves people who aren't signed in",
     );
   }
+  let capValue = (column: string, cap: number | null | undefined) =>
+    !anonymous ? [`NULL`] : cap === undefined ? [column] : [param(cap)];
   let [row] = await txQuery([
     `UPDATE user_keys SET anonymous = `,
     param(anonymous),
     `, anonymous_daily_cap = `,
-    ...(!anonymous
-      ? [`NULL`]
-      : cap === undefined
-        ? [`anonymous_daily_cap`]
-        : [param(cap)]),
+    ...capValue(`anonymous_daily_cap`, dailyCap),
+    `, anonymous_monthly_cap = `,
+    ...capValue(`anonymous_monthly_cap`, monthlyCap),
     ` WHERE id = `,
     param(keyId),
     ` AND owner = `,
@@ -597,18 +615,24 @@ export async function setUserKeyAnonymousUse(
     keyId,
     anonymous,
     anonymousDailyCap,
+    anonymousMonthlyCap,
   }: {
     owner: string;
     keyId: string;
     anonymous: unknown;
     anonymousDailyCap?: unknown;
+    anonymousMonthlyCap?: unknown;
   },
 ): Promise<UserKeyMetadata> {
   assertKeyId(keyId);
   if (typeof anonymous !== 'boolean') {
     throw new UserKeyError(400, 'anonymous is true or false');
   }
-  let use = validateAnonymousUse({ anonymous, anonymousDailyCap });
+  let use = validateAnonymousUse({
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  });
   return await dbAdapter.withTransaction(
     async (txQuery) => await writeAnonymousUseIn(txQuery, owner, keyId, use),
   );
@@ -698,6 +722,7 @@ export async function addUserKey(
     scopes,
     anonymous,
     anonymousDailyCap,
+    anonymousMonthlyCap,
     ticket,
   }: {
     owner: string;
@@ -707,9 +732,10 @@ export async function addUserKey(
     subject?: unknown;
     scopes?: unknown;
     // Whether people who aren't signed in may use the key, and the optional
-    // cap on their calls a day (`validateAnonymousUse`).
+    // caps on their calls a day and a month (`validateAnonymousUse`).
     anonymous?: unknown;
     anonymousDailyCap?: unknown;
+    anonymousMonthlyCap?: unknown;
     ticket: unknown;
   },
 ): Promise<UserKeyMetadata> {
@@ -722,7 +748,11 @@ export async function addUserKey(
     );
   }
   let entered = sealedValueFor(validKind, { value, subject, scopes });
-  let use = validateAnonymousUse({ anonymous, anonymousDailyCap });
+  let use = validateAnonymousUse({
+    anonymous,
+    anonymousDailyCap,
+    anonymousMonthlyCap,
+  });
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'add',
