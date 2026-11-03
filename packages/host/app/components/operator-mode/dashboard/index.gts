@@ -862,7 +862,7 @@ export default class Dashboard extends Component<Signature> {
               @icon={{Bot}}
               @title='Agents'
               @titleId={{this.headingId 'agents'}}
-            >Build with Boxel AI, or connect your own agent.</SectionHead>
+            >Build with Boxel AI Assistant, or connect your own agent.</SectionHead>
             <Agents />
           </section>
         </div>

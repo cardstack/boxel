@@ -111,7 +111,7 @@ export default class GetStarted extends Component<Signature> {
       },
       {
         id: 'ask-ai',
-        title: 'Ask Boxel AI to build something',
+        title: 'Ask Boxel AI Assistant to build something',
         hint: 'It can make your first cards from a sentence.',
         // Opening the panel makes an empty session, so only one with a
         // message has been asked. The sync's first pass brings only each
@@ -341,7 +341,7 @@ export default class GetStarted extends Component<Signature> {
                       @size='s'
                       {{on 'click' this.askBoxelAi}}
                       data-test-get-started-action={{step.id}}
-                    >Ask Boxel AI</Button>
+                    >Ask Boxel AI Assistant</Button>
                   {{else if (eq step.id 'agent')}}
                     <Button
                       class='step-action'

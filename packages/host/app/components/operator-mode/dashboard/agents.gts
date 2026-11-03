@@ -50,7 +50,7 @@ const HOW_BOXEL_AI_WORKS = [
     note: 'In your own words, from any workspace',
   },
   {
-    title: 'Boxel AI builds it',
+    title: 'Boxel AI Assistant builds it',
     note: 'Cards, fields and data, right in the workspace',
   },
   { title: 'Refine it in the chat', note: 'Ask for changes as you look' },

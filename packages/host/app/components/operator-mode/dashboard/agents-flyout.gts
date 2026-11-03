@@ -29,7 +29,7 @@ const log = logger('component:dashboard/agents-flyout');
 const RECENT_SESSION_COUNT = 3;
 
 // The Agents entry's flyout: the agent picker, which shows the Agents section
-// with the picked agent's setup, and the latest Boxel AI sessions with a way
+// with the picked agent's setup, and the latest Boxel AI Assistant sessions with a way
 // to start a new one.
 export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
@@ -114,7 +114,8 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
     {{/each}}
 
     <div role='group' aria-labelledby={{this.sessionsHeadId}}>
-      <span class='flyout-subhead' id={{this.sessionsHeadId}}>Boxel AI sessions</span>
+      <span class='flyout-subhead' id={{this.sessionsHeadId}}>Boxel AI Assistant
+        sessions</span>
       {{#each this.recentSessions key='roomId' as |session|}}
         <Button
           class='flyout-row'

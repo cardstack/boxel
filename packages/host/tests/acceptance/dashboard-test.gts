@@ -2837,7 +2837,7 @@ module('Acceptance | dashboard', function (hooks) {
           .hasAttribute('data-test-agent-panel', 'codex');
       });
 
-      test('New session in the flyout opens Boxel AI', async function (assert) {
+      test('New session in the flyout opens Boxel AI Assistant', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
         await triggerEvent(
@@ -2982,7 +2982,7 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('ask-ai'), 'false');
       });
 
-      test('asking Boxel AI something ticks the ask step, and opening a session does not', async function (assert) {
+      test('asking Boxel AI Assistant something ticks the ask step, and opening a session does not', async function (assert) {
         await visitAsNewUser();
 
         let roomId = await openBoxelAiSession();
