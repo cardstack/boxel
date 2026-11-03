@@ -608,6 +608,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         index,
         location,
         country,
+        // Shown until the weather loads, under the name and its country. Left
+        // out when it only repeats the city's name.
+        region:
+          location.region && location.region !== location.name
+            ? location.region
+            : undefined,
         removeLabel: `Remove ${location.name}${country ? `, ${country}` : ''}`,
         temp: weather ? `${Math.round(weather.current.main.temp)}°` : '—',
         condition: weather?.current.weather[0]?.description,
@@ -1445,8 +1451,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                     }}<span class='place-country'>,
                         {{row.country}}</span>{{/if}}</span>
                   <span class='place-sub'>
-                    {{#if row.time}}{{row.time}}{{else}}{{row.location.region}}
-                      {{row.location.country}}{{/if}}
+                    {{#if row.time}}{{row.time}}{{else}}{{row.region}}{{/if}}
                   </span>
                   <span class='place-condition'>{{row.condition}}</span>
                 </span>
