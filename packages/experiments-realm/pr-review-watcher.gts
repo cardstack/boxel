@@ -120,6 +120,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   @tracked truncated = false;
   @tracked rejected = false;
   @tracked problem: string | undefined;
+  // GitHub's errors for what it left out of an answer it otherwise gave.
+  @tracked partial: string | undefined;
   openedWindow = false;
   tokenAdvice = TOKEN_ADVICE;
 
@@ -155,10 +157,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     this.tab = value as Tab;
   };
 
-  // Opening the watcher loads the lists once its key is ready, and opens the
-  // secure window once when it has no key to send yet.
+  // The lists load when the watcher opens with its key ready, and again
+  // whenever readiness comes back to ready, such as after the token is
+  // replaced. With no key to send yet, the secure window opens once.
   readinessChanged = (readiness: string) => {
-    if (readiness === 'ready' && !this.loadedAt && !this.loading) {
+    if (readiness === 'ready' && !this.loading) {
       this.load();
     } else if (
       (readiness === 'needs-connect' || readiness === 'needs-approval') &&
@@ -179,7 +182,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         ops.myPullRequests(),
       ])) as [SearchAnswer, SearchAnswer];
       let failed = [review, authored].find(
-        (a) => a.status !== 200 || a.errors?.length,
+        (a) => a.status !== 200 || !a.pullRequests,
       );
       if (failed) {
         this.problem = failed.errors?.length
@@ -198,6 +201,10 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       this.truncated = [review, authored].some(
         (a) => (a.total ?? 0) > (a.pullRequests?.length ?? 0),
       );
+      let errors = [review, authored].flatMap((a) => a.errors ?? []);
+      this.partial = errors.length
+        ? errors.map((e) => e.message).join('; ')
+        : undefined;
       this.rejected = false;
       this.loadedAt = new Date();
     } catch (err) {
@@ -355,6 +362,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           @value={{this.tab}}
           @onValueChange={{this.selectTab}}
         />
+        {{#if this.partial}}
+          <Alert @tone='warning' @title='GitHub left some pull requests out'>
+            {{this.partial}}
+          </Alert>
+        {{/if}}
         {{#if this.truncated}}
           <p class='note'>Showing the 100 most recently updated of each search.</p>
         {{/if}}
