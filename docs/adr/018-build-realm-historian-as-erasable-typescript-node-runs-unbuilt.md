@@ -23,10 +23,14 @@ imports and consumers by hand, because nothing derives them.
 ### 1.1. Erasable TypeScript, no build
 
 The package's modules, scripts and tests MUST be TypeScript in `.ts` files.
-The package's `tsconfig.json` MUST set `erasableSyntaxOnly`, so that the Node
-version `.mise.toml` pins runs every file directly. The package MUST NOT have
-a build step: its service starts with `node main.ts`, its scripts and tests
-run the same way, and its container image copies the sources.
+The package's `tsconfig.json` MUST set `erasableSyntaxOnly`,
+`verbatimModuleSyntax`, `module: nodenext` and `allowImportingTsExtensions`,
+as `packages/secure-origin/tsconfig.json` does, so that the Node version
+`.mise.toml` pins runs every file directly: Node strips only the syntax the
+first flag allows, loads only the imports the second marks as values, and
+resolves only the `.ts` specifiers the last two require. The package MUST NOT
+have a build step: its service starts with `node main.ts`, its scripts and
+tests run the same way, and its container image copies the sources.
 
 ### 1.2. Dependencies
 
