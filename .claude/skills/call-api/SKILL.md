@@ -339,19 +339,29 @@ Readiness is never answered for an operation the realm's policy doesn't let
 the caller invoke, so `undefined` alone can't tell "still asking" from
 "refused"; `canInvoke` answering `false` can.
 
-It says which key it is using, and when neither is ready, it shows both
-answers and offers what fixes each. Opening the secure window does this:
-`approve` for the caller's own operation at `needs-connect` or
-`needs-approval`, `review-changes` at `needs-reapproval`, `share-key` for a
-direct writer of a realm with no share, and `swap-key` for a direct writer of
-a realm whose share stopped. At `needs-connect`, open `approve` rather than
-`enter-key`: the approve page lets the user pick one of their keys or add one,
-and approving grants the key the operation's destination. A key saved through
-`enter-key` alone has no grant, so readiness stays `needs-connect`. The
-approve page starts on scheduled pipelines only; the user has to choose to
-let the operations run when a card is opened, which is what a card calling
-from its template needs. A call that a fix makes ready needs no reload:
-readiness is asked again when the user comes back from the window.
+When neither is ready, the card opens the secure window itself for the one
+request that fixes it, once per request (a closed window leaves a prompt
+with the same button, and a browser that blocks the popup gets the host's
+button that opens it). The weather showing is the signal that a key works,
+so the card needn't say whose key it is using. The requests:
+
+- `approve` on the caller's own operation at `needs-connect` or
+  `needs-approval`; `review-changes` at `needs-reapproval`.
+- `approve` on the `apiKey` operation for the writer whose share isn't
+  approved for it yet, asked even while the card runs on their own key,
+  since nobody else in the realm can use the share until then.
+- `replace-key` after `credential-rejected`, from the card's error, not
+  opened by itself.
+
+At `needs-connect`, open `approve` rather than `enter-key`: the approve page
+lets the user pick one of their keys or add one, and approving grants the key
+the operation's destination. A key saved through `enter-key` alone has no
+grant, so readiness stays `needs-connect`. The approve page starts on
+scheduled pipelines only; the user has to choose to let the operations run
+when a card is opened, which is what a card calling from its template needs.
+A call that a fix makes ready needs no reload: readiness is asked again when
+the user comes back from the window. Swapping a key into a stopped share is
+the keys page's job, not the card's.
 
 Don't write one operation whose slot falls back from the realm's key to the
 user's. Who pays would be implicit: every share that was suspended or over
