@@ -11,6 +11,12 @@ import type {
   RequestSnapshot,
 } from '../../security/keys.ts';
 
+import {
+  anonymousCapsClause,
+  anonymousCapsPhrase,
+  type AnonymousCaps,
+} from './anonymous-caps.ts';
+
 // A slot of the batch, by its token, and what can fill it: the user's own
 // keys for a `userKey` slot, their shares in the realm for an `apiKey` one.
 export interface SlotChoice {
@@ -438,17 +444,20 @@ export function sharesForVisitors(
 
 // What the user confirms besides `INTERACTIVE_CONFIRMATION` when the shares
 // they approve serve people who aren't signed in, with each key's anonymous
-// cap.
+// caps.
 export function anonymousConfirmation(
-  shares: { label: string; anonymousDailyCap: number | null }[],
+  shares: ({ label: string } & AnonymousCaps)[],
 ): string {
-  let capped = shares.filter((share) => share.anonymousDailyCap !== null);
+  let capped = shares.flatMap((share) => {
+    let caps = anonymousCapsPhrase(share, { short: true });
+    return caps ? [{ label: share.label, caps }] : [];
+  });
   let caps =
     capped.length === 0
       ? ''
       : shares.length === 1
-        ? `, up to ${capped[0].anonymousDailyCap} calls a day all together`
-        : `, up to each key’s anonymous cap (${capped.map((s) => `${s.label}: ${s.anonymousDailyCap} a day`).join(', ')})`;
+        ? anonymousCapsClause(shares[0])
+        : `, up to each key’s anonymous caps (${capped.map((s) => `${s.label}: ${s.caps}`).join(', ')})`;
   return `Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with ${shares.length === 1 ? 'this key' : 'these keys'}${caps}.`;
 }
 

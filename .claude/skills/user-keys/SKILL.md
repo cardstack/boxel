@@ -107,21 +107,21 @@ the ticket goes in `meta`. A body is at most
 exceed that. A query string on these routes is ignored, and left out of the
 request log line and Sentry breadcrumbs.
 
-| Route                               | Does                                                                                                                                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /_key-write-tickets`          | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                           |
-| `GET /_user-keys`                   | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                               |
-| `GET /_user-keys/:id`               | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                         |
-| `POST /_user-keys`                  | Add: `attributes.{name, kind?, value, subject?, scopes?, anonymous?, anonymousDailyCap?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account` |
-| `PATCH /_user-keys/:id`             | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                           |
-| `DELETE /_user-keys/:id`            | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first)      |
-| `PUT /_user-keys/:id/limits`        | Set the key's limits on its owner's interactive calls, from a secure session, no ticket (see the `key-limits` skill)                                                                       |
-| `PUT /_user-keys/:id/anonymous-use` | Set whether people who aren't signed in may use the key, from a secure session, no ticket (see [Anonymous use](#anonymous-use))                                                            |
+| Route                               | Does                                                                                                                                                                                                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`          | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                                                 |
+| `GET /_user-keys`                   | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                                                     |
+| `GET /_user-keys/:id`               | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                                               |
+| `POST /_user-keys`                  | Add: `attributes.{name, kind?, value, subject?, scopes?, anonymous?, anonymousDailyCap?, anonymousMonthlyCap?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account` |
+| `PATCH /_user-keys/:id`             | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                                                 |
+| `DELETE /_user-keys/:id`            | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first)                            |
+| `PUT /_user-keys/:id/limits`        | Set the key's limits on its owner's interactive calls, from a secure session, no ticket (see the `key-limits` skill)                                                                                             |
+| `PUT /_user-keys/:id/anonymous-use` | Set whether people who aren't signed in may use the key, from a secure session, no ticket (see [Anonymous use](#anonymous-use))                                                                                  |
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
 A listed or shown key carries its `limits` (see the `key-limits` skill) and
-`anonymous` and `anonymousDailyCap`, and
+`anonymous`, `anonymousDailyCap` and `anonymousMonthlyCap`, and
 says where it is used, so the key page draws every key's
 tile from the one listing. `usedWith` is the services its grants send to, each
 grant's destination host reduced to its registrable domain (`registrableDomain`
@@ -188,32 +188,37 @@ check. `boxel keys add --anonymous` is refused for any OAuth client; a
 `client_credentials` client is allowed afterwards with
 `boxel keys anonymous <name> on`.
 
-The cap is calls a UTC day across everyone who isn't signed in, in every
-realm the key is shared into, counted under
-`["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
-Separately, everyone who isn't signed in spends at most
+The caps are calls a UTC day (`anonymousDailyCap`) and a UTC month
+(`anonymousMonthlyCap`) across everyone who isn't signed in, in every realm
+the key is shared into, each optional, counted under
+`["key-limit","key","<key-id>","anonymous"]` for its period, with no clamp per
+share. Separately, everyone who isn't signed in spends at most
 `KEY_ANONYMOUS_SHARE_PERCENT` (default 50) of each share's daily budget and
-of its monthly budget, so signed-in readers keep the rest whatever the cap (see the `key-limits`
+of its monthly budget, so signed-in readers keep the rest whatever the caps (see the `key-limits`
 skill).
 
 The owner sets it:
 
 - **When adding the key**: `attributes.anonymous` (a boolean) and
-  `attributes.anonymousDailyCap` (a whole number, only with
-  `anonymous: true`) on `POST /_user-keys`; `boxel keys add <name> …
---anonymous [--anonymous-cap <calls>]`; or the add-key page's "People who
-  aren't signed in" checkbox in the secure window.
+  `attributes.anonymousDailyCap` and `attributes.anonymousMonthlyCap` (whole
+  numbers, each optional, only with `anonymous: true`) on `POST /_user-keys`;
+  `boxel keys add <name> … --anonymous [--anonymous-cap <calls>]
+[--anonymous-monthly-cap <calls>]`; or the add-key page's "People who aren't
+  signed in" checkbox in the secure window, with its daily and monthly cap
+  fields.
 - **Later**: `PUT /_user-keys/:id/anonymous-use` with
-  `{data: {type: 'anonymous-use', attributes: {anonymous, anonymousDailyCap?}}}`,
-  answering the key; `boxel keys anonymous <name> on|off [--cap <calls>]`; or
+  `{data: {type: 'anonymous-use', attributes: {anonymous, anonymousDailyCap?, anonymousMonthlyCap?}}}`,
+  answering the key; `boxel keys anonymous <name> on|off [--cap <calls>]
+[--monthly-cap <calls>]`; or
   the key's page in the secure window. Like the limits route, it takes a
   secure session (the window's or the CLI's) and no ticket; the app's session
-  is refused 403, and another user's key answers 404. Turning it on without
-  `anonymousDailyCap` (or `boxel keys anonymous <name> on` without `--cap`)
-  keeps the key's current cap; `anonymousDailyCap: null` clears it, and
-  turning it off clears it. `anonymous` must be true or false, and a cap without
-  `anonymous: true`, or outside 1 to the limits' maximum, is refused 400
-  (`validateAnonymousUse` in `lib/user-keys.ts`).
+  is refused 403, and another user's key answers 404. Each cap is handled on
+  its own: turning it on without naming a cap (or `boxel keys anonymous <name>
+  on` without `--cap` or `--monthly-cap`) keeps the key's current one, `null`
+  clears it, and turning anonymous use off clears both. The secure window's
+  key page always sends both, from its two fields. `anonymous` must be true or
+  false, and a cap without `anonymous: true`, or outside 1 to the limits'
+  maximum, is refused 400 (`validateAnonymousUse` in `lib/user-keys.ts`).
 
 Sharing and swapping never change it. A key that doesn't allow anonymous use
 is refused sharing or swapping into a share in a realm whose policy opens

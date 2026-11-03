@@ -13,8 +13,8 @@
 // against its budgets, who used it and how, and its limits, which the owner
 // changes there.
 // Each key that can be shared says whether people who aren't signed in can
-// use it, with its optional anonymous cap, and Change opens a panel to turn
-// that on or off and set the cap. It is the key's own setting, its owner's
+// use it, with its optional daily and monthly anonymous caps, and Change
+// opens a panel to turn that on or off and set the caps. It is the key's own setting, its owner's
 // decision whatever workspaces it is shared into; a workspace's policy says
 // only whether such people can use its cards there.
 // It is what the secure origin shows at its own address and at `keys`.
@@ -241,10 +241,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           <AnonymousUseFields
                             @anonymous={{this.form.anonymous}}
                             @cap={{this.form.cap}}
+                            @monthlyCap={{this.form.monthlyCap}}
                             @agreement='Allow people who aren’t signed in to use this key'
                             @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
                             @onToggle={{this.toggleAnonymous}}
                             @onCap={{this.setCap}}
+                            @onMonthlyCap={{this.setMonthlyCap}}
                           />
                           <div class='panel-actions'>
                             <Button
@@ -484,9 +486,10 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   private form = trackedObject({
     value: '',
     // Whether people who aren't signed in may use the key, and its anonymous
-    // cap as typed, while changing them.
+    // caps as typed, while changing them.
     anonymous: false,
     cap: '',
+    monthlyCap: '',
     saving: false,
   });
 
@@ -648,6 +651,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.anonymous = key.anonymous;
     this.form.cap =
       key.anonymousDailyCap == null ? '' : String(key.anonymousDailyCap);
+    this.form.monthlyCap =
+      key.anonymousMonthlyCap == null ? '' : String(key.anonymousMonthlyCap);
     this.state.error = undefined;
     this.state.action = { name: 'anonymous-use', key };
   };
@@ -660,22 +665,36 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.cap = value;
   };
 
+  private setMonthlyCap = (value: string) => {
+    this.form.monthlyCap = value;
+  };
+
   private get anonymousCap() {
     return anonymousCapOf(this.form.anonymous, this.form.cap);
   }
 
+  private get anonymousMonthlyCap() {
+    return anonymousCapOf(this.form.anonymous, this.form.monthlyCap);
+  }
+
   private get anonymousUseDisabled() {
-    return this.form.saving || this.anonymousCap === undefined;
+    return (
+      this.form.saving ||
+      this.anonymousCap === undefined ||
+      this.anonymousMonthlyCap === undefined
+    );
   }
 
   private saveAnonymousUse = async (event: Event) => {
     event.preventDefault();
     let action = this.state.action;
     let cap = this.anonymousCap;
+    let monthlyCap = this.anonymousMonthlyCap;
     if (
       this.anonymousUseDisabled ||
       action.name !== 'anonymous-use' ||
-      cap === undefined
+      cap === undefined ||
+      monthlyCap === undefined
     ) {
       return;
     }
@@ -685,6 +704,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         keyId: action.key.id,
         anonymous: this.form.anonymous,
         anonymousDailyCap: cap,
+        anonymousMonthlyCap: monthlyCap,
       });
     });
     this.form.saving = false;

@@ -49,12 +49,16 @@ and monthly budgets, which their calls spend as everyone's do:
   under `["key-limit","share","<id>","anonymous"]` for each period (at least 1
   call). Signed-in readers always keep the rest of both, whatever cap the
   key's owner set, or none.
-- **The key's anonymous cap, where its owner set one**: a daily budget of
-  calls (`user_keys.anonymous_daily_cap`) every such caller draws from
-  together, counted once across every realm the key is shared into, under
-  `["key-limit","key","<key-id>","anonymous"]`, with no clamp per share.
+- **The key's anonymous caps, where its owner set them**: a daily and a
+  monthly budget of calls (`user_keys.anonymous_daily_cap`,
+  `user_keys.anonymous_monthly_cap`), each optional and independent of the
+  other, that every such caller draws from together, counted once across
+  every realm the key is shared into, under
+  `["key-limit","key","<key-id>","anonymous"]` for each period (UTC day, UTC
+  month), with no clamp per share. A key with no daily cap counts no day
+  there, and likewise for the month.
 
-`budgetsOf` in `lib/key-limits.ts` adds both. Reaching either refuses only
+`budgetsOf` in `lib/key-limits.ts` adds all of them. Reaching any refuses only
 callers who aren't signed in, `over-budget` with a detail saying "the limit on
 its shared key for people who aren't signed in is reached"; it sends no
 notice of its own. The share's budgets notify as always.
