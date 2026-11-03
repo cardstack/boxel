@@ -70,6 +70,11 @@ import type { SpawningIndexPass } from '../jobs/prerender-html.ts';
 const SPAWNING_PASS_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
+  readServedFile,
+  WRITTEN_FILE_REREAD_DELAYS_MS,
+  WrittenFileRereads,
+} from './written-file-rereads.ts';
+import {
   preWarmModulesTable,
   realmCardModulesToWarm,
   resolveModuleCacheContext,
@@ -126,6 +131,9 @@ export interface PrerenderHtmlPassArgs {
   // null manifests.
   dbAdapter?: DBAdapter;
   mediaCacheAdapter?: MediaCacheAdapter;
+  // The delays a visit re-reads a file the realm just created through when it
+  // reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
+  writtenFileRereadDelaysMs?: readonly number[];
 }
 
 export interface PrerenderHtmlPassResult {
@@ -187,10 +195,14 @@ export async function runPrerenderHtmlPass({
   onProgress,
   dbAdapter,
   mediaCacheAdapter,
+  writtenFileRereadDelaysMs = WRITTEN_FILE_REREAD_DELAYS_MS,
 }: PrerenderHtmlPassArgs): Promise<PrerenderHtmlPassResult> {
   let log = logger('prerender-html-runner');
   let perfLog = logger('index-perf');
   let start = Date.now();
+  let writtenFileRereads = new WrittenFileRereads({
+    delaysMs: writtenFileRereadDelaysMs,
+  });
   // realm + spawning index jobs ride on every log line so the render channel
   // can be correlated back to the index passes that spawned it.
   let jobTag = `${jobIdentity(jobInfo)} [realm: ${realmURL.href}] [spawning index jobs: ${[...new Set(spawningIndexPasses.map((pass) => pass.jobId))].join(', ') || 'none'}]`;
@@ -428,6 +440,7 @@ export async function runPrerenderHtmlPass({
             log,
             dbAdapter,
             mediaCacheAdapter,
+            writtenFileRereads,
           });
         } catch (err) {
           await handleVisitFailure({
@@ -999,6 +1012,7 @@ async function visitForPrerenderedHtml({
   log,
   dbAdapter,
   mediaCacheAdapter,
+  writtenFileRereads,
 }: {
   url: URL;
   realmURL: URL;
@@ -1019,6 +1033,7 @@ async function visitForPrerenderedHtml({
   log: ReturnType<typeof logger>;
   dbAdapter?: DBAdapter;
   mediaCacheAdapter?: MediaCacheAdapter;
+  writtenFileRereads: WrittenFileRereads;
 }): Promise<void> {
   let localPath: string;
   try {
@@ -1030,10 +1045,25 @@ async function visitForPrerenderedHtml({
     return;
   }
 
-  let fileRef = await reader.readFile(url);
-  if (!fileRef) {
-    fileRef = await reader.readFile(new URL(encodeURI(localPath), url));
-  }
+  let readFile = readServedFile(reader, [
+    url,
+    new URL(encodeURI(localPath), url),
+  ]);
+  // While the realm records a file as just created, a miss here is this read
+  // landing on a stale view of the realm (see WrittenFileRereads), not a
+  // removal. That holds whether the committed index holds the file live or
+  // has no row for it yet, as when the spawning pass had not committed by the
+  // time the visits began. A URL the index holds as a tombstone is one the
+  // index pass took as removed, and this pass takes it as removed too, so the
+  // two channels agree.
+  let fileRef = batch.indexHoldsTombstone(url.href)
+    ? (await readFile()).file
+    : await writtenFileRereads.readVisitedFile(readFile, {
+        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
+        label: `${jobIdentity(jobInfo)} file ${url.href}`,
+        ifMissing: 'rendering nothing for it',
+        log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
+      });
   if (!fileRef) {
     // Unreadable file — the same outcome as the index visit's
     // missing-file handling: write nothing, so the up-front tombstone

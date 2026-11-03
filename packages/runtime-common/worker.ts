@@ -123,8 +123,19 @@ export interface StreamFileRef {
   isShimmed?: true;
 }
 
+export interface ReadFileOptions {
+  // Called when the realm's response serves no file at the URL, with that
+  // response's status: 404 when the realm finds no file there, and another
+  // status when it answers otherwise, such as an archived realm's 403 or a
+  // redirect to another path.
+  onNoFile?: (status: number) => void;
+}
+
 export interface Reader {
-  readFile: (url: URL) => Promise<TextFileRef | undefined>;
+  readFile: (
+    url: URL,
+    opts?: ReadFileOptions,
+  ) => Promise<TextFileRef | undefined>;
   readStream: (url: URL) => Promise<StreamFileRef | undefined>;
   mtimes: () => Promise<{ [url: string]: number }>;
 }
@@ -722,10 +733,11 @@ export function getReader(
   };
 
   let reader: Reader = {
-    readFile: (url: URL) =>
+    readFile: (url: URL, opts?: ReadFileOptions) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         if (!servesFileAt(url, response)) {
+          opts?.onNoFile?.(response.status);
           await releaseBody(response);
           return undefined;
         }
