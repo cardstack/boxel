@@ -108,7 +108,14 @@ let warnedUngroupedLayout = false;
  * elements: the handle on the element itself or on a motion element above it.
  * A `layout` element inside a row that doesn't carry `{{motion presence=p}}`
  * warns, although the Presence measures it on an `@items` change; the handle
- * on the row's element quiets it.
+ * on the row's element quiets it. `closest()` stops at a shadow root, so an
+ * element inside a shadow tree whose host sits under a <LayoutGroup> warns as
+ * well; a <LayoutGroup> inside the shadow tree quiets it.
+ *
+ * The check runs once, when the element's node is created. An element that is
+ * not in the document then is never checked, so a list rendered into a
+ * detached container and attached later can reorder in a single frame with no
+ * warning.
  */
 export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
   if (
