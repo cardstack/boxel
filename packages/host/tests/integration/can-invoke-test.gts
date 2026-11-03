@@ -10,7 +10,6 @@ import {
   baseRealm,
   CAPABILITY_CHECK_CAP,
   isCardErrorJSONAPI,
-  realmURL as realmURLMeta,
   rri,
   type CapabilityCheck,
 } from '@cardstack/runtime-common';
@@ -128,11 +127,8 @@ function indexed(realmURL: string, invalidations: string[]) {
   }
 }
 
-function cardAt(id: string, fromRealm?: string): CardDef {
-  return {
-    id,
-    ...(fromRealm ? { [realmURLMeta]: new URL(fromRealm) } : {}),
-  } as unknown as CardDef;
+function cardAt(id: string): CardDef {
+  return { id } as unknown as CardDef;
 }
 
 // The two services the capability check reaches the realm through are faked,
@@ -258,51 +254,28 @@ module('Integration | canInvoke', function (hooks) {
     assert.true(service.canInvoke('read', cardAt(`${REALM}a`)));
   });
 
-  test('a card with no id, and a URL in a realm this session does not know, ask nothing', async function (assert) {
+  test('a card with no id asks nothing, and a card in a realm this session does not know waits for its realm to be looked up', async function (assert) {
     assert.strictEqual(
       service.canInvoke('read', {} as CardDef),
       undefined,
       'an unsaved card has no stored state for a predicate to read',
     );
     assert.strictEqual(
-      service.canInvoke('read', 'http://elsewhere/card'),
+      service.canInvoke('read', cardAt('http://elsewhere/a')),
       undefined,
-      'and a URL whose realm is not known has no realm to be asked yet',
+      'a loaded card whose realm is not known has no realm to be asked yet',
     );
-    await settled();
-    assert.deepEqual(realmUnderTest.sent, [], 'neither enrolled a pair');
-    assert.deepEqual(
-      realmUnderTest.lookedUp,
-      ['http://elsewhere/card'],
-      'the URL’s realm is looked up, so a later read can address it',
-    );
-  });
-
-  test('a loaded card from a realm this session does not know is asked about in the realm it came from', async function (assert) {
-    // A signed-out visitor's page registers no realm of its own accord, so a
-    // card it renders comes from a realm the realm service has never learned.
-    // The card says which realm that is.
-    let elsewhere = 'http://elsewhere/site/';
-    realmUnderTest.allow.add(`read ${elsewhere}card`);
     assert.strictEqual(
-      service.canInvoke('read', cardAt(`${elsewhere}card`, elsewhere)),
+      service.canInvoke('read', 'http://elsewhere/b'),
       undefined,
-      'nothing is known before the realm has been asked',
+      'and nor does a URL',
     );
     await settled();
-    assert.deepEqual(
-      realmUnderTest.sent.map((request) => request.url),
-      [`${elsewhere}_capabilities`],
-      'the check is addressed to the card’s own realm',
-    );
-    assert.true(
-      service.canInvoke('read', cardAt(`${elsewhere}card`, elsewhere)),
-      'and its answer is held like any other',
-    );
+    assert.deepEqual(realmUnderTest.sent, [], 'none enrolled a pair');
     assert.deepEqual(
       realmUnderTest.lookedUp,
-      [],
-      'with no lookup, since the card already named its realm',
+      ['http://elsewhere/a', 'http://elsewhere/b'],
+      'each one’s realm is looked up, so a later read can address it',
     );
   });
 
@@ -757,6 +730,20 @@ module('Integration | canInvoke | a signed-out visitor', function (hooks) {
     assert.false(
       service.canInvoke('noSuchOperation', card as CardDef),
       'and an operation the card does not carry is refused, so the answer is the realm’s',
+    );
+
+    // The same, starting from nothing but the card's URL.
+    realm.removeRealm(REALM_URL);
+    service.resetState();
+    assert.strictEqual(
+      service.canInvoke('read', CARD_URL),
+      undefined,
+      'a URL in a realm that is not known has nothing to answer yet',
+    );
+    await waitUntil(() => service.canInvoke('read', CARD_URL) !== undefined);
+    assert.true(
+      service.canInvoke('read', CARD_URL),
+      'once its realm has been looked up, the check is answered as for the card',
     );
   });
 });

@@ -10,7 +10,6 @@ import {
   CAPABILITY_CHECK_CAP,
   identifyCard,
   isResolvedCodeRef,
-  realmURL as realmURLMeta,
   rri,
   SupportedMimeType,
   type CapabilityAnswer,
@@ -90,8 +89,9 @@ const ANSWER_MAX_AGE_MS = 5_000;
 
 // An answer as a template reads it. `undefined` is "not known": the value a
 // pair has while the realm is being asked, after a request that could not be
-// answered, and forever where there is nothing to ask (an unsaved card, a
-// realm this session does not know, a render).
+// answered, while the realm a card is in is being looked up, and forever where
+// there is nothing to ask (an unsaved card, a URL that names no realm, a
+// render).
 type Held = boolean | undefined;
 
 // What a pair names: a stored card, by the card or its URL, or a type a card
@@ -252,30 +252,20 @@ export default class CapabilitiesService
     if (!id) {
       return undefined;
     }
-    let realmURL =
-      this.realm.realmOf(rri(id)) ?? this.#unregisteredRealm(target);
-    return realmURL
-      ? { realmURL, check: { target: id, operation } }
-      : undefined;
-  }
-
-  // The realm of a card the realm service has not learned about yet. A
-  // signed-out visitor's page registers no realm of its own accord — a
-  // published site knows only the base realm — so a card served there is in a
-  // realm this session has never been told of, and nothing would be asked.
-  //
-  // A loaded card says which realm it came from, so that is asked directly;
-  // the check needs no session, since the realm answers an anonymous caller
-  // for itself. A bare URL carries no such note, so its realm is looked up in
-  // the background, and the read that comes after the lookup lands finds it
-  // known: `info()` is what starts that lookup, and reading it here subscribes
-  // the caller to the lookup's result.
-  #unregisteredRealm(target: CardDef | string): string | undefined {
-    if (typeof target !== 'string') {
-      return target[realmURLMeta]?.href;
+    let realmURL = this.realm.realmOf(rri(id));
+    if (!realmURL) {
+      // A realm this session has not learned about yet. A signed-out visitor's
+      // page registers no realm of its own accord — a published site knows
+      // only the base realm — so the card it shows is in a realm the realm
+      // service has never been told of. `info()` looks that realm up in the
+      // background, and reading it here subscribes the caller to the lookup,
+      // so the read that follows finds the realm known and enrols the pair.
+      // The check then needs no session: the realm answers an anonymous
+      // caller for itself.
+      this.realm.info(id);
+      return undefined;
     }
-    this.realm.info(target);
-    return undefined;
+    return { realmURL, check: { target: id, operation } };
   }
 
   #isStale(key: string): boolean {
