@@ -1423,20 +1423,23 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           background: none;
           box-shadow: none;
         }
-        .pretui-dt[data-flush] .pretui-dt-table,
-        .pretui-dt[data-flush] .pretui-dt-table th {
+        .pretui-dt[data-flush] .pretui-dt-table {
           background: none;
         }
-        /* 2px, not 0: room for an edge control's ring, which the scroller clips */
+        /* opaque, so body rows don't show through a stuck header */
+        .pretui-dt[data-flush] .pretui-dt-table th {
+          background: var(--card);
+        }
+        /* 4px, not 0: room for an edge control's 2px focus outline + 2px offset, which the scroller clips */
         /* the caption lines up with the first column's flush edge */
         .pretui-dt[data-flush] .pretui-dt-caption {
           padding-inline: 2px;
         }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
-          padding-inline-start: 2px;
+          padding-inline-start: 4px;
         }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):last-child {
-          padding-inline-end: 2px;
+          padding-inline-end: 4px;
         }
         .pretui-dt-table td {
           height: 2.56em;
