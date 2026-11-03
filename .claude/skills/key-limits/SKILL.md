@@ -56,7 +56,9 @@ and monthly budgets, which their calls spend as everyone's do:
   every realm the key is shared into, under
   `["key-limit","key","<key-id>","anonymous"]` for each period (UTC day, UTC
   month), with no clamp per share. A key with no daily cap counts no day
-  there, and likewise for the month.
+  there, and likewise for the month. A call through two shares of one key
+  counts once against each (`callBudgets` spends each counter once per
+  call).
 
 `budgetsOf` in `lib/key-limits.ts` adds all of them. Reaching any refuses only
 callers who aren't signed in, `over-budget` with a detail saying "the limit on
