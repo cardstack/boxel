@@ -177,9 +177,10 @@ refusal also writes a key-use line.
    destination, or Google's token endpoint refused the service-account key,
    and no probe is due; see the `user-keys` skill, _Rejected grants_ and
    _Rejected keys_).
-   Every invocation off the network is interactive, and every binding is
-   approved for pipelines only, so a slotted request is sent only from a
-   pipeline (`Realm.handlePipeline`). The `binding-not-approved` detail names
+   Every invocation off the network is interactive, and is served only by a
+   binding its owner approved for interactive use; a pipeline
+   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
    each slot with whose key fills it (`the credential slot "weather" for the
 invoking user's own key`, `… for the realm's key`, from `describeSlots`),
    because a caller that sees only the message, such as the AI assistant,

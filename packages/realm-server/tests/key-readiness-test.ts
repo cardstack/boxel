@@ -223,8 +223,10 @@ module(basename(import.meta.filename), function (hooks) {
     return response.body.data[0].id as string;
   }
 
-  // Interactive use isn't offered by any approval route, so a binding that
-  // allows it is made by setting the column the call reads.
+  // Allows a binding interactive use by setting the column the call reads,
+  // as approving it with `interactive` does, so a test can watch readiness
+  // change on one binding without a share's first interactive approval also
+  // setting the share's daily budget.
   async function allowInteractive(bindingId: string) {
     await dbAdapter.execute(
       `UPDATE key_bindings SET interactive = true WHERE id = $1`,

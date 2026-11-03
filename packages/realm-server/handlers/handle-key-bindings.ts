@@ -55,6 +55,7 @@ const APPROVE_ATTRIBUTES = new Set([
   'operations',
   'interactive',
   'anonymous',
+  'dailyBudgets',
 ]);
 const OPERATION_MEMBERS = new Set([
   'codeRef',
@@ -203,9 +204,21 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
     }
-    let { realm, operations, interactive, anonymous } = attributes;
+    let { realm, operations, interactive, anonymous, dailyBudgets } =
+      attributes;
     if (!Array.isArray(operations)) {
       throw new UserKeyError(400, 'an approval lists its operations');
+    }
+    if (
+      dailyBudgets !== undefined &&
+      (!dailyBudgets ||
+        typeof dailyBudgets !== 'object' ||
+        Array.isArray(dailyBudgets))
+    ) {
+      throw new UserKeyError(
+        400,
+        'dailyBudgets names a daily budget by share id',
+      );
     }
     let approvals = operations.map((operation) =>
       operationOf(args.virtualNetwork, operation),
@@ -222,6 +235,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         operations: approvals,
         interactive: interactive === true,
         anonymous: anonymous === true,
+        dailyBudgets: (dailyBudgets ?? {}) as Record<string, number>,
       },
     );
     await sendJSON(ctxt, 201, {
@@ -353,10 +367,10 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-const BATCH_ATTRIBUTES = new Set(['target', 'review']);
+const BATCH_ATTRIBUTES = new Set(['target', 'review', 'interactive']);
 
 // The batch the secure window approves in one confirmation
-// (`lib/key-binding-batch.ts`): `attributes.{target, review?}`,
+// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?}`,
 // where `target` names a card or a card type in its realm as the window's
 // context does. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
@@ -398,9 +412,12 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be asked about here`);
       }
     }
-    let { review } = attributes;
+    let { review, interactive } = attributes;
     if (review !== undefined && typeof review !== 'boolean') {
       throw new UserKeyError(400, 'review is true or false');
+    }
+    if (interactive !== undefined && typeof interactive !== 'boolean') {
+      throw new UserKeyError(400, 'interactive is true or false');
     }
     let { target } = validateContextRequest({ target: attributes.target });
     if (!target) {
@@ -418,6 +435,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
       {
         target,
         review: review === true,
+        interactive: interactive === true,
       },
     );
     await sendJSON(ctxt, 200, {

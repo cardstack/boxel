@@ -167,5 +167,9 @@ export function cliOpenedFor(hash: string = window.location.hash) {
   return {
     cli,
     operations: named ? new Set(named.split(',').filter(Boolean)) : undefined,
+    // `boxel keys approve --interactive`: the page starts on interactive use.
+    // It is where the page starts, not what it approves: the user still
+    // chooses, and reads the confirmation, before approving.
+    interactive: cli !== undefined && fragment.get('interactive') === '1',
   };
 }
