@@ -16,7 +16,8 @@ Agents trained on shadcn will type `<Toaster />` and `toast('Saved')`; the secon
 @duration?         — default seconds per toast; 0 is sticky (default 5)
 @pauseOnHover?     — pause every clock while the pointer is over the region (default true)
 @pauseOnFocus?     — pause every clock while focus is inside it (default true)
-@pauseWhenHidden?  — pause every clock while the tab is hidden (default true)
+@pauseWhenHidden?  — pause every clock while the tab is hidden (default true);
+                     false lets throttled timers stretch a hidden tab's toasts
 @label?            — the region's accessible name (default 'Notifications')
 @dismissLabel?     — the dismiss control's name (default 'Dismiss')
 @hotkey?           — F6 moves focus into the region and back out (default true)
@@ -25,7 +26,7 @@ Agents trained on shadcn will type `<Toaster />` and `toast('Saved')`; the secon
 
 **`ToastStore.show({ title, message?, tone?, duration?, dismissible?, actionLabel?, onAction?, onDismiss?, id? })`** returns the id. Ids come from a counter, so they are reproducible. Showing with an id that already exists replaces that toast in place — a "Saving…" becomes a "Saved" without the stack jumping. `store.dismiss(id)` and `store.clear()` remove, firing each toast's own `onDismiss`. The controlled half exists because a host that can only be told a toast left is not a host a parent controls; `@toasts` wins when both are given.
 
-**The clock is state, and the life bar draws it.** Each toast with a duration has a countdown, advanced in tenth-of-a-second ticks by a timer the life bar's modifier owns and clears, and the toast is removed when the countdown reaches zero — whether or not anything animates. Pausing (hover, focus within, a hidden tab) means the ticks leave the countdown alone, so no elapsed time is ever measured against a wall clock or re-armed; the bar, which renders the countdown, stands still with it. Where no stylesheet loads the bar is invisible and the toast still leaves on time. What it costs is an exit animation — removal is immediate and the survivors reflow with a transition. The duration is seconds, not milliseconds, and is clamped to 600.
+**The clock is state, and the life bar draws it.** Each toast with a duration has a countdown, and the region advances every countdown on screen in tenth-of-a-second ticks of one timer, which runs only while a life bar is rendered and is cleared when the last one goes. The toast is removed when its countdown reaches zero — whether or not anything animates. Pausing (hover, focus within, a hidden tab) means the ticks leave the countdown alone, so no elapsed time is ever measured against a wall clock or re-armed; the bar, which renders the countdown, stands still with it, and lands on empty as the toast leaves. Where no stylesheet loads the bar is invisible and the toast still leaves on time. A tick is a tenth of a second of the page running, not of wall time, so the countdown errs long, never short: a busy main thread holds it, and a hidden tab's throttled timers slow it, so with `@pauseWhenHidden={{false}}` a toast in a hidden tab outlasts its duration. What it costs is an exit animation — removal is immediate and the survivors reflow with a transition. The duration is seconds, not milliseconds, and is clamped to 600.
 
 **The cap is a queue, not a clip.** The first `@limit` toasts to arrive are the ones on screen; a toast already shown stays until it is dismissed, so a new arrival never pushes a running toast out. Toasts past the cap are not rendered, so their clock has not started, and the region shows how many are waiting. A `show` with an existing id replaces that toast and restarts its clock.
 
