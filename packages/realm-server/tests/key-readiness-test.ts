@@ -160,13 +160,16 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  async function share(keyId: string) {
+  async function share(
+    keyId: string,
+    { owner = OWNER, label = 'Team vendor key' } = {},
+  ) {
     return await shareKey(dbAdapter, {
-      owner: OWNER,
+      owner,
       realm: realmURL.href,
       keyId,
-      label: 'Team vendor key',
-      ticket: await ticket(OWNER, 'share', { keyId, realm: realmURL }),
+      label,
+      ticket: await ticket(owner, 'share', { keyId, realm: realmURL }),
     });
   }
 
@@ -445,6 +448,53 @@ module(basename(import.meta.filename), function (hooks) {
       await readiness(OWNER, 'shared'),
       'needs-admin',
       'a suspended share needs an administrator, whoever asks',
+    );
+
+    await share((await addKey(WRITER)).id, {
+      owner: WRITER,
+      label: 'Writer vendor key',
+    });
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-approval',
+      'a caller with an active share of their own can approve it in place of the suspended one',
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-admin',
+      'someone whose only share is suspended is still told an administrator needs to set it up',
+    );
+  });
+
+  test('a share slot nothing fills is for a caller with a share of their own in the realm to approve, and an administrator’s to set up for anyone else', async function (assert) {
+    let key = await addKey();
+    let { id: shareId } = await share(key.id);
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-approval',
+      'the owner of a share in the realm can approve it for the slot, though its key has no grant yet',
+    );
+    let response = await capabilities(WRITER, [
+      { target: GENERAL, operation: 'shared', readiness: true },
+    ]);
+    assert.strictEqual(
+      response.body.checks[0].readiness,
+      'needs-admin',
+      'a writer with no share of their own is told an administrator needs to set it up',
+    );
+    let body = JSON.stringify(response.body);
+    for (let detail of [shareId, OWNER, 'Team vendor key', key.id]) {
+      assert.false(body.includes(detail), `the answer names no ${detail}`);
+    }
+
+    await dbAdapter.execute(
+      `UPDATE key_shares SET state = 'suspended', suspension_reason = 'suspended-by-writer', suspended_by = $1, suspended_at = NOW() WHERE id = $2`,
+      { bind: [WRITER, shareId] },
+    );
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-admin',
+      'a suspended share is not one its owner can approve',
     );
   });
 

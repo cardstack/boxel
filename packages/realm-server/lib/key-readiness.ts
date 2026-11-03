@@ -45,7 +45,10 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
-// the share's key, who is told what they could fix themselves. The one
+// the share's key, who is told what they could fix themselves. A caller with
+// an active share of their own in the realm is told `needs-approval` for a
+// share slot nothing fills, or one whose share is suspended: the approve page
+// offers them their shares for it, and approving one fills it. The one
 // exception is a key the vendor rejected, at a grant or as a whole, which the
 // call itself refuses `credential-rejected` to everyone.
 //
@@ -110,12 +113,18 @@ export async function keyReadiness(
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
     (covering ??= callerHasCoveringGrant(dbAdapter, lookup, caller));
+  // Read once, and only where an `{{apiKey}}` slot has no share to fill it.
+  let sharing: Promise<boolean> | undefined;
+  let callerShares = () =>
+    (sharing ??= lookup.caller
+      ? callerHasActiveShare(dbAdapter, lookup.realmURL, lookup.caller)
+      : Promise.resolve(false));
   let answers: KeyReadiness[] = [];
   for (let check of checks) {
     answers.push(
       check.slot.key === 'userKey'
         ? await userKeyReadiness(check, callerCovers)
-        : shareReadiness(check, caller),
+        : await shareReadiness(check, caller, callerShares),
     );
   }
   let filled = checks.filter(
@@ -187,10 +196,34 @@ async function callerHasCoveringGrant(
   );
 }
 
+// Whether the caller has an active share in the realm: the shares the approve
+// page offers for an `{{apiKey}}` slot, whatever their keys' grants cover,
+// since approving one writes the grant it lacks.
+async function callerHasActiveShare(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  caller: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM key_shares WHERE realm_url = `,
+    param(realmURL),
+    ` AND owner = `,
+    param(caller),
+    ` AND state = 'active' LIMIT 1`,
+  ]);
+  return rows.length > 0;
+}
+
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only
-// the owner of the share's key can approve it, so anyone else is told an
-// administrator needs to set it up, however it falls short.
-function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
+// the owner of the share's key can approve it, and only someone with a share
+// of their own in the realm can approve one for a slot nothing fills, so
+// anyone else is told an administrator needs to set it up, however it falls
+// short.
+async function shareReadiness(
+  check: SlotCheck,
+  caller: string,
+  callerShares: () => Promise<boolean>,
+): Promise<KeyReadiness> {
   if (check.refused === undefined) {
     return keyRejected(check) ? 'credential-rejected' : 'ready';
   }
@@ -211,6 +244,8 @@ function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
       return 'credential-rejected';
     case 'share-suspended':
     case 'binding-not-approved':
-      return 'needs-admin';
+      // No binding, or one whose share is suspended: approving one of the
+      // caller's own shares replaces it.
+      return (await callerShares()) ? 'needs-approval' : 'needs-admin';
   }
 }

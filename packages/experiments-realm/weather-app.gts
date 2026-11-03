@@ -423,10 +423,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // see the realm's shares, so for anyone else this stays false.
   @tracked isWriter = false;
   @tracked share: ShareInfo | undefined;
-  // Whether the signed-in writer has an active share in this realm that
-  // isn't approved for the app yet: a share names no service until its owner
-  // approves it for an operation, so this is the share they might mean.
-  @tracked hasUnboundShare = false;
   @tracked adding = false;
   @tracked query = '';
   @tracked matches: CityMatch[] = [];
@@ -639,16 +635,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             suspensionReason: share.suspensionReason,
           }
         : undefined;
-      this.hasUnboundShare = (result.shares ?? []).some(
-        (s: RealmKeyShareField) =>
-          s.own && s.state === 'active' && (s.operations ?? []).length === 0,
-      );
     } catch {
       // Someone who isn't signed in, or isn't a direct writer, is never
       // shown the realm's shares.
       this.isWriter = false;
       this.share = undefined;
-      this.hasUnboundShare = false;
     }
   });
 
@@ -965,9 +956,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         if (this.sharedStopped) {
           return `The workspace’s weather key is unavailable. ${this.stoppedReason}`;
         }
-        if (this.isWriter && !this.share && this.hasUnboundShare) {
-          return 'A key you shared with this workspace isn’t approved for this app yet.';
-        }
         if (this.isWriter && !this.share) {
           return 'This workspace has no weather key.';
         }
@@ -1136,16 +1124,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   get ownRejected() {
     return this.ownReadiness === 'credential-rejected';
   }
-  // The key's owner approves a share for the app: at `needs-approval`, or a
-  // writer whose own share isn't approved for any operation yet, which
-  // readiness can't tell from a realm with no share.
+  // The owner of a share in the workspace approves it for the app.
   get sharedNeedsApproval() {
-    return (
-      this.sharedReadiness === 'needs-approval' ||
-      (this.sharedReadiness === 'needs-admin' &&
-        !this.share &&
-        this.hasUnboundShare)
-    );
+    return this.sharedReadiness === 'needs-approval';
   }
   get sharedNeedsReapproval() {
     return this.sharedReadiness === 'needs-reapproval';
@@ -1154,7 +1135,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     return (
       this.isWriter &&
       !this.share &&
-      !this.hasUnboundShare &&
       this.sharedReadiness === 'needs-admin'
     );
   }
