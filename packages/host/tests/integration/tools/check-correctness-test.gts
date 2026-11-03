@@ -839,6 +839,51 @@ module('Integration | tools | check-correctness', function (hooks) {
     );
   });
 
+  test('a wait that a newer write to its target replaces leaves the newer write tracked', async function (assert) {
+    let toolService = getService('tool-service');
+    let roomId = '!room:example.com';
+    let fileUrl = `${testRealmURL}milestone.gts`;
+    toolService.trackAiAssistantCardRequest({
+      action: 'test',
+      roomId,
+      fileUrl,
+    });
+    let first = toolService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      fileUrl,
+      10_000,
+    );
+    let clientRequestId = toolService.trackAiAssistantCardRequest({
+      action: 'test',
+      roomId,
+      fileUrl,
+    });
+    assert.strictEqual(
+      await first,
+      undefined,
+      'the replaced wait ends without an index event',
+    );
+
+    let second = toolService.waitForInvalidationAfterAIAssistantRequest(
+      roomId,
+      fileUrl,
+      10_000,
+    );
+    getService('message-service').relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [],
+      generation: 7,
+      clientRequestId,
+      realmURL: testRealmURL,
+    });
+    assert.deepEqual(
+      await second,
+      { invalidations: [], generation: 7 },
+      "the newer write's wait gets its index event",
+    );
+  });
+
   test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;

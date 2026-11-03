@@ -699,9 +699,11 @@ export default class ToolService extends Service {
           delay(timeoutMs).then(() => undefined),
         ])
       : await invalidated;
-    // Only a real invalidation consumes the entry. On timeout the deferred is
-    // still live, and a later caller must still be able to wait on it.
-    if (settled) {
+    // Only a settled wait consumes the entry, and only the entry it waited
+    // on: a newer write to the target settles this wait empty and puts its
+    // own entry under the same key. On timeout the deferred is still live,
+    // and a later caller must still be able to wait on it.
+    if (settled && this.aiAssistantInvalidations.get(key) === existing) {
       this.aiAssistantInvalidations.delete(key);
     }
     return settled?.indexed;
