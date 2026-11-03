@@ -174,21 +174,13 @@ interface ValidationStep {
   at: number;
 }
 
-// Which side reported the terminal result of one validation. A validation
-// that times out keeps running, so both the drain (with a failed result for
-// the timeout) and the validation (with an invalid result for a bad call) can
-// try to report. Each side checks and sets this synchronously before its
-// send, so exactly one result reaches the room.
-//
-// When the timeout fires while the validation's send is still pending, the
-// drain leaves that send's outcome to the validation (`sendLeftToValidation`),
-// so a send that then fails still falls back to a failed result. A send that
-// fails before the timeout makes the validation throw, and the drain handles
-// that like any other throw.
-interface ValidationReport {
-  reportedBy?: 'validation' | 'timeout';
-  sendLeftToValidation?: boolean;
-}
+// The outcome of validating one tool call. `validate()` only decides; the
+// drain sends the result. A validation that times out keeps running, and
+// because it sends nothing itself, its late verdict cannot add a second
+// result to the failed one the drain sent for the timeout. A call that is
+// invalid has a `reason`; one skipped without a result (ai-bot runs it, or it
+// has no name) has none.
+type ValidationVerdict = { valid: true } | { valid: false; reason?: string };
 
 // e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at +2950ms
 // (still running at +3000ms)"
@@ -861,7 +853,7 @@ export default class ToolService extends Service {
           // cost is larger: every later drain pass awaits this one, so every
           // tool in the tab stops. Bound it like execute, and log what it is
           // waiting on if it is slow, so the stuck step can be named.
-          let isValid = false;
+          let verdict: ValidationVerdict = { valid: false };
           // This run's own timeline. A validation that times out keeps
           // running, so it writes only to this array and never to the map
           // entry of a later validation of the same request.
@@ -870,37 +862,48 @@ export default class ToolService extends Service {
             this.validationSteps.set(messageTool.id, steps);
           }
           let validationSettled = false;
-          let report: ValidationReport = {};
+          let validationStartedAt = performance.now();
           let watchdog = setTimeout(
             () => this.logSlowValidation(messageTool, steps),
             VALIDATE_WATCHDOG_MS,
           );
+          let validation = this.trackValidation(
+            this.validate(messageTool, steps),
+          ).finally(() => {
+            validationSettled = true;
+          });
           try {
-            isValid = await withTimeout(
-              this.trackValidation(
-                this.validate(messageTool, steps, report),
-              ).finally(() => {
-                validationSettled = true;
-              }),
+            verdict = await withTimeout(
+              validation,
               this.validateTimeoutMs,
               `Validating tool "${messageTool.name}"`,
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
-            // The validation found the call invalid and its send of that
-            // result is still pending. That result is the terminal one, so a
-            // failed result here would contradict it; the validation handles
-            // a send that fails. (A send that already failed made the
-            // validation throw, so `validationSettled` is true and the throw
-            // is handled below.)
-            if (report.reportedBy === 'validation' && !validationSettled) {
-              report.sendLeftToValidation = true;
-              console.warn(
-                `[tool-validate] "${messageTool.name}" (${messageTool.id}) timed out while sending its invalid result; no failed result is sent for the timeout (${error.message})`,
+            if (!validationSettled) {
+              // The drain stops waiting here and reports the timeout. Log
+              // what the validation that keeps running decides, so a slow
+              // step and a hang read differently; its verdict sends nothing.
+              validation.then(
+                (late) =>
+                  console.warn(
+                    `[tool-validate] "${messageTool.name}" (${messageTool.id}) finished ${Math.round(
+                      performance.now() - validationStartedAt,
+                    )}ms after it started, after its timeout: ${
+                      late.valid
+                        ? 'valid'
+                        : `invalid (${late.reason ?? 'skipped'})`
+                    }; nothing is sent for it`,
+                  ),
+                (late) =>
+                  console.warn(
+                    `[tool-validate] "${messageTool.name}" (${messageTool.id}) threw ${Math.round(
+                      performance.now() - validationStartedAt,
+                    )}ms after it started, after its timeout; nothing is sent for it`,
+                    late,
+                  ),
               );
-              continue;
             }
-            report.reportedBy = 'timeout';
             // The message and step timeline go in the text itself: a test
             // runner's console capture can render an Error argument as
             // "[object Object]". The error argument is still passed for its
@@ -923,7 +926,14 @@ export default class ToolService extends Service {
               this.validationSteps.delete(messageTool.id);
             }
           }
-          if (!isValid) {
+          if (!verdict.valid) {
+            if (verdict.reason) {
+              await this.sendInvalidValidationResult(
+                roomId!,
+                messageTool,
+                verdict.reason,
+              );
+            }
             continue;
           }
 
@@ -1687,6 +1697,48 @@ export default class ToolService extends Service {
       .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
+  // Sends the invalid result for a call the validation rejected. The drain
+  // claimed this request before validating, so this result is terminal for
+  // auto-execution. (The user can still run it manually: "Try Anyway"
+  // bypasses the drain.) When the send fails, a failed result still tells
+  // the model why its call was rejected, so it does not resend the same call.
+  private async sendInvalidValidationResult(
+    roomId: string,
+    messageTool: MessageTool,
+    reason: string,
+  ) {
+    try {
+      // CS-11045: Same canonical-event-id resolution as the run task — emit
+      // the invalid commandResult linked to the bot-message event currently
+      // owning the toolRequest in room state, so ai-bot's /messages view
+      // and the host's own m.replace-aware bookkeeping agree on the linkage.
+      await this.matrixService.sendToolResultEvent({
+        roomId,
+        invokedToolFromEventId:
+          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+          messageTool.eventId,
+        toolCallId: messageTool.id!,
+        status: 'invalid',
+        failureReason: reason,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    } catch (sendError) {
+      let message =
+        sendError instanceof Error ? sendError.message : String(sendError);
+      console.error(
+        `[tool-validate] "${messageTool.name}" (${messageTool.id}) could not send its invalid result; sending a failed result instead`,
+        sendError,
+      );
+      await this.sendFailedValidationResult(
+        roomId,
+        messageTool,
+        new Error(
+          `${reason} (the invalid result could not be sent: ${message})`,
+        ),
+      );
+    }
+  }
+
   // Sends a failed result for a validation that threw or timed out. When that
   // send fails too, the room never gets a terminal result, so nothing else
   // will clear the tool's spinner: the local failed state at least restores
@@ -1762,29 +1814,27 @@ export default class ToolService extends Service {
   async validate(
     command: MessageTool,
     steps: ValidationStep[] = [],
-    report: ValidationReport = {},
-  ): Promise<boolean> {
-    let startedAt = performance.now();
+  ): Promise<ValidationVerdict> {
     let markStep = (step: string) =>
       steps.push({ step, at: performance.now() });
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
     // class to resolve, and never runs it, so there is nothing to validate.
     if (command.executedBy === AI_BOT_EXECUTOR) {
-      return false;
+      return { valid: false };
     }
     if (!command.name) {
       console.warn(
         `Command with id ${command.id} has no name, skipping validation`,
       );
-      return false;
+      return { valid: false };
     }
 
     if (command.argumentsError) {
       error = `The arguments of this "${command.name}" call were not valid JSON (${command.argumentsError}), so the call was not run. Send the call again with complete, valid JSON arguments.`;
     } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
-      return true;
+      return { valid: true };
     }
 
     // The message's tool list is complete as soon as its event is applied, but
@@ -1863,62 +1913,10 @@ export default class ToolService extends Service {
       }
     }
     if (error) {
-      // The caller claimed this request before validating, so this invalid
-      // result is already terminal for auto-execution. (The user can still
-      // run it manually — "Try Anyway" bypasses the drain.)
-      //
-      // CS-11045: Same canonical-event-id resolution as the run task — emit
-      // the invalid commandResult linked to the bot-message event currently
-      // owning the toolRequest in room state, so ai-bot's /messages view
-      // and the host's own m.replace-aware bookkeeping agree on the linkage.
-      let context = await this.operatorModeStateService.getSummaryForAIBot();
-      // The drain gave up on this validation and already sent a failed
-      // result for the timeout, so this late invalid result is dropped. The
-      // check and the claim come after the last await before the send, so
-      // only one side can report.
-      if (report.reportedBy === 'timeout') {
-        console.warn(
-          `[tool-validate] "${command.name}" (${command.id}) found the call invalid after ${Math.round(
-            performance.now() - startedAt,
-          )}ms, after the drain reported its validation timeout; the invalid result is not sent (${error})`,
-        );
-        return false;
-      }
-      report.reportedBy = 'validation';
-      let invokedToolFromEventId =
-        this.getCurrentEventIdForCommandRequest(
-          command.message.roomId,
-          command.toolRequest.id,
-        ) ?? command.eventId;
-      try {
-        await this.matrixService.sendToolResultEvent({
-          roomId: command.message.roomId,
-          invokedToolFromEventId,
-          toolCallId: command.toolRequest.id!,
-          status: 'invalid',
-          failureReason: error,
-          context,
-        });
-      } catch (sendError) {
-        if (!report.sendLeftToValidation) {
-          // The drain is still waiting, and reports the throw.
-          throw sendError;
-        }
-        // The drain timed out during this send and left its outcome here.
-        console.error(
-          `[tool-validate] "${command.name}" (${command.id}) could not send its invalid result after the drain's validation timeout; sending a failed result instead`,
-          sendError,
-        );
-        await this.sendFailedValidationResult(
-          command.message.roomId,
-          command,
-          sendError instanceof Error ? sendError : new Error(String(sendError)),
-        );
-      }
-      return false;
+      return { valid: false, reason: error };
     }
 
-    return true;
+    return { valid: true };
   }
 
   // Builds the tool's input card from the call's arguments. The input is

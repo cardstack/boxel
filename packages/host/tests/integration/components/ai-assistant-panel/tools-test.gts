@@ -3030,8 +3030,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     // a failed result for the timeout. Then let the resolve continue into an
     // import that throws, so the validation that kept running finds the call
     // invalid after the drain has already answered it.
-    let hold = holdDiscoveredSkillLoads();
     let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    let hold = holdDiscoveredSkillLoads();
     toolService.validateTimeoutMs = 200;
     let fail = failCommandModuleImport();
     let toolResults = () =>
@@ -3064,6 +3065,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       await settled();
     } finally {
       fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
     }
 
     assert.true(
@@ -3124,11 +3126,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       ['failed'],
       'the call still gets a terminal result',
     );
+    let failureReason = String(hostToolResults[0]?.content.failureReason);
     assert.true(
-      String(hostToolResults[0]?.content.failureReason).includes(
-        'simulated invalid result send failure',
+      failureReason.includes(
+        'could not be prepared (simulated command module load failure)',
       ),
-      `the reason names the send failure: ${hostToolResults[0]?.content.failureReason}`,
+      `the reason still says why the call was invalid: ${failureReason}`,
+    );
+    assert.true(
+      failureReason.includes('simulated invalid result send failure'),
+      `the reason names the send failure: ${failureReason}`,
     );
   });
 
@@ -3258,7 +3265,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       if (!heldToolIds || heldToolIds.includes(messageTool.id ?? '')) {
         await released;
       }
-      return true;
+      return { valid: true };
     };
     let results: Array<{
       toolCallId: string;
