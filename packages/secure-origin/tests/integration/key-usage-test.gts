@@ -1,4 +1,4 @@
-import { click, fillIn, render, waitFor } from '@ember/test-helpers';
+import { click, fillIn, render, settled, waitFor } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -17,7 +17,8 @@ import { setupWaitedBrowserWork, waitedFetch } from '../helpers/waiters.ts';
 // key's usage on its tile and changes its limits in place; the share-limits
 // page shows a share's usage to the owner of the key it holds and changes its
 // limits, and tells a direct writer who doesn't own it that only its owner
-// does.
+// does. The key page lists where a share's or key's use reached a limit, each
+// with what to do about it, and marks what it lists read.
 
 const REALM_SERVER = 'https://realm-server.test/';
 const REALM = 'https://realm-server.test/someone/workspace/';
@@ -102,6 +103,41 @@ function usage(overrides: Record<string, unknown> = {}) {
     ],
     canEditLimits: true,
     ...overrides,
+  };
+}
+
+// A limit notice as the realm server lists it.
+function limitNotice(
+  id: string,
+  attributes: Partial<{
+    share: string | null;
+    key: string | null;
+    realm: string | null;
+    label: string;
+    yours: boolean;
+    period: 'day' | 'month';
+    threshold: 'high-water' | 'budget';
+    budget: number;
+    readAt: string | null;
+  }>,
+) {
+  return {
+    type: 'key-limit-notice',
+    id,
+    attributes: {
+      share: null,
+      key: 'key-1',
+      realm: null,
+      label: 'Weather service',
+      yours: true,
+      period: 'day',
+      periodEndsAt: '2099-01-02T00:00:00.000Z',
+      threshold: 'budget',
+      budget: 2400,
+      readAt: null,
+      createdAt: '2099-01-01T15:00:00.000Z',
+      ...attributes,
+    },
   };
 }
 
@@ -392,6 +428,212 @@ module('Integration | key usage and limits', function (hooks) {
     });
   });
 
+  module('limit notices on the key page', function (hooks) {
+    let navigations: { how: string; url?: string }[];
+
+    hooks.beforeEach(function () {
+      navigations = [];
+      navigation.assign = (url: string) =>
+        navigations.push({ how: 'assign', url });
+    });
+
+    function serveNotices(data: ReturnType<typeof limitNotice>[]) {
+      serve({
+        'GET _key-limit-notices': () =>
+          json(200, {
+            data,
+            meta: {
+              unread: data.filter((n) => !n.attributes.readAt).length,
+            },
+          }),
+        'POST _key-limit-notices/read': ({ body }) =>
+          json(200, { meta: { marked: body.data.length, unread: 0 } }),
+      });
+    }
+
+    test('a key that used its budget says so, and See usage opens its usage and limits on its tile', async function (assert) {
+      serveNotices([limitNotice('7', {})]);
+      serve({
+        'GET _user-keys/key-1/usage': () => usageResource('key-1', usage()),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notice="Weather service"]');
+      assert
+        .dom('[data-test-key-limit-notice="Weather service"]')
+        .hasAttribute('data-test-key-limit-notice-threshold', 'budget')
+        .includesText('Limit reached')
+        .includesText(
+          'Your key “Weather service” used its whole daily budget of 2,400 calls.',
+        );
+      assert
+        .dom('[data-test-key-limit-notice-explain]')
+        .includesText('Calls with it are refused until')
+        .includesText('Raise the budget to keep it working');
+      assert.dom('[data-test-key-usage]').doesNotExist('closed until asked');
+
+      await click('[data-test-key-limit-notice-usage]');
+      await waitFor('[data-test-key-usage]');
+      assert
+        .dom('[data-test-key-usage-toggle]')
+        .hasAttribute('aria-expanded', 'true');
+      assert
+        .dom('[data-test-key-limit-input="dailyBudget"]')
+        .hasValue('2400', 'the key’s limits are there to change');
+      assert
+        .dom('[data-test-key-usage-toggle]')
+        .isFocused('focus moves to the panel it opened');
+      assert
+        .dom('[data-test-key-limit-notice-usage]')
+        .hasText('See usage…', 'the same action as on any other notice');
+      assert.deepEqual(navigations, [], 'it stays on the page');
+    });
+
+    test('a notice about a key whose limits the page doesn’t show offers nothing to click', async function (assert) {
+      serveNotices([
+        limitNotice('7', { key: 'key-elsewhere', label: 'Old key' }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notice="Old key"]');
+      assert.dom('[data-test-key-limit-notice-usage]').doesNotExist();
+    });
+
+    test('a share of the user’s key nearing its budget opens the share’s limits, which come back here', async function (assert) {
+      serveNotices([
+        limitNotice('9', {
+          share: 'share-1',
+          key: null,
+          realm: REALM,
+          label: 'Team weather',
+          period: 'month',
+          threshold: 'high-water',
+          budget: 72000,
+        }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notice="Team weather"]');
+      assert
+        .dom('[data-test-key-limit-notice="Team weather"]')
+        .hasAttribute('data-test-key-limit-notice-threshold', 'high-water')
+        .includesText('Nearing limit')
+        .includesText(
+          '“Team weather”, your key shared with realm-server.test/someone/workspace/, is close to its monthly budget of 72,000 calls.',
+        );
+      await click('[data-test-key-limit-notice-usage]');
+      assert.strictEqual(navigations.length, 1);
+      let target = new URL(navigations[0].url!, window.location.href);
+      assert.true(target.pathname.endsWith('/share-limits'));
+      assert.deepEqual(
+        Object.fromEntries(new URLSearchParams(target.hash.slice(1))),
+        { realm: REALM, share: 'share-1', then: 'keys' },
+      );
+    });
+
+    test('a share that reached both thresholds shows once, for its budget', async function (assert) {
+      let share = {
+        share: 'share-1',
+        key: null,
+        realm: REALM,
+        label: 'Team weather',
+      };
+      serveNotices([
+        limitNotice('9', { ...share, threshold: 'budget' }),
+        limitNotice('8', { ...share, threshold: 'high-water' }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notices]');
+      assert
+        .dom('[data-test-key-limit-notice]')
+        .exists({ count: 1 }, 'one entry for the share and day');
+      assert
+        .dom('[data-test-key-limit-notice="Team weather"]')
+        .hasAttribute('data-test-key-limit-notice-threshold', 'budget')
+        .includesText('Cards there can’t use it until');
+    });
+
+    test('a direct writer who doesn’t own the key is told who can change it, and can see its usage', async function (assert) {
+      serveNotices([
+        limitNotice('9', {
+          share: 'share-1',
+          key: null,
+          realm: REALM,
+          label: 'Team weather',
+          yours: false,
+        }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notice="Team weather"]');
+      assert
+        .dom('[data-test-key-limit-notice="Team weather"]')
+        .includesText(
+          '“Team weather” in realm-server.test/someone/workspace/, used its whole daily budget',
+        )
+        .includesText('Only the key’s owner can change its limits.');
+      await click('[data-test-key-limit-notice-usage]');
+      let target = new URL(navigations[0].url!, window.location.href);
+      assert.true(target.pathname.endsWith('/share-limits'));
+    });
+
+    test('the limit notices the page lists are marked read, and only the unread ones', async function (assert) {
+      serveNotices([
+        limitNotice('9', { threshold: 'budget' }),
+        limitNotice('8', { threshold: 'high-water' }),
+        limitNotice('4', {
+          key: 'key-2',
+          label: 'Maps',
+          readAt: '2099-01-01T09:00:00.000Z',
+        }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notices]');
+      await settled();
+      assert.deepEqual(
+        requests
+          .filter(
+            (r) => r.method === 'POST' && r.path === '_key-limit-notices/read',
+          )
+          .map((r) => r.body),
+        [
+          {
+            data: [
+              { type: 'key-limit-notice', id: '9' },
+              { type: 'key-limit-notice', id: '8' },
+            ],
+          },
+        ],
+        'the one shown and the one it stands for, once',
+      );
+    });
+
+    test('a page whose limit notices are all read marks nothing', async function (assert) {
+      serveNotices([limitNotice('4', { readAt: '2099-01-01T09:00:00.000Z' })]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notices]');
+      await settled();
+      assert.false(
+        requests.some((r) => r.path === '_key-limit-notices/read'),
+        'nothing is sent',
+      );
+    });
+
+    test('limit notices that can’t be read leave the keys as they are', async function (assert) {
+      serve({
+        'GET _key-limit-notices': () => refusal(500, 'Something went wrong'),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      assert.dom('[data-test-key-limit-notices]').doesNotExist();
+      assert.dom('[data-test-keys-load-failed]').doesNotExist();
+    });
+  });
+
   module('the share-limits page', function (hooks) {
     hooks.beforeEach(function () {
       serve({
@@ -481,6 +723,58 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom('[data-test-share-limits-not-owner]')
         .includesText('Only they change its limits');
+      assert
+        .dom('[data-test-key-usage-budget="day"]')
+        .includesText('12 of 2,400 calls', 'the share’s usage is shown');
+      assert
+        .dom('[data-test-share-limits-back]')
+        .doesNotExist('opened from the app, it has no key page to go back to');
+    });
+
+    test('opened from the key page by someone who can’t see the share, it still goes back there', async function (assert) {
+      let backTo: string[] = [];
+      navigation.back = (url: string) => backTo.push(url);
+      serve({
+        'POST _secure-window/context': () =>
+          json(200, {
+            data: {
+              type: 'secure-window-context',
+              attributes: {
+                realm: {
+                  url: REALM,
+                  name: 'Team Workspace',
+                  directWriter: false,
+                },
+              },
+            },
+          }),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1&then=keys`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-keys-needs-admin]');
+      await click('[data-test-share-limits-back]');
+      assert.strictEqual(backTo.length, 1);
+    });
+
+    test('opened from the key page, it goes back there', async function (assert) {
+      let backTo: string[] = [];
+      navigation.back = (url: string) => backTo.push(url);
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource('share-1', usage()),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1&then=keys`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      await click('[data-test-share-limits-back]');
+      assert.strictEqual(backTo.length, 1);
+      assert.true(
+        new URL(backTo[0], window.location.href).pathname.endsWith('/keys'),
+      );
     });
 
     test('a link naming no shared key in the workspace says so', async function (assert) {

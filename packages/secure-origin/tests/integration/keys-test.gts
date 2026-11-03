@@ -965,7 +965,12 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings', 'GET _key-policy-notices'],
+        [
+          'GET _user-keys',
+          'GET _key-bindings',
+          'GET _key-policy-notices',
+          'GET _key-limit-notices',
+        ],
         'the page asks nothing per key',
       );
     });

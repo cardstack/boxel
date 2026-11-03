@@ -28,38 +28,59 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 const ME = '@testuser:localhost';
-const NOTICES_PATH = '/_key-policy-notices';
+const POLICY_NOTICES_PATH = '/_key-policy-notices';
+const LIMIT_NOTICES_PATH = '/_key-limit-notices';
 
-// The realm server's notice listing, as far as the app reads it: the unread
-// count in `meta`.
-function stubNotices(unread: { count: number }) {
+interface Unread {
+  // Unread policy notices, and unread limit notices.
+  policy: number;
+  limit: number;
+}
+
+// The realm server's notice listings, as far as the app reads them: the
+// unread count in each one's `meta`.
+function stubNotices(unread: Unread) {
   let reads = 0;
-  // The mock's own listing, put back when the test is done.
-  let standing = getRealmServerRoute(new URL(NOTICES_PATH, 'http://mock/'));
-  registerRealmServerRoute({
-    path: NOTICES_PATH,
-    handler: async (req) => {
-      if (req.method !== 'GET') {
-        return null;
-      }
-      reads++;
-      return new Response(
-        JSON.stringify({ data: [], meta: { unread: unread.count } }),
-        {
-          status: 200,
-          headers: { 'content-type': SupportedMimeType.JSONAPI },
-        },
-      );
-    },
-  });
+  let listings: [string, () => number][] = [
+    [POLICY_NOTICES_PATH, () => unread.policy],
+    [LIMIT_NOTICES_PATH, () => unread.limit],
+  ];
+  // The mock's own listings, put back when the test is done.
+  let standing = listings.map(([path]) =>
+    getRealmServerRoute(new URL(path, 'http://mock/')),
+  );
+  for (let [path, count] of listings) {
+    registerRealmServerRoute({
+      path,
+      handler: async (req) => {
+        if (req.method !== 'GET') {
+          return null;
+        }
+        reads++;
+        return new Response(
+          JSON.stringify({ data: [], meta: { unread: count() } }),
+          {
+            status: 200,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      },
+    });
+  }
   return {
     get reads() {
       return reads;
     },
-    restore: () =>
-      standing
-        ? registerRealmServerRoute(standing)
-        : unregisterRealmServerRoute(NOTICES_PATH),
+    restore: () => {
+      listings.forEach(([path], index) => {
+        let route = standing[index];
+        if (route) {
+          registerRealmServerRoute(route);
+        } else {
+          unregisterRealmServerRoute(path);
+        }
+      });
+    },
   };
 }
 
@@ -73,12 +94,13 @@ module('Acceptance | key notices badge', function (hooks) {
     directRooms: ['test-auth-realm-server-session-room'],
   });
 
-  let unread = { count: 0 };
+  let unread: Unread = { policy: 0, limit: 0 };
   let api: ReturnType<typeof stubNotices> | undefined;
   let opened: string[];
 
   hooks.beforeEach(async function () {
-    unread.count = 0;
+    unread.policy = 0;
+    unread.limit = 0;
     api = stubNotices(unread);
     opened = [];
     window.open = ((url?: string | URL) => {
@@ -108,7 +130,7 @@ module('Acceptance | key notices badge', function (hooks) {
   }
 
   test('unread notices put a count on the avatar and on API Keys, which opens the key page', async function (assert) {
-    unread.count = 2;
+    unread.policy = 2;
     await visitApp();
     await waitFor('[data-test-profile-icon-key-notices-badge]');
     let avatarSpoken = document.querySelector(
@@ -177,13 +199,15 @@ module('Acceptance | key notices badge', function (hooks) {
   });
 
   test('once the key page has marked the notices read, both badges go away', async function (assert) {
-    unread.count = 2;
+    unread.policy = 1;
+    unread.limit = 1;
     await visitApp();
     await waitFor('[data-test-profile-icon-key-notices-badge]');
 
     // The key page marks what it lists read, and the realm server tells the
     // owner's sessions.
-    unread.count = 0;
+    unread.policy = 0;
+    unread.limit = 0;
     mockMatrixUtils.simulateRemoteMessage(
       'test-auth-realm-server-session-room',
       '@realm-server:localhost',
@@ -205,12 +229,28 @@ module('Acceptance | key notices badge', function (hooks) {
     assert.dom('[data-test-pretui-badge-mark]').doesNotExist();
   });
 
-  test('a notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {
+  test('the count adds up unread policy notices and unread limit notices', async function (assert) {
+    unread.policy = 1;
+    unread.limit = 2;
+    await visitApp();
+    await waitFor('[data-test-profile-icon-key-notices-badge]');
+    assert
+      .dom(
+        '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-mark]',
+      )
+      .hasText('3');
+    await click('[data-test-profile-icon-button]');
+    assert
+      .dom('[data-test-profile-api-keys-badge] [data-test-pretui-badge-spoken]')
+      .hasText('3 unseen key notices');
+  });
+
+  test('a limit notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {
     await visitApp();
     await waitUntil(() => api!.reads > 0);
     assert.dom('[data-test-profile-icon-key-notices-badge]').doesNotExist();
 
-    unread.count = 1;
+    unread.limit = 1;
     // The realm server writes to the user's session room, the one room the
     // app takes its events from.
     mockMatrixUtils.simulateRemoteMessage(

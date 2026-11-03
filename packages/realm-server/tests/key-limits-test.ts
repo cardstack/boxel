@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import sinon from 'sinon';
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -12,9 +13,16 @@ import {
 import type { Realm } from '@cardstack/runtime-common';
 import {
   createJWT,
+  insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
+import {
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  KEY_NOTICES_UPDATED_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { upsertSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -33,7 +41,9 @@ import {
 import { shareKey, suspendShare, swapKeyIntoShare } from '../lib/key-shares.ts';
 import { keyReadiness } from '../lib/key-readiness.ts';
 import {
+  setKeyLimitNoticeSender,
   setKeyLimitSink,
+  settleKeyLimitNoticeSends,
   setKeyLimitStore,
   type KeyLimitEvent,
 } from '../lib/key-limits.ts';
@@ -120,6 +130,9 @@ module(basename(import.meta.filename), function (hooks) {
   let keyring: SecretsKeyring;
   let vendor: StubVendor;
   let events: KeyLimitEvent[];
+  // Each `[recipient, event type]` the realm server sent when it recorded a
+  // limit notice.
+  let told: [string, string][];
   let nowMs: number;
 
   hooks.before(async function () {
@@ -136,6 +149,10 @@ module(basename(import.meta.filename), function (hooks) {
     configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
     events = [];
     setKeyLimitSink((event) => events.push(event));
+    told = [];
+    setKeyLimitNoticeSender(async (user, eventType) => {
+      told.push([user, eventType]);
+    });
     nowMs = START_MS;
     setKeyLimitStore((db) => new DBRateLimitStore(db, { now: () => nowMs }));
     setKeyLimitDefaults(LIMITS);
@@ -144,6 +161,8 @@ module(basename(import.meta.filename), function (hooks) {
     setKeyLimitDefaults(undefined);
     setKeyLimitStore(undefined);
     setKeyLimitSink(undefined);
+    setKeyLimitNoticeSender(undefined);
+    sinon.restore();
     resetOutbound();
     resetSecretsAtRest();
   });
@@ -586,6 +605,443 @@ module(basename(import.meta.filename), function (hooks) {
         .map((e) => (e as { threshold: string }).threshold),
       ['high-water', 'budget'],
     );
+  });
+
+  async function listLimitNotices(authorization: string) {
+    return await request
+      .get('/_key-limit-notices')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Authorization', authorization);
+  }
+
+  async function markLimitNoticesRead(
+    authorization: string,
+    ids: unknown[],
+    type = 'key-limit-notice',
+  ) {
+    return await request
+      .post('/_key-limit-notices/read')
+      .set('Authorization', authorization)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({ data: ids.map((id) => ({ type, id })) });
+  }
+
+  test('each recipient of a limit notice is told it is waiting, once per notice recorded', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    let recipients = [
+      ...new Set([OWNER, ...(await fetchDirectWriters(dbAdapter, realmURL))]),
+    ].sort();
+
+    for (let i = 0; i < 3; i++) {
+      await call('shared');
+    }
+    assert.deepEqual(told, [], 'nothing below the high-water mark');
+
+    await call('shared');
+    await settleKeyLimitNoticeSends();
+    assert.deepEqual(
+      told.map(([user]) => user).sort(),
+      recipients,
+      'each recipient of the high-water notice is told',
+    );
+    assert.true(
+      told.every(
+        ([, eventType]) => eventType === KEY_NOTICES_UPDATED_EVENT_TYPE,
+      ),
+    );
+
+    told = [];
+    await call('shared');
+    await settleKeyLimitNoticeSends();
+    assert.deepEqual(
+      told.map(([user]) => user).sort(),
+      recipients,
+      'and each recipient of the budget notice',
+    );
+
+    told = [];
+    assert.strictEqual((await call('shared')).code, 'over-budget');
+    await settleKeyLimitNoticeSends();
+    assert.deepEqual(told, [], 'a refusal past the budget records nothing');
+  });
+
+  test('the call that crosses a threshold doesn’t wait for the push', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    let started = 0;
+    setKeyLimitNoticeSender(async () => {
+      started++;
+      await held;
+    });
+    for (let i = 0; i < 4; i++) {
+      let response = await call('check');
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    }
+    assert.strictEqual(started, 1, 'the push started');
+    assert.strictEqual(
+      vendor.requests.length,
+      4,
+      'the call that crossed the high-water mark was sent while its push was still waiting',
+    );
+    release();
+    await settleKeyLimitNoticeSends();
+  });
+
+  test('a notice that can’t be sent is still recorded, and the call still goes through', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    setKeyLimitNoticeSender(async () => {
+      throw new Error('the homeserver is down');
+    });
+    for (let i = 0; i < 4; i++) {
+      let response = await call('check');
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    }
+    assert.deepEqual(
+      (await notices()).map(({ threshold, recipient }) => [
+        threshold,
+        recipient,
+      ]),
+      [['high-water', OWNER]],
+    );
+  });
+
+  test('a recipient lists the limit notices whose period hasn’t ended, with an unread count', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    let shared = await share((await addKey(OWNER, 'shared vendor')).id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 4; i++) {
+      await call('check');
+    }
+    for (let i = 0; i < 5; i++) {
+      await call('shared');
+    }
+
+    // The app's own session reads them: the badge is shown in the app.
+    let owners = await listLimitNotices(appSession(OWNER));
+    assert.strictEqual(owners.status, 200, owners.text);
+    assert.strictEqual(owners.body.meta.unread, 3);
+    let listed = (
+      owners.body.data as {
+        type: string;
+        attributes: Record<string, unknown>;
+      }[]
+    ).map(({ type, attributes }) => ({
+      type,
+      share: attributes.share,
+      key: attributes.key,
+      realm: attributes.realm,
+      label: attributes.label,
+      yours: attributes.yours,
+      period: attributes.period,
+      threshold: attributes.threshold,
+      budget: attributes.budget,
+      readAt: attributes.readAt,
+    }));
+    assert.deepEqual(
+      listed,
+      [
+        {
+          type: 'key-limit-notice',
+          share: shared.id,
+          key: null,
+          realm: realmURL.href,
+          label: 'Vendor',
+          yours: true,
+          period: 'day',
+          threshold: 'budget',
+          budget: 5,
+          readAt: null,
+        },
+        {
+          type: 'key-limit-notice',
+          share: shared.id,
+          key: null,
+          realm: realmURL.href,
+          label: 'Vendor',
+          yours: true,
+          period: 'day',
+          threshold: 'high-water',
+          budget: 5,
+          readAt: null,
+        },
+        {
+          type: 'key-limit-notice',
+          share: null,
+          key: key.id,
+          realm: null,
+          label: 'vendor',
+          yours: true,
+          period: 'day',
+          threshold: 'high-water',
+          budget: 5,
+          readAt: null,
+        },
+      ],
+      'newest first, a share’s naming its realm and a key’s naming neither',
+    );
+    assert.strictEqual(
+      owners.body.data[0].attributes.periodEndsAt,
+      new Date(Date.UTC(2027, 1, 1)).toISOString(),
+      'the day ends at UTC midnight',
+    );
+
+    let writers = await listLimitNotices(appSession(WRITER));
+    assert.deepEqual(
+      (writers.body.data as { attributes: Record<string, unknown> }[]).map(
+        ({ attributes }) => [attributes.label, attributes.yours],
+      ),
+      [
+        ['Vendor', false],
+        ['Vendor', false],
+      ],
+      'a direct writer sees the share’s notices, and that the key isn’t theirs',
+    );
+    let readers = await listLimitNotices(appSession(READER));
+    assert.deepEqual(readers.body.data, [], 'a reader is told nothing');
+    assert.strictEqual(readers.body.meta.unread, 0);
+
+    await dbAdapter.execute(
+      `UPDATE key_limit_notices SET period_ends_at = NOW() - interval '1 minute' WHERE key_id = $1`,
+      { bind: [key.id] },
+    );
+    let afterReset = await listLimitNotices(appSession(OWNER));
+    assert.deepEqual(
+      (afterReset.body.data as { attributes: { label: string } }[]).map(
+        ({ attributes }) => attributes.label,
+      ),
+      ['Vendor', 'Vendor'],
+      'a notice whose period has ended is no longer listed',
+    );
+    assert.strictEqual(
+      afterReset.body.meta.unread,
+      2,
+      'nor counted unread, since no page can show it to mark it read',
+    );
+  });
+
+  test('a notice whose budget the owner has since raised is no longer listed or counted', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 5; i++) {
+      await call('check');
+    }
+    let before = await listLimitNotices(appSession(OWNER));
+    assert.strictEqual(before.body.meta.unread, 2, 'high-water and budget');
+
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      dailyBudget: 10,
+    });
+    let after = await listLimitNotices(appSession(OWNER));
+    assert.deepEqual(
+      after.body.data,
+      [],
+      'the key isn’t refused any more, so nothing says it is',
+    );
+    assert.strictEqual(after.body.meta.unread, 0);
+
+    for (let i = 0; i < 3; i++) {
+      await call('check');
+    }
+    let reached = await listLimitNotices(appSession(OWNER));
+    assert.deepEqual(
+      (
+        reached.body.data as {
+          attributes: { threshold: string; budget: number };
+        }[]
+      ).map(({ attributes }) => [attributes.threshold, attributes.budget]),
+      [['high-water', 10]],
+      'reaching the new budget’s high-water mark is a notice of its own',
+    );
+
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      dailyBudget: 5,
+    });
+    assert.deepEqual(
+      (
+        (await listLimitNotices(appSession(OWNER))).body.data as {
+          attributes: { budget: number };
+        }[]
+      ).map(({ attributes }) => attributes.budget),
+      [10, 5, 5],
+      'a budget lowered below what a notice was for leaves it listed',
+    );
+  });
+
+  test('a share’s notices follow its owner and its realm’s writers as they are now', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 4; i++) {
+      await call('shared');
+    }
+    let yours = async (user: string) =>
+      (
+        (await listLimitNotices(appSession(user))).body.data as {
+          attributes: { yours: boolean };
+        }[]
+      ).map(({ attributes }) => attributes.yours);
+    assert.deepEqual(await yours(OWNER), [true]);
+    assert.deepEqual(await yours(WRITER), [false]);
+
+    // The share now holds the writer's key: `yours` follows it, whoever the
+    // notice was recorded for.
+    await dbAdapter.execute(`UPDATE key_shares SET owner = $1 WHERE id = $2`, {
+      bind: [WRITER, shared.id],
+    });
+    assert.deepEqual(await yours(WRITER), [true]);
+    assert.deepEqual(await yours(OWNER), [false]);
+
+    await dbAdapter.execute(`UPDATE key_shares SET owner = $1 WHERE id = $2`, {
+      bind: [OWNER, shared.id],
+    });
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, WRITER] },
+    );
+    let lost = await listLimitNotices(appSession(WRITER));
+    assert.deepEqual(
+      lost.body.data,
+      [],
+      'a writer who lost direct write no longer sees the share',
+    );
+    assert.strictEqual(lost.body.meta.unread, 0);
+  });
+
+  test('only a secure session marks a recipient’s own limit notices read, and their sessions are told', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 5; i++) {
+      await call('check');
+    }
+    let ids = (
+      (await listLimitNotices(appSession(OWNER))).body.data as { id: string }[]
+    ).map(({ id }) => id);
+    assert.strictEqual(ids.length, 2);
+
+    const OWNER_ROOM = '!limits-owner-session-room:localhost';
+    try {
+      await upsertSessionRoom(dbAdapter, OWNER, OWNER_ROOM);
+    } catch {
+      await insertUser(dbAdapter, OWNER, 'cus_key_limits_owner', null);
+      await upsertSessionRoom(dbAdapter, OWNER, OWNER_ROOM);
+    }
+    sinon.stub(MatrixClient.prototype, 'isLoggedIn').returns(true);
+    let sent = sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+    let pushes = () =>
+      sent
+        .getCalls()
+        .map((c) => c.args as [string, string, Record<string, any>])
+        .filter(
+          (args) =>
+            args[0] === OWNER_ROOM &&
+            args[2]?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE &&
+            JSON.parse(args[2].body).eventType ===
+              KEY_NOTICES_UPDATED_EVENT_TYPE,
+        ).length;
+
+    let fromApp = await request
+      .post('/_key-limit-notices/read')
+      .set('Authorization', appSession(OWNER))
+      .set('Content-Type', 'application/json')
+      .send({ data: ids.map((id) => ({ type: 'key-limit-notice', id })) });
+    assert.strictEqual(
+      fromApp.status,
+      403,
+      'the app page, where card code runs, cannot clear the badge',
+    );
+
+    let byOther = await markLimitNoticesRead(
+      await secureSessionAuth(dbAdapter, WRITER),
+      ids,
+    );
+    assert.strictEqual(byOther.status, 200, byOther.text);
+    assert.strictEqual(byOther.body.meta.marked, 0, 'not the writer’s notices');
+
+    assert.strictEqual(
+      (
+        await markLimitNoticesRead(await secureSessionAuth(dbAdapter, OWNER), [
+          'x1',
+        ])
+      ).status,
+      400,
+      'a malformed id is refused',
+    );
+    assert.strictEqual(
+      (
+        await markLimitNoticesRead(
+          await secureSessionAuth(dbAdapter, OWNER),
+          ids,
+          'key-policy-notice',
+        )
+      ).status,
+      400,
+      'so is another kind of notice',
+    );
+    assert.strictEqual(pushes(), 0);
+
+    let marked = await markLimitNoticesRead(
+      await secureSessionAuth(dbAdapter, OWNER),
+      [ids[0]],
+    );
+    assert.strictEqual(marked.status, 200, marked.text);
+    assert.deepEqual(marked.body.meta, { marked: 1, unread: 1 });
+    assert.strictEqual(pushes(), 1, 'the owner’s sessions are told');
+
+    let again = await markLimitNoticesRead(
+      await secureSessionAuth(dbAdapter, OWNER),
+      ids,
+    );
+    assert.deepEqual(again.body.meta, { marked: 1, unread: 0 });
+    let listed = await listLimitNotices(appSession(OWNER));
+    assert.true(
+      (listed.body.data as { attributes: { readAt: string | null } }[]).every(
+        ({ attributes }) => typeof attributes.readAt === 'string',
+      ),
+    );
+
+    let none = await markLimitNoticesRead(
+      await secureSessionAuth(dbAdapter, OWNER),
+      ids,
+    );
+    assert.deepEqual(none.body.meta, { marked: 0, unread: 0 });
+    assert.strictEqual(pushes(), 2, 'marking nothing tells nobody');
   });
 
   test('counters that can’t be read refuse every interactive call, and nothing is sent', async function (assert) {

@@ -3,7 +3,9 @@
 // used it and how, and its limits, which the owner changes in place, since
 // this window is the owner's own. A usage that fails to load says so and
 // offers to try again, rather than reading as no use.
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
@@ -24,7 +26,14 @@ import LimitsForm from './limits-form.gts';
 import UsageSummary from './usage-summary.gts';
 
 interface Signature {
-  Args: { key: ListedKey; api: KeysWindowAPI };
+  Args: {
+    key: ListedKey;
+    api: KeysWindowAPI;
+    // Hands the key page a way to open this panel and bring it into view, as
+    // a limit notice's See usage… does; and takes it back when the panel
+    // goes.
+    onRegister?: (keyId: string, show: (() => void) | undefined) => void;
+  };
 }
 
 type State =
@@ -35,7 +44,11 @@ type State =
 
 export default class KeyUsagePanel extends Component<Signature> {
   <template>
-    <div class='usage-panel' data-test-key-usage-panel>
+    <div
+      class='usage-panel'
+      data-usage-panel={{@key.id}}
+      data-test-key-usage-panel
+    >
       {{! A disclosure, drawn as the usage's own "Details this month" is: a
           marker that turns as it opens, with the same name either way. }}
       <button
@@ -43,6 +56,7 @@ export default class KeyUsagePanel extends Component<Signature> {
         class='toggle'
         aria-expanded={{if this.isClosed 'false' 'true'}}
         aria-describedby='key-name-{{@key.id}}'
+        data-usage-panel-toggle
         data-test-key-usage-toggle
         {{on 'click' this.toggle}}
       >Usage and limits</button>
@@ -137,6 +151,29 @@ export default class KeyUsagePanel extends Component<Signature> {
   private page = trackedObject<{ state: State }>({
     state: { name: 'closed' },
   });
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    let { key, onRegister } = args;
+    if (onRegister) {
+      onRegister(key.id, this.show);
+      registerDestructor(this, () => onRegister(key.id, undefined));
+    }
+  }
+
+  // Opens the panel, unless it is open or opening, and moves focus to its
+  // disclosure, which brings it into view. The disclosure is drawn whether
+  // the panel is open or not, so it can take focus at once.
+  private show = () => {
+    if (this.isClosed || this.failed) {
+      this.load();
+    }
+    document
+      .querySelector<HTMLElement>(
+        `[data-usage-panel="${CSS.escape(this.args.key.id)}"] [data-usage-panel-toggle]`,
+      )
+      ?.focus();
+  };
 
   private get isClosed() {
     return this.page.state.name === 'closed';
