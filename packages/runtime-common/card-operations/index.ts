@@ -286,6 +286,7 @@ export {
   destinationCovers,
   notApproved,
   slotsIn,
+  type AnonymousCallApiCaller,
   type CallApiCredential,
   type CallApiFilledSlot,
   type CallApiGrantUse,

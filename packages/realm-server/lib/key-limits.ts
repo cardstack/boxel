@@ -13,7 +13,10 @@ import {
   type RateLimitStore,
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
-import { OperationFailure } from '@cardstack/runtime-common/card-operations';
+import {
+  OperationFailure,
+  type AnonymousCallApiCaller,
+} from '@cardstack/runtime-common/card-operations';
 import {
   KEY_LIMIT_COLUMNS,
   keyLimitDefaults,
@@ -49,6 +52,14 @@ import { UserKeyError } from './user-keys.ts';
 //   writers each get one notice for that period (`key_limit_notices`).
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
+// - **Callers who aren't signed in**, served by a share whose key allows
+//   anonymous use, have a bucket per address (the rate the share sets for each
+//   person, counted for each address instead), and spend the share's daily
+//   and monthly budgets as everyone does. All of them together spend at most
+//   `anonymousSharePercent` of the share's daily budget and of its monthly
+//   budget, so signed-in readers always keep the rest of each. Where the key's owner set the key's optional
+//   anonymous cap, they also draw together from it, across every realm the
+//   key is shared into.
 //
 // Only the key's owner changes a share's or a key's limits, from the secure
 // window or the CLI. A realm's other direct writers can't raise them; they
@@ -69,6 +80,11 @@ export type LimitSubject =
 interface LimitedSubject {
   subject: LimitSubject;
   limits: KeyLimits;
+  // The anonymous cap of the key the share holds, or of the key itself: calls
+  // a UTC day across everyone who isn't signed in, in every realm the key is
+  // shared into. Null where its owner set none. `capKeyId` is that key.
+  anonymousDailyCap: number | null;
+  capKeyId: string | null;
   owner: string;
   label: string;
   // The share's realm; absent for a personal key.
@@ -83,14 +99,15 @@ export type KeyLimitEvent =
       code: 'rate-limited' | 'over-budget' | 'rate-limit-unavailable';
       share: string | null;
       key: string | null;
+      // The signed-in caller, or `"anonymous"` for a caller who isn't
+      // signed in. Their address is never logged here.
       caller: string;
       realm: string;
       operation: string;
       // The limit that refused the call; absent when the counters couldn't
-      // be read.
-      limit?:
-        | { rateBurst: number; rateRefillPerMinute: number }
-        | { period: BudgetPeriod; budget: number };
+      // be read. `anonymousCap` marks a limit for people who aren't signed
+      // in: the key's anonymous cap, or their part of a share's budget.
+      limit?: Limit;
       retryAfterSeconds: number;
     }
   | {
@@ -156,12 +173,41 @@ function storeOf(dbAdapter: DBAdapter): RateLimitStore {
   return store;
 }
 
-function bucketKey(subject: LimitSubject, caller: string): string {
-  return counterKey('key-limit', subject.kind, subject.id, caller);
+type Limit =
+  | { rateBurst: number; rateRefillPerMinute: number }
+  | { period: BudgetPeriod; budget: number; anonymousCap?: true };
+
+// A caller who isn't signed in is counted by the address the realm admitted
+// them from, in a bucket of its own that no signed-in caller's id can name.
+function bucketKey(
+  subject: LimitSubject,
+  caller: string,
+  anonymous?: AnonymousCallApiCaller,
+): string {
+  return anonymous
+    ? counterKey(
+        'key-limit',
+        subject.kind,
+        subject.id,
+        'anonymous',
+        anonymous.address,
+      )
+    : counterKey('key-limit', subject.kind, subject.id, caller);
 }
 
 function budgetKey(subject: LimitSubject): string {
   return counterKey('key-limit', subject.kind, subject.id);
+}
+
+// The anonymous cap is the key's, so every realm the key is shared into
+// counts against one budget.
+function anonymousCapKey(keyId: string): string {
+  return counterKey('key-limit', 'key', keyId, 'anonymous');
+}
+
+// What people who aren't signed in have spent of one share's daily budget.
+function anonymousShareKey(subject: LimitSubject): string {
+  return counterKey('key-limit', subject.kind, subject.id, 'anonymous');
 }
 
 function bucketOf(limits: KeyLimits) {
@@ -171,11 +217,65 @@ function bucketOf(limits: KeyLimits) {
   };
 }
 
-function budgetsOf(limits: KeyLimits) {
-  return [
-    { period: 'day' as const, limit: limits.dailyBudget },
-    { period: 'month' as const, limit: limits.monthlyBudget },
+interface CountedBudget {
+  key: string;
+  period: BudgetPeriod;
+  limit: number;
+  anonymousCap?: true;
+}
+
+// The budgets a call spends: the share's or key's daily and monthly budgets,
+// and for a caller who isn't signed in, more. One is their part of the share's
+// daily budget and of its monthly budget (`anonymousSharePercent` of each), so
+// signed-in readers always keep the rest of both. The other is the key's
+// anonymous cap, where its owner set one, counted once across every realm the
+// key is shared into.
+function budgetsOf(
+  limited: LimitedSubject,
+  anonymous?: AnonymousCallApiCaller,
+): CountedBudget[] {
+  let key = budgetKey(limited.subject);
+  let budgets: CountedBudget[] = [
+    { key, period: 'day', limit: limited.limits.dailyBudget },
+    { key, period: 'month', limit: limited.limits.monthlyBudget },
   ];
+  if (anonymous && limited.subject.kind === 'share') {
+    let percent = keyLimitDefaults().anonymousSharePercent;
+    let partOf = (budget: number) =>
+      Math.max(1, Math.floor((budget * percent) / 100));
+    let anonymousKey = anonymousShareKey(limited.subject);
+    budgets.push(
+      {
+        key: anonymousKey,
+        period: 'day',
+        limit: partOf(limited.limits.dailyBudget),
+        anonymousCap: true,
+      },
+      {
+        key: anonymousKey,
+        period: 'month',
+        limit: partOf(limited.limits.monthlyBudget),
+        anonymousCap: true,
+      },
+    );
+  }
+  if (anonymous && limited.anonymousDailyCap != null && limited.capKeyId) {
+    budgets.push({
+      key: anonymousCapKey(limited.capKeyId),
+      period: 'day',
+      limit: limited.anonymousDailyCap,
+      anonymousCap: true,
+    });
+  }
+  return budgets;
+}
+
+function limitOf(budget: CountedBudget): Limit {
+  return {
+    period: budget.period,
+    budget: budget.limit,
+    ...(budget.anonymousCap ? { anonymousCap: true as const } : {}),
+  };
 }
 
 // The subjects as the database holds them now, each once. One that is gone
@@ -197,11 +297,11 @@ async function limitedSubjects(
       dbAdapter,
       subject.kind === 'share'
         ? [
-            `SELECT owner, label, realm_url, ${KEY_LIMIT_COLUMNS} FROM key_shares WHERE id = `,
+            `SELECT s.owner, s.label, s.realm_url, s.key_id AS cap_key_id, k.anonymous_daily_cap, s.rate_burst, s.rate_refill_per_minute, s.daily_budget, s.monthly_budget FROM key_shares s LEFT JOIN user_keys k ON k.id = s.key_id WHERE s.id = `,
             param(subject.id),
           ]
         : [
-            `SELECT owner, name AS label, ${KEY_LIMIT_COLUMNS} FROM user_keys WHERE id = `,
+            `SELECT owner, name AS label, id AS cap_key_id, anonymous_daily_cap, ${KEY_LIMIT_COLUMNS} FROM user_keys WHERE id = `,
             param(subject.id),
           ],
     );
@@ -211,6 +311,11 @@ async function limitedSubjects(
     found.push({
       subject,
       limits: limitsOf(row),
+      anonymousDailyCap:
+        row.anonymous_daily_cap == null
+          ? null
+          : Number(row.anonymous_daily_cap),
+      capKeyId: (row.cap_key_id as string | null) ?? null,
       owner: row.owner as string,
       label: row.label as string,
       ...(subject.kind === 'share'
@@ -225,6 +330,8 @@ export interface LimitedCall {
   realmURL: string;
   operation: string;
   caller: string;
+  // Set for a caller who isn't signed in: only shares serve one.
+  anonymous?: AnonymousCallApiCaller;
   subjects: LimitSubject[];
 }
 
@@ -246,13 +353,10 @@ export async function chargeInteractiveCall(
   // Reading every budget first refuses a call that is plainly over one
   // without taking anything at all.
   for (let limited of subjects) {
-    for (let budget of budgetsOf(limited.limits)) {
-      let outcome = await store.budget(budgetKey(limited.subject), budget);
+    for (let budget of budgetsOf(limited, call.anonymous)) {
+      let outcome = await store.budget(budget.key, budget);
       if (!outcome.admitted) {
-        throw refuse(call, limited, outcome, {
-          period: budget.period,
-          budget: budget.limit,
-        });
+        throw refuse(call, limited, outcome, limitOf(budget));
       }
     }
   }
@@ -276,7 +380,7 @@ export async function chargeInteractiveCall(
 
   for (let limited of subjects) {
     let bucket = bucketOf(limited.limits);
-    let key = bucketKey(limited.subject, call.caller);
+    let key = bucketKey(limited.subject, call.caller, call.anonymous);
     let outcome = await store.take(key, bucket);
     if (!outcome.admitted) {
       await giveBack();
@@ -293,22 +397,24 @@ export async function chargeInteractiveCall(
   // notices below are sent only for a call that was counted.
   let reached: {
     limited: LimitedSubject;
-    budget: { period: BudgetPeriod; limit: number };
+    budget: CountedBudget;
     outcome: Extract<BudgetOutcome, { admitted: true }>;
   }[] = [];
   for (let limited of subjects) {
-    for (let budget of budgetsOf(limited.limits)) {
-      let key = budgetKey(limited.subject);
+    for (let budget of budgetsOf(limited, call.anonymous)) {
+      let { key } = budget;
       let outcome = await store.spend(key, budget);
       if (!outcome.admitted) {
         await giveBack();
-        throw refuse(call, limited, outcome, {
-          period: budget.period,
-          budget: budget.limit,
-        });
+        throw refuse(call, limited, outcome, limitOf(budget));
       }
       spent.push({ key, period: budget.period, resetsAt: outcome.resetsAt });
-      reached.push({ limited, budget, outcome });
+      // The anonymous cap sends no notice of its own: reaching it refuses
+      // only callers who aren't signed in, and the share's budgets, which
+      // their calls spend too, notify as they always do.
+      if (!budget.anonymousCap) {
+        reached.push({ limited, budget, outcome });
+      }
     }
   }
   for (let { limited, budget, outcome } of reached) {
@@ -323,21 +429,29 @@ export async function chargeInteractiveCall(
 // and the call refuses `rate-limit-unavailable` itself.
 export async function limitReadiness(
   dbAdapter: DBAdapter,
-  { caller, subjects }: { caller: string; subjects: LimitSubject[] },
+  {
+    caller,
+    anonymous,
+    subjects,
+  }: {
+    caller: string;
+    anonymous?: AnonymousCallApiCaller;
+    subjects: LimitSubject[];
+  },
 ): Promise<'ready' | 'rate-limited' | 'over-budget'> {
   let limited = await limitedSubjects(dbAdapter, subjects);
   let store = storeOf(dbAdapter);
   let answer: 'ready' | 'rate-limited' = 'ready';
-  for (let { subject, limits } of limited) {
-    for (let budget of budgetsOf(limits)) {
-      let outcome = await store.budget(budgetKey(subject), budget);
+  for (let one of limited) {
+    for (let budget of budgetsOf(one, anonymous)) {
+      let outcome = await store.budget(budget.key, budget);
       if (!outcome.admitted && !isRateLimitUnavailable(outcome)) {
         return 'over-budget';
       }
     }
     let outcome = await store.peek(
-      bucketKey(subject, caller),
-      bucketOf(limits),
+      bucketKey(one.subject, caller, anonymous),
+      bucketOf(one.limits),
     );
     if (!outcome.admitted && !isRateLimitUnavailable(outcome)) {
       answer = 'rate-limited';
@@ -350,9 +464,7 @@ function refuse(
   call: LimitedCall,
   limited: LimitedSubject,
   outcome: Exclude<TokenBucketOutcome | BudgetOutcome, { admitted: true }>,
-  limit:
-    | { rateBurst: number; rateRefillPerMinute: number }
-    | { period: BudgetPeriod; budget: number },
+  limit: Limit,
 ): OperationFailure {
   let { subject } = limited;
   let ids = {
@@ -399,9 +511,11 @@ function refuse(
         code: 'over-budget',
         title: 'Over budget',
         detail:
-          subject.kind === 'share'
-            ? `operation "${call.operation}" wasn't sent: this realm's limit for its shared key is reached. It resets in ${wait}.`
-            : `operation "${call.operation}" wasn't sent: the ${(limit as { period: BudgetPeriod }).period === 'day' ? 'daily' : 'monthly'} budget you set for your key is used up. It resets in ${wait}.`,
+          'anonymousCap' in limit
+            ? `operation "${call.operation}" wasn't sent: the limit on its shared key for people who aren't signed in is reached. It resets in ${wait}, and signing in may let you use it now.`
+            : subject.kind === 'share'
+              ? `operation "${call.operation}" wasn't sent: this realm's limit for its shared key is reached. It resets in ${wait}.`
+              : `operation "${call.operation}" wasn't sent: the ${(limit as { period: BudgetPeriod }).period === 'day' ? 'daily' : 'monthly'} budget you set for your key is used up. It resets in ${wait}.`,
         meta: { retryAfterSeconds },
       })
     : new OperationFailure({

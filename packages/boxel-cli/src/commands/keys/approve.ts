@@ -351,6 +351,31 @@ function printBatch(
         say(ctx, `  ${FG_YELLOW}${INTERACTIVE_CONFIRMATION[kind]}${RESET}`);
       }
     }
+    // As the approve window says: who besides signed-in people the calls the
+    // realm's policy opens to visitors serve, by the share's key's setting.
+    let visitorShares = new Map<
+      string,
+      { share: ApprovalBatch['shares'][number]; operations: string[] }
+    >();
+    for (let p of planned.filter((p) => p.operation.openToAnonymous)) {
+      for (let fill of p.fills.filter((f) => f.kind === 'apiKey')) {
+        let share = batch.shares.find((s) => s.id === fill.id);
+        if (!share) {
+          continue;
+        }
+        let entry = visitorShares.get(share.id) ?? { share, operations: [] };
+        entry.operations.push(p.operation.label);
+        visitorShares.set(share.id, entry);
+      }
+    }
+    for (let { share, operations } of visitorShares.values()) {
+      say(
+        ctx,
+        share.anonymous
+          ? `  ${FG_YELLOW}Anyone on the internet who opens this card, including people who aren't signed in, can make ${operations.join(', ')} with ${share.label}${share.anonymousDailyCap != null ? `, up to ${share.anonymousDailyCap} calls a day all together` : ''}.${RESET}`
+          : `  This realm lets people who aren't signed in make ${operations.join(', ')}, but ${share.label}'s key allows signed-in people only, so they're asked to sign in.`,
+      );
+    }
   }
   let remaining =
     batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
