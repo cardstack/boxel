@@ -20,14 +20,31 @@ export function onMembershipEvent({
     _membershipEvent: MatrixEvent,
     member: RoomMember,
   ) {
+    if (member.membership !== 'invite' || member.userId !== authUserId) {
+      return;
+    }
     try {
-      if (member.membership === 'invite' && member.userId === authUserId) {
-        log.info(`joining room ${member.roomId} from invite`);
-        await client.joinRoom(member.roomId);
-      }
+      log.info(`joining room ${member.roomId} from invite`);
+      await client.joinRoom(member.roomId);
     } catch (error) {
+      if (isUnjoinable(error)) {
+        // Otherwise the dead invite is retried, and fails, on every start.
+        log.info(`rejecting invite to unjoinable room ${member.roomId}`);
+        try {
+          await client.leave(member.roomId);
+        } catch (leaveError) {
+          log.error('error rejecting invite', leaveError);
+          Sentry.captureException(leaveError);
+        }
+        return;
+      }
       log.error('error handling membership event', error);
       Sentry.captureException(error);
     }
   };
+}
+
+function isUnjoinable(error: unknown): boolean {
+  let errcode = (error as { errcode?: unknown } | undefined)?.errcode;
+  return errcode === 'M_FORBIDDEN' || errcode === 'M_NOT_FOUND';
 }

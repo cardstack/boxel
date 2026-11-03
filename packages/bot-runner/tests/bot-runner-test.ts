@@ -113,6 +113,64 @@ module('membership handler', () => {
 
     assert.deepEqual(joinedRooms, [], 'ignores invites for other users');
   });
+
+  test('rejects an invite to a room it can no longer join', async (assert) => {
+    let leftRooms: string[] = [];
+    let handle = onMembershipEvent({
+      client: makeMatrixClient({
+        joinRoom: async () => {
+          throw Object.assign(new Error('not allowed'), {
+            errcode: 'M_FORBIDDEN',
+          });
+        },
+        leave: async (roomId: string) => {
+          leftRooms.push(roomId);
+          return {};
+        },
+      }),
+      authUserId: '@submissionbot:localhost',
+    });
+
+    await handle(
+      makeStrippedInviteEvent('@submissionbot:localhost'),
+      makeMember({
+        membership: 'invite',
+        userId: '@submissionbot:localhost',
+        roomId: '!dead-room:localhost',
+        name: 'submissionbot',
+      }),
+    );
+
+    assert.deepEqual(leftRooms, ['!dead-room:localhost'], 'rejects the invite');
+  });
+
+  test('keeps the invite when joining fails for another reason', async (assert) => {
+    let leftRooms: string[] = [];
+    let handle = onMembershipEvent({
+      client: makeMatrixClient({
+        joinRoom: async () => {
+          throw new Error('connection reset');
+        },
+        leave: async (roomId: string) => {
+          leftRooms.push(roomId);
+          return {};
+        },
+      }),
+      authUserId: '@submissionbot:localhost',
+    });
+
+    await handle(
+      makeStrippedInviteEvent('@submissionbot:localhost'),
+      makeMember({
+        membership: 'invite',
+        userId: '@submissionbot:localhost',
+        roomId: '!room-id:localhost',
+        name: 'submissionbot',
+      }),
+    );
+
+    assert.deepEqual(leftRooms, [], 'leaves the invite pending');
+  });
 });
 
 module('timeline handler', () => {
