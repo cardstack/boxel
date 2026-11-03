@@ -2849,6 +2849,23 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(reads(), 3, 'the file was read again once');
       });
 
+      test('is re-read and rendered when the index holds no row for it yet', async function (assert) {
+        // The spawning pass had not committed by the time the visits began.
+        await realmCreatedFile('notes.txt');
+        let { reader, reads } = readerMissing(notesURL, 2);
+
+        await runPassAt(passArgs(reader, [5, 5, 5]));
+
+        let row = await productionRow(notesURL, 'file');
+        assert.strictEqual(
+          row?.isolated_html,
+          '<pre>notes</pre>',
+          'the file the realm just created gets its HTML',
+        );
+        assert.false(Boolean(row?.is_deleted));
+        assert.strictEqual(reads(), 3, 'the file was read again once');
+      });
+
       test('is taken as removed at once when the realm no longer records it', async function (assert) {
         // The index still holds the file, but the realm removed it after the
         // index pass committed.
@@ -2866,9 +2883,12 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(reads(), 2, 'one attempt, under both URL forms');
       });
 
-      // Each case below leaves the realm recording the file, so the index row
-      // is the only thing that can keep the pass from re-reading it.
-      async function assertTakenAsRemoved(assert: Assert) {
+      test('is taken as removed at once when the index holds it as a tombstone', async function (assert) {
+        // A card delete that names the extensionless URL tombstones the
+        // `.json` row while the fan-out still carries that form as an update.
+        await indexFileRow(notesURL, true);
+        // The realm records the file as just created, so the tombstone is the
+        // only thing that can keep the pass from re-reading it.
         await realmCreatedFile('notes.txt');
         let { reader, reads } = readerMissing(notesURL, Infinity);
         let start = Date.now();
@@ -2884,17 +2904,6 @@ module(basename(import.meta.filename), function () {
         let row = await productionRow(notesURL, 'file');
         let live = Boolean(row) && !row?.is_deleted;
         assert.false(live, 'the file gets no live rendering');
-      }
-
-      test('is taken as removed at once when the index holds it as a tombstone', async function (assert) {
-        // A card delete that names the extensionless URL tombstones the
-        // `.json` row while the fan-out still carries that form as an update.
-        await indexFileRow(notesURL, true);
-        await assertTakenAsRemoved(assert);
-      });
-
-      test('is taken as removed at once when the index holds no row for it', async function (assert) {
-        await assertTakenAsRemoved(assert);
       });
     });
 

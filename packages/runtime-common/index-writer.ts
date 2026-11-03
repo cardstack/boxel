@@ -726,9 +726,9 @@ export class Batch {
   // `boxel_index` generation by row type, read once the job's spawning passes
   // have committed. Undefined until `adoptIndexGenerations` runs.
   #indexGenerations: Map<string, number> | undefined;
-  // The URLs of those that the index holds as a file or card rather than as a
-  // tombstone, read with the generations.
-  #liveIndexURLs: Set<string> | undefined;
+  // The URLs of those that the index holds only as tombstones, read with the
+  // generations.
+  #tombstonedIndexURLs: Set<string> | undefined;
   #priorLoaderEpoch = '0';
   #mintedLoaderEpoch: string | undefined;
   #hasExecutableInvalidation = false;
@@ -1946,6 +1946,7 @@ export class Batch {
     }
     await this.ready;
     let indexGenerations = new Map<string, number>();
+    let indexedURLs = new Set<string>();
     let liveIndexURLs = new Set<string>();
     let uniqueURLs = [...new Set(urls)];
     for (let offset = 0; offset < uniqueURLs.length; offset += 10000) {
@@ -1967,6 +1968,7 @@ export class Batch {
       > & { is_deleted: boolean | null })[];
       for (let { url, type, generation, is_deleted } of rows) {
         indexGenerations.set(indexGenerationKey(url, type), Number(generation));
+        indexedURLs.add(url);
         if (!is_deleted) {
           liveIndexURLs.add(url);
         }
@@ -1978,22 +1980,22 @@ export class Batch {
     ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     this.#provisionalGeneration = row ? Number(row.current_generation) : 0;
     this.#indexGenerations = indexGenerations;
-    this.#liveIndexURLs = liveIndexURLs;
+    this.#tombstonedIndexURLs = new Set(
+      [...indexedURLs].filter((url) => !liveIndexURLs.has(url)),
+    );
     return this.#provisionalGeneration;
   }
 
-  // Whether the committed index holds `url` as a file or card, among the URLs
-  // `adoptIndexGenerations` read. The index pass that published such a row
-  // read the file, so a visit that cannot read it is reading through a stale
-  // view of the realm unless the realm has removed the file since (see
-  // `recordedCreatedAt`).
-  indexHoldsLiveRow(url: string): boolean {
-    if (!this.#liveIndexURLs) {
+  // Whether the committed index holds `url` only as a tombstone, among the
+  // URLs `adoptIndexGenerations` read: the index pass that committed it took
+  // the file as removed.
+  indexHoldsTombstone(url: string): boolean {
+    if (!this.#tombstonedIndexURLs) {
       throw new Error(
         `the prerender-html batch for ${this.realmURL.href} asked about ${url} before adopting the index generations`,
       );
     }
-    return this.#liveIndexURLs.has(url);
+    return this.#tombstonedIndexURLs.has(url);
   }
 
   // The generation this batch stamps on the `prerendered_html` row of `url`

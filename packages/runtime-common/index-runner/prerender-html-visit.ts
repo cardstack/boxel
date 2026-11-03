@@ -130,8 +130,8 @@ export interface PrerenderHtmlPassArgs {
   // null manifests.
   dbAdapter?: DBAdapter;
   mediaCacheAdapter?: MediaCacheAdapter;
-  // The delays a visit re-reads a file the committed index holds through when
-  // it reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
+  // The delays a visit re-reads a file the realm just created through when it
+  // reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
   writtenFileRereadDelaysMs?: readonly number[];
 }
 
@@ -1047,19 +1047,21 @@ async function visitForPrerenderedHtml({
   let readFile = async () =>
     (await reader.readFile(url)) ??
     (await reader.readFile(new URL(encodeURI(localPath), url)));
-  // A file the committed index holds was read by the index pass that
-  // published its row, so while the realm records it as just created, a miss
-  // here is this read landing on a stale view of the realm (see
-  // WrittenFileRereads), not a removal. A URL the index holds as a tombstone,
-  // or not at all, is a removal and is taken as one at once.
-  let fileRef = batch.indexHoldsLiveRow(url.href)
-    ? await writtenFileRereads.readVisitedFile(readFile, {
+  // While the realm records a file as just created, a miss here is this read
+  // landing on a stale view of the realm (see WrittenFileRereads), not a
+  // removal. That holds whether the committed index holds the file live or
+  // has no row for it yet, as when the spawning pass had not committed by the
+  // time the visits began. A URL the index holds as a tombstone is one the
+  // index pass took as removed, and this pass takes it as removed too, so the
+  // two channels agree.
+  let fileRef = batch.indexHoldsTombstone(url.href)
+    ? await readFile()
+    : await writtenFileRereads.readVisitedFile(readFile, {
         recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
-        label: `${jobIdentity(jobInfo)} indexed file ${url.href}`,
+        label: `${jobIdentity(jobInfo)} file ${url.href}`,
         ifMissing: 'rendering nothing for it',
         log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },
-      })
-    : await readFile();
+      });
   if (!fileRef) {
     // Unreadable file — the same outcome as the index visit's
     // missing-file handling: write nothing, so the up-front tombstone
