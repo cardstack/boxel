@@ -34,6 +34,9 @@ export type InputValidationState = 'none' | 'valid' | 'invalid' | 'initial';
 export interface Signature {
   Args: {
     autocomplete?: string;
+    // The id of an element that describes the input, such as a note under it;
+    // it is read with the error message, when there is one.
+    describedBy?: string;
     errorMessage?: string;
     id?: string;
     onBlur?: (ev: Event) => void;
@@ -93,6 +96,11 @@ export default class BoxelInput extends Component<Signature> {
       : undefined;
   }
 
+  private get describedBy() {
+    let ids = [this.args.describedBy, this.errorMessageId].filter(Boolean);
+    return ids.length > 0 ? ids.join(' ') : undefined;
+  }
+
   private onInput = (event: Event) => {
     this.args.onInput?.(
       (event.target as HTMLInputElement | HTMLTextAreaElement).value,
@@ -118,7 +126,7 @@ export default class BoxelInput extends Component<Signature> {
           value={{@value}}
           placeholder={{@placeholder}}
           autocomplete={{@autocomplete}}
-          aria-describedby={{this.errorMessageId}}
+          aria-describedby={{this.describedBy}}
           aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{this.errorMessageId}}
           data-test-boxel-input
@@ -145,7 +153,7 @@ export default class BoxelInput extends Component<Signature> {
           value={{@value}}
           placeholder={{@placeholder}}
           autocomplete={{@autocomplete}}
-          aria-describedby={{this.errorMessageId}}
+          aria-describedby={{this.describedBy}}
           aria-invalid={{if this.isInvalid 'true'}}
           aria-errormessage={{this.errorMessageId}}
           data-test-boxel-input

@@ -80,7 +80,7 @@ class DocReportUsage extends GlimmerComponent {
       <:api as |Args|>
         <Args.Object
           @name='cards'
-          @description='The cards this report cites: { id, label, summary?, icon? }. The icon is a boxel-ui export name resolved through icon-registry — data, never a static component. Each pill is a real button, so the preview is reachable by Tab as well as by pointer.'
+          @description='The cards this report cites: { id, label, summary?, icon? }. The icon is an icon-registry key, such as a boxel-icons name, resolved to its icon — data, never a static component. Each pill is a real button, so the preview is reachable by Tab as well as by pointer.'
           @value={{REPORT_CARDS}}
         />
         <Args.Array

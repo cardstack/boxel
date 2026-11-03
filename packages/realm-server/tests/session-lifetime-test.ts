@@ -31,6 +31,7 @@ function makeAuthentication() {
     login: async () => {},
     verifyOpenIdToken: async () => user,
     getUserId: () => '@realm:localhost',
+    serverName: 'localhost',
   } as any;
   let utils = {
     badRequest: (message: string) =>

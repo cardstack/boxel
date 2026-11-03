@@ -1,5 +1,7 @@
 import {
   click,
+  fillIn,
+  find,
   render,
   settled,
   waitFor,
@@ -281,7 +283,11 @@ module('Integration | approve pages', function (hooks) {
     assert.deepEqual(
       requests.find((r) => r.path === '_key-bindings/batch')?.body.data
         .attributes,
-      { target: { kind: 'instance', url: CARD }, review: false },
+      {
+        target: { kind: 'instance', url: CARD },
+        review: false,
+        interactive: true,
+      },
       'the page asks for the batch of the card it was opened for, never naming its operations',
     );
     assert
@@ -344,10 +350,10 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-also-sends]')
       .hasText(
-        'This approves the requests shown above, including sending GitHub token to uploads.github.com for the first time.',
+        'Approving lets Boxel make the calls above, and send GitHub token to uploads.github.com for the first time.',
         'the one confirmation sums up what it approves',
       );
-    assert.dom('[data-test-approve-save]').hasText('Approve 4 requests');
+    assert.dom('[data-test-approve-save]').hasText('Approve 4 calls');
     await click('[data-test-approve-save]');
     await settled();
 
@@ -403,7 +409,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-new-grant]')
       .doesNotExist('nothing is sent to uploads.github.com, so no grant');
     assert.dom('[data-test-approve-also-sends]').doesNotExist();
-    assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+    assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
     await click('[data-test-approve-save]');
     await settled();
     assert.deepEqual(
@@ -439,7 +445,7 @@ module('Integration | approve pages', function (hooks) {
       assert
         .dom('[data-test-approve-key="Another token"] input')
         .isChecked('the key the CLI named starts chosen');
-      assert.dom('[data-test-approve-save]').hasText('Approve 2 requests');
+      assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
 
       await click('[data-test-approve-save]');
@@ -676,7 +682,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-also-sends]')
       .includesText(
-        'sending Another token to api.github.com, uploads.github.com for the first time',
+        'send Another token to api.github.com, uploads.github.com for the first time',
       );
   });
 
@@ -722,7 +728,7 @@ module('Integration | approve pages', function (hooks) {
         .attributes.review,
       'review asks for the changed operations only',
     );
-    assert.dom('[data-test-keys-heading]').hasText('Review changed requests');
+    assert.dom('[data-test-keys-heading]').hasText('Review changed calls');
     assert.dom('[data-test-approve-changed]').hasText('Changed');
     assert
       .dom('[data-test-approve-diff-field]')
@@ -751,7 +757,7 @@ module('Integration | approve pages', function (hooks) {
     await waitFor('[data-test-approve-form]');
     assert
       .dom('[data-test-approve-remaining]')
-      .includesText('3 more requests on this card need approving');
+      .includesText('This card has 3 more calls to approve');
   });
 
   test('a batch with nothing in it says so', async function (assert) {
@@ -1055,5 +1061,320 @@ module('Integration | approve pages', function (hooks) {
       ['replace'],
       'back to the key page, not closed',
     );
+  });
+  // An operation approved, unchanged, for pipelines only: in the batch only
+  // for interactive use.
+  function pipelinesOnly(name: string, label: string) {
+    let base = operation(name, label);
+    return {
+      ...base,
+      status: 'pipelines-only',
+      slots: base.slots.map((s) => ({
+        ...s,
+        status: 'pipelines-only',
+        approved: {
+          snapshot: s.snapshot,
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: false,
+        },
+      })),
+    };
+  }
+
+  test('requests start approved for pipelines only; choosing interactive use shows what it allows, once, and approves it', async function (assert) {
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    operation('listPRs', 'List your open pull requests'),
+                    pipelinesOnly('listReviews', 'List reviews'),
+                  ],
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.true(
+      requests.find((r) => r.path === '_key-bindings/batch')?.body.data
+        .attributes.interactive,
+      'the batch also answers what is approved for pipelines only',
+    );
+    assert
+      .dom('[data-test-radio-choice="pipelines"] input')
+      .isChecked('pipelines only is where the choice starts');
+    assert
+      .dom('[data-test-approve-operation="listReviews"]')
+      .doesNotExist('one approved for pipelines already needs nothing more');
+    assert.dom('[data-test-approve-interactive]').doesNotExist();
+
+    await click('[data-test-radio-choice="interactive"] input');
+    assert.dom('[data-test-approve-operation="listReviews"]').exists();
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 1 })
+      .hasText(
+        'Any card you open can make these calls as you and read what comes back.',
+      );
+    assert.dom('[data-test-approve-budget]').doesNotExist();
+    assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
+
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.strictEqual(approval.dailyBudgets, undefined);
+    assert.deepEqual(
+      approval.operations.map((o: { operation: string }) => o.operation),
+      ['listPRs', 'listReviews'],
+    );
+  });
+
+  test('approving for pipelines only sends no interactive approval', async function (assert) {
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.strictEqual(approval.interactive, undefined);
+    assert.strictEqual(approval.operations.length, 4);
+  });
+
+  // A batch of one group holding `operations`.
+  function batchOf(operations: unknown[]) {
+    return {
+      groups: [
+        {
+          destination: {
+            href: GRAPHQL,
+            host: 'api.github.com',
+            path: '/graphql/',
+            registrableDomain: 'github.com',
+          },
+          operations,
+        },
+      ],
+    };
+  }
+
+  // An operation whose request changed since it was last approved, and that
+  // approval allowed interactive use.
+  function changedInteractive(name: string, label: string) {
+    let base = operation(name, label);
+    return {
+      ...base,
+      status: 'changed',
+      slots: base.slots.map((s) => ({
+        ...s,
+        status: 'changed',
+        approved: {
+          snapshot: s.snapshot,
+          keyId: 'key-gh',
+          shareId: null,
+          interactive: true,
+        },
+      })),
+    };
+  }
+
+  async function openWith(operations: unknown[]) {
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch(batchOf(operations)),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+  }
+
+  test('a batch holding only requests approved for pipelines starts on interactive use, each marked', async function (assert) {
+    await openWith([pipelinesOnly('listPRs', 'List PRs')]);
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    assert
+      .dom(
+        '[data-test-approve-operation="listPRs"] [data-test-approve-pipelines-only]',
+      )
+      .hasText('Approved for the schedule');
+  });
+
+  test('a batch whose every request was last approved for interactive use starts on it, so approving again keeps it', async function (assert) {
+    await openWith([changedInteractive('listPRs', 'List PRs')]);
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+  });
+
+  test('one request approved for interactive use among new ones starts on pipelines only', async function (assert) {
+    await openWith([
+      changedInteractive('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+      pipelinesOnly('listComments', 'List comments'),
+    ]);
+    assert
+      .dom('[data-test-radio-choice="pipelines"] input')
+      .isChecked('the new request is not widened by default');
+    assert
+      .dom('[data-test-approve-operation="listComments"]')
+      .doesNotExist('one approved for pipelines needs nothing for pipelines');
+  });
+
+  test('approving a request last approved for interactive use for pipelines only says it stops running when the card is opened', async function (assert) {
+    await openWith([
+      changedInteractive('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert
+      .dom(
+        '[data-test-approve-operation="listPRs"] [data-test-approve-open-cards]',
+      )
+      .hasText('Approved for open cards');
+    assert
+      .dom(
+        '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
+      )
+      .doesNotExist();
+    assert
+      .dom('[data-test-approve-demoted]')
+      .includesText('stops the calls marked “Approved for open cards”');
+
+    await click('[data-test-approve-tick="listPRs"]');
+    assert
+      .dom('[data-test-approve-demoted]')
+      .doesNotExist('an unticked call is not approved, so keeps its use');
+    await click('[data-test-approve-tick="listPRs"]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-demoted]')
+      .doesNotExist('interactive use keeps it');
+
+    await click('[data-test-radio-choice="pipelines"] input');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.strictEqual(approval.interactive, undefined);
+    assert.strictEqual(approval.operations.length, 2);
+  });
+
+  test('the intro says which cards the approval covers', async function (assert) {
+    await openWith([operation('listPRs', 'List PRs')]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText('the approval covers every card of this kind');
+
+    await openWith([
+      operation('listPRs', 'List PRs', { instance: CARD }),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText(
+        'Some cover only this card, and the rest cover every card of this kind',
+      );
+
+    await openWith([operation('listPRs', 'List PRs', { instance: CARD })]);
+    assert
+      .dom('[data-test-approve]')
+      .includesText('You approve these calls once, for this card.');
+  });
+
+  test("a share's first interactive approval asks for its daily budget, starting from the one in force", async function (assert) {
+    let shared = operation('listTeamPRs', 'List the team’s pull requests');
+    serve({
+      'POST _key-bindings/batch': () =>
+        json(200, {
+          data: {
+            type: 'key-binding-batch',
+            attributes: batch({
+              groups: [
+                {
+                  destination: {
+                    href: GRAPHQL,
+                    host: 'api.github.com',
+                    path: '/graphql/',
+                    registrableDomain: 'github.com',
+                  },
+                  operations: [
+                    {
+                      ...shared,
+                      slots: shared.slots.map((s) => ({
+                        ...s,
+                        slot: 'apiKey',
+                        key: 'apiKey',
+                      })),
+                    },
+                  ],
+                },
+              ],
+              keys: [],
+              shares: [
+                {
+                  id: 'share-team',
+                  label: 'Team GitHub',
+                  keyId: 'key-gh',
+                  keyName: 'GitHub token',
+                  covers: [GRAPHQL],
+                  interactive: false,
+                  dailyBudget: 2400,
+                },
+              ],
+            }),
+          },
+        }),
+    });
+    visitShell(opened);
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="interactive"] input');
+    assert
+      .dom('[data-test-approve-confirmation]')
+      .exists({ count: 1 })
+      .includesText('Any card a reader of this realm opens, from any realm');
+    assert
+      .dom('[data-test-approve-budget="Team GitHub"] input')
+      .hasValue('2400');
+    let input = find('[data-test-approve-budget="Team GitHub"] input')!;
+    let name = input
+      .getAttribute('aria-labelledby')!
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent?.trim())
+      .join(' ');
+    assert.strictEqual(
+      name,
+      'Daily budget for Team GitHub',
+      'the field is named by its label alone',
+    );
+    assert
+      .dom(document.getElementById(input.getAttribute('aria-describedby')!))
+      .includesText('in total across everyone', 'its note describes it');
+
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
+    assert
+      .dom('[data-test-approve-save]')
+      .isDisabled('a budget that is not a whole number is not sent');
+    await fillIn('[data-test-approve-budget="Team GitHub"] input', '500');
+    await click('[data-test-approve-save]');
+    await settled();
+    let [approval] = approvals();
+    assert.true(approval.interactive);
+    assert.deepEqual(approval.dailyBudgets, { 'share-team': 500 });
   });
 });

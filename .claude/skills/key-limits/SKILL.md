@@ -126,6 +126,10 @@ WHERE bucket_key = '["key-limit","key","<key-id>","@someone:boxel.ai"]';
 
 ## Who changes them
 
+A share's first interactive approval also sets its daily budget, in the same
+transaction (see the `key-bindings` skill): from then on every reader of the
+realm can spend it, so its owner names the budget as they allow it.
+
 Only the key's owner — for a share, the owner of the key it holds — and only
 with a session signed in on the secure origin, from a request whose `Origin`
 is the secure origin or absent (the CLI), as for approving a binding. The

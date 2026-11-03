@@ -206,6 +206,7 @@ export class Worker {
   #queuePublisher: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
+  #matrixServerName: string;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
   #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
@@ -225,6 +226,7 @@ export class Worker {
     queuePublisher,
     virtualNetwork,
     matrixURL,
+    matrixServerName,
     realmServerMatrixUsername,
     secretSeed,
     reportStatus,
@@ -242,6 +244,9 @@ export class Worker {
     queuePublisher: QueuePublisher;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
+    // The name of the Matrix server the homeserver at `matrixURL` serves
+    // (ADR 004 §1.2).
+    matrixServerName: string;
     realmServerMatrixUsername: string;
     secretSeed: string;
     prerenderer: Prerenderer;
@@ -261,6 +266,7 @@ export class Worker {
     this.#indexWriter = indexWriter;
     this.#virtualNetwork = virtualNetwork;
     this.#matrixURL = matrixURL;
+    this.#matrixServerName = matrixServerName;
     this.#secretSeed = secretSeed;
     this.#reportStatus = reportStatus;
     this.#reportProgress = reportProgress;
@@ -286,6 +292,7 @@ export class Worker {
       getReader,
       log: this.#log,
       matrixURL: this.#matrixURL.href,
+      matrixServerName: this.#matrixServerName,
       dbAdapter: this.#dbAdapter,
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
@@ -374,6 +381,7 @@ export class Worker {
     } else {
       matrixClient = new MatrixClient({
         matrixURL: new URL(this.#matrixURL),
+        serverName: this.#matrixServerName,
         username: this.#realmServerMatrixUsername,
         seed: this.#secretSeed,
       });
@@ -395,7 +403,7 @@ export class Worker {
     }
     let realmUserId = userIdFromUsername(
       args.realmUsername,
-      this.#matrixURL.href,
+      this.#matrixServerName,
     );
     _fetch = fetcher(
       this.#virtualNetwork.fetch,

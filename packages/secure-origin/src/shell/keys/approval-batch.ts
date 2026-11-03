@@ -290,3 +290,130 @@ export function approvalOf(
       })),
   );
 }
+
+// Where approved requests may run: only in the card's scheduled pipelines, or
+// also when a card is opened (in the browser, the AI assistant or the CLI).
+export type ApprovalUse = 'pipelines' | 'interactive';
+
+// What the user confirms, once for the batch, when they allow interactive
+// use: one line for their own keys, and one for a workspace's share, whose
+// approval reaches every reader of the realm.
+export const INTERACTIVE_CONFIRMATION = {
+  userKey:
+    'Any card you open can make these calls as you and read what comes back.',
+  apiKey:
+    'Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren’t private, and that the service limits to reading.',
+} as const;
+
+// The batch as the page shows it for `use`. An operation approved for
+// pipelines only needs approving only for interactive use, so for pipelines
+// it is left out.
+export function batchFor(
+  batch: ApprovalBatch,
+  use: ApprovalUse,
+): ApprovalBatch {
+  if (use === 'interactive') {
+    return batch;
+  }
+  return {
+    ...batch,
+    groups: batch.groups
+      .map((group) => ({
+        ...group,
+        operations: group.operations.filter(
+          (o) => o.status !== 'pipelines-only',
+        ),
+      }))
+      .filter((group) => group.operations.length > 0),
+  };
+}
+
+// Where the choice starts: on pipelines only, unless the CLI asked for
+// interactive use, or the batch holds nothing to approve for pipelines (only
+// operations approved for pipelines already), or every slot that needs
+// approving was last approved for interactive use, so approving it again
+// keeps that. One interactive slot among new ones doesn't count: starting on
+// interactive use would widen the new ones with a single click.
+export function initialUse(
+  batch: ApprovalBatch,
+  { cliInteractive = false }: { cliInteractive?: boolean } = {},
+): ApprovalUse {
+  let needed = allSlots(batchFor(batch, 'pipelines'));
+  if (
+    cliInteractive ||
+    needed.length === 0 ||
+    needed.every((s) => s.approved?.interactive)
+  ) {
+    return 'interactive';
+  }
+  return 'pipelines';
+}
+
+// Whether an operation was last approved for interactive use: approving it
+// again for pipelines only stops it running when a card is opened.
+export function approvedForOpenCards(operation: BatchOperation): boolean {
+  return operation.slots.some((s) => s.approved?.interactive);
+}
+
+// Which cards the approval covers: only this card (every operation approved
+// per instance), every card of its kind, or a mix of the two.
+export function approvalScope(
+  batch: ApprovalBatch | undefined,
+): 'card' | 'kind' | 'mixed' {
+  let operations = (batch?.groups ?? []).flatMap((g) => g.operations);
+  let perCard = operations.filter((o) => o.instance !== null).length;
+  if (perCard === 0) {
+    return 'kind';
+  }
+  return perCard === operations.length ? 'card' : 'mixed';
+}
+
+// How many more requests need approving after these, for the choice made:
+// those approved for pipelines only count only for interactive use.
+export function remainingFor(batch: ApprovalBatch, use: ApprovalUse): number {
+  return (
+    batch.remaining +
+    (use === 'interactive' ? (batch.remainingPipelinesOnly ?? 0) : 0)
+  );
+}
+
+// Which confirmations the ticked operations need: one for the user's own keys
+// and one for shares, each once whatever the number of operations.
+export function confirmationsFor(
+  operations: BatchOperation[],
+): (keyof typeof INTERACTIVE_CONFIRMATION)[] {
+  let kinds = new Set(operations.flatMap((o) => o.slots.map((s) => s.key)));
+  return (['userKey', 'apiKey'] as const).filter((k) => kinds.has(k));
+}
+
+// The shares the ticked operations would approve for interactive use for the
+// first time: each needs its daily budget named, starting from the one in
+// force.
+export function firstInteractiveShares(
+  batch: ApprovalBatch,
+  operations: BatchOperation[],
+  chosen: Record<string, string | undefined>,
+): { id: string; label: string; dailyBudget: number }[] {
+  let ids = new Set(
+    operations.flatMap((o) =>
+      o.slots
+        .filter((s) => s.key === 'apiKey')
+        .flatMap((s) => chosen[s.slot] ?? []),
+    ),
+  );
+  return batch.shares
+    .filter((share) => ids.has(share.id) && !share.interactive)
+    .map(({ id, label, dailyBudget }) => ({ id, label, dailyBudget }));
+}
+
+// A daily budget as typed: a whole number of calls, at least one.
+export function parseDailyBudget(
+  value: string | undefined,
+): number | undefined {
+  let trimmed = (value ?? '').trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return undefined;
+  }
+  let budget = Number(trimmed);
+  return budget >= 1 && budget <= 2_147_483_647 ? budget : undefined;
+}

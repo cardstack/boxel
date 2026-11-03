@@ -211,6 +211,8 @@ export function validateContextRequest(
 
 export interface Deps {
   dbAdapter: DBAdapter;
+  // The paired homeserver's server name, which a `users` grant is judged by.
+  matrixServerName: string;
   // The realm a URL is in, found among every realm this server serves,
   // mounted or not, and without mounting it (`findRealm`).
   findRealm: (url: URL) => Promise<ServedRealm | undefined>;
@@ -247,9 +249,10 @@ async function realmNamed(
 
 // Read from the realm's permission rows, so a realm need not be mounted to be
 // asked about, by the rule every realm request is checked by. A secure session
-// is a registered Matrix user's, so the `users` row applies to it.
+// is a registered Matrix user's, so the `users` row applies to it when the
+// user is on the paired homeserver.
 async function mayRead(
-  dbAdapter: DBAdapter,
+  { dbAdapter, matrixServerName }: Pick<Deps, 'dbAdapter' | 'matrixServerName'>,
   realmURL: string,
   user: string,
 ): Promise<boolean> {
@@ -257,6 +260,7 @@ async function mayRead(
   let actions = await effectiveRealmPermissions(
     permissions,
     user,
+    matrixServerName,
     async () => true,
   );
   return actions.includes('read');
@@ -322,7 +326,7 @@ export async function resolveWindowRequest(
     let named = target?.kind === 'type' ? target.realm : request.realm;
     served = named ? await realmNamed(deps, named) : undefined;
   }
-  if (!served || !(await mayRead(dbAdapter, served.url, user))) {
+  if (!served || !(await mayRead(deps, served.url, user))) {
     throw notFound();
   }
   // A realm named beside a target must be the target's own. Any other realm
@@ -358,7 +362,7 @@ export async function resolveWindowRequest(
     codeRef.module as RealmResourceIdentifier,
   );
   let moduleRealm = moduleURL ? await findRealm(moduleURL) : undefined;
-  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm.url, user))) {
+  if (!moduleRealm || !(await mayRead(deps, moduleRealm.url, user))) {
     throw notFound();
   }
   // The definition is looked up among mounted realms.
@@ -611,7 +615,7 @@ export async function realmCardsWithRequests(
     if (!readable.has(moduleRealm.url)) {
       readable.set(
         moduleRealm.url,
-        (await mayRead(dbAdapter, moduleRealm.url, user)) &&
+        (await mayRead(deps, moduleRealm.url, user)) &&
           Boolean(await moduleRealm.mount()),
       );
     }

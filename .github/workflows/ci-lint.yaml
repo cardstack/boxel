@@ -129,6 +129,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/school-example-realm
+      - name: Lint Test Realm Cards
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/test-realm-cards
       - name: Lint Pret UI
         if: ${{ !cancelled() }}
         run: pnpm run lint
