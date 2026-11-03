@@ -19,11 +19,25 @@
           "longitude": -74.0060152
         },
         {
-          "name": "Tokyo",
-          "region": "Tokyo",
-          "country": "JP",
-          "latitude": 35.6828387,
-          "longitude": 139.7594549
+          "name": "Sydney",
+          "region": "New South Wales",
+          "country": "AU",
+          "latitude": -33.8698439,
+          "longitude": 151.2082848
+        },
+        {
+          "name": "Singapore",
+          "region": "",
+          "country": "SG",
+          "latitude": 1.2899175,
+          "longitude": 103.8519072
+        },
+        {
+          "name": "Tromsø",
+          "region": "Troms",
+          "country": "NO",
+          "latitude": 69.6496,
+          "longitude": 18.956
         }
       ],
       "cardInfo": {

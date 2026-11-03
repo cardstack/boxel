@@ -23,7 +23,6 @@ import {
 import { realmURL, type KeyReadiness } from '@cardstack/runtime-common';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
-import { Chip } from '@cardstack/pretui/components/chip';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input as TextInput } from '@cardstack/pretui/components/input';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
@@ -40,7 +39,6 @@ import CloudRainIcon from '@cardstack/boxel-icons/cloud-rain';
 import CloudSnowIcon from '@cardstack/boxel-icons/cloud-snow';
 import CloudSunIcon from '@cardstack/boxel-icons/cloud-sun';
 import CloudyIcon from '@cardstack/boxel-icons/cloudy';
-import KeyIcon from '@cardstack/boxel-icons/key';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import MoonIcon from '@cardstack/boxel-icons/moon';
@@ -393,6 +391,17 @@ interface PlaceWeather {
   airQuality?: AirQuality;
 }
 
+// A secure window request that would let the app call, with what the
+// app's prompt says about it.
+interface KeyRequest {
+  mode: 'approve' | 'review-changes';
+  operation: string;
+  reason: string;
+  title: string;
+  message: string;
+  action: string;
+}
+
 interface ShareInfo {
   shareId?: string;
   label?: string;
@@ -440,6 +449,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // The operation each refused call invoked, so a fix opens the secure window
   // for the call that needs it.
   #failedOperation = new WeakMap<object, string>();
+  // The key requests already opened in the secure window by themselves.
+  #asked = new Set<string>();
 
   get units(): Units {
     return (
@@ -536,14 +547,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     );
   }
 
-  get sourceLabel(): string | undefined {
-    let source = this.problem?.source ?? this.loadedFrom ?? this.source;
-    if (!source) {
-      return undefined;
-    }
-    return source === 'shared' ? 'Using the workspace’s key' : 'Using your key';
-  }
-
   get selectedLocation() {
     return this.selected === undefined
       ? undefined
@@ -571,7 +574,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           : undefined,
         time: weather ? timeIn(weather.offset, weather.current.dt) : undefined,
         icon: weather ? iconFor(weather.current.weather[0]) : undefined,
-        tone: weather ? skyFor(weather.current.weather[0]) : 'unknown',
+        tone: weather
+          ? temperatureTone(weather.current.main.temp, this.units)
+          : 'unknown',
+        season: weather
+          ? seasonAt(location.latitude, weather.offset, weather.current.dt)
+          : 'none',
       };
     });
   }
@@ -861,46 +869,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     },
   );
 
-  // The approve page lets the reader pick one of their keys or add one, and
-  // approving grants it the places the app sends it. Saving a key alone
-  // grants it nowhere, so readiness would still answer `needs-connect`.
-  useOwnKey = () =>
-    this.openWindow.perform({
-      mode: 'approve',
-      operation: this.ownOperation,
-      reason: `${OWN_KEY_USE} Any OpenWeatherMap key works, even a free one.`,
-    });
-
-  approveOwn = () =>
-    this.openWindow.perform({
-      mode: 'approve',
-      operation: this.ownOperation,
-      reason: OWN_KEY_USE,
-    });
-
-  reviewOwn = () =>
-    this.openWindow.perform({
-      mode: 'review-changes',
-      operation: this.ownOperation,
-      reason:
-        'Weather changed what it sends with your key to get the weather for your saved places. Review the changes.',
-    });
-
-  approveShared = () =>
-    this.openWindow.perform({
-      mode: 'approve',
-      operation: this.sharedOperation,
-      reason: SHARED_KEY_USE,
-    });
-
-  reviewShared = () =>
-    this.openWindow.perform({
-      mode: 'review-changes',
-      operation: this.sharedOperation,
-      reason:
-        'Weather changed what it sends with the shared key to get the weather for this workspace. Review the changes.',
-    });
-
   replaceKey = () =>
     this.openWindow.perform({
       mode: 'replace-key',
@@ -920,100 +888,110 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         'Share an OpenWeatherMap key so everyone in this workspace sees the weather for its saved places without a key of their own.',
     });
 
-  swapKey = () => {
-    if (!this.share?.shareId) {
+  // ---- asking for a key ---------------------------------------------------
+
+  // The one thing that would let the app call when no key it may use is
+  // ready, as the secure window request that does it: approving the share a
+  // writer made, or reviewing what changed in its calls; otherwise approving
+  // the reader's own key, where the approve page lets them pick one of their
+  // keys or add one and grants it the places the app sends it. Undefined
+  // while a key is ready, while readiness is still being asked, or when no
+  // request the reader can make would help.
+  get keyRequest(): KeyRequest | undefined {
+    if (!this.isLive || this.problem || this.source === 'shared') {
+      return undefined;
+    }
+    let shared = this.sharedReadiness;
+    let own = this.ownReadiness;
+    if (shared === undefined || own === undefined) {
+      return undefined;
+    }
+    // Asked even while the app runs on the writer's own key: until the share
+    // is approved, nobody else here can use it.
+    if (this.sharedNeedsApproval) {
+      return {
+        mode: 'approve',
+        operation: this.sharedOperation,
+        reason: SHARED_KEY_USE,
+        title: 'Approve the key you shared',
+        message:
+          'Approve it for this app so everyone in this workspace sees the weather.',
+        action: 'Approve',
+      };
+    }
+    if (this.source) {
+      return undefined;
+    }
+    if (shared === 'needs-reapproval') {
+      return {
+        mode: 'review-changes',
+        operation: this.sharedOperation,
+        reason:
+          'Weather changed what it sends with the shared key to get the weather for this workspace. Review the changes.',
+        title: 'The app’s calls changed',
+        message: 'Review what it sends with the workspace’s key.',
+        action: 'Review the changes',
+      };
+    }
+    if (own === 'needs-connect' || own === 'needs-approval') {
+      return {
+        mode: 'approve',
+        operation: this.ownOperation,
+        reason: `${OWN_KEY_USE} Any OpenWeatherMap key works, even a free one.`,
+        title: 'Weather needs an OpenWeatherMap key',
+        message:
+          'Add your key to see the weather here. Any OpenWeatherMap key works, even a free one.',
+        action: 'Add a key',
+      };
+    }
+    if (own === 'needs-reapproval') {
+      return {
+        mode: 'review-changes',
+        operation: this.ownOperation,
+        reason:
+          'Weather changed what it sends with your key to get the weather for your saved places. Review the changes.',
+        title: 'The app’s calls changed',
+        message: 'Review what it sends with your key.',
+        action: 'Review the changes',
+      };
+    }
+    return undefined;
+  }
+
+  // Opens the secure window for the key request as soon as the card sees
+  // one, once per request: a reader who closes the window gets the prompt's
+  // button instead of another window. A browser that blocks the popup gets
+  // the host's button that opens it.
+  askForKey = modifier(
+    (_element: Element, [request]: [KeyRequest | undefined]) => {
+      if (!request) {
+        return;
+      }
+      let key = `${request.mode}|${request.operation}`;
+      if (this.#asked.has(key)) {
+        return;
+      }
+      this.#asked.add(key);
+      queueMicrotask(() => this.openKeyRequest());
+    },
+  );
+
+  openKeyRequest = () => {
+    let request = this.keyRequest;
+    if (!request) {
       return;
     }
     this.openWindow.perform({
-      mode: 'swap-key',
-      share: this.share.shareId,
-      reason: `The workspace’s weather key “${this.share.label}” is unavailable. Swap in one of your OpenWeatherMap keys so everyone here sees the weather again.`,
+      mode: request.mode,
+      operation: request.operation,
+      reason: request.reason,
     });
   };
 
-  // ---- what the key panel says ---------------------------------------------
+  // ---- what the app says ---------------------------------------------------
 
   get signedOut(): boolean {
     return this.ownReadiness === 'needs-sign-in';
-  }
-
-  get sharedStopped(): boolean {
-    return this.share?.state === 'suspended';
-  }
-
-  get stoppedReason(): string {
-    switch (this.share?.suspensionReason) {
-      case 'key-deleted':
-        return 'Its owner deleted the key.';
-      case 'suspended-by-writer':
-        return 'Someone who manages this workspace suspended it.';
-      case 'owner-lost-write':
-        return 'Its owner no longer manages this workspace.';
-      default:
-        return '';
-    }
-  }
-
-  // What the workspace's key can't do, in a sentence, for a reader whose app
-  // isn't using it.
-  get sharedMessage(): string | undefined {
-    switch (this.sharedReadiness) {
-      case 'ready':
-      case undefined:
-        return undefined;
-      case 'needs-admin':
-        if (this.sharedStopped) {
-          return `The workspace’s weather key is unavailable. ${this.stoppedReason}`;
-        }
-        if (this.isWriter && !this.share && this.hasUnboundShare) {
-          return 'A key you shared with this workspace isn’t approved for this app yet.';
-        }
-        if (this.isWriter && !this.share) {
-          return 'This workspace has no weather key.';
-        }
-        if (this.isWriter) {
-          return 'The workspace’s weather key isn’t approved for this app yet.';
-        }
-        return 'This workspace has no weather key you can use.';
-      case 'needs-approval':
-        return 'You shared a weather key here; approve it for this app so everyone here can use it.';
-      case 'needs-reapproval':
-        return 'What this app sends with the workspace’s key changed since it was approved.';
-      case 'needs-sign-in':
-        return 'The workspace’s weather key is only for people who are signed in.';
-      case 'rate-limited':
-      case 'over-budget':
-        return 'The workspace’s key has had too many requests. Try again shortly.';
-      case 'credential-rejected':
-        return 'OpenWeatherMap rejected the workspace’s key.';
-      case 'not-allowed':
-        return 'This workspace doesn’t let you use its weather key here.';
-      default:
-        return 'The workspace’s weather key isn’t available.';
-    }
-  }
-
-  get ownMessage(): string | undefined {
-    switch (this.ownReadiness) {
-      case 'ready':
-      case undefined:
-        return undefined;
-      case 'needs-connect':
-        return 'You can use your own OpenWeatherMap key instead.';
-      case 'needs-approval':
-        return 'You have an OpenWeatherMap key; approve it for this app to use it here.';
-      case 'needs-reapproval':
-        return 'What this app sends with your key changed since you approved it.';
-      case 'rate-limited':
-      case 'over-budget':
-        return 'Your key has had too many requests. Try again shortly.';
-      case 'credential-rejected':
-        return 'OpenWeatherMap rejected your key.';
-      case 'not-allowed':
-        return 'This workspace doesn’t let you use your own key here.';
-      default:
-        return undefined;
-    }
   }
 
   get problemTitle(): string {
@@ -1124,15 +1102,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     );
   }
 
-  get ownNeedsConnect() {
-    return this.ownReadiness === 'needs-connect';
-  }
-  get ownNeedsApproval() {
-    return this.ownReadiness === 'needs-approval';
-  }
-  get ownNeedsReapproval() {
-    return this.ownReadiness === 'needs-reapproval';
-  }
   get ownRejected() {
     return this.ownReadiness === 'credential-rejected';
   }
@@ -1147,9 +1116,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         this.hasUnboundShare)
     );
   }
-  get sharedNeedsReapproval() {
-    return this.sharedReadiness === 'needs-reapproval';
-  }
   get offerShare() {
     return (
       this.isWriter &&
@@ -1157,9 +1123,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       !this.hasUnboundShare &&
       this.sharedReadiness === 'needs-admin'
     );
-  }
-  get offerSwap() {
-    return this.isWriter && this.sharedStopped && Boolean(this.share?.shareId);
   }
 
   get updatedText(): string | undefined {
@@ -1174,6 +1137,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       data-test-weather-app
       {{this.watchShares}}
       {{this.loadWhenReady this.source this.problem}}
+      {{this.askForKey this.keyRequest}}
     >
       <header class='app-bar'>
         {{#if this.selectedLocation}}
@@ -1187,20 +1151,14 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           <h1>{{@model.cardTitle}}</h1>
         {{/if}}
         <div class='app-bar-tools'>
-          {{#if this.sourceLabel}}
-            <Chip @tone='info' @dot={{false}} data-test-weather-key-source>
-              <KeyIcon width='1em' height='1em' aria-hidden='true' />
-              {{this.sourceLabel}}
-            </Chip>
-          {{/if}}
           {{#if this.canAddCity}}
             <Button
               @size='sm'
               @tone='primary'
+              @icon={{PlusIcon}}
               {{on 'click' this.startAdding}}
               data-test-weather-add-city-button
             >
-              <PlusIcon width='16' height='16' aria-hidden='true' />
               Add a city
             </Button>
           {{/if}}
@@ -1215,10 +1173,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             @size='sm'
             @busy={{this.load.isRunning}}
             @disabled={{this.refreshDisabled}}
+            @icon={{RefreshIcon}}
             {{on 'click' this.refresh}}
             data-test-weather-refresh
           >
-            <RefreshIcon width='16' height='16' aria-hidden='true' />
             Refresh
           </Button>
         </div>
@@ -1254,46 +1212,29 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           </:action>
         </Alert>
       {{else if this.source}}
-        {{#if this.sharedFallbackNote}}
-          <div class='fallback-note' data-test-weather-fallback>
-            <span>{{this.sharedFallbackNote}}</span>
-            {{#if this.offerShare}}
-              <Button
-                @size='sm'
-                @appearance='outlined'
-                {{on 'click' this.shareKey}}
-                data-test-weather-share-key
-              >Share a key with this workspace</Button>
-            {{/if}}
-            {{#if this.offerSwap}}
-              <Button
-                @size='sm'
-                @appearance='outlined'
-                {{on 'click' this.swapKey}}
-                data-test-weather-swap-key
-              >Swap in one of my keys</Button>
-            {{/if}}
-            {{#if this.sharedNeedsApproval}}
+        {{! The weather shows; nothing to say about keys but a share to approve. }}
+        {{#if this.keyRequest}}
+          <Alert
+            @tone='info'
+            @title={{this.keyRequest.title}}
+            data-test-weather-state='needs-key'
+          >
+            <:default>
+              {{this.keyRequest.message}}
+            </:default>
+            <:action>
               <Button
                 @size='sm'
                 @tone='primary'
-                {{on 'click' this.approveShared}}
-                data-test-weather-approve-shared
-              >Approve the shared key</Button>
-            {{/if}}
-            {{#if this.sharedNeedsReapproval}}
-              <Button
-                @size='sm'
-                @appearance='outlined'
-                {{on 'click' this.reviewShared}}
-              >Review the changes</Button>
-            {{/if}}
-          </div>
+                {{on 'click' this.openKeyRequest}}
+                data-test-weather-open-key-request
+              >{{this.keyRequest.action}}</Button>
+            </:action>
+          </Alert>
         {{/if}}
       {{else if this.checking}}
         <div class='checking'><Skeleton @height='1.5rem' /></div>
       {{else if this.isLive}}
-        {{! No key the app may use: say whose key would serve, and what fixes it }}
         <section class='key-panel' data-test-weather-key-panel>
           {{#if this.notAllowed}}
             <Alert
@@ -1310,8 +1251,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
               @title='Too many requests'
               data-test-weather-state='rate-limited'
             >
-              The workspace’s weather key has had too many requests. Try again
-              shortly.
+              Try again shortly.
             </Alert>
           {{else if this.signedOut}}
             <Alert
@@ -1319,92 +1259,60 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
               @title='The weather isn’t available here'
               data-test-weather-state='signed-out'
             >
-              {{#if this.sharedMessage}}{{this.sharedMessage}}{{/if}}
               Sign in to use your own OpenWeatherMap key.
             </Alert>
-          {{else}}
+          {{else if this.ownRejected}}
             <Alert
-              @tone={{if this.sharedStopped 'warning' 'info'}}
-              @title={{if
-                this.sharedStopped
-                'The workspace’s key is unavailable'
-                'The workspace’s key'
-              }}
-              data-test-weather-state={{if
-                this.sharedStopped
-                'share-stopped'
-                'no-share'
-              }}
+              @tone='danger'
+              @title='OpenWeatherMap rejected your key'
+              data-test-weather-state='rejected'
             >
               <:default>
-                {{this.sharedMessage}}
+                It may have expired or been revoked.
               </:default>
               <:action>
+                <Button
+                  @size='sm'
+                  @tone='primary'
+                  {{on 'click' this.replaceOwnKey}}
+                  data-test-weather-replace-key
+                >Replace the key</Button>
+              </:action>
+            </Alert>
+          {{else if this.keyRequest}}
+            <Alert
+              @tone='info'
+              @title={{this.keyRequest.title}}
+              data-test-weather-state='needs-key'
+            >
+              <:default>
+                {{this.keyRequest.message}}
+              </:default>
+              <:action>
+                <Button
+                  @size='sm'
+                  @tone='primary'
+                  {{on 'click' this.openKeyRequest}}
+                  data-test-weather-open-key-request
+                >{{this.keyRequest.action}}</Button>
                 {{#if this.offerShare}}
                   <Button
                     @size='sm'
+                    @appearance='outlined'
                     {{on 'click' this.shareKey}}
                     data-test-weather-share-key
                   >Share a key with this workspace</Button>
                 {{/if}}
-                {{#if this.offerSwap}}
-                  <Button
-                    @size='sm'
-                    {{on 'click' this.swapKey}}
-                    data-test-weather-swap-key
-                  >Swap in one of my keys</Button>
-                {{/if}}
-                {{#if this.sharedNeedsApproval}}
-                  <Button
-                    @size='sm'
-                    @tone='primary'
-                    {{on 'click' this.approveShared}}
-                    data-test-weather-approve-shared
-                  >Approve</Button>
-                {{/if}}
-                {{#if this.sharedNeedsReapproval}}
-                  <Button @size='sm' {{on 'click' this.reviewShared}}>Review the
-                    changes</Button>
-                {{/if}}
               </:action>
             </Alert>
-            {{#if this.ownMessage}}
-              <Alert
-                @tone={{if this.ownRejected 'danger' 'info'}}
-                @title='Your own key'
-                data-test-weather-own={{this.ownReadiness}}
-              >
-                <:default>
-                  {{this.ownMessage}}
-                  {{#if this.ownNeedsConnect}}
-                    <span class='key-note'>{{this.keyNote}}</span>
-                  {{/if}}
-                </:default>
-                <:action>
-                  {{#if this.ownNeedsConnect}}
-                    <Button
-                      @size='sm'
-                      @tone='primary'
-                      {{on 'click' this.useOwnKey}}
-                      data-test-weather-use-own-key
-                    >Use my own key</Button>
-                  {{else if this.ownNeedsApproval}}
-                    <Button
-                      @size='sm'
-                      @tone='primary'
-                      {{on 'click' this.approveOwn}}
-                      data-test-weather-approve-own
-                    >Approve</Button>
-                  {{else if this.ownNeedsReapproval}}
-                    <Button @size='sm' {{on 'click' this.reviewOwn}}>Review the
-                      changes</Button>
-                  {{else if this.ownRejected}}
-                    <Button @size='sm' {{on 'click' this.replaceOwnKey}}>Replace
-                      my key</Button>
-                  {{/if}}
-                </:action>
-              </Alert>
-            {{/if}}
+          {{else}}
+            <Alert
+              @tone='info'
+              @title='The weather isn’t available here'
+              data-test-weather-state='unavailable'
+            >
+              This workspace has no weather key you can use.
+            </Alert>
           {{/if}}
         </section>
       {{/if}}
@@ -1455,10 +1363,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                     <Button
                       @appearance='outlined'
                       @size='sm'
+                      @icon={{MapPinIcon}}
                       {{on 'click' (fn this.addCity match)}}
                       data-test-weather-city-match={{match.name}}
                     >
-                      <MapPinIcon width='16' height='16' aria-hidden='true' />
                       {{match.name}}{{#if match.state}}, {{match.state}}{{/if}},
                       {{match.country}}
                     </Button>
@@ -1471,11 +1379,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         <ul class='places' data-test-weather-places>
           {{#each this.rows as |row|}}
             <li>
-              {{! A native button: the tile is a sky-colored panel with its own
+              {{! A native button: the tile is a temperature-colored panel with its own
                 layout, which none of Button's appearances draws. }}
               <button
                 type='button'
-                class='place sky-{{row.tone}}'
+                class='place temp-{{row.tone}} season-{{row.season}}'
                 {{on 'click' (fn this.select row.index)}}
                 data-test-weather-place={{row.location.name}}
               >
@@ -1522,18 +1430,93 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     </div>
     <style scoped>
       .weather-app {
-        /* The sky behind each place: fixed colors rather than theme tokens,
-           since they stand for the weather, each dark enough for white text
-           at 4.5:1. */
-        --_weather-sky-day: #1f5c99;
-        --_weather-sky-day-end: #2b6cb0;
-        --_weather-sky-night: #1d2b4f;
-        --_weather-sky-night-end: #33416a;
-        --_weather-sky-cloud: #4b5866;
-        --_weather-sky-cloud-end: #5c6978;
-        --_weather-sky-rain: #3c4a5a;
-        --_weather-sky-rain-end: #4f5d6d;
-        --_weather-on-sky: #ffffff;
+        /* Each place is colored by its temperature now, from deep blue for
+           frigid to red for hot: fixed colors rather than theme tokens, since
+           they stand for the temperature, each dark enough for white text at
+           4.5:1. */
+        --_weather-temp-frigid: #312e81;
+        --_weather-temp-frigid-end: #3f3cbb;
+        --_weather-temp-freezing: #1e40af;
+        --_weather-temp-freezing-end: #2556c4;
+        --_weather-temp-cold: #1d5f8a;
+        --_weather-temp-cold-end: #0e6f9e;
+        --_weather-temp-cool: #0f6e6e;
+        --_weather-temp-cool-end: #127a72;
+        --_weather-temp-mild: #3f6b1a;
+        --_weather-temp-mild-end: #4b7a17;
+        --_weather-temp-warm: #9a4a0c;
+        --_weather-temp-warm-end: #a8560d;
+        --_weather-temp-hot: #9f1d1d;
+        --_weather-temp-hot-end: #b42318;
+        --_weather-temp-unknown: #4b5866;
+        --_weather-temp-unknown-end: #5c6978;
+        --_weather-on-tone: #ffffff;
+        /* A motif for the season where each place is, laid over its
+           temperature color: blossom, sun rays, falling leaves or snow, and
+           a lush glow near the equator or an aurora near the poles. Kept
+           faint, so white text keeps its contrast. */
+        --_weather-season-spring:
+          radial-gradient(
+            circle at 88% 12%,
+            rgb(255 160 200 / 0.26),
+            transparent 45%
+          ),
+          radial-gradient(
+            circle at 6% 105%,
+            rgb(255 214 236 / 0.2),
+            transparent 50%
+          );
+        --_weather-season-summer:
+          radial-gradient(
+            circle at 90% 8%,
+            rgb(255 214 102 / 0.3),
+            transparent 42%
+          ),
+          repeating-conic-gradient(
+            from 200deg at 90% 8%,
+            rgb(255 235 170 / 0.1) 0deg 6deg,
+            transparent 6deg 18deg
+          );
+        --_weather-season-autumn:
+          radial-gradient(
+            circle at 86% 14%,
+            rgb(255 140 50 / 0.32),
+            transparent 45%
+          ),
+          repeating-linear-gradient(
+            120deg,
+            rgb(255 200 120 / 0.08) 0 0.625rem,
+            transparent 0.625rem 1.625rem
+          );
+        --_weather-season-winter:
+          radial-gradient(
+            circle at 86% 10%,
+            rgb(220 240 255 / 0.3),
+            transparent 45%
+          ),
+          radial-gradient(rgb(255 255 255 / 0.22) 1px, transparent 1.5px) 0 0 /
+            0.875rem 0.875rem,
+          radial-gradient(rgb(255 255 255 / 0.14) 1px, transparent 1.5px)
+            0.4375rem 0.4375rem / 0.875rem 0.875rem;
+        --_weather-season-tropical:
+          radial-gradient(
+            circle at 86% 14%,
+            rgb(120 255 200 / 0.26),
+            transparent 45%
+          ),
+          repeating-radial-gradient(
+            circle at 50% 170%,
+            rgb(255 255 255 / 0.07) 0 0.375rem,
+            transparent 0.375rem 1.375rem
+          );
+        --_weather-season-polar: linear-gradient(
+          170deg,
+          transparent 8%,
+          rgb(110 255 190 / 0.26) 28%,
+          transparent 44%,
+          rgb(190 120 255 / 0.22) 60%,
+          transparent 76%
+        );
         display: grid;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-lg);
@@ -1555,26 +1538,13 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      .fallback-note,
       .search-message {
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-sm);
       }
-      .fallback-note {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
       .key-panel {
         display: grid;
         gap: var(--boxel-sp-sm);
-      }
-      .key-note {
-        display: block;
-        margin-top: var(--boxel-sp-4xs);
-        color: var(--muted-foreground);
-        font-size: var(--boxel-font-size-sm);
       }
       .places,
       .matches {
@@ -1598,39 +1568,66 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
         border: none;
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--_weather-on-sky);
+        color: var(--_weather-on-tone);
         text-align: left;
         cursor: pointer;
-        background: linear-gradient(
-          135deg,
-          var(--_weather-sky-cloud),
-          var(--_weather-sky-cloud-end)
-        );
+        background:
+          var(--_season, linear-gradient(transparent, transparent)),
+          linear-gradient(135deg, var(--_tone), var(--_tone-end));
       }
       .place:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
-      .sky-day {
-        background: linear-gradient(
-          135deg,
-          var(--_weather-sky-day),
-          var(--_weather-sky-day-end)
-        );
+      .temp-frigid {
+        --_tone: var(--_weather-temp-frigid);
+        --_tone-end: var(--_weather-temp-frigid-end);
       }
-      .sky-night {
-        background: linear-gradient(
-          135deg,
-          var(--_weather-sky-night),
-          var(--_weather-sky-night-end)
-        );
+      .temp-freezing {
+        --_tone: var(--_weather-temp-freezing);
+        --_tone-end: var(--_weather-temp-freezing-end);
       }
-      .sky-rain {
-        background: linear-gradient(
-          135deg,
-          var(--_weather-sky-rain),
-          var(--_weather-sky-rain-end)
-        );
+      .temp-cold {
+        --_tone: var(--_weather-temp-cold);
+        --_tone-end: var(--_weather-temp-cold-end);
+      }
+      .temp-cool {
+        --_tone: var(--_weather-temp-cool);
+        --_tone-end: var(--_weather-temp-cool-end);
+      }
+      .temp-mild {
+        --_tone: var(--_weather-temp-mild);
+        --_tone-end: var(--_weather-temp-mild-end);
+      }
+      .temp-warm {
+        --_tone: var(--_weather-temp-warm);
+        --_tone-end: var(--_weather-temp-warm-end);
+      }
+      .temp-hot {
+        --_tone: var(--_weather-temp-hot);
+        --_tone-end: var(--_weather-temp-hot-end);
+      }
+      .temp-unknown {
+        --_tone: var(--_weather-temp-unknown);
+        --_tone-end: var(--_weather-temp-unknown-end);
+      }
+      .season-spring {
+        --_season: var(--_weather-season-spring);
+      }
+      .season-summer {
+        --_season: var(--_weather-season-summer);
+      }
+      .season-autumn {
+        --_season: var(--_weather-season-autumn);
+      }
+      .season-winter {
+        --_season: var(--_weather-season-winter);
+      }
+      .season-tropical {
+        --_season: var(--_weather-season-tropical);
+      }
+      .season-polar {
+        --_season: var(--_weather-season-polar);
       }
       .place-main,
       .place-side {
@@ -1698,7 +1695,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     </style>
   </template>
 
-  keyNote = KEY_NOTE;
   cityInputId = `${guidFor(this)}-city`;
 
   get refreshDisabled(): boolean {
@@ -1725,16 +1721,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.query = '';
     this.searchMessage = undefined;
   };
-
-  // Said when the app is on the reader's own key because the workspace's
-  // isn't ready, so whose key pays is never a surprise.
-  get sharedFallbackNote(): string | undefined {
-    if (this.source !== 'own') {
-      return undefined;
-    }
-    let message = this.sharedMessage;
-    return message ? `${message} Using your own key instead.` : undefined;
-  }
 
   replaceOwnKey = () =>
     this.openWindow.perform({
@@ -1790,8 +1776,16 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
     return iconFor(this.condition);
   }
 
-  get sky() {
-    return skyFor(this.condition);
+  get season() {
+    return this.current
+      ? seasonAt(this.args.location.latitude, this.offset, this.current.dt)
+      : 'none';
+  }
+
+  get tone() {
+    return this.current
+      ? temperatureTone(this.current.main.temp, this.args.units)
+      : 'unknown';
   }
 
   get today() {
@@ -1910,7 +1904,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
 
   <template>
     <article class='place-view' data-test-weather-place-view>
-      <section class='hero sky-{{this.sky}}'>
+      <section class='hero temp-{{this.tone}} season-{{this.season}}'>
         <h2>{{@location.name}}</h2>
         {{#if this.current}}
           <div class='hero-temp' data-test-weather-current-temp>
@@ -2016,33 +2010,60 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         gap: var(--boxel-sp-4xs);
         padding: var(--boxel-sp-xl) var(--boxel-sp);
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--_weather-on-sky);
-        background: linear-gradient(
-          180deg,
-          var(--_weather-sky-cloud),
-          var(--_weather-sky-cloud-end)
-        );
+        color: var(--_weather-on-tone);
+        background:
+          var(--_season, linear-gradient(transparent, transparent)),
+          linear-gradient(180deg, var(--_tone), var(--_tone-end));
       }
-      .sky-day {
-        background: linear-gradient(
-          180deg,
-          var(--_weather-sky-day),
-          var(--_weather-sky-day-end)
-        );
+      .temp-frigid {
+        --_tone: var(--_weather-temp-frigid);
+        --_tone-end: var(--_weather-temp-frigid-end);
       }
-      .sky-night {
-        background: linear-gradient(
-          180deg,
-          var(--_weather-sky-night),
-          var(--_weather-sky-night-end)
-        );
+      .temp-freezing {
+        --_tone: var(--_weather-temp-freezing);
+        --_tone-end: var(--_weather-temp-freezing-end);
       }
-      .sky-rain {
-        background: linear-gradient(
-          180deg,
-          var(--_weather-sky-rain),
-          var(--_weather-sky-rain-end)
-        );
+      .temp-cold {
+        --_tone: var(--_weather-temp-cold);
+        --_tone-end: var(--_weather-temp-cold-end);
+      }
+      .temp-cool {
+        --_tone: var(--_weather-temp-cool);
+        --_tone-end: var(--_weather-temp-cool-end);
+      }
+      .temp-mild {
+        --_tone: var(--_weather-temp-mild);
+        --_tone-end: var(--_weather-temp-mild-end);
+      }
+      .temp-warm {
+        --_tone: var(--_weather-temp-warm);
+        --_tone-end: var(--_weather-temp-warm-end);
+      }
+      .temp-hot {
+        --_tone: var(--_weather-temp-hot);
+        --_tone-end: var(--_weather-temp-hot-end);
+      }
+      .temp-unknown {
+        --_tone: var(--_weather-temp-unknown);
+        --_tone-end: var(--_weather-temp-unknown-end);
+      }
+      .season-spring {
+        --_season: var(--_weather-season-spring);
+      }
+      .season-summer {
+        --_season: var(--_weather-season-summer);
+      }
+      .season-autumn {
+        --_season: var(--_weather-season-autumn);
+      }
+      .season-winter {
+        --_season: var(--_weather-season-winter);
+      }
+      .season-tropical {
+        --_season: var(--_weather-season-tropical);
+      }
+      .season-polar {
+        --_season: var(--_weather-season-polar);
       }
       h2 {
         font-size: var(--boxel-font-size-xl);
@@ -2395,20 +2416,62 @@ function iconFor(condition: Condition | undefined) {
   return CloudyIcon;
 }
 
-// Which sky the place's tile is painted with.
-function skyFor(
-  condition: Condition | undefined,
-): 'day' | 'night' | 'cloud' | 'rain' | 'unknown' {
-  if (!condition) {
-    return 'unknown';
+// Which temperature band a place's tile is painted with, by the temperature
+// now in degrees Celsius.
+function temperatureTone(temp: number, units: Units): string {
+  let celsius = units === 'imperial' ? ((temp - 32) * 5) / 9 : temp;
+  if (celsius < -10) return 'frigid';
+  if (celsius < 0) return 'freezing';
+  if (celsius < 8) return 'cold';
+  if (celsius < 15) return 'cool';
+  if (celsius < 22) return 'mild';
+  if (celsius < 30) return 'warm';
+  return 'hot';
+}
+
+// The season where a place is, on its own calendar date: by hemisphere in
+// the temperate bands, and as its climate band near the equator and the
+// poles, where the four seasons don't describe the year.
+function seasonAt(
+  latitude: number | undefined,
+  offset: number,
+  seconds: number,
+): string {
+  if (latitude === undefined) {
+    return 'none';
   }
-  if (condition.id < 700) {
-    return 'rain';
+  if (Math.abs(latitude) < 23.5) {
+    return 'tropical';
   }
-  if (condition.icon?.endsWith('n')) {
-    return 'night';
+  if (Math.abs(latitude) > 66.5) {
+    return 'polar';
   }
-  return condition.id >= 803 ? 'cloud' : 'day';
+  let month = atOffset(offset, seconds).getUTCMonth();
+  let northern = [
+    'winter',
+    'winter',
+    'spring',
+    'spring',
+    'spring',
+    'summer',
+    'summer',
+    'summer',
+    'autumn',
+    'autumn',
+    'autumn',
+    'winter',
+  ];
+  let season = northern[month];
+  if (latitude < 0) {
+    season =
+      {
+        winter: 'summer',
+        summer: 'winter',
+        spring: 'autumn',
+        autumn: 'spring',
+      }[season] ?? season;
+  }
+  return season;
 }
 
 // The service gives each place's offset from UTC rather than its time zone,
