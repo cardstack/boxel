@@ -3139,7 +3139,7 @@ export class Realm {
     this.#matrixClient = matrixClient;
     this.#matrixClientUserId = userIdFromUsername(
       this.#matrixClient.username,
-      this.#matrixClient.matrixURL.href,
+      this.#matrixClient.serverName,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#transpileCoordinator = transpileCoordinator;
@@ -17515,7 +17515,7 @@ export class Realm {
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
-        this.#matrixClient.matrixURL.href,
+        this.#matrixClient.serverName,
       ),
       publishable: metadata.publishable,
       lastPublishedAt,
