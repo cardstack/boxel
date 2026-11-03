@@ -1362,6 +1362,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert
       .dom(`[data-test-delete-modal="${testRealmURL}re-export.gts"]`)
       .exists();
+    await settled();
+    assert
+      .dom('[data-test-cards-using-loading]')
+      .doesNotExist('the lookup has finished');
+    assert.dom('[data-test-cards-using-failed]').doesNotExist();
     assert.dom('[data-test-cards-using-definition]').doesNotExist();
     assert.dom('[data-test-also-delete-cards]').doesNotExist();
 
