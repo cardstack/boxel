@@ -1605,7 +1605,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-noresults {
           padding: var(--space-4, 11px) 0;
         }
+        /* the pager's selected page is a filled box; room above it keeps it
+           off the last row's rule */
         .pretui-dt-foot {
+          padding-block-start: var(--boxel-sp-xs);
           display: flex;
           flex-wrap: wrap;
           align-items: center;
