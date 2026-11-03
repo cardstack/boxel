@@ -13,6 +13,8 @@ import {
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
   APP_BOXEL_ACTIVE_LLM,
@@ -49,10 +51,13 @@ import {
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
+  currentTurnMessageMedia,
   currentTurnToolResultMedia,
+  MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
   MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+  MEDIA_NOT_IN_HISTORY_NOTE,
   getAttachedFiles,
   getPromptParts,
   getRelevantCards,
@@ -8011,9 +8016,24 @@ ${patchedFileSource}
     let promptOnNextTurn = await buildPromptForModel(
       [
         firstMessage,
+        {
+          type: 'm.room.message',
+          event_id: '2',
+          origin_server_ts: 2,
+          content: {
+            msgtype: 'm.text',
+            format: 'org.matrix.custom.html',
+            body: 'It shows a diagram.',
+            isStreamingFinished: true,
+          },
+          sender: '@aibot:localhost',
+          room_id: 'room1',
+          unsigned: { age: 1000, transaction_id: '2' },
+          status: EventStatus.SENT,
+        } as unknown as DiscreteMatrixEvent,
         userImageMessage(
-          '2',
-          2,
+          '3',
+          3,
           'And this one?',
           'second.png',
           'http://test.com/second-uploaded.png',
@@ -8069,6 +8089,391 @@ ${patchedFileSource}
       ),
       'an older message renders byte-identical text once it stops being current',
     );
+  });
+
+  module('message media of the current turn', () => {
+    type AttachedFile = {
+      sourceUrl: string;
+      url: string;
+      name: string;
+      contentType: string;
+      contentSize?: number;
+    };
+
+    let png = (name: string, contentSize: number | 'unknown' = 1024) => {
+      let file: AttachedFile = {
+        sourceUrl: `http://test.com/my-realm/${name}`,
+        url: `http://test.com/${name}-uploaded`,
+        name,
+        contentType: 'image/png',
+        contentSize: contentSize === 'unknown' ? undefined : contentSize,
+      };
+      mockResponses.set(file.url, { ok: true, text: `bytes-of-${name}` });
+      return file;
+    };
+
+    let dataUrlOf = (file: AttachedFile) =>
+      `data:image/png;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
+
+    let userMessage = (
+      eventId: string,
+      ts: number,
+      body: string,
+      attachedFiles: AttachedFile[] = [],
+    ) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: {
+            context: { tools: [], submode: 'code', functions: [] },
+            attachedFiles,
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let botAnswer = (
+      eventId: string,
+      ts: number,
+      body: string,
+      {
+        isCanceled = false,
+        isStreamingFinished = true,
+        errorMessage,
+        toolRequestIds = [],
+      }: {
+        isCanceled?: boolean;
+        isStreamingFinished?: boolean;
+        errorMessage?: string;
+        toolRequestIds?: string[];
+      } = {},
+    ) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          isStreamingFinished,
+          ...(isCanceled ? { isCanceled: true } : {}),
+          ...(errorMessage ? { errorMessage } : {}),
+          data: { context: { tools: [], functions: [] } },
+          ...(toolRequestIds.length
+            ? {
+                [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequestIds.map((id) => ({
+                  id,
+                  name: 'someTool_ab12',
+                  arguments: JSON.stringify({ description: `run ${id}` }),
+                })),
+              }
+            : {}),
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let buildPrompt = (history: DiscreteMatrixEvent[]) =>
+      buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+    let trailingParts = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content) ? (content as any[]) : [];
+    };
+
+    let imageUrls = (prompt: { content?: unknown }[]) =>
+      trailingParts(prompt)
+        .filter((p) => p.type === 'image_url')
+        .map((p) => p.image_url.url);
+
+    let trailingText = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
+    };
+
+    // A history message as it goes on the wire, without the cache marker,
+    // which is allowed to move.
+    let wireBytes = (message: unknown) =>
+      JSON.stringify(message, (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      );
+
+    test('an image on a message whose answer was canceled reaches the model with the follow-up', async () => {
+      let sample = png('sample.png');
+      let messageA = userMessage('1', 1, 'Build an app from this image', [
+        sample,
+      ]);
+      let promptForA = await buildPrompt([messageA]);
+      let promptForB = await buildPrompt([
+        messageA,
+        botAnswer('2', 2, '', { isCanceled: true }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(promptForB), [dataUrlOf(sample)]);
+      let parts = trailingParts(promptForB);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        'Attached to a user message: sample.png (http://test.com/my-realm/sample.png)',
+        'a label naming the file precedes the image',
+      );
+      assert.strictEqual(
+        wireBytes(promptForB[1]),
+        wireBytes(promptForA[1]),
+        'message A serializes identically once a follow-up joins its turn',
+      );
+    });
+
+    test("a follow-up sent before the bot starts answering keeps both messages' images, oldest first", async () => {
+      let first = png('first.png');
+      let second = png('second.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Here is the first image', [first]),
+        userMessage('2', 2, 'And the second one', [second]),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(first),
+        dataUrlOf(second),
+      ]);
+    });
+
+    test('a file attached to more than one message of the turn is sent once, as its newest attachment', async () => {
+      let firstCopy = png('open.png');
+      let newestCopy = {
+        ...firstCopy,
+        url: 'http://test.com/open.png-attached-again',
+      };
+      mockResponses.set(newestCopy.url, {
+        ok: true,
+        text: 'bytes-of-newest-copy',
+      });
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Look at this', [firstCopy]),
+        userMessage('2', 2, 'And make it brighter', [newestCopy]),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [
+        `data:image/png;base64,${Buffer.from('bytes-of-newest-copy').toString('base64')}`,
+      ]);
+    });
+
+    test('an answer split into parts and canceled by the follow-up leaves the turn open', async () => {
+      let sample = png('sample.png');
+      let firstPart = botAnswer('2', 2, 'first part of a long answer ');
+      (firstPart.content as any)[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] = true;
+      let lastPart = botAnswer('3', 3, 'and its end', { isCanceled: true });
+      (lastPart.content as any)[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] = '2';
+      let history = await constructHistory(
+        [
+          userMessage('1', 1, 'Build an app from this image', [sample]),
+          firstPart,
+          lastPart,
+          userMessage('4', 4, 'Put it in my other workspace'),
+        ] as any,
+        fakeMatrixClient as any,
+      );
+
+      assert.deepEqual(imageUrls(await buildPrompt(history)), [
+        dataUrlOf(sample),
+      ]);
+    });
+
+    test("an answer still streaming leaves the earlier message's image in the turn", async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Looking at', { isStreamingFinished: false }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(sample)]);
+    });
+
+    test("a follow-up sent while the bot's tool call waits keeps the earlier message's image in the turn", async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Creating the app.', {
+          toolRequestIds: ['create-1'],
+        }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(sample)]);
+    });
+
+    test('an answer that ended in an error closes the turn', async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer(
+          '2',
+          2,
+          'There was an error processing your request, please try again later.',
+          { errorMessage: 'the provider rejected the request' },
+        ),
+        userMessage('3', 3, 'Try again'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), []);
+    });
+
+    test('an image from an answered turn stays out of the prompt, and its metadata says its content is not there', async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Here is your app.'),
+        userMessage('3', 3, 'Now make the title bigger'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [], 'no image rides the request');
+      assert.notOk(
+        trailingText(prompt).includes('sample.png'),
+        'the trailing message does not name the answered image',
+      );
+      assert.ok(
+        messageText(prompt[1]).includes(
+          `[sample.png](http://test.com/my-realm/sample.png): [image/png, 1024 bytes] ${MEDIA_NOT_IN_HISTORY_NOTE}`,
+        ),
+        'the history metadata says the content is not in the message',
+      );
+    });
+
+    test('the note naming a left-out file asks the user to attach it again', async () => {
+      let sizeless = png('sizeless.png', 'unknown');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Here is the first image', [sizeless]),
+        userMessage('2', 2, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), []);
+      let text = trailingText(prompt);
+      assert.ok(
+        text.includes(
+          "The following files attached to the user's messages were not sent to the model, so you cannot see them: sizeless.png (http://test.com/my-realm/sizeless.png): its size is unknown.",
+        ),
+        'the note names the file and the reason',
+      );
+      assert.ok(
+        text.includes('ask the user to attach it again'),
+        'the note tells the model to ask for the file',
+      );
+    });
+
+    test("currentTurnMessageMedia always keeps the newest message's media and fits earlier media in the budget, newest first", () => {
+      let quarter = MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / 4;
+      let old = png('old.png', 2 * quarter);
+      let sizeless = png('sizeless.png', 'unknown');
+      let recent = png('recent.png', quarter);
+      let newest = png('newest.png', 2 * quarter);
+      let names = (files: { name?: string }[]) => files.map((f) => f.name);
+
+      let media = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [old, sizeless, recent]),
+          botAnswer('2', 2, '', { isCanceled: true }),
+          userMessage('3', 3, 'Second', [newest]),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(names(media.included), ['recent.png', 'newest.png']);
+      assert.deepEqual(
+        media.omitted.map(({ file, reason }) => [file.name, reason]),
+        [
+          [
+            'old.png',
+            `newer media already fill the ${MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / (1024 * 1024)} MiB sent per turn`,
+          ],
+          ['sizeless.png', 'its size is unknown'],
+        ],
+      );
+
+      let oversized = png(
+        'oversized.png',
+        MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES + 1,
+      );
+      let tooMuch = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [recent]),
+          userMessage('2', 2, 'Second', [oversized]),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(
+        names(tooMuch.included),
+        ['oversized.png'],
+        'the newest message is sent even over the budget',
+      );
+      assert.deepEqual(names(tooMuch.omitted.map(({ file }) => file)), [
+        'recent.png',
+      ]);
+
+      let withoutImageInput = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [sizeless]),
+          userMessage('2', 2, 'Second', [oversized]),
+        ],
+        '@aibot:localhost',
+        ['file'],
+      );
+      assert.deepEqual(
+        names(withoutImageInput.included),
+        ['sizeless.png', 'oversized.png'],
+        'files the model cannot take use none of the budget; the modality note names them',
+      );
+    });
+
+    test("earlier messages' media fit only in what the turn's tool-result media and the newest message leave", () => {
+      let quarter = MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / 4;
+      let old = png('old.png', 1);
+      let recent = png('recent.png', quarter);
+      let newest = png('newest.png', quarter);
+      let capture = png('capture.png', 2 * quarter);
+
+      let media = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [old, recent]),
+          userMessage('2', 2, 'Second', [newest]),
+        ],
+        '@aibot:localhost',
+        undefined,
+        { included: [capture], omitted: [] },
+      );
+      assert.deepEqual(
+        media.included.map((f) => f.name),
+        ['recent.png', 'newest.png'],
+        'the earlier file that exactly fills the budget is sent',
+      );
+      assert.deepEqual(
+        media.omitted.map(({ file }) => file.name),
+        ['old.png'],
+        'the next byte is over the budget the tool-result media share',
+      );
+    });
   });
 
   module('tool-result media', () => {
@@ -8823,17 +9228,15 @@ ${patchedFileSource}
         dataUrlOf(captured),
       ]);
       let labels = trailingParts(prompt)
-        .filter(
-          (p) =>
-            p.type === 'text' && p.text.startsWith('Attached to a tool result'),
-        )
+        .filter((p) => p.type === 'text' && p.text.startsWith('Attached to'))
         .map((p) => p.text);
       assert.deepEqual(
         labels,
         [
+          'Attached to a user message: attached.png (https://example.com/attached.png)',
           'Attached to a tool result: captured.png (https://example.com/captured.png)',
         ],
-        "only the tool result's image is labelled",
+        'each image is labelled with where it came from',
       );
     });
 
