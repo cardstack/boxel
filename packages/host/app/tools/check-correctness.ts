@@ -37,7 +37,7 @@ const maxInstanceChecks = 10;
 // An index event strips `.json` from every file it names, so a card instance
 // appears as its URL with no extension, and a name with an extension is some
 // other file. A card whose name holds a dot reads as a file here and is not
-// rendered.
+// checked.
 function hasNoExtension(href: string): boolean {
   let name = href.split('/').pop() ?? '';
   return name.length > 0 && !name.includes('.');
