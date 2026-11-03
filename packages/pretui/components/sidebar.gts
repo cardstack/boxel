@@ -150,7 +150,9 @@ const restoresOpen = modifier(
 const measuresPane = modifier(
   (
     element: HTMLElement,
-    [apply]: [(width: number) => void],
+    // the breakpoints ride along unused so a change re-runs the modifier,
+    // and the fresh observer's first report re-sorts the current width
+    [apply]: [(width: number) => void, ...unknown[]],
   ) => {
     let observer = new ResizeObserver((entries) => {
       let entry = entries[0];
@@ -402,7 +404,8 @@ export class Sidebar extends Component<SidebarSignature> {
       this.drawerOpen = false;
     }
     this.narrowPane = narrow;
-    if (width === 0) {
+    // @mobile bypasses measurement, so it bypasses the rail bands too
+    if (width === 0 || this.args.mobile !== undefined) {
       return;
     }
     let rb = this.railBreakpoint;
@@ -482,7 +485,12 @@ export class Sidebar extends Component<SidebarSignature> {
       data-bordered={{if @bordered 'true' 'false'}}
       data-test-pretui-sidebar
       {{restoresOpen @persistKey this.restore}}
-      {{measuresPane this.setWidth}}
+      {{measuresPane
+        this.setWidth
+        this.mobileBreakpoint
+        this.railBreakpoint
+        @mobile
+      }}
       {{!-- A document listener, not an `on 'keydown'` modifier on this div —
             realm lint's no-invalid-interactive rejects a template listener on
             a non-widget element, and the shortcut has to work while focus is

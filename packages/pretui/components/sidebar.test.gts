@@ -2,6 +2,7 @@
 // and the shortcut's routing between several sidebars.
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
+import { tracked } from '@glimmer/tracking';
 import { click, render, settled, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Sidebar } from './sidebar';
@@ -113,6 +114,31 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.strictEqual(state(), 'collapsed', 'still the icon rail within 16px of the edge');
     await resizeTo(1050, () => state() === 'expanded');
     assert.strictEqual(state(), 'expanded', 'full once clearly past the edge');
+  });
+
+  test('@railBreakpoint: changing the breakpoint re-sorts the pane at the same width', async function (assert) {
+    class Args {
+      @tracked rb = 1024;
+    }
+    let args = new Args();
+    await render(<template><div data-test-pane><Sidebar @label='Library' @railBreakpoint={{args.rb}}><:nav>Lots</:nav></Sidebar></div></template>);
+    await resizeTo(800, () => state() === 'collapsed');
+    args.rb = 700;
+    await waitUntil(() => state() === 'expanded', { timeout: 2000 });
+    assert.strictEqual(state(), 'expanded', 'the same 800px pane is now in the full band');
+  });
+
+  test('@railBreakpoint is ignored while @mobile forces the mode', async function (assert) {
+    let calls: boolean[] = [];
+    let onOpenChange = (v: boolean) => calls.push(v);
+    await render(<template><div data-test-pane><Sidebar @label='Library' @mobile={{true}} @open={{false}} @onOpenChange={{onOpenChange}} @railBreakpoint={{1024}}><:nav>Lots</:nav></Sidebar></div></template>);
+    pane().style.inlineSize = '800px';
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    pane().style.inlineSize = '1200px';
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await settled();
+    assert.deepEqual(calls, [], 'no band change reaches the caller');
+    assert.notOk(document.querySelector('[data-test-pretui-sidebar] dialog[open]'), 'the drawer stays closed');
   });
 
   test('without @railBreakpoint a mid-width pane keeps the full rail', async function (assert) {
