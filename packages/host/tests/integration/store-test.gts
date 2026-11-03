@@ -1983,7 +1983,7 @@ module('Integration | Store', function (hooks) {
 
     // Records the URL of every card write the store sends, and whether it was
     // sent with keepalive, without consuming the request.
-    function recordWrites(onWrite?: (url: string) => void) {
+    function recordWrites(onWrite?: (url: string) => void, delayMs = 0) {
       let virtualNetwork = getService('network').virtualNetwork;
       let originalFetch = virtualNetwork.fetch;
       let writes: { url: string; keepalive: boolean }[] = [];
@@ -2000,6 +2000,9 @@ module('Integration | Store', function (hooks) {
             keepalive: init?.keepalive ?? request?.keepalive ?? false,
           });
           onWrite?.(url);
+          if (delayMs) {
+            await pause(delayMs);
+          }
         }
         return await originalFetch.call(virtualNetwork, input, init);
       }) as typeof virtualNetwork.fetch;
@@ -2057,67 +2060,83 @@ module('Integration | Store', function (hooks) {
       );
     });
 
-    test('editing without a pause is saved at the maximum wait', async function (this: TestContextWithSave, assert) {
-      setAutoSaveTiming(300, 600);
+    // STRESS (do not merge): runs 1-5 hold each realm write for 3 s, so the
+    // realm answers after editing stops, as on a busy runner.
+    for (let run = 1; run <= 40; run++) {
+      let slowRealmMs = run <= 5 ? 3000 : 0;
+      test(`editing without a pause is saved at the maximum wait (stress ${run}${slowRealmMs ? ', slow realm' : ''})`, async function (this: TestContextWithSave, assert) {
+        setAutoSaveTiming(300, 600);
 
-      let id = `${testRealmURL}Person/hassan`;
-      let instance = (await storeService.get(id)) as CardDef;
+        let id = `${testRealmURL}Person/hassan`;
+        let instance = (await storeService.get(id)) as CardDef;
 
-      let maxWaitMs = 600;
-      let edits = 30;
-      let startedAt = Date.now();
-      // When each save left the store and when the realm answered it, in ms
-      // from the first edit, so a failure shows whether the timer was late or
-      // the realm was slow.
-      let timeline: string[] = [];
-      this.onSave((url, doc) => {
-        recordSave(url, doc);
-        timeline.push(`saved@${Date.now() - startedAt}`);
-      });
-      let { writes, restore } = recordWrites((url) =>
-        timeline.push(
-          `${url === id ? 'sent' : `sent ${url}`}@${Date.now() - startedAt}`,
-        ),
-      );
-      let editingMs: number;
-      let sentWhileEditing: number;
-      try {
-        for (let i = 1; i <= edits; i++) {
-          (instance as any).name = `Hassan ${i}`;
-          await pause(100);
+        let maxWaitMs = 600;
+        let edits = 30;
+        let startedAt = Date.now();
+        // When each save left the store and when the realm answered it, in ms
+        // from the first edit, so a failure shows whether the timer was late or
+        // the realm was slow.
+        let timeline: string[] = [];
+        this.onSave((url, doc) => {
+          recordSave(url, doc);
+          timeline.push(`saved@${Date.now() - startedAt}`);
+        });
+        let { writes, restore } = recordWrites(
+          (url) =>
+            timeline.push(
+              `${url === id ? 'sent' : `sent ${url}`}@${Date.now() - startedAt}`,
+            ),
+          slowRealmMs,
+        );
+        let savedWhileEditing = 0;
+        let editingMs: number;
+        let sentWhileEditing: number;
+        try {
+          for (let i = 1; i <= edits; i++) {
+            (instance as any).name = `Hassan ${i}`;
+            await pause(100);
+          }
+          editingMs = Date.now() - startedAt;
+          // The maximum wait governs when a save is sent. When the realm
+          // answers depends on how busy the runner is, so a save sent on time
+          // can still be in flight when editing stops.
+          sentWhileEditing = writes.filter((w) => w.url === id).length;
+          savedWhileEditing = saves.length;
+          timeline.push(`editing-ended@${editingMs}`);
+          await storeService.flushSaves();
+        } finally {
+          restore();
         }
-        editingMs = Date.now() - startedAt;
-        // The maximum wait governs when a save is sent. When the realm
-        // answers depends on how busy the runner is, so a save sent on time
-        // can still be in flight when editing stops.
-        sentWhileEditing = writes.filter((w) => w.url === id).length;
-        timeline.push(`editing-ended@${editingMs}`);
-        await storeService.flushSaves();
-      } finally {
-        restore();
-      }
 
-      assert.ok(
-        sentWhileEditing >= 1,
-        `edits are saved while editing goes on (${sentWhileEditing} sent; ${timeline.join(', ')})`,
-      );
-      // At most one save per maximum wait while editing, plus the one that
-      // carries the last edit.
-      let bound = Math.ceil(editingMs / maxWaitMs) + 1;
-      assert.ok(
-        saves.length <= bound,
-        `${edits} edits over ${editingMs}ms take at most ${bound} saves (${saves.length} saved; ${timeline.join(', ')})`,
-      );
-      assert.ok(
-        saves.length < edits / 3,
-        `${edits} edits take far fewer saves than edits (${saves.length} saved; ${timeline.join(', ')})`,
-      );
-      assert.strictEqual(
-        saves[saves.length - 1]?.name,
-        `Hassan ${edits}`,
-        'the last save carries the last edit',
-      );
-    });
+        assert.ok(
+          sentWhileEditing >= 1,
+          `edits are saved while editing goes on (${sentWhileEditing} sent; ${timeline.join(', ')})`,
+        );
+        if (slowRealmMs) {
+          assert.strictEqual(
+            savedWhileEditing,
+            0,
+            `the old measure sees no save while editing (${timeline.join(', ')})`,
+          );
+        }
+        // At most one save per maximum wait while editing, plus the one that
+        // carries the last edit.
+        let bound = Math.ceil(editingMs / maxWaitMs) + 1;
+        assert.ok(
+          saves.length <= bound,
+          `${edits} edits over ${editingMs}ms take at most ${bound} saves (${saves.length} saved; ${timeline.join(', ')})`,
+        );
+        assert.ok(
+          saves.length < edits / 3,
+          `${edits} edits take far fewer saves than edits (${saves.length} saved; ${timeline.join(', ')})`,
+        );
+        assert.strictEqual(
+          saves[saves.length - 1]?.name,
+          `Hassan ${edits}`,
+          'the last save carries the last edit',
+        );
+      });
+    }
 
     test('an edit made while its save runs stays unsaved until the next save', async function (assert) {
       let id = `${testRealmURL}Person/hassan`;
