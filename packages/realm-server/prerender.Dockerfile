@@ -13,7 +13,7 @@ WORKDIR /realm-server
 # on changes; this value is one of those inputs. When a Chrome security release
 # lands, raise it to the fixed version: the layer then reinstalls from the
 # current stable package instead of keeping the cached browser.
-ARG CHROME_MIN_VERSION=156.0.8078.73
+ARG CHROME_MIN_VERSION=156.0.8078.79
 
 # Install Chrome dependencies required by Puppeteer; the google-chrome package
 # drags in the shared libraries that Chromium needs at runtime.
