@@ -67,7 +67,9 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
     if (!fileLink) {
       return;
     }
-    await copyCardURLToClipboard(fileLink);
+    if (!(await copyCardURLToClipboard(fileLink))) {
+      return;
+    }
     if (this.copyFeedbackTimer) {
       clearTimeout(this.copyFeedbackTimer);
     }

@@ -53,6 +53,9 @@ class DeferredLinkStore implements CardStore {
   realmForId(id: string): string | undefined {
     return this.#virtualNetwork.realmForReference(id);
   }
+  openableURL(id: string): string {
+    return this.#virtualNetwork.keyForIdentifier(id);
+  }
   private cardInstances = new Map<string, CardDef>();
   private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();
