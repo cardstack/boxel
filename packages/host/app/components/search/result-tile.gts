@@ -379,6 +379,7 @@ export default class SearchResultTile extends Component<Signature> {
         -webkit-line-clamp: 2;
         min-width: 0;
         overflow: hidden;
+        overflow-wrap: anywhere;
         white-space: normal;
         text-align: start;
       }
