@@ -132,8 +132,9 @@ const AnonymousUseFields: TemplateOnlyComponent<Signature> = <template>
         data-test-anonymous-cap-input
       />
       <span id='anonymous-cap-note' class='note cap-note'>How many calls people
-        who aren’t signed in can make with this key each day, all together, in
-        every workspace it’s shared into. Leave it empty for no cap.</span>
+        who aren’t signed in can make with this key each day (UTC), all
+        together, in every workspace it’s shared into. Leave it empty for no
+        cap.</span>
     </FieldContainer>
     <FieldContainer
       @tag='div'

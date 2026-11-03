@@ -1251,7 +1251,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-anonymous-cap]')
         .includesText(
-          'How many calls people who aren’t signed in can make with this key each day, all together, in every workspace it’s shared into. Leave it empty for no cap.',
+          'How many calls people who aren’t signed in can make with this key each day (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
         );
       assert.dom('[data-test-anonymous-cap-input]').hasValue('');
       await fillIn('[data-test-anonymous-cap-input]', '1.5');
