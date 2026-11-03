@@ -15,6 +15,7 @@ function buildDeps(getIndexHTML: () => Promise<string>) {
     dbAdapter: {} as any,
     matrixClient: {
       matrixURL: new URL('http://localhost:8008/'),
+      serverName: 'localhost',
     } as any,
     getIndexHTML,
     virtualNetwork: new PrefixRealmNetwork(),
