@@ -37,11 +37,11 @@ const secureOriginURL = new URL('https://secure.pr-review-watcher.test/secure');
 const VENDOR_PORT = 4534;
 const VENDOR = `http://127.0.0.1:${VENDOR_PORT}`;
 const OPERATIONS = SupportedMimeType.BoxelOperations;
-const ALICE = '@watcher-alice:localhost';
-const BOB = '@watcher-bob:localhost';
+const VIEWER = '@watcher-viewer:localhost';
+const SECOND = '@watcher-second:localhost';
 const REALM_USER = '@node-test_realm:localhost';
-const ALICE_TOKEN = 'ghp-watcher-alice-token-5d20c1';
-const BOB_TOKEN = 'ghp-watcher-bob-token-81fa3e';
+const VIEWER_TOKEN = 'ghp-watcher-viewer-token-5d20c1';
+const SECOND_TOKEN = 'ghp-watcher-second-token-81fa3e';
 const WATCHER = {
   module: rri(`${realmURL.href}pr-review-watcher`),
   name: 'PRReviewWatcher',
@@ -89,7 +89,7 @@ const TEAM = 'cardstack/boxel-developers';
 function pr(
   number: number,
   {
-    author = 'carol',
+    author = 'octo-author',
     isDraft = false,
     requests = [] as { at: string; user?: string; team?: string }[],
     opinions = [] as { state: string; by: string }[],
@@ -134,22 +134,22 @@ function pr(
 module(basename(import.meta.filename), function () {
   module('which pull requests are waiting on whom', function () {
     test("a team request stays after GitHub drops the team from the PR's requested reviewers, until someone approves", function (assert) {
-      // GitHub drops the team as a requested reviewer once dave reviews; the
+      // GitHub drops the team as a requested reviewer once a member reviews; the
       // request is still in the PR's history, which is what the watcher reads.
       let commented = pr(1, {
         requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
-        reviews: [{ state: 'COMMENTED', by: user('dave'), lines: 2 }],
+        reviews: [{ state: 'COMMENTED', by: user('octo-reviewer'), lines: 2 }],
       });
       let approved = pr(2, {
         requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
-        opinions: [{ state: 'APPROVED', by: 'dave' }],
+        opinions: [{ state: 'APPROVED', by: 'octo-reviewer' }],
       });
       let otherTeam = pr(3, {
         requests: [{ at: '2026-10-02T00:00:00Z', team: 'cardstack/infra' }],
       });
       let waiting = waitingOnReviewBy(
         [commented, approved, otherTeam],
-        'alice',
+        'octo-viewer',
         TEAM,
       );
       assert.deepEqual(
@@ -166,26 +166,26 @@ module(basename(import.meta.filename), function () {
     test('a direct request is sticky the same way, and the longest waiting comes first', function (assert) {
       let older = pr(4, {
         requests: [
-          { at: '2026-10-01T00:00:00Z', user: 'bob' },
-          { at: '2026-10-03T00:00:00Z', user: 'alice' },
+          { at: '2026-10-01T00:00:00Z', user: 'octo-second' },
+          { at: '2026-10-03T00:00:00Z', user: 'octo-viewer' },
         ],
       });
       let newer = pr(5, {
         isDraft: true,
-        requests: [{ at: '2026-10-05T00:00:00Z', user: 'Alice' }],
+        requests: [{ at: '2026-10-05T00:00:00Z', user: 'Octo-Viewer' }],
       });
       let own = pr(6, {
-        author: 'alice',
+        author: 'octo-viewer',
         requests: [{ at: '2026-10-01T00:00:00Z', team: TEAM }],
       });
-      let waiting = waitingOnReviewBy([newer, older, own], 'alice', TEAM);
+      let waiting = waitingOnReviewBy([newer, older, own], 'octo-viewer', TEAM);
       assert.deepEqual(
         waiting.map((p) => [p.number, p.requested?.at, p.isDraft]),
         [
           [4, '2026-10-03T00:00:00Z', false],
           [5, '2026-10-05T00:00:00Z', true],
         ],
-        'her own PR is not waiting on her; a draft that asked is listed, marked; logins match whatever their case',
+        "the viewer's own PR is not waiting on them; a draft that asked is listed, marked; logins match whatever their case",
       );
     });
 
@@ -193,32 +193,36 @@ module(basename(import.meta.filename), function () {
       let [mine] = authoredBy(
         [
           pr(7, {
-            author: 'alice',
+            author: 'octo-viewer',
             requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
             opinions: [
-              { state: 'APPROVED', by: 'dave' },
-              { state: 'CHANGES_REQUESTED', by: 'erin' },
-              { state: 'APPROVED', by: 'alice' },
+              { state: 'APPROVED', by: 'octo-reviewer' },
+              { state: 'CHANGES_REQUESTED', by: 'octo-critic' },
+              { state: 'APPROVED', by: 'octo-viewer' },
             ],
           }),
         ],
-        'alice',
+        'octo-viewer',
       );
-      assert.deepEqual(mine.approvedBy, ['dave']);
-      assert.deepEqual(mine.changesRequestedBy, ['erin']);
+      assert.deepEqual(mine.approvedBy, ['octo-reviewer']);
+      assert.deepEqual(mine.changesRequestedBy, ['octo-critic']);
     });
 
     test('comments count conversation and review comments by people other than the author, bots excluded', function (assert) {
       let count = commentCount(
         pr(8, {
-          author: 'alice',
-          comments: [user('dave'), user('alice'), bot('github-actions')],
+          author: 'octo-viewer',
+          comments: [
+            user('octo-reviewer'),
+            user('octo-viewer'),
+            bot('github-actions'),
+          ],
           reviews: [
-            { state: 'COMMENTED', by: user('erin'), lines: 3 },
+            { state: 'COMMENTED', by: user('octo-critic'), lines: 3 },
             // A review that left only its summary.
-            { state: 'COMMENTED', by: user('dave'), lines: 0 },
-            { state: 'APPROVED', by: user('dave'), lines: 0 },
-            { state: 'COMMENTED', by: user('alice'), lines: 4 },
+            { state: 'COMMENTED', by: user('octo-reviewer'), lines: 0 },
+            { state: 'APPROVED', by: user('octo-reviewer'), lines: 0 },
+            { state: 'COMMENTED', by: user('octo-viewer'), lines: 4 },
             { state: 'COMMENTED', by: bot('copilot'), lines: 5 },
           ],
         }),
@@ -226,21 +230,21 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         count,
         5,
-        "dave's comment, erin's three and dave's summary",
+        'one conversation comment, three line comments and one review summary',
       );
     });
 
     test('my PRs: every open one, drafts included, nobody asked to review last', function (assert) {
       let mine = authoredBy(
         [
-          pr(9, { author: 'alice', isDraft: true }),
+          pr(9, { author: 'octo-viewer', isDraft: true }),
           pr(10, {
-            author: 'alice',
+            author: 'octo-viewer',
             requests: [{ at: '2026-10-04T00:00:00Z', team: TEAM }],
           }),
-          pr(11, { author: 'carol' }),
+          pr(11, { author: 'octo-author' }),
         ],
-        'alice',
+        'octo-viewer',
       );
       assert.deepEqual(
         mine.map((p) => [p.number, p.isDraft, p.requested?.from]),
@@ -281,8 +285,8 @@ module(basename(import.meta.filename), function () {
       realmURL,
       secureOriginURL,
       permissions: {
-        [ALICE]: ['read', 'write'],
-        [BOB]: ['read', 'write'],
+        [VIEWER]: ['read', 'write'],
+        [SECOND]: ['read', 'write'],
         [REALM_USER]: ['read', 'write', 'realm-owner'],
       },
       fileSystem: {
@@ -414,40 +418,44 @@ module(basename(import.meta.filename), function () {
 
     test('each person is asked for their own key, and their lists are fetched with it', async function (assert) {
       assert.strictEqual(
-        await readiness(ALICE),
+        await readiness(VIEWER),
         'needs-connect',
         'with no key yet, the card asks for one',
       );
-      let alicesKey = await addKey(ALICE, ALICE_TOKEN);
-      await approveBoth(ALICE, alicesKey.id);
-      assert.strictEqual(await readiness(ALICE), 'ready');
+      let viewersKey = await addKey(VIEWER, VIEWER_TOKEN);
+      await approveBoth(VIEWER, viewersKey.id);
+      assert.strictEqual(await readiness(VIEWER), 'ready');
       assert.strictEqual(
-        await readiness(BOB),
+        await readiness(SECOND),
         'needs-connect',
-        "Alice's approval does nothing for Bob",
+        "the first person's approval does nothing for the second",
       );
 
-      let refused = await fromCard(BOB, 'waitingOnMyReview');
+      let refused = await fromCard(SECOND, 'waitingOnMyReview');
       assert.strictEqual(refused.code, 'binding-not-approved');
-      assert.strictEqual(vendor.requests.length, 0, 'nothing was sent for Bob');
+      assert.strictEqual(
+        vendor.requests.length,
+        0,
+        'nothing was sent for the second person',
+      );
 
       vendor.graphqlAnswers.push({
         status: 200,
         body: {
           data: {
-            viewer: { login: 'alice' },
+            viewer: { login: 'octo-viewer' },
             search: { issueCount: 1, nodes: [pr(12)] },
           },
         },
       });
-      let loaded = await fromCard(ALICE, 'waitingOnMyReview');
+      let loaded = await fromCard(VIEWER, 'waitingOnMyReview');
       assert.strictEqual(loaded.status, 200, JSON.stringify(loaded.body));
       assert.true(
         JSON.stringify(loaded.body).includes('Pull request 12'),
         "GitHub's answer reaches the card",
       );
       let sent = vendor.requests[0];
-      assert.strictEqual(sent.headers.authorization, `Bearer ${ALICE_TOKEN}`);
+      assert.strictEqual(sent.headers.authorization, `Bearer ${VIEWER_TOKEN}`);
       let { query, variables } = JSON.parse(sent.body);
       assert.true(
         query.includes('REVIEW_REQUESTED_EVENT'),
@@ -459,34 +467,37 @@ module(basename(import.meta.filename), function () {
         "the search is the card's own, as the token's owner",
       );
 
-      let bobsKey = await addKey(BOB, BOB_TOKEN);
-      await approveBoth(BOB, bobsKey.id);
-      await fromCard(BOB, 'myPullRequests');
-      let bobs = vendor.requests[1];
-      assert.strictEqual(bobs.headers.authorization, `Bearer ${BOB_TOKEN}`);
+      let secondsKey = await addKey(SECOND, SECOND_TOKEN);
+      await approveBoth(SECOND, secondsKey.id);
+      await fromCard(SECOND, 'myPullRequests');
+      let seconds = vendor.requests[1];
       assert.strictEqual(
-        JSON.parse(bobs.body).variables.q,
+        seconds.headers.authorization,
+        `Bearer ${SECOND_TOKEN}`,
+      );
+      assert.strictEqual(
+        JSON.parse(seconds.body).variables.q,
         'is:pr is:open archived:false org:cardstack author:@me sort:updated-desc',
       );
     });
 
     test('a revoked token stops the card with credential-rejected instead of returning GitHub’s 401 as data', async function (assert) {
-      let key = await addKey(ALICE, ALICE_TOKEN);
-      await approveBoth(ALICE, key.id);
+      let key = await addKey(VIEWER, VIEWER_TOKEN);
+      await approveBoth(VIEWER, key.id);
       vendor.graphqlAnswers.push({
         status: 401,
         body: { message: 'Bad credentials' },
       });
-      let refused = await fromCard(ALICE, 'waitingOnMyReview');
+      let refused = await fromCard(VIEWER, 'waitingOnMyReview');
       assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
       assert.strictEqual(refused.code, 'credential-rejected');
       assert.false(
         JSON.stringify(refused.body).includes('Bad credentials'),
         "GitHub's refusal is not handed to the card",
       );
-      assert.strictEqual(await readiness(ALICE), 'credential-rejected');
+      assert.strictEqual(await readiness(VIEWER), 'credential-rejected');
 
-      let held = await fromCard(ALICE, 'myPullRequests');
+      let held = await fromCard(VIEWER, 'myPullRequests');
       assert.strictEqual(
         held.code,
         'credential-rejected',
