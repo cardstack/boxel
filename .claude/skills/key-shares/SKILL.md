@@ -88,12 +88,12 @@ and suspends the share instead. See the `key-limits` skill.
 A share carries nothing about people who aren't signed in: `key_shares` has no
 anonymous columns, and a share resource no anonymous attributes. Whether such
 people may use a key is its owner's decision about the key itself
-(`user_keys.anonymous` and `user_keys.anonymous_daily_cap`; see the
+(`user_keys.anonymous`, `user_keys.anonymous_daily_cap` and `user_keys.anonymous_monthly_cap`; see the
 `user-keys` skill), and whether they can use it in a realm is that realm's
 policy's to say. A visitor the policy admits to an operation is served by a
 share's interactive bindings only while the key the share holds allows
 anonymous use (see the `key-bindings` skill), within the per-address rate and
-the key's anonymous cap (see the `key-limits` skill).
+the key's daily and monthly anonymous caps (see the `key-limits` skill).
 
 Sharing makes no choice about such people: the owner's only decision is on
 the key. Where the realm's policy opens a call that sends a shared key to
@@ -109,7 +109,7 @@ keyless `callApi` doesn't count. The secure window reads it as
   and the `share-key` page is the signed-in-only page.
 - **The policy opens such calls and the key allows anonymous use.** The share
   is made. The page's intro bolds "and so will people who aren't signed in",
-  and a read-only row says the key allows it (with its anonymous cap) and
+  and a read-only row says the key allows it (with its anonymous caps) and
   that sharing it here means they will use it.
 - **The policy opens such calls and the key doesn't allow it.** The share is
   refused 400 (`shareKey`), with a message telling the owner to allow it for
@@ -118,7 +118,7 @@ keyless `callApi` doesn't count. The secure window reads it as
   shared here, and links to the key's page to allow it first.
 
 `POST /_key-shares` takes no anonymous attributes: `anonymous` and
-`anonymousDailyCap` are refused 400 as attributes that can't be set.
+`anonymousDailyCap` and `anonymousMonthlyCap` are refused 400 as attributes that can't be set.
 `boxel keys share` has no `--anonymous`; it first asks the realm
 (`POST /_secure-window/context` with the CLI's secure session), and where the
 policy opens such calls it prints a warning that sharing means people who
@@ -271,9 +271,9 @@ method and path of these routes.
 | `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
 | `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
 
-| Status | Means                                                                                                                                                                                                                                                                                                                |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set (`anonymous` and `anonymousDailyCap` included); sharing a key that doesn't allow anonymous use into a realm whose policy opens a call that sends a shared key to people who aren't signed in |
-| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer                                                                                                |
-| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                                                                                                                  |
-| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                                                                                                                       |
+| Status | Means                                                                                                                                                                                                                                                                                                                                       |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Malformed body, a missing realm or key, a missing, over-long or control-character label, an attribute that can't be set (`anonymous`, `anonymousDailyCap` and `anonymousMonthlyCap` included); sharing a key that doesn't allow anonymous use into a realm whose policy opens a call that sends a shared key to people who aren't signed in |
+| 403    | No valid ticket; sharing into a realm the owner isn't a direct writer of; a writer action by someone who isn't one; unsharing someone else's share; listing a realm's shares or notices without being a direct writer                                                                                                                       |
+| 404    | No such share, or one the user can't see; no such key of the user's                                                                                                                                                                                                                                                                         |
+| 409    | A label the realm already has; suspending a suspended share; resuming one a writer didn't suspend; swapping into an active one                                                                                                                                                                                                              |

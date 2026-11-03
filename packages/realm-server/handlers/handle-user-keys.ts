@@ -57,8 +57,9 @@ interface KeyRequestBody {
 
 // The attributes a request may set. `subject` and `scopes` belong to a
 // google-service-account key, whose `value` is its JSON key file; `oauth` to
-// an OAuth client. `anonymous` and `anonymousDailyCap` say whether people who
-// aren't signed in may use the key (`validateAnonymousUse`).
+// an OAuth client. `anonymous`, `anonymousDailyCap` and `anonymousMonthlyCap`
+// say whether people who aren't signed in may use the key, and how much
+// (`validateAnonymousUse`).
 const ADD_ATTRIBUTES = new Set([
   'name',
   'kind',
@@ -68,6 +69,7 @@ const ADD_ATTRIBUTES = new Set([
   'oauth',
   'anonymous',
   'anonymousDailyCap',
+  'anonymousMonthlyCap',
 ]);
 const REPLACE_ATTRIBUTES = new Set(['value', 'subject', 'scopes']);
 
@@ -430,6 +432,7 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
         scopes: attributes.scopes,
         anonymous: attributes.anonymous,
         anonymousDailyCap: attributes.anonymousDailyCap,
+        anonymousMonthlyCap: attributes.anonymousMonthlyCap,
         ticket: ticketOf(body),
       });
     }

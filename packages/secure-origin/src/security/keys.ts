@@ -73,11 +73,12 @@ export type KeyValue =
       scopes: string[];
     };
 
-// The attributes that let people who aren't signed in use a key, with an
-// optional cap on their calls a day; none when they may not.
+// The attributes that let people who aren't signed in use a key, with
+// optional caps on their calls a day and a month; none when they may not.
 function anonymousAttributes(
   anonymous: boolean,
   anonymousDailyCap: number | undefined,
+  anonymousMonthlyCap: number | undefined,
 ): Record<string, unknown> {
   if (!anonymous) {
     return {};
@@ -85,6 +86,7 @@ function anonymousAttributes(
   return {
     anonymous: true,
     ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   };
 }
 
@@ -152,10 +154,11 @@ export interface UserKey {
   updatedAt: string;
   // Whether its owner lets people who aren't signed in use the key, wherever
   // a realm it is shared into lets them make a call that sends it, and the
-  // optional cap on their calls a day, all together, across every such
-  // realm. Null where there is no cap.
+  // optional caps on their calls a day and a month, all together, across
+  // every such realm. Null where there is no cap.
   anonymous: boolean;
   anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
   oauth?: OAuthKeyDescription;
   serviceAccount?: ServiceAccountDetails;
 }
@@ -246,9 +249,9 @@ export async function getKey(
   );
 }
 
-// Adds a key. `anonymous` lets people who aren't signed in use it, with an
-// optional cap on their calls a day (`anonymousDailyCap`); without it, only
-// signed-in people can.
+// Adds a key. `anonymous` lets people who aren't signed in use it, with
+// optional caps on their calls a day (`anonymousDailyCap`) and a month
+// (`anonymousMonthlyCap`); without it, only signed-in people can.
 export async function addKey(
   config: Config,
   {
@@ -256,11 +259,13 @@ export async function addKey(
     entered,
     anonymous = false,
     anonymousDailyCap,
+    anonymousMonthlyCap,
   }: {
     name: string;
     entered: KeyValue;
     anonymous?: boolean;
     anonymousDailyCap?: number;
+    anonymousMonthlyCap?: number;
   },
 ): Promise<UserKey> {
   let { ticket } = await mintKeyWriteTicket(config, { action: 'add' });
@@ -273,7 +278,11 @@ export async function addKey(
             name,
             kind: entered.kind,
             ...valueAttributes(entered),
-            ...anonymousAttributes(anonymous, anonymousDailyCap),
+            ...anonymousAttributes(
+              anonymous,
+              anonymousDailyCap,
+              anonymousMonthlyCap,
+            ),
           },
         },
         meta: { ticket },
@@ -355,19 +364,22 @@ export async function replaceKey(
 }
 
 // Sets whether people who aren't signed in may use one of the user's keys,
-// and the optional cap on their calls a day. It is the key's own setting,
-// whichever realms it is shared into, and needs no ticket: the window's
-// session is its owner's. Turning it off clears the cap. Answers the key.
+// and the optional caps on their calls a day and a month. It is the key's
+// own setting, whichever realms it is shared into, and needs no ticket: the
+// window's session is its owner's. Turning it off clears both caps. Answers
+// the key.
 export async function setAnonymousUse(
   config: Config,
   {
     keyId,
     anonymous,
     anonymousDailyCap = null,
+    anonymousMonthlyCap = null,
   }: {
     keyId: string;
     anonymous: boolean;
     anonymousDailyCap?: number | null;
+    anonymousMonthlyCap?: number | null;
   },
 ): Promise<UserKey> {
   return resource<UserKey>(
@@ -382,6 +394,7 @@ export async function setAnonymousUse(
             attributes: {
               anonymous,
               anonymousDailyCap: anonymous ? anonymousDailyCap : null,
+              anonymousMonthlyCap: anonymous ? anonymousMonthlyCap : null,
             },
           },
         },
@@ -713,10 +726,11 @@ export interface BatchShare {
   interactive: boolean;
   dailyBudget: number;
   // Whether the share's key lets people who aren't signed in use it, and the
-  // key's optional cap on their calls a day, counted across every realm the
-  // key is shared into. The share's daily budget bounds them too.
+  // key's optional caps on their calls a day and a month, counted across
+  // every realm the key is shared into. The share's budgets bound them too.
   anonymous: boolean;
   anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
 }
 
 // Every operation on one card definition, in one realm, that needs the user's

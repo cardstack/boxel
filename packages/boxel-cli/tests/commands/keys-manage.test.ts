@@ -429,7 +429,12 @@ describe('boxel keys: managing keys', () => {
       [
         'add',
         ['--kind'],
-        [...oauthOptions, '--anonymous', '--anonymous-cap'],
+        [
+          ...oauthOptions,
+          '--anonymous',
+          '--anonymous-cap',
+          '--anonymous-monthly-cap',
+        ],
         [],
       ],
       ['replace', [], [], ['--no-subject']],

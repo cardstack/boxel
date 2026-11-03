@@ -136,6 +136,7 @@ export interface BatchShare {
   dailyBudget: number;
   anonymous: boolean;
   anonymousDailyCap: number | null;
+  anonymousMonthlyCap: number | null;
 }
 
 export interface ApprovalBatch {
@@ -583,7 +584,7 @@ async function sharesIn(
   user: string,
 ): Promise<(Omit<BatchShare, 'covers'> & { grants: string[] })[]> {
   let rows = await query(dbAdapter, [
-    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap,
+    `SELECT s.id, s.label, s.key_id, k.name AS key_name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap,
             EXISTS (SELECT 1 FROM key_bindings b WHERE b.share_id = s.id AND b.interactive) AS interactive,
             COALESCE(ARRAY_AGG(g.destination) FILTER (WHERE g.id IS NOT NULL), '{}') AS grants
        FROM key_shares s
@@ -594,7 +595,7 @@ async function sharesIn(
     ` AND s.owner = `,
     param(user),
     ` AND s.state = 'active'
-      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap
+      GROUP BY s.id, s.label, s.key_id, k.name, s.daily_budget, k.anonymous, k.anonymous_daily_cap, k.anonymous_monthly_cap
       ORDER BY s.label`,
   ]);
   return rows.map((row) => ({
@@ -608,6 +609,10 @@ async function sharesIn(
     anonymous: Boolean(row.anonymous),
     anonymousDailyCap:
       row.anonymous_daily_cap == null ? null : Number(row.anonymous_daily_cap),
+    anonymousMonthlyCap:
+      row.anonymous_monthly_cap == null
+        ? null
+        : Number(row.anonymous_monthly_cap),
   }));
 }
 

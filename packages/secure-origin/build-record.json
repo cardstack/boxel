@@ -922,7 +922,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 340898,
+      "bytes": 342748,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1107,7 +1107,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 7974
+          "size": 8198
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1131,13 +1131,18 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/anonymous-caps.ts",
+          "size": 565
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/anonymous-use-fields.gts",
-          "size": 3573
+          "size": 4688
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 8212
+          "size": 8251
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1182,7 +1187,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/enter-key-page.gts",
-          "size": 16120
+          "size": 16591
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1197,7 +1202,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 23093
+          "size": 23614
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1297,7 +1302,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/share-key-page.gts",
-          "size": 15153
+          "size": 15034
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1307,7 +1312,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/swap-key-page.gts",
-          "size": 12177
+          "size": 12051
         },
         {
           "package": "@cardstack/secure-origin",

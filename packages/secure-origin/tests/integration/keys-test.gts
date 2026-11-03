@@ -66,6 +66,7 @@ const KEYS = [
     updatedAt: '2026-10-01T12:00:00.000Z',
     anonymous: false,
     anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: ['github.com', 'openweathermap.org'],
     sharedInto: [
       {
@@ -101,6 +102,7 @@ const KEYS = [
     updatedAt: '2026-10-02T12:00:00.000Z',
     anonymous: false,
     anonymousDailyCap: null as number | null,
+    anonymousMonthlyCap: null as number | null,
     usedWith: [] as string[],
     sharedInto: [] as {
       url: string;
@@ -821,7 +823,12 @@ module('Integration | key pages', function (hooks) {
     test('each key says whether people who aren’t signed in can use it, and changes that with its own request', async function (assert) {
       let keys = [
         KEYS[0],
-        { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+        {
+          ...KEYS[1],
+          anonymous: true,
+          anonymousDailyCap: 50,
+          anonymousMonthlyCap: 1000,
+        },
       ];
       serve({
         'GET _user-keys': () => json(200, keyResources(keys)),
@@ -849,7 +856,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom(`${maps} [data-test-key-anonymous-use-summary]`)
         .hasText(
-          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day all together',
+          'People who aren’t signed in can use it where a workspace lets them, up to 50 calls a day and 1000 a month all together',
         );
       assert
         .dom(`${weather} [data-test-key-anonymous-use-change]`)
@@ -865,6 +872,7 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-anonymous-use-agreement]')
         .hasText('Allow people who aren’t signed in to use this key');
       assert.dom('[data-test-anonymous-cap-input]').doesNotExist();
+      assert.dom('[data-test-anonymous-monthly-cap-input]').doesNotExist();
       await click('[data-test-anonymous-use-input]');
       let capInput = find('[data-test-anonymous-cap-input]')!;
       let capName = capInput
@@ -874,9 +882,26 @@ module('Integration | key pages', function (hooks) {
         .join(' ');
       assert.strictEqual(
         capName,
-        'Anonymous cap (optional)',
+        'Daily anonymous cap (optional)',
         'the cap is named by its label alone',
       );
+      let monthlyInput = find('[data-test-anonymous-monthly-cap-input]')!;
+      assert.strictEqual(
+        monthlyInput
+          .getAttribute('aria-labelledby')!
+          .split(' ')
+          .map((id) => document.getElementById(id)?.textContent?.trim())
+          .join(' '),
+        'Monthly anonymous cap (optional)',
+        'so is the monthly cap',
+      );
+      assert
+        .dom(
+          document.getElementById(
+            monthlyInput.getAttribute('aria-describedby')!,
+          ),
+        )
+        .includesText('each calendar month (UTC)', 'its note describes it');
       assert
         .dom(
           document.getElementById(capInput.getAttribute('aria-describedby')!),
@@ -887,6 +912,11 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-key-anonymous-use-save]')
         .isDisabled('a cap is at least one call');
       await fillIn('[data-test-anonymous-cap-input]', '25');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '0');
+      assert
+        .dom('[data-test-key-anonymous-use-save]')
+        .isDisabled('a monthly cap is at least one call too');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '500');
       await click('[data-test-key-anonymous-use-save]');
       await waitFor(
         `${weather} [data-test-key-anonymous-use-summary]:not(:empty)`,
@@ -898,7 +928,11 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(put.body, {
         data: {
           type: 'anonymous-use',
-          attributes: { anonymous: true, anonymousDailyCap: 25 },
+          attributes: {
+            anonymous: true,
+            anonymousDailyCap: 25,
+            anonymousMonthlyCap: 500,
+          },
         },
       });
       assert.deepEqual(ticketRequests(), [], 'it takes no ticket');
@@ -906,7 +940,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom(`${weather} [data-test-key-anonymous-use-summary]`)
         .hasText(
-          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day all together',
+          'People who aren’t signed in can use it where a workspace lets them, up to 25 calls a day and 500 a month all together',
           'the list is read again',
         );
 
@@ -915,6 +949,7 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-anonymous-use-input]')
         .isChecked('the panel starts from the key’s setting');
       assert.dom('[data-test-anonymous-cap-input]').hasValue('50');
+      assert.dom('[data-test-anonymous-monthly-cap-input]').hasValue('1000');
       await click('[data-test-anonymous-use-input]');
       await click('[data-test-key-anonymous-use-save]');
       await settled();
@@ -923,8 +958,12 @@ module('Integration | key pages', function (hooks) {
           (r) =>
             r.method === 'PUT' && r.path === '_user-keys/key-2/anonymous-use',
         )!.body.data.attributes,
-        { anonymous: false, anonymousDailyCap: null },
-        'turning it off clears the cap',
+        {
+          anonymous: false,
+          anonymousDailyCap: null,
+          anonymousMonthlyCap: null,
+        },
+        'turning it off clears both caps',
       );
       assert
         .dom(`${maps} [data-test-key-anonymous-use-summary]`)
@@ -1295,6 +1334,7 @@ module('Integration | key pages', function (hooks) {
                 name: 'Forecasts',
                 anonymous: true,
                 anonymousDailyCap: 100,
+                anonymousMonthlyCap: 2000,
               },
             },
           }),
@@ -1322,11 +1362,11 @@ module('Integration | key pages', function (hooks) {
       await click('[data-test-anonymous-use-input]');
       assert
         .dom('[data-test-anonymous-cap]')
-        .includesText('Anonymous cap (optional)');
+        .includesText('Daily anonymous cap (optional)');
       assert
         .dom('[data-test-anonymous-cap]')
         .includesText(
-          'How many calls people who aren’t signed in can make with this key each day, all together, in every workspace it’s shared into. Leave it empty for no cap.',
+          'How many calls people who aren’t signed in can make with this key each day (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
         );
       assert.dom('[data-test-anonymous-cap-input]').hasValue('');
       await fillIn('[data-test-anonymous-cap-input]', '1.5');
@@ -1334,6 +1374,19 @@ module('Integration | key pages', function (hooks) {
         .dom('[data-test-enter-key-save]')
         .isDisabled('a cap is a whole number of calls');
       await fillIn('[data-test-anonymous-cap-input]', '100');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText('Monthly anonymous cap (optional)');
+      assert
+        .dom('[data-test-anonymous-monthly-cap]')
+        .includesText(
+          'How many calls people who aren’t signed in can make with this key each calendar month (UTC), all together, in every workspace it’s shared into. Leave it empty for no cap.',
+        );
+      await fillIn('[data-test-anonymous-monthly-cap-input]', 'lots');
+      assert
+        .dom('[data-test-enter-key-save]')
+        .isDisabled('a monthly cap is a whole number of calls');
+      await fillIn('[data-test-anonymous-monthly-cap-input]', '2000');
       await click('[data-test-enter-key-save]');
       await waitFor('[data-test-keys-done]');
       assert.deepEqual(
@@ -1345,6 +1398,7 @@ module('Integration | key pages', function (hooks) {
           value: 'sk-forecast',
           anonymous: true,
           anonymousDailyCap: 100,
+          anonymousMonthlyCap: 2000,
         },
       );
     });
@@ -1376,6 +1430,10 @@ module('Integration | key pages', function (hooks) {
       )!.body.data;
       assert.true(attributes.anonymous);
       assert.false('anonymousDailyCap' in attributes, 'the cap is optional');
+      assert.false(
+        'anonymousMonthlyCap' in attributes,
+        'so is the monthly cap',
+      );
     });
 
     test('opened for an operation, says what it is for, as the server describes it', async function (assert) {
@@ -2371,7 +2429,12 @@ module('Integration | key pages', function (hooks) {
             200,
             keyResources([
               KEYS[0],
-              { ...KEYS[1], anonymous: true, anonymousDailyCap: 50 },
+              {
+                ...KEYS[1],
+                anonymous: true,
+                anonymousDailyCap: 50,
+                anonymousMonthlyCap: 1500,
+              },
             ]),
           ),
         'POST _secure-window/context': () =>
@@ -2403,7 +2466,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-share-key-key-allows-text]')
         .hasText(
-          'This key allows it, up to 50 calls a day all together. Sharing it here means they will use it.',
+          'This key allows it, up to 50 calls a day and 1500 a month all together. Sharing it here means they will use it.',
         );
       assert.dom('[data-test-anonymous-use-input]').doesNotExist();
       assert.dom('[data-test-share-key-save]').isEnabled();

@@ -29,21 +29,28 @@ import {
   addUserKey,
   canonicalRealmUrl,
   deleteUserKey,
+  findShare,
   findUserKey,
+  getKeyUsage,
   listConnectableClients,
   listOwnShares,
   listRealmShares,
   listUserKeys,
   realmOpensToAnonymous,
   replaceUserKey,
+  setKeyLimits,
   setUserKeyAnonymousUse,
+  anonymousCapsClause,
   shareUserKey,
   completeOAuthConnect,
   startOAuthConnect,
   swapKeyIntoShare,
   unshareUserKey,
   type ConnectableClient,
+  type KeyLimitChanges,
+  type KeyLimits,
   type KeyShare,
+  type KeyUsage,
   type OAuthClientSettings,
   type OAuthConnectOutcome,
   type ServiceAccountDetails,
@@ -55,12 +62,14 @@ import { finishInSecureWindow, windowTimeout } from './approve.ts';
 // put them into realms. Keys belong to the user, so only the share commands
 // name a realm.
 //
-// Reading (`list`, `show`, `shares`, `clients`) and unsharing use the
-// profile's ordinary realm-server session. A change that stores or hands out
-// a key (`add`, `replace`, `delete`, `share`, `swap`, `connect`) takes a key
-// write ticket for that change, which only a session signed in on the secure
-// origin can mint, so those commands first make sure the profile holds one,
-// opening the secure window's sign-in in the browser when it doesn't.
+// Reading (`list`, `show`, `shares`, `clients`, `usage`, and `limits` with
+// nothing to change) and unsharing use the profile's ordinary realm-server
+// session. A change that stores or hands out a key (`add`, `replace`,
+// `delete`, `share`, `swap`, `connect`) takes a key write ticket for that
+// change, which only a session signed in on the secure origin can mint, so
+// those commands first make sure the profile holds one, opening the secure
+// window's sign-in in the browser when it doesn't. Changing a key's limits
+// takes that session too, with no ticket.
 //
 // A key's value is typed at a masked prompt or read with `--stdin` or
 // `--key-file`, never taken as an argument, and nothing prints one. A refusal
@@ -597,6 +606,7 @@ export async function keysAdd(
     json?: boolean;
     anonymous?: boolean;
     anonymousCap?: string;
+    anonymousMonthlyCap?: string;
   } & KeyValueSource &
     ServiceAccountOptions &
     OAuthClientOptions &
@@ -604,10 +614,13 @@ export async function keysAdd(
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   let kind = options.kind ?? 'static';
-  let anonymousDailyCap = anonymousCapOption(
-    options.anonymous,
-    options.anonymousCap,
-  );
+  // A new key has no cap to remove, so these take numbers only.
+  let anonymousDailyCap =
+    anonymousCapOption(options.anonymous, options.anonymousCap) ?? undefined;
+  let anonymousMonthlyCap =
+    anonymousCapOption(options.anonymous, options.anonymousMonthlyCap, {
+      flag: '--anonymous-monthly-cap',
+    }) ?? undefined;
   if (options.anonymous && kind === 'oauth-client') {
     throw new Error(
       "--anonymous isn't taken when adding an OAuth client: a sign-in app's people each connect their own account, so it never serves people who aren't signed in. For one that gets its own tokens (client_credentials), allow it after adding: `boxel keys anonymous <name> on`",
@@ -628,6 +641,7 @@ export async function keysAdd(
     ...oauthClientSettings(kind, options),
     ...(options.anonymous ? { anonymous: true } : {}),
     ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   });
   emit(ctx, key, () => {
     if (kind === 'oauth-client' && options.grantType !== 'client_credentials') {
@@ -818,31 +832,42 @@ async function warnWhereVisitorsWillUse(
   }
   if (!key.anonymous) {
     throw new Error(
-      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls>)`,
+      `${realm} lets people who aren't signed in make calls that send a shared key, so ${doing} ${name} there means they will use it, and ${name} doesn't allow them. To put it there, allow it for the key first: \`boxel keys anonymous ${name} on\` (with an optional --cap <calls> a day and --monthly-cap <calls> a month)`,
     );
   }
   console.error(
-    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}.${RESET}`,
+    `${FG_YELLOW}Warning: ${doing} ${name} into ${realm} means people who aren't signed in will use it. The realm's policy lets anyone on the internet who opens its cards make calls that send a shared key, and read the responses. Their calls count against your quota and/or are billed to your account with the service${anonymousCapsClause(key)}.${RESET}`,
   );
   return true;
 }
 
-// `--anonymous-cap <calls>`, given only with `--anonymous` (or `on`): a whole
-// number of calls a day, from 1.
+// An anonymous cap (`--anonymous-cap`, `--anonymous-monthly-cap`, or `--cap`
+// and `--monthly-cap` with `on`), given only with `--anonymous` (or `on`): a
+// whole number of calls, from 1. With `on`, `none` removes that cap (null)
+// and keeps anonymous use on.
 function anonymousCapOption(
   anonymous: boolean | undefined,
   cap: string | undefined,
-  { flag = '--anonymous-cap', with: withFlag = '--anonymous' } = {},
-): number | undefined {
+  {
+    flag = '--anonymous-cap',
+    with: withFlag = '--anonymous',
+    removable = false,
+  } = {},
+): number | null | undefined {
   if (cap === undefined) {
     return undefined;
   }
   if (!anonymous) {
     throw new Error(`${flag} is given with ${withFlag}`);
   }
+  if (removable && cap.trim().toLowerCase() === 'none') {
+    return null;
+  }
   let calls = Number(cap);
   if (!/^\d+$/.test(cap.trim()) || calls < 1 || calls > 2_147_483_647) {
-    throw new Error(`${flag} is a whole number of calls, from 1 to 2147483647`);
+    throw new Error(
+      `${flag} is a whole number of calls, from 1 to 2147483647${removable ? ', or none' : ''}`,
+    );
   }
   return calls;
 }
@@ -850,18 +875,22 @@ function anonymousCapOption(
 // How a key's setting for people who aren't signed in reads.
 function anonymousUseOf(key: UserKeyMetadata): string {
   return key.anonymous
-    ? `allowed${key.anonymousDailyCap != null ? `, up to ${key.anonymousDailyCap} calls a day all together` : ''}, wherever a realm's policy lets them make the call`
+    ? `allowed${anonymousCapsClause(key)}, wherever a realm's policy lets them make the call`
     : 'not allowed';
 }
 
 // Whether people who aren't signed in may use one of the user's keys: its
 // owner's setting for the key itself, which every realm it is shared into
-// follows where that realm's policy lets them make the call. `off` clears the
-// cap.
+// follows where that realm's policy lets them make the call. `off` clears
+// both caps; `on` keeps a cap it doesn't name, and removes one named `none`.
 export async function keysAnonymous(
   name: string,
   setting: string,
-  options: { cap?: string; json?: boolean } & KeysCommandDeps = {},
+  options: {
+    cap?: string;
+    monthlyCap?: string;
+    json?: boolean;
+  } & KeysCommandDeps = {},
 ): Promise<UserKeyMetadata> {
   if (setting !== 'on' && setting !== 'off') {
     throw new Error('say on or off');
@@ -870,6 +899,12 @@ export async function keysAnonymous(
   let anonymousDailyCap = anonymousCapOption(anonymous, options.cap, {
     flag: '--cap',
     with: 'on',
+    removable: true,
+  });
+  let anonymousMonthlyCap = anonymousCapOption(anonymous, options.monthlyCap, {
+    flag: '--monthly-cap',
+    with: 'on',
+    removable: true,
   });
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);
@@ -878,6 +913,7 @@ export async function keysAnonymous(
     keyId: key.id,
     anonymous,
     ...(anonymousDailyCap !== undefined ? { anonymousDailyCap } : {}),
+    ...(anonymousMonthlyCap !== undefined ? { anonymousMonthlyCap } : {}),
   });
   emit(ctx, updated, () => {
     console.log(
@@ -1015,6 +1051,206 @@ export async function keysShares(
     }
   });
   return shares;
+}
+
+export interface LimitsOptions {
+  realm?: string;
+  // `<burst>/<refill per minute>`; either side may be `default`.
+  rate?: string;
+  daily?: string;
+  monthly?: string;
+  json?: boolean;
+}
+
+// A limit as typed: a number, or `default` for the platform's default. The
+// realm server says which numbers a limit takes.
+function limitValue(option: string, value: string): number | null {
+  if (value.trim().toLowerCase() === 'default') {
+    return null;
+  }
+  let number = Number(value);
+  if (value.trim() === '' || !Number.isFinite(number)) {
+    throw new Error(`${option} is a number, or default`);
+  }
+  return number;
+}
+
+function limitChanges(options: LimitsOptions): KeyLimitChanges {
+  let changes: KeyLimitChanges = {};
+  if (options.rate !== undefined) {
+    // A bare `default` puts both halves back, as `--daily default` does its one.
+    let parts =
+      options.rate.trim().toLowerCase() === 'default'
+        ? ['default', 'default']
+        : options.rate.split('/');
+    if (parts.length !== 2) {
+      throw new Error(
+        '--rate is <burst>/<refill per minute>, such as 25/15; either may be default, or default for both',
+      );
+    }
+    changes.rateBurst = limitValue('--rate burst', parts[0]!);
+    changes.rateRefillPerMinute = limitValue('--rate refill', parts[1]!);
+  }
+  if (options.daily !== undefined) {
+    changes.dailyBudget = limitValue('--daily', options.daily);
+  }
+  if (options.monthly !== undefined) {
+    changes.monthlyBudget = limitValue('--monthly', options.monthly);
+  }
+  return changes;
+}
+
+function printLimits(what: string, limits: KeyLimits): void {
+  console.log(`Limits on ${what}:`);
+  console.log(
+    `  rate: ${limits.rateBurst} calls at once per caller, refilled at ${limits.rateRefillPerMinute} a minute`,
+  );
+  console.log(`  daily budget: ${limits.dailyBudget} calls`);
+  console.log(`  monthly budget: ${limits.monthlyBudget} calls`);
+}
+
+// A share named by its label with `--realm`, or else one of the user's own
+// keys by name.
+async function limitedTarget(
+  ctx: Context,
+  token: string,
+  name: string,
+  realm: string | undefined,
+): Promise<{
+  what: string;
+  target: { shareId: string } | { keyId: string };
+  limits: KeyLimits | undefined;
+}> {
+  if (realm) {
+    let share = await findShare(ctx.realmServerUrl, token, {
+      realm,
+      label: name,
+    });
+    return {
+      what: `${share.label} in ${share.realm}`,
+      target: { shareId: share.id },
+      limits: share.limits,
+    };
+  }
+  let key = await findUserKey(ctx.realmServerUrl, token, name);
+  return { what: key.name, target: { keyId: key.id }, limits: key.limits };
+}
+
+// Shows or sets the limits on how much of a key interactive calls may spend:
+// on a personal key, or with `--realm` on a share of one in that realm. Only
+// the key's owner sets them, with a session signed in on the secure origin;
+// a realm's other direct writers can read a share's but are refused changing
+// them, by the realm server. Without a change, prints the limits in force.
+export async function keysLimits(
+  name: string,
+  options: LimitsOptions & KeysCommandDeps,
+): Promise<KeyLimits> {
+  let ctx = context(options.json, options);
+  let changes = limitChanges(options);
+  let changing = Object.keys(changes).length > 0;
+  let token = changing ? await secureToken(ctx) : await ordinaryToken(ctx);
+  let {
+    what,
+    target,
+    limits: current,
+  } = await limitedTarget(ctx, token, name, options.realm);
+  let limits = changing
+    ? await setKeyLimits(ctx.realmServerUrl, token, target, changes)
+    : current;
+  if (!limits) {
+    throw new Error(`The realm server didn't list the limits on ${what}`);
+  }
+  emit(ctx, limits, () => {
+    if (changing) {
+      console.log(`${FG_GREEN}Set the limits on ${what}.${RESET}`);
+    }
+    printLimits(what, limits);
+  });
+  return limits;
+}
+
+// The realm server names a caller only to someone who may see them in the
+// realm: one the reader can't see comes `withheld`, without a name, and a
+// call with no session comes without a name too.
+function callerName(
+  ctx: Context,
+  { caller, withheld }: { caller: string | null; withheld?: boolean },
+): string {
+  if (withheld) {
+    return "someone you can't see in the realm";
+  }
+  return caller === null
+    ? 'anonymous'
+    : caller === ctx.matrixUserId
+      ? 'you'
+      : caller;
+}
+
+function printBudget(label: string, use: KeyUsage['budgets']['day']): void {
+  console.log(
+    `  ${label}: ${use.used} of ${use.budget} calls ${DIM}(resets ${use.resetsAt})${RESET}`,
+  );
+}
+
+function printUsage(ctx: Context, what: string, usage: KeyUsage): void {
+  console.log(`Usage of ${what}:`);
+  printBudget('today', usage.budgets.day);
+  printBudget('this month', usage.budgets.month);
+  console.log(`  calls since ${usage.since}: ${usage.calls}`);
+  if (usage.lastUse) {
+    let { at, operation, outcome } = usage.lastUse;
+    console.log(
+      `  last use: ${at}, ${operation} by ${callerName(ctx, usage.lastUse)} (${outcome})`,
+    );
+  } else {
+    console.log('  last use: never');
+  }
+  if (usage.topCallers.length > 0) {
+    console.log('  top callers:');
+    for (let entry of usage.topCallers) {
+      console.log(`    ${callerName(ctx, entry)}: ${entry.calls}`);
+    }
+  }
+  if (usage.refusals.length > 0) {
+    console.log('  refusals:');
+    for (let { code, count } of usage.refusals) {
+      console.log(`    ${code}: ${count}`);
+    }
+  }
+  if (usage.vendorOutcomes.length > 0) {
+    console.log('  vendor answers:');
+    for (let { status, count, outcome } of usage.vendorOutcomes) {
+      console.log(`    ${status}${outcome ? ` (${outcome})` : ''}: ${count}`);
+    }
+  }
+  if (usage.grants.length > 0) {
+    console.log('  grants:');
+    for (let grant of usage.grants) {
+      let state =
+        grant.state === 'rejected'
+          ? `${FG_RED}rejected${RESET}${grant.rejectedAt ? ` ${grant.rejectedAt}` : ''}`
+          : grant.state;
+      console.log(`    ${grant.destination}: ${state}`);
+    }
+  }
+  printLimits(what, usage.limits);
+}
+
+// What a share or a personal key has served: its budgets' use this UTC day
+// and month, its last use, top callers, refusals by reason, the vendor's
+// answers and its grants. A personal key's usage is for its owner; a share's,
+// named by its label with `--realm`, for the realm's direct writers. Reading
+// needs no secure session.
+export async function keysUsage(
+  name: string,
+  options: { realm?: string; json?: boolean } & KeysCommandDeps,
+): Promise<KeyUsage> {
+  let ctx = context(options.json, options);
+  let token = await ordinaryToken(ctx);
+  let { what, target } = await limitedTarget(ctx, token, name, options.realm);
+  let usage = await getKeyUsage(ctx.realmServerUrl, token, target);
+  emit(ctx, usage, () => printUsage(ctx, what, usage));
+  return usage;
 }
 
 // How `connect --client` names a client: `platform:<name>` for one of
