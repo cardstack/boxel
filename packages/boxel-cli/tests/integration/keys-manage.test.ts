@@ -322,6 +322,20 @@ describe('boxel keys: managing keys and shares (integration)', () => {
       anonymousDailyCap: 20,
       anonymousMonthlyCap: 100,
     });
+    await expect(
+      keysAnonymous('anon', 'on', { ...deps, monthlyCap: 'lots' }),
+    ).rejects.toThrow(
+      '--monthly-cap is a whole number of calls, from 1 to 2147483647, or none',
+    );
+    let monthlyRemoved = await keysAnonymous('anon', 'on', {
+      ...deps,
+      monthlyCap: 'none',
+    });
+    expect(monthlyRemoved).toMatchObject({
+      anonymous: true,
+      anonymousDailyCap: 20,
+      anonymousMonthlyCap: null,
+    });
 
     // This realm's policy lets only signed-in people make calls with a
     // shared key, so sharing reflects nothing more.

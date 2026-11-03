@@ -405,7 +405,7 @@ export async function realmOpensToAnonymous(
 
 // Sets whether people who aren't signed in may use one of the user's keys,
 // and the optional caps on their calls a day and a month. A cap left out is
-// kept. Takes a secure session.
+// kept, and null removes it. Takes a secure session.
 export async function setUserKeyAnonymousUse(
   realmServerUrl: string,
   token: string,
@@ -417,8 +417,9 @@ export async function setUserKeyAnonymousUse(
   }: {
     keyId: string;
     anonymous: boolean;
-    anonymousDailyCap?: number;
-    anonymousMonthlyCap?: number;
+    // A cap left out is kept, and null removes it.
+    anonymousDailyCap?: number | null;
+    anonymousMonthlyCap?: number | null;
   },
   fetchFn: FetchFn = fetch,
 ): Promise<UserKeyMetadata> {

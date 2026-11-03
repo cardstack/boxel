@@ -614,15 +614,13 @@ export async function keysAdd(
 ): Promise<UserKeyMetadata> {
   let ctx = context(options.json, options);
   let kind = options.kind ?? 'static';
-  let anonymousDailyCap = anonymousCapOption(
-    options.anonymous,
-    options.anonymousCap,
-  );
-  let anonymousMonthlyCap = anonymousCapOption(
-    options.anonymous,
-    options.anonymousMonthlyCap,
-    { flag: '--anonymous-monthly-cap' },
-  );
+  // A new key has no cap to remove, so these take numbers only.
+  let anonymousDailyCap =
+    anonymousCapOption(options.anonymous, options.anonymousCap) ?? undefined;
+  let anonymousMonthlyCap =
+    anonymousCapOption(options.anonymous, options.anonymousMonthlyCap, {
+      flag: '--anonymous-monthly-cap',
+    }) ?? undefined;
   if (options.anonymous && kind === 'oauth-client') {
     throw new Error(
       "--anonymous isn't taken when adding an OAuth client: a sign-in app's people each connect their own account, so it never serves people who aren't signed in. For one that gets its own tokens (client_credentials), allow it after adding: `boxel keys anonymous <name> on`",
@@ -845,21 +843,31 @@ async function warnWhereVisitorsWillUse(
 
 // An anonymous cap (`--anonymous-cap`, `--anonymous-monthly-cap`, or `--cap`
 // and `--monthly-cap` with `on`), given only with `--anonymous` (or `on`): a
-// whole number of calls, from 1.
+// whole number of calls, from 1. With `on`, `none` removes that cap (null)
+// and keeps anonymous use on.
 function anonymousCapOption(
   anonymous: boolean | undefined,
   cap: string | undefined,
-  { flag = '--anonymous-cap', with: withFlag = '--anonymous' } = {},
-): number | undefined {
+  {
+    flag = '--anonymous-cap',
+    with: withFlag = '--anonymous',
+    removable = false,
+  } = {},
+): number | null | undefined {
   if (cap === undefined) {
     return undefined;
   }
   if (!anonymous) {
     throw new Error(`${flag} is given with ${withFlag}`);
   }
+  if (removable && cap.trim().toLowerCase() === 'none') {
+    return null;
+  }
   let calls = Number(cap);
   if (!/^\d+$/.test(cap.trim()) || calls < 1 || calls > 2_147_483_647) {
-    throw new Error(`${flag} is a whole number of calls, from 1 to 2147483647`);
+    throw new Error(
+      `${flag} is a whole number of calls, from 1 to 2147483647${removable ? ', or none' : ''}`,
+    );
   }
   return calls;
 }
@@ -874,7 +882,7 @@ function anonymousUseOf(key: UserKeyMetadata): string {
 // Whether people who aren't signed in may use one of the user's keys: its
 // owner's setting for the key itself, which every realm it is shared into
 // follows where that realm's policy lets them make the call. `off` clears
-// both caps; `on` keeps a cap it doesn't name.
+// both caps; `on` keeps a cap it doesn't name, and removes one named `none`.
 export async function keysAnonymous(
   name: string,
   setting: string,
@@ -891,10 +899,12 @@ export async function keysAnonymous(
   let anonymousDailyCap = anonymousCapOption(anonymous, options.cap, {
     flag: '--cap',
     with: 'on',
+    removable: true,
   });
   let anonymousMonthlyCap = anonymousCapOption(anonymous, options.monthlyCap, {
     flag: '--monthly-cap',
     with: 'on',
+    removable: true,
   });
   let ctx = context(options.json, options);
   let token = await secureToken(ctx);

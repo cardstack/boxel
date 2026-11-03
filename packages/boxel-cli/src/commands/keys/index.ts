@@ -202,11 +202,11 @@ export function registerKeysCommand(program: Command): void {
     .argument('<on|off>', 'Allow it or not')
     .option(
       '--cap <calls>',
-      "With on, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into",
+      "With on, the most calls a day people who aren't signed in make with it, all together, in every realm it's shared into, or none to remove the cap",
     )
     .option(
       '--monthly-cap <calls>',
-      "With on, the most calls a UTC month people who aren't signed in make with it, all together, in every realm it's shared into",
+      "With on, the most calls a UTC month people who aren't signed in make with it, all together, in every realm it's shared into, or none to remove the cap",
     )
     .option('--json', 'Output JSON')
     .action(
