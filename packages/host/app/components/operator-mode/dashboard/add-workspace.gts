@@ -71,8 +71,10 @@ export default class AddWorkspace extends Component<Signature> {
         color: var(--boxel-light);
         transition: box-shadow var(--boxel-transition);
       }
-      .add-workspace:hover {
-        box-shadow: inset 0 0 0 1px var(--boxel-light-50);
+      @media (hover: hover) {
+        .add-workspace:hover {
+          box-shadow: inset 0 0 0 1px var(--boxel-light-50);
+        }
       }
       .add-workspace.is-selected,
       .add-workspace:focus-visible {

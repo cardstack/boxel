@@ -110,10 +110,6 @@ export default class ArchivedWorkspace extends Component<Signature> {
         background-color: var(--dashboard-row-tint);
         box-shadow: inset 0 0 0 1px var(--boxel-light-25);
         color: var(--boxel-light);
-        transition: box-shadow var(--boxel-transition);
-      }
-      .archived-row:hover {
-        box-shadow: inset 0 0 0 1px var(--boxel-light-50);
       }
       .thumb {
         display: flex;

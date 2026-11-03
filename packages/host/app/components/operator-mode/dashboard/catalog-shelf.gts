@@ -389,7 +389,7 @@ export default class CatalogShelf extends Component<Signature> {
           0 0 0 1px var(--boxel-light-25),
           var(--shadow-md);
       }
-      /* The hover edge brightens as the tiles' does. */
+      /* The hover ring stands 1px off the resting edge. */
       .story::after {
         content: '';
         position: absolute;
