@@ -13,6 +13,7 @@ import type {
   RoomMember,
 } from 'matrix-js-sdk';
 import type { GitHubClient } from '../lib/github.ts';
+import { MatrixError } from 'matrix-js-sdk';
 import { onMembershipEvent } from '../lib/membership-handler.ts';
 import { onTimelineEvent } from '../lib/timeline-handler.ts';
 
@@ -67,29 +68,38 @@ function makeMatrixClient(client: Partial<MatrixClient>): MatrixClient {
 }
 
 module('membership handler', () => {
-  let joinedRooms: string[] = [];
-  let handleMembershipEvent = onMembershipEvent({
-    client: makeMatrixClient({
+  const BOT = '@submissionbot:localhost';
+
+  function botInvite(roomId: string) {
+    return makeMember({
+      membership: 'invite',
+      userId: BOT,
+      roomId,
+      name: 'submissionbot',
+    });
+  }
+
+  function makeHandler(client: Partial<MatrixClient>) {
+    return onMembershipEvent({
+      client: makeMatrixClient(client),
+      authUserId: BOT,
+    });
+  }
+
+  function matrixError(errcode: string, httpStatus: number, extra = {}) {
+    return new MatrixError({ errcode, error: errcode, ...extra }, httpStatus);
+  }
+
+  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
+    let joinedRooms: string[] = [];
+    let handle = makeHandler({
       joinRoom: async (roomId: string) => {
         joinedRooms.push(roomId);
         return makeRoom('join');
       },
-    }),
-    authUserId: '@submissionbot:localhost',
-  });
+    });
 
-  test('auto-joins room after membership invite event for submissionbot', async (assert) => {
-    joinedRooms = [];
-
-    await handleMembershipEvent(
-      makeStrippedInviteEvent('@submissionbot:localhost'),
-      makeMember({
-        membership: 'invite',
-        userId: '@submissionbot:localhost',
-        roomId: '!room-id:localhost',
-        name: 'submissionbot',
-      }),
-    );
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
 
     assert.deepEqual(
       joinedRooms,
@@ -99,9 +109,15 @@ module('membership handler', () => {
   });
 
   test('does not join when another user is invited', async (assert) => {
-    joinedRooms = [];
+    let joinedRooms: string[] = [];
+    let handle = makeHandler({
+      joinRoom: async (roomId: string) => {
+        joinedRooms.push(roomId);
+        return makeRoom('join');
+      },
+    });
 
-    await handleMembershipEvent(
+    await handle(
       makeStrippedInviteEvent('@alice:localhost'),
       makeMember({
         membership: 'invite',
@@ -114,99 +130,84 @@ module('membership handler', () => {
     assert.deepEqual(joinedRooms, [], 'ignores invites for other users');
   });
 
-  test('rejects an invite to a room it can no longer join', async (assert) => {
-    let leftRooms: string[] = [];
-    let handle = onMembershipEvent({
-      client: makeMatrixClient({
+  test('retries a join that hits the rate limit', async (assert) => {
+    let attempts = 0;
+    let handle = makeHandler({
+      joinRoom: async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw matrixError('M_LIMIT_EXCEEDED', 429, { retry_after_ms: 1 });
+        }
+        return makeRoom('join');
+      },
+    });
+
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
+
+    assert.strictEqual(attempts, 2, 'joins after waiting out the limit');
+  });
+
+  for (let [label, error] of [
+    ['M_FORBIDDEN', () => matrixError('M_FORBIDDEN', 403)],
+    ['M_NOT_FOUND', () => matrixError('M_NOT_FOUND', 404)],
+    ['a room everyone has left', () => matrixError('M_UNKNOWN', 404)],
+  ] as const) {
+    test(`rejects the invite when the join fails with ${label}`, async (assert) => {
+      let leftRooms: string[] = [];
+      let handle = makeHandler({
         joinRoom: async () => {
-          throw Object.assign(new Error('not allowed'), {
-            errcode: 'M_FORBIDDEN',
-          });
+          throw error();
         },
         leave: async (roomId: string) => {
           leftRooms.push(roomId);
           return {};
         },
-      }),
-      authUserId: '@submissionbot:localhost',
+      });
+
+      await handle(
+        makeStrippedInviteEvent(BOT),
+        botInvite('!dead-room:localhost'),
+      );
+
+      assert.deepEqual(leftRooms, ['!dead-room:localhost'], 'rejects it');
     });
-
-    await handle(
-      makeStrippedInviteEvent('@submissionbot:localhost'),
-      makeMember({
-        membership: 'invite',
-        userId: '@submissionbot:localhost',
-        roomId: '!dead-room:localhost',
-        name: 'submissionbot',
-      }),
-    );
-
-    assert.deepEqual(leftRooms, ['!dead-room:localhost'], 'rejects the invite');
-  });
-
-  test('rejects an invite to a room everyone has left', async (assert) => {
-    let leftRooms: string[] = [];
-    let handle = onMembershipEvent({
-      client: makeMatrixClient({
-        joinRoom: async () => {
-          throw Object.assign(
-            new Error(
-              "Can't join remote room because no servers that are in the room have been provided.",
-            ),
-            { errcode: 'M_UNKNOWN', httpStatus: 404 },
-          );
-        },
-        leave: async (roomId: string) => {
-          leftRooms.push(roomId);
-          return {};
-        },
-      }),
-      authUserId: '@submissionbot:localhost',
-    });
-
-    await handle(
-      makeStrippedInviteEvent('@submissionbot:localhost'),
-      makeMember({
-        membership: 'invite',
-        userId: '@submissionbot:localhost',
-        roomId: '!empty-room:localhost',
-        name: 'submissionbot',
-      }),
-    );
-
-    assert.deepEqual(
-      leftRooms,
-      ['!empty-room:localhost'],
-      'rejects the invite',
-    );
-  });
+  }
 
   test('keeps the invite when joining fails for another reason', async (assert) => {
     let leftRooms: string[] = [];
-    let handle = onMembershipEvent({
-      client: makeMatrixClient({
-        joinRoom: async () => {
-          throw new Error('connection reset');
-        },
-        leave: async (roomId: string) => {
-          leftRooms.push(roomId);
-          return {};
-        },
-      }),
-      authUserId: '@submissionbot:localhost',
+    let handle = makeHandler({
+      joinRoom: async () => {
+        throw new Error('connection reset');
+      },
+      leave: async (roomId: string) => {
+        leftRooms.push(roomId);
+        return {};
+      },
+    });
+
+    await handle(makeStrippedInviteEvent(BOT), botInvite('!room-id:localhost'));
+
+    assert.deepEqual(leftRooms, [], 'leaves the invite pending');
+  });
+
+  test('survives a failure to reject the invite', async (assert) => {
+    let leaveAttempts = 0;
+    let handle = makeHandler({
+      joinRoom: async () => {
+        throw matrixError('M_FORBIDDEN', 403);
+      },
+      leave: async () => {
+        leaveAttempts++;
+        throw new Error('connection reset');
+      },
     });
 
     await handle(
-      makeStrippedInviteEvent('@submissionbot:localhost'),
-      makeMember({
-        membership: 'invite',
-        userId: '@submissionbot:localhost',
-        roomId: '!room-id:localhost',
-        name: 'submissionbot',
-      }),
+      makeStrippedInviteEvent(BOT),
+      botInvite('!dead-room:localhost'),
     );
 
-    assert.deepEqual(leftRooms, [], 'leaves the invite pending');
+    assert.strictEqual(leaveAttempts, 1, 'tried to reject, and did not throw');
   });
 });
 

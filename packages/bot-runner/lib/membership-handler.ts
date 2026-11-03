@@ -1,8 +1,12 @@
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
+import { MatrixError } from 'matrix-js-sdk';
 import type { MatrixClient, MatrixEvent, RoomMember } from 'matrix-js-sdk';
 
 const log = logger('bot-runner');
+
+const MAX_JOIN_ATTEMPTS = 5;
+const DEFAULT_RETRY_AFTER_MS = 1000;
 
 export interface MembershipHandlerOptions {
   client: MatrixClient;
@@ -25,7 +29,7 @@ export function onMembershipEvent({
     }
     try {
       log.info(`joining room ${member.roomId} from invite`);
-      await client.joinRoom(member.roomId);
+      await joinRoom(client, member.roomId);
     } catch (error) {
       if (isUnjoinable(error)) {
         // Otherwise the dead invite is retried, and fails, on every start.
@@ -44,15 +48,34 @@ export function onMembershipEvent({
   };
 }
 
+// Joining every pending invite at start can exceed Synapse's join rate limit.
+async function joinRoom(client: MatrixClient, roomId: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await client.joinRoom(roomId);
+      return;
+    } catch (error) {
+      if (
+        !(error instanceof MatrixError) ||
+        !error.isRateLimitError() ||
+        attempt >= MAX_JOIN_ATTEMPTS
+      ) {
+        throw error;
+      }
+      let retryAfterMs = error.getRetryAfterMs() ?? DEFAULT_RETRY_AFTER_MS;
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+    }
+  }
+}
+
 // Synapse answers a join to a room everyone has left with 404 M_UNKNOWN, so
 // the status matters as much as the errcode.
 function isUnjoinable(error: unknown): boolean {
-  let { errcode, httpStatus } =
-    (error as { errcode?: unknown; httpStatus?: unknown } | undefined) ?? {};
   return (
-    httpStatus === 403 ||
-    httpStatus === 404 ||
-    errcode === 'M_FORBIDDEN' ||
-    errcode === 'M_NOT_FOUND'
+    error instanceof MatrixError &&
+    (error.httpStatus === 403 ||
+      error.httpStatus === 404 ||
+      error.errcode === 'M_FORBIDDEN' ||
+      error.errcode === 'M_NOT_FOUND')
   );
 }
