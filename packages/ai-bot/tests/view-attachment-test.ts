@@ -261,6 +261,32 @@ module('viewAttachment', () => {
     assert.deepEqual(data.attachedFiles, [jpg]);
   });
 
+  test('files whose URLs differ only in percent-encoding stay apart', async () => {
+    let escaped = photo('a', {
+      sourceUrl: 'boxel-local://3f2a/a%2Fb.jpg',
+      url: 'mxc://localhost/escaped',
+    });
+    let plain = photo('b', {
+      sourceUrl: 'boxel-local://3f2a/a/b.jpg',
+      url: 'mxc://localhost/plain',
+    });
+    let history = [message(USER, [escaped]), message(USER, [plain])];
+
+    let first = await view(history, [escaped.sourceUrl]);
+    let second = await view(history, [plain.sourceUrl]);
+    let ambiguous = await view(history, ['boxel-local://3f2a/a%2fb.jpg']);
+
+    assert.deepEqual(first.data.attachedFiles, [escaped]);
+    assert.deepEqual(second.data.attachedFiles, [plain]);
+    assert.strictEqual(ambiguous.content['m.relates_to'].key, 'invalid');
+    assert.ok(
+      ambiguous.content.failureReason.includes(
+        'boxel-local://3f2a/a%2fb.jpg could name more than one attachment.',
+      ),
+      ambiguous.content.failureReason,
+    );
+  });
+
   test('a text attachment is refused: its content is already in history', async () => {
     let notes = photo('notes.md', { contentType: 'text/markdown' });
     let { content } = await view([message(USER, [notes])], [notes.sourceUrl]);

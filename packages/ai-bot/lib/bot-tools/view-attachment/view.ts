@@ -96,18 +96,14 @@ export function selectViewAttachmentUrls(
   } catch {
     urls = [];
   }
-  let unique: string[] = [];
-  let seen = new Set<string>();
-  for (let url of urls) {
-    if (typeof url !== 'string' || url.trim().length === 0) {
-      continue;
-    }
-    let key = attachmentKey(url);
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(url.trim());
-    }
-  }
+  let unique = [
+    ...new Set(
+      urls
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter(Boolean),
+    ),
+  ];
   return {
     urls: unique.slice(0, VIEW_ATTACHMENT_MAX_URLS),
     dropped: unique.slice(VIEW_ATTACHMENT_MAX_URLS),
@@ -142,18 +138,28 @@ export function viewAttachmentLabel(argumentsJson: string): string {
   return `View attachments: ${shown.join(', ')}${suffix}`;
 }
 
-// The files humans attached to their messages in the room, each URL mapped
-// to the newest file attached under it: history tells the model that a later
-// attachment of the same file supersedes earlier ones. Files the bot attached
-// to anything it sent, and files attached to tool results, are not here, so
-// the tool can only ever show a file a person put in this room.
-export type RoomAttachments = Map<string, SerializedFileDef>;
+// The files humans attached to their messages in the room. Files the bot
+// attached to anything it sent, and files attached to tool results, are not
+// here, so the tool can only ever show a file a person put in this room.
+export interface RoomAttachments {
+  // Each source URL, exactly as the message lists it, mapped to the newest
+  // file attached under it: history tells the model that a later attachment
+  // of the same file supersedes earlier ones.
+  byUrl: Map<string, SerializedFileDef>;
+  // Each source URL with its percent-encoding undone, mapped to the source
+  // URLs that decode to it, so a model that copies a URL with its escapes
+  // resolved still names its file, when only one file decodes that way.
+  urlsByDecodedUrl: Map<string, Set<string>>;
+}
 
 export function roomAttachments(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): RoomAttachments {
-  let attachments: RoomAttachments = new Map();
+  let attachments: RoomAttachments = {
+    byUrl: new Map(),
+    urlsByDecodedUrl: new Map(),
+  };
   for (let event of history) {
     if (event.type !== 'm.room.message' || event.sender === aiBotUserId) {
       continue;
@@ -163,9 +169,15 @@ export function roomAttachments(
       continue;
     }
     for (let file of attachedFiles as SerializedFileDef[]) {
-      if (typeof file?.sourceUrl === 'string' && file.sourceUrl.trim()) {
-        attachments.set(attachmentKey(file.sourceUrl), file);
+      let url =
+        typeof file?.sourceUrl === 'string' ? file.sourceUrl.trim() : '';
+      if (!url) {
+        continue;
       }
+      attachments.byUrl.set(url, file);
+      let decoded = safeDecode(url);
+      let urls = attachments.urlsByDecodedUrl.get(decoded) ?? new Set();
+      attachments.urlsByDecodedUrl.set(decoded, urls.add(url));
     }
   }
   return attachments;
@@ -185,7 +197,18 @@ export function lookUpAttachment(
   attachments: RoomAttachments,
   inputModalities?: string[],
 ): AttachmentLookup {
-  let file = attachments.get(attachmentKey(url));
+  let file = attachments.byUrl.get(url.trim());
+  if (!file) {
+    let urls = attachments.urlsByDecodedUrl.get(safeDecode(url.trim()));
+    if (urls && urls.size > 1) {
+      return {
+        ok: false,
+        error: `${url} could name more than one attachment. Pass the URL exactly as the message that attached the file lists it.`,
+      };
+    }
+    let [onlyUrl] = urls ?? [];
+    file = onlyUrl ? attachments.byUrl.get(onlyUrl) : undefined;
+  }
   if (!file) {
     return {
       ok: false,
@@ -227,13 +250,6 @@ export function lookUpAttachment(
         : {}),
     } as SerializedFileDef,
   };
-}
-
-// The key an attachment is looked up by: the URL as the message lists it,
-// with percent-encoding undone, so a model that copies the URL with its
-// escapes resolved still names the same file.
-function attachmentKey(url: string): string {
-  return safeDecode(url.trim());
 }
 
 function safeDecode(text: string): string {
