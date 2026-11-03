@@ -281,6 +281,9 @@ export interface SearchEntry {
 // level of the batch, or a path (`[2].boxel:operations[0]`) to a member of a
 // group. `retryAfterSeconds` is how long to wait before asking again, for a
 // refusal that says (`rate-limited`, `over-budget`, `rate-limit-unavailable`).
+// `meta` holds the refusal's other details a card can act on (see
+// `OperationsErrorMeta`); it is always an object, so reading a member of it
+// is safe whatever the code.
 export class OperationsError extends Error {
   readonly status: number;
   readonly code: string | undefined;
@@ -289,6 +292,7 @@ export class OperationsError extends Error {
   readonly entry: number | string | undefined;
   readonly id: string | undefined;
   readonly retryAfterSeconds: number | undefined;
+  readonly meta: OperationsErrorMeta;
 
   constructor(args: {
     status: number;
@@ -298,6 +302,7 @@ export class OperationsError extends Error {
     entry?: number | string;
     id?: string;
     retryAfterSeconds?: number;
+    meta?: OperationsErrorMeta;
   }) {
     super(
       [args.title, args.detail].filter(Boolean).join(': ') ||
@@ -311,7 +316,69 @@ export class OperationsError extends Error {
     this.entry = args.entry;
     this.id = args.id;
     this.retryAfterSeconds = args.retryAfterSeconds;
+    this.meta = Object.freeze({ ...args.meta });
   }
+}
+
+// Why a key that mints its tokens (an OAuth connection, a Google service
+// account) has none to send: `rejected`, its owner signs in again or replaces
+// the key; `needs-admin`, the OAuth client it mints through needs its
+// administrator; `unavailable`, its token endpoint kept failing, so a later
+// call may succeed.
+export type CredentialRejectedReason =
+  | 'rejected'
+  | 'needs-admin'
+  | 'unavailable';
+
+const CREDENTIAL_REJECTED_REASONS: ReadonlySet<string> =
+  new Set<CredentialRejectedReason>(['rejected', 'needs-admin', 'unavailable']);
+
+// The details of a refusal a card may branch on, each present only on the
+// code it belongs to.
+//
+// The realm's refusal carries more in its `meta` than this: the credential
+// slot and destination, which the `detail` sentence already names, and
+// details for whoever is diagnosing the realm (which guard rule refused a
+// destination, which phase of a request timed out, how a response's size was
+// measured). Those stay on the server's side of the wire contract, so a card
+// never comes to depend on a diagnostic. A detail joins this type when a card
+// has something different to do because of it.
+export interface OperationsErrorMeta {
+  // `credential-rejected` from a key that mints its tokens. Absent when the
+  // service itself answered 401 to a stored key.
+  readonly reason?: CredentialRejectedReason;
+  // `response-too-large`: the most bytes, decompressed, the realm server
+  // carries back from the service for this call.
+  readonly cap?: number;
+}
+
+// The card-facing details of a refusal's `meta`, as the realm sent it. A
+// member is kept only on the code it belongs to and only when its value is
+// one the type allows, so a card reads either a value it can act on or
+// nothing.
+export function operationsErrorMeta(
+  code: string | undefined,
+  meta: Record<string, unknown> | undefined,
+): OperationsErrorMeta {
+  if (!meta) {
+    return {};
+  }
+  if (
+    code === 'credential-rejected' &&
+    typeof meta.reason === 'string' &&
+    CREDENTIAL_REJECTED_REASONS.has(meta.reason)
+  ) {
+    return { reason: meta.reason as CredentialRejectedReason };
+  }
+  if (
+    code === 'response-too-large' &&
+    typeof meta.cap === 'number' &&
+    Number.isFinite(meta.cap) &&
+    meta.cap >= 0
+  ) {
+    return { cap: meta.cap };
+  }
+  return {};
 }
 
 // ---------------------------------------------------------------------------

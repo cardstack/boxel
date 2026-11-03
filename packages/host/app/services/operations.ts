@@ -15,6 +15,7 @@ import {
   localId as localIdSymbol,
   mintedIdentities,
   OperationsError,
+  operationsErrorMeta,
   rri,
   stampBaseVersion,
   SKIP_INDEX_WAIT_HEADER,
@@ -681,13 +682,16 @@ export async function refusal(response: Response): Promise<Error> {
       detail: body || response.statusText,
     });
   }
-  let meta = (error.meta ?? {}) as {
+  let meta = (
+    error.meta && typeof error.meta === 'object' ? error.meta : {}
+  ) as Record<string, unknown> & {
     entry?: number | string;
     retryAfterSeconds?: unknown;
   };
+  let code = typeof error.code === 'string' ? error.code : undefined;
   return new OperationsError({
     status: Number(error.status ?? response.status),
-    ...(typeof error.code === 'string' ? { code: error.code } : {}),
+    ...(code === undefined ? {} : { code }),
     ...(typeof error.title === 'string' ? { title: error.title } : {}),
     ...(typeof error.detail === 'string' ? { detail: error.detail } : {}),
     ...(typeof error.id === 'string' ? { id: error.id } : {}),
@@ -695,6 +699,7 @@ export async function refusal(response: Response): Promise<Error> {
     ...(typeof meta.retryAfterSeconds === 'number'
       ? { retryAfterSeconds: meta.retryAfterSeconds }
       : {}),
+    meta: operationsErrorMeta(code, meta),
   });
 }
 

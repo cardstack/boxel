@@ -45,4 +45,140 @@ module('Unit | operations refusal', function () {
       'a value that is not a number of seconds is left out',
     );
   });
+
+  test('a key that could not mint a token says why', async function (assert) {
+    let detail =
+      `operation "load" can't fill the credential slot "github": the OAuth ` +
+      `client it mints through is unavailable, so an administrator of that ` +
+      `client needs to set it up again`;
+    let error = (await refusal(
+      refused(424, {
+        status: 424,
+        code: 'credential-rejected',
+        title: 'Credential rejected',
+        detail,
+        meta: {
+          entry: 0,
+          slot: { name: 'github', key: 'userKey' },
+          destination: 'https://api.github.com',
+          reason: 'needs-admin',
+        },
+      }),
+    )) as OperationsError;
+    assert.deepEqual(
+      {
+        status: error.status,
+        code: error.code,
+        title: error.title,
+        detail: error.detail,
+        entry: error.entry,
+      },
+      {
+        status: 424,
+        code: 'credential-rejected',
+        title: 'Credential rejected',
+        detail,
+        entry: 0,
+      },
+      "the code, status and detail are the realm's own",
+    );
+    assert.deepEqual(
+      error.meta,
+      { reason: 'needs-admin' },
+      'the reason is carried; the slot and destination the detail names are not',
+    );
+  });
+
+  test('a stored key the service rejected names no reason, and reading one is safe', async function (assert) {
+    let error = (await refusal(
+      refused(424, {
+        status: 424,
+        code: 'credential-rejected',
+        title: 'Credential rejected',
+        detail: 'that service rejected the key',
+        meta: {
+          slot: { name: 'forecast', key: 'apiKey' },
+          destination: 'https://api.example.com',
+        },
+      }),
+    )) as OperationsError;
+    assert.strictEqual(error.meta.reason, undefined);
+    assert.deepEqual(error.meta, {});
+  });
+
+  test('a reason the card cannot act on is left out', async function (assert) {
+    let unknown = (await refusal(
+      refused(424, {
+        status: 424,
+        code: 'credential-rejected',
+        meta: { reason: 'revoked-upstream' },
+      }),
+    )) as OperationsError;
+    assert.deepEqual(unknown.meta, {}, 'a reason outside the known set');
+
+    let guard = (await refusal(
+      refused(502, {
+        status: 502,
+        code: 'guard-refused',
+        title: 'Destination refused',
+        detail: 'the request is addressed to a token endpoint',
+        meta: { reason: 'platform-only' },
+      }),
+    )) as OperationsError;
+    assert.deepEqual(
+      guard.meta,
+      {},
+      "a reason on another code is the server's diagnostic",
+    );
+    assert.strictEqual(
+      guard.detail,
+      'the request is addressed to a token endpoint',
+    );
+  });
+
+  test('a response over the size cap says what the cap is', async function (assert) {
+    let error = (await refusal(
+      refused(502, {
+        status: 502,
+        code: 'response-too-large',
+        title: 'Response too large',
+        detail: 'api.example.com answered more than 10485760 bytes',
+        meta: { cap: 10485760, measured: 'declared-length' },
+      }),
+    )) as OperationsError;
+    assert.strictEqual(error.code, 'response-too-large');
+    assert.deepEqual(
+      error.meta,
+      { cap: 10485760 },
+      'the cap is carried; how the size was measured is not',
+    );
+
+    let malformed = (await refusal(
+      refused(502, {
+        status: 502,
+        code: 'response-too-large',
+        meta: { cap: '10MiB' },
+      }),
+    )) as OperationsError;
+    assert.deepEqual(malformed.meta, {}, 'a cap that is not a byte count');
+  });
+
+  test('a refusal that is not a JSON:API document has empty meta', async function (assert) {
+    let error = (await refusal(
+      new Response('Bad Gateway', { status: 502 }),
+    )) as OperationsError;
+    assert.strictEqual(error.status, 502);
+    assert.deepEqual(error.meta, {});
+  });
+
+  test("a refusal's meta can't be changed by the card that catches it", async function (assert) {
+    let error = (await refusal(
+      refused(424, {
+        status: 424,
+        code: 'credential-rejected',
+        meta: { reason: 'unavailable' },
+      }),
+    )) as OperationsError;
+    assert.true(Object.isFrozen(error.meta));
+  });
 });
