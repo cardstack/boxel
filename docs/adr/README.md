@@ -31,3 +31,4 @@ or backfill one. A proposed ADR's known gaps are listed in
 | [014](014-beacon-the-secure-origins-telemetry-to-the-realm-server-and-let-no-secret-into-it.md) | Beacon the secure origin's telemetry to the realm server, and let no secret into it       | proposed |
 | [015](015-express-realm-url-routing-as-rules-the-server-interprets-never-as-realm-code.md)      | Express realm URL routing as rules the server interprets, never as realm code             | proposed |
 | [017](017-fit-toolbar-rows-with-layoutcontrol-not-per-app-css.md)                               | Fit toolbar rows with LayoutControl, not per-app CSS                                      | proposed |
+| [018](018-build-realm-historian-as-erasable-typescript-node-runs-unbuilt.md)                    | Build realm-historian as erasable TypeScript that Node runs unbuilt                       | proposed |
