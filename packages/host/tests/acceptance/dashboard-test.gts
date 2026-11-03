@@ -2794,6 +2794,49 @@ module('Acceptance | dashboard', function (hooks) {
           .hasAttribute('data-test-agent-panel', 'claude');
       });
 
+      test('for a user with no coding agent, the flyout marks Boxel AI Assistant as picked, as the section shows', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+        await settled();
+
+        await triggerEvent(
+          '[data-test-section-rail-item="agents"]',
+          'pointerenter',
+          { pointerType: 'mouse' },
+        );
+
+        assert
+          .dom(`${FLYOUT} [data-test-section-rail-agent="boxel"]`)
+          .includesText('(picked)');
+        assert
+          .dom(`${FLYOUT} [data-test-section-rail-agent="claude"]`)
+          .doesNotIncludeText('(picked)');
+        assert
+          .dom('[data-test-agent-panel]')
+          .hasAttribute('data-test-agent-panel', 'boxel');
+      });
+
+      test('a pick from the flyout replaces the agent the section opened on', async function (assert) {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
+        await settled();
+        await click('[data-test-agents-show-coding]');
+        assert
+          .dom('[data-test-agent-panel]')
+          .hasAttribute('data-test-agent-panel', 'claude');
+
+        await triggerEvent(
+          '[data-test-section-rail-item="agents"]',
+          'pointerenter',
+          { pointerType: 'mouse' },
+        );
+        await click(`${FLYOUT} [data-test-section-rail-agent="codex"]`);
+
+        assert
+          .dom('[data-test-agent-panel]')
+          .hasAttribute('data-test-agent-panel', 'codex');
+      });
+
       test('New session in the flyout opens Boxel AI', async function (assert) {
         await visitOperatorMode({ workspaceChooserOpened: true });
 

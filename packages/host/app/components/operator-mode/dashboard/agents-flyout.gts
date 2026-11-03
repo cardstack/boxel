@@ -18,7 +18,7 @@ import { logger } from '@cardstack/runtime-common';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { AGENT_KINDS, agentKindFor, type AgentKind } from './agent-kinds';
+import { AGENT_KINDS, shownAgentFor, type AgentKind } from './agent-kinds';
 import AgentMark from './agent-mark';
 
 import type { SectionFlyoutSignature } from './sections';
@@ -40,7 +40,10 @@ export default class AgentsFlyout extends Component<SectionFlyoutSignature> {
   private sessionsHeadId = `${guidFor(this)}-sessions`;
 
   private get pickedId() {
-    return agentKindFor(this.matrixService.dashboardAgent).id;
+    return shownAgentFor(
+      this.matrixService.dashboardAgent,
+      this.matrixService.dashboardState.agentSetup,
+    ).id;
   }
 
   private get recentSessions() {

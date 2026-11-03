@@ -101,6 +101,15 @@ export function usesCodingAgent(
   );
 }
 
+// The agent the dashboard shows as picked: Boxel AI Assistant until the
+// user takes up a coding agent, then their pick.
+export function shownAgentFor(
+  agent: string | undefined,
+  agentSetup: Partial<Record<string, number>> | undefined,
+): AgentKind {
+  return agentKindFor(usesCodingAgent(agent, agentSetup) ? agent : 'boxel');
+}
+
 // The agent's own setup, then the steps typed into its chat: the plugin's
 // skills sign in, sync the workspace and open Boxel from there.
 export function setupStepsFor(

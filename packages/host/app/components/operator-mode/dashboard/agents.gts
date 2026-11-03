@@ -33,6 +33,7 @@ import {
   AGENT_KINDS,
   agentKindFor,
   setupStepsFor,
+  shownAgentFor,
   usesCodingAgent,
   type DashboardAgent,
 } from './agent-kinds';
@@ -83,8 +84,8 @@ export default class Agents extends Component<Signature> {
   // Opened from the minimized section for this visit; a pick or a copy then
   // keeps the full section open on later visits.
   @tracked private showsCodingAgents = false;
-  // Shown once the coding agents are opened, until the user picks one: the
-  // stored pick there is Boxel AI Assistant or nothing.
+  // Shown once the coding agents are opened, until the user takes one up:
+  // the stored pick there is Boxel AI Assistant or nothing.
   @tracked private openedAgent: DashboardAgent | undefined;
   private focusPicker = false;
 
@@ -96,21 +97,28 @@ export default class Agents extends Component<Signature> {
     description: kind.hint,
   }));
 
-  private get isMinimized() {
-    return (
-      !this.showsCodingAgents &&
-      !usesCodingAgent(
-        this.matrixService.dashboardAgent,
-        this.matrixService.dashboardState.agentSetup,
-      )
+  private get usesCodingAgent() {
+    return usesCodingAgent(
+      this.matrixService.dashboardAgent,
+      this.matrixService.dashboardState.agentSetup,
     );
   }
 
+  private get isMinimized() {
+    return !this.showsCodingAgents && !this.usesCodingAgent;
+  }
+
+  // The rail's flyout marks the same agent, except while the coding agents
+  // are opened here and none is taken up yet.
   private get kind() {
-    return agentKindFor(
-      this.isMinimized
-        ? 'boxel'
-        : (this.openedAgent ?? this.matrixService.dashboardAgent),
+    if (this.showsCodingAgents && !this.usesCodingAgent) {
+      return agentKindFor(
+        this.openedAgent ?? this.matrixService.dashboardAgent,
+      );
+    }
+    return shownAgentFor(
+      this.matrixService.dashboardAgent,
+      this.matrixService.dashboardState.agentSetup,
     );
   }
 
