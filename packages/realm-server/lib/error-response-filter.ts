@@ -89,6 +89,10 @@ export function errorResponseFilterFromEnv(
           : 'Request could not be completed.';
       context.app.emit('error', error, context);
     }
+    // A handler that wrote straight to the socket (the proxy forwards an
+    // upstream body as it arrives) has already answered; a body set now would
+    // be appended after the one the client received.
+    if (context.headerSent) return;
     let isError = context.status >= 400;
     if (!isError && !context.type.includes('json')) return;
     let body: unknown = context.body;

@@ -242,4 +242,21 @@ module('native error response filtering', () => {
     ])
       assert.throws(() => errorResponseFilterFromEnv(env));
   });
+  test('a response the handler already wrote to the socket is left as it was sent', async (assert) => {
+    let app = appFor((ctx) => {
+      let upstream = JSON.stringify({ error: { message: 'Unknown voice', code: 400 } });
+      ctx.body = null;
+      ctx.status = 400;
+      ctx.set('Content-Type', 'application/json');
+      ctx.res.writeHead(400, { 'Content-Type': 'application/json' });
+      ctx.res.write(upstream);
+    });
+    let response = await request(app.callback()).post('/_request-forward');
+    assert.strictEqual(response.status, 400);
+    assert.strictEqual(
+      response.text,
+      JSON.stringify({ error: { message: 'Unknown voice', code: 400 } }),
+      'no second error document follows the forwarded one',
+    );
+  });
 });
