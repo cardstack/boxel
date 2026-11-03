@@ -574,6 +574,12 @@ module('Integration | tools | check-correctness', function (hooks) {
       result.errors[0].includes('Invalid time value'),
       'the error carries the render error message',
     );
+    assert.ok(
+      result.errors[0].endsWith(
+        "(an instance of the edited module; the cause may be the edit or this card's own data)",
+      ),
+      'the error says the cause may be the edit or the instance',
+    );
   });
 
   test('passes a module edit whose instances render', async function (assert) {
@@ -911,7 +917,9 @@ module('Integration | tools | check-correctness', function (hooks) {
 
     assert.deepEqual(
       result.errors,
-      [`${cardURL}: Invalid time value`],
+      [
+        `${cardURL}: Invalid time value (an instance of the edited module; the cause may be the edit or this card's own data)`,
+      ],
       'the error from the later render is reported',
     );
     assert.false(result.correct, 'the check fails');

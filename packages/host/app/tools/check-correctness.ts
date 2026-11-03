@@ -35,6 +35,11 @@ const cardIndexingTimeout = ENV.cardRenderTimeout;
 // How many instances of an edited module a check reads render errors for.
 const maxInstanceChecks = 10;
 
+// Follows an instance's error in a module check: the error may have come
+// with the edit or been there before it.
+const instanceErrorNote =
+  "an instance of the edited module; the cause may be the edit or this card's own data";
+
 // An index event strips `.json` from every file it names, so a card instance
 // appears as its URL without `.json`, keeping any dot in its own name. A
 // module is not an instance; any other name may be one.
@@ -307,7 +312,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // is nothing to wait for. A read can't tell an error the edit caused from
     // one the instance already had, so an instance that already failed to
     // render fails the check as well: either way it is a card of this module
-    // that doesn't render.
+    // that doesn't render. Its error says the cause may be either.
     if (indexed?.generation === undefined) {
       return { errors: [], warnings: [] };
     }
@@ -350,7 +355,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     for (let { href, read: firstRead } of instances) {
       let read = rereads.get(href) ?? firstRead;
       if (read.kind === 'error') {
-        errors.push(read.error);
+        errors.push(`${read.error} (${instanceErrorNote})`);
       } else if (
         awaitingRender.has(href) &&
         read.kind !== 'not-an-instance' &&
