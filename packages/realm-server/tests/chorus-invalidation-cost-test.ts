@@ -62,11 +62,23 @@ module(basename(import.meta.filename), function (hooks) {
       return state / 2147483648;
     };
     let at = (path: string) => `${testRealm}${path}`;
+    // Real cards also record every module and stylesheet their render
+    // loaded, most of them shared across a realm: dev realms average 33-112
+    // dependencies a row. `CHORUS_DEPS_PER_CARD` pads each card to about that
+    // many with shared module dependencies, since a row's GIN maintenance
+    // grows with how many keys it holds.
+    let padding = Array.from(
+      {
+        length: Math.max(0, Number(process.env.CHORUS_DEPS_PER_CARD ?? 0) - 4),
+      },
+      (_, i) => at(`kit/module-${i}`),
+    );
     let shared = [
       at('social'),
       at('social-kit'),
       at('Theme/chorus.json'),
       '@cardstack/base/card-api',
+      ...padding,
     ];
     let result: Card[] = [
       { path: 'Theme/chorus.json', deps: ['@cardstack/base/card-api'] },
@@ -147,6 +159,7 @@ module(basename(import.meta.filename), function (hooks) {
   // dependencies, in both channels. The tables are analyzed afterwards, as
   // production's are.
   async function seed(entries: Card[]) {
+    await applyGinSettings();
     let batch = await indexWriter.createBatch(
       new URL(testRealm),
       virtualNetwork,
@@ -191,6 +204,30 @@ module(basename(import.meta.filename), function (hooks) {
         { bind: [template.href, rows] },
       );
       await adapter.execute(`ANALYZE ${table}`);
+    }
+  }
+
+  // The GIN setting the run measures, applied before the rows are written so
+  // the pending lists hold what that setting leaves in them: the migration's
+  // 256 kB limit by default, `INVALIDATION_COST_GIN_DEFAULTS` for GIN's
+  // defaults, `INVALIDATION_COST_FASTUPDATE_OFF` for no pending list.
+  async function applyGinSettings() {
+    let gin = (
+      (await adapter.execute(
+        `SELECT indexname FROM pg_indexes WHERE indexdef ILIKE '%USING gin%'`,
+      )) as { indexname: string }[]
+    ).map(({ indexname }) => indexname);
+    for (let index of gin) {
+      await adapter.execute(
+        `ALTER INDEX ${index} RESET (gin_pending_list_limit, fastupdate)`,
+      );
+      if (process.env.INVALIDATION_COST_FASTUPDATE_OFF) {
+        await adapter.execute(`ALTER INDEX ${index} SET (fastupdate = off)`);
+      } else if (!process.env.INVALIDATION_COST_GIN_DEFAULTS) {
+        await adapter.execute(
+          `ALTER INDEX ${index} SET (gin_pending_list_limit = 256)`,
+        );
+      }
     }
   }
 
@@ -248,6 +285,9 @@ module(basename(import.meta.filename), function (hooks) {
     ['definition-edit', 'social.gts'],
   ] as const) {
     test(`a ${label} reaches exactly its dependents`, async function (assert) {
+      if (process.env.CHORUS_FULL_PASS) {
+        assert.timeout(30 * 60 * 1000);
+      }
       let expected = expectedClosure(changed);
       for (let split of [false, true]) {
         let { reached, statements } = await measure(label, changed, split);
@@ -270,5 +310,113 @@ module(basename(import.meta.filename), function (hooks) {
         );
       }
     });
+  }
+
+  // The whole pass a theme edit costs, walk and commit, for comparing GIN
+  // settings: the walk, then every card it reached staged again as a visit
+  // would stage it, then the commit's swap, timed per table, with the WAL it
+  // wrote. Opt-in (`CHORUS_FULL_PASS=1`), since it is a measurement rather than
+  // a check. The pending list's size before the walk is reported beside the
+  // walk, since that is what a probe has to scan.
+  if (process.env.CHORUS_FULL_PASS) {
+    for (let [edit, changed] of [
+      ['theme edit', 'Theme/chorus.json'],
+      ['post edit', 'Post/p7.json'],
+    ] as const) {
+      test(`a ${edit}, walk and commit`, async function (assert) {
+        // At GIN's default pending list the walk alone can run for minutes.
+        assert.timeout(30 * 60 * 1000);
+        await adapter.execute(`CREATE EXTENSION IF NOT EXISTS pgstattuple`);
+        let pending = (await adapter.execute(
+          `SELECT 'boxel_index_deps_index' AS index, * FROM pgstatginindex('boxel_index_deps_index')
+         UNION ALL SELECT 'prerendered_html_deps_index', * FROM pgstatginindex('prerendered_html_deps_index')`,
+        )) as {
+          index: string;
+          pending_pages: number;
+          pending_tuples: string;
+        }[];
+        let batch = await indexWriter.createBatch(
+          new URL(testRealm),
+          virtualNetwork,
+          undefined,
+          { splitPrerenderHtml: false },
+        );
+        let walkStart = process.hrtime.bigint();
+        await batch.invalidate([new URL(changed, testRealm)]);
+        let walkMs = Number(process.hrtime.bigint() - walkStart) / 1e6;
+        let urls = JSON.stringify(batch.invalidations);
+        for (let [table, constraint] of [
+          ['boxel_index', 'boxel_index_pending_pkey'],
+          ['prerendered_html', 'prerendered_html_pending_pkey'],
+        ]) {
+          let columns = (
+            (await adapter.execute(
+              `SELECT column_name FROM information_schema.columns WHERE table_name = $1
+             AND column_name IN (SELECT column_name FROM information_schema.columns WHERE table_name = $2)
+             ORDER BY ordinal_position`,
+              { bind: [table, `${table}_pending`] },
+            )) as { column_name: string }[]
+          ).map(({ column_name }) => column_name);
+          await adapter.execute(
+            `INSERT INTO ${table}_pending (${columns.join(', ')}, staging_id)
+           SELECT ${columns.join(', ')}, $1 FROM ${table}
+           WHERE realm_url = $2 AND url IN (SELECT jsonb_array_elements_text($3::jsonb))
+           ON CONFLICT ON CONSTRAINT ${constraint} DO UPDATE SET
+           ${columns.map((c) => `${c} = EXCLUDED.${c}`).join(', ')}`,
+            { bind: [batch.stagingId, testRealm, urls] },
+          );
+        }
+        let perTable = { boxel_index: 0, prerendered_html: 0, other: 0 };
+        let withTransaction = adapter.withTransaction.bind(adapter);
+        adapter.withTransaction = (async (fn: any, opts: any) =>
+          await withTransaction(
+            async (query: any) =>
+              await fn(async (expression: any, ...rest: any[]) => {
+                let begun = process.hrtime.bigint();
+                try {
+                  return await query(expression, ...rest);
+                } finally {
+                  let took = Number(process.hrtime.bigint() - begun) / 1e6;
+                  let text = (Array.isArray(expression) ? expression : [])
+                    .filter((part: unknown) => typeof part === 'string')
+                    .join(' ');
+                  let target =
+                    /(INSERT INTO|UPDATE|DELETE FROM)\s+(boxel_index|prerendered_html)\b(?!_)/.exec(
+                      text,
+                    )?.[2] as 'boxel_index' | 'prerendered_html' | undefined;
+                  perTable[target ?? 'other'] += took;
+                }
+              }),
+            opts,
+          )) as typeof adapter.withTransaction;
+        let [{ lsn: walBefore }] = (await adapter.execute(
+          `SELECT pg_current_wal_lsn()::text AS lsn`,
+        )) as { lsn: string }[];
+        let doneStart = process.hrtime.bigint();
+        try {
+          await batch.done();
+        } finally {
+          adapter.withTransaction = withTransaction;
+        }
+        let doneMs = Number(process.hrtime.bigint() - doneStart) / 1e6;
+        let [{ bytes }] = (await adapter.execute(
+          `SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), $1::pg_lsn)::bigint AS bytes`,
+          { bind: [walBefore] },
+        )) as { bytes: string }[];
+        let setting = process.env.INVALIDATION_COST_FASTUPDATE_OFF
+          ? 'fastupdate-off'
+          : process.env.INVALIDATION_COST_GIN_DEFAULTS
+            ? 'gin-defaults'
+            : 'pending-256kB';
+        console.log(
+          `chorus-full-pass edit=${edit.replace(' ', '-')} people=${people} deps-per-card=${process.env.CHORUS_DEPS_PER_CARD ?? 'about 5'} setting=${setting} reached=${batch.invalidations.length} ` +
+            `walk=${walkMs.toFixed(0)}ms done=${doneMs.toFixed(0)}ms ` +
+            `boxel_index-swap=${perTable.boxel_index.toFixed(0)}ms prerendered_html-swap=${perTable.prerendered_html.toFixed(0)}ms ` +
+            `other-in-commit=${perTable.other.toFixed(0)}ms wal=${(Number(bytes) / 1e6).toFixed(1)}MB ` +
+            `pending-before-walk=${pending.map((p) => `${p.index}:${p.pending_pages}pages/${p.pending_tuples}tuples`).join(',')}`,
+        );
+        assert.ok(batch.invalidations.length > 0);
+      });
+    }
   }
 });
