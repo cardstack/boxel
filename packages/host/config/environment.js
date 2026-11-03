@@ -218,8 +218,9 @@ module.exports = function (environment) {
         : `${normalized}/test/`;
     })(),
     featureFlags: {
-      // Dashboard v2 replaces the workspace chooser. On in staging
-      // (config/staging.env); locally, start the host with DASHBOARD_V2=true.
+      // Dashboard v2 replaces the workspace chooser. On in staging and
+      // production (config/staging.env, config/production.env); locally, start
+      // the host with DASHBOARD_V2=true.
       DASHBOARD_V2: process.env.DASHBOARD_V2 === 'true',
     },
   };
