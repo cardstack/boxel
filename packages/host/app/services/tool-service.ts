@@ -860,9 +860,11 @@ export default class ToolService extends Service {
           );
           try {
             isValid = await withTimeout(
-              this.validate(messageTool, steps).finally(() => {
-                validationSettled = true;
-              }),
+              this.trackValidation(this.validate(messageTool, steps)).finally(
+                () => {
+                  validationSettled = true;
+                },
+              ),
               this.validateTimeoutMs,
               `Validating tool "${messageTool.name}"`,
             );
@@ -1685,6 +1687,20 @@ export default class ToolService extends Service {
 
   // The step timeline of each in-flight validation, by tool call id.
   private validationSteps = new Map<string, ValidationStep[]>();
+
+  // STRESS CONTROL: only the in-flight counter, not the fix.
+  private runningValidations = 0;
+  get validationsInFlight(): number {
+    return this.runningValidations;
+  }
+  private async trackValidation<T>(validation: Promise<T>): Promise<T> {
+    this.runningValidations++;
+    try {
+      return await validation;
+    } finally {
+      this.runningValidations--;
+    }
+  }
 
   private logSlowValidation(command: MessageTool, steps: ValidationStep[]) {
     let step = steps.at(-1)?.step;
