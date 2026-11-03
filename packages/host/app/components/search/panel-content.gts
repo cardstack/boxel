@@ -9,7 +9,6 @@ import { consume } from 'ember-provide-consume-context';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  type CodeRef,
   type Filter,
   type getCard,
   type SearchEntryWireFilter,
@@ -36,6 +35,7 @@ import {
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/search/query-builder';
 import { SectionPagination } from '@cardstack/host/utils/search/section-pagination';
+import type { OfferToCreate } from '@cardstack/host/utils/search/sections';
 import type {
   NewCardArgs,
   SearchResultKind,
@@ -130,12 +130,7 @@ interface Signature {
     multiSelect?: boolean;
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
-    offerToCreate?: {
-      ref: CodeRef;
-      relativeTo: URL | undefined;
-      // The workspace of the card the new card is for.
-      realmURL?: URL | undefined;
-    };
+    offerToCreate?: OfferToCreate;
     onSubmit?: (
       selection: string | NewCardArgs,
       kind?: SearchResultKind,

@@ -33,6 +33,7 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
+import type { OfferToCreate } from '@cardstack/host/utils/search/sections';
 import { getFilterTypeRefs } from '@cardstack/host/utils/search/type-filter';
 import type { NewCardArgs } from '@cardstack/host/utils/search/types';
 
@@ -60,12 +61,7 @@ interface Signature {
 type Request = {
   deferred: Deferred<string[] | undefined>;
   opts?: {
-    offerToCreate?: {
-      ref: CodeRef;
-      relativeTo: URL | undefined;
-      // The workspace of the card the new card is for.
-      realmURL?: URL | undefined;
-    };
+    offerToCreate?: OfferToCreate;
     createNewCard?: CreateNewCard;
   };
 };

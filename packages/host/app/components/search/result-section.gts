@@ -12,10 +12,7 @@ import pluralize from 'pluralize';
 import { Button, GridContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq, type FittedFormatId } from '@cardstack/boxel-ui/helpers';
 
-import type {
-  CodeRef,
-  RenderableSearchEntryLike,
-} from '@cardstack/runtime-common';
+import type { RenderableSearchEntryLike } from '@cardstack/runtime-common';
 
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -23,6 +20,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import { UNKNOWN_REALM_NAME } from '@cardstack/host/services/realm';
 
 import type {
+  OfferToCreate,
   RealmSection,
   RecentsSection,
   SearchSheetSection,
@@ -91,12 +89,7 @@ interface Signature {
     pager?: RealmSectionPager;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
-    offerToCreate?: {
-      ref: CodeRef;
-      relativeTo: URL | undefined;
-      // The workspace of the card the new card is for.
-      realmURL?: URL | undefined;
-    };
+    offerToCreate?: OfferToCreate;
     onSubmit?: (
       selection: string | NewCardArgs,
       kind?: SearchResultKind,

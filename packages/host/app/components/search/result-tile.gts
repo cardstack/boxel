@@ -374,10 +374,13 @@ export default class SearchResultTile extends Component<Signature> {
         stroke: none;
       }
       .create-new-label {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
         min-width: 0;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        white-space: normal;
+        text-align: start;
       }
 
       .selection-indicator {
