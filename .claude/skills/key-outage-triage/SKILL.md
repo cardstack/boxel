@@ -28,7 +28,7 @@ All of these are one line per event. None carries a key, a filled request or a q
 | `boxel:key-limits` (JSON)                                           | realm-server         | `refused` (`code`, `share` or `key`, `realm`, `limit`) and `threshold`. See `key-limits`.                                                                                                                          |
 | `boxel:secrets-at-rest` (JSON)                                      | realm-server, worker | `open-failed`: `field`, `id`, `keyId`, `reason` `unknown-data-key` / `not-authentic` / `malformed`. See `secrets-at-rest`.                                                                                         |
 | `outbound guard refused: path=… host=… reason=… destinationSetBy=…` | realm-server, worker | every request the guard refused before sending, on both paths (`call-api`, `system-key`), with who chose the destination: `platform` or `user`. See `outbound-guard`.                                              |
-| `outbound response size: …` and `wouldRefuse=…`                     | realm-server, worker | the response size cap in observe mode. See `outbound-guard`.                                                                                                                                                       |
+| `outbound response size: …` and `refused=…`                         | realm-server, worker | the response size cap: every response's size, and each one refused for size. See `outbound-guard`.                                                                                                                 |
 | CloudWatch `/aws/events/<env>-boxel-secrets-decrypts`               | (EventBridge)        | every allowed `kms:Decrypt` on the secrets key, and every denied one that names the key or carries its encryption context, copied from CloudTrail by `cardstack/infra:configs/boxel-secrets-kms`.                  |
 
 Hosted, every line arrives wrapped in FireLens's JSON with the line in `.log`; locally the line is bare. A worker child's line also starts with its manager's `[worker <id> priority N]: ` prefix. This unwrap handles all three (the parse error the first `json` raises on a bare line is dropped, and the prefix is stripped); `<unwrap>` below stands for it:
@@ -161,7 +161,7 @@ Top row, **Is it us, one vendor, or one key?** — six counts over the selected 
 - **Limit and budget refusals by realm** — filter with the Realm box. One realm hitting its budget is the owner's setting; `rate-limit-unavailable` is the database.
 - **Keys and grants entering the rejected state, by vendor host** — with `cleared` alongside, so a vendor's outage reads as a spike of rejections followed, one probe interval later, by clears.
 - **Key state changes** — the raw `boxel:key-grant` feed. Grant and key ids, hosts and realms only.
-- **Response size cap (observe mode)** — the p50, p95 and max decompressed response per path against the dashed cap, the responses an enforced cap would refuse, and the largest response per destination. Choose an enforced cap above the max here over a representative window (`outbound-guard`, Reading the response size cap).
+- **Response size cap** — the p50, p95 and max decompressed response per path against the dashed cap, the responses refused for size, and the largest response per destination. A refusal from a legitimate vendor, or a max closing on the cap, means the cap needs revisiting (`outbound-guard`, The response size cap).
 
 The Realm box filters the `callApi` and limit panels only.
 

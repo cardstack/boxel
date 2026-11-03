@@ -8,6 +8,7 @@ import {
 import {
   describeOutboundError,
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundTimeoutError,
   outboundFetch,
   outboundSettings,
@@ -204,8 +205,11 @@ export function outboundLogContext(
 
 // How a proxy answers its caller when the outbound guard stops a call: a
 // forbidden forwarded header is the caller's mistake, any other refusal is a
-// destination the proxy will not reach, and a timeout is an upstream that did
-// not answer. Anything else is not the guard's, and gets undefined.
+// destination the proxy will not reach, a response over the size cap is an
+// upstream answer the proxy will not carry, and a timeout is an upstream that
+// did not answer. Anything else is not the guard's, and gets undefined.
+// Once a response's body has started, its status can't change: the body is
+// reset instead (see `forwardJsonResponse`), or a stream gets an error frame.
 export function outboundFailureResponse(
   error: unknown,
 ): { status: number; statusText: string; message: string } | undefined {
@@ -217,6 +221,13 @@ export function outboundFailureResponse(
           statusText: 'Bad Gateway',
           message: `Destination refused: ${error.message}`,
         };
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    return {
+      status: 502,
+      statusText: 'Bad Gateway',
+      message: `Response too large: ${error.message}`,
+    };
   }
   if (error instanceof OutboundTimeoutError) {
     return {

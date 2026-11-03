@@ -30,8 +30,9 @@ import { CredentialScrubber } from './scrubber.ts';
 // - scrubs every error it throws of the attached credential, and keeps Sentry's
 //   fetch instrumentation off its requests (see `guarded-call-context.ts`);
 // - streams the response body through, counting its decompressed bytes against
-//   a response size cap. The cap is in observe mode: what an enforced cap
-//   would have refused is logged and nothing is refused;
+//   its path's response size cap. A declared length over the cap is refused
+//   before any of the body is read; a body that passes the cap ends there,
+//   with an error, so no caller takes a body cut at the cap for a whole one;
 // - removes every credential registered with the request's scrubber from the
 //   response's status text, headers and decompressed body, as a stream, before
 //   the caller reads any of it.
@@ -73,8 +74,9 @@ export const DEFAULT_OUTBOUND_SETTINGS: Readonly<OutboundSettings> =
     // minutes, so the bound sits well above the longest of those.
     totalTimeoutMs: 10 * 60_000,
     maxRedirects: 5,
-    // Observe-mode starting points. The enforced values come from the sizes
-    // these paths log in practice.
+    // Each sits above the largest legitimate response its path carries; the
+    // `outbound-guard` skill records the measured sizes they were set from
+    // and how to revisit them.
     responseSizeCaps: { 'system-key': 32 * MiB, 'call-api': 10 * MiB },
   });
 
@@ -272,9 +274,7 @@ export function startOutboundGuard({
       effective.totalTimeoutMs
     } maxRedirects=${effective.maxRedirects} responseSizeCap.system-key=${
       effective.responseSizeCaps['system-key']
-    } responseSizeCap.call-api=${
-      effective.responseSizeCaps['call-api']
-    } responseSizeCapMode=observe`,
+    } responseSizeCap.call-api=${effective.responseSizeCaps['call-api']}`,
   );
 }
 
@@ -328,6 +328,27 @@ export class OutboundRefusedError extends Error {
   }
 }
 
+// What a response size cap was passed by: the length the response declared,
+// before any of its body was read, or the decompressed bytes of a body as it
+// streamed.
+export type ResponseSizeMeasure = 'declared-length' | 'stream-reached-cap';
+
+// The response was larger than its path's size cap. Nothing of a body
+// refused on its declared length was read; a body refused while streaming
+// ends at the cap with this error, so whatever was read before it is never
+// mistaken for the whole. The message names the host at most.
+export class OutboundResponseTooLargeError extends Error {
+  readonly cap: number;
+  readonly measured: ResponseSizeMeasure;
+  context?: OutboundErrorContext;
+  constructor(hostname: string, cap: number, measured: ResponseSizeMeasure) {
+    super(`The response from ${hostname} is larger than ${cap} bytes`);
+    this.name = 'OutboundResponseTooLargeError';
+    this.cap = cap;
+    this.measured = measured;
+  }
+}
+
 export class OutboundTimeoutError extends Error {
   readonly phase: 'connect' | 'total';
   context?: OutboundErrorContext;
@@ -368,6 +389,7 @@ export function outboundErrorContext(
   if (
     error instanceof OutboundRefusedError ||
     error instanceof OutboundTimeoutError ||
+    error instanceof OutboundResponseTooLargeError ||
     error instanceof OutboundSendError
   ) {
     return error.context;
@@ -439,7 +461,8 @@ function finalizeError(
   scrubError(error, scrubber);
   if (
     error instanceof OutboundRefusedError ||
-    error instanceof OutboundTimeoutError
+    error instanceof OutboundTimeoutError ||
+    error instanceof OutboundResponseTooLargeError
   ) {
     error.context ??= context;
     return error;
@@ -787,7 +810,7 @@ async function send(
       !location ||
       (staysOnOrigin && leavesOrigin(location, current))
     ) {
-      let observed = observeResponseSize(response, {
+      let capped = await capResponseSize(response, {
         destination: recordedURL(request.url),
         sizePath: request.sizePath,
         timeout,
@@ -796,7 +819,7 @@ async function send(
         scrubber,
         context,
       });
-      return scrubResponse(observed, scrubber);
+      return scrubResponse(capped, scrubber);
     }
 
     await response.body?.cancel().catch(() => undefined);
@@ -846,16 +869,26 @@ function leavesOrigin(location: string, current: URL): boolean {
   }
 }
 
-// --- Response size, observe mode --------------------------------------------
+// --- Response size cap -----------------------------------------------------
 
-// Hands back `response` with its body counted as it streams. Decompression
-// has already happened inside fetch, chunk by chunk, so the count is of
-// decompressed bytes and nothing is held beyond the chunk in hand.
+// Hands back `response` with its body counted as it streams, against the
+// cap for `sizePath`. Decompression has already happened inside fetch, chunk
+// by chunk, so the count is of decompressed bytes and nothing is held beyond
+// the chunk in hand.
 //
-// Each response logs its size once it ends. A declared length over the cap,
-// and a body whose count passes the cap, each log what an enforced cap would
-// have refused; the body still streams on unchanged.
-function observeResponseSize(
+// A body whose declared length is over the cap is refused before any of it
+// is read: the body is cancelled and `OutboundResponseTooLargeError` thrown.
+// With compression the declared length is the compressed size, which exceeds
+// the decompressed body by a few bytes of framing at most, so a body refused
+// on it would have passed the cap while streaming too. A body whose count
+// passes the cap while streaming ends there: the
+// chunk that passed it is dropped, the upstream read cancelled, and the
+// stream errors with `OutboundResponseTooLargeError`, so a reader gets an
+// error, never a body cut short at the cap. A response with no body (a HEAD,
+// a 204 or 304) has nothing to refuse, whatever length it declares.
+//
+// Each response logs its size once its body ends; each refusal logs at warn.
+async function capResponseSize(
   response: Response,
   {
     destination,
@@ -874,26 +907,27 @@ function observeResponseSize(
     scrubber: CredentialScrubber;
     context: OutboundErrorContext;
   },
-): Response {
+): Promise<Response> {
   let cap = settings.responseSizeCaps[sizePath];
   let describe = `path=${sizePath} destination=${destination} status=${response.status} cap=${cap}`;
+
+  let source = response.body;
+  if (!source) {
+    log.info(`outbound response size: ${describe} bytes=0 outcome=complete`);
+    return response;
+  }
 
   let declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > cap) {
     log.warn(
-      `outbound response over size cap (observe): ${describe} declaredBytes=${declared} wouldRefuse=declared-length`,
+      `outbound response over size cap: ${describe} declaredBytes=${declared} refused=declared-length`,
     );
-  }
-
-  let source = response.body;
-  if (!source) {
-    log.info(`outbound response size: ${describe} bytes=0`);
-    return response;
+    await source.cancel().catch(() => undefined);
+    throw new OutboundResponseTooLargeError(hostname, cap, 'declared-length');
   }
 
   let reader = source.getReader();
   let bytes = 0;
-  let reachedCap = false;
   let ended = false;
   let finish = (outcome: string) => {
     if (ended) {
@@ -901,9 +935,7 @@ function observeResponseSize(
     }
     ended = true;
     log.info(
-      `outbound response size: ${describe} bytes=${bytes} outcome=${outcome}${
-        reachedCap ? ' overCap=true' : ''
-      }`,
+      `outbound response size: ${describe} bytes=${bytes} outcome=${outcome}`,
     );
   };
 
@@ -930,11 +962,25 @@ function observeResponseSize(
         return;
       }
       bytes += result.value.byteLength;
-      if (!reachedCap && bytes > cap) {
-        reachedCap = true;
+      if (bytes > cap) {
         log.warn(
-          `outbound response over size cap (observe): ${describe} bytesRead=${bytes} wouldRefuse=stream-reached-cap`,
+          `outbound response over size cap: ${describe} bytesRead=${bytes} refused=stream-reached-cap`,
         );
+        finish('too-large');
+        reader.cancel().catch(() => undefined);
+        controller.error(
+          finalizeError(
+            new OutboundResponseTooLargeError(
+              hostname,
+              cap,
+              'stream-reached-cap',
+            ),
+            scrubber,
+            context,
+            callerSignal,
+          ),
+        );
+        return;
       }
       controller.enqueue(result.value);
     },

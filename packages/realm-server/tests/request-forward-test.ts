@@ -2396,6 +2396,87 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test('a response whose declared length is over the cap is refused with a 502, and nothing is charged', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+        });
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/large?bytes=50000`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 502);
+        assert.true(
+          JSON.stringify(response.body).includes('Response too large'),
+          'the caller is told the response was too large',
+        );
+        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
+      test('a JSON response that passes the cap mid-body resets the caller and is charged for the generation', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 64 * 1024, 'call-api': 64 * 1024 },
+        });
+        let lookups = stubGenerationCost(0.003);
+        try {
+          let outcome = await new Promise<string>((resolve) => {
+            request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: `${vendor.url}/completion?bytes=${256 * 1024}&cost=0.004`,
+                method: 'POST',
+                requestBody: JSON.stringify({}),
+              })
+              .buffer(true)
+              .parse((res, callback) => {
+                res.on('data', () => undefined);
+                res.on('end', () => {
+                  resolve('complete');
+                  callback(null, null);
+                });
+                res.on('aborted', () => resolve('reset'));
+                res.on('error', () => resolve('reset'));
+                res.on('close', () => resolve('reset'));
+              })
+              .then(
+                () => undefined,
+                () => resolve('reset'),
+              );
+          });
+
+          assert.strictEqual(
+            outcome,
+            'reset',
+            'the caller cannot take the body cut at the cap for a whole one',
+          );
+          // The usage past the cap is never read; the generation is priced
+          // by its id. 0.003 USD × 1000 = 3 credits.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeoutMessage:
+              'the generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-completion']);
+        } finally {
+          sinon.restore();
+        }
+      });
+
       test('a charged call whose caller stops reading without leaving is given up on, read to its end and charged', async function (assert) {
         configureClientStall(500);
         // Any generation lookup would mean the usage at the end was never
