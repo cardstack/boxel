@@ -296,7 +296,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // A module that loads can still break the cards that use it: a template
     // or a computed field throws only when an instance renders. The write's
     // index pass reindexed those instances, so its invalidations name them.
-    // Without a tracked write there is nothing to render.
+    // Without a tracked write there is nothing to render. A render can't tell
+    // an error the edit caused from one the instance already had, so an
+    // instance that already failed to render fails the check as well: either
+    // way it is a card of this module that doesn't render.
     let instanceHrefs = await this.instancesToRender(
       invalidations ?? [],
       roomId,
