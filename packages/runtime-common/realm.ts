@@ -2586,8 +2586,13 @@ interface Options {
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
   // identify carries no server stack (see `withholdsStacksFrom`), and, at a
   // host's root, a crawler's `/robots.txt` gets a default answer when the
-  // realm holds none.
+  // realm holds none. Its policy keeps only the grants that send a key shared
+  // with its source (see `sharedKeyCallsOnly`).
   published?: true;
+  // For a published realm, the realm it was published from. Its policy card is
+  // the source's, copied, so a rule naming a type by the source's own URL names
+  // the copy of that type here.
+  sourceRealmURL?: string;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2864,6 +2869,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #published = false;
+  #sourceRealmURL: string | undefined;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   // The root ignore files' mtimes when their rules were last read.
@@ -3225,6 +3231,7 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#published = Boolean(opts?.published);
+    this.#sourceRealmURL = opts?.published ? opts.sourceRealmURL : undefined;
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -17686,7 +17693,9 @@ export class Realm {
           undefined,
           this.#virtualNetwork,
         );
-        return isResolvedCodeRef(absolute) ? absolute : undefined;
+        return isResolvedCodeRef(absolute)
+          ? this.#ownCopyOf(absolute)
+          : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
         this.#definitionLookup.lookupDefinitionEntry(codeRef),
@@ -17703,7 +17712,24 @@ export class Realm {
         (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
           .map((summary) => summary.code_ref)
           .sort(),
+      ...(this.#published ? { sharedKeyCallsOnly: true } : {}),
     };
+  }
+
+  // A type in a published realm's source, as the published realm names its
+  // copy: the module at the same path in this realm. A policy card copied from
+  // the source may name the source's types by their absolute URLs, while the
+  // published realm's cards adopt from its own copies of those modules. Any
+  // other type is named as it is.
+  #ownCopyOf(codeRef: ResolvedCodeRef): ResolvedCodeRef {
+    let source = this.#sourceRealmURL;
+    if (!source) {
+      return codeRef;
+    }
+    let module = this.#virtualNetwork.toURL(codeRef.module).href;
+    return module.startsWith(source)
+      ? { ...codeRef, module: rri(`${this.url}${module.slice(source.length)}`) }
+      : codeRef;
   }
 
   // Indexes the policy card stored at `file` again, in the realm at `realmURL`

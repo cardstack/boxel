@@ -38,7 +38,10 @@ const testRealm2URL = 'http://127.0.0.1:4445/test/';
 
 // Publishing a realm whose `realm.json` names a policy. A published realm is a
 // public, read-only snapshot of its source: its ACL lets everyone read and
-// nobody write, and it names no policy of its own.
+// nobody write. A pointer to a policy card in the source names the snapshot's
+// copy of that card, of which the published realm keeps only the grants that
+// send a key shared with the realm, so no grant admits a write into it. A
+// pointer to a card anywhere else is dropped.
 module(basename(import.meta.filename), function (hooks) {
   let testRealmHttpServer: Server;
   let testRealmServer: Awaited<
@@ -268,7 +271,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
     }
 
-    async function assertPublishedRealmNamesNoPolicy(
+    async function assertPublishedPolicyAdmitsNoWrite(
       assert: Assert,
       publishedRealmId: string,
       label: string,
@@ -284,9 +287,10 @@ module(basename(import.meta.filename), function (hooks) {
           data: { attributes: Record<string, unknown> };
         }
       ).data.attributes;
-      assert.false(
-        'policy' in attributes,
-        `${label}: the published realm.json carries no policy pointer`,
+      assert.strictEqual(
+        attributes.policy,
+        `${publishedRealmURL}policies/open`,
+        `${label}: the published realm.json names the snapshot's copy of the policy`,
       );
       assert.deepEqual(
         attributes.cardInfo,
@@ -306,10 +310,17 @@ module(basename(import.meta.filename), function (hooks) {
         await testRealmServer.testingOnlyReconciler.lookupOrMount(
           publishedRealmURL,
         );
-      assert.strictEqual(
+      assert.deepEqual(
         await publishedRealm!.getRealmPolicy(),
-        undefined,
-        `${label}: the published realm names no policy`,
+        { card: `${publishedRealmURL}policies/open` },
+        `${label}: the published realm is governed by the snapshot's policy`,
+      );
+      assert.deepEqual(
+        (await publishedRealm!.getCompiledPolicy())?.rules.flatMap(
+          (rule) => rule.grants,
+        ),
+        [],
+        `${label}: the published realm keeps none of the policy's write grants`,
       );
 
       let auth = stranger(publishedRealmURL, ['read']);
@@ -341,12 +352,12 @@ module(basename(import.meta.filename), function (hooks) {
       );
     }
 
-    test('a published realm names no policy, so its source policy grants no write into it', async function (assert) {
+    test("a published realm names its snapshot of the source's policy, which grants no write into it", async function (assert) {
       let response = await publish();
       assert.strictEqual(response.status, 202, 'publish accepted');
       await awaitPublishedRealmReady();
 
-      await assertPublishedRealmNamesNoPolicy(
+      await assertPublishedPolicyAdmitsNoWrite(
         assert,
         response.body.data.id,
         'first publish',
@@ -379,7 +390,7 @@ module(basename(import.meta.filename), function (hooks) {
     // published realm has no writer to fix for itself. A republish replaces
     // the file, and the mounted realm stops answering from the pointer it
     // memoized.
-    test('republishing a snapshot that names its source policy drops the pointer', async function (assert) {
+    test("republishing a snapshot that names its source's live policy names the snapshot's copy instead", async function (assert) {
       let first = await publish();
       assert.strictEqual(first.status, 202, 'first publish accepted');
       await awaitPublishedRealmReady();
@@ -428,10 +439,60 @@ module(basename(import.meta.filename), function (hooks) {
       );
       await awaitPublishedRealmReady();
 
-      await assertPublishedRealmNamesNoPolicy(
+      await assertPublishedPolicyAdmitsNoWrite(
         assert,
         second.body.data.id,
         'republish',
+      );
+    });
+
+    // A policy card in another realm is no part of the snapshot, so the
+    // published realm has no copy of it to be governed by.
+    test('a pointer to a policy card in another realm is dropped from the published realm', async function (assert) {
+      let elsewhere = `${testRealm2URL}policies/elsewhere`;
+      await sourceRealm.write(
+        'realm.json',
+        realmConfigCardJSON({ name: 'Policy Source', policy: elsewhere }),
+      );
+      await sourceRealm.indexing();
+
+      let response = await publish();
+      assert.strictEqual(response.status, 202, 'publish accepted');
+      await awaitPublishedRealmReady();
+
+      let attributes = (
+        readJsonSync(
+          join(
+            dir.name,
+            'realm_server_3',
+            '_published',
+            response.body.data.id,
+            'realm.json',
+          ),
+        ) as { data: { attributes: Record<string, unknown> } }
+      ).data.attributes;
+      assert.false(
+        'policy' in attributes,
+        'the published realm.json carries no policy pointer',
+      );
+      let publishedRealm =
+        await testRealmServer.testingOnlyReconciler.lookupOrMount(
+          publishedRealmURL,
+        );
+      assert.strictEqual(
+        await publishedRealm!.getRealmPolicy(),
+        undefined,
+        'the published realm names no policy',
+      );
+      assert.strictEqual(
+        (
+          await cardJsonCreate(
+            publishedRealmURL,
+            stranger(publishedRealmURL, ['read']),
+          )
+        ).status,
+        403,
+        "a signed-in caller's create is refused",
       );
     });
   });

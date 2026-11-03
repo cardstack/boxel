@@ -1,4 +1,5 @@
 import {
+  ensureTrailingSlash,
   logger,
   type CallApiResponse,
   type DBAdapter,
@@ -7,8 +8,11 @@ import {
   OperationFailure,
   type CallApiCredential,
   type CallApiGrantUse,
+  type CallApiReadinessLookup,
   type CallApiRequest,
   type CallApiSender,
+  type CallApiSlotLookup,
+  type CallApiUse,
 } from '@cardstack/runtime-common/card-operations';
 import { fillSlots } from '../key-bindings.ts';
 import {
@@ -93,18 +97,29 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // Each use of a share or key is recorded against it (`lib/key-uses.ts`): a
 // refusal raised while filling by `fill`, everything after by `recordUse`.
+//
+// A published realm's sender (`publishedFrom`) reads the bindings of the realm
+// it was published from: see `PublishedFrom`.
 export function createCallApiSender(
   dbAdapter: DBAdapter,
   {
     // How long a grant the vendor rejected waits between probes.
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
-  }: { probeIntervalMs?: number } = {},
+    publishedFrom,
+  }: { probeIntervalMs?: number; publishedFrom?: PublishedFrom } = {},
 ): CallApiSender {
+  let source = publishedFrom ? onSource(publishedFrom) : undefined;
   return {
     fill: (lookup) =>
-      fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
-    readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
-    recordUse: (use) => recordKeyUses(dbAdapter, use),
+      fillSlots(dbAdapter, secretsKeyring, source?.lookup(lookup) ?? lookup, {
+        probeIntervalMs,
+        ...(source ? { marksStaleBindings: false } : {}),
+      }),
+    readiness: (lookup) =>
+      keyReadiness(dbAdapter, source?.lookup(lookup) ?? lookup, {
+        probeIntervalMs,
+      }),
+    recordUse: (use) => recordKeyUses(dbAdapter, source?.use(use) ?? use),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(
@@ -135,6 +150,61 @@ export function createCallApiSender(
       }
       await actOnVendorAnswer(dbAdapter, request, grants, response.status);
       return response;
+    },
+  };
+}
+
+// A published realm and the realm it was published from. The published realm
+// holds no share or binding of its own: its owner shares a key into the source
+// realm, and approves the source's operations there. A copy of the source's
+// cards and modules serves them at other URLs, so a lookup the published realm
+// makes names its own realm, the type's module and the card under the
+// published realm's URL. Each is read at the same path in the source realm,
+// where the bindings were approved; a module in any other realm is read as it
+// is. Each use is recorded against the source realm, whose shares it counts
+// against.
+//
+// The copy's code is the source's as of its last publish, so a binding the
+// source's owner approved for a later request than the copy sends refuses the
+// copy's call and is left approved for the source.
+export interface PublishedFrom {
+  realmURL: string;
+  sourceRealmURL: string;
+}
+
+// The realm a registry row's realm was published from, for a published realm
+// whose row names its source.
+export function publishedFromRow(row: {
+  url: string;
+  kind: string;
+  source_url: string | null;
+}): PublishedFrom | undefined {
+  return row.kind === 'published' && row.source_url
+    ? {
+        realmURL: ensureTrailingSlash(row.url),
+        sourceRealmURL: ensureTrailingSlash(row.source_url),
+      }
+    : undefined;
+}
+
+function onSource({ realmURL, sourceRealmURL }: PublishedFrom) {
+  let rebase = (url: string) =>
+    url.startsWith(realmURL)
+      ? `${sourceRealmURL}${url.slice(realmURL.length)}`
+      : url;
+  return {
+    lookup<T extends CallApiSlotLookup | CallApiReadinessLookup>(lookup: T): T {
+      return {
+        ...lookup,
+        realmURL: rebase(lookup.realmURL),
+        type: { ...lookup.type, module: rebase(lookup.type.module) },
+        ...(lookup.instance !== undefined
+          ? { instance: rebase(lookup.instance) }
+          : {}),
+      };
+    },
+    use(use: CallApiUse): CallApiUse {
+      return { ...use, realmURL: rebase(use.realmURL) };
     },
   };
 }

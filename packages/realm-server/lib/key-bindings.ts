@@ -1291,7 +1291,10 @@ function checkSlot(
 
 // The binding for each of the request's slots, checked (`checkSlots`). A
 // binding whose request has changed goes to `needs-reapproval` here, and its
-// owner gets one notice. Throws the refusal for the first slot that fails.
+// owner gets one notice, unless the caller says its request may be older than
+// the one approved (`marksStaleBindings: false`): then the call is refused and
+// the binding is left as it is. Throws the refusal for the first slot that
+// fails.
 //
 // A call claims a rejected grant's or key's probe when one is due
 // (`claimProbe: true`); an admission only asks whether one is due, so a run
@@ -1303,7 +1306,11 @@ function checkSlot(
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
-  rejection: { probeIntervalMs: number; claimProbe: boolean },
+  rejection: {
+    probeIntervalMs: number;
+    claimProbe: boolean;
+    marksStaleBindings?: boolean;
+  },
 ): Promise<CheckedBinding[]> {
   let { request } = lookup;
   let refuseNotApproved = () =>
@@ -1354,11 +1361,13 @@ async function checkedBindings(
           ),
         );
       case 'binding-needs-reapproval':
-        await markNeedsReapproval(
-          dbAdapter,
-          check.binding.id,
-          check.binding.approval_id,
-        );
+        if (rejection.marksStaleBindings !== false) {
+          await markNeedsReapproval(
+            dbAdapter,
+            check.binding.id,
+            check.binding.approval_id,
+          );
+        }
         throw refusedFrom(
           limitSubjectOf(check.binding),
           refusal(
@@ -1614,13 +1623,22 @@ async function markNeedsReapproval(
 // fills only the call that claims its probe; every other is refused
 // `credential-rejected`. Each slot reports its grant, so the sender can act on
 // the vendor's answer.
+// How a call fills its slots. `marksStaleBindings: false` is for a caller
+// whose request may be older than the one its bindings were approved for, such
+// as a published realm's snapshot of its source's code: a mismatch refuses its
+// call and leaves the binding approved for the source.
+export interface FillOptions {
+  probeIntervalMs?: number;
+  marksStaleBindings?: boolean;
+}
+
 export async function fillSlots(
   dbAdapter: DBAdapter,
   // Read only once a binding's grant is opened, so a slot nobody approved is
   // refused without the keyring.
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
-  options: { probeIntervalMs?: number } = {},
+  options: FillOptions = {},
 ): Promise<CallApiFilledSlot[]> {
   // A refusal raised here is recorded against the share or key that raised
   // it; one raised once the slots are filled is the executor's to report
@@ -1639,12 +1657,16 @@ async function fillCheckedSlots(
   dbAdapter: DBAdapter,
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
-  { probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS }: { probeIntervalMs?: number },
+  {
+    probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
+    marksStaleBindings,
+  }: FillOptions,
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
   for (let checked of await checkedBindings(dbAdapter, lookup, {
     probeIntervalMs,
     claimProbe: true,
+    ...(marksStaleBindings === false ? { marksStaleBindings } : {}),
   })) {
     // A refusal filling this slot, from an unusable grant or a credential
     // whose token can't be minted, is this binding's share's or key's.

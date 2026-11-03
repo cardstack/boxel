@@ -365,7 +365,10 @@ import {
   realmInfoExtraKeys,
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
-import { createCallApiSender } from '../../lib/outbound/call-api-sender.ts';
+import {
+  createCallApiSender,
+  publishedFromRow,
+} from '../../lib/outbound/call-api-sender.ts';
 import {
   createPolicyWriteAuditor,
   type PolicyPointerReader,
@@ -576,18 +579,27 @@ export function makeTestReconciler(
         diskPath,
         dynamicMountDeps.enableFileWatcher,
       );
-      let reconciledRealm = new Realm({
-        url: row.url,
-        adapter,
-        secretSeed: realmSecretSeed,
-        virtualNetwork: dynamicMountDeps.virtualNetwork,
-        dbAdapter,
-        queue: dynamicMountDeps.queue,
-        matrixClient: dynamicMountDeps.matrixClient,
-        realmServerURL: dynamicMountDeps.serverURL.href,
-        definitionLookup: dynamicMountDeps.definitionLookup,
-        callApi: createCallApiSender(dbAdapter),
-      });
+      let publishedFrom = publishedFromRow(row);
+      let reconciledRealm = new Realm(
+        {
+          url: row.url,
+          adapter,
+          secretSeed: realmSecretSeed,
+          virtualNetwork: dynamicMountDeps.virtualNetwork,
+          dbAdapter,
+          queue: dynamicMountDeps.queue,
+          matrixClient: dynamicMountDeps.matrixClient,
+          realmServerURL: dynamicMountDeps.serverURL.href,
+          definitionLookup: dynamicMountDeps.definitionLookup,
+          callApi: createCallApiSender(dbAdapter, {
+            ...(publishedFrom ? { publishedFrom } : {}),
+          }),
+        },
+        // Mounted as the production reconciler mounts a published realm.
+        publishedFrom
+          ? { published: true, sourceRealmURL: publishedFrom.sourceRealmURL }
+          : undefined,
+      );
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
       return reconciledRealm;
