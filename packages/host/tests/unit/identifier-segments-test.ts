@@ -6,10 +6,29 @@ import {
   extensionOfIdentifier,
   lastSegmentOfIdentifier,
   nameWithoutExtension,
+  pathSegmentsOfIdentifier,
   rri,
 } from '@cardstack/runtime-common';
 
 module('Unit | identifier segments', function () {
+  test('the path segments leave out the origin and the prefix namespace', function (assert) {
+    assert.deepEqual(
+      pathSegmentsOfIdentifier(
+        'https://realms.example.test/r/skills/trip/SKILL.md?v=1',
+      ),
+      ['r', 'skills', 'trip', 'SKILL.md'],
+    );
+    assert.deepEqual(
+      pathSegmentsOfIdentifier('@cardstack/skills/trip/SKILL.md#top'),
+      ['trip', 'SKILL.md'],
+    );
+    assert.deepEqual(pathSegmentsOfIdentifier('@cardstack/skills/'), []);
+    assert.deepEqual(
+      pathSegmentsOfIdentifier('https://realms.example.test'),
+      [],
+    );
+  });
+
   test('the last segment is the same in either form', function (assert) {
     assert.strictEqual(
       lastSegmentOfIdentifier('https://realms.example.test/r/notes/todo.md'),
