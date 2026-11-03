@@ -6,6 +6,15 @@ ENV prerender_script=$prerender_script
 
 WORKDIR /realm-server
 
+# The oldest Chrome this image may ship. The prerenderer loads card HTML from
+# any realm, so its browser must carry Chrome's security fixes, and the build
+# fails when the apt repository serves something older. Docker reuses the
+# install layer below from the registry build cache until something it depends
+# on changes; this value is one of those inputs. When a Chrome security release
+# lands, raise it to the fixed version: the layer then reinstalls from the
+# current stable package instead of keeping the cached browser.
+ARG CHROME_MIN_VERSION=156.0.8078.73
+
 # Install Chrome dependencies required by Puppeteer; the google-chrome package
 # drags in the shared libraries that Chromium needs at runtime.
 RUN apt-get update \
@@ -45,6 +54,12 @@ RUN apt-get update \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
+    && chrome_version="$(dpkg-query -W -f='${Version}' google-chrome-stable)" \
+    && if ! dpkg --compare-versions "$chrome_version" ge "$CHROME_MIN_VERSION"; then \
+         echo "google-chrome-stable $chrome_version is older than CHROME_MIN_VERSION $CHROME_MIN_VERSION" >&2; \
+         exit 1; \
+       fi \
+    && echo "Installed google-chrome-stable $chrome_version" \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g pnpm@12.7.0
