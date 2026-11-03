@@ -18,6 +18,9 @@ import {
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
+  realmPolicyCardNamed,
+  RealmPaths,
+  sameResourceIn,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
@@ -268,19 +271,39 @@ async function ensureRealmIndexBoilerplateOptIn(
   }
 }
 
-// A published realm names no policy, so it answers on its ACL alone. The
-// source's pointer is an absolute card id, so a copy of it would name the
-// source's policy card rather than anything in the snapshot: the published
-// realm would be governed by the source's live policy, and a grant there of
-// any writing operation (create, update, delete, transform, …) could admit a
-// signed-in caller's write into a realm nobody may write. Removed from the
-// copy before it is swapped in, so the file a mounted published realm reads
-// after the swap never names the source's pointer.
+// A published realm is governed by the snapshot of its source's policy card,
+// never by the source's live one. The source's pointer is an absolute card id,
+// so a verbatim copy of it would name the source's card, whose rules name the
+// source's types rather than the snapshot's, and whose grants change whenever
+// the source's owner edits them.
+//
+// So where the pointer names a card in the source realm, the copy's pointer
+// names the same path in the published realm: the policy card copied with the
+// rest of the realm, whose rules resolve against the published realm's own
+// modules. A published realm keeps only that policy's grants on a `callApi`
+// whose every credential slot takes a key shared with the realm
+// (`sharedKeyCallsOnly`), which send a request outside the realm and write
+// nothing in it; so the copy still admits no write by any caller. A pointer to
+// a card in any other realm is removed, and the published realm answers on its
+// ACL alone. Either way the file is rewritten before the copy is swapped in,
+// so the file a mounted published realm reads after the swap never names the
+// source's pointer.
 //
 // A `realm.json` that doesn't parse is left alone, since a realm reads no
 // policy from it either. Any other failure to read or rewrite it fails the
 // publish.
-async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
+async function rebaseRealmPolicyPointer(
+  realmPath: string,
+  {
+    sourceRealmURL,
+    publishedRealmURL,
+    virtualNetwork,
+  }: {
+    sourceRealmURL: string;
+    publishedRealmURL: string;
+    virtualNetwork: VirtualNetwork;
+  },
+): Promise<void> {
   let realmJsonPath = join(realmPath, 'realm.json');
   if (!(await pathExists(realmJsonPath))) {
     return;
@@ -302,7 +325,19 @@ async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
   ) {
     return;
   }
-  delete attributes.policy;
+  let card = realmPolicyCardNamed(attributes.policy, virtualNetwork);
+  let copy = card
+    ? sameResourceIn(
+        new RealmPaths(new URL(sourceRealmURL)),
+        new RealmPaths(new URL(publishedRealmURL)),
+        new URL(card),
+      )
+    : undefined;
+  if (copy) {
+    attributes.policy = copy;
+  } else {
+    delete attributes.policy;
+  }
   await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
 }
 
@@ -325,7 +360,7 @@ function sameRealmConfig(a: Buffer | undefined, b: Buffer | undefined) {
 
 // The copy keeps every file's mtime, so the index skips the files that did
 // not change since the last publish. The publish then rewrites the copied
-// realm.json (dropRealmPolicyPointer, ensureRealmIndexBoilerplateOptIn), and
+// realm.json (rebaseRealmPolicyPointer, ensureRealmIndexBoilerplateOptIn), and
 // each write stamps it with the current time. Give it the source file's mtime
 // back, so an unchanged realm.json also reads as unchanged.
 async function restoreRealmConfigMtime(
@@ -738,7 +773,11 @@ export default function handlePublishRealm({
             );
           }
           try {
-            await dropRealmPolicyPointer(tempCopyPath);
+            await rebaseRealmPolicyPointer(tempCopyPath, {
+              sourceRealmURL,
+              publishedRealmURL,
+              virtualNetwork,
+            });
             if (await pathExists(publishedRealmPath)) {
               await move(publishedRealmPath, backupPath);
             }
@@ -757,10 +796,11 @@ export default function handlePublishRealm({
           }
 
           // A mounted realm memoizes the policy pointer it read from
-          // `realm.json`. When the file this swap replaced named one, the memo
-          // still holds it, and a write resolved against it would wait out
-          // this lock and then commit. Drop it while the lock still excludes
-          // every writer in the realm.
+          // `realm.json`. The memo still holds whatever the file this swap
+          // replaced named, which may be a pointer no publish writes, and a
+          // write resolved against it would wait out this lock and then
+          // commit. Drop it while the lock still excludes every writer in the
+          // realm, so the realm reads the pointer the swap put in place.
           reconciler.mounted
             .get(publishedRealmURL)
             ?.invalidateCachedRealmInfo();

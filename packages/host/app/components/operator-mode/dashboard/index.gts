@@ -40,10 +40,13 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import Agents from './agents';
+import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
 import CatalogsFlyout from './catalogs-flyout';
 import FavoritesFlyout from './favorites-flyout';
+import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
 import SectionHead from './section-head';
@@ -517,6 +520,17 @@ export default class Dashboard extends Component<Signature> {
     flyout: FavoritesFlyout,
   };
 
+  private agentsSection: DashboardSection = {
+    id: 'agents',
+    label: 'Agents',
+    icon: Bot,
+    flyout: AgentsFlyout,
+  };
+
+  @action private showAgents() {
+    this.args.sections.scrollTo(this.agentsSection.id);
+  }
+
   private catalogsSection: DashboardSection = {
     id: 'catalogs',
     label: 'Catalogs',
@@ -590,6 +604,8 @@ export default class Dashboard extends Component<Signature> {
               data-test-dashboard-filter
             />
           </header>
+
+          <GetStarted @showAgents={{this.showAgents}} />
 
           {{#if this.catalogLeads}}
             <CatalogSection
@@ -839,13 +855,15 @@ export default class Dashboard extends Component<Signature> {
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'agents'}}
+            {{@sections.register this.agentsSection}}
             data-test-dashboard-section='agents'
           >
             <SectionHead
               @icon={{Bot}}
               @title='Agents'
               @titleId={{this.headingId 'agents'}}
-            >Boxel AI works here; your own agent works through the Boxel plugin.</SectionHead>
+            >Build with Boxel AI Assistant, or connect your own agent.</SectionHead>
+            <Agents />
           </section>
         </div>
       </div>

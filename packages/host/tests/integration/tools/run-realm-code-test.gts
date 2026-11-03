@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType, type Realm } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -90,6 +90,23 @@ function recipeJSON(
   )}\n`;
 }
 
+// A Pet instance for a test to write straight to a test realm's adapter. The
+// test realm has no file watcher, so the realm then holds the file and no
+// index pass is coming to index it.
+const UNINDEXED_PET = JSON.stringify({
+  data: {
+    type: 'card',
+    attributes: { name: 'Biscuit' },
+    meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+  },
+});
+
+// A script that reads a card, and returns the error's message when the read
+// fails.
+function readCardScript(path: string) {
+  return `try { return await realm.cards.get(${JSON.stringify(path)}); } catch (e) { return e.message; }`;
+}
+
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -138,9 +155,10 @@ module('Integration | tools | run-realm-code', function (hooks) {
   });
 
   let adapter: any;
+  let testRealm: Realm;
 
   hooks.beforeEach(async function () {
-    ({ adapter } = await withCachedRealmSetup(async () =>
+    ({ adapter, realm: testRealm } = await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -966,6 +984,187 @@ return await realm.cards.get('people/hassan');`,
         code: `await realm.cards.get('https://example.com/card');`,
       }),
       /Path is outside this realm/,
+    );
+  });
+
+  test('realm.cards.get says to read a card that is not indexed again only while the workspace is indexing, and names the call that indexes it otherwise', async function (assert) {
+    await adapter.write('Pet/unindexed.json', UNINDEXED_PET);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let messageService = getService('message-service');
+
+    // An index pass has started in the realm and has not finished.
+    messageService.relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental-index-initiation',
+      updatedFile: `${testRealmURL}task.json`,
+      realmURL: testRealmURL,
+    });
+    let whileIndexing;
+    try {
+      whileIndexing = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/unindexed'),
+      });
+    } finally {
+      // The pass ends having indexed nothing.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL: testRealmURL,
+      });
+    }
+    assert.strictEqual(
+      JSON.parse(whileIndexing.scriptResult!),
+      `Card is not indexed yet: ${testRealmURL}Pet/unindexed; read it again ` +
+        `in a moment. If it is still not indexed after a few reads, index ` +
+        `the file with realm.index.invalidate('Pet/unindexed.json')`,
+      'while a pass runs, the row may still come, so the card is read again',
+    );
+
+    let idle = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: readCardScript('Pet/unindexed.json'),
+    });
+    assert.strictEqual(
+      JSON.parse(idle.scriptResult!),
+      `Card is not indexed: ${testRealmURL}Pet/unindexed. Its file ` +
+        `Pet/unindexed.json is in the workspace, and the workspace is not ` +
+        `indexing, so reading the card again will not find it. Index the ` +
+        `file with realm.index.invalidate('Pet/unindexed.json'), then read ` +
+        `the card again. Do not edit the card to make the workspace index it`,
+      'with no pass running, the error names the call that indexes the file',
+    );
+
+    let recovered = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.index.invalidate('Pet/unindexed.json');
+return await realm.cards.get('Pet/unindexed');`,
+    });
+    assert.strictEqual(
+      JSON.parse(recovered.scriptResult!).attributes.name,
+      'Biscuit',
+      'the call the error names indexes the card, and the card reads',
+    );
+    assert.deepEqual(recovered.files, [], 'no file was edited to get there');
+  });
+
+  test('realm.cards.get names the error of a card that failed to index', async function (assert) {
+    await testRealm.write(
+      'Pet/orphan.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { name: 'Orphan' },
+          meta: { adoptsFrom: { module: '../no-such-module', name: 'Pet' } },
+        },
+      }),
+    );
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: readCardScript('Pet/orphan'),
+    });
+
+    let message = JSON.parse(result.scriptResult!);
+    assert.true(
+      message.startsWith(`Card failed to index: ${testRealmURL}Pet/orphan: `),
+      message,
+    );
+    assert.true(
+      /no-such-module/.test(message),
+      `the index error's own text is in the message: ${message}`,
+    );
+    assert.true(
+      message.endsWith(
+        'Reading it again gives the same error until its cause is fixed, ' +
+          'in Pet/orphan.json, in the definition it adopts from, or in a ' +
+          'card it links to',
+      ),
+      message,
+    );
+  });
+
+  test('realm.cards.get says a path that names a file is not a card', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let messages = [];
+for (let path of ['images/existing.png', 'notes/first.md']) {
+  try { await realm.cards.get(path); } catch (e) { messages.push(e.message); }
+}
+return messages;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'Not a card: images/existing.png is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+      'Not a card: notes/first.md is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+    ]);
+  });
+
+  test('realm.cards.get does not blame the card for a read that failed for another reason', async function (assert) {
+    let cardURL = `${testRealmURL}Pet/mango`;
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    // The realm answers the card's read with a 500 of its own, with no index
+    // row behind it.
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (String(url) === cardURL) {
+        let err = new Error('realm failure') as any;
+        err.status = 500;
+        err.responseText = JSON.stringify({
+          errors: [
+            {
+              id: cardURL,
+              status: 500,
+              title: 'Internal Server Error',
+              message: 'the database is unavailable',
+            },
+          ],
+        });
+        throw err;
+      }
+      return originalFetchJSON(url, args);
+    };
+    let result;
+    try {
+      result = await new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      ).execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/mango'),
+      });
+    } finally {
+      delete cardService.fetchJSON;
+    }
+
+    assert.strictEqual(
+      JSON.parse(result.scriptResult!),
+      `Unable to read card ${cardURL}: the database is unavailable`,
+    );
+  });
+
+  test('the tool description names the call that indexes a card that is not indexed, and rules out editing the card for it', function (assert) {
+    let { description } = new RunRealmCodeTool(
+      getService('tool-service').toolContext,
+    );
+    assert.true(
+      description.includes("realm.index.invalidate('<card path>.json')"),
+      description,
+    );
+    assert.true(
+      description.includes(
+        "never edit a card's data to make the workspace index it",
+      ),
+      description,
     );
   });
 
@@ -3627,6 +3826,8 @@ module(
     ]);
     setupRealmCacheTeardown(hooks);
 
+    let adapter: any;
+
     hooks.beforeEach(async function () {
       captureRequests = [];
       await setupIntegrationTestRealm({
@@ -3638,7 +3839,7 @@ module(
           'brand.md': '# Brand\n',
         },
       });
-      await setupIntegrationTestRealm({
+      ({ adapter } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         enforcePermissions: true,
         permissions: { '*': ['read'] },
@@ -3662,7 +3863,7 @@ module(
             },
           },
         },
-      });
+      }));
       await getService('realm').login(testRealmURL);
       await getService('realm').login(readOnlyRealmURL);
     });
@@ -3808,6 +4009,29 @@ return refused;`,
           `the refusal says why: ${message}`,
         );
       }
+    });
+
+    test('a card that is not indexed asks for a user who can write, not for a call the run would refuse', async function (assert) {
+      await adapter.write('Pet/unindexed.json', UNINDEXED_PET);
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/unindexed'),
+      });
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        `Card is not indexed: ${testRealmURL}Pet/unindexed. Its file ` +
+          `Pet/unindexed.json is in the workspace, and the workspace is not ` +
+          `indexing, so reading the card again will not find it. You can ` +
+          `only read this workspace, so tell the user that ` +
+          `Pet/unindexed.json needs indexing again by someone who can ` +
+          `write to it`,
+      );
     });
   },
 );
