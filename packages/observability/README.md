@@ -538,6 +538,18 @@ When one arrives, look at the data source (for Loki, the Loki task and its
 `context canceled` / `context deadline exceeded` errors), not at the service
 the rule watches.
 
+A `DatasourceError` alert also carries the rule's annotations, and the
+notification shows them. So a summary that states the condition must not read
+as true when the query failed:
+
+- With `noDataState: OK`, wrap the summary in
+  `{{ if $values }}…{{ else }}…{{ end }}`. A failed query has no values, and
+  for these rules no data never notifies, so the `else` text is what a
+  `DatasourceError` shows: say the query failed and what to check.
+- With `noDataState: Alerting`, a rule that found no data has no values
+  either, so the template cannot tell the two apart. Open the summary with
+  both cases, keyed on the alert name (`DatasourceError` or the rule's title).
+
 ## Staging / production workflow
 
 Tokens come from SSM at `/<env>/grafana/grafanactl_token` (provisioned by `cardstack/infra:configs/grafana/`). AWS creds with `ssm:GetParameter` on that path are required.
