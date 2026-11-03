@@ -12,6 +12,7 @@ import {
   keysClients,
   keysConnect,
   keysDelete,
+  keysLimits,
   keysList,
   keysReplace,
   keysShare,
@@ -19,8 +20,10 @@ import {
   keysShow,
   keysSwap,
   keysUnshare,
+  keysUsage,
   runKeysCommand,
   signInToManageKeys,
+  type LimitsOptions,
 } from './manage.ts';
 import {
   keysApprove,
@@ -364,6 +367,39 @@ export function registerKeysCommand(program: Command): void {
     .option('--json', 'Output JSON')
     .action((options: { realm: string; json?: boolean }) =>
       runKeysCommand(options.json, () => keysShares(options)),
+    );
+
+  keys
+    .command('limits')
+    .description(
+      "Show or set the limits on how much of one of your keys calls from cards, the AI assistant and the CLI may spend: on a personal key, or with --realm on your share of one there. Each limit takes a number, or default for the platform's. Without a limit to change, shows the limits in force",
+    )
+    .argument('<name>', 'Your key, or with --realm the label of the share')
+    .option('--realm <url>', 'The realm the share is in')
+    .option(
+      '--rate <burst>/<refill>',
+      'Per caller: how many calls at once, and how many a minute refill, such as 25/15 (default for both puts them back)',
+    )
+    .option('--daily <n>', 'Calls a UTC day, across every caller')
+    .option(
+      '--monthly <n>',
+      'Calls a UTC month, across every caller (default: 30 daily budgets)',
+    )
+    .option('--json', 'Output JSON')
+    .action((name: string, options: LimitsOptions) =>
+      runKeysCommand(options.json, () => keysLimits(name, options)),
+    );
+
+  keys
+    .command('usage')
+    .description(
+      "Show what one of your keys has served: this UTC day's and month's calls against its budgets, its last use, top callers, refusals by reason and the vendor's answers. With --realm, a share in that realm, for any of the realm's direct writers",
+    )
+    .argument('<name>', 'Your key, or with --realm the label of the share')
+    .option('--realm <url>', 'The realm the share is in')
+    .option('--json', 'Output JSON')
+    .action((name: string, options: { realm?: string; json?: boolean }) =>
+      runKeysCommand(options.json, () => keysUsage(name, options)),
     );
 
   keys

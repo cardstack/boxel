@@ -95,6 +95,8 @@ export interface UserKeyMetadata {
   oauth?: OAuthKeyDescription;
   // Only a google-service-account key has one.
   serviceAccount?: ServiceAccountDetails;
+  // The limits in force, defaults filled in.
+  limits?: KeyLimits;
   createdAt: string;
   updatedAt: string;
   // Whether its owner lets people who aren't signed in use it, wherever a
@@ -118,12 +120,31 @@ export interface KeyShare {
   suspensionReason: string | null;
   suspendedBy: string | null;
   suspendedAt: string | null;
+  // The limits in force, defaults filled in; listed for the key's owner and
+  // the realm's direct writers.
+  limits?: KeyLimits;
   createdAt: string;
   updatedAt: string;
   // In a realm's listing: the operations the share is approved for there,
   // each with where it sends, as last approved.
   operations?: KeyShareOperation[];
 }
+
+// How much of a key interactive calls may spend: a token bucket per caller
+// (`rateBurst` calls at once, refilled at `rateRefillPerMinute`) and the calls
+// the share or key serves in a UTC day and month, across every caller.
+export interface KeyLimits {
+  rateBurst: number;
+  rateRefillPerMinute: number;
+  dailyBudget: number;
+  monthlyBudget: number;
+}
+
+// A change to some of a key's limits: a limit left out keeps what it was, and
+// null puts it back to the platform's default.
+export type KeyLimitChanges = Partial<{
+  [limit in keyof KeyLimits]: number | null;
+}>;
 
 export interface KeyShareOperation {
   bindingId: string;
@@ -133,6 +154,50 @@ export interface KeyShareOperation {
   slot: string;
   state: string;
   destination?: string;
+}
+
+// What a share or a personal key has served, as the realm server records it.
+// The counts cover `since` (the start of the UTC month) until now; the
+// budgets' `used` is what the limits count, interactive calls charged this
+// UTC day and month.
+export interface KeyUsage {
+  id: string;
+  limits: KeyLimits;
+  budgets: {
+    day: KeyBudgetUse;
+    month: KeyBudgetUse;
+  };
+  since: string;
+  calls: number;
+  lastUse: {
+    at: string;
+    caller: string | null;
+    operation: string;
+    outcome: 'sent' | 'refused' | 'failed';
+    // Set when the caller is someone the reader can't see in the realm.
+    withheld?: boolean;
+  } | null;
+  // A null caller is a call with no session; one marked `withheld` is every
+  // caller the reader can't see in the realm, counted together.
+  topCallers: { caller: string | null; calls: number; withheld?: boolean }[];
+  refusals: { code: string; count: number }[];
+  vendorOutcomes: { status: number; count: number; outcome?: string }[];
+  grants: {
+    id: string;
+    host: string;
+    destination: string;
+    state: 'active' | 'rejected';
+    rejectedAt: string | null;
+    lastForbiddenAt: string | null;
+  }[];
+  // Whether the reader may change the limits: only the key's owner may.
+  canEditLimits: boolean;
+}
+
+export interface KeyBudgetUse {
+  used: number;
+  budget: number;
+  resetsAt: string;
 }
 
 export interface KeyWriteTarget {
@@ -628,4 +693,70 @@ export async function completeOAuthConnect(
     },
   );
   return json.data.attributes;
+}
+
+// The user's own share labelled `label` in `realm`, or else the realm's share
+// of that label, for a direct writer of the realm to read or to be refused
+// changing.
+export async function findShare(
+  realmServerUrl: string,
+  token: string,
+  { realm, label }: { realm: string; label: string },
+  fetchFn: FetchFn = fetch,
+): Promise<KeyShare> {
+  let canonical = canonicalRealmUrl(realm);
+  let own = (await listOwnShares(realmServerUrl, token, {}, fetchFn)).find(
+    (share) => share.realm === canonical && share.label === label,
+  );
+  if (own) {
+    return own;
+  }
+  return findByLabel(
+    await listRealmShares(realmServerUrl, token, realm, fetchFn),
+    realm,
+    label,
+  );
+}
+
+// Sets some of a share's or a personal key's limits, which only the key's
+// owner may, with a session signed in on the secure origin. Answers the
+// limits in force afterwards, defaults filled in.
+export async function setKeyLimits(
+  realmServerUrl: string,
+  token: string,
+  target: { shareId: string } | { keyId: string },
+  changes: KeyLimitChanges,
+  fetchFn: FetchFn = fetch,
+): Promise<KeyLimits> {
+  let path =
+    'shareId' in target
+      ? `_key-shares/${encodeURIComponent(target.shareId)}/limits`
+      : `_user-keys/${encodeURIComponent(target.keyId)}/limits`;
+  let json = await realmServerRequest(realmServerUrl, path, {
+    method: 'PUT',
+    token,
+    fetchFn,
+    body: { data: { type: 'key-limits', attributes: changes } },
+  });
+  return json.data.attributes as KeyLimits;
+}
+
+// What a share or a personal key has served. A share's usage is for the
+// realm's direct writers, a personal key's for its owner; anyone else is
+// answered 404, as for no such share or key.
+export async function getKeyUsage(
+  realmServerUrl: string,
+  token: string,
+  target: { shareId: string } | { keyId: string },
+  fetchFn: FetchFn = fetch,
+): Promise<KeyUsage> {
+  let path =
+    'shareId' in target
+      ? `_key-shares/${encodeURIComponent(target.shareId)}/usage`
+      : `_user-keys/${encodeURIComponent(target.keyId)}/usage`;
+  let json = await realmServerRequest(realmServerUrl, path, {
+    token,
+    fetchFn,
+  });
+  return fromResource<KeyUsage>(json.data);
 }
