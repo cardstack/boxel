@@ -8232,14 +8232,15 @@ ${patchedFileSource}
     };
 
     let png = (name: string, contentSize: number | 'unknown' = 1024) => {
+      let mxcUrl = `mxc://mock-server/${name.replace(/[^\w-]/g, '-')}-uploaded`;
       let file: AttachedFile = {
         sourceUrl: `http://test.com/my-realm/${name}`,
-        url: `http://test.com/${name}-uploaded`,
+        url: matrixMediaUrl(mxcUrl),
         name,
         contentType: 'image/png',
         contentSize: contentSize === 'unknown' ? undefined : contentSize,
       };
-      mockResponses.set(file.url, { ok: true, text: `bytes-of-${name}` });
+      mockMedia(mxcUrl, { ok: true, text: `bytes-of-${name}` });
       return file;
     };
 
@@ -8396,9 +8397,9 @@ ${patchedFileSource}
       let firstCopy = png('open.png');
       let newestCopy = {
         ...firstCopy,
-        url: 'http://test.com/open.png-attached-again',
+        url: matrixMediaUrl('mxc://mock-server/open-png-attached-again'),
       };
-      mockResponses.set(newestCopy.url, {
+      mockMedia('mxc://mock-server/open-png-attached-again', {
         ok: true,
         text: 'bytes-of-newest-copy',
       });
