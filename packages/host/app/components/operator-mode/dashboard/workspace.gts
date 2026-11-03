@@ -1037,14 +1037,17 @@ export default class Workspace extends Component<Signature> {
           var(--boxel-sp-xs) var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius);
         background-color: var(--dashboard-row-tint);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
-        transition: background-color var(--boxel-transition);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-25);
+        transition:
+          background-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
       }
       .workspace.is-row:has(.host-menu) {
         --_workspace-controls: 3;
       }
       .workspace.is-row:hover {
         background-color: var(--_workspace-row-tint-hover);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-50);
       }
       /* Over the list's scrim, so a row the cursor rests on is never hidden
          under it; the Show more toggle, later in the page at the same level,

@@ -67,12 +67,12 @@ export default class AddWorkspace extends Component<Signature> {
         justify-content: center;
         align-items: center;
         background-color: transparent;
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-25);
         color: var(--boxel-light);
         transition: box-shadow var(--boxel-transition);
       }
       .add-workspace:hover {
-        box-shadow: inset 0 0 0 1px var(--boxel-light-25);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-50);
       }
       .add-workspace.is-selected,
       .add-workspace:focus-visible {

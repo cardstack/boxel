@@ -315,7 +315,7 @@ export default class CatalogShelf extends Component<Signature> {
           @appearance='link'
           {{on 'click' this.openCatalog}}
           data-test-catalog-see-all
-        >See the whole catalog <span aria-hidden='true'>→</span></Button>
+        >See the full catalog <span aria-hidden='true'>→</span></Button>
       </div>
     {{else if this.isPending}}
       {{! The stories' metrics with nothing in them. }}
@@ -343,7 +343,7 @@ export default class CatalogShelf extends Component<Signature> {
           class='see-all is-pending'
           @tone='neutral'
           @appearance='link'
-        >See the whole catalog</Button>
+        >See the full catalog</Button>
       </div>
     {{/if}}
 
@@ -383,20 +383,20 @@ export default class CatalogShelf extends Component<Signature> {
         border-radius: var(--boxel-border-radius-2xl);
         background-color: var(--_story-paper);
         color: var(--foreground);
+        /* Edged like the workspace tiles, just outside the card so the edge
+           reads the same against the dashboard on every paper. */
         box-shadow:
-          0 0 0 1px var(--_story-edge),
+          0 0 0 1px var(--boxel-light-25),
           var(--shadow-md);
       }
-      /* The hover ring; the transparent outline shows it in forced-colors
-         mode. */
+      /* The hover edge brightens as the tiles' does. */
       .story::after {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        box-shadow: 0 0 0 2px
-          color-mix(in oklch, var(--foreground) 30%, transparent);
-        outline: 2px solid transparent;
+        outline: 1px solid var(--boxel-light-50);
+        outline-offset: 1px;
         opacity: 0;
         transition: opacity var(--boxel-transition);
         pointer-events: none;

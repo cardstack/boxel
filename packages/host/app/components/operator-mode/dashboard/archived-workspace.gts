@@ -90,14 +90,12 @@ export default class ArchivedWorkspace extends Component<Signature> {
         @appearance='outlined'
         @shape='pill'
         @size='s'
+        @icon={{ArchiveRestoreIcon}}
         @busy={{this.restoreTask.isRunning}}
         @busyLabel='Restoring'
         {{on 'click' (perform this.restoreTask)}}
         data-test-restore-workspace-btn={{@archivedRealm.url}}
-      >
-        <ArchiveRestoreIcon width='14' height='14' aria-hidden='true' />
-        Restore
-      </Button>
+      >Restore</Button>
     </div>
     <style scoped>
       .archived-row {
@@ -110,8 +108,12 @@ export default class ArchivedWorkspace extends Component<Signature> {
         padding: var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius);
         background-color: var(--dashboard-row-tint);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-25);
         color: var(--boxel-light);
+        transition: box-shadow var(--boxel-transition);
+      }
+      .archived-row:hover {
+        box-shadow: inset 0 0 0 1px var(--boxel-light-50);
       }
       .thumb {
         display: flex;
