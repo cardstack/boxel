@@ -21,6 +21,7 @@ import {
   recordVendorForbidden,
 } from '../key-grant-rejection.ts';
 import { keyReadiness } from '../key-readiness.ts';
+import { recordKeyUses } from '../key-uses.ts';
 import { secretsKeyring } from '../secrets-at-rest/index.ts';
 import {
   OutboundRefusedError,
@@ -88,6 +89,9 @@ export function safeResponseHeaders(headers: Headers): Record<string, string> {
 //
 // A request addressed to one of the platform's token endpoints is refused
 // before anything is sent, key or no key (see `tokenEndpointAt`).
+//
+// Each use of a share or key is recorded against it (`lib/key-uses.ts`): a
+// refusal raised while filling by `fill`, everything after by `recordUse`.
 export function createCallApiSender(
   dbAdapter: DBAdapter,
   {
@@ -99,6 +103,7 @@ export function createCallApiSender(
     fill: (lookup) =>
       fillSlots(dbAdapter, secretsKeyring, lookup, { probeIntervalMs }),
     readiness: (lookup) => keyReadiness(dbAdapter, lookup, { probeIntervalMs }),
+    recordUse: (use) => recordKeyUses(dbAdapter, use),
     send: async (request, credentials) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(

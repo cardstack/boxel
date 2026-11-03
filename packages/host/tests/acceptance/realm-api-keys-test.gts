@@ -157,6 +157,71 @@ function fixtureShares(): ShareRow[] {
   ];
 }
 
+// A share's usage as the realm server answers it to a direct writer, after
+// calls through it: what it spent today and this month, the last use, the top
+// callers, refusals by code, the service's answers by status (a 403 named
+// `vendor-forbidden`), and its grants, one of them rejected by the service.
+// Only the owner of the key a share holds may edit its limits.
+function fixtureUsage(owner: string | null) {
+  return {
+    limits: {
+      rateBurst: 25,
+      rateRefillPerMinute: 15,
+      dailyBudget: 2400,
+      monthlyBudget: 72000,
+    },
+    budgets: {
+      day: { used: 312, budget: 2400, resetsAt: '2026-11-03T00:00:00.000Z' },
+      month: {
+        used: 4180,
+        budget: 72000,
+        resetsAt: '2026-12-01T00:00:00.000Z',
+      },
+    },
+    since: '2026-11-01T00:00:00.000Z',
+    calls: 4207,
+    lastUse: {
+      at: '2026-11-02T14:05:00.000Z',
+      caller: OTHER_WRITER,
+      operation: 'summarize',
+      outcome: 'sent',
+    },
+    topCallers: [
+      { caller: OTHER_WRITER, calls: 3100 },
+      { caller: ME, calls: 1050 },
+      { caller: null, calls: 57, withheld: true },
+    ],
+    refusals: [
+      { code: 'rate-limited', count: 21 },
+      { code: 'over-budget', count: 6 },
+    ],
+    vendorOutcomes: [
+      { status: 200, count: 4150 },
+      { status: 403, count: 3, outcome: 'vendor-forbidden' },
+      { status: 429, count: 27 },
+    ],
+    grants: [
+      {
+        id: 'grant-1',
+        host: 'api.openai.com',
+        destination: 'https://api.openai.com/v1/',
+        state: 'active',
+        rejectedAt: null,
+        lastForbiddenAt: '2026-11-02T09:00:00.000Z',
+      },
+      {
+        id: 'grant-2',
+        host: 'eu.api.openai.com',
+        destination: 'https://eu.api.openai.com/v1/',
+        state: 'rejected',
+        rejectedAt: '2026-11-01T08:00:00.000Z',
+        lastForbiddenAt: null,
+      },
+    ],
+    canEditLimits: owner === ME,
+  };
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -210,7 +275,27 @@ function stubSharesAPI({ directWriter }: { directWriter: boolean }) {
   for (let share of fixtureShares()) {
     let byId = `/_key-shares/${share.id}`;
     let suspend = `${byId}/suspend`;
-    paths.push(byId, suspend);
+    let usage = `${byId}/usage`;
+    paths.push(byId, suspend, usage);
+    registerRealmServerRoute({
+      path: usage,
+      handler: async (req, url) => {
+        requests.push({ method: req.method, path: url.pathname });
+        if (req.method !== 'GET') {
+          return null;
+        }
+        if (!directWriter) {
+          return json(404, { errors: ['no such share'] });
+        }
+        return json(200, {
+          data: {
+            type: 'key-usage',
+            id: share.id,
+            attributes: fixtureUsage(share.owner),
+          },
+        });
+      },
+    });
     registerRealmServerRoute({
       path: byId,
       handler: async (req, url) => {
@@ -243,7 +328,10 @@ function stubSharesAPI({ directWriter }: { directWriter: boolean }) {
   return {
     requests,
     changes: () => requests.filter((r) => r.method !== 'GET'),
-    listings: () => requests.filter((r) => r.method === 'GET'),
+    listings: () =>
+      requests.filter((r) => r.method === 'GET' && r.path === '/_key-shares'),
+    usages: () =>
+      requests.filter((r) => r.method === 'GET' && r.path.endsWith('/usage')),
     restore: () => paths.forEach((p) => unregisterRealmServerRoute(p)),
   };
 }
@@ -526,6 +614,111 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       assert.deepEqual(api!.changes(), []);
     });
 
+    test('each share shows its usage against its budgets, its callers, refusals by reason and how the service answered', async function (assert) {
+      await visitConfig();
+      await waitFor(`${share('OpenAI')} [data-test-realm-key-share-usage]`);
+      let usage = `${share('OpenAI')} [data-test-realm-key-share-usage]`;
+
+      assert
+        .dom(`${usage} [data-test-realm-key-share-usage-details]`)
+        .doesNotHaveAttribute('open', 'the detailed counts start closed');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-budget="day"] progress`)
+        .hasAttribute('value', '312', 'the meter shows the day’s use');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-budget="day"]`)
+        .hasText('Today 312 of 2,400 calls');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-budget="month"]`)
+        .hasText('This month 4,180 of 72,000 calls');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-last-use]`)
+        .includesText(`by ${OTHER_WRITER}`);
+      assert.deepEqual(
+        [
+          ...document.querySelectorAll(
+            `${usage} [data-test-realm-key-share-caller]`,
+          ),
+        ].map((el) => el.textContent!.replace(/\s+/g, ' ').trim()),
+        [`${OTHER_WRITER} 3,100`, `${ME} 1,050`, 'Others 57'],
+        'callers the user isn’t shown are counted together',
+      );
+      assert
+        .dom(`${usage} [data-test-realm-key-share-refusal="rate-limited"]`)
+        .hasText('Over a caller’s rate limit 21');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-refusal="over-budget"]`)
+        .hasText('Over budget 6');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-outcome="403"]`)
+        .hasText('403 Forbidden 3', 'a 403 is the service refusing the key');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-outcome="200"]`)
+        .hasText('200 OK 4,150');
+      assert
+        .dom(
+          `${usage} [data-test-realm-key-share-grant="eu.api.openai.com"][data-test-realm-key-share-grant-state="rejected"]`,
+        )
+        .includesText('Rejected');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-grant="api.openai.com"]`)
+        .includesText('Last refused');
+      assert
+        .dom(`${usage} [data-test-realm-key-share-limit="rate"]`)
+        .hasText(
+          'Each person 25 calls at once, then 15 a minute',
+          'the rate is per person',
+        );
+      assert
+        .dom(`${usage} [data-test-realm-key-share-limit="budget"]`)
+        .hasText(
+          'The key, in total across everyone 2,400 calls a day, 72,000 a month',
+          'the budgets are the key’s total',
+        );
+    });
+
+    test('the owner of a share’s key edits its limits in the secure window', async function (assert) {
+      let calls = stubWindowOpen();
+      await visitConfig();
+      await waitFor(`${share('OpenAI')} [data-test-realm-key-share-usage]`);
+      await click(`${share('OpenAI')} [data-test-realm-key-share-edit-limits]`);
+      await waitUntil(() => calls.length > 0);
+
+      let opened = new URL(calls[0].url);
+      assert.strictEqual(opened.origin, new URL(ENV.secureOriginURL).origin);
+      assert.true(
+        opened.pathname.endsWith('/share-limits'),
+        'at the share limits page',
+      );
+      assert.strictEqual(opened.search, '');
+      let fragment = new URLSearchParams(opened.hash.slice(1));
+      assert.deepEqual([...fragment.keys()], ['realm', 'share', 'reason']);
+      assert.strictEqual(fragment.get('realm'), testRealmURL);
+      assert.strictEqual(
+        fragment.get('share'),
+        '00000000-0000-4000-8000-000000000001',
+      );
+      assert.deepEqual(
+        api!.changes(),
+        [],
+        'no limit is changed from the app page',
+      );
+    });
+
+    test('a direct writer who doesn’t own a share sees its usage but can’t edit its limits', async function (assert) {
+      await visitConfig();
+      await waitFor(`${share('Weather')} [data-test-realm-key-share-usage]`);
+      assert
+        .dom(`${share('Weather')} [data-test-realm-key-share-limits]`)
+        .exists('the limits are shown');
+      assert
+        .dom(`${share('Weather')} [data-test-realm-key-share-edit-limits]`)
+        .doesNotExist('only the owner of the share’s key edits them');
+      assert
+        .dom(`${share('Weather')} [data-test-realm-key-share-change="suspend"]`)
+        .exists('they can suspend it instead');
+    });
+
     test('the listing is read again when the page comes back into focus', async function (assert) {
       await visitConfig();
       await waitFor(share('Maps'));
@@ -682,6 +875,8 @@ module('Acceptance | realm config | API Keys', function (hooks) {
 
       assert.dom('[data-test-realm-api-keys]').doesNotExist();
       assert.dom('[data-test-realm-api-keys-section]').doesNotExist();
+      assert.dom('[data-test-realm-key-share-usage]').doesNotExist();
+      assert.deepEqual(api!.usages(), [], 'no share’s usage is asked for');
       assert.dom('[data-test-realm-config-policy]').exists();
     });
   });

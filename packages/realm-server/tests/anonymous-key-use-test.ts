@@ -39,6 +39,7 @@ import {
 import {
   addUserKey,
   mintKeyWriteTicket,
+  setUserKeyAnonymousUse,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey, swapKeyIntoShare } from '../lib/key-shares.ts';
@@ -755,6 +756,42 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
     let reader = await invoke('forecast', { user: READER });
     assert.strictEqual(reader.status, 200, 'a signed-in reader is served');
+  });
+
+  test("a visitor's uses count against the share as someone not signed in, served or refused", async function (assert) {
+    let { shareId, keyId } = await sharedForAnyone(['forecast']);
+    let served = await invoke('forecast');
+    assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+
+    await setUserKeyAnonymousUse(dbAdapter, {
+      owner: OWNER,
+      keyId,
+      anonymous: false,
+    });
+    let refused = await invoke('forecast');
+    assert.strictEqual(refused.code, 'anonymous-use-not-approved');
+
+    let rows = (await dbAdapter.execute(
+      `SELECT share_id, caller, outcome, code FROM key_uses ORDER BY id`,
+    )) as {
+      share_id: string | null;
+      caller: string | null;
+      outcome: string;
+      code: string | null;
+    }[];
+    assert.deepEqual(
+      rows,
+      [
+        { share_id: shareId, caller: null, outcome: 'sent', code: null },
+        {
+          share_id: shareId,
+          caller: null,
+          outcome: 'refused',
+          code: 'anonymous-use-not-approved',
+        },
+      ],
+      'the visitor is recorded as nobody signed in, and the refusal counts against the share its key would have filled from',
+    );
   });
 
   test("a visitor's address is held to the share's rate, and other addresses are not", async function (assert) {

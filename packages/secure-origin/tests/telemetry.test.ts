@@ -26,6 +26,10 @@ describe('endpoint labels', () => {
         '_key-shares',
       ],
       [`_key-shares/${KEY}/swap`, '_key-shares/:id/swap'],
+      [`_key-shares/${KEY}/usage`, '_key-shares/:id/usage'],
+      [`_key-shares/${KEY}/limits`, '_key-shares/:id/limits'],
+      [`_user-keys/${KEY}/usage`, '_user-keys/:id/usage'],
+      [`_user-keys/${KEY}/limits`, '_user-keys/:id/limits'],
       ['_key-write-tickets', '_key-write-tickets'],
       [
         '_oauth/clients?realm=https%3A%2F%2Frealm.example%2Fmine%2F',

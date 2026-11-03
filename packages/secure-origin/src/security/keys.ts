@@ -849,3 +849,124 @@ export async function realmCardsWithRequests(
     }) => attributes,
   );
 }
+
+// How much of a key anyone may spend: a burst of calls per caller, refilled
+// at a steady rate, and the calls the key or share serves in one UTC day and
+// month across every caller. The realm server fills in the platform's default
+// for any its owner left unset.
+export interface KeyLimits {
+  rateBurst: number;
+  rateRefillPerMinute: number;
+  dailyBudget: number;
+  monthlyBudget: number;
+}
+
+// A limit to change, or null to go back to the platform's default.
+export type KeyLimitChanges = Partial<Record<keyof KeyLimits, number | null>>;
+
+// Where a key may be sent, as its usage lists it, and whether the service
+// there rejected it (`rejected`) or last refused a request (`lastForbiddenAt`).
+export interface UsageGrant {
+  id: string;
+  host: string;
+  destination: string;
+  state: 'active' | 'rejected';
+  rejectedAt: string | null;
+  lastForbiddenAt: string | null;
+}
+
+// A key's or a share's use: what it spent against its budgets this UTC day
+// and month, and since the start of the month every call, the last one and by
+// whom, the callers who used it most, the calls refused by reason, and the
+// service's answers by status.
+export interface KeyUsage {
+  limits: KeyLimits;
+  budgets: Record<
+    'day' | 'month',
+    { used: number; budget: number; resetsAt: string }
+  >;
+  since: string;
+  calls: number;
+  lastUse: {
+    at: string;
+    caller: string | null;
+    // The caller is someone the user isn't shown.
+    withheld?: true;
+    operation: string;
+    outcome: 'sent' | 'refused' | 'failed';
+  } | null;
+  topCallers: { caller: string | null; calls: number; withheld?: true }[];
+  refusals: { code: string; count: number }[];
+  vendorOutcomes: {
+    status: number;
+    count: number;
+    outcome?: 'vendor-forbidden';
+  }[];
+  grants: UsageGrant[];
+  canEditLimits: boolean;
+}
+
+function usageOf(json: { data: Resource }): KeyUsage {
+  return json.data.attributes as unknown as KeyUsage;
+}
+
+export async function keyUsage(
+  config: Config,
+  keyId: string,
+): Promise<KeyUsage> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/usage`,
+      { method: 'GET' },
+    ),
+  );
+}
+
+export async function shareUsage(
+  config: Config,
+  shareId: string,
+): Promise<KeyUsage> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_key-shares/${encodeURIComponent(shareId)}/usage`,
+      { method: 'GET' },
+    ),
+  );
+}
+
+function limitsBody(changes: KeyLimitChanges) {
+  return { data: { type: 'key-limits', attributes: changes } };
+}
+
+// Changes one of the user's own keys' limits, answering the limits in force.
+// Only the window's session may: the realm server refuses the app's.
+export async function setKeyLimits(
+  config: Config,
+  keyId: string,
+  changes: KeyLimitChanges,
+): Promise<KeyLimits> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_user-keys/${encodeURIComponent(keyId)}/limits`,
+      { method: 'PUT', body: limitsBody(changes) },
+    ),
+  ) as unknown as KeyLimits;
+}
+
+// Changes the limits of a share of one of the user's keys.
+export async function setShareLimits(
+  config: Config,
+  shareId: string,
+  changes: KeyLimitChanges,
+): Promise<KeyLimits> {
+  return usageOf(
+    await authorizedRequest(
+      config,
+      `_key-shares/${encodeURIComponent(shareId)}/limits`,
+      { method: 'PUT', body: limitsBody(changes) },
+    ),
+  ) as unknown as KeyLimits;
+}
