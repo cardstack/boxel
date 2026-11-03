@@ -983,6 +983,7 @@ module(basename(import.meta.filename), function () {
           log: logger('media-cache-dsl-test'),
           reportStatus: () => {},
           matrixURL: 'http://localhost:8008',
+          matrixServerName: 'localhost',
           indexWriter: null as unknown as IndexWriter,
           definitionLookup: null as unknown as DefinitionLookup,
           virtualNetwork,

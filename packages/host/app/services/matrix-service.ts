@@ -36,6 +36,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   aiBotUsername,
+  getMatrixServerName,
   submissionBotUsername,
   logger,
   Deferred,
@@ -112,6 +113,7 @@ import type { LoginHandoff } from '@cardstack/host/utils/login-token';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
+import { decideRoomInvite } from '../lib/room-invite-policy';
 import {
   appRootURL,
   clearRedirectGuard,
@@ -711,12 +713,12 @@ export default class MatrixService extends Service {
   }
 
   get aiBotUserId() {
-    let server = this.userId!.split(':')[1];
+    let server = getMatrixServerName(this.userId!);
     return `@${aiBotUsername}:${server}`;
   }
 
   get submissionBotUserId() {
-    let server = this.userId!.split(':')[1];
+    let server = getMatrixServerName(this.userId!);
     return `@${submissionBotUsername}:${server}`;
   }
 
@@ -724,7 +726,7 @@ export default class MatrixService extends Service {
     if (username.includes(':')) {
       return username;
     }
-    let server = this.userId?.split(':')[1];
+    let server = this.userId ? getMatrixServerName(this.userId) : undefined;
     if (!server) {
       throw new Error('Matrix server is unavailable for user id');
     }
@@ -2872,7 +2874,15 @@ export default class MatrixService extends Service {
     });
   }
 
+  // Applies `decideRoomInvite` (ADR 011 §1.5) to every invite into an
+  // existing room, whichever tool or workflow asks for it.
   async inviteUserToRoom(roomId: string, userId: string) {
+    let decision = decideRoomInvite(userId, this.userId!);
+    if (!decision.allowed) {
+      throw new Error(
+        `cannot invite: ${decision.reason}. Boxel invites only the AI bot and the submission bot, because a person's Matrix id is shown only to users who share a realm with them (ADR 011 §1.5).`,
+      );
+    }
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
       return this.client.invite(roomId, userId);

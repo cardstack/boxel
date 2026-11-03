@@ -176,16 +176,17 @@ through `@fields` at fitted format.
 
 ### `/helpers`
 
-Logic: `eq`, `not`, `and`, `or`, `gt`, `gte`, `lt`, `lte`, `add`,
-`subtract`, `multiply`, `divide`.
-Templates: `cn` (class names), `cssVar`, `element` (dynamic tag),
-`optional`, `pick`.
+Templates: `cn` (class names), `cssVar`, `optional`, `pick`.
 Format: `formatDateTime`, `formatNumber`, `formatCurrency`,
 `formatRelativeTime`, `formatDuration`, `formatCountdown`, `formatFileSize`,
 `formatList`, `formatNames`, `formatOrdinal`, `formatPeriod`, `formatAge`,
 `currencyFormat` (legacy), `dayjsFormat` (deprecated).
 Markdown: `markdownEscape`.
 Menus: `MenuItem`, `MenuItemOptions`.
+
+The logic helpers (`eq`, `not`, `bool`, `and`, `or`, `coalesce`, `gt`,
+`gte`, `lt`, `lte`, `add`, `subtract`, `multiply`, `divide`) and `element`
+(dynamic tag) come from `@cardstack/pretui/helpers`.
 
 ### `/icons`
 

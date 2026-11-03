@@ -61,7 +61,11 @@ import {
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
-import { chargeInteractiveCall, type LimitSubject } from './key-limits.ts';
+import {
+  chargeInteractiveCall,
+  validateLimitChanges,
+  type LimitSubject,
+} from './key-limits.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -87,10 +91,15 @@ import { chargeInteractiveCall, type LimitSubject } from './key-limits.ts';
 //   definition cache lowers the operation to now. A binding whose request has
 //   changed goes to `needs-reapproval`, its owner gets one notice, and nothing
 //   is sent until they approve the new request.
-// - **Pipelines only.** An interactive invocation — a card in the browser, the
-//   AI assistant, the CLI — is refused `interactive-use-not-approved`, since
-//   no binding is approved for interactive use. A pipeline the realm server
-//   runs as its payer (`Realm.handlePipeline`) is served.
+// - **Pipelines, and interactive use when approved for it.** A pipeline the
+//   realm server runs as its payer (`Realm.handlePipeline`) is served by any
+//   active binding. An interactive invocation — a card in the browser, the AI
+//   assistant, the CLI — is served only by a binding approved `interactive`,
+//   and refused `interactive-use-not-approved` by one approved for pipelines
+//   only. Approving interactive use is the owner's choice for the whole
+//   confirmation; a share's first interactive approval also sets the share's
+//   daily budget, since every reader of its realm can then spend it.
+//   Anonymous use is not offered.
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
@@ -371,8 +380,9 @@ export async function approveBindings(
     approver,
     via,
     operations,
-    interactive,
+    interactive = false,
     anonymous,
+    dailyBudgets = {},
   }: {
     core: Pick<
       OperationCore,
@@ -382,15 +392,32 @@ export async function approveBindings(
     approver: string;
     via: SecureSessionClient;
     operations: OperationApproval[];
+    // Approves interactive use as well as pipelines, for every slot.
     interactive?: boolean;
     anonymous?: boolean;
+    // A daily budget for a share this approval fills, by share id. Required
+    // for a share's first interactive approval, accepted for any share an
+    // interactive approval fills, and refused otherwise.
+    dailyBudgets?: Record<string, number>;
   },
 ): Promise<{ batchId: string; approved: ApprovedBinding[] }> {
-  if (interactive || anonymous) {
-    throw new UserKeyError(
-      403,
-      'a binding is approved for pipelines only: interactive and anonymous use are not offered',
-    );
+  if (anonymous) {
+    throw new UserKeyError(403, 'anonymous use of a binding is not offered');
+  }
+  for (let [shareId, budget] of Object.entries(dailyBudgets)) {
+    if (!interactive) {
+      throw new UserKeyError(
+        400,
+        'a daily budget is set with an approval for interactive use',
+      );
+    }
+    let { dailyBudget } = validateLimitChanges({ dailyBudget: budget });
+    if (dailyBudget == null) {
+      throw new UserKeyError(
+        400,
+        `the daily budget for share ${shareId} is a whole number of calls`,
+      );
+    }
   }
   if (operations.length === 0) {
     throw new UserKeyError(400, 'an approval names at least one operation');
@@ -506,20 +533,39 @@ export async function approveBindings(
     });
   }
 
+  let filledShares = new Set(
+    planned.flatMap((p) => p.fills.flatMap((f) => f.shareId ?? [])),
+  );
+  for (let shareId of Object.keys(dailyBudgets)) {
+    if (!filledShares.has(shareId)) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} fills no slot of this approval, so its daily budget isn't set here`,
+      );
+    }
+  }
+
   let batchId = randomUUID();
   let approved: ApprovedBinding[] = [];
   await dbAdapter.withTransaction(async (txQuery) => {
+    let shareKeys = new Map<string, string>();
+    for (let shareId of [...filledShares].sort()) {
+      shareKeys.set(
+        shareId,
+        await lockApprovableShare(txQuery, realmURL, shareId, approver),
+      );
+      if (interactive) {
+        await setFirstInteractiveBudget(
+          txQuery,
+          shareId,
+          dailyBudgets[shareId],
+        );
+      }
+    }
     for (let plan of planned) {
       for (let fill of plan.fills) {
-        let keyId = fill.keyId;
-        if (fill.shareId !== undefined) {
-          keyId = await lockApprovableShare(
-            txQuery,
-            realmURL,
-            fill.shareId,
-            approver,
-          );
-        }
+        let keyId =
+          fill.shareId !== undefined ? shareKeys.get(fill.shareId) : fill.keyId;
         let { grant, created } = await createOrReuseGrantIn(txQuery, keyring, {
           owner: approver,
           keyId: keyId!,
@@ -540,6 +586,7 @@ export async function approveBindings(
           approver,
           via,
           snapshot,
+          interactive,
         });
         approved.push({ binding, snapshot, grant, grantCreated: created });
       }
@@ -615,6 +662,37 @@ async function lockApprovableShare(
   return share.key_id as string;
 }
 
+// A share approved for interactive use serves every reader of its realm, so
+// the first approval that allows it names the share's daily budget, which is
+// set with it. A later one may name one too, and sets it. Runs with the share
+// locked, so two first approvals can't both skip it.
+async function setFirstInteractiveBudget(
+  txQuery: Querier,
+  shareId: string,
+  dailyBudget: number | undefined,
+): Promise<void> {
+  if (dailyBudget === undefined) {
+    let [already] = await txQuery([
+      `SELECT 1 FROM key_bindings WHERE share_id = `,
+      param(shareId),
+      ` AND interactive LIMIT 1`,
+    ]);
+    if (!already) {
+      throw new UserKeyError(
+        400,
+        `share ${shareId} is approved for interactive use for the first time, so the approval names its daily budget, as dailyBudgets`,
+      );
+    }
+    return;
+  }
+  await txQuery([
+    `UPDATE key_shares SET daily_budget = `,
+    param(dailyBudget),
+    `, updated_at = NOW() WHERE id = `,
+    param(shareId),
+  ]);
+}
+
 // Writes one slot's approval: the binding, created or moved to what was just
 // approved, and its approval row.
 async function writeApproval(
@@ -632,6 +710,7 @@ async function writeApproval(
     approver,
     via,
     snapshot,
+    interactive,
   }: {
     batchId: string;
     realmURL: string;
@@ -645,6 +724,7 @@ async function writeApproval(
     approver: string;
     via: SecureSessionClient;
     snapshot: BindingSnapshot;
+    interactive: boolean;
   },
 ): Promise<KeyBinding> {
   let [existing] = await txQuery([
@@ -678,7 +758,9 @@ async function writeApproval(
         param(grantId),
         `, approved_by = `,
         param(approver),
-        `, interactive = false, anonymous = false, fingerprint = `,
+        `, interactive = `,
+        param(interactive),
+        `, anonymous = false, fingerprint = `,
         param(fingerprint),
         `, approval_id = `,
         param(approvalId),
@@ -687,7 +769,7 @@ async function writeApproval(
         ` RETURNING ${BINDING_COLUMNS}`,
       ])
     : await txQuery([
-        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, fingerprint, approval_id, state) VALUES (`,
+        `INSERT INTO key_bindings (id, realm_url, definition_url, export_name, operation_name, instance_url, slot, key_id, share_id, grant_id, approved_by, interactive, fingerprint, approval_id, state) VALUES (`,
         param(bindingId),
         `, `,
         param(realmURL),
@@ -709,6 +791,8 @@ async function writeApproval(
         param(grantId),
         `, `,
         param(approver),
+        `, `,
+        param(interactive),
         `, `,
         param(fingerprint),
         `, `,
@@ -732,6 +816,7 @@ async function writeApproval(
     fingerprint,
     actor: approver,
     via,
+    interactive,
   });
   return toBinding(row);
 }
@@ -755,6 +840,7 @@ async function insertApprovalRow(
     fingerprint: string;
     actor: string;
     via: SecureSessionClient;
+    interactive: boolean;
   },
 ): Promise<void> {
   let { snapshot } = row;
@@ -769,7 +855,9 @@ async function insertApprovalRow(
     param(row.grantId),
     `, `,
     param(row.action),
-    `, false, false, `,
+    `, `,
+    param(row.interactive),
+    `, false, `,
     param(row.realmURL),
     `, `,
     param(row.type.module),
@@ -879,7 +967,7 @@ export async function moveShareBindingsIn(
   },
 ): Promise<string[]> {
   let rows = await txQuery([
-    `SELECT b.id, b.approval_id, b.fingerprint, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
+    `SELECT b.id, b.approval_id, b.fingerprint, b.interactive, last.realm_url, last.definition_url, last.export_name, last.operation_name, last.instance_url, last.slot, last.destination, last.method, last.path_template, last.headers_template, last.placement, last.placement_name, last.transform, last.body_template
        FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
       WHERE b.share_id = `,
     param(shareId),
@@ -943,6 +1031,7 @@ export async function moveShareBindingsIn(
       fingerprint: row.fingerprint as string,
       actor: owner,
       via,
+      interactive: Boolean(row.interactive),
     });
     moved.push(row.id as string);
   }
@@ -1253,7 +1342,12 @@ async function checkedBindings(
           403,
           'interactive-use-not-approved',
           'Interactive use not approved',
-          `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" isn't used when it is invoked from a browser, the AI assistant or the CLI`,
+          // Says whose key the slot takes, in the words the other refusals
+          // use, since the AI assistant sees only the message and answers a
+          // caller's own key and a realm's shared key differently.
+          slot.key === 'userKey'
+            ? `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the invoking user's own key) isn't used when it is invoked from a browser, the AI assistant or the CLI. The invoking user can allow that in the approval window, by choosing "On a schedule and when the card is opened"`
+            : `operation "${lookup.operation}" is approved for scheduled pipelines only, so the key for the credential slot "${slot.name}" (the realm's key) isn't used when it is invoked from a browser, the AI assistant or the CLI. Whoever shared the realm's key can allow that in the approval window, by choosing "On a schedule and when the card is opened"`,
           slot,
         );
       case 'credential-rejected':

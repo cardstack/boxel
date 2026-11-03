@@ -5,12 +5,19 @@ import HostBaseTool from '../lib/host-base-tool';
 import type MatrixService from '../services/matrix-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
+// Invites the AI bot or the submission bot to a room.
+// `MatrixService.inviteUserToRoom` refuses a person: an end user's Matrix id
+// is shown only to users who share a realm with them (ADR 011 §1.5), and
+// `decideRoomInvite` says why the host can't check that for an invite.
 export default class InviteUserToRoomTool extends HostBaseTool<
   typeof BaseToolModule.InviteUserToRoomInput
 > {
   @service declare private matrixService: MatrixService;
 
   static actionVerb = 'Invite';
+
+  description =
+    'Invite the AI bot or the submission bot to a room. It cannot invite a person.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
