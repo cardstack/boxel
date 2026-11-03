@@ -194,6 +194,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('re-reads a dependent the realm records, not only the files the job names', async function (assert) {
+      // A first pass indexes both files, which records them in the realm's
+      // file metadata the way a write does.
+      let { reader: first } = realmReader({ 'notes.txt': {}, 'dep.txt': {} });
+      await runIncremental(
+        first,
+        [
+          { name: 'notes.txt', operation: 'update' },
+          { name: 'dep.txt', operation: 'update' },
+        ],
+        [],
+      );
+      await adapter.execute(
+        `UPDATE boxel_index SET deps = $1::jsonb WHERE url = $2 AND type = 'file'`,
+        { bind: [JSON.stringify([url('notes.txt')]), url('dep.txt')] },
+      );
+
+      let { reader, readsOf } = realmReader({
+        'notes.txt': {},
+        'dep.txt': { missFor: 2 },
+      });
+      await runIncremental(
+        reader,
+        [{ name: 'notes.txt', operation: 'update' }],
+        [5, 5, 5],
+      );
+
+      assert.strictEqual(
+        readsOf('dep.txt'),
+        3,
+        'the dependent the pass fanned out to was read again once it read as missing',
+      );
+      let row = await fileRow('dep.txt');
+      assert.ok(row, 'the dependent keeps its index row');
+      assert.false(Boolean(row?.is_deleted), 'and the row is live');
+    });
+
     test('does not wait on a written file the realm has since removed', async function (assert) {
       // The write's pass runs after a later delete removed the file and the
       // realm's record of it.

@@ -257,13 +257,13 @@ export class IndexRunner {
   #batchId!: string;
   #idleRenderTimeoutAbortAfter: number;
   #writtenFileRereadDelaysMs: readonly number[];
-  // The files an incremental pass was asked to index because the realm wrote
-  // them, and the re-read window they share (see WrittenFileRereads). Fan-out
-  // dependents are not in the set: a dependent that reads as missing was
-  // removed, and visiting it as gone right away is what a removal needs.
-  #writtenFiles:
-    | { hrefs: Set<string>; rereads: WrittenFileRereads }
-    | undefined;
+  // The re-read window an incremental pass's visits share (see
+  // WrittenFileRereads). Any URL the pass visits can be one another instance
+  // just wrote: the job's own writes, and also a dependent or a validation
+  // round's URL that a peer's pass committed. So every visit that reads a file
+  // as missing re-reads it while the realm still records the file, and a file
+  // the realm has removed is visited as gone at once.
+  #visitRereads: WrittenFileRereads | undefined;
 
   constructor({
     realmURL,
@@ -298,8 +298,8 @@ export class IndexRunner {
     // Consecutive idle render timeouts after which a from-scratch pass gives
     // up; see IDLE_RENDER_TIMEOUT_ABORT_AFTER. 0 disables the guard.
     idleRenderTimeoutAbortAfter?: number;
-    // The delays an incremental pass re-reads a written file through when it
-    // reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
+    // The delays an incremental pass re-reads a file the realm records through
+    // when it reads as missing; see WRITTEN_FILE_REREAD_DELAYS_MS.
     writtenFileRereadDelaysMs?: readonly number[];
     jobInfo?: JobInfo;
     // Optional override of `jobInfo.priority`. When both are present,
@@ -378,7 +378,7 @@ export class IndexRunner {
     current.#dependencyResolver.reset();
     // A from-scratch pass visits what the realm lists, not files a write
     // named, so a miss in it is a file that is gone.
-    current.#writtenFiles = undefined;
+    current.#visitRereads = undefined;
     let start = Date.now();
     // Between-visit phase walls, assembled onto the job result's `phaseTimings`
     // at the end. `visitLoopMs`, `swapMs` and the swap's attempt counts are set
@@ -638,16 +638,9 @@ export class IndexRunner {
     for (let href of await current.#removalsBackOnDisk(removals)) {
       operations.set(href, 'update');
     }
-    current.#writtenFiles = {
-      hrefs: new Set(
-        [...operations]
-          .filter(([, operation]) => operation === 'update')
-          .map(([href]) => href),
-      ),
-      rereads: new WrittenFileRereads({
-        delaysMs: current.#writtenFileRereadDelaysMs,
-      }),
-    };
+    current.#visitRereads = new WrittenFileRereads({
+      delaysMs: current.#writtenFileRereadDelaysMs,
+    });
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -1058,8 +1051,8 @@ export class IndexRunner {
         batchId: this.#batchId,
         renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
-        ...(this.#writtenFiles?.hrefs.has(url.href)
-          ? { writtenFileRereads: this.#writtenFiles.rereads }
+        ...(this.#visitRereads
+          ? { writtenFileRereads: this.#visitRereads }
           : {}),
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),

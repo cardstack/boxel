@@ -52,10 +52,9 @@ interface RenderFileForIndexingOptions {
   // re-reads after peer commits moved the realm (see `renderScopeFor`).
   renderScopeRound: number;
   prerenderer: Prerenderer;
-  // Present when the pass was asked to index this file because the realm
-  // wrote it: a read that finds no file is then retried through the pass's
-  // re-read window, for as long as the realm still records the file, before
-  // the visit reports the file gone.
+  // Present in an incremental pass: a read that finds no file is then retried
+  // through the pass's re-read window, for as long as the realm still records
+  // the file, before the visit reports the file gone.
   writtenFileRereads?: WrittenFileRereads;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
@@ -185,15 +184,15 @@ export async function renderFileForIndexing({
     fileRef = value;
     if (fileRef) {
       logInfo(
-        `${jobIdentity(jobInfo)} read written file ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
+        `${jobIdentity(jobInfo)} read ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
       );
-    } else if (removed) {
-      logInfo(
-        `${jobIdentity(jobInfo)} written file ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
-      );
-    } else {
+    } else if (!removed) {
       logWarn(
-        `${jobIdentity(jobInfo)} written file ${url.href} still reads as missing after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
+        `${jobIdentity(jobInfo)} ${url.href} is recorded by the realm but still reads as missing after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
+      );
+    } else if (rereads > 0) {
+      logInfo(
+        `${jobIdentity(jobInfo)} ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; indexing it as removed`,
       );
     }
   }

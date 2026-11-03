@@ -1063,13 +1063,13 @@ async function visitForPrerenderedHtml({
       log.info(
         `${jobIdentity(jobInfo)} read indexed file ${url.href} on re-read ${rereads} after ${waitedMs}ms; the realm first answered it as missing`,
       );
-    } else if (removed) {
-      log.info(
-        `${jobIdentity(jobInfo)} indexed file ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; rendering nothing for it`,
-      );
-    } else {
+    } else if (!removed) {
       log.warn(
         `${jobIdentity(jobInfo)} indexed file ${url.href} still reads as missing after ${rereads} re-reads over ${waitedMs}ms; rendering nothing for it`,
+      );
+    } else if (rereads > 0) {
+      log.info(
+        `${jobIdentity(jobInfo)} indexed file ${url.href} was removed after ${rereads} re-reads over ${waitedMs}ms; rendering nothing for it`,
       );
     }
   }
