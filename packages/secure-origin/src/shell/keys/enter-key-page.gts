@@ -21,9 +21,10 @@
 // also says whether people who aren't signed in may use it: its owner's
 // decision about the key itself, not about any one workspace. Ticked, they
 // can use it wherever a workspace it is shared into lets them use its cards,
-// up to an optional anonymous cap on their calls a day, all together, across
-// every such workspace. It can be changed later on the key page. An OAuth app
-// isn't asked: people connect their own accounts through it.
+// up to optional anonymous caps on their calls a day and a month, all
+// together, across every such workspace. It can be changed later on the key
+// page. An OAuth app isn't asked: people connect their own accounts through
+// it.
 //
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
@@ -245,10 +246,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               <AnonymousUseFields
                 @anonymous={{this.form.anonymous}}
                 @cap={{this.form.cap}}
+                @monthlyCap={{this.form.monthlyCap}}
                 @agreement='Allow people who aren’t signed in to use this key'
                 @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
                 @onToggle={{this.toggleAnonymous}}
                 @onCap={{this.setCap}}
+                @onMonthlyCap={{this.setMonthlyCap}}
               />
             {{/unless}}
             {{#if this.form.error}}
@@ -331,9 +334,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     value: '',
     clientId: '',
     // Whether people who aren't signed in may use the key, and its anonymous
-    // cap as typed.
+    // caps as typed.
     anonymous: false,
     cap: '',
+    monthlyCap: '',
     oauth: trackedObject<OAuthClientForm>({
       provider: 'github',
       grantType: 'authorization_code',
@@ -438,7 +442,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     if (saving || !name.trim()) {
       return true;
     }
-    if (this.anonymousCap === undefined) {
+    if (
+      this.anonymousCap === undefined ||
+      this.anonymousMonthlyCap === undefined
+    ) {
       return true;
     }
     if (this.isServiceAccount) {
@@ -512,11 +519,17 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     this.form.error = undefined;
   };
 
-  // The anonymous cap to send: none for an OAuth app, which isn't asked.
+  // The anonymous caps to send: none for an OAuth app, which isn't asked.
   private get anonymousCap() {
     return this.isOAuthClient
       ? null
       : anonymousCapOf(this.form.anonymous, this.form.cap);
+  }
+
+  private get anonymousMonthlyCap() {
+    return this.isOAuthClient
+      ? null
+      : anonymousCapOf(this.form.anonymous, this.form.monthlyCap);
   }
 
   private toggleAnonymous = () => {
@@ -526,6 +539,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private setCap = (value: string) => {
     this.form.cap = value;
+    this.form.error = undefined;
+  };
+
+  private setMonthlyCap = (value: string) => {
+    this.form.monthlyCap = value;
     this.form.error = undefined;
   };
 
@@ -564,6 +582,9 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               anonymous: this.form.anonymous,
               ...(this.anonymousCap != null
                 ? { anonymousDailyCap: this.anonymousCap }
+                : {}),
+              ...(this.anonymousMonthlyCap != null
+                ? { anonymousMonthlyCap: this.anonymousMonthlyCap }
                 : {}),
             });
       // The value is gone from the page the moment the server has it.

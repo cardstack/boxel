@@ -1344,6 +1344,7 @@ module('Integration | approve pages', function (hooks) {
                   dailyBudget: 2400,
                   anonymous: false,
                   anonymousDailyCap: null,
+                  anonymousMonthlyCap: null,
                 },
               ],
             }),
@@ -1606,6 +1607,7 @@ module('Integration | approve pages', function (hooks) {
                   dailyBudget: 2400,
                   anonymous: false,
                   anonymousDailyCap: null,
+                  anonymousMonthlyCap: null,
                   ...share,
                 },
               ],
@@ -1618,7 +1620,11 @@ module('Integration | approve pages', function (hooks) {
   test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows them says so, with the key’s anonymous cap', async function (assert) {
     serveShareBatch({
       opensToAnonymous: true,
-      share: { anonymous: true, anonymousDailyCap: 100 },
+      share: {
+        anonymous: true,
+        anonymousDailyCap: 100,
+        anonymousMonthlyCap: 1000,
+      },
     });
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
@@ -1639,7 +1645,7 @@ module('Integration | approve pages', function (hooks) {
     assert
       .dom('[data-test-approve-interactive]')
       .includesText(
-        'Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with this key, up to 100 calls a day all together.',
+        'Anyone on the internet who opens this card, including people who aren’t signed in, can make these calls with this key, up to 100 calls a day and 1000 a month all together.',
       );
     assert
       .dom('[data-test-approve-budget="Team GitHub"]')

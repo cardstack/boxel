@@ -45,6 +45,7 @@ import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
 import { cliOpenedFor, openedFor } from './opened-for.ts';
+import { anonymousCapsClause } from './anonymous-caps.ts';
 
 type State =
   | { name: 'loading' }
@@ -134,11 +135,9 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               >
                 <p class='visitors'>This workspace lets people who aren’t signed
                   in use the keys shared into it, so
-                  <strong>they will use this key</strong>{{#if
-                    this.chosenKey.anonymousDailyCap
-                  }}, up to
-                    {{this.chosenKey.anonymousDailyCap}}
-                    calls a day all together{{/if}}. It allows them.</p>
+                  <strong>they will use this key</strong>{{anonymousCapsClause
+                    this.chosenKey
+                  }}. It allows them.</p>
               </FieldContainer>
             {{else if this.keyRefusesAnonymous}}
               <FieldContainer
