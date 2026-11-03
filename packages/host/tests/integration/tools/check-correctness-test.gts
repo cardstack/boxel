@@ -3,7 +3,11 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { delay, hasExecutableExtension } from '@cardstack/runtime-common';
+import {
+  delay,
+  hasExecutableExtension,
+  X_BOXEL_LINK_SHAPE_HEADER,
+} from '@cardstack/runtime-common';
 import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
@@ -105,36 +109,82 @@ function milestoneDocument(title: string) {
   };
 }
 
-// Answers the realm server's module prerender endpoint with the in-browser
-// prerenderer the test realm indexes with.
-function mountModulePrerender() {
+// Answers the realm server's module and card prerender endpoints with the
+// in-browser prerenderer the test realm indexes with, and lists the cards it
+// rendered.
+function mountPrerenderEndpoints() {
   let localIndexer = getService('local-indexer');
   let realmServerURL = getService('realm-server').url;
+  let renderedCards: string[] = [];
   getService('network').virtualNetwork.mount(
     async (request: Request) => {
       let { origin, pathname } = new URL(request.url);
       if (
         origin !== realmServerURL.origin ||
-        pathname !== '/_prerender-module'
+        (pathname !== '/_prerender-module' && pathname !== '/_prerender-card')
       ) {
         return null;
       }
       let { realm, url } = (await request.json()).data.attributes;
-      let attributes = await localIndexer.prerenderer.prerenderModule({
-        affinityType: 'realm',
+      let args = {
+        affinityType: 'realm' as const,
         affinityValue: realm,
         realm,
         url,
         auth: createPrerenderAuth('@testuser:localhost', {}),
-      });
+      };
+      let attributes;
+      if (pathname === '/_prerender-module') {
+        attributes = await localIndexer.prerenderer.prerenderModule(args);
+      } else {
+        renderedCards.push(url);
+        attributes = (
+          await localIndexer.prerenderer.prerenderVisit({
+            ...args,
+            renderOptions: { cardRender: true },
+          })
+        ).card;
+      }
       return new Response(
         JSON.stringify({
-          data: { type: 'prerender-module-result', id: url, attributes },
+          data: { type: 'prerender-result', id: url, attributes },
         }),
         {
           status: 201,
           headers: { 'content-type': 'application/vnd.api+json' },
         },
+      );
+    },
+    { prepend: true },
+  );
+  return renderedCards;
+}
+
+// Answers the check's reads of the cards under `prefix` with a clean
+// document indexed at a generation no render job announces, the way a realm
+// serves instances its render job has not reached yet.
+function serveUnrenderedInstances(prefix: string) {
+  getService('network').virtualNetwork.mount(
+    async (request: Request) => {
+      if (
+        !request.url.startsWith(prefix) ||
+        request.headers.get(X_BOXEL_LINK_SHAPE_HEADER) !== 'links-only'
+      ) {
+        return null;
+      }
+      return new Response(
+        JSON.stringify({
+          data: {
+            type: 'card',
+            id: request.url,
+            attributes: {},
+            meta: {
+              adoptsFrom: { module: '../milestone', name: 'Milestone' },
+              generation: 1_000_000,
+            },
+          },
+        }),
+        { headers: { 'content-type': 'application/vnd.card+json' } },
       );
     },
     { prepend: true },
@@ -557,7 +607,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   }
 
   test('reports an instance whose render a module edit breaks', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     announceRendersWithIndexEvents();
 
     let result = await checkMilestoneEdit(
@@ -583,11 +633,16 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('passes a module edit whose instances render', async function (assert) {
-    mountModulePrerender();
+    let renderedCards = mountPrerenderEndpoints();
     announceRendersWithIndexEvents();
 
     let result = await checkMilestoneEdit('<h2>{{@model.title}}</h2>');
 
+    assert.deepEqual(
+      renderedCards,
+      [],
+      'the check renders nothing itself once the render job has',
+    );
     assert.deepEqual(result.errors, [], 'no errors are reported');
     assert.deepEqual(
       result.warnings,
@@ -598,7 +653,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('checks an instance whose name holds a dot', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     await testRealm.write(
       'Milestone/v1.2.json',
       JSON.stringify(milestoneDocument('Version 1.2')),
@@ -619,7 +674,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test("reads an instance's document without fetching its source", async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     let renders = announceRendersWithIndexEvents();
     let announcedBefore = renders.announced;
     let cardURL = `${testRealmURL}Milestone/launch`;
@@ -662,8 +717,100 @@ module('Integration | tools | check-correctness', function (hooks) {
     );
   });
 
+  test('renders an instance itself when the render job has not reached it', async function (assert) {
+    getService('tool-service').__setWaitsForTesting({ renderJobWaitMs: 100 });
+    let renderedCards = mountPrerenderEndpoints();
+    let cardURL = `${testRealmURL}Milestone/launch`;
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+      async () => serveUnrenderedInstances(`${testRealmURL}Milestone/`),
+    );
+
+    assert.deepEqual(
+      renderedCards,
+      [`${cardURL}.json`],
+      'the check renders the instance',
+    );
+    assert.false(result.correct, 'the broken render fails the check');
+    assert.strictEqual(result.errors.length, 1, 'one error');
+    assert.ok(
+      result.errors[0].startsWith(`${cardURL}: `),
+      `the error names the instance: ${result.errors[0]}`,
+    );
+    assert.ok(
+      result.errors[0].includes('Invalid time value'),
+      'the error carries the render error message',
+    );
+    assert.deepEqual(result.warnings, [], 'the instance was checked');
+  });
+
+  test('renders at most three instances itself and says the rest were not checked', async function (assert) {
+    getService('tool-service').__setWaitsForTesting({ renderJobWaitMs: 100 });
+    let renderedCards = mountPrerenderEndpoints();
+    let files = new Map<string, string>();
+    for (let name of 'abcd') {
+      files.set(
+        `Milestone/${name}.json`,
+        JSON.stringify(milestoneDocument(`Milestone ${name}`)),
+      );
+    }
+    await testRealm.writeMany(files);
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+      async () => serveUnrenderedInstances(`${testRealmURL}Milestone/`),
+    );
+
+    assert.strictEqual(renderedCards.length, 3, 'three instances are rendered');
+    assert.strictEqual(result.errors.length, 3, 'each rendered one fails');
+    assert.strictEqual(
+      result.warnings.length,
+      2,
+      'the two it did not render are named',
+    );
+    for (let warning of result.warnings) {
+      assert.ok(
+        warning.endsWith(
+          ': not checked, because the indexer had not rendered it with the edited module yet, and a check renders at most 3 instances itself',
+        ),
+        warning,
+      );
+    }
+    assert.false(result.correct, 'the check fails');
+  });
+
+  test('says an instance whose render request fails was not checked', async function (assert) {
+    getService('tool-service').__setWaitsForTesting({ renderJobWaitMs: 100 });
+    mountPrerenderEndpoints();
+    let realmServerURL = getService('realm-server').url;
+    getService('network').virtualNetwork.mount(
+      async (request: Request) =>
+        new URL(request.url).origin === realmServerURL.origin &&
+        new URL(request.url).pathname === '/_prerender-card'
+          ? new Response('{}', { status: 500 })
+          : null,
+      { prepend: true },
+    );
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+      async () => serveUnrenderedInstances(`${testRealmURL}Milestone/`),
+    );
+
+    assert.deepEqual(result.errors, [], 'the failed render is not an error');
+    assert.deepEqual(
+      result.warnings,
+      [
+        `${testRealmURL}Milestone/launch: not checked, because rendering it failed`,
+      ],
+      'the instance is named as not checked',
+    );
+    assert.true(result.correct, 'the check passes');
+  });
+
   test('does not check an instance deleted after the module write', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     announceRendersWithIndexEvents();
 
     let result = await checkMilestoneEdit(
@@ -686,7 +833,7 @@ module('Integration | tools | check-correctness', function (hooks) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;
     };
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     announceRendersWithIndexEvents();
     let roomId = '!room:example.com';
 
@@ -715,7 +862,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('checks the instances open in the workspace first', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     announceRendersWithIndexEvents();
     // Ten instances whose titles read as ISO dates, and one, open in the
     // workspace and last in the index event's order, whose title does not.
@@ -747,7 +894,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('reports errors in the order the instances are ranked', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     let openCardURL = `${testRealmURL}Milestone/z-open`;
     await testRealm.write(
       'Milestone/z-open.json',
@@ -825,7 +972,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('does not report an instance whose document cannot be read', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     let renders = announceRendersWithIndexEvents();
     let announcedBefore = renders.announced;
     let cardURL = `${testRealmURL}Milestone/launch`;
@@ -852,7 +999,7 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   test('waits for the render of an instance indexed again after the module write', async function (assert) {
-    mountModulePrerender();
+    mountPrerenderEndpoints();
     let renders = announceRendersWithIndexEvents();
     let announcedBefore = renders.announced;
     let cardURL = `${testRealmURL}Milestone/launch`;

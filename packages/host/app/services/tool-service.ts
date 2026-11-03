@@ -329,6 +329,11 @@ const TRACKED_WRITE_MS = 5 * 60 * 1000;
 // How many `prerender_html` events a realm's watch keeps.
 const RENDERED_HTML_LOG_SIZE = 100;
 
+// How long a render wait gives a realm's render job by default. The job for
+// a module with a handful of dependents finishes within a few seconds of its
+// index pass; one with hundreds can take minutes.
+const RENDER_JOB_WAIT_MS = 5_000;
+
 // A realm's `prerender_html` events since a module write there was first
 // tracked: which files each render job rendered, as file URLs, and the
 // generation it rendered at. `expired` says the time the realm's last
@@ -355,6 +360,7 @@ export default class ToolService extends Service {
   #toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
   #scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
   #renderedHTMLWatchMs = TRACKED_WRITE_MS;
+  #renderJobWaitMs = RENDER_JOB_WAIT_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   // The room each running call runs for, by tool call id.
   private executingToolRooms = new TrackedMap<string, string>();
@@ -393,13 +399,14 @@ export default class ToolService extends Service {
     }
   >();
 
-  // Shortens the tool deadline, the wait for a script's question and how
-  // long a realm's render watch outlives a module write, so a test can reach
-  // them. Refused outside tests.
+  // Shortens the tool deadline, the wait for a script's question, how long a
+  // realm's render watch outlives a module write and how long a render wait
+  // gives the render job, so a test can reach them. Refused outside tests.
   __setWaitsForTesting(waits: {
     toolExecuteTimeoutMs?: number;
     scriptAskMaxMs?: number;
     renderedHTMLWatchMs?: number;
+    renderJobWaitMs?: number;
   }) {
     if (!isTesting()) {
       throw new Error('__setWaitsForTesting is only for tests');
@@ -409,6 +416,7 @@ export default class ToolService extends Service {
     this.#scriptAskMaxMs = waits.scriptAskMaxMs ?? this.#scriptAskMaxMs;
     this.#renderedHTMLWatchMs =
       waits.renderedHTMLWatchMs ?? this.#renderedHTMLWatchMs;
+    this.#renderJobWaitMs = waits.renderJobWaitMs ?? this.#renderJobWaitMs;
   }
 
   private askFromScript(
@@ -775,14 +783,14 @@ export default class ToolService extends Service {
   }
 
   // Waits until every file in `files` has been rendered by a render job at
-  // the generation it maps to or later, or until `timeoutMs` passes, and
-  // returns the files that have. The realm's watch lasts at least as long as
+  // the generation it maps to or later, or until `timeoutMs` passes (the
+  // render job's default wait unless given), and returns the files that have. The realm's watch lasts at least as long as
   // the wait. A realm with no recent tracked module write has no watch, so
   // nothing is known to be rendered there.
   async waitForRenderedHTML(
     realmURL: string,
     files: Map<string, number>,
-    timeoutMs: number,
+    timeoutMs = this.#renderJobWaitMs,
   ): Promise<Set<string>> {
     let watch = this.renderedHTMLWatches.get(realmURL);
     if (!watch) {

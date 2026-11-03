@@ -9,6 +9,7 @@ import {
   X_BOXEL_LINK_SHAPE_HEADER,
   type CardErrorJSONAPI,
   type RenderErrorSummary,
+  type RenderResponse,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -34,6 +35,11 @@ const cardIndexingTimeout = ENV.cardRenderTimeout;
 
 // How many instances of an edited module a check reads render errors for.
 const maxInstanceChecks = 10;
+
+// How many of those a check renders itself when the realm's render job has
+// not rendered them yet. Each one is a full prerender visit, so this bounds
+// what a check adds.
+const maxInstanceRenders = 3;
 
 // Follows an instance's error in a module check: the error may have come
 // with the edit or been there before it.
@@ -307,12 +313,14 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // render error lands on the instance's document only once a render job
     // has rendered the instance at its current index generation, which is
     // the module write's or, when the instance was indexed again since, a
-    // later one; so a clean read waits for that render and reads again.
-    // Without a tracked write, or an index event naming its generation, there
-    // is nothing to wait for. A read can't tell an error the edit caused from
-    // one the instance already had, so an instance that already failed to
-    // render fails the check as well: either way it is a card of this module
-    // that doesn't render. Its error says the cause may be either.
+    // later one; so a clean read waits a few seconds for that render and
+    // reads again, and the check renders a few instances the render job has
+    // not reached yet itself. Without a tracked write, or an index event
+    // naming its generation, there is nothing to wait for. A read can't tell
+    // an error the edit caused from one the instance already had, so an
+    // instance that already failed to render fails the check as well: either
+    // way it is a card of this module that doesn't render. Its error says the
+    // cause may be either.
     if (indexed?.generation === undefined) {
       return { errors: [], warnings: [] };
     }
@@ -329,6 +337,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     }
     let rendered = new Set<string>();
     let rereads = new Map<string, InstanceRead>();
+    let renders = new Map<string, InstanceRead>();
     if (awaitingRender.size > 0) {
       rendered = await this.toolService.waitForRenderedHTML(
         realmURL,
@@ -338,7 +347,6 @@ export default class CheckCorrectnessTool extends HostBaseTool<
             generation,
           ]),
         ),
-        cardIndexingTimeout,
       );
       // A render job's event can be dropped when a realm's events back up, so
       // an instance whose render was not announced is read again too: an
@@ -348,21 +356,45 @@ export default class CheckCorrectnessTool extends HostBaseTool<
         hrefs.map((href) => this.readInstance(href)),
       );
       hrefs.forEach((href, index) => rereads.set(href, reads[index]));
+      // For a module with many dependents the render job takes minutes, so
+      // the first few instances it has not rendered yet, in ranked order, are
+      // rendered here instead.
+      let unrendered = hrefs
+        .filter((href) => {
+          let read = rereads.get(href)!;
+          return (
+            read.kind !== 'error' &&
+            read.kind !== 'not-an-instance' &&
+            !rendered.has(`${href}.json`)
+          );
+        })
+        .slice(0, maxInstanceRenders);
+      let results = await Promise.all(
+        unrendered.map((href) => this.renderInstance(href, realmURL)),
+      );
+      unrendered.forEach((href, index) => renders.set(href, results[index]));
     }
     // reported in the order the instances were ranked in
     let errors: string[] = [];
     let warnings: string[] = [];
     for (let { href, read: firstRead } of instances) {
       let read = rereads.get(href) ?? firstRead;
+      let render = renders.get(href);
+      let cardId = this.network.virtualNetwork.unresolveURL(href);
       if (read.kind === 'error') {
         errors.push(`${read.error} (${instanceErrorNote})`);
+      } else if (render?.kind === 'error') {
+        errors.push(`${render.error} (${instanceErrorNote})`);
+      } else if (render?.kind === 'unknown') {
+        warnings.push(`${cardId}: not checked, because rendering it failed`);
       } else if (
+        !render &&
         awaitingRender.has(href) &&
         read.kind !== 'not-an-instance' &&
         !rendered.has(`${href}.json`)
       ) {
         warnings.push(
-          `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
+          `${cardId}: not checked, because the indexer had not rendered it with the edited module yet, and a check renders at most ${maxInstanceRenders} instances itself`,
         );
       }
     }
@@ -476,6 +508,48 @@ export default class CheckCorrectnessTool extends HostBaseTool<
         `CheckCorrectnessTool: reading ${cardId} for its errors threw`,
         error,
       );
+      return { kind: 'unknown' };
+    }
+  }
+
+  // Renders the instance in every format, the way the realm's render job
+  // does. A render request that fails says nothing about the instance, so it
+  // is logged.
+  private async renderInstance(
+    cardHref: string,
+    realmURL: string,
+  ): Promise<InstanceRead> {
+    let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
+    try {
+      let prerenderURL = new URL('/_prerender-card', this.realmServer.url);
+      let response = await this.realmServer.authedFetch(prerenderURL.href, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'prerender-card-request',
+            attributes: { realm: realmURL, url: `${cardHref}.json` },
+          },
+        }),
+      });
+      let render: RenderResponse | undefined = response.ok
+        ? (await response.json().catch(() => undefined))?.data?.attributes
+        : undefined;
+      if (!render) {
+        console.warn(
+          `CheckCorrectnessTool: rendering ${cardId} failed (${response.status})`,
+        );
+        return { kind: 'unknown' };
+      }
+      let error = render.error?.error;
+      return error
+        ? { kind: 'error', error: this.describeCardError(cardId, error) }
+        : { kind: 'clean' };
+    } catch (error) {
+      console.warn(`CheckCorrectnessTool: rendering ${cardId} threw`, error);
       return { kind: 'unknown' };
     }
   }
