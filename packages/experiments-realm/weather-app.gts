@@ -139,7 +139,8 @@ function tryAgain(seconds: number | undefined): string {
     return 'Try again shortly.';
   }
   if (seconds < 90) {
-    return `Try again in ${Math.ceil(seconds)} seconds.`;
+    let s = Math.ceil(seconds);
+    return `Try again in ${s} ${s === 1 ? 'second' : 'seconds'}.`;
   }
   if (seconds < 60 * 60) {
     return `Try again in about ${Math.ceil(seconds / 60)} minutes.`;
