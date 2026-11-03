@@ -756,9 +756,15 @@ export function emitChangeJournal(event: ChangeJournalEvent): void {
       changeJournalSink(event);
       return;
     }
-    (changeJournalLog ??= logger(CHANGE_JOURNAL_CHANNEL)).info(
-      JSON.stringify({ channel: CHANGE_JOURNAL_CHANNEL, ...event }),
-    );
+    let log = (changeJournalLog ??= logger(CHANGE_JOURNAL_CHANNEL));
+    let line = JSON.stringify({ channel: CHANGE_JOURNAL_CHANNEL, ...event });
+    // A realm that records no history skips every write. That is the common
+    // case while recording is off, so it is logged only on request.
+    if (event.outcome === 'skipped') {
+      log.debug(line);
+    } else {
+      log.info(line);
+    }
   });
 }
 
