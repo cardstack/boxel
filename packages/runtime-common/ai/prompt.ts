@@ -909,8 +909,10 @@ export const MEDIA_NOT_IN_HISTORY_NOTE =
 // MEDIA_NOT_IN_HISTORY_NOTE for a media file attached to a message someone
 // sent, which the viewAttachment tool can bring back into the current turn.
 // A tool result's media keep the plain note: the tool shows only files a
-// user attached to a message.
-export const ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE = `(its content is not in this message; you can see it only if the last message of this request includes it, and if it doesn't, call ${VIEW_ATTACHMENT_TOOL_NAME} with this file's URL to see it)`;
+// user attached to a message. The tool is offered only in rooms with one
+// human, and the note can't follow that without depending on more than the
+// message itself, so it names the tool only for a model that has it.
+export const ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE = `(its content is not in this message; you can see it only if the last message of this request includes it, and if it doesn't and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with this file's URL to see it)`;
 
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
@@ -3281,7 +3283,7 @@ export const buildCurrentTurnMediaParts = async (
       .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
       .join('; ');
     notes.push(
-      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one, call ${VIEW_ATTACHMENT_TOOL_NAME} with its URL, or ask the user to attach it again if you can't.`,
+      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with the file's URL, and otherwise ask the user to attach it again.`,
     );
   }
   let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];

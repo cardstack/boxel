@@ -8384,7 +8384,7 @@ ${patchedFileSource}
       );
       assert.ok(
         text.includes(
-          `if you need one, call ${VIEW_ATTACHMENT_TOOL_NAME} with its URL, or ask the user to attach it again if you can't.`,
+          `if you need one and you have the ${VIEW_ATTACHMENT_TOOL_NAME} tool, call it with the file's URL, and otherwise ask the user to attach it again.`,
         ),
         'the note tells the model how to get the file',
       );
