@@ -29,7 +29,8 @@ export { VIEW_ATTACHMENT_TOOL_NAME };
 // limits.
 
 // How many files one call may name: the most tool-result media files one turn
-// embeds, so a call never names a file that could not be sent.
+// embeds. The turn's count and byte limits still apply across all of its
+// tool results, so a file a call names can still be left out of a request.
 export const VIEW_ATTACHMENT_MAX_URLS = MAX_CURRENT_TURN_TOOL_RESULT_MEDIA;
 
 export const viewAttachmentTool: Tool = {
