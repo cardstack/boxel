@@ -479,9 +479,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                       rel='noopener noreferrer'
                       data-test-approve-budget-limits-link
                     >Open the limits for {{share.label}} in a new tab</a>
-                    to change its others: how fast each person can make calls,
-                    and how many calls this share makes in a month, in total
-                    across everyone.</span>
+                    to change its other limits: how fast each person can make
+                    calls, and how many calls this share makes in a month, in
+                    total across everyone.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
