@@ -258,10 +258,14 @@ export default class LimitsForm extends Component<Signature> {
     let value = COUNT.format(this.defaults[field]);
     let empty = this.values[field].trim() === '';
     if (field === 'monthlyBudget') {
-      let days = this.current.defaults.monthlyBudgetDays;
+      let { defaults } = this.current;
+      let daily = COUNT.format(
+        limitOf(this.values.dailyBudget, true) ?? defaults.dailyBudget,
+      );
+      let sum = `${defaults.monthlyBudgetDays} × ${daily} = ${value}`;
       return empty
-        ? `Follows calls a day: ${days} × calls a day, ${value}.`
-        : `Leave empty to follow calls a day (${days} × calls a day, ${value}).`;
+        ? `Follows calls a day: ${sum}.`
+        : `Leave empty to follow calls a day: ${sum}.`;
     }
     return empty
       ? `Using the default, ${value}.`

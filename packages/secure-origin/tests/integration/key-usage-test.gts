@@ -493,7 +493,7 @@ module('Integration | key usage and limits', function (hooks) {
         .hasAttribute('placeholder', '72,000');
       assert
         .dom('[data-test-key-limit-default="monthlyBudget"]')
-        .hasText('Follows calls a day: 30 × calls a day, 72,000.');
+        .hasText('Follows calls a day: 30 × 2,400 = 72,000.');
 
       await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
       assert
@@ -505,7 +505,7 @@ module('Integration | key usage and limits', function (hooks) {
         );
       assert
         .dom('[data-test-key-limit-default="monthlyBudget"]')
-        .hasText('Follows calls a day: 30 × calls a day, 2,280.');
+        .hasText('Follows calls a day: 30 × 76 = 2,280.');
 
       await click('[data-test-key-limits-save]');
       await waitFor('[data-test-key-limits-saved]');
@@ -829,7 +829,24 @@ module('Integration | key usage and limits', function (hooks) {
       let limits = limitsOf({ monthlyBudget: 15000 });
       serve({
         'GET _key-shares/share-1/usage': () =>
-          usageResource('share-1', usage({ limits })),
+          usageResource(
+            'share-1',
+            usage({
+              limits,
+              budgets: {
+                day: {
+                  used: 12,
+                  budget: limits.dailyBudget,
+                  resetsAt: '2026-11-03T00:00:00.000Z',
+                },
+                month: {
+                  used: 340,
+                  budget: limits.monthlyBudget,
+                  resetsAt: '2026-12-01T00:00:00.000Z',
+                },
+              },
+            }),
+          ),
         'PUT _key-shares/share-1/limits': ({ body }) => {
           limits = limitsAfter(limits, body.data.attributes);
           return json(200, {
@@ -847,9 +864,7 @@ module('Integration | key usage and limits', function (hooks) {
         .hasValue('15000');
       assert
         .dom('[data-test-key-limit-default="monthlyBudget"]')
-        .hasText(
-          'Leave empty to follow calls a day (30 × calls a day, 72,000).',
-        );
+        .hasText('Leave empty to follow calls a day: 30 × 2,400 = 72,000.');
 
       await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
       await click('[data-test-key-limits-save]');
@@ -861,9 +876,40 @@ module('Integration | key usage and limits', function (hooks) {
         .hasValue('15000', 'the monthly budget the owner set is kept');
       assert
         .dom('[data-test-key-limit-default="monthlyBudget"]')
-        .hasText(
-          'Leave empty to follow calls a day (30 × calls a day, 2,280).',
-        );
+        .hasText('Leave empty to follow calls a day: 30 × 76 = 2,280.');
+      assert
+        .dom('[data-test-key-usage-budget="day"]')
+        .includesText('12 of 76 calls', 'the budgets are read again');
+    });
+
+    test('a share’s limits that saved stay saved when its usage can’t be read again', async function (assert) {
+      let reads = 0;
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          ++reads === 1
+            ? usageResource('share-1', usage())
+            : refusal(500, 'Internal server error'),
+        'PUT _key-shares/share-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'share-1',
+              attributes: limitsAfter(LIMITS, body.data.attributes),
+            },
+          }),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-key-limits-form]');
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '900');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      assert.strictEqual(reads, 2, 'the usage is read again');
+      assert.dom('[data-test-key-limits-error]').doesNotExist();
+      assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('900');
+      assert.dom('[data-test-key-usage-budget="day"]').exists();
     });
 
     test('tells a direct writer who doesn’t own the share that only its owner changes its limits', async function (assert) {
