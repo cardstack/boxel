@@ -1,7 +1,5 @@
 /** @type {import('eslint').Rule.RuleModule} */
 
-const { PREFIX_REALM_ALIASES } = require('./prefix-realms');
-
 // URL-form alias for each registered RRI prefix that has one, read from the
 // plugin's restatement of `PREFIX_REALMS`. Lets the rule treat
 // `https://cardstack.com/base/X` and `@cardstack/base/X` as the same module,
@@ -12,7 +10,9 @@ const { PREFIX_REALM_ALIASES } = require('./prefix-realms');
 // imported in either form. Once the alias is retired and all source uses the
 // RRI prefix form, the map is empty and the two helpers below are the
 // identity, so callers compare specifiers directly.
-const REALM_PREFIX_ALIASES = PREFIX_REALM_ALIASES;
+const {
+  PREFIX_REALM_ALIASES: REALM_PREFIX_ALIASES,
+} = require('./prefix-realms');
 
 function canonicalizeModuleSpecifier(specifier) {
   if (typeof specifier !== 'string') {

@@ -27,15 +27,11 @@ describe('prefix-realms', () => {
     );
   });
 
-  it('derives the alias map from the realms that have an alias', async () => {
-    let { PREFIX_REALMS: declared } =
-      await import('../../../../runtime-common/realm-prefixes.ts');
-    let expected = Object.fromEntries(
-      declared
-        .filter((realm) => realm.alias)
-        .map((realm) => [realm.prefix, realm.alias]),
-    );
-    expect(PREFIX_REALM_ALIASES).toEqual(expected);
-    expect(Object.keys(expected)).not.toHaveLength(0);
+  // `no-url-form-base-imports` reports nothing without the base alias, so
+  // retiring the alias retires that rule too.
+  it('maps each prefix that has an alias to it', () => {
+    expect(PREFIX_REALM_ALIASES).toEqual({
+      '@cardstack/base/': 'https://cardstack.com/base/',
+    });
   });
 });

@@ -27,19 +27,28 @@ interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
 `baseRealm.url` interpolated first (`` `${baseRealm.url}card-api` ``).
 
 A specifier built from `baseRealm.url` with `+` or `new URL(path, baseRealm.url)`
-(or its `.href`) is flagged too, without a fix, since it has no spelling to
-rewrite.
+(or its `.href`), as described below, is flagged too, without a fix, since it
+has no spelling to rewrite. A specifier is read through `as`, `satisfies` and
+`!`, and a `+` chain by its leading operand, as a template literal is by its
+leading spelling.
 
 ## Every other position
 
 Anywhere else, a string or template literal that contains the alias is flagged,
 as is a `<template>`'s text, attribute value or string argument that contains it.
 So is the alias built from `baseRealm.url`, the constant that holds it: a
-template that appends a path to it (`` `${baseRealm.url}cards/skill` ``),
-`baseRealm.url + path`, and `new URL(path, baseRealm.url)` each spell an
-alias-form resource. Reading `baseRealm.url` on its own is not flagged, nor is
-embedding it whole in a larger string (`` `[data-test-realm-url="${baseRealm.url}"]` ``):
+template that appends a path to it (`` `${baseRealm.url}cards/skill` ``), a `+`
+chain that does (`baseRealm.url + path`, wherever `baseRealm.url` sits in the
+chain), and `new URL(path, baseRealm.url)` each spell an alias-form resource.
+In a template or a `+` chain, what continues the URL is a path, query or
+fragment, or an interpolation or operand, which the rule can't read and takes
+to be a path. Reading `baseRealm.url` on its own is not flagged, nor is
+embedding it whole in a larger string, followed by a delimiter or nothing
+(`` `[data-test-realm-url="${baseRealm.url}"]` ``, `baseRealm.url + ' is down'`):
 that is the base realm's registered URL, which the constant exists to name.
+`new URL(path, baseRealm.url)` is flagged only where `path` is written out as a
+string or template that resolves under the base. A `path` the rule can't read,
+such as a variable, may be a URL, which `new URL` resolves without its base.
 None of these is flagged where it sits in one of the positions that define the
 alias or recognize data written in it:
 

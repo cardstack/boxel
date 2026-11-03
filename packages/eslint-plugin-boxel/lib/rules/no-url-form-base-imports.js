@@ -7,18 +7,28 @@
 const { PREFIX_REALM_ALIASES } = require('../utils/prefix-realms');
 
 // The base realm's prefix and the alias it answers to, from the plugin's
-// restatement of `PREFIX_REALMS`.
+// restatement of `PREFIX_REALMS`. Without an alias the rule has nothing to
+// check, and it reports nothing. It does not throw: the plugin loads every rule
+// together, so one that throws stops them all. The plugin's tests pin the
+// alias instead.
 const CANONICAL_PREFIX = '@cardstack/base/';
 const URL_FORM_PREFIX = PREFIX_REALM_ALIASES[CANONICAL_PREFIX];
-if (!URL_FORM_PREFIX) {
-  throw new Error(
-    `PREFIX_REALMS gives ${CANONICAL_PREFIX} no alias, so no-url-form-base-imports has nothing to check`,
-  );
-}
 
-// The first character of a path appended to a realm URL, as against a
-// delimiter that closes the URL inside a larger string.
-const URL_PATH_START = /^[A-Za-z0-9_.~%@/-]/;
+// The first character of a path, query or fragment that continues a realm URL,
+// as against a delimiter that closes the URL inside a larger string.
+const URL_CONTINUATION = /^[A-Za-z0-9_.~%@/?#-]/;
+
+// A URL, or a path from the root, which `new URL` resolves without its base's
+// path.
+const OUTSIDE_BASE_PATH = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/;
+
+// TypeScript wrappers that assert a type and leave the value as it is.
+const TYPE_ASSERTIONS = new Set([
+  'TSAsExpression',
+  'TSNonNullExpression',
+  'TSSatisfiesExpression',
+  'TSTypeAssertion',
+]);
 
 // The alias is the base realm's registered identity, so code that defines that
 // identity or recognizes data written in it may spell it out. These are the
@@ -69,6 +79,9 @@ module.exports = {
   },
 
   create(context) {
+    if (!URL_FORM_PREFIX) {
+      return {};
+    }
     let { allowAliasOutsideImports = false, allowBaseRealmURLPaths = false } =
       context.options[0] || {};
     // Every node read as an import specifier, reported or not, so the check
@@ -160,60 +173,189 @@ module.exports = {
       );
     }
 
-    // `baseRealm.url + path`.
+    function withoutTypeAssertions(node) {
+      while (node && TYPE_ASSERTIONS.has(node.type)) {
+        node = node.expression;
+      }
+      return node;
+    }
+
+    function isConcatenation(node) {
+      return (
+        !!node && node.type === 'BinaryExpression' && node.operator === '+'
+      );
+    }
+
+    // The pieces a template literal joins, in order: the text of each quasi
+    // and each interpolation.
+    function templateParts(node) {
+      let parts = [];
+      node.quasis.forEach((quasi, index) => {
+        parts.push({ text: quasi.value.raw });
+        let expression = node.expressions[index];
+        if (expression) {
+          parts.push({ expression });
+        }
+      });
+      return parts;
+    }
+
+    // The pieces a chain of `+` joins, in order, whichever way it is grouped:
+    // the text of each string literal and each other operand.
+    function concatenationParts(node) {
+      if (isConcatenation(node)) {
+        return [
+          ...concatenationParts(node.left),
+          ...concatenationParts(node.right),
+        ];
+      }
+      if (node.type === 'Literal' && typeof node.value === 'string') {
+        return [{ text: node.value }];
+      }
+      return [{ expression: node }];
+    }
+
+    // Whether what follows `parts[index]` continues a URL. Text does when its
+    // first character does. An operand or interpolation can't be read, and it
+    // counts as continuing the URL, since that is how a path is usually
+    // appended. Empty text is passed over.
+    function continuesURL(parts, index) {
+      for (let part of parts.slice(index + 1)) {
+        if (part.expression) {
+          return true;
+        }
+        if (part.text !== '') {
+          return URL_CONTINUATION.test(part.text);
+        }
+      }
+      return false;
+    }
+
+    // What a template literal spells. `baseRealm.url` is the alias, so where
+    // the URL continues past it the template spells an alias-form resource,
+    // and the alias stands in for it in the text. Where a delimiter or nothing
+    // follows it, as in `[data-test-realm-url="${baseRealm.url}"]`, the
+    // template embeds the registered URL itself, read as `baseRealm.url` is.
+    // Other interpolations spell nothing.
+    function spelledText(parts) {
+      return parts
+        .map((part, index) => {
+          if (!part.expression) {
+            return part.text;
+          }
+          return isBaseRealmURL(part.expression) && continuesURL(parts, index)
+            ? URL_FORM_PREFIX
+            : '';
+        })
+        .join('');
+    }
+
+    // A chain of `+` that continues the URL past `baseRealm.url` anywhere in
+    // it, as `baseRealm.url + path` does.
     function isBaseRealmURLConcatenation(node) {
-      return (
-        node.type === 'BinaryExpression' &&
-        node.operator === '+' &&
-        isBaseRealmURL(node.left)
+      if (!isConcatenation(node)) {
+        return false;
+      }
+      let parts = concatenationParts(node);
+      return parts.some(
+        (part, index) =>
+          isBaseRealmURL(part.expression) && continuesURL(parts, index),
       );
     }
 
-    // `new URL(path, baseRealm.url)`. `new URL(baseRealm.url)` parses the
-    // registered URL itself, so it is not one.
+    // The text a `path` written out as a string or template literal starts
+    // with, or `undefined` for one the rule can't read.
+    function leadingText(node) {
+      if (node && node.type === 'Literal' && typeof node.value === 'string') {
+        return node.value;
+      }
+      if (
+        node &&
+        node.type === 'TemplateLiteral' &&
+        (node.quasis[0].value.raw !== '' || node.expressions.length === 0)
+      ) {
+        return node.quasis[0].value.raw;
+      }
+      return undefined;
+    }
+
+    // `new URL(path, baseRealm.url)` with a `path` that resolves under the
+    // base. A `path` the rule can't read, such as a variable, may be a URL,
+    // which `new URL` resolves without its base, so it is not one. Nor is an
+    // empty `path`, which resolves to the registered URL itself, or
+    // `new URL(baseRealm.url)`, which parses it.
     function isURLUnderBaseRealmURL(node) {
-      return (
-        node.type === 'NewExpression' &&
-        node.callee.type === 'Identifier' &&
-        node.callee.name === 'URL' &&
-        isBaseRealmURL(node.arguments[1])
-      );
+      if (
+        node.type !== 'NewExpression' ||
+        node.callee.type !== 'Identifier' ||
+        node.callee.name !== 'URL' ||
+        !isBaseRealmURL(node.arguments[1])
+      ) {
+        return false;
+      }
+      let path = leadingText(node.arguments[0]);
+      return !!path && !OUTSIDE_BASE_PATH.test(path);
     }
 
-    // The `baseRealm.url + path` or `new URL(path, baseRealm.url)` a specifier
-    // is built from, reading through a trailing `.href`.
-    function builtFromBaseRealmURL(node) {
-      let built =
+    function isHref(node) {
+      return (
         node.type === 'MemberExpression' &&
         !node.computed &&
         node.property.type === 'Identifier' &&
         node.property.name === 'href'
-          ? node.object
-          : node;
+      );
+    }
+
+    // The `baseRealm.url + path` or `new URL(path, baseRealm.url)` a specifier
+    // is built from, reading through a trailing `.href` and type assertions.
+    function builtFromBaseRealmURL(node) {
+      let built = node;
+      for (;;) {
+        if (TYPE_ASSERTIONS.has(built.type)) {
+          built = built.expression;
+        } else if (isHref(built)) {
+          built = built.object;
+        } else {
+          break;
+        }
+      }
       return isBaseRealmURLConcatenation(built) || isURLUnderBaseRealmURL(built)
         ? built
         : undefined;
     }
 
     // Marks each node it reads as an import specifier, so the check for other
-    // positions leaves it alone. A specifier built from `baseRealm.url` has no
+    // positions leaves it alone. A specifier is read through type assertions,
+    // and a chain of `+` by its leading operand, as a template literal is by
+    // its leading spelling. A specifier built from `baseRealm.url` has no
     // spelling to rewrite, so it is reported without a fix.
     function check(node) {
+      node = withoutTypeAssertions(node);
       if (!node) {
         return;
       }
       if (node.type === 'Literal') {
         importPositions.add(node);
         checkLiteral(node);
-      } else if (node.type === 'TemplateLiteral') {
+        return;
+      }
+      if (node.type === 'TemplateLiteral') {
         importPositions.add(node);
         checkTemplateLiteral(node);
-      } else {
-        let built = builtFromBaseRealmURL(node);
-        if (built) {
-          importPositions.add(built);
-          context.report({ node, messageId: 'builtURLFormSpecifier' });
+        return;
+      }
+      let built = builtFromBaseRealmURL(node);
+      if (built) {
+        importPositions.add(built);
+        context.report({ node, messageId: 'builtURLFormSpecifier' });
+        return;
+      }
+      if (isConcatenation(node)) {
+        let lead = node;
+        while (isConcatenation(lead)) {
+          lead = lead.left;
         }
+        check(lead);
       }
     }
 
@@ -272,31 +414,6 @@ module.exports = {
         }
       }
       return false;
-    }
-
-    // What a template literal spells. `baseRealm.url` is the alias, so where a
-    // path follows it the template spells an alias-form resource, and the
-    // alias stands in for it in the text. Where a delimiter or nothing follows
-    // it, as in `[data-test-realm-url="${baseRealm.url}"]`, the template
-    // embeds the registered URL itself, read as `baseRealm.url` is.
-    function templateText(node) {
-      let text = '';
-      node.quasis.forEach((quasi, index) => {
-        text += quasi.value.raw;
-        let expression = node.expressions[index];
-        if (!expression) {
-          return;
-        }
-        let next = node.quasis[index + 1].value.raw;
-        let followedByPath =
-          next === ''
-            ? index + 1 < node.expressions.length
-            : URL_PATH_START.test(next);
-        if (isBaseRealmURL(expression) && followedByPath) {
-          text += URL_FORM_PREFIX;
-        }
-      });
-      return text;
     }
 
     function checkOtherPosition(node, text) {
@@ -406,13 +523,17 @@ module.exports = {
           node,
           allowBaseRealmURLPaths
             ? node.quasis.map((quasi) => quasi.value.raw).join('')
-            : templateText(node),
+            : spelledText(templateParts(node)),
         );
       },
       // `baseRealm.url + path` spells an alias-form resource, as the template
-      // does.
+      // does. A chain is read whole, from its top.
       BinaryExpression(node) {
-        if (!allowBaseRealmURLPaths && isBaseRealmURLConcatenation(node)) {
+        if (
+          !allowBaseRealmURLPaths &&
+          !isConcatenation(node.parent) &&
+          isBaseRealmURLConcatenation(node)
+        ) {
           checkOtherPosition(node, URL_FORM_PREFIX);
         }
       },

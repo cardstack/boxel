@@ -56,6 +56,15 @@ ruleTester.run('no-url-form-base-imports', rule, {
     'let selector = `[data-test-realm-url="${baseRealm.url}"]`;',
     'let message = `${baseRealm.url} is the base realm`;',
     "let permissions = { [`${baseRealm.url}`]: ['read'] };",
+    "let message = baseRealm.url + ' is the base realm';",
+    "let message = 'Served from ' + baseRealm.url;",
+    // `new URL` with a path that may be a URL, or one outside the base's path
+    'let url = new URL(cardId, baseRealm.url);',
+    'let url = new URL(ref.module, baseRealm.url).href;',
+    'let mod = await loader.import(new URL(ref.module, baseRealm.url).href);',
+    "let url = new URL('https://example.com/x', baseRealm.url);",
+    "let url = new URL('/_info', baseRealm.url);",
+    "let url = new URL('', baseRealm.url);",
     'let id = `${other.url}index`;',
     "let id = other.url + 'index';",
     "let url = new URL('index', other.url);",
@@ -131,7 +140,35 @@ ruleTester.run('no-url-form-base-imports', rule, {
       errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
     {
+      code: "let id = '' + baseRealm.url + 'card-api';",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let id = prefix + baseRealm.url + path;',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let id = prefix + (baseRealm.url + 'card-api');",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let url = baseRealm.url + '?include=x';",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let url = `${baseRealm.url}?include=x`;',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let url = `${baseRealm.url}#frag`;',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
       code: "let url = new URL('card-api', baseRealm.url).href;",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let url = new URL(`cards/${name}`, baseRealm.url);',
       errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
     {
@@ -191,6 +228,17 @@ ruleTester.run('no-url-form-base-imports', rule, {
       options: [{ allowBaseRealmURLPaths: true }],
       errors: [{ messageId: 'builtURLFormSpecifier' }],
     },
+    {
+      code: "let api = await loader.import('' + baseRealm.url + 'card-api');",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import('https://cardstack.com/base/' + name);",
+      output: "let api = await loader.import('@cardstack/base/' + name);",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
     // `allowBaseRealmURLPaths` still reports the alias spelled out
     {
       code: "let id = 'https://cardstack.com/base/cards/skill';",
@@ -210,6 +258,10 @@ ruleTester.run('no-url-form-base-imports', rule, {
     },
     {
       code: "let api = await import(baseRealm.url + 'card-api');",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import('' + baseRealm.url + 'card-api');",
       errors: [{ messageId: 'builtURLFormSpecifier' }],
     },
     {
@@ -249,6 +301,12 @@ ruleTester.run('no-url-form-base-imports', rule, {
       code: "let api = await this.loaderService.loader.import('https://cardstack.com/base/command');",
       output:
         "let api = await this.loaderService.loader.import('@cardstack/base/command');",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    // A chain of `+`, read by its leading operand
+    {
+      code: "let api = await loader.import('https://cardstack.com/base/' + name);",
+      output: "let api = await loader.import('@cardstack/base/' + name);",
       errors: [{ messageId: 'no-url-form-base-imports' }],
     },
     // Template literals
@@ -319,6 +377,32 @@ typeScriptRuleTester.run('no-url-form-base-imports (TypeScript)', rule, {
         "let api = await loader.import<typeof import('@cardstack/base/card-api')>('@cardstack/base/card-api');",
       errors: [{ messageId: 'no-url-form-base-imports' }],
     },
+    // A specifier is read through type assertions, whatever the options
+    {
+      code: "let api = await loader.import('https://cardstack.com/base/card-api' as string);",
+      output:
+        "let api = await loader.import('@cardstack/base/card-api' as string);",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: "let api = await loader.import((baseRealm.url + 'card-api') as string);",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import((baseRealm.url + 'card-api') satisfies string);",
+      options: [{ allowBaseRealmURLPaths: true }],
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import(new URL('card-api', baseRealm.url).href!);",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
+    {
+      code: "let api = await loader.import((new URL('card-api', baseRealm.url) as URL).href);",
+      errors: [{ messageId: 'builtURLFormSpecifier' }],
+    },
   ],
 });
 
@@ -348,3 +432,35 @@ templateRuleTester.run('no-url-form-base-imports (templates)', rule, {
     },
   ],
 });
+
+// The rule as it loads once `PREFIX_REALMS` gives the base prefix no alias.
+function ruleWithoutBaseAlias() {
+  let rulePath = require.resolve('../../../lib/rules/no-url-form-base-imports');
+  let prefixRealms =
+    require.cache[require.resolve('../../../lib/utils/prefix-realms')];
+  let loadedRule = require.cache[rulePath];
+  let { exports } = prefixRealms;
+  prefixRealms.exports = { ...exports, PREFIX_REALM_ALIASES: {} };
+  delete require.cache[rulePath];
+  try {
+    return require(rulePath);
+  } finally {
+    prefixRealms.exports = exports;
+    require.cache[rulePath] = loadedRule;
+  }
+}
+
+// The plugin loads every rule together, so this one loads without the alias,
+// and it has nothing to report.
+ruleTester.run(
+  'no-url-form-base-imports (no base alias)',
+  ruleWithoutBaseAlias(),
+  {
+    valid: [
+      "import { CardDef } from 'https://cardstack.com/base/card-api';",
+      "let id = baseRealm.url + 'card-api';",
+      "let isUndefined = typeof value === 'undefined';",
+    ],
+    invalid: [],
+  },
+);

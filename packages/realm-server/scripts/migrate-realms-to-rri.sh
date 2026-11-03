@@ -45,31 +45,6 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATE="$SCRIPT_DIR/migrate-realm-references.sh"
 
-# <find>|<replace> pairs, one per prefix realm with an alias, from PREFIX_REALMS.
-# Node strips the declaration's types as it loads it, so this needs no build and
-# no node_modules.
-PREFIX_REALMS_MODULE="$SCRIPT_DIR/../../runtime-common/realm-prefixes.ts"
-MAPPINGS=()
-while IFS= read -r mapping; do
-  MAPPINGS+=("$mapping")
-done < <(
-  # The template literal inside the quotes is JavaScript's to expand.
-  # shellcheck disable=SC2016
-  NODE_NO_WARNINGS=1 node --input-type=module -e '
-    import { pathToFileURL } from "node:url";
-    let { PREFIX_REALMS } = await import(pathToFileURL(process.argv[1]).href);
-    for (let realm of PREFIX_REALMS) {
-      if (realm.alias) {
-        console.log(`${realm.alias}|${realm.prefix}`);
-      }
-    }
-  ' -- "$PREFIX_REALMS_MODULE"
-)
-if [ ${#MAPPINGS[@]} -lt 1 ]; then
-  echo "Could not read any alias from $PREFIX_REALMS_MODULE" >&2
-  exit 1
-fi
-
 # Realm directory names the server mounts — mirrors the --path / --realmsRootPath
 # entries in start-staging.sh / start-production.sh. KEEP IN SYNC with those.
 # Used by --persistent to target exactly the live realm trees under a root.
@@ -127,6 +102,32 @@ fi
 if [ ${#DIRS[@]} -lt 1 ]; then
   echo "Usage: $0 [--dry-run] [--json-only] [--exclude <dir>]... <directory> [<directory> ...]" >&2
   echo "       $0 [--dry-run] [--json-only] --persistent <root>" >&2
+  exit 1
+fi
+
+# <find>|<replace> pairs, one per prefix realm with an alias, from PREFIX_REALMS.
+# Node strips the declaration's types as it loads it, so this needs no build and
+# no node_modules.
+PREFIX_REALMS_MODULE="$SCRIPT_DIR/../../runtime-common/realm-prefixes.ts"
+MAPPINGS=()
+# The template literal inside the single quotes is for JavaScript to expand. A
+# comment inside the process substitution would not parse under bash 3.2.
+# shellcheck disable=SC2016
+while IFS= read -r mapping; do
+  MAPPINGS+=("$mapping")
+done < <(
+  NODE_NO_WARNINGS=1 node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    let { PREFIX_REALMS } = await import(pathToFileURL(process.argv[1]).href);
+    for (let realm of PREFIX_REALMS) {
+      if (realm.alias) {
+        console.log(`${realm.alias}|${realm.prefix}`);
+      }
+    }
+  ' -- "$PREFIX_REALMS_MODULE"
+)
+if [ ${#MAPPINGS[@]} -lt 1 ]; then
+  echo "Could not read any alias from $PREFIX_REALMS_MODULE" >&2
   exit 1
 fi
 
