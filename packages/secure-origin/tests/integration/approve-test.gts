@@ -1374,6 +1374,28 @@ module('Integration | approve pages', function (hooks) {
       .dom(document.getElementById(input.getAttribute('aria-describedby')!))
       .includesText('in total across everyone', 'its note describes it');
 
+    assert
+      .dom('[data-test-approve-budget-more]')
+      .includesText('how fast each person can make calls')
+      .includesText(
+        'how many calls the key makes in a month, in total across everyone',
+      );
+    let link = find(
+      '[data-test-approve-budget="Team GitHub"] [data-test-approve-budget-limits-link]',
+    ) as HTMLAnchorElement;
+    assert.strictEqual(
+      link.target,
+      '_blank',
+      'it opens in a tab of its own, leaving the batch as it is',
+    );
+    assert.strictEqual(link.rel, 'noopener noreferrer');
+    let limitsURL = new URL(link.href);
+    assert.strictEqual(limitsURL.origin, window.location.origin);
+    assert.strictEqual(limitsURL.pathname, '/secure/share-limits');
+    let limitsFragment = new URLSearchParams(limitsURL.hash.slice(1));
+    assert.strictEqual(limitsFragment.get('realm'), REALM);
+    assert.strictEqual(limitsFragment.get('share'), 'share-team');
+
     await fillIn('[data-test-approve-budget="Team GitHub"] input', 'lots');
     assert
       .dom('[data-test-approve-save]')
