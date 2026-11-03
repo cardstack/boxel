@@ -155,12 +155,24 @@ export default class DashboardSections {
       ? 'auto'
       : 'smooth';
     // The first section opens the page, greeting and all, so it goes to the
-    // top.
-    if (registration === this.ordered[0]) {
-      this.scroller.scrollTo({ top: 0, behavior });
-    } else {
-      registration.element.scrollIntoView({ behavior, block: 'start' });
+    // top. The others scroll only the dashboard's scroller: scrollIntoView
+    // would also scroll its overflow-hidden ancestors when a section near
+    // the end can't reach the top, and nothing scrolls those back.
+    let top = 0;
+    if (registration !== this.ordered[0]) {
+      let scrollerBox = this.scroller.getBoundingClientRect();
+      // Client rects are measured after any transform on an ancestor (the
+      // test container scales the app), and scrollTop before it.
+      let scale = scrollerBox.height / this.scroller.offsetHeight || 1;
+      let paddingTop =
+        parseFloat(getComputedStyle(this.scroller).scrollPaddingTop) || 0;
+      top =
+        this.scroller.scrollTop +
+        (registration.element.getBoundingClientRect().top - scrollerBox.top) /
+          scale -
+        paddingTop;
     }
+    this.scroller.scrollTo({ top, behavior });
   }
 
   private readCompact() {
