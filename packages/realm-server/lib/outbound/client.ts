@@ -880,9 +880,9 @@ function leavesOrigin(location: string, current: URL): boolean {
 // --- Response size cap -----------------------------------------------------
 
 // Hands back `response` with its body counted as it streams, against `cap`:
-// the call's own cap, else its path's. Decompression has already happened inside fetch, chunk
-// by chunk, so the count is of decompressed bytes and nothing is held beyond
-// the chunk in hand.
+// the call's own cap, else its path's. Decompression has already happened
+// inside fetch, chunk by chunk, so the count is of decompressed bytes and
+// nothing is held beyond the chunk in hand.
 //
 // A body whose declared length is over the cap is refused before any of it
 // is read: the body is cancelled and `OutboundResponseTooLargeError` thrown.

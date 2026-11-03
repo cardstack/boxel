@@ -650,7 +650,10 @@ module(basename(import.meta.filename), function () {
           if (
             hold &&
             typeof sql === 'string' &&
-            sql.includes('auth_parameter_name, encode(api_key_ciphertext')
+            // The endpoint cache's load is the one read of both a key's
+            // settings and its sealed value.
+            sql.includes('auth_parameter_name') &&
+            sql.includes('encode(api_key_ciphertext')
           ) {
             hold = false;
             held();
