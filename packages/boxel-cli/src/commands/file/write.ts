@@ -10,6 +10,11 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import {
+  confirmPolicyAuditFor,
+  sendConfirmingPolicyAudit,
+  type ConfirmPolicyAudit,
+} from '../../lib/policy-audit.ts';
 
 export interface WriteResult {
   ok: boolean;
@@ -28,6 +33,13 @@ export interface WriteCommandOptions {
    * changes open tabs pick up on their next load. On by default.
    */
   realmEvents?: boolean;
+  /**
+   * Asked when the realm refuses the write because it saves a policy change
+   * that lets people who aren't signed in use keys shared into a workspace;
+   * agreeing sends it again with the confirmation. Without it, the refusal is
+   * the answer.
+   */
+  confirmPolicyAudit?: ConfirmPolicyAudit;
 }
 
 interface WriteCliOptions {
@@ -36,6 +48,7 @@ interface WriteCliOptions {
   json?: boolean;
   realmSecretSeed?: boolean;
   realmEvents?: boolean;
+  confirmSharedKeys?: boolean;
 }
 
 /**
@@ -104,24 +117,29 @@ export async function write(
   let isBinary = typeof body !== 'string';
 
   try {
-    let response = await authenticator.authedRealmFetch(url, {
-      method: 'POST',
-      headers: {
-        ...(isBinary
-          ? { 'Content-Type': SupportedMimeType.OctetStream }
-          : {
-              Accept: SupportedMimeType.CardSource,
-              'Content-Type': SupportedMimeType.CardSource,
-            }),
-        ...(options?.realmEvents === false
-          ? { 'X-Boxel-Realm-Events': 'none' }
-          : {}),
-      },
-      // Both branches of `body: string | Uint8Array` are valid BodyInit
-      // values, but TS narrows them as a union that doesn't unify against
-      // the fetch signature without a hint.
-      body: body as BodyInit,
-    });
+    let response = await sendConfirmingPolicyAudit(
+      (confirmation) =>
+        authenticator.authedRealmFetch(url, {
+          method: 'POST',
+          headers: {
+            ...confirmation,
+            ...(isBinary
+              ? { 'Content-Type': SupportedMimeType.OctetStream }
+              : {
+                  Accept: SupportedMimeType.CardSource,
+                  'Content-Type': SupportedMimeType.CardSource,
+                }),
+            ...(options?.realmEvents === false
+              ? { 'X-Boxel-Realm-Events': 'none' }
+              : {}),
+          },
+          // Both branches of `body: string | Uint8Array` are valid BodyInit
+          // values, but TS narrows them as a union that doesn't unify against
+          // the fetch signature without a hint.
+          body: body as BodyInit,
+        }),
+      options?.confirmPolicyAudit,
+    );
 
     if (!response.ok) {
       let body = await response.text().catch(() => '(no body)');
@@ -173,6 +191,10 @@ export function registerWriteCommand(parent: Command): void {
     .option(
       '--no-realm-events',
       'Index the write without announcing it to open tabs, which pick it up on their next load (for deploys)',
+    )
+    .option(
+      '--confirm-shared-keys',
+      "Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking",
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
@@ -238,6 +260,9 @@ export function registerWriteCommand(parent: Command): void {
         result = await write(opts.realm, filePath, content, {
           realmSecretSeed,
           realmEvents: opts.realmEvents,
+          confirmPolicyAudit: confirmPolicyAuditFor({
+            confirmed: opts.confirmSharedKeys,
+          }),
         });
       } catch (err) {
         stderr(

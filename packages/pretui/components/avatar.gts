@@ -13,10 +13,14 @@ export interface AvatarSignature {
     hue?: string;
     /** diameter in px at a 16px root, written as rem; omitted, 24 (1.5rem) */
     size?: number;
+    /** the corner: 'circle' (the default, an identity disc), 'rounded' (the
+     * half the theme's --radius, for a standalone app or brand mark) or 'square' */
+    shape?: 'circle' | 'rounded' | 'square';
   };
   Element: HTMLSpanElement;
 }
 
+const STARTS_WITH_WORD_CHAR = new RegExp('^[\\p{L}\\p{N}]', 'u');
 const SIZE_PROPERTY = '--pretui-avatar-size';
 const HUE_PROPERTY = '--pretui-chip-hue';
 
@@ -26,6 +30,8 @@ export class Avatar extends Component<AvatarSignature> {
   get initials() {
     return (this.args.name ?? '')
       .split(/\s+/)
+      // words that open with a letter or digit only: "Talent & Resource" is TR
+      .filter((w) => STARTS_WITH_WORD_CHAR.test(w))
       .map((w) => w[0])
       .slice(0, 2)
       .join('')
@@ -43,6 +49,10 @@ export class Avatar extends Component<AvatarSignature> {
   get size(): string | undefined {
     let size = Number(this.args.size) || undefined;
     return size === undefined ? undefined : `${size / 16}rem`;
+  }
+  get shape(): 'rounded' | 'square' | undefined {
+    let { shape } = this.args;
+    return shape === 'rounded' || shape === 'square' ? shape : undefined;
   }
   get explicitHue(): string | undefined {
     return this.args.hue ?? undefined;
@@ -78,6 +88,7 @@ export class Avatar extends Component<AvatarSignature> {
       role={{unless this.showImage 'img'}}
       aria-label={{unless this.showImage @name}}
       data-has-image={{if this.showImage 'true'}}
+      data-shape={{this.shape}}
       style={{this.style}}
       {{keepStyle this.keptStyle}}
       data-test-pretui-avatar
@@ -104,7 +115,11 @@ export class Avatar extends Component<AvatarSignature> {
           font-weight: 600;
           background-color: color-mix(in oklch, var(--_avatar-hue) 16%, var(--card));
           color: var(--foreground);
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--_avatar-hue) 28%, var(--border));
+          /* drawn inside the box: an outer ring is clipped by a scroll
+             container when the avatar sits flush with its edge. An outline
+             paints over the photo, where an inset shadow would sit under it. */
+          outline: 1px solid color-mix(in oklch, var(--_avatar-hue) 28%, var(--border));
+          outline-offset: -1px;
           overflow: hidden;
           flex: none;
         }
@@ -119,9 +134,16 @@ export class Avatar extends Component<AvatarSignature> {
         }
         /* A photo gets a neutral ring: the name's hue carries no meaning once
            the photo shows. The ring sits on the root, whose overflow: hidden
-           circle would clip an outline on the square img. */
+           shape would clip an outline on the square img. */
         .pretui-avatar[data-has-image] {
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent);
+          outline-color: color-mix(in oklch, var(--foreground) 10%, transparent);
+        }
+        .pretui-avatar[data-shape='rounded'] {
+          /* half the card's corner: never the same radius inside a rounded card */
+          border-radius: var(--pretui-avatar-radius, calc(var(--radius) / 2));
+        }
+        .pretui-avatar[data-shape='square'] {
+          border-radius: 0;
         }
         .pretui-avatar img {
           width: 100%;

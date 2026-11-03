@@ -527,6 +527,452 @@
           },
           "isPaused": false,
           "notification_settings": null
+        },
+        {
+          "uid": "keys-response-near-size-cap",
+          "title": "System key responses near the size cap",
+          "folderUID": "defd2d156sav4d",
+          "condition": "NEAR",
+          "data": [
+            {
+              "refId": "LARGEST_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (key, destination) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response size: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=\\\\d+ bytes=(?P<bytes>\\\\d+) outcome=(?P<outcome>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | outcome!=\"too-large\" | keep key, destination, bytes | unwrap bytes [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "LARGEST_Q"
+              }
+            },
+            {
+              "refId": "CAP_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(0 * max by (key, destination) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response size: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=\\\\d+ bytes=(?P<bytes>\\\\d+) outcome=(?P<outcome>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | outcome!=\"too-large\" | keep key, destination, bytes | unwrap bytes [10m]))) + on (key) group_left max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "CAP_Q"
+              }
+            },
+            {
+              "refId": "SHARE_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (key, destination) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response size: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=\\\\d+ bytes=(?P<bytes>\\\\d+) outcome=(?P<outcome>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | outcome!=\"too-large\" | keep key, destination, bytes | unwrap bytes [10m])) / on (key) group_left max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "SHARE_Q"
+              }
+            },
+            {
+              "refId": "SUGGESTED_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(2 * ((0 * max by (key, destination) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response size: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=\\\\d+ bytes=(?P<bytes>\\\\d+) outcome=(?P<outcome>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | outcome!=\"too-large\" | keep key, destination, bytes | unwrap bytes [10m]))) + on (key) group_left max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m]))) < 1073741824) or (0 * 2 * ((0 * max by (key, destination) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response size: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=\\\\d+ bytes=(?P<bytes>\\\\d+) outcome=(?P<outcome>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | outcome!=\"too-large\" | keep key, destination, bytes | unwrap bytes [10m]))) + on (key) group_left max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m]))) + 1073741824)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "SUGGESTED_Q"
+              }
+            },
+            {
+              "refId": "LARGEST",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "LARGEST_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "LARGEST",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "CAP",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "CAP_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "CAP",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "SHARE",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "SHARE_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "SHARE",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "SUGGESTED",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "SUGGESTED_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "SUGGESTED",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "NEAR",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0.75],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "SHARE",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "NEAR",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] System key {{ reReplaceAll \"^system:\" \"\" .Labels.key }} is nearing its response size cap{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the system key near-size-cap rule could not run its query{{ end }}",
+            "summary": "{{ if $values }}A response on a system key passed 75% of the key's response size cap in the last 10 minutes. Nothing has been refused yet; a response over the cap would be, and its caller would get an error. The cap is the key's own when it has one, else the system-key path's. Once the cap is raised, the alert resolves as soon as a response on the key succeeds under the new cap. See the outbound-guard and key-outage-triage skills.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about system keys' response sizes. Check the data source named in the datasource_uid label: the Loki task, and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nSystem key: {{ .Labels.key }}\nDestination: {{ .Labels.destination }}\nLargest response in the last 10 minutes: {{ humanize1024 .Values.LARGEST.Value }}B ({{ printf \"%.0f\" .Values.LARGEST.Value }} bytes), {{ humanizePercentage .Values.SHARE.Value }} of the cap\nThe key's current cap: {{ humanize1024 .Values.CAP.Value }}B ({{ printf \"%.0f\" .Values.CAP.Value }} bytes)\n\nFirst check that the response is legitimate: a vendor answering a real request, not a runaway or a decompression bomb (a small compressed body that decompresses past the cap). The outbound-guard skill has the queries. If it is legitimate, raise this key's cap. It takes effect on the key's next call, with no deploy:\n\nboxel realm-server keys set-response-cap --realm-server ${REALM_SERVER_URL} --destination {{ reReplaceAll \"^system:\" \"\" .Labels.key }} {{ printf \"%.0f\" .Values.SUGGESTED.Value }}\n\nThe suggested value is twice the current cap. It is never more than 1 GiB (1073741824 bytes), the largest cap the command accepts. A key already at 1 GiB can't go higher: a legitimate response that size belongs on a file-transfer path, not a system key's forward. Pick another from the sizes on the Keys dashboard's Response size cap row.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about system keys' response sizes. Check the data source named in the datasource_uid label: the Loki task, and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The key-outage-triage skill (Response size cap alerts) and the outbound-guard skill (The response size cap).",
+            "__dashboardUid__": "boxel-keys",
+            "__panelId__": "25"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "key"]
+          }
+        },
+        {
+          "uid": "keys-response-over-size-cap",
+          "title": "System key responses refused over the size cap",
+          "folderUID": "defd2d156sav4d",
+          "condition": "OVER",
+          "data": [
+            {
+              "refId": "REFUSED_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (key, destination, refused) (count_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, destination, refused [10m])) and on (key) (max by (key) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m])) >= on (key) max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m])))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "REFUSED_Q"
+              }
+            },
+            {
+              "refId": "SIZE_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (key, destination, refused) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, destination, refused, bytes | unwrap bytes [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "SIZE_Q"
+              }
+            },
+            {
+              "refId": "CAP_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(0 * sum by (key, destination, refused) (count_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, destination, refused [10m]))) + on (key) group_left max by (key) (last_over_time({service=~\"realm-server|worker\"} |~ \"outbound response (size|over size cap): path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"cap=(?P<cap>\\\\d+) .*key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, cap | unwrap cap [10m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "CAP_Q"
+              }
+            },
+            {
+              "refId": "SUGGESTED_Q",
+              "queryType": "instant",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "(2 * max by (key, destination, refused) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, destination, refused, bytes | unwrap bytes [10m])) < 1073741824) or (0 * 2 * max by (key, destination, refused) (max_over_time({service=~\"realm-server|worker\"} |= \"outbound response over size cap: path=system-key \" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"destination=(?P<destination>\\\\S+) status=\\\\d+ cap=(?P<cap>\\\\d+) (?:declaredBytes|bytesRead)=(?P<bytes>\\\\d+) refused=(?P<refused>\\\\S+) key=(?P<key>\\\\S+)$\" | key=~\"system:.+\" | keep key, destination, refused, bytes | unwrap bytes [10m])) + 1073741824)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "SUGGESTED_Q"
+              }
+            },
+            {
+              "refId": "REFUSED",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "REFUSED_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "REFUSED",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "SIZE",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "SIZE_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "SIZE",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "CAP",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "CAP_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "CAP",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "SUGGESTED",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "SUGGESTED_Q",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "reducer": "last",
+                "refId": "SUGGESTED",
+                "type": "reduce"
+              }
+            },
+            {
+              "refId": "OVER",
+              "queryType": "",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [0],
+                      "type": "gt"
+                    }
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                },
+                "expression": "REFUSED",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "OVER",
+                "type": "threshold"
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "title": "{{ if $values }}[${ALERT_ENVIRONMENT}] REFUSED: responses on system key {{ reReplaceAll \"^system:\" \"\" .Labels.key }} are over its size cap, and callers are getting errors{{ else }}[${ALERT_ENVIRONMENT}] DatasourceError: the system key over-size-cap rule could not run its query{{ end }}",
+            "summary": "{{ if $values }}The guarded outbound client refused a response on a system key in the last 10 minutes because it was larger than the key's response size cap. Its caller got an error: a 502 from _request-forward or the OpenRouter passthrough, or an uncharged generation-cost lookup. Only refusals measured against the key's current cap count, so once the cap is raised the alert resolves as soon as a response on the key succeeds under the new cap. callApi refusals never fire it. See the outbound-guard and key-outage-triage skills.{{ else }}Grafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about system keys' response sizes. Check the data source named in the datasource_uid label: the Loki task, and its context canceled and context deadline exceeded errors.{{ end }}",
+            "description": "{{ if $values }}Environment: ${ALERT_ENVIRONMENT}\nSystem key: {{ .Labels.key }}\nDestination: {{ .Labels.destination }}\nResponses refused in the last 10 minutes: {{ printf \"%.0f\" .Values.REFUSED.Value }}\nSize: {{ humanize1024 .Values.SIZE.Value }}B ({{ printf \"%.0f\" .Values.SIZE.Value }} bytes), measured as {{ .Labels.refused }} ({{ if eq .Labels.refused \"declared-length\" }}the length the vendor declared{{ else }}the stream reached the cap, so the whole response is at least this{{ end }})\nThe key's current cap: {{ humanize1024 .Values.CAP.Value }}B ({{ printf \"%.0f\" .Values.CAP.Value }} bytes)\n\nFirst check that the response is legitimate: a vendor answering a real request, not a runaway or a decompression bomb (a small compressed body that decompresses past the cap). The outbound-guard skill has the queries. If it is legitimate, raise this key's cap. It takes effect on the key's next call, with no deploy:\n\nboxel realm-server keys set-response-cap --realm-server ${REALM_SERVER_URL} --destination {{ reReplaceAll \"^system:\" \"\" .Labels.key }} {{ printf \"%.0f\" .Values.SUGGESTED.Value }}\n\nThe suggested value is twice the size above. It is never more than 1 GiB (1073741824 bytes), the largest cap the command accepts. A key already at 1 GiB can't go higher: a legitimate response that size belongs on a file-transfer path, not a system key's forward. Pick another from the sizes on the Keys dashboard's Response size cap row.{{ else }}Environment: ${ALERT_ENVIRONMENT}\n\nGrafana could not run this rule's query. This is the rule's DatasourceError alert, and its Error annotation gives the reason. It shows nothing about system keys' response sizes. Check the data source named in the datasource_uid label: the Loki task, and its context canceled and context deadline exceeded errors.{{ end }}",
+            "runbook": "The key-outage-triage skill (Response size cap alerts) and the outbound-guard skill (The response size cap).",
+            "__dashboardUid__": "boxel-keys",
+            "__panelId__": "25"
+          },
+          "labels": {
+            "area": "keys"
+          },
+          "isPaused": false,
+          "notification_settings": {
+            "receiver": "Techops",
+            "group_by": ["alertname", "key"]
+          }
         }
       ]
     }

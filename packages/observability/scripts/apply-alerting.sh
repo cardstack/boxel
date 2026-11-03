@@ -254,6 +254,14 @@ upsert_contact_point() {
 
 push_rule_groups() {
   local f="$1" raw resolved folder_uid group_name interval_raw interval_secs body
+  # A file with no rule groups in provisioning/alerting/ is one local Grafana
+  # provisions and a hosted one doesn't: local-techops-contact-point.json, the
+  # stand-in for the hosted Techops contact point, which comes from
+  # provisioning/alerting-hosted/<env>/contact-points/.
+  if ! jq -e 'has("groups")' "$f" >/dev/null; then
+    echo "→ ${f}: no rule groups, local only; skipped" >&2
+    return
+  fi
   echo "→ ${f}" >&2
   # Each file is `apiVersion: 1` + `groups: [...]`. Pull groups out as
   # JSON one per line, envsubst them so ${VAR} placeholders resolve, then

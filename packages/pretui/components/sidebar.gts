@@ -141,7 +141,7 @@ const restoresOpen = modifier(
 );
 
 /**
- * Publishes the shell's own inline size as a coarse `wide | narrow` fact.
+ * Publishes the shell's own inline size; the component sorts it into bands.
  *
  * `ResizeObserver`, never a viewport media query: a card does not know the
  * window, it knows its pane. The callback fires after layout, outside render,
@@ -150,20 +150,18 @@ const restoresOpen = modifier(
 const measuresPane = modifier(
   (
     element: HTMLElement,
-    [breakpoint, apply]: [number, (narrow: boolean) => void],
+    // the breakpoints ride along so a change re-runs the modifier, and the
+    // fresh observer's first report re-sorts the current width; they must be
+    // read here, since a function modifier only tracks the args it reads
+    [apply, ...breakpoints]: [(width: number) => void, ...unknown[]],
   ) => {
+    void breakpoints;
     let observer = new ResizeObserver((entries) => {
       let entry = entries[0];
       if (!entry) {
         return;
       }
-      // A width of 0 is not "narrow", it is "not laid out" — a shell inside a
-      // `display: none` tab panel, a collapsed accordion, or a card that has
-      // not been measured yet. Treating it as narrow would silently promote
-      // the rail to a modal drawer the moment the pane was hidden, and the
-      // reader would find it in the top layer when the tab came back.
-      let width = entry.contentRect.width;
-      apply(width > 0 && width < breakpoint);
+      apply(entry.contentRect.width);
     });
     // The observer reports once as soon as observation starts, and does so
     // asynchronously — a synchronous first report here would write tracked
@@ -216,6 +214,14 @@ export interface SidebarSignature {
     mobile?: boolean;
     /** Pane width in px below which the rail becomes a drawer. Default `640`. */
     mobileBreakpoint?: number;
+    /**
+     * Pane width in px below which the expanded rail folds to the icon rail
+     * on its own, and at or above which it opens again. Opt-in, and only with
+     * `@collapsible='rail'`. A manual toggle holds until the pane crosses into
+     * another band; the automatic change is reported through `@onOpenChange`
+     * (a controlled caller applies it) and is never persisted.
+     */
+    railBreakpoint?: number;
     /** Draw the hairline between rail and content. Default `false`. */
     bordered?: boolean;
   };
@@ -283,6 +289,21 @@ export class Sidebar extends Component<SidebarSignature> {
   /** The drawer's own uncontrolled state, separate from the rail's expanded
    * state, so a narrow pane starts with the modal closed. */
   @tracked private drawerOpen = false;
+  /** Last band the pane was measured in. Starts `full`, so a first wide
+   * measurement leaves `@defaultOpen` and a persisted preference alone. */
+  private band: 'full' | 'rail' | 'drawer' = 'full';
+  /** False until the pane's first non-zero width arrives. */
+  @tracked private measured = false;
+  /** With rail bands on, the rail stays invisible until the first
+   * measurement, so a pane that opens in the rail band doesn't flash the
+   * full rail for a frame first. */
+  get measuring(): boolean {
+    return (
+      !this.measured &&
+      this.railBreakpoint !== undefined &&
+      this.args.mobile === undefined
+    );
+  }
   railId = `${guidFor(this)}-rail`;
 
   get open(): boolean {
@@ -323,6 +344,9 @@ export class Sidebar extends Component<SidebarSignature> {
   }
   get mobileBreakpoint(): number {
     return this.args.mobileBreakpoint ?? 640;
+  }
+  get railBreakpoint(): number | undefined {
+    return this.collapsible === 'rail' ? this.args.railBreakpoint : undefined;
   }
   get shortcutKey(): string {
     return (this.args.shortcutKey ?? 'b').toLowerCase();
@@ -382,11 +406,51 @@ export class Sidebar extends Component<SidebarSignature> {
       this.internal = stored;
     }
   };
-  setNarrow = (narrow: boolean) => {
+  /**
+   * A width of 0 is not "narrow", it is "not laid out" — a shell inside a
+   * `display: none` tab panel, a collapsed accordion, or a card that has not
+   * been measured yet. Treating it as narrow would silently promote the rail
+   * to a modal drawer the moment the pane was hidden, so it changes nothing.
+   */
+  setWidth = (width: number) => {
+    let narrow = width > 0 && width < this.mobileBreakpoint;
     if (narrow !== this.narrowPane) {
       this.drawerOpen = false;
     }
     this.narrowPane = narrow;
+    if (width > 0 && !this.measured) {
+      this.measured = true;
+    }
+    // @mobile bypasses measurement, so it bypasses the rail bands too
+    if (width === 0 || this.args.mobile !== undefined) {
+      return;
+    }
+    let rb = this.railBreakpoint;
+    let band: 'full' | 'rail' | 'drawer' = 'full';
+    if (width < this.mobileBreakpoint) {
+      band = 'drawer';
+    } else if (rb !== undefined) {
+      // 16px of hysteresis: leaving the rail band needs a clear move past the
+      // edge, so a pane resting on it does not flip the rail every frame.
+      band = width < (this.band === 'rail' ? rb + 16 : rb) ? 'rail' : 'full';
+    }
+    if (band === this.band) {
+      return;
+    }
+    this.band = band;
+    // Crossing into another band hands control back to the automatic choice;
+    // a manual toggle within a band is just `internal`, untouched until then.
+    if (rb === undefined || band === 'drawer') {
+      return;
+    }
+    let next = band === 'full';
+    let changed = next !== this.open;
+    if (this.args.open === undefined) {
+      this.internal = next;
+    }
+    if (changed) {
+      this.args.onOpenChange?.(next);
+    }
   };
 
   /** The shell element, so the shortcut can tell which sidebar owns focus. */
@@ -438,7 +502,12 @@ export class Sidebar extends Component<SidebarSignature> {
       data-bordered={{if @bordered 'true' 'false'}}
       data-test-pretui-sidebar
       {{restoresOpen @persistKey this.restore}}
-      {{measuresPane this.mobileBreakpoint this.setNarrow}}
+      {{measuresPane
+        this.setWidth
+        this.mobileBreakpoint
+        this.railBreakpoint
+        @mobile
+      }}
       {{!-- A document listener, not an `on 'keydown'` modifier on this div —
             realm lint's no-invalid-interactive rejects a template listener on
             a non-widget element, and the shortcut has to work while focus is
@@ -498,6 +567,7 @@ export class Sidebar extends Component<SidebarSignature> {
           aria-label={{this.label}}
           data-state={{this.state}}
           data-mobile='false'
+          data-measuring={{if this.measuring 'true'}}
           data-test-pretui-sidebar-rail
         >
           {{#if (has-block 'header')}}
@@ -639,6 +709,9 @@ export class Sidebar extends Component<SidebarSignature> {
         }
         /* The drawer's own rail is not a grid child — it lives inside a
            <dialog> in the top layer. */
+        .pretui-sidebar-rail[data-measuring] {
+          visibility: hidden;
+        }
         .pretui-sidebar-rail[data-mobile='true'] {
           display: flex;
           block-size: 100%;

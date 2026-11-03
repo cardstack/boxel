@@ -18,7 +18,7 @@ Reach for a neighbour when you need something else:
 ```
 @open?, @defaultOpen?, @onOpenChange?, @persistKey?
 @label?, @placement? ('start' | 'end'; left/right map), @collapsible? ('rail' | 'offcanvas' | 'none')
-@width?, @railWidth?, @mobileWidth?, @mobile?, @mobileBreakpoint?
+@width?, @railWidth?, @mobileWidth?, @mobile?, @mobileBreakpoint?, @railBreakpoint?
 @shortcut?, @shortcutKey?, @bordered?
 <:header> <:nav> <:footer> <:default>   — each yielded { open, collapsed, mobile }; nav and default add toggle, default adds controls
 Element: HTMLDivElement
@@ -37,6 +37,8 @@ Element: HTMLDivElement
 **The shortcut** (Cmd/Ctrl + `@shortcutKey`, default `b`) toggles the rail. It needs the modifier, it is ignored while focus is in a text field, and `@shortcut={{false}}` turns it off. It is owned by a modifier that removes it on teardown.
 
 **Mobile is the pane, not the viewport.** The rail measures its own shell with a ResizeObserver and becomes a **Drawer** (native `<dialog>` top layer) below `@mobileBreakpoint`. A sidebar in a 400px pane folds whatever the window is doing, and `@mobile` forces either mode.
+
+**The icon rail can follow the pane too.** With `@collapsible='rail'`, `@railBreakpoint` (px, opt-in) adds a third band on the same measurement: at or above it the rail is full, between `@mobileBreakpoint` and it the rail folds to icons, below `@mobileBreakpoint` it is a drawer. A manual toggle wins while the pane stays in its band; crossing into another band hands control back. The automatic change fires `@onOpenChange`, so a controlled caller applies it by updating `@open`, and it is never written to `@persistKey`. Leaving the rail band needs 16px past the edge, so a pane resting on it does not flicker. Unset, nothing changes.
 
 **Everything is logical**, so RTL is a `dir` attribute, and the width slide lands on its end state under reduced motion.
 
@@ -86,3 +88,4 @@ Sidebar, SidebarTrigger and SidebarGroup sit in `@layer PretComponent`. SidebarI
 | shadcn `SidebarMenuButton isActive`         | `<SidebarItem @active>`                      |
 | Ant `<Sider collapsible collapsed>`         | `<Sidebar @open>`                            |
 | Ant / Mantine `breakpoint`                  | `@mobileBreakpoint` (measured on the pane)   |
+| Ant `collapsedWidth` + `breakpoint`         | `@railBreakpoint` with `@collapsible='rail'` |

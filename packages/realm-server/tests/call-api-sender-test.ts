@@ -234,6 +234,54 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a response over the cap is refused as response-too-large, never handed back cut short', async function (assert) {
+    configureOutbound({
+      devAllowlist: ['127.0.0.1', 'localhost'],
+      responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+    });
+    let declared = await refusalOf(
+      sendCallApiRequest(
+        request({ url: `${vendor.url}/large?bytes=50000` }),
+        [],
+      ),
+    );
+    assert.strictEqual(declared.error.code, 'response-too-large');
+    assert.strictEqual(declared.error.status, 502);
+    assert.deepEqual(declared.error.meta, {
+      cap: 10_000,
+      measured: 'declared-length',
+    });
+
+    let streamed = await refusalOf(
+      sendCallApiRequest(
+        request({
+          method: 'POST',
+          url: `${vendor.url}/respond`,
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            chunks: ['a'.repeat(6_000), 'b'.repeat(6_000)],
+          }),
+        }),
+        [],
+      ),
+    );
+    assert.strictEqual(streamed.error.code, 'response-too-large');
+    assert.strictEqual(streamed.error.meta?.measured, 'stream-reached-cap');
+  });
+
+  test('a response at the cap is the answer', async function (assert) {
+    configureOutbound({
+      devAllowlist: ['127.0.0.1', 'localhost'],
+      responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+    });
+    let response = await sendCallApiRequest(
+      request({ url: `${vendor.url}/large?bytes=10000` }),
+      [],
+    );
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual((response.body as string).length, 9_998);
+  });
+
   test('a vendor that does not answer in time is refused as upstream-timeout', async function (assert) {
     configureOutbound({
       devAllowlist: ['127.0.0.1', 'localhost'],

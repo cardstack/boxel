@@ -8,6 +8,7 @@ import {
 import {
   describeOutboundError,
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundTimeoutError,
   outboundFetch,
   outboundSettings,
@@ -204,8 +205,11 @@ export function outboundLogContext(
 
 // How a proxy answers its caller when the outbound guard stops a call: a
 // forbidden forwarded header is the caller's mistake, any other refusal is a
-// destination the proxy will not reach, and a timeout is an upstream that did
-// not answer. Anything else is not the guard's, and gets undefined.
+// destination the proxy will not reach, a response over the size cap is an
+// upstream answer the proxy will not carry, and a timeout is an upstream that
+// did not answer. Anything else is not the guard's, and gets undefined.
+// Once a response's body has started, its status can't change: the body is
+// reset instead (see `forwardJsonResponse`), or a stream gets an error frame.
 export function outboundFailureResponse(
   error: unknown,
 ): { status: number; statusText: string; message: string } | undefined {
@@ -217,6 +221,13 @@ export function outboundFailureResponse(
           statusText: 'Bad Gateway',
           message: `Destination refused: ${error.message}`,
         };
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    return {
+      status: 502,
+      statusText: 'Bad Gateway',
+      message: `Response too large: ${error.message}`,
+    };
   }
   if (error instanceof OutboundTimeoutError) {
     return {
@@ -552,9 +563,19 @@ export async function handleStreamingRequest(
   {
     credential,
     scrubber,
-  }: { credential: OutboundCredential; scrubber: CredentialScrubber },
+    responseSizeCap,
+  }: {
+    credential: OutboundCredential;
+    scrubber: CredentialScrubber;
+    // The system key's own response size cap, when it has one.
+    responseSizeCap?: number;
+  },
 ): Promise<StreamUsage | undefined> {
   let usage: StreamUsage | undefined;
+  // Read from the stream as it passes, and kept outside the `try` so a body
+  // refused partway can still be charged for the generation that began.
+  let generationId: string | undefined;
+  let costInUsd: number | undefined;
   try {
     setupSSEHeaders(ctxt);
 
@@ -565,6 +586,7 @@ export async function handleStreamingRequest(
       body: requestBody,
       signal,
       sizePath: 'system-key',
+      responseSizeCap,
       destinationSetBy: 'platform',
       credential,
       scrubber,
@@ -589,8 +611,6 @@ export async function handleStreamingRequest(
     const reader = externalResponse.body?.getReader();
     if (!reader) throw new Error('No readable stream available');
 
-    let generationId: string | undefined;
-    let costInUsd: number | undefined;
     let lastPing = Date.now();
 
     await proxySSE(
@@ -661,6 +681,18 @@ export async function handleStreamingRequest(
       }
       ctxt.res.write(`data: ${JSON.stringify({ error: failure.message })}\n\n`);
       ctxt.res.write('data: [DONE]\n\n');
+      // A stream that passes the size cap has already delivered everything
+      // up to it, so a generation that began is charged, priced by its id
+      // when the usage never arrived, as the non-streamed path does.
+      if (
+        error instanceof OutboundResponseTooLargeError &&
+        generationId != null
+      ) {
+        log.warn(
+          `Streamed response passed the size cap after generation ${generationId} began; charging for the generation`,
+        );
+        return { id: generationId, usage: { cost: costInUsd } };
+      }
       return undefined;
     }
     log.error(

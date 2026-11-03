@@ -40,8 +40,14 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups for every env; routing uses
-                       # Grafana's default notification policy
+  alerting/            # alert rule groups for every env; a rule routes
+                       # through Grafana's default notification policy, or
+                       # to a contact point by `notification_settings.receiver`
+                       # (the response size cap rules in keys-group.json go
+                       # to Techops). local-techops-contact-point.json is the
+                       # local stand-in for that contact point, with no SMTP
+                       # behind it; apply-alerting.sh skips it, as it skips
+                       # any file here with no rule groups
   alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
                        # <env>/rules/ exist in that hosted env only;
                        # apply-alerting.sh pushes contact points first, with
@@ -545,7 +551,9 @@ as true when the query failed:
 - With `noDataState: OK`, wrap the summary in
   `{{ if $values }}…{{ else }}…{{ end }}`. A failed query has no values, and
   for these rules no data never notifies, so the `else` text is what a
-  `DatasourceError` shows: say the query failed and what to check.
+  `DatasourceError` shows: say the query failed and what to check. Do the
+  same for every other annotation the rule's contact point shows: the
+  `Techops` email uses `title` as its subject and `description` as its body.
 - With `noDataState: Alerting`, a rule that found no data has no values
   either, so the template cannot tell the two apart. Open the summary with
   both cases, keyed on the alert name (`DatasourceError` or the rule's title).

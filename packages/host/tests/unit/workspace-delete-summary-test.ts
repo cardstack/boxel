@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import {
   formatWorkspaceDeleteSummary,
   joinWithAnd,
-} from '@cardstack/host/components/operator-mode/workspace-chooser/workspace';
+} from '@cardstack/host/lib/workspace-actions';
 
 module('Unit | workspace delete summary', function () {
   test('it omits zero-count categories', function (assert) {
