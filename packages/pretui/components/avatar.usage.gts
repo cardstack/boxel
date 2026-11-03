@@ -80,7 +80,7 @@ class AvatarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='shape'
-          @description="The corner: 'circle' (an identity disc), 'rounded' (the theme's --radius, for an app or brand mark) or 'square'."
+          @description="The corner: 'circle' (an identity disc), 'rounded' (half the theme's --radius, overridable with --pretui-avatar-radius, for a standalone app or brand mark) or 'square'."
           @options={{SHAPE_OPTIONS}}
           @defaultValue='circle'
           @value={{this.shape}}

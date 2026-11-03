@@ -14,7 +14,7 @@ export interface AvatarSignature {
     /** diameter in px at a 16px root, written as rem; omitted, 24 (1.5rem) */
     size?: number;
     /** the corner: 'circle' (the default, an identity disc), 'rounded' (the
-     * theme's --radius, for an app or brand mark) or 'square' */
+     * half the theme's --radius, for a standalone app or brand mark) or 'square' */
     shape?: 'circle' | 'rounded' | 'square';
   };
   Element: HTMLSpanElement;
@@ -139,7 +139,8 @@ export class Avatar extends Component<AvatarSignature> {
           outline-color: color-mix(in oklch, var(--foreground) 10%, transparent);
         }
         .pretui-avatar[data-shape='rounded'] {
-          border-radius: var(--radius);
+          /* half the card's corner: never the same radius inside a rounded card */
+          border-radius: var(--pretui-avatar-radius, calc(var(--radius) / 2));
         }
         .pretui-avatar[data-shape='square'] {
           border-radius: 0;
