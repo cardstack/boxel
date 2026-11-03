@@ -390,7 +390,10 @@ realm tokens and asks the realm server to end the user's window sessions.
 It then replaces the location with
 `<secure origin>/sign-out#return=<app root>` (an app in a frame signs
 out of its own session only, since the secure origin can't be framed), which forgets the
-window's session, ends it on the server, and goes back to a listed `return`.
+window's session, ends it on the server, and moves straight on to the
+secure origin's `sign-in` page, keeping a listed `return` for the sign-in
+that follows. The app, signed out, would only send the user to that same
+page, so sign-out never loads the app again on the way.
 
 Links already sent keep working through the app: a reset link
 (`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
