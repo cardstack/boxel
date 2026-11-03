@@ -719,6 +719,84 @@ module('Integration | tools | check-correctness', function (hooks) {
     );
   });
 
+  test('reports errors in the order the instances are ranked', async function (assert) {
+    mountModulePrerender();
+    let openCardURL = `${testRealmURL}Milestone/z-open`;
+    await testRealm.write(
+      'Milestone/z-open.json',
+      JSON.stringify(milestoneDocument('Open milestone')),
+    );
+    let renders = announceRendersWithIndexEvents();
+    let announcedBefore = renders.announced;
+    getService('operator-mode-state-service').restore({
+      stacks: [[{ id: openCardURL, format: 'isolated' }]],
+    });
+    // The open instance reads clean until a render at a later generation
+    // records its error, so its error is read after the render wait, after
+    // the other instance's.
+    let laterGeneration = 1_000_000;
+    let renderedLater = false;
+    let document = () => ({
+      data: {
+        type: 'card',
+        id: openCardURL,
+        attributes: {},
+        meta: {
+          adoptsFrom: { module: '../milestone', name: 'Milestone' },
+          generation: laterGeneration,
+        },
+      },
+      ...(renderedLater
+        ? {
+            meta: {
+              renderError: { status: 500, message: 'Invalid time value' },
+            },
+          }
+        : {}),
+    });
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+      async () => {
+        await waitUntil(() => renders.announced > announcedBefore, {
+          timeout: 10_000,
+        });
+        getService('network').virtualNetwork.mount(
+          async (request: Request) => {
+            if (
+              request.url !== openCardURL ||
+              !request.headers.get('Accept')?.includes('card+json')
+            ) {
+              return null;
+            }
+            let response = new Response(JSON.stringify(document()), {
+              headers: { 'content-type': 'application/vnd.card+json' },
+            });
+            if (!renderedLater) {
+              setTimeout(() => {
+                renderedLater = true;
+                getService('message-service').relayRealmEvent({
+                  eventName: 'prerender_html',
+                  invalidations: [`${openCardURL}.json`],
+                  generation: laterGeneration,
+                  realmURL: testRealmURL,
+                });
+              }, 100);
+            }
+            return response;
+          },
+          { prepend: true },
+        );
+      },
+    );
+
+    assert.deepEqual(
+      result.errors.map((error: string) => error.split(': ')[0]),
+      [openCardURL, `${testRealmURL}Milestone/launch`],
+      'the open instance is reported first',
+    );
+  });
+
   test('does not report an instance whose document cannot be read', async function (assert) {
     mountModulePrerender();
     let renders = announceRendersWithIndexEvents();

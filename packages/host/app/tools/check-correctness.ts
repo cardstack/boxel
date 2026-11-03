@@ -313,50 +313,54 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     }
     let moduleGeneration = indexed.generation;
     let instances = await this.readInstances(indexed.invalidations, roomId);
-    let errors: string[] = [];
-    let warnings: string[] = [];
     let awaitingRender = new Map<string, number>();
     for (let { href, read } of instances) {
-      if (read.kind === 'error') {
-        errors.push(read.error);
-      } else if (read.kind === 'clean') {
+      if (read.kind === 'clean') {
         awaitingRender.set(
           href,
           Math.max(moduleGeneration, read.generation ?? moduleGeneration),
         );
       }
     }
-    if (awaitingRender.size === 0) {
-      return { errors, warnings };
+    let rendered = new Set<string>();
+    let rereads = new Map<string, InstanceRead>();
+    if (awaitingRender.size > 0) {
+      rendered = await this.toolService.waitForRenderedHTML(
+        realmURL,
+        new Map(
+          [...awaitingRender].map(([href, generation]) => [
+            `${href}.json`,
+            generation,
+          ]),
+        ),
+        cardIndexingTimeout,
+      );
+      // A render job's event can be dropped when a realm's events back up, so
+      // an instance whose render was not announced is read again too: an
+      // error that has landed is still reported.
+      let hrefs = [...awaitingRender.keys()];
+      let reads = await Promise.all(
+        hrefs.map((href) => this.readInstance(href)),
+      );
+      hrefs.forEach((href, index) => rereads.set(href, reads[index]));
     }
-    let rendered = await this.toolService.waitForRenderedHTML(
-      realmURL,
-      new Map(
-        [...awaitingRender].map(([href, generation]) => [
-          `${href}.json`,
-          generation,
-        ]),
-      ),
-      cardIndexingTimeout,
-    );
-    // A render job's event can be dropped when a realm's events back up, so
-    // an instance whose render was not announced is read again too: an error
-    // that has landed is still reported.
-    await Promise.all(
-      [...awaitingRender.keys()].map(async (href) => {
-        let read = await this.readInstance(href);
-        if (read.kind === 'error') {
-          errors.push(read.error);
-        } else if (
-          read.kind !== 'not-an-instance' &&
-          !rendered.has(`${href}.json`)
-        ) {
-          warnings.push(
-            `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
-          );
-        }
-      }),
-    );
+    // reported in the order the instances were ranked in
+    let errors: string[] = [];
+    let warnings: string[] = [];
+    for (let { href, read: firstRead } of instances) {
+      let read = rereads.get(href) ?? firstRead;
+      if (read.kind === 'error') {
+        errors.push(read.error);
+      } else if (
+        awaitingRender.has(href) &&
+        read.kind !== 'not-an-instance' &&
+        !rendered.has(`${href}.json`)
+      ) {
+        warnings.push(
+          `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
+        );
+      }
+    }
     return { errors, warnings };
   }
 
