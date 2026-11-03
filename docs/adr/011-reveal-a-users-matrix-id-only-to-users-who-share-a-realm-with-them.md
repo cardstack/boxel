@@ -36,7 +36,7 @@ Matrix id includes its localpart, so these rules cover the username alone too.
 ### 1.1. Matrix ids are private by default
 
 Boxel MUST NOT reveal an end user's Matrix id to another end user, except as
-§1.2 and §1.4 allow. This covers every channel, including room membership,
+§1.2, §1.4 and §1.8 allow. This covers every channel, including room membership,
 room state and timelines, user directory search, presence, realm events and
 realm-server API responses.
 
@@ -54,7 +54,7 @@ the user names them.
 An open realm is one readable through a `'*'` or `users` grant. Reading an
 open realm, or subscribing to its events, MUST NOT reveal the reader's Matrix
 id to another end user. It MUST NOT reveal another end
-user's Matrix id to the reader, except as §1.2 and §1.4 allow.
+user's Matrix id to the reader, except as §1.2, §1.4 and §1.8 allow.
 
 ### 1.4. A realm's URL may name its owner
 
