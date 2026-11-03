@@ -15,6 +15,16 @@ import type { LocalPath } from './paths.ts';
 // stale "not here" for `new-dir` would otherwise hide `new-dir/file` even
 // after `new-dir` itself is listed.
 //
+// A listing does not always re-read the directory. For a few seconds after
+// this instance itself wrote into a directory, a listing of it comes back
+// with the cached contents: it neither shows a file a peer created there in
+// the meantime nor drops the stale "not here" for it, and the entry then
+// lasts until the directory's attribute cache expires, up to a minute. So
+// when the refreshed path still reads as missing after its listings, the
+// refresh lists its directories again after each of the recheck delays,
+// stopping once the path exists. A listing made a few seconds after the
+// instance's own write re-reads the directory.
+//
 // Notifications arrive one per written path, so a batch write into one
 // directory would list that directory once per file. Listings are coalesced
 // per directory: while one is running, later requests wait for one pending
@@ -29,7 +39,11 @@ import type { LocalPath } from './paths.ts';
 // instance receives its own NOTIFY too. That is deliberate: realm trees are
 // shallow, bursts coalesce per directory, and the simpler shape is easier to
 // reason about than walking up only when the written name is missing from its
-// parent's entries.
+// parent's entries. A path that still reads as missing afterwards (a peer's
+// write this instance cannot see yet, or a removal) costs one more listing per
+// ancestor at each recheck delay; rechecks of paths in one directory coalesce
+// like any other listings, and a path already being rechecked is not
+// rechecked twice.
 //
 // Containment: one ancestor failing does not stop the rest of the chain —
 // the immediate parent is the listing that matters, and the realm root (first
@@ -42,21 +56,86 @@ interface DirectoryListing {
   pending?: Promise<void>;
 }
 
+// How long after a refresh that left its path missing the refresh lists the
+// path's directories again. A listing made within about three seconds of the
+// instance's own write into the directory can still return its cached
+// contents; the later rechecks cover a longer run of writes into it.
+export const DIRECTORY_RECHECK_DELAYS_MS: readonly number[] = [
+  3_000, 10_000, 30_000,
+];
+
 export class DirectoryViewRefresher {
   #listings = new Map<LocalPath, DirectoryListing>();
+  #rechecking = new Set<LocalPath>();
 
   #listDirectory: (directory: LocalPath) => Promise<void>;
   #timeoutMs: number;
+  #exists: ((path: LocalPath) => Promise<boolean>) | undefined;
+  #recheckDelaysMs: readonly number[];
 
   constructor(
     listDirectory: (directory: LocalPath) => Promise<void>,
-    opts?: { timeoutMs?: number },
+    opts?: {
+      timeoutMs?: number;
+      // Whether a path exists right now. Without it a refresh never rechecks.
+      exists?: (path: LocalPath) => Promise<boolean>;
+      recheckDelaysMs?: readonly number[];
+    },
   ) {
     this.#listDirectory = listDirectory;
     this.#timeoutMs = opts?.timeoutMs ?? 15_000;
+    this.#exists = opts?.exists;
+    this.#recheckDelaysMs =
+      opts?.recheckDelaysMs ?? DIRECTORY_RECHECK_DELAYS_MS;
   }
 
+  // Resolves once the path's directories have been listed. Rechecks, when the
+  // path still reads as missing, run on their own afterwards.
   async refresh(path: LocalPath): Promise<void> {
+    try {
+      await this.#listAncestors(path);
+    } finally {
+      void this.#recheckWhileMissing(path);
+    }
+  }
+
+  async #recheckWhileMissing(path: LocalPath): Promise<void> {
+    if (!this.#exists || this.#rechecking.has(path)) {
+      return;
+    }
+    this.#rechecking.add(path);
+    try {
+      if (await this.#pathExists(path)) {
+        return;
+      }
+      for (let delayMs of this.#recheckDelaysMs) {
+        await sleepUnref(delayMs);
+        try {
+          await this.#listAncestors(path);
+        } catch {
+          // A failed recheck leaves the next one, and the kernel's own cache
+          // expiry, to catch up.
+        }
+        if (await this.#pathExists(path)) {
+          return;
+        }
+      }
+    } finally {
+      this.#rechecking.delete(path);
+    }
+  }
+
+  // An existence check that fails stops the rechecks rather than repeating
+  // them against an adapter that cannot answer.
+  async #pathExists(path: LocalPath): Promise<boolean> {
+    try {
+      return await this.#exists!(path);
+    } catch {
+      return true;
+    }
+  }
+
+  async #listAncestors(path: LocalPath): Promise<void> {
     let errors: unknown[] = [];
     for (let directory of ancestorDirectories(path)) {
       try {
@@ -137,6 +216,14 @@ export class DirectoryViewRefresher {
       );
     });
   }
+}
+
+function sleepUnref(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    let timer = setTimeout(resolve, ms);
+    // In Node, don't let a pending recheck hold the process open.
+    (timer as { unref?: () => void }).unref?.();
+  });
 }
 
 // The directories that lead to `path`, realm root first: for `a/b/c.json`

@@ -2872,11 +2872,14 @@ export class Realm {
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
-    for await (let _entry of this.#adapter.readdir(directory)) {
-      // draining the listing is the whole effect; the entries are not used
-    }
-  });
+  #directoryViewRefresher = new DirectoryViewRefresher(
+    async (directory) => {
+      for await (let _entry of this.#adapter.readdir(directory)) {
+        // draining the listing is the whole effect; the entries are not used
+      }
+    },
+    { exists: (path) => this.#adapter.exists(path) },
+  );
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)

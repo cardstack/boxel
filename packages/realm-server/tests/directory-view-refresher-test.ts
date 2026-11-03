@@ -159,4 +159,90 @@ module(basename(import.meta.filename), function () {
     await refresher.refresh('x.json');
     assert.strictEqual(attempt, 2, 'the second refresh listed again');
   });
+
+  module('a path that still reads as missing', function () {
+    async function waitUntil(condition: () => boolean, timeoutMs = 2_000) {
+      let start = Date.now();
+      while (!condition()) {
+        if (Date.now() - start > timeoutMs) {
+          throw new Error('timed out waiting');
+        }
+        await new Promise((r) => setTimeout(r, 2));
+      }
+    }
+
+    test('is listed again after each delay until it exists', async function (assert) {
+      let listed: string[] = [];
+      let checks = 0;
+      let refresher = new DirectoryViewRefresher(
+        async (dir) => {
+          listed.push(dir);
+        },
+        {
+          // The path reads as missing after the refresh and the first
+          // recheck, and is there after the second.
+          exists: async () => ++checks >= 3,
+          recheckDelaysMs: [5, 5, 5],
+        },
+      );
+
+      await refresher.refresh('PersonCard/bob.json');
+      assert.deepEqual(
+        listed,
+        ['', 'PersonCard'],
+        'the refresh resolves after its own listings',
+      );
+
+      await waitUntil(() => checks >= 3);
+      await new Promise((r) => setTimeout(r, 30));
+      assert.deepEqual(
+        listed,
+        ['', 'PersonCard', '', 'PersonCard', '', 'PersonCard'],
+        'two rechecks list the directories again, and none follow once the path exists',
+      );
+      assert.strictEqual(checks, 3);
+    });
+
+    test('is rechecked at most once per delay, and not at all once it exists', async function (assert) {
+      let listed: string[] = [];
+      let refresher = new DirectoryViewRefresher(
+        async (dir) => {
+          listed.push(dir);
+        },
+        { exists: async () => true, recheckDelaysMs: [5, 5] },
+      );
+
+      await refresher.refresh('bob.json');
+      await new Promise((r) => setTimeout(r, 30));
+      assert.deepEqual(listed, [''], 'a path that exists is not rechecked');
+
+      let missing = new DirectoryViewRefresher(
+        async (dir) => {
+          listed.push(dir);
+        },
+        { exists: async () => false, recheckDelaysMs: [5, 5] },
+      );
+      listed = [];
+      await missing.refresh('gone.json');
+      // A second refresh of the same path while it is being rechecked
+      // shares those rechecks rather than starting more.
+      await missing.refresh('gone.json');
+      await new Promise((r) => setTimeout(r, 40));
+      assert.deepEqual(
+        listed,
+        ['', '', '', ''],
+        'two refreshes plus one recheck per delay, then the rechecks stop',
+      );
+    });
+
+    test('is not rechecked without an existence check', async function (assert) {
+      let listed: string[] = [];
+      let refresher = new DirectoryViewRefresher(async (dir) => {
+        listed.push(dir);
+      });
+      await refresher.refresh('bob.json');
+      await new Promise((r) => setTimeout(r, 20));
+      assert.deepEqual(listed, ['']);
+    });
+  });
 });
