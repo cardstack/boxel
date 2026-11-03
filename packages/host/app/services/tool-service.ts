@@ -179,8 +179,15 @@ interface ValidationStep {
 // the timeout) and the validation (with an invalid result for a bad call) can
 // try to report. Each side checks and sets this synchronously before its
 // send, so exactly one result reaches the room.
+//
+// When the timeout fires while the validation's send is still pending, the
+// drain leaves that send's outcome to the validation (`sendLeftToValidation`),
+// so a send that then fails still falls back to a failed result. A send that
+// fails before the timeout makes the validation throw, and the drain handles
+// that like any other throw.
 interface ValidationReport {
   reportedBy?: 'validation' | 'timeout';
+  sendLeftToValidation?: boolean;
 }
 
 // e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at +2950ms
@@ -880,10 +887,14 @@ export default class ToolService extends Service {
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
-            // The validation found the call invalid and started sending that
-            // result before the timeout fired. That result is the terminal
-            // one, so a failed result here would contradict it.
-            if (report.reportedBy === 'validation') {
+            // The validation found the call invalid and its send of that
+            // result is still pending. That result is the terminal one, so a
+            // failed result here would contradict it; the validation handles
+            // a send that fails. (A send that already failed made the
+            // validation throw, so `validationSettled` is true and the throw
+            // is handled below.)
+            if (report.reportedBy === 'validation' && !validationSettled) {
+              report.sendLeftToValidation = true;
               console.warn(
                 `[tool-validate] "${messageTool.name}" (${messageTool.id}) timed out while sending its invalid result; no failed result is sent for the timeout (${error.message})`,
               );
@@ -901,32 +912,7 @@ export default class ToolService extends Service {
               )}]`,
               e,
             );
-            try {
-              await this.matrixService.sendToolResultEvent({
-                roomId: roomId!,
-                invokedToolFromEventId:
-                  this.getCurrentEventIdForCommandRequest(
-                    roomId!,
-                    messageTool.id,
-                  ) ?? messageTool.eventId,
-                toolCallId: messageTool.id!,
-                status: 'failed',
-                failureReason: error.message,
-                context:
-                  await this.operatorModeStateService.getSummaryForAIBot(),
-              });
-            } catch (sendError) {
-              console.error(
-                'could not send failed tool result event to the room',
-                sendError,
-              );
-              // The room never got a terminal result, so nothing else will
-              // clear this tool's spinner — the local failed state at least
-              // restores the Retry affordance in this tab.
-              if (messageTool.id) {
-                this.matrixService.failedToolState.set(messageTool.id, error);
-              }
-            }
+            await this.sendFailedValidationResult(roomId!, messageTool, error);
             continue;
           } finally {
             clearTimeout(watchdog);
@@ -1701,6 +1687,37 @@ export default class ToolService extends Service {
       .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
+  // Sends a failed result for a validation that threw or timed out. When that
+  // send fails too, the room never gets a terminal result, so nothing else
+  // will clear the tool's spinner: the local failed state at least restores
+  // the Retry affordance in this tab.
+  private async sendFailedValidationResult(
+    roomId: string,
+    messageTool: MessageTool,
+    error: Error,
+  ) {
+    try {
+      await this.matrixService.sendToolResultEvent({
+        roomId,
+        invokedToolFromEventId:
+          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+          messageTool.eventId,
+        toolCallId: messageTool.id!,
+        status: 'failed',
+        failureReason: error.message,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    } catch (sendError) {
+      console.error(
+        'could not send failed tool result event to the room',
+        sendError,
+      );
+      if (messageTool.id) {
+        this.matrixService.failedToolState.set(messageTool.id, error);
+      }
+    }
+  }
+
   // The validation timeout. Tests that deliberately hold a validation raise
   // it, so the hold does not use up the time the rest of the validation has.
   validateTimeoutMs = VALIDATE_TIMEOUT_MS;
@@ -1873,14 +1890,31 @@ export default class ToolService extends Service {
           command.message.roomId,
           command.toolRequest.id,
         ) ?? command.eventId;
-      await this.matrixService.sendToolResultEvent({
-        roomId: command.message.roomId,
-        invokedToolFromEventId,
-        toolCallId: command.toolRequest.id!,
-        status: 'invalid',
-        failureReason: error,
-        context,
-      });
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId: command.message.roomId,
+          invokedToolFromEventId,
+          toolCallId: command.toolRequest.id!,
+          status: 'invalid',
+          failureReason: error,
+          context,
+        });
+      } catch (sendError) {
+        if (!report.sendLeftToValidation) {
+          // The drain is still waiting, and reports the throw.
+          throw sendError;
+        }
+        // The drain timed out during this send and left its outcome here.
+        console.error(
+          `[tool-validate] "${command.name}" (${command.id}) could not send its invalid result after the drain's validation timeout; sending a failed result instead`,
+          sendError,
+        );
+        await this.sendFailedValidationResult(
+          command.message.roomId,
+          command,
+          sendError instanceof Error ? sendError : new Error(String(sendError)),
+        );
+      }
       return false;
     }
 

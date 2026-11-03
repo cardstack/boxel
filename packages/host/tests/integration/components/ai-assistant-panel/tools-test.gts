@@ -3077,6 +3077,61 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     );
   });
 
+  test('a call whose invalid result cannot be sent still gets a failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The call is invalid because its command module fails to load, and the
+    // send of that invalid result fails.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let matrixService = getService('matrix-service');
+    let originalSend = matrixService.sendToolResultEvent;
+    let refusedSends = 0;
+    (matrixService as any).sendToolResultEvent = async function (
+      params: { status: string },
+      ...rest: unknown[]
+    ) {
+      if (params.status === 'invalid') {
+        refusedSends++;
+        throw new Error('simulated invalid result send failure');
+      }
+      return (originalSend as any).call(matrixService, params, ...rest);
+    };
+    let fail = failCommandModuleImport();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      fail.restore();
+      (matrixService as any).sendToolResultEvent = originalSend;
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(refusedSends, 1, 'the invalid result was refused');
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'the call still gets a terminal result',
+    );
+    assert.true(
+      String(hostToolResults[0]?.content.failureReason).includes(
+        'simulated invalid result send failure',
+      ),
+      `the reason names the send failure: ${hostToolResults[0]?.content.failureReason}`,
+    );
+  });
+
   test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let otherAgentContext = { context: { agentId: 'another-agent' } };
