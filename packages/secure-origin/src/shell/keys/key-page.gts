@@ -9,7 +9,9 @@
 // Each key also lists where it may be sent, its grants, with the approvals
 // that send it there; removing a grant lists those first, then revokes them.
 // Use with a card sets a key up for a card's requests ahead of the card
-// asking, on the approve page.
+// asking, on the approve page. Usage and limits opens what the key spent
+// against its budgets, who used it and how, and its limits, which the owner
+// changes there.
 // Each key that can be shared says whether people who aren't signed in can
 // use it, with its optional anonymous cap, and Change opens a panel to turn
 // that on or off and set the cap. It is the key's own setting, its owner's
@@ -76,6 +78,7 @@ import ServiceAccountFields, {
   type ServiceAccountReplacing,
 } from './service-account-fields.gts';
 import KeyUse from './key-use.gts';
+import KeyUsagePanel from './key-usage-panel.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OAuthKeyStatus from './oauth-key-status.gts';
@@ -134,6 +137,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                           @bindings={{this.state.bindings}}
                           @onRemove={{this.removeGrant}}
                         />
+                        {{#if (this.hasUsage key)}}
+                          <KeyUsagePanel @key={{key}} @api={{@api}} />
+                        {{/if}}
                         <div class='tile-actions'>
                           {{#unless (eq key.kind 'oauth-connection')}}
                             <Button
@@ -596,6 +602,10 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
 
   // A key a card's request can send: any but an OAuth app people sign in
   // through, which only connects accounts.
+  // An OAuth client is never sent anywhere itself, so it has no use to show
+  // and no limits to set; its connections do.
+  private hasUsage = (key: ListedKey) => key.kind !== 'oauth-client';
+
   private usableWithCard = (key: ListedKey) =>
     key.kind !== 'oauth-client' ||
     key.oauth?.client?.grantType === 'client_credentials';

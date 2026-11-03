@@ -14,7 +14,7 @@ import {
   type OperationTemplate,
 } from './types.ts';
 import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
-import { emitKeyUse, type KeyUseOutcome } from './telemetry.ts';
+import { emitKeyUse, recordSafely, type KeyUseOutcome } from './telemetry.ts';
 import { destinationCovers } from './destination-covers.ts';
 
 export { destinationCovers };
@@ -835,6 +835,33 @@ export interface CallApiFilledSlot {
   // before anything is filled into it, must be under this destination.
   destination: string;
   grant?: CallApiGrantUse;
+  // The share or personal key this slot's use is counted against, which the
+  // executor hands back to the sender's `recordUse` unread.
+  countsAgainst?: CallApiUseSubject;
+}
+
+// A share, or one of a user's own keys, whose use is recorded.
+export interface CallApiUseSubject {
+  kind: 'share' | 'key';
+  id: string;
+}
+
+// One invocation's use of the shares and keys filling its slots, as the
+// executor reports it to the sender once the slots are filled: how it ended,
+// and for whom. A refusal raised while the slots are being filled is the
+// sender's own to record, since only it knows which share or key refused.
+export interface CallApiUse {
+  realmURL: string;
+  operation: string;
+  caller: string | null;
+  mode: CallApiMode;
+  // The origin and path of the request as declared, or null when it was
+  // refused before one was built.
+  url: string | null;
+  outcome: KeyUseOutcome;
+  code?: string;
+  status?: number;
+  countsAgainst: CallApiUseSubject[];
 }
 
 // The realm server's side of a `callApi`. `fill` finds the binding for every
@@ -853,8 +880,14 @@ export interface CallApiFilledSlot {
 // every slot for this caller invoking from a card, and what would fix it if
 // not, or `undefined` where no approval could make it fill. A sender that
 // can't tell leaves it out.
+//
+// `recordUse` keeps the record of each invocation that got as far as filled
+// slots, against the shares and keys `fill` said they count against. It
+// describes what happened and never changes it, so whatever it throws is
+// logged and dropped.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
+  recordUse?(use: CallApiUse): Promise<void>;
   readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
   send(
     request: CallApiRequest,
@@ -1173,11 +1206,14 @@ export async function callApiOperation(
 ): Promise<OperationCallApiResult> {
   let declared = definition.callApi;
   let id = request.target.kind === 'instance' ? request.target.url : undefined;
-  let refuse = (
+  // The slots' credentials once `fill` has found them, whose shares and keys
+  // each outcome from then on is recorded against.
+  let filled: CallApiFilledSlot[] = [];
+  let refuse = async (
     error: ConstructorParameters<typeof OperationFailure>[0],
     url?: string,
-  ): never => {
-    recordKeyUse(request, invocation, url, {
+  ): Promise<never> => {
+    await recordKeyUse(request, invocation, url, filled, {
       outcome: 'refused',
       code: error.code,
     });
@@ -1233,7 +1269,6 @@ export async function callApiOperation(
   // A slot is filled only by the key a binding names: one its owner approved
   // for this operation in this realm. The binding is found before anything is
   // built, so a request nobody approved reads nothing of the card either.
-  let filled: CallApiFilledSlot[] = [];
   if (declared.slots.length > 0) {
     let type = await invocation.type();
     if (!type) {
@@ -1322,12 +1357,12 @@ export async function callApiOperation(
     if (error instanceof OperationFailure) {
       return refuse(error.error, built.url);
     }
-    recordKeyUse(request, invocation, built.url, {
+    await recordKeyUse(request, invocation, built.url, filled, {
       outcome: 'failed',
     });
     throw error;
   }
-  recordKeyUse(request, invocation, built.url, {
+  await recordKeyUse(request, invocation, built.url, filled, {
     outcome: 'sent',
     status: response.status,
   });
@@ -1371,22 +1406,58 @@ function describeSlots(slots: CallApiSlot[]): string {
     .join(' and ');
 }
 
-// One line per invocation on the key-use channel. The URL is the origin and
-// path of the request as declared, never one a credential was filled into,
-// and never its query string, which can carry a value of the caller's.
-function recordKeyUse(
+// One line per invocation on the key-use channel, and, once slots are filled,
+// the sender's record against the shares and keys filling them. The URL is the
+// origin and path of the request as declared, never one a credential was
+// filled into, and never its query string, which can carry a value of the
+// caller's.
+async function recordKeyUse(
   request: OperationRequest,
   invocation: CallApiInvocation,
   url: string | undefined,
+  filled: CallApiFilledSlot[],
   outcome: { outcome: KeyUseOutcome; code?: string; status?: number },
-) {
-  emitKeyUse({
+): Promise<void> {
+  let event = {
     operation: request.name,
     realm: invocation.realmURL,
     caller: request.actor || null,
     url: url ? originAndPath(url) : null,
     ...outcome,
-  });
+  };
+  emitKeyUse(event);
+  let countsAgainst = useSubjects(filled);
+  let recordUse = invocation.sender?.recordUse;
+  if (!recordUse || countsAgainst.length === 0) {
+    return;
+  }
+  try {
+    await recordUse({
+      realmURL: event.realm,
+      operation: event.operation,
+      caller: event.caller,
+      mode: invocation.mode,
+      url: event.url,
+      ...outcome,
+      countsAgainst,
+    });
+  } catch (e: unknown) {
+    recordSafely('key use record', () => {
+      throw e;
+    });
+  }
+}
+
+// Each share and key the filled slots count against, once: a call whose two
+// slots are filled from one share is one use of it.
+function useSubjects(filled: CallApiFilledSlot[]): CallApiUseSubject[] {
+  let seen = new Map<string, CallApiUseSubject>();
+  for (let { countsAgainst } of filled) {
+    if (countsAgainst) {
+      seen.set(`${countsAgainst.kind}:${countsAgainst.id}`, countsAgainst);
+    }
+  }
+  return [...seen.values()];
 }
 
 function originAndPath(url: string): string {

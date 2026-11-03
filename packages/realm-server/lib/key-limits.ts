@@ -24,6 +24,7 @@ import {
   MAX_KEY_LIMIT,
   type KeyLimits,
 } from './key-limit-settings.ts';
+import { refusedFrom } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
 // Limits: how much of a key anyone spends, set by the key's owner. No credits
@@ -422,6 +423,47 @@ export async function chargeInteractiveCall(
   }
 }
 
+// What a share or key has spent against each of its budgets this UTC day and
+// month, from the limiter's own counters, with the budget in force and when
+// the period starts over. Counters that can't be read throw, so the usage
+// view says it couldn't load rather than show nothing spent.
+export type BudgetUse = Record<
+  BudgetPeriod,
+  { used: number; budget: number; resetsAt: string }
+>;
+
+export async function budgetUse(
+  dbAdapter: DBAdapter,
+  subject: LimitSubject,
+  limits: KeyLimits,
+): Promise<BudgetUse> {
+  let store = storeOf(dbAdapter);
+  let use = {} as BudgetUse;
+  let budgets: { period: BudgetPeriod; limit: number }[] = [
+    { period: 'day', limit: limits.dailyBudget },
+    { period: 'month', limit: limits.monthlyBudget },
+  ];
+  for (let budget of budgets) {
+    // Read against the largest budget a column holds, so a share already over
+    // a budget its owner lowered still reports what it spent.
+    let outcome = await store.budget(budgetKey(subject), {
+      period: budget.period,
+      limit: MAX_KEY_LIMIT,
+    });
+    if (!outcome.admitted) {
+      throw new Error(
+        `the budget counters for ${subject.kind} ${subject.id} couldn't be read`,
+      );
+    }
+    use[budget.period] = {
+      used: outcome.used,
+      budget: budget.limit,
+      resetsAt: new Date(outcome.resetsAt * 1000).toISOString(),
+    };
+  }
+  return use;
+}
+
 // What readiness answers for the limits of the shares and keys that would
 // fill a call's slots: `over-budget` when a budget is used up, `rate-limited`
 // when the caller's bucket is empty, and `ready` otherwise. Nothing is taken
@@ -460,11 +502,28 @@ export async function limitReadiness(
   return answer;
 }
 
+// The refusal for a call over one of `limited`'s limits, marked as that share's
+// or key's, so the use record counts it there and not against the call's
+// other shares or keys.
 function refuse(
   call: LimitedCall,
   limited: LimitedSubject,
   outcome: Exclude<TokenBucketOutcome | BudgetOutcome, { admitted: true }>,
   limit: Limit,
+): OperationFailure {
+  return refusedFrom(
+    limited.subject,
+    limitRefusal(call, limited, outcome, limit),
+  );
+}
+
+function limitRefusal(
+  call: LimitedCall,
+  limited: LimitedSubject,
+  outcome: Exclude<TokenBucketOutcome | BudgetOutcome, { admitted: true }>,
+  limit:
+    | { rateBurst: number; rateRefillPerMinute: number }
+    | { period: BudgetPeriod; budget: number },
 ): OperationFailure {
   let { subject } = limited;
   let ids = {

@@ -17,10 +17,13 @@ import {
 } from './realm-api.ts';
 import {
   expectedChangedSeeds,
+  pipelineApprovalTargets,
   promptCardIds,
+  seededCardSeeds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
+import { seedPipelineApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -1031,6 +1034,7 @@ function classify(
   analysis: RunResult['analysis'] & object,
   promptsSent: number,
   promptsTotal: number,
+  expectsNoWrites = false,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
   // A run the runner cut short is a failure whatever is on screen when it
@@ -1089,6 +1093,28 @@ function classify(
     return { verdict: 'host-failure', reasons };
   }
   let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  // A conversation-only evaluation is about what the assistant says and which
+  // tools it calls; its criteria forbid writing anything, so a write is the
+  // failure and no card needs to render. `cardReasons` then holds any seeded
+  // card that no longer matches its seed, which catches a change made by a
+  // tool the write counts don't know.
+  if (expectsNoWrites) {
+    reasons.push(...cardReasons);
+    if (writes > 0) {
+      reasons.push(
+        `the evaluation expects no writes, but ${writes} file write(s) were applied`,
+      );
+    }
+    if (promptsSent < promptsTotal) {
+      reasons.push(
+        `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+      );
+    }
+    return {
+      verdict: reasons.length === 0 ? 'pass' : 'model-failure',
+      reasons,
+    };
+  }
   if (writes === 0) {
     reasons.push(
       'no file was written (no applied run-realm-code or other writing tool call)',
@@ -1236,6 +1262,18 @@ async function runModel(
           );
         }
       }
+      if (evaluation.pipelineApprovals?.length) {
+        setStep('approve operations for pipelines only');
+        await seedPipelineApprovals(
+          pipelineApprovalTargets(evaluation, realmUrl),
+          {
+            user: credentials.userId,
+            owner: client,
+            password: PASSWORD,
+            log: (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+          },
+        );
+      }
     }
     setStep('open room');
     result.roomId = await openRoom(page);
@@ -1361,14 +1399,33 @@ async function runModel(
           ? [`${seed.path} is expected to change but no longer exists`]
           : [],
     );
+    // A conversation-only evaluation fails on any change to a seeded card,
+    // whichever tool made it, not only on the writes the room analysis counts.
+    if (evaluation?.expectsNoWrites) {
+      let seeds = await Promise.all(
+        seededCardSeeds(evaluation, checkRealmUrl).map((seed) =>
+          seedState(checkClient, checkRealmUrl, seed, 'data'),
+        ),
+      );
+      for (let { seed, state } of seeds) {
+        if (state !== 'same') {
+          cardReasons.push(
+            `${seed.path} was ${state === 'missing' ? 'removed' : 'changed'}, and the evaluation expects no writes`,
+          );
+        }
+      }
+    }
     let indexProblems = await Promise.all(
       changed.map((state) =>
         waitForIndexedChange(checkClient, checkRealmUrl, state),
       ),
     );
     cardReasons.push(...indexProblems.filter((p): p is string => !!p));
-    let rendered =
-      expected.length === 0
+    // A conversation-only evaluation renders no card of its own, so there is
+    // nothing to wait for.
+    let rendered = evaluation?.expectsNoWrites
+      ? { cardId: undefined, reasons: [], where: undefined }
+      : expected.length === 0
         ? await findRenderedCard(page, result.realmUrl, {
             seeded: seededCards,
           })
@@ -1400,6 +1457,7 @@ async function runModel(
       result.analysis,
       result.promptsSent,
       prompts.length,
+      evaluation?.expectsNoWrites ?? false,
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;

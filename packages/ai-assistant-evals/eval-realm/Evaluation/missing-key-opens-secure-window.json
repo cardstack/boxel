@@ -11,7 +11,8 @@
         "notes": "The browser's popup blocker may block the window, which shows the app's \"Open the secure window\" button; either outcome passes criterion 2. The seed has no theme and is not graded on design.",
         "cardThumbnailURL": null
       },
-      "secondsPerPrompt": 200
+      "secondsPerPrompt": 200,
+      "expectsNoWrites": true
     },
     "relationships": {
       "cardInfo.theme": {

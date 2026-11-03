@@ -13,6 +13,7 @@
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
+import { SHARE_OWNER } from './key-seed.ts';
 import { loginWithPassword } from './matrix-api.ts';
 
 export const DEFAULT_USERS = [1, 2, 3, 4, 5].map(
@@ -76,7 +77,9 @@ function register(username: string, password: string): Promise<void> {
 async function main() {
   let checkOnly = process.argv.slice(2).includes('--check');
   let password = process.env.EVAL_PASSWORD ?? 'password';
-  let users = evalUsers();
+  // The share owner signs in only to seed an evaluation's shares, never to
+  // drive a browser, but a missing one fails that evaluation just as late.
+  let users = [...new Set([...evalUsers(), SHARE_OWNER])];
   let missing: string[] = [];
 
   for (let username of users) {
