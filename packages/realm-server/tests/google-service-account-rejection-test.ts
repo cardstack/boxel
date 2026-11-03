@@ -367,10 +367,25 @@ module(basename(import.meta.filename), function (hooks) {
         {
           event: 'key-rejected',
           key: key.id,
+          host: `127.0.0.1:${VENDOR_PORT}`,
           realm: realmURL.href,
           share: null,
         },
       ],
+    );
+    assert.deepEqual(
+      events.filter((e) => e.event === 'mint-failed'),
+      [
+        {
+          event: 'mint-failed',
+          key: key.id,
+          kind: 'google-service-account',
+          host: `127.0.0.1:${VENDOR_PORT}`,
+          realm: realmURL.href,
+          reason: 'rejected',
+        },
+      ],
+      'the refused mint is recorded against its vendor',
     );
   });
 
@@ -573,6 +588,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await readiness('values'), 'ready');
     assert.strictEqual((await invoke('values')).status, 200);
     assert.deepEqual(await notices(), []);
+    assert.deepEqual(
+      events
+        .filter((e) => e.event === 'mint-failed')
+        .map((e) => e.event === 'mint-failed' && [e.kind, e.reason]),
+      [['google-service-account', 'unavailable']],
+      'one unavailable mint is recorded for the call that failed',
+    );
   });
 
   test("a refusal that isn't about the key refuses the call and leaves the key active", async function (assert) {

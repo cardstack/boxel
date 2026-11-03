@@ -58,6 +58,7 @@ import {
   credentialRejected,
   DEFAULT_PROBE_INTERVAL_MS,
   emitKeyGrantEvent,
+  hostOf,
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
@@ -101,7 +102,15 @@ import { recordFillRefusal } from './key-uses.ts';
 //   only. Approving interactive use is the owner's choice for the whole
 //   confirmation; a share's first interactive approval also sets the share's
 //   daily budget, since every reader of its realm can then spend it.
-//   Anonymous use is not offered.
+// - **Anonymous use, of a key whose owner allows it.** A caller who isn't
+//   signed in, whom the realm's policy admits to the operation, is served by
+//   an interactive share binding only when the key the share holds allows
+//   anonymous use, which its owner decides for the key itself
+//   (`user-keys.ts`). Any other binding refuses them
+//   `anonymous-use-not-approved`. A `{{userKey}}` slot never fills for such a
+//   caller. A binding itself is never approved for anonymous use: whether
+//   visitors are served follows the policy and the key, so the two can't
+//   disagree binding by binding.
 // - **Within the owner's limits.** An interactive call counts against the
 //   limits of the share or key filling each slot, and is refused
 //   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
@@ -1049,7 +1058,8 @@ function refusal(
   code:
     | 'share-suspended'
     | 'binding-needs-reapproval'
-    | 'interactive-use-not-approved',
+    | 'interactive-use-not-approved'
+    | 'anonymous-use-not-approved',
   title: string,
   detail: string,
   slot: CallApiSlot,
@@ -1143,6 +1153,9 @@ export interface CheckedSlotBinding {
   approval_id: string;
   state: KeyBindingState;
   share_state: string | null;
+  // Whether the key the binding's share holds allows anonymous use; null for
+  // a personal key's binding, or a share with no key.
+  share_key_anonymous: boolean | null;
   share_key_id: string | null;
   share_owner: string | null;
   grant_state: string | null;
@@ -1179,6 +1192,7 @@ export type SlotCheck =
         | 'share-suspended'
         | 'binding-needs-reapproval'
         | 'interactive-use-not-approved'
+        | 'anonymous-use-not-approved'
         | 'credential-rejected'
         | 'key-rejected';
     };
@@ -1187,7 +1201,9 @@ export type SlotCheck =
 // approved in this realm, for this operation (and this card, when it is
 // approved per instance), by the caller for a `{{userKey}}` slot; its share,
 // if it has one, not suspended; its fingerprint the one the request has now;
-// approved for how the invocation arrived; its grant still there for its key;
+// approved for how the invocation arrived, and for a caller who isn't signed
+// in, its share's key allowing anonymous use; its grant still there for its
+// key;
 // that grant not rejected by the vendor, unless its probe is due; and the
 // grant's key not a service-account key Google refused, unless the key's
 // probe is due. The first check a slot fails is its answer.
@@ -1207,7 +1223,7 @@ export async function checkSlots(
   for (let slot of request.slots) {
     let [binding] = (await query(dbAdapter, [
       `SELECT b.id, b.slot, b.key_id, b.share_id, g.id AS grant_id, b.grant_id AS bound_grant_id, b.approved_by, b.interactive, b.fingerprint, b.approval_id, b.state,
-              s.state AS share_state, s.key_id AS share_key_id, s.owner AS share_owner,
+              s.state AS share_state, (SELECT sk.anonymous FROM user_keys sk WHERE sk.id = s.key_id) AS share_key_anonymous, s.key_id AS share_key_id, s.owner AS share_owner,
               g.state AS grant_state, g.destination AS grant_destination,
               k.id AS grant_key_id, k.kind AS key_kind, k.state AS key_state,
               `,
@@ -1251,6 +1267,11 @@ function checkSlot(
   }
   if (lookup.mode === 'interactive' && !binding.interactive) {
     return { slot, binding, refused: 'interactive-use-not-approved' };
+  }
+  // A personal key's binding has no share, so a `{{userKey}}` slot reaching
+  // here for such a caller is refused too.
+  if (lookup.anonymous && !binding.share_key_anonymous) {
+    return { slot, binding, refused: 'anonymous-use-not-approved' };
   }
   if (!binding.grant_id) {
     return { slot, binding, refused: 'binding-not-approved' };
@@ -1364,6 +1385,14 @@ async function checkedBindings(
             slot,
           ),
         );
+      case 'anonymous-use-not-approved':
+        throw refusal(
+          401,
+          'anonymous-use-not-approved',
+          'Anonymous use not approved',
+          `operation "${lookup.operation}" fills the credential slot "${slot.name}" from a key whose owner hasn't allowed people who aren't signed in to use it, so it is used only for signed-in callers. Sign in to use it`,
+          slot,
+        );
       case 'credential-rejected':
         throw refusedFrom(
           limitSubjectOf(check.binding),
@@ -1405,6 +1434,7 @@ async function checkedBindings(
       realmURL: lookup.realmURL,
       operation: lookup.operation,
       caller: lookup.caller,
+      ...(lookup.anonymous ? { anonymous: lookup.anonymous } : {}),
       subjects: checked.map(({ binding }) => limitSubjectOf(binding)),
     });
   }
@@ -1780,6 +1810,14 @@ async function mintedToken(
     ) {
       throw error;
     }
+    emitKeyGrantEvent({
+      event: 'mint-failed',
+      key: opened.keyId,
+      kind: opened.kind,
+      host: hostOf(opened.destination),
+      realm: call.realmURL,
+      reason: error.reason,
+    });
     if (call.keyProbe) {
       emitKeyGrantEvent({
         event: 'key-probe',

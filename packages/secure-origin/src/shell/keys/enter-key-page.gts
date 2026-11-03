@@ -17,6 +17,14 @@
 // operation that sends to a Google API says when a service account fits,
 // without choosing one.
 //
+// A key that can be sent in a card's request, a secret or a service account,
+// also says whether people who aren't signed in may use it: its owner's
+// decision about the key itself, not about any one workspace. Ticked, they
+// can use it wherever a workspace it is shared into lets them use its cards,
+// up to an optional anonymous cap on their calls a day, all together, across
+// every such workspace. It can be changed later on the key page. An OAuth app
+// isn't asked: people connect their own accounts through it.
+//
 // This is the one page a new key's value is typed into. Reached from the key
 // page, at `keys/add`, it goes back there once the key is added, rather than
 // closing the window. Reached from the approve page's "Add a new key"
@@ -44,6 +52,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
+import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
 import {
   failureMessage,
   isSignedOut,
@@ -232,6 +241,16 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @onChange={{this.setOAuth}}
               />
             {{/if}}
+            {{#unless this.isOAuthClient}}
+              <AnonymousUseFields
+                @anonymous={{this.form.anonymous}}
+                @cap={{this.form.cap}}
+                @agreement='Allow people who aren’t signed in to use this key'
+                @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
+                @onToggle={{this.toggleAnonymous}}
+                @onCap={{this.setCap}}
+              />
+            {{/unless}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -311,6 +330,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     name: '',
     value: '',
     clientId: '',
+    // Whether people who aren't signed in may use the key, and its anonymous
+    // cap as typed.
+    anonymous: false,
+    cap: '',
     oauth: trackedObject<OAuthClientForm>({
       provider: 'github',
       grantType: 'authorization_code',
@@ -415,6 +438,9 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     if (saving || !name.trim()) {
       return true;
     }
+    if (this.anonymousCap === undefined) {
+      return true;
+    }
     if (this.isServiceAccount) {
       return !this.serviceAccount.value;
     }
@@ -486,6 +512,23 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     this.form.error = undefined;
   };
 
+  // The anonymous cap to send: none for an OAuth app, which isn't asked.
+  private get anonymousCap() {
+    return this.isOAuthClient
+      ? null
+      : anonymousCapOf(this.form.anonymous, this.form.cap);
+  }
+
+  private toggleAnonymous = () => {
+    this.form.anonymous = !this.form.anonymous;
+    this.form.error = undefined;
+  };
+
+  private setCap = (value: string) => {
+    this.form.cap = value;
+    this.form.error = undefined;
+  };
+
   private setName = (value: string) => {
     this.form.name = value;
     this.form.error = undefined;
@@ -518,6 +561,10 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
           : await addKey(this.args.api.config, {
               name: this.form.name.trim(),
               entered: entered!,
+              anonymous: this.form.anonymous,
+              ...(this.anonymousCap != null
+                ? { anonymousDailyCap: this.anonymousCap }
+                : {}),
             });
       // The value is gone from the page the moment the server has it.
       this.form.value = '';

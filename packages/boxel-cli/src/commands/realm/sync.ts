@@ -652,7 +652,7 @@ export async function sync(
   realmUrl: string,
   options: SyncCommandOptions,
 ): Promise<SyncResult> {
-  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  const resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options.profileManager,
   });
   if (!resolvedRealm.ok) {

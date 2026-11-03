@@ -12,6 +12,11 @@
 // asking, on the approve page. Usage and limits opens what the key spent
 // against its budgets, who used it and how, and its limits, which the owner
 // changes there.
+// Each key that can be shared says whether people who aren't signed in can
+// use it, with its optional anonymous cap, and Change opens a panel to turn
+// that on or off and set the cap. It is the key's own setting, its owner's
+// decision whatever workspaces it is shared into; a workspace's policy says
+// only whether such people can use its cards there.
 // It is what the secure origin shows at its own address and at `keys`.
 // No key's value is ever shown, here or anywhere: a key is replaced, never
 // read back. Removing a key first lists the shares it would suspend, and
@@ -29,6 +34,7 @@ import {
   listKeys,
   removeGrant,
   replaceKey,
+  setAnonymousUse,
   sharesOfKey,
   unshare,
   type KeyBinding,
@@ -45,6 +51,10 @@ import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
+import AnonymousUseFields, {
+  anonymousCapOf,
+  servesVisitors,
+} from './anonymous-use-fields.gts';
 import {
   failureMessage,
   isSignedOut,
@@ -76,6 +86,8 @@ import OAuthKeyStatus from './oauth-key-status.gts';
 type Action =
   | { name: 'none' }
   | { name: 'replacing'; key: UserKey; shares: KeyShare[] | undefined }
+  // Changing whether people who aren't signed in can use the key.
+  | { name: 'anonymous-use'; key: UserKey }
   // `shares` is undefined until the list of shares the key is in has loaded.
   | { name: 'deleting'; key: UserKey; shares: KeyShare[] | undefined };
 
@@ -106,7 +118,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                   <li class='item' data-test-key-row={{key.name}}>
                     <div class='entry'>
                       <KeyTile @key={{key}}>
-                        <KeyUse @key={{key}} @onUnshare={{this.unshare}}>
+                        <KeyUse
+                          @key={{key}}
+                          @onUnshare={{this.unshare}}
+                          @onChangeAnonymousUse={{if
+                            (this.servesVisitors key)
+                            this.startAnonymousUse
+                          }}
+                        >
                           <OAuthKeyStatus
                             @key={{key}}
                             @onReconnect={{this.reconnect}}
@@ -210,6 +229,38 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                               @loading={{this.form.saving}}
                               data-test-key-replace-save
                             >Replace key</Button>
+                          </div>
+                        </form>
+                      {{else if (this.isActing 'anonymous-use' key)}}
+                        <form
+                          class='panel'
+                          novalidate
+                          {{on 'submit' this.saveAnonymousUse}}
+                          data-test-key-anonymous-use-form
+                        >
+                          <AnonymousUseFields
+                            @anonymous={{this.form.anonymous}}
+                            @cap={{this.form.cap}}
+                            @agreement='Allow people who aren’t signed in to use this key'
+                            @note='Only where a workspace you share it into lets them use its cards. Their calls are made with your key and count against your quota.'
+                            @onToggle={{this.toggleAnonymous}}
+                            @onCap={{this.setCap}}
+                          />
+                          <div class='panel-actions'>
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              @size='small'
+                              {{on 'click' this.cancel}}
+                            >Cancel</Button>
+                            <Button
+                              type='submit'
+                              @kind='primary'
+                              @size='small'
+                              @disabled={{this.anonymousUseDisabled}}
+                              @loading={{this.form.saving}}
+                              data-test-key-anonymous-use-save
+                            >Save</Button>
                           </div>
                         </form>
                       {{else if (this.isActing 'deleting' key)}}
@@ -430,7 +481,14 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     loadFailed: undefined as LoadFailure | undefined,
     action: { name: 'none' } as Action,
   });
-  private form = trackedObject({ value: '', saving: false });
+  private form = trackedObject({
+    value: '',
+    // Whether people who aren't signed in may use the key, and its anonymous
+    // cap as typed, while changing them.
+    anonymous: false,
+    cap: '',
+    saving: false,
+  });
 
   constructor(owner: Owner, args: { api: KeysWindowAPI }) {
     super(owner, args);
@@ -577,6 +635,62 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         throw e;
       }
       return undefined;
+    }
+  };
+
+  // A key that can be shared: any but a connection, which is its owner's own
+  // sign-in.
+
+  private servesVisitors = (key: ListedKey) => servesVisitors(key);
+
+  // The panel starts from the key's setting as the listing gives it.
+  private startAnonymousUse = (key: ListedKey) => {
+    this.form.anonymous = key.anonymous;
+    this.form.cap =
+      key.anonymousDailyCap == null ? '' : String(key.anonymousDailyCap);
+    this.state.error = undefined;
+    this.state.action = { name: 'anonymous-use', key };
+  };
+
+  private toggleAnonymous = () => {
+    this.form.anonymous = !this.form.anonymous;
+  };
+
+  private setCap = (value: string) => {
+    this.form.cap = value;
+  };
+
+  private get anonymousCap() {
+    return anonymousCapOf(this.form.anonymous, this.form.cap);
+  }
+
+  private get anonymousUseDisabled() {
+    return this.form.saving || this.anonymousCap === undefined;
+  }
+
+  private saveAnonymousUse = async (event: Event) => {
+    event.preventDefault();
+    let action = this.state.action;
+    let cap = this.anonymousCap;
+    if (
+      this.anonymousUseDisabled ||
+      action.name !== 'anonymous-use' ||
+      cap === undefined
+    ) {
+      return;
+    }
+    this.form.saving = true;
+    let saved = await this.guard(async () => {
+      await setAnonymousUse(this.args.api.config, {
+        keyId: action.key.id,
+        anonymous: this.form.anonymous,
+        anonymousDailyCap: cap,
+      });
+    });
+    this.form.saving = false;
+    if (saved) {
+      this.state.action = { name: 'none' };
+      await this.load();
     }
   };
 
