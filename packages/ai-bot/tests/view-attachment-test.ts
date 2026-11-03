@@ -3,6 +3,7 @@ const { module, test, assert } = QUnit;
 
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -11,6 +12,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
+import { viewAttachmentBotTool } from '../lib/bot-tools/view-attachment/index.ts';
 import {
   roomAttachments,
   VIEW_ATTACHMENT_MAX_URLS,
@@ -111,7 +113,11 @@ function fakeClient() {
   return { client, sent };
 }
 
-async function view(history: DiscreteMatrixEvent[], urls: unknown) {
+async function view(
+  history: DiscreteMatrixEvent[],
+  urls: unknown,
+  inputModalities?: string[],
+) {
   let { client, sent } = fakeClient();
   let outcome = await fulfillViewAttachmentCall(viewCall(urls), {
     client,
@@ -119,6 +125,7 @@ async function view(history: DiscreteMatrixEvent[], urls: unknown) {
     requestEventId: REQUEST_EVENT_ID,
     agentId: AGENT_ID,
     attachments: roomAttachments(history, BOT),
+    inputModalities,
   });
   assert.strictEqual(sent.length, 1, 'the call publishes one result');
   let { eventType, content } = sent[0];
@@ -310,6 +317,67 @@ module('viewAttachment', () => {
         `${large.sourceUrl} can't be shown: it is larger than 3.75 MiB.`,
       ),
       content.failureReason,
+    );
+  });
+
+  test("a kind of media the active model doesn't take is refused, without advice to attach it again", async () => {
+    let pdf = photo('report.pdf', { contentType: 'application/pdf' });
+    let jpg = photo('trees.jpg');
+    let { content, data } = await view(
+      [message(USER, [pdf, jpg])],
+      [pdf.sourceUrl, jpg.sourceUrl],
+      ['text', 'image'],
+    );
+
+    assert.deepEqual(data.attachedFiles, [jpg]);
+    assert.ok(
+      content.failureReason.includes(
+        `${pdf.sourceUrl} can't be shown: the active model does not accept PDF files. Tell the user you can't view it with the current model.`,
+      ),
+      content.failureReason,
+    );
+  });
+
+  test("the tool reads the active model's input modalities from the room", async () => {
+    let pdf = photo('report.pdf', { contentType: 'application/pdf' });
+    let activeLLM = {
+      type: APP_BOXEL_ACTIVE_LLM,
+      event_id: '$active-llm',
+      sender: USER,
+      state_key: '',
+      content: {
+        model: 'example/image-only',
+        inputModalities: ['text', 'image'],
+      },
+    } as unknown as DiscreteMatrixEvent;
+    let turn = await viewAttachmentBotTool.startTurn({
+      humanMemberCount: 1,
+      realmDelegation: false,
+      history: [message(USER, [pdf]), activeLLM],
+      aiBotUserId: BOT,
+      client: {} as any,
+      onBehalfOf: USER,
+      delegatedUserRealmSessions: {
+        getToken: async () => 'token',
+        invalidate: () => {},
+      },
+      offeredToolNames: new Set([VIEW_ATTACHMENT_TOOL_NAME]),
+    });
+    let { client, sent } = fakeClient();
+
+    await turn.fulfill(viewCall([pdf.sourceUrl]), {
+      client,
+      roomId: ROOM_ID,
+      requestEventId: REQUEST_EVENT_ID,
+      agentId: AGENT_ID,
+    });
+
+    assert.strictEqual(sent[0].content['m.relates_to'].key, 'invalid');
+    assert.ok(
+      sent[0].content.failureReason.includes(
+        'the active model does not accept PDF files',
+      ),
+      sent[0].content.failureReason,
     );
   });
 

@@ -171,10 +171,12 @@ export type AttachmentLookup =
 // The stored file the tool attaches to its result for `url`, or why it
 // can't: the url names no file a user attached in this room, the file is
 // text (its content is already in history), or the prompt builder could never
-// send it as tool-result media (see toolResultMediaRefusal).
+// send it as tool-result media to the active model, whose input modalities
+// are `inputModalities` (see toolResultMediaRefusal).
 export function lookUpAttachment(
   url: string,
   attachments: RoomAttachments,
+  inputModalities?: string[],
 ): AttachmentLookup {
   let file = attachments.get(attachmentKey(url));
   if (!file) {
@@ -191,13 +193,19 @@ export function lookUpAttachment(
         : `${url} is not an image, PDF, audio or video file, so it can't be shown.`,
     };
   }
-  // A message carries its own media without these limits, so attaching the
-  // file again is the way to show it.
-  let refusal = toolResultMediaRefusal(file);
+  let refusal = toolResultMediaRefusal(file, inputModalities);
   if (refusal) {
+    // A message carries its own media without the storage and size limits,
+    // so attaching the file again shows it. Nothing shows a kind of media
+    // the active model doesn't take.
+    let reattaching = refusal === toolResultMediaRefusal(file);
     return {
       ok: false,
-      error: `${url} can't be shown: ${refusal}. Ask the user to attach it again if you need it.`,
+      error: `${url} can't be shown: ${refusal}. ${
+        reattaching
+          ? 'Ask the user to attach it again if you need it.'
+          : "Tell the user you can't view it with the current model."
+      }`,
     };
   }
   return {

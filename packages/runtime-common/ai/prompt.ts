@@ -3024,18 +3024,14 @@ export function currentTurnToolResultMedia(
     // Read only once toolResultMediaRefusal has let the file through, which
     // it does only for a file with a recorded size.
     let size = file.contentSize;
-    let modality = requiredModality(file.contentType);
-    let reason: string | undefined;
-    let refusal = toolResultMediaRefusal(file);
-    if (inputModalities && modality && !inputModalities.includes(modality)) {
-      reason = `the active model does not accept ${modalityLabel(modality)}`;
-    } else if (refusal) {
-      reason = refusal;
-    } else if (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA) {
-      reason = `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`;
-    } else if (totalBytes + size! > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
-      reason = `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`;
-    }
+    let reason =
+      toolResultMediaRefusal(file, inputModalities) ??
+      (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA
+        ? `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`
+        : undefined) ??
+      (totalBytes + size! > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES
+        ? `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`
+        : undefined);
     if (reason) {
       omitted.unshift({ file, reason });
     } else {
@@ -3050,14 +3046,20 @@ const NOT_STORED_IN_CONVERSATION =
   'it is not a file stored in this conversation';
 
 // Why a tool result's media file can never be sent, whatever else the turn
-// holds: its URL names no Matrix media item, its size is unknown, or it is
-// over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Undefined when only the turn's
-// shared count and byte limits can still leave it out. The viewAttachment
-// tool refuses the same files, so it never reports a file as shown that the
-// next request leaves out.
+// holds: the active model doesn't take its kind of media (per
+// `inputModalities`, when given), its URL names no Matrix media item, its
+// size is unknown, or it is over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Undefined
+// when only the turn's shared count and byte limits can still leave it out.
+// The viewAttachment tool refuses the same files, so it never reports a file
+// as shown that the next request leaves out on its own account.
 export function toolResultMediaRefusal(
-  file: Pick<SerializedFileDef, 'url' | 'contentSize'>,
+  file: Pick<SerializedFileDef, 'url' | 'contentSize' | 'contentType'>,
+  inputModalities?: string[],
 ): string | undefined {
+  let modality = requiredModality(file.contentType);
+  if (inputModalities && modality && !inputModalities.includes(modality)) {
+    return `the active model does not accept ${modalityLabel(modality)}`;
+  }
   if (
     !file.url ||
     !canonicalizeMatrixMediaKey(file.url)?.startsWith('mxc://')
@@ -3576,6 +3578,15 @@ export const isToolResultStatusApplied = (event?: MatrixEvent) => {
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
+
+// The input modalities of the room's active model, as the prompt builder
+// gates media on them. Undefined when the model doesn't say, and then every
+// modality passes.
+export function activeModelInputModalities(
+  eventlist: DiscreteMatrixEvent[],
+): string[] | undefined {
+  return getActiveLLMDetails(eventlist).inputModalities;
+}
 
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;

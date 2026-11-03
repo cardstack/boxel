@@ -18,6 +18,9 @@ export interface ViewAttachmentFulfillmentDeps extends BotToolTarget {
   // The files humans attached to their messages in the room (see
   // roomAttachments), the only files a call can view.
   attachments: RoomAttachments;
+  // The active model's input modalities (see activeModelInputModalities),
+  // when it names them.
+  inputModalities?: string[];
 }
 
 export interface ViewAttachmentFulfillmentOutcome {
@@ -52,7 +55,7 @@ export async function fulfillViewAttachmentCall(
   let attachedFiles: SerializedFileDef[] = [];
   let errors: string[] = [];
   for (let url of urls) {
-    let lookup = lookUpAttachment(url, deps.attachments);
+    let lookup = lookUpAttachment(url, deps.attachments, deps.inputModalities);
     if (lookup.ok) {
       attachedFiles.push(lookup.file);
     } else {

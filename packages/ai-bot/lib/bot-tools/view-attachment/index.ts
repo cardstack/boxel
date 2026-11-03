@@ -1,3 +1,4 @@
+import { activeModelInputModalities } from '@cardstack/runtime-common/ai';
 import type { BotTool } from '../types.ts';
 import { fulfillViewAttachmentCall } from './fulfillment.ts';
 import {
@@ -27,6 +28,7 @@ export const viewAttachmentBotTool: BotTool = {
 
   async startTurn(room) {
     let attachments = roomAttachments(room.history, room.aiBotUserId);
+    let inputModalities = activeModelInputModalities(room.history);
     return {
       needsApproval() {
         return false;
@@ -34,7 +36,7 @@ export const viewAttachmentBotTool: BotTool = {
       async fulfill(call, target) {
         let { commandRequestId, published } = await fulfillViewAttachmentCall(
           call,
-          { ...target, attachments },
+          { ...target, attachments, inputModalities },
         );
         return { commandRequestId, published };
       },
