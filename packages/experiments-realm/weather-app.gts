@@ -68,14 +68,17 @@ import { TrackedMap } from 'tracked-built-ins';
 //
 // OpenWeatherMap takes the key in the `appid` query parameter and answers 401
 // for a key it doesn't accept, which the realm reports as
-// `credential-rejected`. The forecast is One Call 3.0, which needs the "One
-// Call by Call" subscription on whichever account the key belongs to.
+// `credential-rejected`. Every endpoint the app calls is on the free plan:
+// current conditions, the 5-day forecast in 3-hour steps and air quality
+// under `/data/2.5/`, and city search under `/geo/1.0/`, so each key is
+// approved for those two destinations.
 
 type Units = 'metric' | 'imperial';
 type KeySource = 'shared' | 'own';
-type Family = 'forecast' | 'airQuality' | 'findCity';
+type Family = 'current' | 'forecast' | 'airQuality' | 'findCity';
 
 const OPERATION: Record<Family, Record<KeySource, string>> = {
+  current: { shared: 'currentShared', own: 'currentOwn' },
   forecast: { shared: 'forecastShared', own: 'forecastOwn' },
   airQuality: { shared: 'airQualityShared', own: 'airQualityOwn' },
   findCity: { shared: 'findCityShared', own: 'findCityOwn' },
@@ -83,8 +86,8 @@ const OPERATION: Record<Family, Record<KeySource, string>> = {
 
 const SHARED_OPERATIONS = Object.values(OPERATION).map((o) => o.shared);
 
-const SUBSCRIPTION_NOTE =
-  'The key needs OpenWeatherMap’s “One Call by Call” subscription (the first 1,000 calls a day are free, with a payment card on file); a key without it is rejected.';
+const KEY_NOTE =
+  'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
 
 export class WeatherLocation extends FieldDef {
   static displayName = 'Weather Location';
@@ -112,30 +115,54 @@ export class WeatherApp extends CardDef {
   @field units = contains(StringField);
   @field locations = containsMany(WeatherLocation);
 
-  @operation static forecastShared = {
+  @operation static currentShared = {
     base: 'callApi',
-    label: 'Get the weather for a place, with the workspace’s key',
+    label: 'Get the current weather for a place, with the workspace’s key',
     params: { lat: NumberField, lon: NumberField, units: StringField },
-    url: 'https://api.openweathermap.org/data/3.0/onecall',
+    url: 'https://api.openweathermap.org/data/2.5/weather',
     query: {
       lat: params('lat'),
       lon: params('lon'),
       units: params('units'),
-      exclude: 'minutely',
+      appid: '{{apiKey}}',
+    },
+  } satisfies OperationDeclaration;
+
+  @operation static currentOwn = {
+    base: 'callApi',
+    label: 'Get the current weather for a place, with your own key',
+    params: { lat: NumberField, lon: NumberField, units: StringField },
+    url: 'https://api.openweathermap.org/data/2.5/weather',
+    query: {
+      lat: params('lat'),
+      lon: params('lon'),
+      units: params('units'),
+      appid: '{{userKey}}',
+    },
+  } satisfies OperationDeclaration;
+
+  @operation static forecastShared = {
+    base: 'callApi',
+    label: 'Get the 5-day forecast for a place, with the workspace’s key',
+    params: { lat: NumberField, lon: NumberField, units: StringField },
+    url: 'https://api.openweathermap.org/data/2.5/forecast',
+    query: {
+      lat: params('lat'),
+      lon: params('lon'),
+      units: params('units'),
       appid: '{{apiKey}}',
     },
   } satisfies OperationDeclaration;
 
   @operation static forecastOwn = {
     base: 'callApi',
-    label: 'Get the weather for a place, with your own key',
+    label: 'Get the 5-day forecast for a place, with your own key',
     params: { lat: NumberField, lon: NumberField, units: StringField },
-    url: 'https://api.openweathermap.org/data/3.0/onecall',
+    url: 'https://api.openweathermap.org/data/2.5/forecast',
     query: {
       lat: params('lat'),
       lon: params('lon'),
       units: params('units'),
-      exclude: 'minutely',
       appid: '{{userKey}}',
     },
   } satisfies OperationDeclaration;
@@ -256,43 +283,49 @@ interface Condition {
   icon: string;
 }
 
-interface CurrentWeather {
+// `/data/2.5/weather`
+interface CurrentResponse {
   dt: number;
-  sunrise?: number;
-  sunset?: number;
-  temp: number;
-  feels_like: number;
-  pressure: number;
-  humidity: number;
-  uvi: number;
-  clouds: number;
+  timezone: number;
+  weather: Condition[];
+  main: {
+    temp: number;
+    feels_like: number;
+    temp_min: number;
+    temp_max: number;
+    pressure: number;
+    humidity: number;
+  };
   visibility?: number;
-  wind_speed: number;
-  wind_gust?: number;
-  wind_deg: number;
-  weather: Condition[];
+  wind: { speed: number; deg: number; gust?: number };
+  clouds: { all: number };
+  sys: { sunrise?: number; sunset?: number };
 }
 
-interface HourlyWeather {
-  dt: number;
-  temp: number;
-  pop: number;
-  weather: Condition[];
+// `/data/2.5/forecast`: five days in 3-hour steps.
+interface ForecastResponse {
+  list: {
+    dt: number;
+    main: { temp: number; temp_min: number; temp_max: number };
+    weather: Condition[];
+    pop?: number;
+  }[];
+  city: { timezone: number };
 }
 
-interface DailyWeather {
-  dt: number;
-  temp: { min: number; max: number };
-  pop: number;
-  weather: Condition[];
-}
-
-interface Forecast {
-  timezone: string;
-  current: CurrentWeather;
-  hourly: HourlyWeather[];
-  daily: DailyWeather[];
-  alerts?: { event: string; sender_name: string; description: string }[];
+// One place's weather as the app shows it, read from both responses.
+interface Weather {
+  // The place's offset from UTC, in seconds.
+  offset: number;
+  current: CurrentResponse;
+  steps: { dt: number; temp: number; pop: number; condition?: Condition }[];
+  days: {
+    dt: number;
+    min: number;
+    max: number;
+    pop: number;
+    condition?: Condition;
+  }[];
 }
 
 interface AirQuality {
@@ -317,7 +350,7 @@ interface Problem {
 
 // Each place's answers, by the place's position in the list.
 interface PlaceWeather {
-  forecast?: Forecast;
+  weather?: Weather;
   airQuality?: AirQuality;
 }
 
@@ -386,11 +419,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
 
   get sharedReadiness() {
-    return this.readiness(OPERATION.forecast.shared);
+    return this.readiness(OPERATION.current.shared);
   }
 
   get ownReadiness() {
-    return this.readiness(OPERATION.forecast.own);
+    return this.readiness(OPERATION.current.own);
   }
 
   // Which key the app calls with: the workspace's when its operation is
@@ -436,20 +469,19 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
 
   get rows() {
     return this.args.model.locations.map((location, index) => {
-      let forecast = this.places.get(index)?.forecast;
+      let weather = this.places.get(index)?.weather;
+      let today = weather?.days[0];
       return {
         index,
         location,
-        temp: forecast ? `${Math.round(forecast.current.temp)}°` : '—',
-        condition: forecast?.current.weather[0]?.description,
-        range: forecast
-          ? `H:${Math.round(forecast.daily[0].temp.max)}° L:${Math.round(forecast.daily[0].temp.min)}°`
+        temp: weather ? `${Math.round(weather.current.main.temp)}°` : '—',
+        condition: weather?.current.weather[0]?.description,
+        range: today
+          ? `H:${Math.round(today.max)}° L:${Math.round(today.min)}°`
           : undefined,
-        time: forecast
-          ? timeIn(forecast.timezone, forecast.current.dt)
-          : undefined,
-        icon: forecast ? iconFor(forecast.current.weather[0]) : undefined,
-        tone: forecast ? skyFor(forecast.current) : 'unknown',
+        time: weather ? timeIn(weather.offset, weather.current.dt) : undefined,
+        icon: weather ? iconFor(weather.current.weather[0]) : undefined,
+        tone: weather ? skyFor(weather.current.weather[0]) : 'unknown',
       };
     });
   }
@@ -460,7 +492,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   loadWhenReady = modifier(
     (_element: Element, [source]: [KeySource | undefined]) => {
       if (source && source !== this.loadedFrom && !this.problem) {
-        this.load.perform(source);
+        // Started outside the render that read this state, since the task
+        // writes it.
+        queueMicrotask(() => this.load.perform(source));
       }
     },
   );
@@ -471,7 +505,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     if (!this.isLive) {
       return;
     }
-    this.loadShares.perform();
+    queueMicrotask(() => this.loadShares.perform());
     let back = () => {
       if (this.#openedWindow) {
         this.#openedWindow = false;
@@ -522,12 +556,17 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     try {
       await Promise.all(
         locations.map(async (location, index) => {
-          let forecast = await this.call<Forecast>('forecast', source, {
+          let at = {
             lat: location.latitude,
             lon: location.longitude,
             units: this.units,
-          });
-          this.places.set(index, { ...this.places.get(index), forecast });
+          };
+          let [current, forecast] = await Promise.all([
+            this.call<CurrentResponse>('current', source, at),
+            this.call<ForecastResponse>('forecast', source, at),
+          ]);
+          let weather = toWeather(current, forecast);
+          this.places.set(index, { ...this.places.get(index), weather });
         }),
       );
       this.loadedFrom = source;
@@ -714,35 +753,35 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   useOwnKey = () =>
     this.openWindow.perform({
       mode: 'enter-key',
-      operation: OPERATION.forecast.own,
-      reason: `Weather needs your OpenWeatherMap key. ${SUBSCRIPTION_NOTE}`,
+      operation: OPERATION.current.own,
+      reason: `Weather needs your OpenWeatherMap key. ${KEY_NOTE}`,
     });
 
   approveOwn = () =>
     this.openWindow.perform({
       mode: 'approve',
-      operation: OPERATION.forecast.own,
+      operation: OPERATION.current.own,
       reason: 'Let Weather use your OpenWeatherMap key',
     });
 
   reviewOwn = () =>
     this.openWindow.perform({
       mode: 'review-changes',
-      operation: OPERATION.forecast.own,
+      operation: OPERATION.current.own,
       reason: 'What Weather sends with your key has changed',
     });
 
   approveShared = () =>
     this.openWindow.perform({
       mode: 'approve',
-      operation: OPERATION.forecast.shared,
+      operation: OPERATION.current.shared,
       reason: 'Let Weather use the key you shared with this workspace',
     });
 
   reviewShared = () =>
     this.openWindow.perform({
       mode: 'review-changes',
-      operation: OPERATION.forecast.shared,
+      operation: OPERATION.current.shared,
       reason: 'What Weather sends with the shared key has changed',
     });
 
@@ -751,15 +790,15 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       mode: 'replace-key',
       operation:
         this.problem?.source === 'shared'
-          ? OPERATION.forecast.shared
-          : OPERATION.forecast.own,
-      reason: `OpenWeatherMap rejected the key. ${SUBSCRIPTION_NOTE}`,
+          ? OPERATION.current.shared
+          : OPERATION.current.own,
+      reason: `OpenWeatherMap rejected the key. ${KEY_NOTE}`,
     });
 
   shareKey = () =>
     this.openWindow.perform({
       mode: 'share-key',
-      reason: `Share an OpenWeatherMap key so everyone here sees the weather. ${SUBSCRIPTION_NOTE}`,
+      reason: `Share an OpenWeatherMap key so everyone here sees the weather. ${KEY_NOTE}`,
     });
 
   swapKey = () => {
@@ -769,7 +808,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.openWindow.perform({
       mode: 'swap-key',
       share: this.share.shareId,
-      reason: `Swap one of your OpenWeatherMap keys into “${this.share.label}”. ${SUBSCRIPTION_NOTE}`,
+      reason: `Swap one of your OpenWeatherMap keys into “${this.share.label}”. ${KEY_NOTE}`,
     });
   };
 
@@ -875,7 +914,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     }
     switch (problem.code) {
       case 'credential-rejected':
-        return `It may have expired, been revoked, or lack the One Call 3.0 subscription. ${SUBSCRIPTION_NOTE}`;
+        return `It may have expired or been revoked. ${KEY_NOTE}`;
       case 'rate-limited':
       case 'over-budget':
       case 'rate-limit-unavailable':
@@ -1097,9 +1136,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
               >
                 {{this.ownMessage}}
                 {{#if this.ownNeedsConnect}}
-                  <span
-                    class='subscription-note'
-                  >{{this.subscriptionNote}}</span>
+                  <span class='key-note'>{{this.keyNote}}</span>
                 {{/if}}
                 <:action>
                   {{#if this.ownNeedsConnect}}
@@ -1272,7 +1309,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         display: grid;
         gap: var(--boxel-sp-sm);
       }
-      .subscription-note {
+      .key-note {
         display: block;
         margin-top: var(--boxel-sp-4xs);
         color: var(--muted-foreground);
@@ -1414,7 +1451,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     </style>
   </template>
 
-  subscriptionNote = SUBSCRIPTION_NOTE;
+  keyNote = KEY_NOTE;
 
   get refreshDisabled(): boolean {
     return !this.source;
@@ -1437,8 +1474,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   replaceOwnKey = () =>
     this.openWindow.perform({
       mode: 'replace-key',
-      operation: OPERATION.forecast.own,
-      reason: `OpenWeatherMap rejected your key. ${SUBSCRIPTION_NOTE}`,
+      operation: OPERATION.current.own,
+      reason: `OpenWeatherMap rejected your key. ${KEY_NOTE}`,
     });
 }
 
@@ -1467,20 +1504,16 @@ interface PlaceSignature {
 }
 
 class PlaceView extends GlimmerComponent<PlaceSignature> {
-  get forecast() {
-    return this.args.weather?.forecast;
+  get weather() {
+    return this.args.weather?.weather;
   }
 
   get current() {
-    return this.forecast?.current;
+    return this.weather?.current;
   }
 
-  get tz() {
-    return this.forecast?.timezone ?? 'UTC';
-  }
-
-  get tempUnit() {
-    return this.args.units === 'imperial' ? '°F' : '°C';
+  get offset() {
+    return this.weather?.offset ?? 0;
   }
 
   get condition() {
@@ -1492,40 +1525,66 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
   }
 
   get sky() {
-    return this.current ? skyFor(this.current) : 'unknown';
+    return skyFor(this.condition);
   }
 
   get today() {
-    return this.forecast?.daily[0];
+    return this.weather?.days[0];
   }
 
+  get temp() {
+    return this.current ? Math.round(this.current.main.temp) : undefined;
+  }
+
+  get range() {
+    let today = this.today;
+    return today
+      ? `H:${Math.round(today.max)}° L:${Math.round(today.min)}°`
+      : undefined;
+  }
+
+  // The next day or so, in the forecast's 3-hour steps.
   get hourly() {
-    let tz = this.tz;
-    return (this.forecast?.hourly ?? []).slice(0, 25).map((hour, i) => ({
-      label: i === 0 ? 'Now' : hourIn(tz, hour.dt),
-      temp: Math.round(hour.temp),
-      pop: hour.pop >= 0.2 ? `${Math.round(hour.pop * 100)}%` : undefined,
-      icon: iconFor(hour.weather[0]),
-    }));
+    let offset = this.offset;
+    let current = this.current;
+    let now = current
+      ? [
+          {
+            label: 'Now',
+            temp: Math.round(current.main.temp),
+            pop: undefined,
+            icon: iconFor(current.weather[0]),
+          },
+        ]
+      : [];
+    return [
+      ...now,
+      ...(this.weather?.steps ?? []).slice(0, 9).map((step) => ({
+        label: hourIn(offset, step.dt),
+        temp: Math.round(step.temp),
+        pop: step.pop >= 0.2 ? `${Math.round(step.pop * 100)}%` : undefined,
+        icon: iconFor(step.condition),
+      })),
+    ];
   }
 
   get week() {
-    let days = this.forecast?.daily ?? [];
+    let days = this.weather?.days ?? [];
     if (days.length === 0) {
       return [];
     }
-    let low = Math.min(...days.map((d) => d.temp.min));
-    let high = Math.max(...days.map((d) => d.temp.max));
+    let low = Math.min(...days.map((d) => d.min));
+    let high = Math.max(...days.map((d) => d.max));
     let span = Math.max(high - low, 1);
-    let tz = this.tz;
+    let offset = this.offset;
     return days.map((day, i) => ({
-      label: i === 0 ? 'Today' : dayIn(tz, day.dt),
-      icon: iconFor(day.weather[0]),
+      label: i === 0 ? 'Today' : dayIn(offset, day.dt),
+      icon: iconFor(day.condition),
       pop: day.pop >= 0.2 ? `${Math.round(day.pop * 100)}%` : undefined,
-      low: Math.round(day.temp.min),
-      high: Math.round(day.temp.max),
+      low: Math.round(day.min),
+      high: Math.round(day.max),
       // Where this day's range sits within the week's, as percentages.
-      barStyle: `left: ${(((day.temp.min - low) / span) * 100).toFixed(1)}%; right: ${(((high - day.temp.max) / span) * 100).toFixed(1)}%;`,
+      barStyle: `left: ${(((day.min - low) / span) * 100).toFixed(1)}%; right: ${(((high - day.max) / span) * 100).toFixed(1)}%;`,
     }));
   }
 
@@ -1544,27 +1603,19 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
           : `${(c.visibility / 1000).toFixed(1)} km`;
     let aqi = this.args.weather?.airQuality?.list?.[0]?.main.aqi;
     return [
-      {
-        label: 'Feels like',
-        value: `${Math.round(c.feels_like)}°`,
-      },
-      { label: 'Humidity', value: `${c.humidity}%` },
+      { label: 'Feels like', value: `${Math.round(c.main.feels_like)}°` },
+      { label: 'Humidity', value: `${c.main.humidity}%` },
       {
         label: 'Wind',
-        value: `${Math.round(c.wind_speed)} ${speed} ${compass(c.wind_deg)}`,
+        value: `${Math.round(c.wind.speed)} ${speed} ${compass(c.wind.deg)}`,
         hint:
-          c.wind_gust !== undefined
-            ? `Gusts ${Math.round(c.wind_gust)} ${speed}`
+          c.wind.gust !== undefined
+            ? `Gusts ${Math.round(c.wind.gust)} ${speed}`
             : undefined,
       },
-      { label: 'Pressure', value: `${c.pressure} hPa` },
+      { label: 'Pressure', value: `${c.main.pressure} hPa` },
       { label: 'Visibility', value: visibility },
-      { label: 'Cloud cover', value: `${c.clouds}%` },
-      {
-        label: 'UV index',
-        value: `${Math.round(c.uvi)}`,
-        hint: uvLabel(c.uvi),
-      },
+      { label: 'Cloud cover', value: `${c.clouds.all}%` },
       {
         label: 'Air quality',
         value: aqi ? `${aqi}` : '—',
@@ -1574,19 +1625,15 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
   }
 
   get sunrise() {
-    return this.current?.sunrise
-      ? timeIn(this.tz, this.current.sunrise)
+    return this.current?.sys.sunrise
+      ? timeIn(this.offset, this.current.sys.sunrise)
       : undefined;
   }
 
   get sunset() {
-    return this.current?.sunset
-      ? timeIn(this.tz, this.current.sunset)
+    return this.current?.sys.sunset
+      ? timeIn(this.offset, this.current.sys.sunset)
       : undefined;
-  }
-
-  get alerts() {
-    return this.forecast?.alerts ?? [];
   }
 
   <template>
@@ -1595,27 +1642,19 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         <h2>{{@location.name}}</h2>
         {{#if this.current}}
           <div class='hero-temp' data-test-weather-current-temp>
-            {{this.round this.current.temp}}°
+            {{this.temp}}°
           </div>
           <div class='hero-condition'>
             <this.icon class='hero-icon' />
             <span>{{this.condition.description}}</span>
           </div>
-          {{#if this.today}}
-            <div class='hero-range'>H:{{this.round this.today.temp.max}}° L:{{this.round
-                this.today.temp.min
-              }}°</div>
+          {{#if this.range}}
+            <div class='hero-range'>{{this.range}}</div>
           {{/if}}
         {{else}}
           <Skeleton @height='4rem' @width='8rem' />
         {{/if}}
       </section>
-
-      {{#each this.alerts as |alert|}}
-        <Alert @tone='warning' @title={{alert.event}}>
-          {{alert.sender_name}}
-        </Alert>
-      {{/each}}
 
       {{#if this.current}}
         <section class='panel' aria-label='Hourly forecast'>
@@ -1887,8 +1926,6 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
       }
     </style>
   </template>
-
-  round = (n: number) => Math.round(n);
 }
 
 // ---------------------------------------------------------------------------
@@ -2095,49 +2132,102 @@ function iconFor(condition: Condition | undefined) {
 }
 
 // Which sky the place's tile is painted with.
-function skyFor(current: CurrentWeather): 'day' | 'night' | 'cloud' | 'rain' {
-  let condition = current.weather[0];
-  let id = condition?.id ?? 800;
-  if (id < 700) {
+function skyFor(
+  condition: Condition | undefined,
+): 'day' | 'night' | 'cloud' | 'rain' | 'unknown' {
+  if (!condition) {
+    return 'unknown';
+  }
+  if (condition.id < 700) {
     return 'rain';
   }
-  if (condition?.icon?.endsWith('n')) {
+  if (condition.icon?.endsWith('n')) {
     return 'night';
   }
-  return id >= 803 ? 'cloud' : 'day';
+  return condition.id >= 803 ? 'cloud' : 'day';
 }
 
-function timeIn(timeZone: string, seconds: number): string {
-  return new Date(seconds * 1000).toLocaleTimeString([], {
+// The service gives each place's offset from UTC rather than its time zone,
+// so a time is shifted by the offset and then read as UTC.
+function atOffset(offset: number, seconds: number): Date {
+  return new Date((seconds + offset) * 1000);
+}
+
+function timeIn(offset: number, seconds: number): string {
+  return atOffset(offset, seconds).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
-    timeZone,
+    timeZone: 'UTC',
   });
 }
 
-function hourIn(timeZone: string, seconds: number): string {
-  return new Date(seconds * 1000).toLocaleTimeString([], {
+function hourIn(offset: number, seconds: number): string {
+  return atOffset(offset, seconds).toLocaleTimeString([], {
     hour: 'numeric',
-    timeZone,
+    timeZone: 'UTC',
   });
 }
 
-function dayIn(timeZone: string, seconds: number): string {
-  return new Date(seconds * 1000).toLocaleDateString([], {
+function dayIn(offset: number, seconds: number): string {
+  return atOffset(offset, seconds).toLocaleDateString([], {
     weekday: 'short',
-    timeZone,
+    timeZone: 'UTC',
   });
+}
+
+// One place's weather from its current conditions and its 3-hourly forecast.
+// Each day is the place's own calendar day: its low and high are the lowest
+// and highest of its steps (today's including the temperature now), its
+// chance of precipitation is its wettest step's, and its condition is the one
+// nearest midday.
+function toWeather(
+  current: CurrentResponse,
+  forecast: ForecastResponse,
+): Weather {
+  let offset = current.timezone ?? forecast.city?.timezone ?? 0;
+  let steps = (forecast.list ?? []).map((step) => ({
+    dt: step.dt,
+    temp: step.main.temp,
+    min: step.main.temp_min,
+    max: step.main.temp_max,
+    pop: step.pop ?? 0,
+    condition: step.weather[0],
+  }));
+  let byDay = new Map<string, typeof steps>();
+  let dayOf = (dt: number) => atOffset(offset, dt).toISOString().slice(0, 10);
+  for (let step of steps) {
+    let day = dayOf(step.dt);
+    byDay.set(day, [...(byDay.get(day) ?? []), step]);
+  }
+  let today = dayOf(current.dt);
+  if (!byDay.has(today)) {
+    byDay.set(today, []);
+  }
+  let days = [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, daySteps]) => {
+      let temps = daySteps.flatMap((s) => [s.min, s.max]);
+      if (day === today) {
+        temps.push(current.main.temp);
+      }
+      let midday = [...daySteps].sort(
+        (a, b) =>
+          Math.abs(atOffset(offset, a.dt).getUTCHours() - 12) -
+          Math.abs(atOffset(offset, b.dt).getUTCHours() - 12),
+      )[0];
+      return {
+        dt: daySteps[0]?.dt ?? current.dt,
+        min: Math.min(...temps),
+        max: Math.max(...temps),
+        pop: Math.max(0, ...daySteps.map((s) => s.pop)),
+        condition:
+          day === today && !midday ? current.weather[0] : midday?.condition,
+      };
+    });
+  return { offset, current, steps, days };
 }
 
 function compass(degrees: number): string {
   let points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return points[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
-}
-
-function uvLabel(uvi: number): string {
-  if (uvi < 3) return 'Low';
-  if (uvi < 6) return 'Moderate';
-  if (uvi < 8) return 'High';
-  if (uvi < 11) return 'Very high';
-  return 'Extreme';
 }

@@ -305,9 +305,9 @@ request twice, identical but for the slot.
 ```ts
 @operation static forecastShared = {
   base: 'callApi',
-  label: 'Get the weather for a place, with the workspace’s key',
+  label: 'Get the 5-day forecast for a place, with the workspace’s key',
   params: { lat: NumberField, lon: NumberField },
-  url: 'https://api.openweathermap.org/data/3.0/onecall',
+  url: 'https://api.openweathermap.org/data/2.5/forecast',
   query: { lat: params('lat'), lon: params('lon'), appid: '{{apiKey}}' },
 } satisfies OperationDeclaration;
 
