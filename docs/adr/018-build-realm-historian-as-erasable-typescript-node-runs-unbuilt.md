@@ -13,7 +13,7 @@ realm-historian is the service that records realm revision history: it reads
 the change journal, captures changed files, and commits them to one git repo
 per realm. It runs no realm code and talks to nothing but Postgres, the file
 system and git, so it lives in its own package, `packages/realm-historian`.
-This ADR fixes that package's conventions before its first code: TypeScript
+This ADR fixes that package's conventions: TypeScript
 restricted to syntax Node can strip, so nothing is built; a lint that
 type-checks; and CI change filters that are kept in step with the package's
 imports and consumers by hand, because nothing derives them.
@@ -71,9 +71,10 @@ origin's pages already follow this rule (ADR 008 §1.10), so the convention is
 established and the package can copy its configuration.
 
 No build step keeps the image and the local service the same artifact: the
-Dockerfile copies the sources and runs `node main.ts`, as the worker's does.
-A build would add a compile to the image, to `mise run dev`, and to every test
-run.
+Dockerfile copies the sources and runs them unbuilt, as the worker image runs
+`worker-manager.ts`. A build would add a compile step, and a second artifact
+that can disagree with the sources, to the service's start, to `mise run
+dev` and to every test run.
 
 The package has its own filter because its tests cost minutes and should not
 run on every host change, and because the suites that depend on it, the
