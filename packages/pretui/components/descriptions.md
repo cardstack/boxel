@@ -2,7 +2,7 @@
 
 A read-only record as label/value pairs in an N-column grid that folds to stacked: the thing an agent types after Ant's `Descriptions`. N pairs per row, a per-item `span`, an optional title with a trailing `<:extra>` slot, borders that tint the label cells, and a container query that reduces the column count as the pane narrows.
 
-It is not **RecordDetail**, which is the editing machine: a draft batch, one open editor, dirty counts, save and cancel. It is not **KeyValue** either, though that is the nearest thing: **KeyValue** is a fixed two-column `<dl>` with no borders, no header, no spans, no density and no fold, and six facts beside a card still want it. Descriptions is the page-scale form of the same idea. **PropertyRow** is one labelled value in a form; **Field** is the form control's frame.
+It is not **RecordDetail**, which is the editing machine: a draft batch, one open editor, dirty counts, save and cancel. It is not **KeyValue** either, though that is the nearest thing: **KeyValue** is a fixed two-column `<dl>` with at most a hairline between rows (`@divided`) and no cell borders, no header, no spans, no density and no fold, and six facts beside a card still want it. Descriptions is the page-scale form of the same idea. **PropertyRow** is one labelled value in a form; **Field** is the form control's frame.
 
 ## The contract
 

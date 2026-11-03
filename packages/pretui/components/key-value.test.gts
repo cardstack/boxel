@@ -134,21 +134,44 @@ module('Pretui | components/key-value', function (hooks) {
     assert.dom('[data-test-kv="eyebrow"]').hasAttribute('data-label-style', 'eyebrow');
   });
 
-  test("KeyValue rules its rows only with @rows='ruled' on the horizontal layout", async function (assert) {
+  test('KeyValue divides and end-aligns only on the horizontal layout', async function (assert) {
     const ITEMS: KeyValueItem[] = [{ key: 'Origin', value: 'Wuyi' }];
     await render(
       <template>
         <KeyValue @items={{ITEMS}} data-test-kv='none' />
-        <KeyValue @items={{ITEMS}} @rows='plain' data-test-kv='plain' />
-        <KeyValue @items={{ITEMS}} @rows='ruled' data-test-kv='ruled' />
-        <KeyValue @items={{ITEMS}} @rows='ruled' @layout='stacked' data-test-kv='stacked' />
-        <KeyValue @items={{ITEMS}} @rows='ruled' @layout='inline' data-test-kv='inline' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' data-test-kv='horizontal' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='stacked' data-test-kv='stacked' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='inline' data-test-kv='inline' />
       </template>,
     );
-    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-rows');
-    assert.dom('[data-test-kv="plain"]').doesNotHaveAttribute('data-rows');
-    assert.dom('[data-test-kv="ruled"]').hasAttribute('data-rows', 'ruled');
-    assert.dom('[data-test-kv="stacked"]').doesNotHaveAttribute('data-rows');
-    assert.dom('[data-test-kv="inline"]').doesNotHaveAttribute('data-rows');
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-divided');
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-value-align');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-divided', 'true');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-value-align', 'end');
+    for (let layout of ['stacked', 'inline']) {
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-divided');
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-value-align');
+    }
+  });
+
+  // Scoped CSS is inert in this harness, so this checks the selector the
+  // hairline rule keys off: it must skip the first row's dt and dd.
+  test('KeyValue @divided rules every row but the first', async function (assert) {
+    const ITEMS: KeyValueItem[] = [
+      { key: 'Origin', value: 'Wuyi' },
+      { key: 'Harvest', value: 'Spring 2026' },
+    ];
+    await render(<template><KeyValue @items={{ITEMS}} @divided={{true}} /></template>);
+    let ruled = (el: Element) => el.matches(':not(:first-of-type)');
+    let cells = Array.from(q('[data-test-pretui-kv]').children);
+    assert.deepEqual(
+      cells.map((c) => [c.tagName, ruled(c)]),
+      [
+        ['DT', false],
+        ['DD', false],
+        ['DT', true],
+        ['DD', true],
+      ],
+    );
   });
 });

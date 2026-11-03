@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Token } from './token';
-import { KeyValue } from './key-value';
-import type { KeyValueLayout } from './key-value';
+import { KeyValue, KEY_VALUE_VALUE_ALIGNS } from './key-value';
+import type { KeyValueLayout, KeyValueValueAlign } from './key-value';
 
 const LOT_DETAILS = [
   { key: 'Lot', value: 'B-103' },
@@ -14,17 +14,16 @@ const LOT_DETAILS = [
 ];
 const LAYOUTS: KeyValueLayout[] = ['horizontal', 'stacked', 'inline'];
 const LABEL_STYLES = ['default', 'eyebrow'];
-const ROWS = ['plain', 'ruled'];
+const VALUE_ALIGNS = [...KEY_VALUE_VALUE_ALIGNS];
 
 class KeyValueUsage extends Component {
   items = LOT_DETAILS;
   @tracked layout: KeyValueLayout = 'horizontal';
   @tracked labelStyle = 'default';
-  @tracked rows = 'plain';
-  setRows = (v: string) => (this.rows = v);
-  get rowsVal(): 'ruled' | undefined {
-    return this.rows === 'ruled' ? 'ruled' : undefined;
-  }
+  @tracked divided = false;
+  @tracked valueAlign: KeyValueValueAlign = 'start';
+  setDivided = (v: boolean) => (this.divided = v);
+  setValueAlign = (v: string) => (this.valueAlign = v as KeyValueValueAlign);
   setLayout = (v: string) => (this.layout = v as KeyValueLayout);
   setLabelStyle = (v: string) => (this.labelStyle = v);
   get labelStyleVal(): 'eyebrow' | undefined {
@@ -38,8 +37,11 @@ class KeyValueUsage extends Component {
     if (this.labelStyleVal) {
       bits.push(`@labelStyle='${this.labelStyleVal}'`);
     }
-    if (this.rowsVal) {
-      bits.push(`@rows='${this.rowsVal}'`);
+    if (this.divided) {
+      bits.push('@divided={{true}}');
+    }
+    if (this.valueAlign !== 'start') {
+      bits.push(`@valueAlign='${this.valueAlign}'`);
     }
     return `<KeyValue ${bits.join(' ')} />`;
   }
@@ -55,7 +57,8 @@ class KeyValueUsage extends Component {
           @items={{this.items}}
           @layout={{this.layout}}
           @labelStyle={{this.labelStyleVal}}
-          @rows={{this.rowsVal}}
+          @divided={{this.divided}}
+          @valueAlign={{this.valueAlign}}
         ><:value as |item|>{{#if (this.isLot item)}}<Token
                 @value={{item.value}}
               />{{else}}{{item.value}}{{/if}}</:value></KeyValue>
@@ -78,13 +81,20 @@ class KeyValueUsage extends Component {
           @description="'eyebrow' sets the keys in the theme's eyebrow role, uppercase; the --pretui-kv-label-* properties still win (Pretui addition)."
           @onInput={{this.setLabelStyle}}
         />
+        <Args.Bool
+          @name='divided'
+          @value={{this.divided}}
+          @defaultValue={{false}}
+          @description='Draws a --border hairline between rows, unbroken across both columns. Horizontal layout only (Pretui addition).'
+          @onInput={{this.setDivided}}
+        />
         <Args.String
-          @name='rows'
-          @value={{this.rows}}
-          @options={{ROWS}}
-          @defaultValue='plain'
-          @description="'ruled' right-aligns the values and draws a --border line between rows, unbroken across both columns. Horizontal layout only (Pretui addition)."
-          @onInput={{this.setRows}}
+          @name='valueAlign'
+          @value={{this.valueAlign}}
+          @options={{VALUE_ALIGNS}}
+          @defaultValue='start'
+          @description="'end' aligns the values to the inline end of their column. Horizontal layout only (Pretui addition)."
+          @onInput={{this.setValueAlign}}
         />
         <Args.Yield
           @name='value'

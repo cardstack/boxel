@@ -8,7 +8,8 @@ A definition list of property names and their values: by default in two columns,
 @items: { key: string; value: string }[]   (required)
 @layout?: 'horizontal' | 'stacked' | 'inline'   (default 'horizontal'; 'vertical' = 'stacked')
 @labelStyle?: 'default' | 'eyebrow'   (default 'default')
-@rows?: 'plain' | 'ruled'   (default 'plain'; horizontal layout only)
+@divided?: boolean   (default false; horizontal layout only)
+@valueAlign?: 'start' | 'end'   (default 'start'; horizontal layout only)
 <:value as |item|>   — optional per-row override
 Element: HTMLDListElement
 ```
@@ -25,7 +26,9 @@ Element: HTMLDListElement
 
 **`@labelStyle='eyebrow'`** sets the keys in the theme's eyebrow role: the `--boxel-eyebrow-*` font, size, weight, line height and tracking, uppercase. Inside a card those come from the card's theme, and outside one from the `theme.css` defaults. It lands as `data-label-style`.
 
-**`@rows='ruled'`** is the spec-sheet / detail-panel look: values right-aligned, and a `--border` line between rows that runs unbroken across both columns (the row and column gaps move into the cells as padding, so nothing breaks the line). Only `'horizontal'` takes it; the other layouts ignore it. It lands as `data-rows`.
+**`@divided`** draws a `--border` hairline between rows that runs unbroken across both columns: the row and column gaps move into the cells as padding, so nothing breaks the line. It is the same name List and PageScaffold use for their row rules, and it lands as `data-divided`.
+
+**`@valueAlign='end'`** aligns the values to the inline end of their column, landing as `data-value-align`. With `@divided` it gives the spec-sheet / detail-panel look; each works without the other. Only `'horizontal'` takes either arg; the other layouts ignore them.
 
 **The keys' typography has its own properties**, `--pretui-kv-label-*` (see Theming). Set them on the KeyValue, through a class, or on any ancestor; they win over `@labelStyle`. A caller restyles the keys this way rather than reaching into the `<dt>` with `:deep()`.
 
@@ -63,7 +66,7 @@ Gaps:
 
 ## Theming
 
-`--muted-foreground` and the ui-label role (`--boxel-ui-label-*`) for the keys, `--boxel-sp-lg` (the column gap, and the gap between inline pairs) and `--boxel-sp-2xs` (the row gap). With `@rows='ruled'`: `--border` for the rule lines and `--boxel-sp-xs` for each row's block padding. The values set no typography of their own, so they inherit the surrounding text: the body role inside a card. The eyebrow keys read `--boxel-eyebrow-font-family`, `--boxel-eyebrow-font-size`, `--boxel-eyebrow-font-weight`, `--boxel-eyebrow-line-height` and `--boxel-eyebrow-letter-spacing`.
+`--muted-foreground` and the ui-label role (`--boxel-ui-label-*`) for the keys, `--boxel-sp-lg` (the column gap, and the gap between inline pairs) and `--boxel-sp-2xs` (the row gap). With `@divided`: `--border` for the hairlines and `--boxel-sp-xs` for each row's block padding. The values set no typography of their own, so they inherit the surrounding text: the body role inside a card. The eyebrow keys read `--boxel-eyebrow-font-family`, `--boxel-eyebrow-font-size`, `--boxel-eyebrow-font-weight`, `--boxel-eyebrow-line-height` and `--boxel-eyebrow-letter-spacing`.
 
 The keys' own properties, each unset by default:
 
@@ -77,7 +80,7 @@ The keys' own properties, each unset by default:
 
 With `@labelStyle='eyebrow'`, the unset typography properties take the eyebrow role instead and the text transform becomes uppercase. The color stays `--muted-foreground`.
 
-The arrangement is `@layout`, not a token, and there is still no way to set a fixed key column or right-align keys.
+The arrangement is `@layout`, not a token, and there is still no way to set a fixed key column or right-align keys (`@valueAlign` moves the values only).
 
 Because keys use `--muted-foreground` and values inherit `--foreground`, the key/value distinction is carried by ink, weight and size. A theme that compresses its gray ramp will make the two columns read as one; keep at least a step between them.
 
