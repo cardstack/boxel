@@ -13,6 +13,8 @@ scope:
   - packages/ai-bot/**
   - packages/bot-runner/**
   - packages/matrix/support/synapse/**
+  - packages/runtime-common/card-operations/read-history.ts
+  - packages/runtime-common/realm-history.ts
 ---
 
 # 011. Reveal a user's Matrix id only to users who share a realm with them
@@ -107,6 +109,18 @@ change this ADR to say how the invite check of §1.6 learns grants held on
 another realm server. A homeserver can see only its own realm server's
 grants.
 
+### 1.8. Realm history shows its authors
+
+Realm revision history records each change to a realm's files as a revision
+authored by the end user who made it. The history operations, `readHistory`
+with its list of pending writes, and the user interface built on them, MAY
+reveal each revision author's Matrix id and display name to every caller the
+operations authorize. That includes a caller whose access comes through a
+`'*'` or `users` grant or through a policy grant (ADR 006 §1.3), and an author
+who no longer holds a grant on the realm. The documentation of realm policies
+MUST say that a policy which opens the history operations to such an audience
+publishes the realm's authors' Matrix ids.
+
 ## 2. Rationale
 
 The team decided that Boxel must not expose one user's Matrix username to
@@ -153,6 +167,17 @@ no view of grants on another realm server. Identity checks don't need profile
 lookups over federation: ADR 004 §1.3 verifies a user through the OpenID
 userinfo endpoint, which §1.6 leaves open.
 
+History is the record of who changed a realm and when, and a revision without
+its author is most of what that record is for. The history operations require
+write access by default, so their callers are the collaborators §1.2 already
+lets see each other, with one difference: an author who has since lost their
+grant stays in history, because the change they made is still there. A policy
+can widen the operations to readers, and a `'*'` or `users` grant can admit
+anyone. §1.8 treats that like any other grant: whoever opens the realm's
+history chooses who learns its authors, and the documentation says so, so the
+choice is made knowingly. Filtering authors at read time was rejected (§3)
+because it would leave a reader looking at changes by no one.
+
 ## 3. Considered options
 
 - **Reveal ids only within a shared realm (chosen).** It allows what Boxel
@@ -169,6 +194,20 @@ userinfo endpoint, which §1.6 leaves open.
   of each member's timeline, so end users could share a room without seeing
   each other. That is a large, ongoing undertaking, and it isn't planned now.
   If Boxel takes it on, a change to this ADR can relax §1.5.
+- **Show history's authors to every authorized caller (chosen, §1.8).** The
+  audience is the one a grant or a policy admitted, and the record keeps its
+  authors.
+- **Filter history's authors by §1.2 at read time.** A reader admitted by a
+  `'*'`, `users` or policy grant would see every change made by no one, and
+  an author who left the realm would vanish from the changes they made. The
+  §1.2 test also needs a permission row for both users at read time, which a
+  departed author no longer has.
+- **Show a hidden author under a stable per-realm pseudonym.** Edits stay
+  correlated without a name, but the pseudonym is undone by anyone who sees
+  one of the same author's named edits, and every reader sees two kinds of
+  author.
+- **Show hidden authors under one generic label.** Keeps the ids private and
+  loses who did what, which is the question history answers.
 
 ## 4. Consequences
 
