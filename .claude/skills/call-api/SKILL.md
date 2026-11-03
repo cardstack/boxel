@@ -359,6 +359,10 @@ What a card can and can't learn:
   `ListRealmKeySharesTool` (`@cardstack/boxel-host/tools/list-realm-key-shares`).
   It answers `visible: false` to anyone else, and for a writer it gives each
   share's `state`, `suspensionReason` and `shareId`, which `swap-key` takes.
+  Readiness answers `needs-admin` even to the writer who shared a key the
+  operation isn't approved for yet, since there is no binding to tell them
+  about; a share of theirs listed with no `operations` is the one to offer
+  them to approve (`approve` on the `apiKey` operation).
 - `needs-sign-in` on the `userKey` operation means the caller isn't signed
   in. Showing the shared answer is the most such a visitor can be offered.
 - A refusal reaches card code as an `OperationsError` carrying `code`,
