@@ -9,6 +9,7 @@
 // transaction is older than every transaction still in progress
 // (`pg_snapshot_xmin(pg_current_snapshot())`) and never skip a row whose
 // `seq` was assigned before a visible later one but whose commit came after.
+// The `xid8` type and `pg_current_xact_id()` need Postgres 13 or later.
 // `author` is the effective authenticated user's Matrix id, or `boxel-system`
 // for a write with none. `changes` holds one entry per path:
 // `{ path, status, contentHash, size, appended }`. `intent` marks an event
