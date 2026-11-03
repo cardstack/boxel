@@ -53,6 +53,8 @@ interface Signature {
     card?: CardDef;
     // The "Create New <Type>" affordance for a realm the user can write to.
     newCard?: NewCardArgs;
+    // The workspace a new card goes into, named on the "Create New" tile.
+    newCardRealmName?: string;
     isSelected: boolean;
     multiSelect?: boolean;
     // `kind` carries the selected result's card/file classification (absent for
@@ -288,8 +290,14 @@ export default class SearchResultTile extends Component<Signature> {
           height='16'
           role='presentation'
         />
-        Create New
-        {{this.cardRefName}}
+        <span class='create-new-label' data-test-create-new-label>
+          Create New
+          {{this.cardRefName}}
+          {{#if @newCardRealmName}}
+            in
+            <strong>{{@newCardRealmName}}</strong>
+          {{/if}}
+        </span>
       {{else if @entry}}
         <@entry.component
           class='hide-boundaries'

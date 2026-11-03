@@ -383,6 +383,7 @@ export default class ResultSection extends Component<Signature> {
         <SearchSheetSectionHeader
           @realmInfo={{this.realmSection.realmInfo}}
           @title={{this.realmSection.realmInfo.name}}
+          @isCurrent={{this.realmSection.isCurrent}}
           @realmURL={{this.sectionRealmUrl}}
           @totalCount={{this.realmSection.totalCount}}
           @showOnlyLabel={{unless this.isMini this.realmSection.realmInfo.name}}
@@ -398,6 +399,7 @@ export default class ResultSection extends Component<Signature> {
           {{#if (this.showCreateForRealm this.realmSection.realmUrl)}}
             <ResultTile
               @newCard={{this.newCardArgs this.realmSection.realmUrl}}
+              @newCardRealmName={{this.realmSection.realmInfo.name}}
               @isSelected={{this.isCreateNewSelected}}
               @multiSelect={{@multiSelect}}
               @onSelect={{@handleSelect}}

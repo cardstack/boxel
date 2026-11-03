@@ -346,7 +346,25 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
 
     await waitFor(`[data-test-card-chooser-modal]`);
-    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
+    assert
+      .dom('[data-test-item-button-create-new]')
+      .hasText('Create New Pet in Operator Mode Workspace');
+    let firstSection = document.querySelector(
+      '[data-test-card-chooser-modal] [data-test-realm-url]',
+    );
+    assert.strictEqual(
+      firstSection?.getAttribute('data-test-realm-url'),
+      testRealmURL,
+      "the edited card's workspace is listed first",
+    );
+    assert
+      .dom('[data-test-search-sheet-section-current]', firstSection!)
+      .hasText('Current workspace');
+    assert
+      .dom(
+        '[data-test-card-chooser-modal] [data-test-search-sheet-section-current]',
+      )
+      .exists({ count: 1 }, 'only one workspace is marked current');
     await click('[data-test-item-button-create-new]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
@@ -382,7 +400,9 @@ module('Integration | operator-mode | links', function (hooks) {
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
 
     await waitFor(`[data-test-card-chooser-modal]`);
-    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
+    assert
+      .dom('[data-test-item-button-create-new]')
+      .hasText('Create New Pet in Operator Mode Workspace');
     await click('[data-test-item-button-create-new]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
@@ -402,7 +422,9 @@ module('Integration | operator-mode | links', function (hooks) {
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-chooser-modal]`);
-    assert.dom('[data-test-item-button-create-new]').hasText('Create New Pet');
+    assert
+      .dom('[data-test-item-button-create-new]')
+      .hasText('Create New Pet in Operator Mode Workspace');
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {

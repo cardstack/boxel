@@ -22,6 +22,8 @@ export interface RealmSection {
   realmInfo: RealmSectionInfo;
   cards: RenderableSearchEntryLike[];
   totalCount: number;
+  // The workspace of the card a new card is being created for.
+  isCurrent?: boolean;
 }
 
 export type RecentsSection =
@@ -225,6 +227,18 @@ export function buildQuerySections(
         });
       }
     }
+  }
+
+  // The workspace of the card being edited comes first, so its "Create New"
+  // is the one the eye lands on.
+  let relativeTo = opts.offerToCreate?.relativeTo?.href;
+  let current = relativeTo
+    ? sections.find((section) => relativeTo!.startsWith(section.realmUrl))
+    : undefined;
+  if (current) {
+    current.isCurrent = true;
+    sections.splice(sections.indexOf(current), 1);
+    sections.unshift(current);
   }
 
   return sections;
