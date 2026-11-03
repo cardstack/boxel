@@ -1,6 +1,6 @@
 import {
-  canonicalizeMatrixMediaKey,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+  toolResultMediaRefusal,
   VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
 import {
@@ -169,8 +169,8 @@ export type AttachmentLookup =
 
 // The stored file the tool attaches to its result for `url`, or why it
 // can't: the url names no file a user attached in this room, the file is
-// text (its content is already in history), or the file is not stored in
-// the homeserver's media repository.
+// text (its content is already in history), or the prompt builder could never
+// send it as tool-result media (see toolResultMediaRefusal).
 export function lookUpAttachment(
   url: string,
   attachments: RoomAttachments,
@@ -190,13 +190,13 @@ export function lookUpAttachment(
         : `${url} is not an image, PDF, audio or video file, so it can't be shown.`,
     };
   }
-  if (
-    !file.url ||
-    !canonicalizeMatrixMediaKey(file.url)?.startsWith('mxc://')
-  ) {
+  // A message carries its own media without these limits, so attaching the
+  // file again is the way to show it.
+  let refusal = toolResultMediaRefusal(file);
+  if (refusal) {
     return {
       ok: false,
-      error: `${url} is not stored in this conversation, so it can't be shown. Ask the user to attach it again.`,
+      error: `${url} can't be shown: ${refusal}. Ask the user to attach it again if you need it.`,
     };
   }
   return {

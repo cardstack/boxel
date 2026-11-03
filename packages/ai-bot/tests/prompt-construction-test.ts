@@ -9529,7 +9529,7 @@ ${patchedFileSource}
       );
     });
 
-    test('a viewed attachment is held to the tool-result media limits', async () => {
+    test('an attachment over the per-file limit is refused by the tool, and the model reads why', async () => {
       let photo = jpg('huge.jpg', MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1);
       storeMedia(photo);
       let history = [
@@ -9544,10 +9544,39 @@ ${patchedFileSource}
 
       assert.deepEqual(imageUrls(prompt), []);
       assert.ok(
-        textOf(prompt[prompt.length - 1]).includes(
-          'The following files attached to tool results were not sent to the model, so you cannot see them: huge.jpg (boxel-local://3f2a/huge.jpg): it is larger than',
+        textOf(prompt.find((m) => m.role === 'tool')).includes(
+          `${photo.sourceUrl} can't be shown: it is larger than 3.75 MiB. Ask the user to attach it again if you need it.`,
         ),
-        'the trailing note names the file the limit left out',
+        'the tool message gives the reason',
+      );
+    });
+
+    test("viewed attachments share the turn's tool-result media budget", async () => {
+      let photos = ['a', 'b', 'c', 'd', 'e'].map((letter) =>
+        jpg(`${letter}.jpg`, 3.5 * 1024 * 1024),
+      );
+      photos.forEach(storeMedia);
+      let urls = photos.map((photo) => photo.sourceUrl);
+      let history = [
+        userMessage('1', 1, 'Here are the photos', photos),
+        botAnswer('2', 2, 'Five garden photos.'),
+        userMessage('3', 3, followUp),
+        viewRequest('4', 4, 'view-1', urls),
+      ];
+      history.push(await viewResult('5', 5, history, '4', 'view-1', urls));
+
+      let prompt = await buildPrompt(history);
+
+      assert.deepEqual(
+        imageUrls(prompt),
+        photos.slice(1).map(dataUrlOf),
+        'the newest files that fit in 16 MiB are sent',
+      );
+      assert.ok(
+        textOf(prompt[prompt.length - 1]).includes(
+          'The following files attached to tool results were not sent to the model, so you cannot see them: a.jpg (boxel-local://3f2a/a.jpg): newer tool-result media already fill the 16 MiB sent per turn',
+        ),
+        'the trailing note names the file the budget left out',
       );
     });
 

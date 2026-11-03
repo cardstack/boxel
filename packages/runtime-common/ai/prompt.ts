@@ -2977,9 +2977,11 @@ export function currentTurnMessageMedia(
 // takes the position of its latest result. Files the active model cannot
 // take (per `inputModalities`, when given) are left out before the limits
 // apply, so they never use up a slot or budget a sendable file could have.
-// The rest are chosen newest first within the limits above; a file with no recorded size is left out, since
-// its bytes cannot be counted against the budget. Text-based attachments are
-// excluded: their content rides in the tool message itself.
+// The rest are chosen newest first within the limits above. A file
+// toolResultMediaRefusal refuses is left out first: one that names no Matrix
+// media item, one over the per-file limit, and one with no recorded size,
+// since its bytes cannot be counted against the budget. Text-based
+// attachments are excluded: their content rides in the tool message itself.
 export function currentTurnToolResultMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -3014,18 +3016,19 @@ export function currentTurnToolResultMedia(
   let omitted: CurrentTurnMedia['omitted'] = [];
   let totalBytes = 0;
   for (let file of [...candidates].reverse()) {
+    // Read only once toolResultMediaRefusal has let the file through, which
+    // it does only for a file with a recorded size.
     let size = file.contentSize;
     let modality = requiredModality(file.contentType);
     let reason: string | undefined;
+    let refusal = toolResultMediaRefusal(file);
     if (inputModalities && modality && !inputModalities.includes(modality)) {
       reason = `the active model does not accept ${modalityLabel(modality)}`;
-    } else if (typeof size !== 'number') {
-      reason = 'its size is unknown';
-    } else if (size > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
-      reason = `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
+    } else if (refusal) {
+      reason = refusal;
     } else if (included.length >= MAX_CURRENT_TURN_TOOL_RESULT_MEDIA) {
       reason = `only the newest ${MAX_CURRENT_TURN_TOOL_RESULT_MEDIA} tool-result media files are sent`;
-    } else if (totalBytes + size > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
+    } else if (totalBytes + size! > MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES) {
       reason = `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`;
     }
     if (reason) {
@@ -3036,6 +3039,33 @@ export function currentTurnToolResultMedia(
     }
   }
   return { included, omitted };
+}
+
+const NOT_STORED_IN_CONVERSATION =
+  'it is not a file stored in this conversation';
+
+// Why a tool result's media file can never be sent, whatever else the turn
+// holds: its URL names no Matrix media item, its size is unknown, or it is
+// over MAX_TOOL_RESULT_MEDIA_FILE_BYTES. Undefined when only the turn's
+// shared count and byte limits can still leave it out. The viewAttachment
+// tool refuses the same files, so it never reports a file as shown that the
+// next request leaves out.
+export function toolResultMediaRefusal(
+  file: Pick<SerializedFileDef, 'url' | 'contentSize'>,
+): string | undefined {
+  if (
+    !file.url ||
+    !canonicalizeMatrixMediaKey(file.url)?.startsWith('mxc://')
+  ) {
+    return NOT_STORED_IN_CONVERSATION;
+  }
+  if (typeof file.contentSize !== 'number') {
+    return 'its size is unknown';
+  }
+  if (file.contentSize > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+    return `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`;
+  }
+  return undefined;
 }
 
 function formatMiB(bytes: number): string {
@@ -3117,7 +3147,7 @@ export const buildCurrentTurnMediaParts = async (
       if (!mediaUrl) {
         omittedAtDownload.push({
           file: f,
-          reason: 'it is not a file stored in this conversation',
+          reason: NOT_STORED_IN_CONVERSATION,
         });
         continue;
       }

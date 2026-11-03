@@ -9,6 +9,7 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
 import {
   roomAttachments,
@@ -274,7 +275,39 @@ module('viewAttachment', () => {
     assert.strictEqual(content['m.relates_to'].key, 'invalid');
     assert.ok(
       content.failureReason.includes(
-        `${jpg.sourceUrl} is not stored in this conversation`,
+        `${jpg.sourceUrl} can't be shown: it is not a file stored in this conversation. Ask the user to attach it again if you need it.`,
+      ),
+      content.failureReason,
+    );
+  });
+
+  test('an attachment the prompt could never send as tool-result media is refused at call time', async () => {
+    let sizeless = photo('sizeless.jpg', { contentSize: undefined });
+    let large = photo('large.jpg', {
+      contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+    });
+    let atLimit = photo('at-limit.jpg', {
+      contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+    });
+    let { content, data } = await view(
+      [message(USER, [sizeless, large, atLimit])],
+      [sizeless.sourceUrl, large.sourceUrl, atLimit.sourceUrl],
+    );
+
+    assert.deepEqual(
+      data.attachedFiles,
+      [atLimit],
+      'a file at the limit is shown',
+    );
+    assert.ok(
+      content.failureReason.includes(
+        `${sizeless.sourceUrl} can't be shown: its size is unknown.`,
+      ),
+      content.failureReason,
+    );
+    assert.ok(
+      content.failureReason.includes(
+        `${large.sourceUrl} can't be shown: it is larger than 3.75 MiB.`,
       ),
       content.failureReason,
     );
