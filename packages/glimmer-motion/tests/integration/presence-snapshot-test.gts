@@ -22,6 +22,8 @@ const keyOf = (it: { key: string }) => it.key;
 const copies = () => findAll('[data-motion-memory]') as HTMLElement[];
 const FADE = { opacity: 0 };
 const SLOW = { duration: 0.4, ease: 'linear' } as const;
+const QUICK = { duration: 0.05, ease: 'linear' } as const;
+const INNER = [{ key: 'inner' }];
 
 class State {
   @tracked open = true;
@@ -188,6 +190,38 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     );
   });
 
+  test('the copy goes back where its element stood, before what followed the <Presence>', async function (assert) {
+    const s = new State();
+    await render(
+      <template>
+        <div style='position:relative;width:300px;height:100px'>
+          <Presence
+            @items={{s.items}}
+            @key={{keyOf}}
+            @mode='snapshot'
+            as |it h|
+          >
+            <div
+              style='width:120px;height:60px'
+              {{motion presence=h exit=FADE transition=SLOW}}
+            >menu</div>
+          </Presence>
+          <span data-test-after>after</span>
+        </div>
+      </template>,
+    );
+    await nextFrame();
+    s.close();
+    await settled();
+
+    const [copy] = copies();
+    assert.strictEqual(
+      copy!.nextElementSibling,
+      find('[data-test-after]'),
+      'the whitespace that followed the element left with its block, and the copy goes in before the next node still there',
+    );
+  });
+
   test('the copy plays the exit its element declared', async function (assert) {
     const s = new State();
     await render(
@@ -318,6 +352,61 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     assert.strictEqual(done.calls.length, 1, 'once it has left');
   });
 
+  test('nested with @propagate under a leaving parent, the parent waits for the copies to finish', async function (assert) {
+    const s = new State();
+    const done = spy();
+    await render(
+      <template>
+        <Presence
+          @items={{s.items}}
+          @key={{keyOf}}
+          @onExitComplete={{done}}
+          as |it h|
+        >
+          <div
+            data-test-outer
+            style='position:relative;width:200px;height:100px'
+            {{motion presence=h exit=FADE transition=QUICK}}
+          >
+            <Presence
+              @items={{INNER}}
+              @key={{keyOf}}
+              @mode='snapshot'
+              @propagate={{true}}
+              @parent={{h}}
+              as |inner h2|
+            >
+              <div
+                style='width:120px;height:60px'
+                {{motion presence=h2 exit=FADE transition=SLOW}}
+              >inner</div>
+            </Presence>
+          </div>
+        </Presence>
+      </template>,
+    );
+    await nextFrame();
+    s.close();
+    await settled();
+    assert.strictEqual(copies().length, 1, 'the inner copy is leaving');
+
+    const seen: number[] = [];
+    let outerStayed = true;
+    while (copies().length && seen.length < 120) {
+      seen.push(parseFloat(getComputedStyle(copies()[0]!).opacity));
+      outerStayed &&= Boolean(find('[data-test-outer]'));
+      await nextFrame();
+    }
+    assert.true(outerStayed, 'the parent kept its block while the copy played');
+    assert.true(
+      seen[seen.length - 1]! < 0.5,
+      `the copy played its whole exit: ${JSON.stringify(seen)}`,
+    );
+    await animationsSettled();
+    assert.dom('[data-test-outer]').doesNotExist('then the parent left');
+    assert.strictEqual(done.calls.length, 1);
+  });
+
   test("a copy's form controls stay out of the live page's radio groups", async function (assert) {
     const s = new State();
     await render(
@@ -348,6 +437,54 @@ module('Integration | motion | Presence snapshot', function (hooks) {
     assert.true(
       (find('[data-test-radio="b"]') as HTMLInputElement).checked,
       "face b's radio stays checked beside the copy of face a's",
+    );
+  });
+
+  test("a copy's selects show the options the user had chosen", async function (assert) {
+    const s = new State();
+    await render(
+      <template>
+        <Presence @items={{s.items}} @key={{keyOf}} @mode='snapshot' as |it h|>
+          <div
+            style='width:120px;height:60px'
+            {{motion presence=h exit=FADE transition=SLOW}}
+          >
+            <select aria-label='size' data-test-size>
+              <option value='s'>s</option>
+              <option value='m'>m</option>
+              <option value='l'>l</option>
+            </select>
+            <select aria-label='toppings' multiple data-test-toppings>
+              <option value='a' selected>a</option>
+              <option value='b'>b</option>
+              <option value='c'>c</option>
+            </select>
+          </div>
+        </Presence>
+      </template>,
+    );
+    await nextFrame();
+    (find('[data-test-size]') as HTMLSelectElement).value = 'l';
+    const toppings = (find('[data-test-toppings]') as HTMLSelectElement)
+      .options;
+    toppings[0]!.selected = false;
+    toppings[1]!.selected = true;
+    toppings[2]!.selected = true;
+    s.close();
+    await settled();
+
+    const [copy] = copies();
+    assert.strictEqual(
+      copy!.querySelector<HTMLSelectElement>('[data-test-size-memory]')!.value,
+      'l',
+    );
+    assert.deepEqual(
+      [
+        ...copy!.querySelector<HTMLSelectElement>(
+          '[data-test-toppings-memory]',
+        )!.selectedOptions,
+      ].map((o) => o.value),
+      ['b', 'c'],
     );
   });
 

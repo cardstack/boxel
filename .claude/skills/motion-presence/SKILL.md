@@ -64,18 +64,20 @@ When the leaver renders content you can't put on the item — a component's
 caller blocks, `...attributes` — use `@mode="snapshot"`: nothing live stays
 behind, so nothing re-renders. The copy is a memory (the same treatment
 `<Choreo>` gives its parked leavers): inert, held at its last frame, with no
-ids or form-control names. Its test hooks are suffixed (`data-test-title`
-becomes `data-test-title-memory`), so a test's selectors find only the live
-element. It is a picture, so motion elements nested in it don't play their own
-exits.
+ids or form-control names, so a rule keyed on an id doesn't reach it: style a
+leaver by class. Its test hooks are suffixed (`data-test-title` becomes
+`data-test-title-memory`), so a test's selectors find only the live element.
+It is a picture, so motion elements nested in it don't play their own exits.
 
-The copy is pinned out of flow at the seat the last frame showed its element
-in. `@anchorX` / `@anchorY` pick the edges of its containing block it is
-pinned to: pick the ones that hold still as the render lands, so
-`@anchorY='bottom'` in a container that grows upward from its bottom edge. The
-copy keeps its classes and goes back into its parent, so structural selectors
-that read the live scene (`:has()`, `+`, `~`, `:nth-child()`, `:empty`) still
-match it while it fades. A rule that should see only live content excludes it:
+The copy is pinned out of flow at the seat its element last recorded: after
+each render, and when it or its offset parent resizes. A move that is neither
+(a transition on a sibling's width) is not seen. `@anchorX` / `@anchorY` pick
+the edges of its containing block it is pinned to: pick the ones that hold
+still as the render lands, so `@anchorY='bottom'` in a container that grows
+upward from its bottom edge. The copy keeps its classes and goes back into its
+parent, so structural selectors that read the live scene (`:has()`, `+`, `~`,
+`:nth-child()`, `:empty`) still match it while it fades. A rule that should
+see only live content excludes it:
 `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
 `packages/host/app/components/pill-menu/index.gts` is the worked example, and
 the composer in `packages/host/app/components/matrix/room.gts` shows both

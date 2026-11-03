@@ -7,7 +7,7 @@ import type { MotionEl, MotionProps, PopSeat } from './node.ts';
  * that removes it: popLayout measures its seat (React's PopChildMeasure does
  * this in getSnapshotBeforeUpdate; see MotionNode.measureForPop), and
  * snapshot copies it (see MotionNode.exitForCopy), pinning the copy to the
- * seat the last frame showed (see MotionNode.recordSeat).
+ * seat recorded before that render (see MotionNode.recordSeat).
  */
 export interface PopMeasurable {
   exitForCopy():

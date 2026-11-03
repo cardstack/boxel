@@ -1368,9 +1368,11 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
    * `<Presence @mode="snapshot">`: reads the seat this element has now, for
    * the copy of it to be pinned to if it leaves. <Presence> calls this in each
    * frame that follows a render, and whenever this element or the box it is
-   * pinned inside resizes, so the seat is the one the last frame showed.
-   * Returns the elements the seat depends on, for <Presence> to watch for
-   * resizes.
+   * pinned inside resizes. That covers the moves a render or a resize makes;
+   * a move that is neither, such as a transition on a sibling's width that
+   * shifts this element without resizing either box, leaves the seat where it
+   * was. Returns the elements the seat depends on, for <Presence> to watch
+   * for resizes.
    */
   recordSeat(): Element[] {
     const el = this.element;
@@ -1387,7 +1389,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
    * play the exit this element would have played. <Presence> reads it from
    * its diff, before the render that removes the element.
    *
-   * `seat` is where the last frame showed the element (see recordSeat). By the
+   * `seat` is the one recorded before this render (see recordSeat). By the
    * time the diff runs, content earlier in the template has already been
    * patched for this render, and may have moved the element somewhere no
    * frame showed it.

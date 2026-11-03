@@ -178,18 +178,25 @@ acts:
 - Its CSS animations hold still: each one the element was showing pauses where it was, and any other
   jumps to its end, so an entrance does not play again on a leaver. Animations on a scroll timeline
   follow the restored scroll offsets.
-- Its scroll offsets are restored, its backdrop filters are off, and it is composited as one texture.
+- Its scroll offsets are restored, its backdrop filters are off, and it is composited as one texture
+  (`will-change: transform, opacity`). That makes it a stacking context and the containing block of
+  every positioned descendant, `position: fixed` included.
 - It is inert and `aria-hidden`. Its HTML elements carry no ids, `autofocus` or form-control names;
-  its SVG elements keep their ids, which its own fills, clips and masks resolve through. Its iframes
-  are blank, and its media neither plays nor loads.
+  its SVG elements keep their ids, which its own fills, clips and masks resolve through. A reference
+  resolves to the first element with its id, so while a memory comes before its replacement (as one
+  in `<Choreo>`'s orphan layer does), the replacement's `url(#id)` and `<use>` references resolve to
+  the memory's definitions; definitions that change as their element is replaced need an id per
+  version. Its iframes are blank, and its media neither plays nor loads.
 - Its test hooks carry a suffix: `data-test-title` becomes `data-test-title-memory`, with its value. A
   test's selector finds only the live element, and a test that means the leaver names it with the
   suffix. It carries `data-motion-memory`, and `live()` / `liveAll()` in `glimmer-motion/test-support`
   skip it for any other selector.
-- Its classes and its other attributes stay, so it looks as its element did. A memory put back in its
-  parent (a `<Presence @mode="snapshot">` copy) still matches structural selectors that read the live
-  scene (`:has()`, `+`, `~`, `:nth-child()`, `:empty`). A rule that should see only live content
-  excludes it: `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
+- Its classes and its other attributes stay, so it looks as its element did wherever its styles are
+  keyed on them. A rule keyed on an id (`#panel`, `:target`) no longer reaches it, so style an element
+  that may leave by class. A memory put back in its parent (a `<Presence @mode="snapshot">` copy)
+  still matches structural selectors that read the live scene (`:has()`, `+`, `~`, `:nth-child()`,
+  `:empty`). A rule that should see only live content excludes it:
+  `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
 
 A host makes one with `keepAsMemory(element, shown, insert)`, where `insert` puts the element back in
 the document, and `shown` is what the element showed before the render that removed it: its CSS
@@ -265,17 +272,17 @@ yields, not be read back out of state that has already moved on.
 Where it can't, because the leaver renders blocks or state you don't own, use
 `<Presence @mode="snapshot">`. The leaver's block is torn down in the render that removes it, and a
 static copy of the element given the handle plays that element's `exit`. The copy shows the
-element's last frame, lifted out of flow at the seat that frame showed it in. That seat is read after
-every render and on resize, because content earlier in the template is patched before `<Presence>`
-diffs, and may already have moved the leaver. `@anchorX` / `@anchorY` pin the copy to edges of its
-containing block; pick the ones that hold still as the render lands (`@anchorY="bottom"` in a
-container that grows upward from its bottom edge). It is kept as a
-[memory](#memories): inert, held at that frame, with no ids or form-control names, and with its test
-hooks suffixed (`data-test-title-memory`). It also takes the canvas pixels the element showed and the
-values its script animations and transitions had reached. An item that comes back replaces its copy
-at once, and with no `exit` or with animations skipped nothing is copied. A copy is a picture: motion
-elements nested inside it don't play their own exits, and custom elements inside it are constructed
-again.
+element's last frame, lifted out of flow at its recorded seat. That seat is read after every render
+and on resize, because content earlier in the template is patched before `<Presence>` diffs, and may
+already have moved the leaver. A move that is neither, such as a transition on a sibling's width, is
+not seen. `@anchorX` / `@anchorY` pin the copy to edges of its containing block; pick the ones that
+hold still as the render lands (`@anchorY="bottom"` in a container that grows upward from its bottom
+edge). It is kept as a [memory](#memories): inert, held at that frame, with no ids or form-control
+names, and with its test hooks suffixed (`data-test-title-memory`). It also takes the canvas pixels
+the element showed, the option each of its selects had chosen, and the values its script animations
+and transitions had reached. An item that comes back replaces its copy at once, and with no `exit`
+or with animations skipped nothing is copied. A copy is a picture: motion elements nested inside it
+don't play their own exits, and custom elements inside it are constructed again.
 
 **3. Declare what you want tweened, because a value in the stylesheet is invisible to the engine.**
 A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and

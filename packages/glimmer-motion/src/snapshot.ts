@@ -7,20 +7,25 @@
  * In snapshot mode the leaver's block is torn down in the render that removes
  * it, as if no <Presence> were there. Before that render patches the
  * leaver's block, the element is copied as it stands. After it, the copy goes
- * back where the element stood, lifted out of flow at the seat the last frame
- * showed it in, plays the element's exit, and is removed.
+ * back where the element stood (before the first node that followed it and is
+ * still there), lifted out of flow at its recorded seat, plays the element's
+ * exit, and is removed.
  *
  * The seat is read in every frame that follows a render, and whenever the
  * element or the box it is pinned inside resizes, not at the diff: Glimmer
  * patches the DOM in template order, so by the time <Presence> diffs, content
  * earlier in the template has already been patched for the render, and may
  * have moved or resized the element. Its content is still the last frame's;
- * its box may not be.
+ * its box may not be. A move that is neither a render nor one of those
+ * resizes is not seen: a transition on a sibling's width can shift the
+ * element without resizing either box, and the copy is then pinned where the
+ * element stood before that move.
  *
  * The copy is kept as a memory (see memory.ts): it shows the element's last
  * frame, and nothing in it acts. A clone does not carry everything the
- * element showed, so the copy also takes the canvas pixels it showed and the
- * values its script animations and transitions had reached.
+ * element showed, so the copy also takes the canvas pixels it showed, the
+ * option each of its selects had chosen, and the values its script
+ * animations and transitions had reached.
  */
 import type { PresenceContextProps } from 'motion-dom';
 
@@ -51,9 +56,13 @@ export interface CopyPlacement {
 
 /** what the diff read from a leaver, for its copy to use after the render */
 interface Captured {
-  /** the node that followed the element, where the copy goes back in */
-  before: Node | null;
   copy: MotionEl;
+  /**
+   * the nodes that followed the element: the copy goes back in before the
+   * first one the render left in place (the next ones are often the leaver's
+   * own whitespace and bounds, which leave with its block)
+   */
+  following: Node[];
   parent: Node;
   props: MotionProps;
   seat: PopSeat;
@@ -106,8 +115,8 @@ function copyCanvas(live: HTMLCanvasElement, copy: HTMLCanvasElement) {
 /**
  * Copies an element that is about to be removed, as it stands. Called from
  * <Presence>'s diff, before the render patches the element's block. `seat` is
- * where the last frame showed it; an element that is leaving before any frame
- * has shown it is pinned where it stands now.
+ * the one recorded for it (see MotionNode.recordSeat); an element that is
+ * leaving before any seat was recorded is pinned where it stands now.
  */
 export function captureExit(source: {
   element: MotionEl;
@@ -140,11 +149,19 @@ export function captureExit(source: {
   live.forEach((el, i) => {
     if (el instanceof HTMLCanvasElement) {
       copyCanvas(el, copies[i] as HTMLCanvasElement);
+    } else if (el instanceof HTMLOptionElement) {
+      // a clone's options take their selectedness from the markup, not from
+      // the choice the user made
+      (copies[i] as HTMLOptionElement).selected = el.selected;
     }
   });
+  const following: Node[] = [];
+  for (let node = element.nextSibling; node; node = node.nextSibling) {
+    following.push(node);
+  }
   return new ExitCopy({
-    before: element.nextSibling,
     copy,
+    following,
     parent,
     props,
     seat,
@@ -169,15 +186,14 @@ export class ExitCopy {
   /** after the render: put the copy where its element stood and play the exit */
   start(placement: CopyPlacement, onDone: () => void) {
     this.onDone = onDone;
-    const { before, copy, parent, props, shown } = this.captured;
+    const { copy, following, parent, props, shown } = this.captured;
     if (this.ended || !parent.isConnected) {
       this.end(true);
       return;
     }
     this.pin(placement);
-    keepAsMemory(copy, shown, () =>
-      parent.insertBefore(copy, before?.parentNode === parent ? before : null),
-    );
+    const before = following.find((node) => node.parentNode === parent);
+    keepAsMemory(copy, shown, () => parent.insertBefore(copy, before ?? null));
     const node = (this.node = new MotionNode());
     node.update(copy, { ...props, presence: this.handle(placement) });
     flushPendingMounts();

@@ -154,14 +154,14 @@ class Entry<T> implements PresenceHandle {
       // the DOM is patched. That timing is the whole of it. This runs from the
       // diff in `rendered`, the nearest slot Glimmer has: this <Presence>'s
       // newcomers for the pass have not been inserted yet, so the container
-      // they would grow or re-centre has not moved. Content earlier in the
+      // they would grow or re-center has not moved. Content earlier in the
       // template than this <Presence> has already been patched for the pass,
       // though, and a leaver it moves is measured where it was moved to.
-      // (Snapshot mode pins its copies to the seat the last frame showed
+      // (Snapshot mode pins its copies to a seat recorded before the pass
       // instead; see `seatWatch`.)
       //
       // Measure it afterwards and you read a layout that already contains the
-      // arrivals: the container has grown, a centred one has re-centred, and
+      // arrivals: the container has grown, a centered one has re-centered, and
       // the leaver gets pinned at a place it never was. On a stage that
       // replays, every generation lands further from home than the last, and
       // what you see is a stack of ghosts drifting away from the newcomers.
@@ -243,13 +243,14 @@ export class Presence<T> extends Component<Signature<T>> {
   /* eslint-disable ember/no-side-effects -- a render detector (see LayoutGroup): re-evaluated in every
      render pass, it books a read of the seats the pass leaves the children in */
   /**
-   * Snapshot: a leaver's copy is pinned to the seat the last frame showed its
-   * element in. Each direct child reads its seat in the frame after every
+   * Snapshot: a leaver's copy is pinned to the seat its element last
+   * recorded. Each direct child reads its seat in the frame after every
    * render, and again whenever it or the box it is pinned inside resizes (see
    * MotionNode.recordSeat). The diff cannot read it: Glimmer patches the DOM
    * in template order, so content earlier in the template than this
    * <Presence> has been patched by the time it diffs, and may have moved or
-   * resized the leaver.
+   * resized the leaver. A move that is neither a render nor one of those
+   * resizes, such as a transition on a sibling's width, is not seen.
    */
   get seatWatch(): undefined {
     if (this.args.mode !== 'snapshot') {
@@ -361,9 +362,9 @@ export class Presence<T> extends Component<Signature<T>> {
         const presentIndex = presentKeys.indexOf(k);
         if (presentIndex === -1 && snapshot) {
           // copied now, before this render patches the block, so the copy
-          // shows the last frame's content (and is pinned to the seat that
-          // frame showed; see `seatWatch`); the block itself leaves with
-          // this render
+          // shows the last frame's content (and is pinned to the seat
+          // recorded before this render; see `seatWatch`); the block itself
+          // leaves with this render
           snapshotLeft = true;
           for (const copy of this.entries.get(k)?.copiesForExit() ?? []) {
             this.copies.set(copy, k);
@@ -404,7 +405,16 @@ export class Presence<T> extends Component<Signature<T>> {
         }
       }
       this.firstRender = false;
-      if (this.args.propagate && !parentPresent && !this.order.length) {
+      // a leaving parent waits on this <Presence>: with nothing left to
+      // render it is done, unless copies are still playing their exits (they
+      // report when they finish; see checkCopiesLeft)
+      if (
+        this.args.propagate &&
+        !parentPresent &&
+        !this.order.length &&
+        !snapshotLeft &&
+        !this.copies.size
+      ) {
         postRender(() => this.safeToRemove());
       }
     }
@@ -475,10 +485,13 @@ export class Presence<T> extends Component<Signature<T>> {
     this.checkCopiesLeft();
   }
 
-  /** every copy has finished its exit, and no live leaver is still playing one */
+  /** every copy has finished its exit, and no live leaver is still playing one: report as onExit does */
   private checkCopiesLeft() {
     if (this.copies.size || this.exitComplete.size || isDestroying(this)) {
       return;
+    }
+    if (this.args.propagate) {
+      this.safeToRemove();
     }
     this.args.onExitComplete?.();
   }

@@ -21,23 +21,33 @@
  *   behind it on every frame, at full price inside a moving, fading element,
  *   and what is behind a memory is the scene that replaced it.
  * - It is composited as one texture (`will-change: transform, opacity`).
+ *   That also makes it a stacking context, and the containing block of every
+ *   positioned descendant, `position: fixed` included: a descendant that was
+ *   placed against a box outside the element is placed against the memory.
  * - It is inert and hidden from assistive technology.
  * - Its HTML elements carry no ids, `autofocus` or form-control names. A
  *   duplicate id that comes first in the document is what `getElementById`
  *   and `<label for>` find, and a checked radio button joining the document
  *   unchecks the live one in its group. Its SVG elements keep their ids,
  *   which its own fills, clips, masks and `<use>` references resolve through.
- *   Its iframes are blank, and its media neither plays nor loads.
+ *   A reference resolves to the first element in the document with its id,
+ *   so while a memory comes before its replacement (as one in Choreo's orphan
+ *   layer, its region's first child, does), the replacement's `url(#id)` and
+ *   `<use>` references resolve to the memory's definitions. Definitions that
+ *   change as their element is replaced need an id per version. Its iframes
+ *   are blank, and its media neither plays nor loads.
  * - Its test hooks carry a suffix: `data-test-title` becomes
  *   `data-test-title-memory`, with its value. A test's selector finds only the
  *   live element, which is what replaced the leaver or nothing, and a test that
  *   means the leaver names it with the suffix. `live()` and `liveAll()` in
  *   `glimmer-motion/test-support` skip memories for every other selector.
  * - Its classes and its other attributes stay, so it looks as its element
- *   did. A memory put back in its parent (a `<Presence @mode="snapshot">`
- *   copy) therefore still matches structural selectors that read the live
- *   scene: `:has()`, `+`, `~`, `:nth-child()`, `:empty`. A rule that should
- *   see only live content excludes it, as in
+ *   did wherever its styles are keyed on them. A rule keyed on an id
+ *   (`#panel`, `:target`) no longer reaches it, so an element that may leave
+ *   is styled by class. A memory put back in its parent (a
+ *   `<Presence @mode="snapshot">` copy) therefore still matches structural
+ *   selectors that read the live scene: `:has()`, `+`, `~`, `:nth-child()`,
+ *   `:empty`. A rule that should see only live content excludes it, as in
  *   `:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
  *
  * Custom elements in a memory are connected again, and run their
