@@ -384,10 +384,9 @@ order, and maps each way a slot falls short to an answer: no binding →
 `needs-connect`, or `needs-approval` where one of the caller's grants already
 covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
-to anyone but the share key's owner, except that a share slot with no binding,
-or whose share is suspended, is `needs-approval` to a caller with an active
-share of their own in the realm (the shares the approve page offers them for
-it); a grant the vendor rejected, with no
+to anyone but the share key's owner, except that a share slot with no binding
+is `needs-approval` to a caller with an active share of their own in the realm
+(the shares the approve page offers them for it); a grant the vendor rejected, with no
 probe due → `credential-rejected` (to everyone, since the call says the
 same); nobody signed in → `needs-sign-in`, unless every slot is a share's
 and the realm admitted them from an address, when a share whose key doesn't allow

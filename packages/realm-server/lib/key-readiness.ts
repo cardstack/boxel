@@ -47,8 +47,10 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
 // the share's key, who is told what they could fix themselves. A caller with
 // an active share of their own in the realm is told `needs-approval` for a
-// share slot nothing fills, or one whose share is suspended: the approve page
-// offers them their shares for it, and approving one fills it. The one
+// share slot with no binding at all: the approve page offers them their
+// shares for it, and approving one fills it. A slot whose binding names
+// someone else's share, or a suspended one, is never offered there, so it
+// stays `needs-admin` to them. The one
 // exception is a key the vendor rejected, at a grant or as a whole, which the
 // call itself refuses `credential-rejected` to everyone.
 //
@@ -113,7 +115,7 @@ export async function keyReadiness(
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
     (covering ??= callerHasCoveringGrant(dbAdapter, lookup, caller));
-  // Read once, and only where an `{{apiKey}}` slot has no share to fill it.
+  // Read once, and only where an `{{apiKey}}` slot has no binding.
   let sharing: Promise<boolean> | undefined;
   let callerShares = () =>
     (sharing ??= lookup.caller
@@ -216,9 +218,10 @@ async function callerHasActiveShare(
 
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only
 // the owner of the share's key can approve it, and only someone with a share
-// of their own in the realm can approve one for a slot nothing fills, so
+// of their own in the realm can approve one for a slot with no binding, so
 // anyone else is told an administrator needs to set it up, however it falls
-// short.
+// short. A suspended share is resumed or swapped, not approved again, so it
+// needs an administrator whoever asks.
 async function shareReadiness(
   check: SlotCheck,
   caller: string,
@@ -243,9 +246,14 @@ async function shareReadiness(
       // them here gives away nothing more about the share.
       return 'credential-rejected';
     case 'share-suspended':
+      return 'needs-admin';
     case 'binding-not-approved':
-      // No binding, or one whose share is suspended: approving one of the
-      // caller's own shares replaces it.
+      // A binding whose grant is gone is its share owner's to approve again.
+      // With no binding, the approve page offers the caller their own shares
+      // in the realm, if they have any.
+      if (check.binding) {
+        return theirs ? 'needs-approval' : 'needs-admin';
+      }
       return (await callerShares()) ? 'needs-approval' : 'needs-admin';
   }
 }

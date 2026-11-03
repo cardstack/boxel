@@ -347,8 +347,8 @@ so the card needn't say whose key it is using. The requests:
 
 - `approve` on the caller's own operation at `needs-connect` or
   `needs-approval`; `review-changes` at `needs-reapproval`.
-- `approve` on the `apiKey` operation for the writer whose share isn't
-  approved for it yet, asked even while the card runs on their own key,
+- `approve` on the `apiKey` operation at `needs-approval`, for the writer
+  whose share isn't approved for it yet, asked even while the card runs on their own key,
   since nobody else in the realm can use the share until then.
 - `replace-key` after `credential-rejected`, from the card's error, not
   opened by itself.
@@ -376,9 +376,9 @@ What a card can and can't learn:
   told about a realm's shares. The exception is a caller who can fix it: the
   owner of the share's key is told `needs-approval` or `needs-reapproval`,
   and a caller with an active share of their own in the realm is told
-  `needs-approval` when no share fills the slot or its share is suspended,
-  since the approve page offers them their shares for it. Offer them `approve`
-  on the `apiKey` operation. A direct writer can tell the `needs-admin` cases
+  `needs-approval` when the slot has no binding yet, since the approve page
+  offers them their shares for it. Offer them `approve` on the `apiKey`
+  operation. A direct writer can tell the `needs-admin` cases
   apart with `ListRealmKeySharesTool`
   (`@cardstack/boxel-host/tools/list-realm-key-shares`). It answers
   `visible: false` to anyone else, and for a writer it gives each share's

@@ -456,8 +456,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.strictEqual(
       await readiness(WRITER, 'shared'),
-      'needs-approval',
-      'a caller with an active share of their own can approve it in place of the suspended one',
+      'needs-admin',
+      'a suspended share is resumed or swapped, not approved again, even by a caller with a share of their own',
     );
     assert.strictEqual(
       await readiness(OWNER, 'shared'),
@@ -495,6 +495,32 @@ module(basename(import.meta.filename), function (hooks) {
       await readiness(OWNER, 'shared'),
       'needs-admin',
       'a suspended share is not one its owner can approve',
+    );
+  });
+
+  test('a share binding whose grant is gone is its share owner’s to approve again, and an administrator’s to anyone else', async function (assert) {
+    let key = await addKey();
+    let { id: shareId } = await share(key.id);
+    let binding = await approve(OWNER, 'shared', { shareId });
+    await allowInteractive(binding);
+    await share((await addKey(WRITER)).id, {
+      owner: WRITER,
+      label: 'Writer vendor key',
+    });
+    assert.strictEqual(await readiness(WRITER, 'shared'), 'ready');
+
+    await dbAdapter.execute(`DELETE FROM user_key_grants WHERE key_id = $1`, {
+      bind: [key.id],
+    });
+    assert.strictEqual(
+      await readiness(OWNER, 'shared'),
+      'needs-approval',
+      'the share’s owner approves it again, which writes the grant',
+    );
+    assert.strictEqual(
+      await readiness(WRITER, 'shared'),
+      'needs-admin',
+      'a binding to someone else’s share is not offered to a caller with a share of their own',
     );
   });
 
