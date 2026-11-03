@@ -13,12 +13,14 @@ import {
   deleteSystemKey,
   listPlatformClients,
   listSystemKeys,
+  parseResponseCapBytes,
   replacePlatformClientSecret,
   readKeyValue,
   refuseClientOptions,
   refuseSystemOptions,
   replaceSystemKey,
   resolveSystemKeyId,
+  setSystemKeyResponseCap,
   showPlatformClient,
   type SystemKey,
 } from '../../src/commands/realm-server/keys.js';
@@ -37,6 +39,7 @@ function systemKey(overrides: Partial<SystemKey> = {}): SystemKey {
     supportsStreaming: true,
     hasValue: true,
     keyId: 'kms-0123456789abcdef',
+    responseSizeCap: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -230,6 +233,65 @@ describe('boxel realm-server keys', () => {
     await expect(
       resolveSystemKeyId(options(fetch), { id: 'a', destination: 'x' }),
     ).rejects.toThrow(/not both/);
+  });
+
+  it("sets and clears a key's response size cap with its note", async () => {
+    let { fetch, requests } = fakeServer([
+      { body: { key: systemKey({ responseSizeCap: 134217728 }) } },
+      { body: { key: systemKey() } },
+    ]);
+    let id = systemKey().id;
+    let set = await setSystemKeyResponseCap(options(fetch), id, {
+      bytes: 134217728,
+      note: 'image responses near the cap',
+    });
+    expect(set.responseSizeCap).toBe(134217728);
+    await setSystemKeyResponseCap(options(fetch), id, {
+      bytes: null,
+      note: 'back to the default',
+    });
+    expect(requests.map(({ method, url }) => [method, url])).toEqual([
+      [
+        'PUT',
+        `https://realms.example.test/_system-keys/${id}/response-size-cap`,
+      ],
+      [
+        'PUT',
+        `https://realms.example.test/_system-keys/${id}/response-size-cap`,
+      ],
+    ]);
+    expect(requests.map(({ body }) => JSON.parse(body!))).toEqual([
+      { bytes: 134217728, note: 'image responses near the cap' },
+      { bytes: null, note: 'back to the default' },
+    ]);
+  });
+
+  it('takes a response size cap as a whole number of bytes only', () => {
+    expect(parseResponseCapBytes('134217728')).toBe(134217728);
+    for (let raw of ['0', '-1', '1.5', '128MiB', '1e9', '', 'abc']) {
+      expect(() => parseResponseCapBytes(raw)).toThrow(/whole number of bytes/);
+    }
+  });
+
+  it('exposes set-response-cap, which takes the cap or --clear', () => {
+    let keys = buildBoxelProgram('0.0.0')
+      .commands.find((command) => command.name() === 'realm-server')!
+      .commands.find((command) => command.name() === 'keys')!;
+    let command = keys.commands.find((c) => c.name() === 'set-response-cap')!;
+    expect(command).toBeDefined();
+    expect(command.options.map((option) => option.long)).toEqual(
+      expect.arrayContaining([
+        '--realm-server',
+        '--id',
+        '--destination',
+        '--clear',
+        '--note',
+        '--json',
+      ]),
+    );
+    expect(command.registeredArguments.map((arg) => arg.name())).toEqual([
+      'bytes',
+    ]);
   });
 
   it("reports a refusal with the server's reason", async () => {
@@ -511,6 +573,7 @@ describe('boxel realm-server keys', () => {
       'add',
       'replace',
       'delete',
+      'set-response-cap',
     ]);
     for (let command of keys!.commands) {
       for (let option of command.options) {

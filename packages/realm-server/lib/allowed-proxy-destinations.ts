@@ -76,6 +76,9 @@ export interface AllowedProxyDestination {
   supportsStreaming: boolean;
   authMethod: AuthMethod;
   authParameterName?: string; // For URL parameter auth, e.g., 'key' for Google, 'api_key' for others
+  // The key's own response size cap, in bytes. Unset, its calls take the
+  // system-key path's cap.
+  responseSizeCap?: number;
 }
 
 interface ProxyEndpointRow extends ProxyEndpointKeyRow {
@@ -83,6 +86,7 @@ interface ProxyEndpointRow extends ProxyEndpointKeyRow {
   supports_streaming: boolean;
   auth_method?: string;
   auth_parameter_name?: string;
+  response_size_cap_bytes?: string | number | null;
 }
 
 export class AllowedProxyDestinations {
@@ -107,7 +111,8 @@ export class AllowedProxyDestinations {
     try {
       const result = await this.dbAdapter.execute(
         `SELECT id, url, credit_strategy, supports_streaming, auth_method,
-           auth_parameter_name, ${PROXY_ENDPOINT_KEY_COLUMNS}
+           auth_parameter_name, response_size_cap_bytes,
+           ${PROXY_ENDPOINT_KEY_COLUMNS}
          FROM proxy_endpoints`,
       );
       return this.destinationsFromEndpoints(
@@ -133,6 +138,11 @@ export class AllowedProxyDestinations {
       try {
         // A row with no key passes its null through.
         const apiKey = readProxyEndpointKey(endpoint) as string;
+        // A bigint column reads as a string.
+        const responseSizeCap =
+          endpoint.response_size_cap_bytes == null
+            ? undefined
+            : Number(endpoint.response_size_cap_bytes);
         destinations[endpoint.url] = {
           url: endpoint.url,
           apiKey,
@@ -140,10 +150,12 @@ export class AllowedProxyDestinations {
             endpoint.credit_strategy as 'openrouter' | 'no-credit',
             apiKey,
             systemKeyName(endpoint.url),
+            responseSizeCap,
           ),
           supportsStreaming: endpoint.supports_streaming,
           authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
           authParameterName: endpoint.auth_parameter_name,
+          responseSizeCap,
         };
       } catch (error) {
         // An unreadable key was already reported, once per sealed value.

@@ -40,8 +40,14 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups for every env; routing uses
-                       # Grafana's default notification policy
+  alerting/            # alert rule groups for every env; a rule routes
+                       # through Grafana's default notification policy, or
+                       # to a contact point by `notification_settings.receiver`
+                       # (the response size cap rules in keys-group.json go
+                       # to Techops). local-techops-contact-point.json is the
+                       # local stand-in for that contact point, with no SMTP
+                       # behind it; apply-alerting.sh skips it, as it skips
+                       # any file here with no rule groups
   alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
                        # <env>/rules/ exist in that hosted env only;
                        # apply-alerting.sh pushes contact points first, with
