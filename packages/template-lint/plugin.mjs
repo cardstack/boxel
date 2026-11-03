@@ -33,9 +33,10 @@ export default {
         // <details> itself as an interactive parent and reports them.
         // Ignoring <details> leaves the <summary> as the interactive parent,
         // so a control inside the <summary> is still reported, as is any
-        // control nested in another interactive element. What goes
-        // unreported is a <details> element itself inside another control;
-        // a <summary> in it is still reported there.
+        // control nested in another interactive element. Two cases go
+        // unreported: a <details> element itself inside another control (a
+        // <summary> in it is still reported there), and a <summary> that is
+        // not the first child of its <details>.
         'no-nested-interactive': { ignoredTags: ['details'] },
 
         'require-button-type': false,
