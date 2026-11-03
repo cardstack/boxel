@@ -162,18 +162,17 @@ export default class KeyUsagePanel extends Component<Signature> {
   }
 
   // Opens the panel, unless it is open or opening, and moves focus to its
-  // disclosure, which brings it into view.
+  // disclosure, which brings it into view. The disclosure is drawn whether
+  // the panel is open or not, so it can take focus at once.
   private show = () => {
     if (this.isClosed || this.failed) {
       this.load();
     }
-    requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
-          `[data-usage-panel="${CSS.escape(this.args.key.id)}"] [data-usage-panel-toggle]`,
-        )
-        ?.focus(),
-    );
+    document
+      .querySelector<HTMLElement>(
+        `[data-usage-panel="${CSS.escape(this.args.key.id)}"] [data-usage-panel-toggle]`,
+      )
+      ?.focus();
   };
 
   private get isClosed() {
