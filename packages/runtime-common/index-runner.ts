@@ -261,8 +261,8 @@ export class IndexRunner {
   // WrittenFileRereads). Any URL the pass visits can be one another instance
   // just wrote: the job's own writes, and also a dependent or a validation
   // round's URL that a peer's pass committed. So every visit that reads a file
-  // as missing re-reads it while the realm still records the file, and a file
-  // the realm has removed is visited as gone at once.
+  // as missing re-reads it while the realm's record says it just created the
+  // file, and a file the realm has removed is visited as gone at once.
   #visitRereads: WrittenFileRereads | undefined;
 
   constructor({

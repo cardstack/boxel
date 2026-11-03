@@ -1,5 +1,7 @@
-// Re-reads a file that reads as missing although the realm records it: the
-// realm just wrote it, or the committed index holds it.
+import { now as clockNow } from '../clock.ts';
+
+// Re-reads a file that reads as missing although the realm created it moments
+// ago.
 //
 // Several realm-server instances serve one realm from a shared network
 // filesystem, and the instance that answers a read can still hold a cached
@@ -18,13 +20,25 @@ export const WRITTEN_FILE_REREAD_DELAYS_MS: readonly number[] = [
   500, 1_000, 2_000, 4_000, 8_000, 15_000, 30_000,
 ];
 
+// How long after the realm creates a file a read of it can still miss only
+// because the answering instance's view predates the file. A stale "not here"
+// is left from a lookup made before the file existed, and lasts until that
+// instance's attribute cache for the directory expires, about a minute; this
+// leaves a wide margin past that. A file the realm created longer ago that
+// reads as missing is gone, whatever the realm's record of it says. A record
+// can outlive its file: a removal the realm learns of from its file watcher
+// leaves the record, and so does a delete interrupted between removing the
+// file and removing its record.
+export const STALE_MISS_HORIZON_MS = 5 * 60_000;
+
 export interface WrittenFileRereadResult<T> {
   value: T | undefined;
   // Reads made here, beyond the caller's own first read.
   rereads: number;
   waitedMs: number;
-  // True when the re-reads stopped because the realm stopped recording the
-  // file, which is a removal rather than a stale view.
+  // True when the re-reads stopped because the miss is a removal rather than
+  // a stale view: the realm records no file there, or created the one it
+  // records longer ago than STALE_MISS_HORIZON_MS.
   removed: boolean;
 }
 
@@ -45,11 +59,15 @@ export class WrittenFileRereads {
   #delaysMs: readonly number[];
   #sleep: (ms: number) => Promise<void>;
   #remainingMs: number;
+  #now: () => number;
 
   constructor(
     opts: {
       delaysMs?: readonly number[];
       sleep?: (ms: number) => Promise<void>;
+      // The clock a record's age is measured on: the one the realm stamps
+      // records from.
+      now?: () => number;
     } = {},
   ) {
     this.#delaysMs = opts.delaysMs ?? WRITTEN_FILE_REREAD_DELAYS_MS;
@@ -59,21 +77,22 @@ export class WrittenFileRereads {
       (sum, delayMs) => sum + delayMs,
       0,
     );
+    this.#now = opts.now ?? clockNow;
   }
 
   // Reads a file the pass visits. When `read` finds nothing, re-reads it
-  // through the pass's budget while `realmRecordsFile` holds, and logs what the
-  // re-reads came to. `label` leads each log line and names the file;
+  // through the pass's budget while the realm's record says it created the
+  // file recently, and logs what the re-reads came to. `label` leads each log line and names the file;
   // `ifMissing` says what the pass does with a file that stays missing.
   async readVisitedFile<T>(
     read: () => Promise<T | undefined>,
     {
-      realmRecordsFile,
+      recordedCreatedAt,
       label,
       ifMissing,
       log,
     }: {
-      realmRecordsFile: () => Promise<boolean>;
+      recordedCreatedAt: () => Promise<number | undefined>;
       label: string;
       ifMissing: string;
       log: WrittenFileRereadLog;
@@ -85,7 +104,7 @@ export class WrittenFileRereads {
     }
     let { value, rereads, waitedMs, removed } = await this.reread(
       read,
-      realmRecordsFile,
+      recordedCreatedAt,
     );
     if (value !== undefined) {
       log.info(
@@ -93,7 +112,7 @@ export class WrittenFileRereads {
       );
     } else if (!removed) {
       log.warn(
-        `${label} is recorded by the realm but still reads as missing after ${rereads} re-reads over ${waitedMs}ms; ${ifMissing}`,
+        `${label} was just created by the realm but still reads as missing after ${rereads} re-reads over ${waitedMs}ms; ${ifMissing}`,
       );
     } else if (rereads > 0) {
       log.info(
@@ -104,13 +123,22 @@ export class WrittenFileRereads {
   }
 
   // Calls `read` after each delay until it returns a file or the pass's
-  // budget is spent. `realmRecordsFile` is asked before each wait, so a file
-  // the realm removed meanwhile stops the re-reads at once instead of holding
-  // the pass for the rest of the budget.
+  // budget is spent. `recordedCreatedAt` gives when the realm's record says it
+  // created the file, in epoch seconds, read fresh; undefined when the realm
+  // records no file there. It is asked before each wait, so a file the realm
+  // removed meanwhile stops the re-reads at once instead of holding the pass
+  // for the rest of the budget.
   async reread<T>(
     read: () => Promise<T | undefined>,
-    realmRecordsFile: () => Promise<boolean>,
+    recordedCreatedAt: () => Promise<number | undefined>,
   ): Promise<WrittenFileRereadResult<T>> {
+    let mayStillAppear = async () => {
+      let createdAt = await recordedCreatedAt();
+      return (
+        createdAt !== undefined &&
+        this.#now() - createdAt * 1000 <= STALE_MISS_HORIZON_MS
+      );
+    };
     let rereads = 0;
     let waitedMs = 0;
     let result = (value: T | undefined, removed = false) => ({
@@ -123,7 +151,7 @@ export class WrittenFileRereads {
       if (this.#remainingMs <= 0) {
         break;
       }
-      if (!(await realmRecordsFile())) {
+      if (!(await mayStillAppear())) {
         return result(undefined, true);
       }
       let sleepMs = Math.min(delayMs, this.#remainingMs);
@@ -140,6 +168,6 @@ export class WrittenFileRereads {
     }
     // Asked again once the budget is spent, so a file the realm removed reads
     // as a removal even when the budget ran out before this file.
-    return result(undefined, !(await realmRecordsFile()));
+    return result(undefined, !(await mayStillAppear()));
   }
 }

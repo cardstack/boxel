@@ -53,8 +53,8 @@ interface RenderFileForIndexingOptions {
   renderScopeRound: number;
   prerenderer: Prerenderer;
   // Present in an incremental pass: a read that finds no file is then retried
-  // through the pass's re-read budget, for as long as the realm still records
-  // the file, before the visit reports the file gone.
+  // through the pass's re-read budget, for as long as the realm's record says
+  // it just created the file, before the visit reports the file gone.
   writtenFileRereads?: WrittenFileRereads;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
@@ -177,7 +177,7 @@ export async function renderFileForIndexing({
     (await reader.readFile(new URL(encodeURI(localPath), url)));
   let fileRef = writtenFileRereads
     ? await writtenFileRereads.readVisitedFile(readFile, {
-        realmRecordsFile: () => batch.realmRecordsFile(localPath),
+        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
         label: `${jobIdentity(jobInfo)} ${url.href}`,
         ifMissing: 'indexing it as removed',
         log: { info: logInfo, warn: logWarn },

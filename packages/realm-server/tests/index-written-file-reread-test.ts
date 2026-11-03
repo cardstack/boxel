@@ -138,17 +138,19 @@ module(basename(import.meta.filename), function () {
       return row;
     }
 
-    // The record the realm keeps of a file it wrote, which it removes when it
-    // removes the file.
-    async function realmRecordsFile(name: string) {
+    // The record the realm keeps of a file it created, which it removes when
+    // it removes the file.
+    async function realmCreatedFile(name: string, { secondsAgo = 0 } = {}) {
       await adapter.execute(
-        `INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES ($1, $2, 1)`,
-        { bind: [testRealm, name] },
+        `INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES ($1, $2, $3)`,
+        {
+          bind: [testRealm, name, Math.floor(Date.now() / 1000) - secondsAgo],
+        },
       );
     }
 
     test('indexes a written file that reads as missing at first', async function (assert) {
-      await realmRecordsFile('notes.txt');
+      await realmCreatedFile('notes.txt');
       // The visit reads the file under both of its URL forms before it gives
       // up, so two misses are one failed attempt.
       let { reader, readsOf } = realmReader({ 'notes.txt': { missFor: 2 } });
@@ -170,7 +172,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('takes a written file that stays missing as removed once the window closes', async function (assert) {
-      await realmRecordsFile('notes.txt');
+      await realmCreatedFile('notes.txt');
       let { reader, readsOf } = realmReader({});
 
       await runIncremental(
@@ -256,6 +258,33 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(await fileRow('notes.txt'), undefined);
     });
 
+    test('does not wait on a file the realm created long ago', async function (assert) {
+      // A record the file outlived, such as one a removal outside the realm's
+      // own delete left behind. A stale view only hides a file created
+      // moments ago.
+      await realmCreatedFile('notes.txt', { secondsAgo: 60 * 60 });
+      let { reader, readsOf } = realmReader({});
+      let start = Date.now();
+
+      // Any re-read would hold the pass for a minute.
+      await runIncremental(
+        reader,
+        [{ name: 'notes.txt', operation: 'update' }],
+        [60_000],
+      );
+
+      assert.true(
+        Date.now() - start < 30_000,
+        'the pass finishes without sleeping through a re-read delay',
+      );
+      assert.strictEqual(
+        readsOf('notes.txt'),
+        2,
+        'one attempt, under both URL forms',
+      );
+      assert.strictEqual(await fileRow('notes.txt'), undefined);
+    });
+
     test('removes a deleted file without waiting on the re-read window', async function (assert) {
       let { reader: writing } = realmReader({ 'notes.txt': {} });
       await runIncremental(
@@ -304,13 +333,18 @@ module(basename(import.meta.filename), function () {
       };
     }
 
-    const recorded = async () => true;
+    // The clock records are aged on, and a record of a file created on it
+    // just now.
+    const NOW_MS = 1_800_000_000_000;
+    const now = () => NOW_MS;
+    const recorded = async () => NOW_MS / 1000;
 
     test('re-reads after each delay until the file is read', async function (assert) {
       let clock = fakeSleep();
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
         sleep: clock.sleep,
+        now,
       });
       let reads = 0;
       let result = await rereads.reread(
@@ -331,11 +365,12 @@ module(basename(import.meta.filename), function () {
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
         sleep: clock.sleep,
+        now,
       });
       let checks = 0;
       let result = await rereads.reread(
         async () => undefined,
-        async () => ++checks === 1,
+        async () => (++checks === 1 ? NOW_MS / 1000 : undefined),
       );
       assert.deepEqual(
         result,
@@ -350,6 +385,7 @@ module(basename(import.meta.filename), function () {
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
         sleep: clock.sleep,
+        now,
       });
       let first = await rereads.reread(async () => undefined, recorded);
       assert.deepEqual(
@@ -365,7 +401,7 @@ module(basename(import.meta.filename), function () {
       );
       let third = await rereads.reread(
         async () => undefined,
-        async () => false,
+        async () => undefined,
       );
       assert.true(
         third.removed,
@@ -379,6 +415,7 @@ module(basename(import.meta.filename), function () {
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
         sleep: clock.sleep,
+        now,
       });
       await rereads.reread(async () => 'file', recorded);
       let second = await rereads.reread(async () => undefined, recorded);
@@ -398,7 +435,7 @@ module(basename(import.meta.filename), function () {
     test('time the pass spends between re-reads does not count against the budget', async function (assert) {
       // Real timers: a budget measured from the first re-read would have run
       // out during the pause below.
-      let rereads = new WrittenFileRereads({ delaysMs: [5, 10] });
+      let rereads = new WrittenFileRereads({ delaysMs: [5, 10], now });
       await rereads.reread(async () => 'file', recorded);
       await new Promise((r) => setTimeout(r, 50));
       let reads = 0;
@@ -412,6 +449,35 @@ module(basename(import.meta.filename), function () {
         'a miss long after the first one is still re-read',
       );
       assert.strictEqual(later.rereads, 2);
+    });
+
+    test('takes a miss as a removal when the realm created the file long ago', async function (assert) {
+      let clock = fakeSleep();
+      let rereads = new WrittenFileRereads({
+        delaysMs: [10, 20, 40],
+        sleep: clock.sleep,
+        now,
+      });
+      let longAgo = await rereads.reread(
+        async () => undefined,
+        async () => NOW_MS / 1000 - 60 * 60,
+      );
+      assert.deepEqual(
+        longAgo,
+        { value: undefined, rereads: 0, waitedMs: 0, removed: true },
+        'a file created an hour ago is not re-read',
+      );
+      let reads = 0;
+      let recently = await rereads.reread(
+        async () => (++reads === 1 ? 'file' : undefined),
+        async () => NOW_MS / 1000 - 60,
+      );
+      assert.strictEqual(
+        recently.value,
+        'file',
+        'a file created a minute ago is re-read',
+      );
+      assert.deepEqual(clock.slept, [10]);
     });
   });
 });

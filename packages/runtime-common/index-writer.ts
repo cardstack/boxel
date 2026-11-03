@@ -1261,17 +1261,18 @@ export class Batch {
     }
   }
 
-  // Whether the realm records a file at this path right now: the realm writes
-  // a file's `realm_file_meta` row with the file and removes it when it
-  // removes the file. Read fresh rather than from the prefetch, which predates
-  // anything the realm did since the pass began.
-  async realmRecordsFile(localPath: string): Promise<boolean> {
+  // When the realm's record of the file at this path says it created the
+  // file, in epoch seconds, or undefined when the realm records no file there:
+  // the realm writes a file's `realm_file_meta` row when it creates the file
+  // and removes it when it removes the file. Read fresh rather than from the
+  // prefetch, which predates anything the realm did since the pass began.
+  async recordedCreatedAt(localPath: string): Promise<number | undefined> {
     let fetched = await getFileMetaForPaths(
       this.#dbAdapter,
       this.realmURL.href,
       [localPath],
     );
-    return fetched.has(localPath);
+    return fetched.get(localPath)?.createdAt;
   }
 
   // Ensure a created_at row exists for this file in realm_file_meta and return
@@ -1985,7 +1986,7 @@ export class Batch {
   // `adoptIndexGenerations` read. The index pass that published such a row
   // read the file, so a visit that cannot read it is reading through a stale
   // view of the realm unless the realm has removed the file since (see
-  // `realmRecordsFile`).
+  // `recordedCreatedAt`).
   indexHoldsLiveRow(url: string): boolean {
     if (!this.#liveIndexURLs) {
       throw new Error(

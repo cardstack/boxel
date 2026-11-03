@@ -1048,13 +1048,13 @@ async function visitForPrerenderedHtml({
     (await reader.readFile(url)) ??
     (await reader.readFile(new URL(encodeURI(localPath), url)));
   // A file the committed index holds was read by the index pass that
-  // published its row, so while the realm still records it, a miss here is
-  // this read landing on a stale view of the realm (see WrittenFileRereads),
-  // not a removal. A URL the index holds as a tombstone, or not at all, is a
-  // removal and is taken as one at once.
+  // published its row, so while the realm records it as just created, a miss
+  // here is this read landing on a stale view of the realm (see
+  // WrittenFileRereads), not a removal. A URL the index holds as a tombstone,
+  // or not at all, is a removal and is taken as one at once.
   let fileRef = batch.indexHoldsLiveRow(url.href)
     ? await writtenFileRereads.readVisitedFile(readFile, {
-        realmRecordsFile: () => batch.realmRecordsFile(localPath),
+        recordedCreatedAt: () => batch.recordedCreatedAt(localPath),
         label: `${jobIdentity(jobInfo)} indexed file ${url.href}`,
         ifMissing: 'rendering nothing for it',
         log: { info: (m) => log.info(m), warn: (m) => log.warn(m) },

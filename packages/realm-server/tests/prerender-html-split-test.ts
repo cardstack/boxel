@@ -2821,18 +2821,18 @@ module(basename(import.meta.filename), function () {
         };
       }
 
-      // The record the realm keeps of a file it holds, which it removes when
-      // it removes the file.
-      async function realmRecordsFile(localPath: string) {
+      // The record the realm keeps of a file it just created, which it
+      // removes when it removes the file.
+      async function realmCreatedFile(localPath: string) {
         await adapter.execute(
-          `INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES ($1, $2, 1)`,
-          { bind: [testRealm, localPath] },
+          `INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES ($1, $2, $3)`,
+          { bind: [testRealm, localPath, Math.floor(Date.now() / 1000)] },
         );
       }
 
       test('is re-read and rendered when the committed index holds it', async function (assert) {
         await indexFileRow(notesURL, false);
-        await realmRecordsFile('notes.txt');
+        await realmCreatedFile('notes.txt');
         // The visit reads the file under both of its URL forms before it
         // gives up, so two misses are one failed attempt.
         let { reader, reads } = readerMissing(notesURL, 2);
@@ -2869,7 +2869,7 @@ module(basename(import.meta.filename), function () {
       // Each case below leaves the realm recording the file, so the index row
       // is the only thing that can keep the pass from re-reading it.
       async function assertTakenAsRemoved(assert: Assert) {
-        await realmRecordsFile('notes.txt');
+        await realmCreatedFile('notes.txt');
         let { reader, reads } = readerMissing(notesURL, Infinity);
         let start = Date.now();
 
