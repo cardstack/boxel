@@ -877,7 +877,7 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(fragment.get('then'), 'approve');
   });
 
-  test("the key page lists each key's grants with the approvals that use them, and removing one lists those first", async function (assert) {
+  test("the key page lists each key's grants with the approvals that use them, collapsed to a count, and removing one lists those first", async function (assert) {
     let removed: string[] = [];
     let listed = 0;
     serve({
@@ -956,14 +956,31 @@ module('Integration | approve pages', function (hooks) {
       )
       .hasText('2 approvals');
     assert
+      .dom('[data-test-key-grant-count]')
+      .hasAttribute('aria-expanded', 'false', 'the approvals start collapsed');
+    assert.dom('[data-test-key-grant-bindings]').isNotVisible();
+
+    await click('[data-test-key-grant-count]');
+    assert
+      .dom('[data-test-key-grant-count]')
+      .hasAttribute('aria-expanded', 'true');
+    assert.dom('[data-test-key-grant-bindings]').isVisible();
+    assert
       .dom('[data-test-key-grant-binding="listPRs"]')
       .hasText(
         'List your open pull requests on Pull request inbox in realm-server.test/someone/workspace/',
       );
+
+    await click('[data-test-key-grant-count]');
+    assert.dom('[data-test-key-grant-bindings]').isNotVisible();
+
     await click('[data-test-key-grant-remove]');
     assert
       .dom('[data-test-key-grant-remove-panel]')
       .includesText('revokes the approvals above');
+    assert
+      .dom('[data-test-key-grant-bindings]')
+      .isVisible('the approvals the removal revokes are listed');
     assert.deepEqual(removed, [], 'nothing is removed before it is confirmed');
     await click('[data-test-key-grant-remove-confirm]');
     await settled();

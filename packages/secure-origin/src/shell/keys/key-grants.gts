@@ -1,9 +1,12 @@
 // Where one of the user's keys may be sent, as the key page's tile lists it:
 // each grant's full host and path, and the approvals that send the key there
-// (an operation, on a card, in a workspace). Removing a grant first lists
-// those approvals, since removing it revokes every one, then hands the grant
-// to `@onRemove`, which removes it and answers whether it did. A card that
-// needs the key there again asks for its approval again.
+// (an operation, on a card, in a workspace). A key used across a few cards
+// and workspaces has dozens of approvals, so each grant shows only how many
+// it has until its count is opened. Removing a grant first lists those
+// approvals, opening the list if it is closed, since removing it revokes
+// every one, then hands the grant to `@onRemove`, which removes it and
+// answers whether it did. A card that needs the key there again asks for its
+// approval again.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -41,12 +44,31 @@ export default class KeyGrants extends Component<Signature> {
             <div class='grant-row'>
               <span class='where'>{{hostAndPath grant.destination}}</span>
               {{#if @bindings}}
-                <span class='count' data-test-key-grant-count>
-                  {{#let (this.bindingsOf grant) as |bindings|}}
-                    {{bindings.length}}
-                    {{if (eq bindings.length 1) 'approval' 'approvals'}}
-                  {{/let}}
-                </span>
+                {{#let (this.bindingsOf grant) as |bindings|}}
+                  {{#if bindings.length}}
+                    {{! A disclosure, drawn as the page's "Usage and limits"
+                        is: a marker that turns as the list opens. }}
+                    <button
+                      type='button'
+                      class='count toggle'
+                      aria-expanded={{if
+                        (this.isExpanded grant)
+                        'true'
+                        'false'
+                      }}
+                      aria-controls='key-grant-bindings-{{grant.id}}'
+                      data-test-key-grant-count
+                      {{on 'click' (fn this.toggle grant)}}
+                    >{{bindings.length}}
+                      {{if
+                        (eq bindings.length 1)
+                        'approval'
+                        'approvals'
+                      }}</button>
+                  {{else}}
+                    <span class='count' data-test-key-grant-count>0 approvals</span>
+                  {{/if}}
+                {{/let}}
               {{/if}}
               {{#unless (this.isRemoving grant)}}
                 <Button
@@ -58,7 +80,12 @@ export default class KeyGrants extends Component<Signature> {
                 >Remove</Button>
               {{/unless}}
             </div>
-            <ul class='bindings'>
+            <ul
+              class='bindings'
+              id='key-grant-bindings-{{grant.id}}'
+              hidden={{not (this.isExpanded grant)}}
+              data-test-key-grant-bindings
+            >
               {{#each (this.bindingsOf grant) as |binding|}}
                 <li data-test-key-grant-binding={{binding.operation}}>
                   {{binding.operationLabel}}
@@ -138,6 +165,43 @@ export default class KeyGrants extends Component<Signature> {
       .count {
         color: var(--muted-foreground);
       }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        padding: 0;
+        border: none;
+        background: none;
+        font-family: inherit;
+        font-size: inherit;
+        line-height: inherit;
+        cursor: pointer;
+      }
+      .toggle::before {
+        content: '';
+        width: 0;
+        height: 0;
+        border-top: 0.3em solid transparent;
+        border-bottom: 0.3em solid transparent;
+        border-left: 0.45em solid currentColor;
+        transition: transform 0.15s ease;
+      }
+      .toggle[aria-expanded='true']::before {
+        transform: rotate(90deg);
+      }
+      .toggle:hover {
+        color: var(--foreground);
+      }
+      .toggle:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: 2px;
+        border-radius: var(--boxel-border-radius-xs, 2px);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .toggle::before {
+          transition: none;
+        }
+      }
       .bindings {
         margin: var(--boxel-sp-5xs) 0 0;
         padding-inline-start: var(--boxel-sp-lg);
@@ -165,6 +229,8 @@ export default class KeyGrants extends Component<Signature> {
   private state = trackedObject({
     removing: false,
     grant: undefined as string | undefined,
+    // The grants whose approvals are listed; every grant starts collapsed.
+    expanded: [] as string[],
   });
 
   private bindingsOf = (grant: KeyGrant) =>
@@ -172,8 +238,22 @@ export default class KeyGrants extends Component<Signature> {
 
   private isRemoving = (grant: KeyGrant) => this.state.grant === grant.id;
 
+  private isExpanded = (grant: KeyGrant) =>
+    this.state.expanded.includes(grant.id);
+
+  private toggle = (grant: KeyGrant) => {
+    this.state.expanded = this.isExpanded(grant)
+      ? this.state.expanded.filter((id) => id !== grant.id)
+      : [...this.state.expanded, grant.id];
+  };
+
+  // The confirmation names the approvals above, so they are listed while it
+  // is open.
   private startRemove = (grant: KeyGrant) => {
     this.state.grant = grant.id;
+    if (!this.isExpanded(grant)) {
+      this.state.expanded = [...this.state.expanded, grant.id];
+    }
   };
 
   private cancel = () => {
