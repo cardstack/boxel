@@ -1433,8 +1433,9 @@ class RealmFsSession {
       }
       case 'ui.openWorkspace':
         return this.queueUiAction({ action: 'openWorkspace' });
-      // Indexing runs on the realm server after the call returns: each call
-      // starts the work, and the script does not wait for it to finish.
+      // realm.index.invalidate returns once the realm has indexed the paths,
+      // so a read later in the same script sees the result. The other calls
+      // start their work on the realm server and return without waiting.
       case 'index.invalidate': {
         let paths = typeof args[0] === 'string' ? [args[0]] : args[0];
         if (
@@ -2031,8 +2032,18 @@ class RealmFsSession {
   private cardReadError(id: string, read: Exclude<CardRead, { doc: unknown }>) {
     let path = `${this.relative(id)}.json`;
     switch (read.unread) {
+      // The realm-level flag can stay set after a pass whose end event was
+      // lost, so the read-again advice carries the same way out as an idle
+      // workspace's: an extra invalidate costs one more pass.
       case 'indexing':
-        return `Card is not indexed yet: ${id}; read it again in a moment`;
+        return (
+          `Card is not indexed yet: ${id}; read it again in a moment. If it ` +
+          `is still not indexed after a few reads, ` +
+          (this.mayWrite
+            ? `index the file with realm.index.invalidate('${path}')`
+            : `tell the user that ${path} needs indexing again by someone ` +
+              `who can write to it`)
+        );
       case 'unindexed':
         return (
           `Card is not indexed: ${id}. Its file ${path} is in the workspace, ` +

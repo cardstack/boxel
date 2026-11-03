@@ -965,7 +965,9 @@ return await realm.cards.get('people/hassan');`,
     }
     assert.strictEqual(
       JSON.parse(whileIndexing.scriptResult!),
-      `Card is not indexed yet: ${testRealmURL}Pet/unindexed; read it again in a moment`,
+      `Card is not indexed yet: ${testRealmURL}Pet/unindexed; read it again ` +
+        `in a moment. If it is still not indexed after a few reads, index ` +
+        `the file with realm.index.invalidate('Pet/unindexed.json')`,
       'while a pass runs, the row may still come, so the card is read again',
     );
 
