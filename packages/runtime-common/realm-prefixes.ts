@@ -50,6 +50,9 @@ export interface PrefixRealm {
 /** The catalog realm's prefix, for code that names the catalog by itself. */
 export const CATALOG_REALM_PREFIX = '@cardstack/catalog/';
 
+/** The skills realm's prefix, for code that names the skills realm by itself. */
+export const SKILLS_REALM_PREFIX = '@cardstack/skills/';
+
 export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
   {
     prefix: baseRealmRRI,
@@ -61,7 +64,7 @@ export const PREFIX_REALMS: readonly PrefixRealm[] = Object.freeze([
     hostConfigKey: 'resolvedCatalogRealmURL',
   },
   {
-    prefix: '@cardstack/skills/',
+    prefix: SKILLS_REALM_PREFIX,
     hostConfigKey: 'resolvedSkillsRealmURL',
   },
   {

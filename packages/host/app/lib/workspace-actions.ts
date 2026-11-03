@@ -26,6 +26,7 @@ import {
   RealmPaths,
   resolveRRIReference,
   rri,
+  SKILLS_REALM_PREFIX,
   SupportedMimeType,
   type RealmIdentifier,
 } from '@cardstack/runtime-common';
@@ -45,7 +46,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type WorkspaceDuplicationService from '@cardstack/host/services/workspace-duplication';
 
 const log = logger('workspace-actions');
-const SKILLS_REALM = '@cardstack/skills/';
 
 export type TileStat = { label: string; count: number };
 
@@ -380,7 +380,7 @@ export class WorkspaceActions {
     return (
       this.network.virtualNetwork.unresolveURL(
         ensureTrailingSlash(this.realmIdentifier),
-      ) === SKILLS_REALM
+      ) === SKILLS_REALM_PREFIX
     );
   }
 
