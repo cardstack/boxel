@@ -701,6 +701,78 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.true(result.correct, 'the check passes');
   });
 
+  test('waits for the render of an instance indexed again after the module write', async function (assert) {
+    mountModulePrerender();
+    let renders = announceRendersWithIndexEvents();
+    let announcedBefore = renders.announced;
+    let cardURL = `${testRealmURL}Milestone/launch`;
+    // The instance reads as indexed at a generation past the module write's,
+    // the way it would after a later write; its render at that generation
+    // records an error and is announced a moment after the first read.
+    let laterGeneration = 1_000_000;
+    let renderedLater = false;
+    let document = () => ({
+      data: {
+        type: 'card',
+        id: cardURL,
+        attributes: {},
+        meta: {
+          adoptsFrom: { module: '../milestone', name: 'Milestone' },
+          generation: laterGeneration,
+        },
+      },
+      ...(renderedLater
+        ? {
+            meta: {
+              renderError: { status: 500, message: 'Invalid time value' },
+            },
+          }
+        : {}),
+    });
+
+    let result = await checkMilestoneEdit(
+      '<h2>{{@model.title}}</h2>',
+      async () => {
+        await waitUntil(() => renders.announced > announcedBefore, {
+          timeout: 10_000,
+        });
+        getService('network').virtualNetwork.mount(
+          async (request: Request) => {
+            if (
+              request.url !== cardURL ||
+              !request.headers.get('Accept')?.includes('card+json')
+            ) {
+              return null;
+            }
+            let response = new Response(JSON.stringify(document()), {
+              headers: { 'content-type': 'application/vnd.card+json' },
+            });
+            if (!renderedLater) {
+              setTimeout(() => {
+                renderedLater = true;
+                getService('message-service').relayRealmEvent({
+                  eventName: 'prerender_html',
+                  invalidations: [`${cardURL}.json`],
+                  generation: laterGeneration,
+                  realmURL: testRealmURL,
+                });
+              }, 100);
+            }
+            return response;
+          },
+          { prepend: true },
+        );
+      },
+    );
+
+    assert.deepEqual(
+      result.errors,
+      [`${cardURL}: Invalid time value`],
+      'the error from the later render is reported',
+    );
+    assert.false(result.correct, 'the check fails');
+  });
+
   test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;

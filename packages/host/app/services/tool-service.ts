@@ -738,14 +738,13 @@ export default class ToolService extends Service {
     this.renderedHTMLWatches.set(realmURL, watch);
   }
 
-  // Waits until render jobs at `generation` or later have rendered every one of
-  // `fileHrefs`, or until `timeoutMs` passes, and returns the ones they
-  // rendered. A realm with no tracked module write has no watch, so nothing is
-  // known to be rendered there.
+  // Waits until every file in `files` has been rendered by a render job at
+  // the generation it maps to or later, or until `timeoutMs` passes, and
+  // returns the files that have. A realm with no tracked module write has no
+  // watch, so nothing is known to be rendered there.
   async waitForRenderedHTML(
     realmURL: string,
-    fileHrefs: string[],
-    generation: number,
+    files: Map<string, number>,
     timeoutMs: number,
   ): Promise<Set<string>> {
     let watch = this.renderedHTMLWatches.get(realmURL);
@@ -755,18 +754,15 @@ export default class ToolService extends Service {
     let rendered = () => {
       let found = new Set<string>();
       for (let entry of watch.log) {
-        if (entry.generation < generation) {
-          continue;
-        }
-        for (let href of fileHrefs) {
-          if (entry.files.has(href)) {
+        for (let [href, generation] of files) {
+          if (entry.generation >= generation && entry.files.has(href)) {
             found.add(href);
           }
         }
       }
       return found;
     };
-    if (rendered().size < fileHrefs.length) {
+    if (rendered().size < files.size) {
       await new Promise<void>((resolve) => {
         let finish = () => {
           clearTimeout(timeoutId);
@@ -776,7 +772,7 @@ export default class ToolService extends Service {
         let listener = () => {
           if (
             !this.renderedHTMLWatches.has(realmURL) ||
-            rendered().size === fileHrefs.length
+            rendered().size === files.size
           ) {
             finish();
           }

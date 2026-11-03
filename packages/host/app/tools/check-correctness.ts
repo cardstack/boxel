@@ -287,44 +287,66 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
     // A module that loads can still break the cards that use it: a template
     // or a computed field throws only when an instance renders. The write's
-    // index pass reindexed those instances, so its invalidations name them,
-    // and the render job it spawned renders them in every format. An error
-    // lands on an instance's document once that job has rendered it, so the
-    // check waits for the job and reads each instance's errors from its
-    // document. Without a tracked write, or an index event naming its
-    // generation, there is nothing to wait for. A read can't tell an error the
-    // edit caused from one the instance already had, so an instance that
-    // already failed to render fails the check as well: either way it is a
-    // card of this module that doesn't render.
+    // index pass reindexed those instances, so its invalidations name them.
+    // An instance whose index visit failed reads as an error at once. A
+    // render error lands on the instance's document only once a render job
+    // has rendered the instance at its current index generation, which is
+    // the module write's or, when the instance was indexed again since, a
+    // later one; so a clean read waits for that render and reads again.
+    // Without a tracked write, or an index event naming its generation, there
+    // is nothing to wait for. A read can't tell an error the edit caused from
+    // one the instance already had, so an instance that already failed to
+    // render fails the check as well: either way it is a card of this module
+    // that doesn't render.
     if (indexed?.generation === undefined) {
       return { errors: [], warnings: [] };
     }
+    let moduleGeneration = indexed.generation;
     let instanceHrefs = await this.instancesToCheck(
       indexed.invalidations,
       roomId,
     );
-    if (instanceHrefs.length === 0) {
-      return { errors: [], warnings: [] };
+    let errors: string[] = [];
+    let warnings: string[] = [];
+    let awaitingRender = new Map<string, number>();
+    await Promise.all(
+      instanceHrefs.map(async (href) => {
+        let read = await this.readInstance(href);
+        if (read?.error) {
+          errors.push(read.error);
+        } else if (read) {
+          awaitingRender.set(
+            href,
+            Math.max(moduleGeneration, read.generation ?? moduleGeneration),
+          );
+        }
+      }),
+    );
+    if (awaitingRender.size === 0) {
+      return { errors, warnings };
     }
     let rendered = await this.toolService.waitForRenderedHTML(
       realmURL,
-      instanceHrefs.map((href) => `${href}.json`),
-      indexed.generation,
+      new Map(
+        [...awaitingRender].map(([href, generation]) => [
+          `${href}.json`,
+          generation,
+        ]),
+      ),
       cardIndexingTimeout,
     );
-    let errors: string[] = [];
-    let warnings: string[] = [];
+    // A render job's event can be dropped when a realm's events back up, so
+    // an instance whose render was not announced is read again too: an error
+    // that has landed is still reported.
     await Promise.all(
-      instanceHrefs.map(async (href) => {
-        if (!rendered.has(`${href}.json`)) {
+      [...awaitingRender.keys()].map(async (href) => {
+        let read = await this.readInstance(href);
+        if (read?.error) {
+          errors.push(read.error);
+        } else if (!rendered.has(`${href}.json`)) {
           warnings.push(
             `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
           );
-          return;
-        }
-        let instanceError = await this.instanceErrorOf(href);
-        if (instanceError) {
-          errors.push(instanceError);
         }
       }),
     );
@@ -380,13 +402,15 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return hrefs;
   }
 
-  // What went wrong for the instance once the edit was indexed and rendered:
-  // the error its index visit recorded, which the realm answers with in place
-  // of the document, or the error its current render recorded, which the
-  // document carries as `meta.renderError`. A read that fails without a card
-  // error says nothing about the instance, so it is logged rather than
-  // reported.
-  private async instanceErrorOf(cardHref: string): Promise<string | undefined> {
+  // Reads the instance's document. An error is what its index visit
+  // recorded, which the realm answers with in place of the document, or what
+  // its current render recorded, which the document carries as
+  // `meta.renderError`; otherwise the read gives the index generation the
+  // document was written at. A read that fails without a card error says
+  // nothing about the instance, so it is logged and gives nothing.
+  private async readInstance(
+    cardHref: string,
+  ): Promise<{ error?: string; generation?: number } | undefined> {
     let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
     try {
       let response = await this.network.authedFetch(rri(cardHref), {
@@ -399,7 +423,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!response.ok) {
         let error = body?.errors?.[0];
         if (response.status !== 404 && isCardErrorJSONAPI(error)) {
-          return this.describeCardError(cardId, error);
+          return { error: this.describeCardError(cardId, error) };
         }
         console.warn(
           `CheckCorrectnessTool: reading ${cardId} for its errors failed (${response.status})`,
@@ -407,9 +431,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
         return undefined;
       }
       let renderError: RenderErrorSummary | undefined = body?.meta?.renderError;
-      return renderError
-        ? this.describeCardError(cardId, renderError)
-        : undefined;
+      if (renderError) {
+        return { error: this.describeCardError(cardId, renderError) };
+      }
+      let generation = body?.data?.meta?.generation;
+      return typeof generation === 'number' ? { generation } : {};
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: reading ${cardId} for its errors threw`,
