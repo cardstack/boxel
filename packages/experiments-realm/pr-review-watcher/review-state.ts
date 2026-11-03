@@ -22,6 +22,8 @@ export interface PullRequestNode {
   url: string;
   isDraft: boolean;
   createdAt: string;
+  // The searches list the most recently updated first.
+  updatedAt: string;
   repository: { nameWithOwner: string };
   // Null for a deleted account ("ghost").
   author: Actor | null;
@@ -215,8 +217,13 @@ export interface Arrangement {
   repo?: string;
 }
 
+// The longest waiting first, and pull requests nobody has been asked to
+// review after every one that has.
 function byRequestTime(a: WatchedPullRequest, b: WatchedPullRequest) {
-  return (a.requested?.at ?? '').localeCompare(b.requested?.at ?? '');
+  if (!a.requested || !b.requested) {
+    return a.requested ? -1 : b.requested ? 1 : 0;
+  }
+  return a.requested.at.localeCompare(b.requested.at);
 }
 
 // A list as the watcher shows it: filtered by author and repository, then
@@ -231,11 +238,11 @@ export function arrange(
   let compare = (a: WatchedPullRequest, b: WatchedPullRequest) => {
     if (sortBy === 'requested') {
       if (!a.requested || !b.requested) {
-        return a.requested ? -1 : b.requested ? 1 : 0;
+        return byRequestTime(a, b);
       }
       return sign * byRequestTime(a, b);
     }
-    let field = sortBy === 'author' ? 'author' : 'repo';
+    let field: 'author' | 'repo' = sortBy === 'author' ? 'author' : 'repo';
     return (
       sign *
         a[field].localeCompare(b[field], undefined, { sensitivity: 'base' }) ||
@@ -256,4 +263,32 @@ export function choicesOf(
   return [...new Set(prs.map((pr) => pr[field]))].sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: 'base' }),
   );
+}
+
+// Brings a list held from an earlier walk of every page up to date with a
+// fresh first page, which holds the most recently updated pull requests.
+// Anything that changed (a review, a comment, a push, a close) moved a pull
+// request onto that page, so:
+//
+// - a pull request on the fresh page replaces the one held;
+// - one held that was updated at least as recently as the oldest on the fresh
+//   page, and isn't on it, was closed or merged and is dropped;
+// - when the fresh page is the whole list, it replaces the list.
+export function mergeFirstPage(
+  held: PullRequestNode[],
+  fresh: PullRequestNode[],
+  freshIsWholeList: boolean,
+): PullRequestNode[] {
+  if (freshIsWholeList) {
+    return fresh;
+  }
+  let onFresh = new Set(fresh.map((pr) => pr.url));
+  let oldestFresh = fresh.reduce(
+    (oldest, pr) => (pr.updatedAt < oldest ? pr.updatedAt : oldest),
+    fresh[0]?.updatedAt ?? '',
+  );
+  let older = held.filter(
+    (pr) => !onFresh.has(pr.url) && pr.updatedAt < oldestFresh,
+  );
+  return [...fresh, ...older];
 }

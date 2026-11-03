@@ -22,6 +22,7 @@ import {
   authoredBy,
   choicesOf,
   commentCount,
+  mergeFirstPage,
   waitingOnReviewBy,
   type PullRequestNode,
 } from '../../experiments-realm/pr-review-watcher/review-state.ts';
@@ -96,6 +97,7 @@ function pr(
     requests = [] as { at: string; user?: string; team?: string }[],
     opinions = [] as { state: string; by: string }[],
     comments = [] as ReturnType<typeof user>[],
+    updatedAt = undefined as string | undefined,
     reviews = [] as {
       state: string;
       by: ReturnType<typeof user>;
@@ -109,6 +111,7 @@ function pr(
     url: `https://github.com/cardstack/boxel/pull/${number}`,
     isDraft,
     createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: updatedAt ?? '2026-10-10T00:00:00Z',
     repository: { nameWithOwner: 'cardstack/boxel' },
     author: user(author),
     timelineItems: {
@@ -328,6 +331,25 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    test('a pull request nobody was asked to review comes after the others in its repository', function (assert) {
+      let mine = authoredBy(
+        [
+          pr(50, { author: 'octo-viewer' }),
+          pr(51, {
+            author: 'octo-viewer',
+            requests: [{ at: '2026-10-02T00:00:00Z', team: TEAM }],
+          }),
+        ],
+        'octo-viewer',
+      );
+      assert.deepEqual(
+        arrange(mine, { sortBy: 'repo', direction: 'asc' }).map(
+          (p) => p.number,
+        ),
+        [51, 50],
+      );
+    });
+
     test('filters by author and repository together', function (assert) {
       let other = {
         ...pr(40, {
@@ -369,6 +391,45 @@ module(basename(import.meta.filename), function () {
           (p) => p.number,
         ),
         [40, 41, 42],
+      );
+    });
+  });
+
+  module('keeping a list current between full walks', function () {
+    let at = (day: number) =>
+      `2026-10-${String(day).padStart(2, '0')}T00:00:00Z`;
+
+    test('a first page that is the whole list replaces it', function (assert) {
+      let held = [pr(1, { updatedAt: at(1) }), pr(2, { updatedAt: at(2) })];
+      let fresh = [pr(3, { updatedAt: at(9) })];
+      assert.deepEqual(
+        mergeFirstPage(held, fresh, true).map((p) => p.number),
+        [3],
+      );
+    });
+
+    test('updates what changed, drops what closed, and keeps older pull requests from the walk', function (assert) {
+      let held = [
+        pr(10, { updatedAt: at(8), isDraft: true }),
+        pr(11, { updatedAt: at(7) }),
+        pr(12, { updatedAt: at(3) }),
+        pr(13, { updatedAt: at(1) }),
+      ];
+      // 10 changed and moved up; 11 was closed, so the open search no
+      // longer finds it; 12 and 13 are older than everything on the page.
+      let fresh = [
+        pr(14, { updatedAt: at(9) }),
+        pr(10, { updatedAt: at(9) }),
+        pr(15, { updatedAt: at(5) }),
+      ];
+      let merged = mergeFirstPage(held, fresh, false);
+      assert.deepEqual(
+        merged.map((p) => p.number),
+        [14, 10, 15, 12, 13],
+      );
+      assert.false(
+        merged.find((p) => p.number === 10)!.isDraft,
+        'the fresh copy replaces the held one',
       );
     });
   });
@@ -489,7 +550,11 @@ module(basename(import.meta.filename), function () {
 
     // Invokes `name` on the watcher card as `user` from the card open in the
     // browser.
-    async function fromCard(user: string, name: string) {
+    async function fromCard(
+      user: string,
+      name: string,
+      data?: Record<string, unknown>,
+    ) {
       let response = await request
         .post(`${realmURL.pathname}_operations`)
         .set('Accept', OPERATIONS)
@@ -501,7 +566,12 @@ module(basename(import.meta.filename), function () {
         .send(
           JSON.stringify({
             'boxel:operations': [
-              { op: 'invoke', 'boxel:name': name, href: '/cardstack' },
+              {
+                op: 'invoke',
+                'boxel:name': name,
+                href: '/cardstack',
+                ...(data ? { data } : {}),
+              },
             ],
           }),
         );
@@ -596,6 +666,37 @@ module(basename(import.meta.filename), function () {
         JSON.parse(seconds.body).variables.q,
         'is:pr is:open archived:false org:cardstack author:@me sort:updated-desc',
       );
+    });
+
+    test('a search reads a later page by the cursor GitHub gave for it', async function (assert) {
+      let key = await addKey(VIEWER, VIEWER_TOKEN);
+      await approveBoth(VIEWER, key.id);
+      let answer = (cursor: string | null) => ({
+        status: 200,
+        body: {
+          data: {
+            viewer: { login: 'octo-viewer' },
+            search: {
+              issueCount: 2,
+              pageInfo: { hasNextPage: cursor !== null, endCursor: cursor },
+              nodes: [pr(60)],
+            },
+          },
+        },
+      });
+      vendor.graphqlAnswers.push(answer('page-2'), answer(null));
+      let first = await fromCard(VIEWER, 'waitingOnMyReview');
+      assert.strictEqual(first.status, 200, JSON.stringify(first.body));
+      assert.true(
+        JSON.stringify(first.body).includes('"cursor":"page-2"'),
+        'the answer carries the cursor for the next page',
+      );
+      await fromCard(VIEWER, 'waitingOnMyReview', { after: 'page-2' });
+      let [firstSent, secondSent] = vendor.requests.map(
+        (r) => JSON.parse(r.body).variables,
+      );
+      assert.notOk(firstSent.after, 'the first page sends no cursor');
+      assert.strictEqual(secondSent.after, 'page-2');
     });
 
     test('a revoked token stops the card with credential-rejected instead of returning GitHub’s 401 as data', async function (assert) {

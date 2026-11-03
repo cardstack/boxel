@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 
@@ -8,6 +9,7 @@ import {
   bxl,
   instance,
   operation,
+  params,
   operations,
   OperationsError,
   type OperationDeclaration,
@@ -30,6 +32,7 @@ import {
   arrange,
   authoredBy,
   choicesOf,
+  mergeFirstPage,
   waitingOnReviewBy,
   type PullRequestNode,
   type SortDirection,
@@ -40,10 +43,11 @@ import {
 // One GraphQL request answers a whole list: the pull requests a search finds,
 // each with its review requests, reviews and comments. The two operations
 // differ only in the search, so both carry this same document.
-const SEARCH_PULL_REQUESTS = `query($q: String!) {
+const SEARCH_PULL_REQUESTS = `query($q: String!, $after: String) {
   viewer { login }
-  search(type: ISSUE, query: $q, first: 100) {
+  search(type: ISSUE, query: $q, first: 100, after: $after) {
     issueCount
+    pageInfo { hasNextPage endCursor }
     nodes {
       ... on PullRequest {
         number
@@ -51,9 +55,10 @@ const SEARCH_PULL_REQUESTS = `query($q: String!) {
         url
         isDraft
         createdAt
+        updatedAt
         repository { nameWithOwner }
         author { __typename login }
-        timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], first: 50) {
+        timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], first: 100) {
           nodes {
             ... on ReviewRequestedEvent {
               createdAt
@@ -81,7 +86,7 @@ const SEARCH_PULL_REQUESTS = `query($q: String!) {
 // login of its own and each person sees what their own token can.
 const GITHUB_GRAPHQL = 'https://api.github.com/graphql';
 const AUTH = { authorization: 'Bearer {{userKey}}' };
-const ANSWER = bxl`{status: .status, viewer: .body.data.viewer.login, total: .body.data.search.issueCount, pullRequests: .body.data.search.nodes, errors: .body.errors}`;
+const ANSWER = bxl`{status: .status, viewer: .body.data.viewer.login, total: .body.data.search.issueCount, more: .body.data.search.pageInfo.hasNextPage, cursor: .body.data.search.pageInfo.endCursor, pullRequests: .body.data.search.nodes, errors: .body.errors}`;
 
 // The line the secure window shows as the card's reason for opening it.
 const SIGN_IN_REASON =
@@ -98,6 +103,8 @@ interface SearchAnswer {
   status: number;
   viewer: string | null;
   total: number | null;
+  more: boolean | null;
+  cursor: string | null;
   pullRequests: (PullRequestNode | Record<string, never>)[] | null;
   errors: { message: string }[] | null;
 }
@@ -107,6 +114,36 @@ type Tab = 'review' | 'mine';
 // How often an open watcher asks GitHub again. Each time is two calls, which
 // count against the key's limits in Boxel.
 const POLL_EVERY_MS = 60_000;
+// Each minute's poll reads only the first page of each search, the most
+// recently updated, which is where any change to a pull request moves it.
+// Every this often, and when the watcher opens, it walks every page.
+const WALK_EVERY_MS = 10 * 60_000;
+// A search is read at most this many pages deep (100 pull requests a page).
+const MOST_PAGES = 20;
+
+type SearchOperation = 'waitingOnMyReview' | 'myPullRequests';
+
+// Whether this browser has opened the GitHub sign-in for a watcher card.
+// Signing in leaves readiness at needs-connect until the watcher's calls are
+// approved, so opening the sign-in again on the next visit would make a
+// second connection; the next visit opens the approve page instead.
+function signInStarted(cardId: string) {
+  try {
+    return (
+      localStorage.getItem(`pr-review-watcher:signed-in:${cardId}`) === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function rememberSignIn(cardId: string) {
+  try {
+    localStorage.setItem(`pr-review-watcher:signed-in:${cardId}`, '1');
+  } catch {
+    // Not remembered; at worst the next visit opens the sign-in again.
+  }
+}
 
 const NEW_FINE_GRAINED_TOKEN =
   'https://github.com/settings/personal-access-tokens/new';
@@ -115,7 +152,7 @@ const NEW_CLASSIC_TOKEN =
 
 // Step by step, how to make the token the watcher needs on GitHub, for
 // whoever opens the card without one.
-class TokenGuide extends Component<{
+class TokenGuide extends GlimmerComponent<{
   Args: { org: string | undefined; defaultOpen?: boolean };
 }> {
   fineGrained = NEW_FINE_GRAINED_TOKEN;
@@ -202,7 +239,6 @@ class TokenGuide extends Component<{
         gap: var(--boxel-sp-4xs);
       }
       .alternative {
-        margin: 0;
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-sm);
       }
@@ -247,7 +283,15 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   openedWindow = false;
   // Signing in leaves a connection that isn't approved for the watcher's
   // calls yet, and readiness reads the same until it is.
-  @tracked signedIn = false;
+  // Remembered across visits in this browser, so a later visit before the
+  // calls are approved opens the approve page instead of signing in again.
+  @tracked signedIn = signInStarted(this.args.model.id ?? '');
+  // What each search found, as GitHub answered it, between full walks.
+  held: Record<SearchOperation, PullRequestNode[]> = {
+    waitingOnMyReview: [],
+    myPullRequests: [],
+  };
+  walkedAt = 0;
   // The GitHub login the key belongs to.
   @tracked viewer = '';
   // Calls wait until then after a refusal for the key's limits.
@@ -259,9 +303,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     this.stopPolling();
   }
 
-  // Polls while the lists can load. A tick does nothing while the browser tab
-  // is hidden, while a load is still running, or before the time a limit
-  // refusal named.
+  // Polls from the first load until the component is torn down. A tick does
+  // nothing while the browser tab is hidden, while a load is still running,
+  // while GitHub is rejecting the key, before the time a limit refusal named,
+  // or while readiness isn't ready; reading readiness here also asks it
+  // again, so a refilled limit or a replaced key picks polling back up.
   startPolling() {
     if (this.poller) {
       return;
@@ -270,7 +316,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       if (
         document.visibilityState === 'hidden' ||
         this.loading ||
-        Date.now() < this.pausedUntil
+        this.rejected ||
+        Date.now() < this.pausedUntil ||
+        this.readiness !== 'ready'
       ) {
         return;
       }
@@ -292,6 +340,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   }
 
   installApp = INSTALL_GITHUB_APP;
+  mostShown = (MOST_PAGES * 100).toLocaleString();
 
   get loadedAtTime() {
     return this.loadedAt?.toLocaleTimeString([], {
@@ -340,11 +389,16 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       : this.sortBy;
   }
 
-  get directionLabel() {
-    if (this.activeSort === 'requested') {
-      return this.direction === 'asc' ? 'Oldest first' : 'Newest first';
-    }
-    return this.direction === 'asc' ? 'A to Z' : 'Z to A';
+  get directionOptions() {
+    return this.activeSort === 'requested'
+      ? [
+          { value: 'asc', label: 'Oldest first' },
+          { value: 'desc', label: 'Newest first' },
+        ]
+      : [
+          { value: 'asc', label: 'A to Z' },
+          { value: 'desc', label: 'Z to A' },
+        ];
   }
 
   get authorOptions() {
@@ -398,8 +452,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   selectSort = (value: string) => {
     this.sortBy = value as SortKey;
   };
-  flipDirection = () => {
-    this.direction = this.direction === 'asc' ? 'desc' : 'asc';
+  selectDirection = (value: string) => {
+    this.direction = value as SortDirection;
   };
   selectAuthor = (value: string) => {
     this.authorFilter = value;
@@ -427,16 +481,17 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       if (!this.loading) {
         this.load();
       }
-      this.startPolling();
       return;
     }
-    this.stopPolling();
     if (this.openedWindow) {
       return;
-    } else if (readiness === 'needs-connect') {
+    } else if (readiness === 'needs-connect' && !this.signedIn) {
       this.openedWindow = true;
       this.signIn();
-    } else if (readiness === 'needs-approval') {
+    } else if (
+      readiness === 'needs-connect' ||
+      readiness === 'needs-approval'
+    ) {
       this.openedWindow = true;
       this.openWindow('approve');
     }
@@ -446,48 +501,43 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
     this.loading = true;
     this.problem = undefined;
     try {
-      let ops = operations<typeof PRReviewWatcher>(this.record);
-      let [review, authored] = (await Promise.all([
-        ops.waitingOnMyReview(),
-        ops.myPullRequests(),
-      ])) as [SearchAnswer, SearchAnswer];
-      let failed = [review, authored].find(
-        (a) => a.status !== 200 || !a.pullRequests,
-      );
+      let walk = Date.now() - this.walkedAt >= WALK_EVERY_MS;
+      let [review, authored] = await Promise.all([
+        this.search('waitingOnMyReview', walk),
+        this.search('myPullRequests', walk),
+      ]);
+      let failed = [review, authored].find((r) => r.failure);
       if (failed) {
-        this.problem = failed.errors?.length
-          ? `GitHub answered: ${failed.errors.map((e) => e.message).join('; ')}`
-          : `GitHub answered ${failed.status}`;
+        this.problem = failed.failure;
         return;
       }
-      let viewer = review.viewer ?? '';
+      if (walk) {
+        this.walkedAt = Date.now();
+      }
+      let viewer = review.viewer;
       this.viewer = viewer;
       let team = this.record.teamSlug ?? '';
-      let nodesOf = (a: SearchAnswer) =>
-        (a.pullRequests ?? []).filter(
-          (n): n is PullRequestNode => 'number' in n,
-        );
-      this.waitingOnMe = waitingOnReviewBy(nodesOf(review), viewer, team);
-      this.mine = authoredBy(nodesOf(authored), viewer);
-      this.truncated = [review, authored].some(
-        (a) => (a.total ?? 0) > (a.pullRequests?.length ?? 0),
+      this.waitingOnMe = waitingOnReviewBy(
+        this.held.waitingOnMyReview,
+        viewer,
+        team,
       );
-      this.partial = describeLeftOut(
-        [review, authored].flatMap((a) => a.errors ?? []),
-      );
+      this.mine = authoredBy(this.held.myPullRequests, viewer);
+      this.truncated = review.truncated || authored.truncated;
+      this.partial = describeLeftOut([...review.errors, ...authored.errors]);
       this.rejected = false;
       this.limited = undefined;
       this.loadedAt = new Date();
+      this.startPolling();
     } catch (err) {
       if (
         err instanceof OperationsError &&
         err.code === 'credential-rejected'
       ) {
-        // Stop here: calling again only collects the same refusal until the
-        // key is replaced or GitHub accepts it again. Readiness reads ready
-        // again once that happens, which starts polling again.
+        // Polls skip from here: calling again only collects the same refusal
+        // until the key is replaced or GitHub accepts it again. Try again,
+        // or readiness coming back to ready, loads again and clears it.
         this.rejected = true;
-        this.stopPolling();
         return;
       }
       if (
@@ -507,6 +557,56 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           : String(err);
     } finally {
       this.loading = false;
+    }
+  };
+
+  // One search, as GitHub answers it, into `held`: every page when `walk`,
+  // otherwise its first page merged into what is held.
+  search = async (
+    name: SearchOperation,
+    walk: boolean,
+  ): Promise<{
+    viewer: string;
+    errors: { message: string }[];
+    truncated: boolean;
+    failure?: string;
+  }> => {
+    let ops = operations<typeof PRReviewWatcher>(this.record);
+    let nodes: PullRequestNode[] = [];
+    let errors: { message: string }[] = [];
+    let viewer = '';
+    let after: string | undefined;
+    for (let page = 1; ; page++) {
+      // The first page sends no cursor, which GitHub reads as the start.
+      let call = ops[name] as (payload: { after?: string }) => Promise<unknown>;
+      let answer = (await call(after ? { after } : {})) as SearchAnswer;
+      if (answer.status !== 200 || !answer.pullRequests) {
+        return {
+          viewer,
+          errors,
+          truncated: false,
+          failure: answer.errors?.length
+            ? `GitHub answered: ${answer.errors.map((e) => e.message).join('; ')}`
+            : `GitHub answered ${answer.status}`,
+        };
+      }
+      viewer = answer.viewer ?? viewer;
+      errors.push(...(answer.errors ?? []));
+      nodes.push(
+        ...answer.pullRequests.filter(
+          (n): n is PullRequestNode => 'number' in n,
+        ),
+      );
+      let more = Boolean(answer.more && answer.cursor);
+      if (!walk) {
+        this.held[name] = mergeFirstPage(this.held[name], nodes, !more);
+        return { viewer, errors, truncated: false };
+      }
+      if (!more || page === MOST_PAGES) {
+        this.held[name] = nodes;
+        return { viewer, errors, truncated: more };
+      }
+      after = answer.cursor!;
     }
   };
 
@@ -532,6 +632,9 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   };
   signIn = () => {
     this.signedIn = true;
+    if (this.record.id) {
+      rememberSignIn(this.record.id);
+    }
     this.openWindow('connect');
   };
   // The approve page's key choice adds a pasted key as well as choosing one.
@@ -542,8 +645,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   <template>
     <article
       class='watcher'
-      data-test-pr-review-watcher
       {{OnReadiness this.readiness this.readinessChanged}}
+      data-test-pr-review-watcher
     >
       <header class='top'>
         <div>
@@ -665,6 +768,10 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           The watcher tries again shortly; the lists below are the last ones
           loaded.
         </Alert>
+      {{else if (eq this.limited 'rate-limit-unavailable')}}
+        <Alert @tone='warning' @title='Boxel could not count this call'>
+          So it wasn't sent. The watcher tries again in a minute.
+        </Alert>
       {{else if
         (or (eq this.readiness 'over-budget') (eq this.limited 'over-budget'))
       }}
@@ -711,141 +818,150 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           @options={{this.tabs}}
           @value={{this.tab}}
           @onValueChange={{this.selectTab}}
-        />
-        {{#if this.partial}}
-          <Alert @tone='warning' @title='GitHub left some pull requests out'>
-            {{this.partial}}
-          </Alert>
-        {{/if}}
-        {{#if this.unfiltered.length}}
-          <div class='arrange' data-test-arrange>
-            <SegmentedControl
-              @label='Sort by'
-              @options={{this.sortOptions}}
-              @value={{this.activeSort}}
-              @onValueChange={{this.selectSort}}
-              data-test-sort
-            />
-            <Button
-              @appearance='outlined'
-              @size='s'
-              {{on 'click' this.flipDirection}}
-              data-test-direction
-            >{{this.directionLabel}}</Button>
-            {{#if this.byAuthorApplies}}
+        >
+          {{#if this.partial}}
+            <Alert @tone='warning' @title='GitHub left some pull requests out'>
+              {{this.partial}}
+            </Alert>
+          {{/if}}
+          {{#if this.unfiltered.length}}
+            <div
+              class='arrange'
+              role='toolbar'
+              aria-label='Sort and filter'
+              data-test-arrange
+            >
+              <SegmentedControl
+                @label='Sort by'
+                @options={{this.sortOptions}}
+                @value={{this.activeSort}}
+                @onValueChange={{this.selectSort}}
+                data-test-sort
+              />
+              <SegmentedControl
+                @label='Order'
+                @options={{this.directionOptions}}
+                @value={{this.direction}}
+                @onValueChange={{this.selectDirection}}
+                data-test-direction
+              />
+              {{#if this.byAuthorApplies}}
+                <div class='filter'><NativeSelect
+                    @label='Author'
+                    @size='s'
+                    @options={{this.authorOptions}}
+                    @value={{this.activeAuthor}}
+                    @onValueChange={{this.selectAuthor}}
+                    data-test-author-filter
+                  /></div>
+              {{/if}}
               <div class='filter'><NativeSelect
-                  @label='Author'
+                  @label='Repository'
                   @size='s'
-                  @options={{this.authorOptions}}
-                  @value={{this.activeAuthor}}
-                  @onValueChange={{this.selectAuthor}}
-                  data-test-author-filter
+                  @options={{this.repoOptions}}
+                  @value={{this.activeRepo}}
+                  @onValueChange={{this.selectRepo}}
+                  data-test-repo-filter
                 /></div>
-            {{/if}}
-            <div class='filter'><NativeSelect
-                @label='Repository'
-                @size='s'
-                @options={{this.repoOptions}}
-                @value={{this.activeRepo}}
-                @onValueChange={{this.selectRepo}}
-                data-test-repo-filter
-              /></div>
-          </div>
-        {{/if}}
-        {{#if this.truncated}}
-          <p class='note'>Showing the 100 most recently updated of each search.</p>
-        {{/if}}
-        {{#if this.shown.length}}
-          <ul class='prs' data-test-list={{this.tab}}>
-            {{#each this.shown as |pr|}}
-              <li class='pr' data-test-pr='{{pr.repo}}#{{pr.number}}'>
-                <div class='pr-head'>
-                  <span class='ref'>{{pr.repo}}#{{pr.number}}</span>
-                  {{#if pr.isDraft}}
-                    <Chip @label='Draft' @dot={{false}} data-test-draft />
-                  {{/if}}
-                </div>
-                <a
-                  class='title'
-                  href={{pr.url}}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                >
-                  {{pr.title}}
-                </a>
-                <div class='facts'>
-                  {{#if (eq this.tab 'review')}}
-                    <span>by {{pr.author}}</span>
-                  {{/if}}
-                  {{#if pr.approvedBy.length}}
-                    <Chip @tone='success' data-test-approved>
-                      Approved by
-                      {{join pr.approvedBy}}
-                    </Chip>
-                  {{else if pr.requested}}
-                    <span data-test-waiting>
-                      Review requested
-                      <RelativeTime
-                        @date={{pr.requested.at}}
-                        @now={{this.loadedAt}}
-                      />
-                      {{#if (eq this.tab 'review')}}
-                        from
-                        {{if
-                          (eq pr.requested.from this.viewer)
-                          'you'
-                          pr.requested.from
-                        }}
-                      {{/if}}
-                    </span>
-                  {{else}}
-                    <span class='muted'>No review requested</span>
-                  {{/if}}
-                  {{#if pr.changesRequestedBy.length}}
-                    <Chip @tone='danger' data-test-changes-requested>
-                      Changes requested by
-                      {{join pr.changesRequestedBy}}
-                    </Chip>
-                  {{/if}}
-                  {{#if pr.comments}}
-                    <Chip @dot={{false}} data-test-comments>
-                      {{pr.comments}}
-                      {{if (eq pr.comments 1) 'comment' 'comments'}}
-                    </Chip>
-                  {{else}}
-                    <span class='muted'>No comments</span>
-                  {{/if}}
-                </div>
-              </li>
-            {{/each}}
-          </ul>
-        {{else if this.filtering}}
-          <EmptyState
-            @title='No pull requests match'
-            @message='Nothing in this list matches the author and repository chosen.'
-            data-test-empty='filtered'
-          >
-            <:action>
-              <Button
-                @appearance='outlined'
-                {{on 'click' this.clearFilters}}
-                data-test-clear-filters
-              >Show all</Button>
-            </:action>
-          </EmptyState>
-        {{else if (eq this.tab 'review')}}
-          <EmptyState
-            @title='Nothing is waiting on your review'
-            @message='A pull request shows here once review is requested from you or your team, and stays until it is approved, merged or closed.'
-            data-test-empty='review'
-          />
-        {{else}}
-          <EmptyState
-            @title='You have no open pull requests'
-            @message='Your open pull requests, drafts included, show here with how long each has waited for review.'
-            data-test-empty='mine'
-          />
-        {{/if}}
+            </div>
+          {{/if}}
+          {{#if this.truncated}}
+            <p class='note'>Showing the
+              {{this.mostShown}}
+              most recently updated pull requests of a search that found more.</p>
+          {{/if}}
+          {{#if this.shown.length}}
+            <ul class='prs' data-test-list={{this.tab}}>
+              {{#each this.shown as |pr|}}
+                <li class='pr' data-test-pr='{{pr.repo}}#{{pr.number}}'>
+                  <div class='pr-head'>
+                    <span class='ref'>{{pr.repo}}#{{pr.number}}</span>
+                    {{#if pr.isDraft}}
+                      <Chip @label='Draft' @dot={{false}} data-test-draft />
+                    {{/if}}
+                  </div>
+                  <a
+                    class='title'
+                    href={{pr.url}}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                  >
+                    {{pr.title}}
+                  </a>
+                  <div class='facts'>
+                    {{#if (eq this.tab 'review')}}
+                      <span>by {{pr.author}}</span>
+                    {{/if}}
+                    {{#if pr.approvedBy.length}}
+                      <Chip @tone='success' data-test-approved>
+                        Approved by
+                        {{join pr.approvedBy}}
+                      </Chip>
+                    {{else if pr.requested}}
+                      <span data-test-waiting>
+                        Review requested
+                        <RelativeTime
+                          @date={{pr.requested.at}}
+                          @now={{this.loadedAt}}
+                        />
+                        {{#if (eq this.tab 'review')}}
+                          from
+                          {{if
+                            (eq pr.requested.from this.viewer)
+                            'you'
+                            pr.requested.from
+                          }}
+                        {{/if}}
+                      </span>
+                    {{else}}
+                      <span class='muted'>No review requested</span>
+                    {{/if}}
+                    {{#if pr.changesRequestedBy.length}}
+                      <Chip @tone='danger' data-test-changes-requested>
+                        Changes requested by
+                        {{join pr.changesRequestedBy}}
+                      </Chip>
+                    {{/if}}
+                    {{#if pr.comments}}
+                      <Chip @dot={{false}} data-test-comments>
+                        {{pr.comments}}
+                        {{if (eq pr.comments 1) 'comment' 'comments'}}
+                      </Chip>
+                    {{else}}
+                      <span class='muted'>No comments</span>
+                    {{/if}}
+                  </div>
+                </li>
+              {{/each}}
+            </ul>
+          {{else if this.filtering}}
+            <EmptyState
+              @title='No pull requests match'
+              @message='Nothing in this list matches the author and repository chosen.'
+              data-test-empty='filtered'
+            >
+              <:action>
+                <Button
+                  @appearance='outlined'
+                  {{on 'click' this.clearFilters}}
+                  data-test-clear-filters
+                >Show all</Button>
+              </:action>
+            </EmptyState>
+          {{else if (eq this.tab 'review')}}
+            <EmptyState
+              @title='Nothing is waiting on your review'
+              @message='A pull request shows here once review is requested from you or your team, and stays until it is approved, merged or closed.'
+              data-test-empty='review'
+            />
+          {{else}}
+            <EmptyState
+              @title='You have no open pull requests'
+              @message='Your open pull requests, drafts included, show here with how long each has waited for review.'
+              data-test-empty='mine'
+            />
+          {{/if}}
+        </Tabs>
       {{else if this.loading}}
         <div class='loading'><Spinner /> Loading pull requests…</div>
       {{/if}}
@@ -857,6 +973,8 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-lg);
         container-type: inline-size;
+        height: 100%;
+        overflow-y: auto;
       }
       .top {
         display: flex;
@@ -864,10 +982,6 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         align-items: flex-start;
         gap: var(--boxel-sp);
         flex-wrap: wrap;
-      }
-      h1 {
-        margin: 0;
-        font-size: var(--boxel-heading-font-size);
       }
       .scope,
       .note,
@@ -879,7 +993,6 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         margin: var(--boxel-sp-4xs) 0 0;
       }
       .note {
-        margin: 0;
         font-size: var(--boxel-font-size-xs);
       }
       .refresh {
@@ -917,7 +1030,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         gap: var(--boxel-sp-xs);
       }
       .ref {
-        font-family: var(--font-mono, monospace);
+        font-family: var(--font-mono);
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
@@ -1015,26 +1128,28 @@ export class PRReviewWatcher extends CardDef {
 
   @operation static waitingOnMyReview = {
     base: 'callApi',
+    params: { after: StringField },
     label:
       "List others' open pull requests in your organization, with their reviews",
     url: GITHUB_GRAPHQL,
     headers: AUTH,
     graphql: {
       document: SEARCH_PULL_REQUESTS,
-      variables: { q: instance('reviewSearch') },
+      variables: { q: instance('reviewSearch'), after: params('after') },
     },
     output: ANSWER,
   } satisfies OperationDeclaration;
 
   @operation static myPullRequests = {
     base: 'callApi',
+    params: { after: StringField },
     label:
       'List your open pull requests in your organization, with their reviews',
     url: GITHUB_GRAPHQL,
     headers: AUTH,
     graphql: {
       document: SEARCH_PULL_REQUESTS,
-      variables: { q: instance('authoredSearch') },
+      variables: { q: instance('authoredSearch'), after: params('after') },
     },
     output: ANSWER,
   } satisfies OperationDeclaration;
