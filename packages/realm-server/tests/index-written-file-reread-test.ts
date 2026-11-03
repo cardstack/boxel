@@ -291,17 +291,14 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('the re-read window', function () {
-    // A clock that advances only when the window sleeps, so the test reads
-    // how much of the window each re-read used.
-    function fakeClock() {
-      let now = 0;
+  module('the re-read budget', function () {
+    // A sleep that returns at once and records how long each re-read asked
+    // to wait, so the test reads how much of the budget each one spent.
+    function fakeSleep() {
       let slept: number[] = [];
       return {
-        now: () => now,
         sleep: async (ms: number) => {
           slept.push(ms);
-          now += ms;
         },
         slept,
       };
@@ -310,10 +307,10 @@ module(basename(import.meta.filename), function () {
     const recorded = async () => true;
 
     test('re-reads after each delay until the file is read', async function (assert) {
-      let clock = fakeClock();
+      let clock = fakeSleep();
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
-        ...clock,
+        sleep: clock.sleep,
       });
       let reads = 0;
       let result = await rereads.reread(
@@ -330,10 +327,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('stops as soon as the realm no longer records the file', async function (assert) {
-      let clock = fakeClock();
+      let clock = fakeSleep();
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
-        ...clock,
+        sleep: clock.sleep,
       });
       let checks = 0;
       let result = await rereads.reread(
@@ -349,22 +346,22 @@ module(basename(import.meta.filename), function () {
     });
 
     test('is shared by every re-read of the pass', async function (assert) {
-      let clock = fakeClock();
+      let clock = fakeSleep();
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
-        ...clock,
+        sleep: clock.sleep,
       });
       let first = await rereads.reread(async () => undefined, recorded);
       assert.deepEqual(
         first,
         { value: undefined, rereads: 3, waitedMs: 70, removed: false },
-        'the first missing file uses the whole window',
+        'the first missing file spends the whole budget',
       );
       let second = await rereads.reread(async () => undefined, recorded);
       assert.deepEqual(
         second,
         { value: undefined, rereads: 0, waitedMs: 0, removed: false },
-        'a later file in the pass is not re-read once the window has closed',
+        'a later file in the pass is not re-read once the budget is spent',
       );
       let third = await rereads.reread(
         async () => undefined,
@@ -372,23 +369,23 @@ module(basename(import.meta.filename), function () {
       );
       assert.true(
         third.removed,
-        'a file the realm removed reads as a removal after the window has closed too',
+        'a file the realm removed reads as a removal after the budget is spent too',
       );
       assert.deepEqual(clock.slept, [10, 20, 40]);
     });
 
-    test('a later file re-reads only for what is left of the window', async function (assert) {
-      let clock = fakeClock();
+    test('a later file re-reads only for what is left of the budget', async function (assert) {
+      let clock = fakeSleep();
       let rereads = new WrittenFileRereads({
         delaysMs: [10, 20, 40],
-        ...clock,
+        sleep: clock.sleep,
       });
       await rereads.reread(async () => 'file', recorded);
       let second = await rereads.reread(async () => undefined, recorded);
       assert.deepEqual(
         clock.slept,
         [10, 10, 20, 30],
-        'the second file sleeps through the rest of the window and stops at its close',
+        'the second file waits out the rest of the budget and stops when it is spent',
       );
       assert.deepEqual(second, {
         value: undefined,
@@ -396,6 +393,25 @@ module(basename(import.meta.filename), function () {
         waitedMs: 60,
         removed: false,
       });
+    });
+
+    test('time the pass spends between re-reads does not count against the budget', async function (assert) {
+      // Real timers: a budget measured from the first re-read would have run
+      // out during the pause below.
+      let rereads = new WrittenFileRereads({ delaysMs: [5, 10] });
+      await rereads.reread(async () => 'file', recorded);
+      await new Promise((r) => setTimeout(r, 50));
+      let reads = 0;
+      let later = await rereads.reread(
+        async () => (++reads === 2 ? 'file' : undefined),
+        recorded,
+      );
+      assert.strictEqual(
+        later.value,
+        'file',
+        'a miss long after the first one is still re-read',
+      );
+      assert.strictEqual(later.rereads, 2);
     });
   });
 });

@@ -53,7 +53,7 @@ interface RenderFileForIndexingOptions {
   renderScopeRound: number;
   prerenderer: Prerenderer;
   // Present in an incremental pass: a read that finds no file is then retried
-  // through the pass's re-read window, for as long as the realm still records
+  // through the pass's re-read budget, for as long as the realm still records
   // the file, before the visit reports the file gone.
   writtenFileRereads?: WrittenFileRereads;
   consumeClearCacheForRender(): boolean;

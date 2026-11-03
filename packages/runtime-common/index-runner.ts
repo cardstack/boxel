@@ -257,7 +257,7 @@ export class IndexRunner {
   #batchId!: string;
   #idleRenderTimeoutAbortAfter: number;
   #writtenFileRereadDelaysMs: readonly number[];
-  // The re-read window an incremental pass's visits share (see
+  // The re-read budget an incremental pass's visits share (see
   // WrittenFileRereads). Any URL the pass visits can be one another instance
   // just wrote: the job's own writes, and also a dependent or a validation
   // round's URL that a peer's pass committed. So every visit that reads a file

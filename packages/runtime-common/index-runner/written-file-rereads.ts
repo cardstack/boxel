@@ -33,33 +33,36 @@ export interface WrittenFileRereadLog {
   warn(message: string): void;
 }
 
-// One per pass. The window opens at the pass's first re-read and spans the sum
-// of the delays, and every later re-read in the pass shares what is left of
-// it. A bulk write whose files all read as missing (a new directory the
-// answering instance cannot see yet) therefore costs the pass one window, not
-// one per file. Once the window has closed, a missing file is taken as gone on
-// the caller's first read.
+// One per pass. The pass's re-reads share one budget of waiting, the sum of
+// the delays: each re-read spends what it sleeps, and one that finds its file
+// stops spending. A bulk write whose files all read as missing (a new
+// directory the answering instance cannot see yet) therefore costs the pass
+// one window of waiting, not one per file, while a miss that recovers early
+// leaves the rest of the budget to any later miss, however long the pass runs
+// in between. Once the budget is spent, a missing file is taken as gone on the
+// caller's first read.
 export class WrittenFileRereads {
   #delaysMs: readonly number[];
   #sleep: (ms: number) => Promise<void>;
-  #now: () => number;
-  #closesAt: number | undefined;
+  #remainingMs: number;
 
   constructor(
     opts: {
       delaysMs?: readonly number[];
       sleep?: (ms: number) => Promise<void>;
-      now?: () => number;
     } = {},
   ) {
     this.#delaysMs = opts.delaysMs ?? WRITTEN_FILE_REREAD_DELAYS_MS;
     this.#sleep =
       opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.#now = opts.now ?? Date.now;
+    this.#remainingMs = this.#delaysMs.reduce(
+      (sum, delayMs) => sum + delayMs,
+      0,
+    );
   }
 
   // Reads a file the pass visits. When `read` finds nothing, re-reads it
-  // through the window while `realmRecordsFile` holds, and logs what the
+  // through the pass's budget while `realmRecordsFile` holds, and logs what the
   // re-reads came to. `label` leads each log line and names the file;
   // `ifMissing` says what the pass does with a file that stays missing.
   async readVisitedFile<T>(
@@ -100,41 +103,43 @@ export class WrittenFileRereads {
     return value;
   }
 
-  // Calls `read` after each delay until it returns a file or the pass's window
-  // closes. `realmRecordsFile` is asked before each wait, so a file the realm
-  // removed meanwhile stops the re-reads at once instead of holding the pass
-  // for the rest of the window.
+  // Calls `read` after each delay until it returns a file or the pass's
+  // budget is spent. `realmRecordsFile` is asked before each wait, so a file
+  // the realm removed meanwhile stops the re-reads at once instead of holding
+  // the pass for the rest of the budget.
   async reread<T>(
     read: () => Promise<T | undefined>,
     realmRecordsFile: () => Promise<boolean>,
   ): Promise<WrittenFileRereadResult<T>> {
-    let start = this.#now();
-    this.#closesAt ??=
-      start + this.#delaysMs.reduce((sum, delayMs) => sum + delayMs, 0);
     let rereads = 0;
+    let waitedMs = 0;
     let result = (value: T | undefined, removed = false) => ({
       value,
       rereads,
-      waitedMs: this.#now() - start,
+      waitedMs,
       removed,
     });
     for (let delayMs of this.#delaysMs) {
-      let remainingMs = this.#closesAt - this.#now();
-      if (remainingMs <= 0) {
+      if (this.#remainingMs <= 0) {
         break;
       }
       if (!(await realmRecordsFile())) {
         return result(undefined, true);
       }
-      await this.#sleep(Math.min(delayMs, remainingMs));
+      let sleepMs = Math.min(delayMs, this.#remainingMs);
+      // Spent before the wait, so re-reads that overlap cannot together wait
+      // longer than the budget.
+      this.#remainingMs -= sleepMs;
+      await this.#sleep(sleepMs);
+      waitedMs += sleepMs;
       rereads++;
       let value = await read();
       if (value !== undefined) {
         return result(value);
       }
     }
-    // Asked again once the window is spent, so a file the realm removed reads
-    // as a removal even when the window had already closed before this file.
+    // Asked again once the budget is spent, so a file the realm removed reads
+    // as a removal even when the budget ran out before this file.
     return result(undefined, !(await realmRecordsFile()));
   }
 }
