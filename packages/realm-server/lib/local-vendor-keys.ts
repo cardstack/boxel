@@ -13,7 +13,7 @@ const log = logger('local-vendor-keys');
 // The OpenRouter endpoints a local stack's proxy serves with one key. Each is
 // its own destination: a row for the whole `/api/v1` prefix would also admit
 // OpenRouter's key-management and credit endpoints under the platform's key.
-// All four charge Boxel credits from the cost OpenRouter reports.
+// All of them charge Boxel credits from the cost OpenRouter reports.
 const OPENROUTER_DESTINATIONS = [
   {
     destination: 'https://openrouter.ai/api/v1/chat/completions',
@@ -33,6 +33,17 @@ const OPENROUTER_DESTINATIONS = [
     destination: 'https://openrouter.ai/api/v1/audio/transcriptions',
     supportsStreaming: false,
   },
+  // The rest of OpenRouter's generation API. Each answers JSON with the cost in
+  // `usage.cost`, so the proxy bills them like chat. Video is left out: a job is
+  // polled, and every poll repeats its cost.
+  { destination: 'https://openrouter.ai/api/v1/responses', supportsStreaming: true },
+  { destination: 'https://openrouter.ai/api/v1/messages', supportsStreaming: true },
+  { destination: 'https://openrouter.ai/api/v1/rerank', supportsStreaming: false },
+  { destination: 'https://openrouter.ai/api/v1/images', supportsStreaming: false },
+  { destination: 'https://openrouter.ai/api/v1/systemone', supportsStreaming: false },
+  // Alpha: typed questions and typed field extraction over a state.
+  { destination: 'https://openrouter.ai/api/alpha/decisions', supportsStreaming: false },
+  { destination: 'https://openrouter.ai/api/alpha/extractions', supportsStreaming: false },
 ];
 
 // Credits each local user starts with, once, so the credit gate admits their
