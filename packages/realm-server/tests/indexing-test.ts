@@ -515,7 +515,7 @@ module(basename(import.meta.filename), function () {
       if (current?.assertions?.some((a) => !a.result)) {
         await logUnreadableFileRows(
           testDbAdapter,
-          testRealm,
+          testRealm.href,
           `read-only failure: ${current.testName}`,
         );
       }

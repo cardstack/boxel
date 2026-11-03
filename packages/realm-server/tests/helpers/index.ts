@@ -24,6 +24,7 @@ import type {
   QueryResultsMeta,
   LinkShapePolicy,
   ServedRealm,
+  DBAdapter,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -1152,7 +1153,7 @@ export async function logRealmIndexDiagnostics(
 // at one of these three, and this dump names which. Pure diagnostics: wrapped
 // so it can never affect a test result.
 export async function logUnreadableFileRows(
-  dbAdapter: PgAdapter,
+  dbAdapter: DBAdapter,
   realmURL: string,
   label: string,
 ): Promise<void> {
@@ -1161,7 +1162,8 @@ export async function logUnreadableFileRows(
       `SELECT i.url, i.generation, i.is_deleted, i.has_error,
               i.error_doc->>'message' AS index_error,
               ph.generation AS render_generation,
-              ph.error_doc->>'message' AS render_error
+              left(ph.error_doc::text, 2000) AS render_error,
+              left(ph.diagnostics::text, 1000) AS render_diagnostics
        FROM boxel_index i
        LEFT JOIN prerendered_html ph
          ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
@@ -1179,7 +1181,8 @@ export async function logUnreadableFileRows(
           `is_deleted=${r.is_deleted} has_error=${r.has_error} ` +
           `index_error=${r.index_error ?? 'none'} ` +
           `render_generation=${r.render_generation ?? 'none'} ` +
-          `render_error=${r.render_error ?? 'none'}`,
+          `render_error=${r.render_error ?? 'none'} ` +
+          `render_diagnostics=${r.render_diagnostics ?? 'none'}`,
       );
     }
   } catch (e) {
