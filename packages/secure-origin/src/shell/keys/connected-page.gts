@@ -132,7 +132,7 @@ class Connected extends Component<{
               {{else}}
                 Your account is connected.
               {{/if}}
-              Cards can use it only for the requests you approve.
+              Cards can use it only for the calls you approve.
             {{else if this.failed}}
               {{this.failed.message}}
             {{/if}}

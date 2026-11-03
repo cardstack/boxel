@@ -123,6 +123,7 @@ async function initESLint(): Promise<any> {
               'https://cardstack.com/base/*',
               '@cardstack/boxel-ui/*',
               '@cardstack/boxel-icons/*',
+              '@cardstack/pretui/helpers',
             ],
           },
         ],

@@ -121,7 +121,7 @@ function serviceSource(
         base: 'callApi',
         label: 'Read from the other host',
         url: '${elsewhereURL}/echo',
-        headers: { authorization: 'Bearer {{userKey}}' },
+        headers: { authorization: '${edited ? 'Token' : 'Bearer'} {{userKey}}' },
       };
     }
   `;
@@ -179,8 +179,8 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
   // origin and hands the session to the CLI's listener, as the window's form
   // does. The approve page signs in with the window's own session, builds
   // the card's batch, approves the operations the CLI named with the key it
-  // named, and tells the CLI's listener the approval is made, as the page
-  // does.
+  // named (for interactive use too when the CLI opened it so), and tells the
+  // CLI's listener the approval is made, as the page does.
   async function browser(link: string): Promise<boolean> {
     let url = new URL(link);
     expect(url.origin).toBe(secureOriginURL.origin);
@@ -244,6 +244,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
                     name: fragment.get('name'),
                     realm: fragment.get('realm'),
                   },
+                  interactive: true,
                 },
               },
             }),
@@ -278,7 +279,11 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
         body: JSON.stringify({
           data: {
             type: 'key-binding-approval',
-            attributes: { realm: batch.realm.url, operations },
+            attributes: {
+              realm: batch.realm.url,
+              operations,
+              interactive: fragment.get('interactive') === '1',
+            },
           },
         }),
       });
@@ -386,12 +391,13 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     ]);
   });
 
-  it('asks the realm server for interactive use, which it refuses, even when the approval needs a new grant', async () => {
+  it('asks the realm server for anonymous use, which it refuses, even when the approval needs a new grant', async () => {
     let refused = await keysApprove('my key', {
       ...deps,
       operation: 'service#Elsewhere.other',
       realm,
       interactive: true,
+      anonymous: true,
       yes: true,
     }).catch((e) => e);
     expect(refused).toBeInstanceOf(SecureSessionRequestError);
@@ -481,7 +487,7 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       body: { method: 'GET', path: '/echo' },
     });
 
-    // The CLI is interactive, and every approval is for pipelines only.
+    // The CLI is interactive, and `list` is approved for pipelines only.
     let refused = await invokeOperation(`${realm}the-service`, 'list', {
       profileManager: pm,
     });
@@ -489,6 +495,29 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
       'interactive-use-not-approved',
     );
     expect(vendor.requests.some((r) => r.headers.authorization)).toBe(false);
+
+    // Approved again with --interactive, from the terminal, since the key's
+    // grant already covers the destination.
+    let approved = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Service.list',
+      realm,
+      interactive: true,
+      yes: true,
+    });
+    expect(approved.via).toBe('cli');
+    expect(approved.approved.map((b) => [b.operation, b.interactive])).toEqual([
+      ['list', true],
+    ]);
+    let answered = await invokeOperation(`${realm}the-service`, 'list', {
+      profileManager: pm,
+    });
+    expect(answered.status, JSON.stringify(answered.errors)).toBe(200);
+    expect(
+      vendor.requests.some(
+        (r) => r.headers.authorization === `Bearer ${KEY_VALUE}`,
+      ),
+    ).toBe(true);
   });
 
   it('removes a grant, revoking the approvals that send under it', async () => {
@@ -533,5 +562,47 @@ describe('boxel keys approve, revoke, pending, ungrant and operations invoke (in
     } finally {
       windowEnds = 'approved';
     }
+  });
+
+  it('opens the secure window on interactive use for --interactive, when the approval needs a new grant', async () => {
+    let result = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      interactive: true,
+      yes: true,
+    });
+    expect(result.via).toBe('window');
+    let opened = windows[windows.length - 1]!;
+    expect(opened.fragment.get('interactive')).toBe('1');
+    expect(result.approved.map((b) => [b.operation, b.interactive])).toEqual([
+      ['other', true],
+    ]);
+
+    // Its request changes. Approving it again without --interactive would
+    // quietly return it to pipelines only, so that is refused, naming what
+    // to do instead, and --interactive approves it in the terminal.
+    await testRealm.write(
+      'service.gts',
+      serviceSource(vendor.url, { elsewhereURL: vendor.alternateUrl }),
+    );
+    let refused = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      yes: true,
+    }).catch((e) => e);
+    expect(String(refused?.message)).toContain('Pass --interactive to keep');
+    let again = await keysApprove('my key', {
+      ...deps,
+      operation: 'service#Elsewhere.other',
+      realm,
+      interactive: true,
+      yes: true,
+    });
+    expect(again.via).toBe('cli');
+    expect(again.approved.map((b) => [b.operation, b.interactive])).toEqual([
+      ['other', true],
+    ]);
   });
 });

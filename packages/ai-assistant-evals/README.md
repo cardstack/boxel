@@ -135,7 +135,8 @@ where setup creates the workspace.
 ## Run
 
 Start the dev stack first (`mise run dev-all` with `OPENROUTER_API_KEY` set for
-the ai-bot). Then, from `packages/ai-assistant-evals`:
+the ai-bot), with a host built without `DASHBOARD_V2`: the runner drives the
+workspace chooser, which the dashboard replaces. Then, from `packages/ai-assistant-evals`:
 
 ```sh
 EVAL_MODELS="Claude Sonnet 4.6,Claude Opus 4.8" pnpm eval:models

@@ -56,9 +56,14 @@ import {
 // cancelled. Either way, what was approved is read from the realm server. The
 // terminal never creates a grant on its own.
 //
-// The CLI counts as interactive: nothing it invokes runs as a pipeline. An
-// approval is for pipelines only; `--interactive` and `--anonymous` ask the
-// realm server for more, and it refuses them, since it offers neither.
+// An approval is for the card's pipelines unless `--interactive` also allows
+// it from an open card, the AI assistant and the CLI, which counts as
+// interactive: nothing it invokes runs as a pipeline. With `--interactive` the
+// batch also holds operations approved for pipelines only, and the terminal
+// prints what interactive use allows before asking. A share approved for
+// interactive use for the first time needs its daily budget, from
+// `--daily-budget` in the terminal or asked for in the window. `--anonymous`
+// the realm server refuses: it isn't offered.
 
 // How long the CLI waits for the secure window.
 const WINDOW_TIMEOUT_MS = 10 * 60 * 1000;
@@ -115,9 +120,32 @@ interface ApproveOptions {
   instance?: string;
   interactive?: boolean;
   anonymous?: boolean;
+  dailyBudget?: string;
   yes?: boolean;
   timeout?: string;
   json?: boolean;
+}
+
+// What interactive use allows, printed once before the confirmation: for the
+// user's own key, and for a share, whose approval reaches every reader of the
+// realm. The secure window's approve page says the same.
+export const INTERACTIVE_CONFIRMATION = {
+  userKey:
+    'Any card you open can make these calls as you and read what comes back.',
+  apiKey:
+    "Any card a reader of this realm opens, from any realm, can make these calls with this key and read the responses. Allow this only for a key whose responses aren't private, and that the service limits to reading.",
+} as const;
+
+// `--daily-budget`: a whole number of calls, at least one.
+function dailyBudgetOption(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  let budget = /^\d+$/.test(value.trim()) ? Number(value.trim()) : NaN;
+  if (!Number.isSafeInteger(budget) || budget < 1) {
+    throw new Error('--daily-budget is a whole number of calls, at least one');
+  }
+  return budget;
 }
 
 // Where a slot's key goes, as a person reads it.
@@ -265,7 +293,7 @@ function printBatch(
 ): void {
   say(
     ctx,
-    `Approving ${planned.length} ${planned.length === 1 ? 'request' : 'requests'} of ${batch.card.name} in ${batch.realm.name} (${batch.realm.url}):`,
+    `Approving ${planned.length} ${planned.length === 1 ? 'call' : 'calls'} that ${batch.card.name} in ${batch.realm.name} (${batch.realm.url}) makes:`,
   );
   let byDestination = new Map<string, Planned[]>();
   for (let p of planned) {
@@ -280,7 +308,7 @@ function printBatch(
     for (let p of group) {
       say(
         ctx,
-        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : ''}`,
+        `    ${p.operation.label}${p.operation.status === 'changed' ? ` ${FG_YELLOW}(changed since it was approved)${RESET}` : p.operation.status === 'pipelines-only' ? ` ${DIM}(approved for pipelines only)${RESET}` : ''}`,
       );
       say(ctx, `      ${p.operation.method} ${p.operation.path}`);
       if (p.operation.instance) {
@@ -315,14 +343,22 @@ function printBatch(
     say(ctx, '');
     say(
       ctx,
-      '  These requests may also be sent when you use the card yourself (from a card, the AI assistant or the CLI), not only from its pipelines.',
+      '  With --interactive, the card makes these calls on its schedule and whenever it is opened: in the browser, from the AI assistant, or from the CLI.',
     );
+    let kinds = new Set(planned.flatMap((p) => p.fills.map((f) => f.kind)));
+    for (let kind of ['userKey', 'apiKey'] as const) {
+      if (kinds.has(kind)) {
+        say(ctx, `  ${FG_YELLOW}${INTERACTIVE_CONFIRMATION[kind]}${RESET}`);
+      }
+    }
   }
-  if (batch.remaining > 0) {
+  let remaining =
+    batch.remaining + (interactive ? (batch.remainingPipelinesOnly ?? 0) : 0);
+  if (remaining > 0) {
     say(ctx, '');
     say(
       ctx,
-      `  ${DIM}${batch.remaining} more need approving after these; run it again for them.${RESET}`,
+      `  ${DIM}${remaining} more ${remaining === 1 ? 'call needs' : 'calls need'} approving after these; run it again for them.${RESET}`,
     );
   }
   say(ctx, '');
@@ -435,6 +471,10 @@ export async function keysApprove(
   if (options.anonymous && !options.interactive) {
     throw new Error('--anonymous is given with --interactive');
   }
+  let dailyBudget = dailyBudgetOption(options.dailyBudget);
+  if (dailyBudget !== undefined && !options.interactive) {
+    throw new Error('--daily-budget is given with --interactive');
+  }
   let timeoutMs = windowTimeout(options.timeout);
   let parsed = parseOperationArgument(options.operation, options.realm);
   requireConfirmation(ctx, options.yes, 'approve');
@@ -447,7 +487,10 @@ export async function keysApprove(
         name: parsed.name,
         realm: options.realm,
       };
-  let batch = await approvalBatch(ctx.realmServerUrl, token, { target });
+  let batch = await approvalBatch(ctx.realmServerUrl, token, {
+    target,
+    interactive: Boolean(options.interactive),
+  });
   // A card is named by its own URL, so the type --operation names is checked
   // against the one the card adopts from. Both are asked of the realm server,
   // which names each the same way, so the two answers compare as written.
@@ -489,11 +532,7 @@ export async function keysApprove(
   let interactive = Boolean(options.interactive);
   // The window approves every slot of each operation it is given, so an
   // approval narrowed to one slot can't be confirmed there.
-  if (
-    newGrants(planned).length > 0 &&
-    !interactive &&
-    options.slot !== undefined
-  ) {
+  if (newGrants(planned).length > 0 && options.slot !== undefined) {
     throw new Error(
       `Sending ${newGrants(planned)
         .map((g) => `${g.name} to ${g.host}`)
@@ -501,6 +540,42 @@ export async function keysApprove(
           ', ',
         )} is confirmed in the secure window, which approves every slot of an operation. Approve without --slot, or once the key has been approved for ${[...new Set(newGrants(planned).map((g) => g.host))].join(', ')}`,
     );
+  }
+  // Approving again sets where a request runs, so an approval made without
+  // --interactive would quietly return a live card's requests to pipelines
+  // only. Asked for in so many words instead.
+  let live = planned.filter((p) =>
+    p.operation.slots.some(
+      (s) => p.fills.some((f) => f.slot === s.slot) && s.approved?.interactive,
+    ),
+  );
+  if (!interactive && live.length > 0) {
+    throw new Error(
+      `${live.map((p) => p.operation.label).join(', ')} ${live.length === 1 ? 'is' : 'are'} approved for use in open cards. Pass --interactive to keep that; to run ${live.length === 1 ? 'it' : 'them'} in pipelines only, revoke ${live.length === 1 ? 'it' : 'them'} with \`boxel keys revoke\` and approve again`,
+    );
+  }
+  // The shares this approval allows interactive use of for the first time,
+  // whose daily budget it names.
+  let firstInteractive = interactive
+    ? batch.shares.filter(
+        (share) =>
+          !share.interactive &&
+          planned.some((p) =>
+            p.fills.some((f) => f.kind === 'apiKey' && f.id === share.id),
+          ),
+      )
+    : [];
+  if (dailyBudget !== undefined) {
+    if (newGrants(planned).length > 0 && !options.anonymous) {
+      throw new Error(
+        '--daily-budget is asked for in the secure window for this approval, since it sends a key somewhere new. Leave it off',
+      );
+    }
+    if (firstInteractive.length === 0) {
+      throw new Error(
+        "--daily-budget names the daily budget of a share allowed in open cards for the first time, and this approval has none. A share's limits are changed by its owner from the key's page",
+      );
+    }
   }
   printBatch(ctx, batch, planned, { interactive });
   if (!options.yes) {
@@ -513,21 +588,32 @@ export async function keysApprove(
   let operations = planned.map((p) =>
     approvalOf(p, { module: batch.card.module, name: batch.card.exportName }),
   );
-
-  // Asking for more than pipelines is the realm server's to refuse, which it
-  // does before anything is approved, so it is asked here, whatever grants
-  // the approval needs.
-  if (grants.length === 0 || interactive) {
+  // Anonymous use is the realm server's to refuse, which it does before
+  // anything is approved, so it is asked here, whatever grants the approval
+  // needs.
+  if (grants.length === 0 || options.anonymous) {
+    if (firstInteractive.length > 0 && dailyBudget === undefined) {
+      throw new Error(
+        `${firstInteractive.map((s) => s.label).join(', ')} ${firstInteractive.length === 1 ? 'is' : 'are'} allowed in open cards for the first time, so name the daily budget with --daily-budget <calls> (it is ${firstInteractive.map((s) => s.dailyBudget).join(', ')} now)`,
+      );
+    }
     let { approved } = await approveOperations(ctx.realmServerUrl, token, {
       realm: batch.realm.url,
       operations,
       interactive,
       anonymous: Boolean(options.anonymous),
+      ...(dailyBudget !== undefined
+        ? {
+            dailyBudgets: Object.fromEntries(
+              firstInteractive.map((share) => [share.id, dailyBudget]),
+            ),
+          }
+        : {}),
     });
     let result: ApproveResult = { approved, via: 'cli' };
     emit(ctx, result, () => {
       console.log(
-        `${FG_GREEN}Approved ${planned.length} ${planned.length === 1 ? 'request' : 'requests'} of ${batch.card.name}.${RESET}`,
+        `${FG_GREEN}Approved ${planned.length} ${planned.length === 1 ? 'call' : 'calls'} that ${batch.card.name} makes.${RESET}`,
       );
     });
     return result;
@@ -562,6 +648,7 @@ export async function keysApprove(
       operation: first.operation.name,
       key: fill.id,
       operations: planned.map((p) => p.operation.name).join(','),
+      ...(interactive ? { interactive: '1' } : {}),
       reason: `Approve ${batch.card.name}'s requests from the Boxel CLI`,
     },
     what: `sending ${grants.map((g) => `${g.name} to ${g.host}`).join(', ')}`,
@@ -599,7 +686,7 @@ export async function keysApprove(
   emit(ctx, result, () => {
     let count = new Set(approved.map((b) => b.operation)).size;
     console.log(
-      `${FG_GREEN}Approved ${count} ${count === 1 ? 'request' : 'requests'} of ${batch.card.name} in the secure window.${RESET}`,
+      `${FG_GREEN}Approved ${count} ${count === 1 ? 'call' : 'calls'} that ${batch.card.name} makes, in the secure window.${RESET}`,
     );
   });
   return result;

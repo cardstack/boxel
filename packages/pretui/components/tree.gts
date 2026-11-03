@@ -181,7 +181,7 @@ export class Tree extends Component<TreeSignature> {
   /** 'true' | 'false' for branches, undefined (attribute removed) for leaves */
   expandedAttr = (row: TreeRow): string | undefined =>
     row.hasChildren ? (row.expanded ? 'true' : 'false') : undefined;
-  // returns the boxel-ui icon component for the node's icon name (any-typed
+  // returns the boxel-icons icon component for the node's icon name (any-typed
   // by the registry)
   iconOf = (row: TreeRow) => iconFor(row.node.icon);
 

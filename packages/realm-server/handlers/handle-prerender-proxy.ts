@@ -25,14 +25,16 @@ export default function handlePrerenderProxy({
   prerenderer,
   dbAdapter,
   matrixURL,
+  matrixServerName,
   createPrerenderAuth,
 }: {
   kind: 'card' | 'module' | 'file-extract';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
   // Resolves the realm's `users` grant, which is keyed on whether the caller
-  // has a matrix account.
+  // has an account on the paired homeserver.
   matrixURL: string;
+  matrixServerName: string;
   createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -104,6 +106,7 @@ export default function handlePrerenderProxy({
         new URL(attrs.realm),
         token.user,
         matrixURL,
+        matrixServerName,
       );
     } catch (err) {
       console.error(

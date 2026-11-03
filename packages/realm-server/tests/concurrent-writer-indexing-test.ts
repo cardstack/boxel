@@ -454,6 +454,7 @@ module(basename(import.meta.filename), function () {
             queuePublisher: publisher,
             virtualNetwork,
             matrixURL: realmServerTestMatrix.url,
+            matrixServerName: 'localhost',
             secretSeed: realmSecretSeed,
             realmServerMatrixUsername: testRealmServerMatrixUsername,
             prerenderer: recorder,

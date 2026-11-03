@@ -615,6 +615,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
@@ -626,6 +627,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
@@ -637,6 +639,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
