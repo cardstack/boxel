@@ -1,6 +1,10 @@
 import QUnit from 'qunit';
 const { test } = QUnit;
-import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
+import {
+  FAKE_HOMESERVER_URL,
+  FakeMatrixClient,
+  matrixMediaUrl,
+} from './helpers/fake-matrix-client.ts';
 import type { Method } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,
@@ -17,6 +21,8 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common';
 import {
+  downloadFile,
+  downloadFileAsBase64DataUrl,
   getPromptParts,
   getRoomEvents,
   ROOM_EVENTS_MAX_PAGES,
@@ -642,8 +648,7 @@ test('getRoomEvents - a history cut by a compaction builds the same prompt as th
   }
   // A skill file the model read before the cut, which the prompt carries
   // after the summary.
-  const skillMediaUrl =
-    'http://localhost:8008/_matrix/media/v3/download/localhost/windowed-skill';
+  const skillMediaUrl = matrixMediaUrl('mxc://localhost/windowed-skill');
   placeAt(timeline, 60, {
     event_id: 'read-request',
     type: 'm.room.message',
@@ -838,6 +843,118 @@ test('getRoomEvents - a read listed only for its skill files keeps its tools', a
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// Records every request, answering the fake homeserver's media URLs with
+// the text stored under them.
+function recordMediaRequests(media: Record<string, string>) {
+  let requests: { url: string; authorization?: string }[] = [];
+  let originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (
+    url: string,
+    init?: { headers?: Record<string, string> },
+  ) => {
+    requests.push({ url, authorization: init?.headers?.Authorization });
+    let body = media[url];
+    return body === undefined
+      ? { ok: false, status: 404, text: async () => '' }
+      : {
+          ok: true,
+          status: 200,
+          text: async () => body,
+          arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+        };
+  };
+  return { requests, restore: () => (globalThis.fetch = originalFetch) };
+}
+
+test('downloadFile and downloadFileAsBase64DataUrl fetch a Matrix media item only from the homeserver', async function (assert) {
+  // Distinct media ids per call, so downloadFile's cache answers none.
+  const named = [
+    ['mxc://mock-server/media-mxc', 'mxc://mock-server/media-mxc'],
+    [
+      matrixMediaUrl('mxc://mock-server/media-homeserver'),
+      'mxc://mock-server/media-homeserver',
+    ],
+    [
+      'http://other-host:8008/_matrix/media/v3/download/mock-server/media-legacy/file.txt',
+      'mxc://mock-server/media-legacy',
+    ],
+    [
+      'https://other-host/_matrix/client/v1/media/thumbnail/mock-server/media-thumbnail?width=32',
+      'mxc://mock-server/media-thumbnail',
+    ],
+  ];
+  const media = Object.fromEntries(
+    named.map(([, mxc]) => [matrixMediaUrl(mxc), `content of ${mxc}`]),
+  );
+  const client = new FakeMatrixClient();
+
+  for (const [url, mxc] of named) {
+    let { requests, restore } = recordMediaRequests(media);
+    try {
+      assert.strictEqual(
+        await downloadFile(client, { url, contentType: 'text/plain' } as any),
+        `content of ${mxc}`,
+        `downloadFile reads ${url}`,
+      );
+      assert.strictEqual(
+        await downloadFileAsBase64DataUrl(client, url, 'text/plain'),
+        `data:text/plain;base64,${Buffer.from(`content of ${mxc}`).toString('base64')}`,
+        `downloadFileAsBase64DataUrl reads ${url}`,
+      );
+    } finally {
+      restore();
+    }
+    assert.deepEqual(
+      requests,
+      [
+        {
+          url: matrixMediaUrl(mxc),
+          authorization: 'Bearer fake-access-token',
+        },
+        {
+          url: matrixMediaUrl(mxc),
+          authorization: 'Bearer fake-access-token',
+        },
+      ],
+      `${url} is fetched from the homeserver alone`,
+    );
+    assert.true(
+      requests.every(
+        (request) => new URL(request.url).origin === FAKE_HOMESERVER_URL,
+      ),
+    );
+  }
+});
+
+test('downloadFile and downloadFileAsBase64DataUrl refuse a URL that names no Matrix media item without fetching it', async function (assert) {
+  const client = new FakeMatrixClient();
+  const urls = [
+    'https://elsewhere.example/notes.txt',
+    'https://elsewhere.example/files/notes-uploaded',
+    'notes-uploaded',
+    'mxc://mock-server/not/a-media-id',
+    'mxc://mock-server/not.a.media.id',
+  ];
+  let { requests, restore } = recordMediaRequests({});
+  try {
+    for (const url of urls) {
+      await assert.rejects(
+        downloadFile(client, { url, contentType: 'text/plain' } as any),
+        (error: Error) => error.message === `Not a Matrix media URL: ${url}`,
+        `downloadFile refuses ${url}`,
+      );
+      await assert.rejects(
+        downloadFileAsBase64DataUrl(client, url, 'image/png'),
+        (error: Error) => error.message === `Not a Matrix media URL: ${url}`,
+        `downloadFileAsBase64DataUrl refuses ${url}`,
+      );
+    }
+  } finally {
+    restore();
+  }
+  assert.deepEqual(requests, [], 'no request is made');
 });
 
 test('sendErrorEvent - uses provider metadata when available', async function (assert) {

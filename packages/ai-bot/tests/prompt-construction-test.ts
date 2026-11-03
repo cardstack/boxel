@@ -35,7 +35,11 @@ import type { CardDef } from '@cardstack/base/card-api';
 import fsExtra from 'fs-extra';
 const { readFileSync } = fsExtra;
 import * as path from 'path';
-import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
+import {
+  FAKE_HOMESERVER_URL,
+  FakeMatrixClient,
+  matrixMediaUrl,
+} from './helpers/fake-matrix-client.ts';
 import {
   type LooseCardResource,
   ensureTrailingSlash,
@@ -142,6 +146,10 @@ function oldPatchTool(card: CardDef, properties: any): Tool {
 module('buildPromptForModel', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
+  // Stores a response under the homeserver download URL for a Matrix media
+  // item, the only URL the bot downloads it from.
+  let mockMedia = (mxcUrl: string, response: { ok: boolean; text: string }) =>
+    mockResponses.set(matrixMediaUrl(mxcUrl), response);
   let originalFetch: any;
   let originalDate: typeof Date;
 
@@ -721,7 +729,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
   test('an attached SVG is sent as its markup', async () => {
     let svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
-    mockResponses.set('mxc://mock-server/logo-svg', { ok: true, text: svg });
+    mockMedia('mxc://mock-server/logo-svg', { ok: true, text: svg });
     let files = await getAttachedFiles(
       fakeMatrixClient as any,
       {
@@ -808,13 +816,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
   test('an attached SVG that declares no size is sent as its markup when the download is under the limit', async () => {
     let svg = svgOfSize(1024);
-    mockResponses.set('mxc://mock-server/unsized-svg', { ok: true, text: svg });
+    mockMedia('mxc://mock-server/unsized-svg', { ok: true, text: svg });
     let files = await attachSvg('mxc://mock-server/unsized-svg', 'unsized.svg');
     assert.strictEqual(files[0].content, svg);
   });
 
   test('an attached SVG that declares no size is sent as metadata when the download is over the limit', async () => {
-    mockResponses.set('mxc://mock-server/unsized-huge-svg', {
+    mockMedia('mxc://mock-server/unsized-huge-svg', {
       ok: true,
       text: svgOfSize(MAX_SVG_TEXT_BYTES + 1),
     });
@@ -830,7 +838,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
   });
 
   test('an attached SVG that declares a small size but downloads over the limit is sent as metadata', async () => {
-    mockResponses.set('mxc://mock-server/understated-svg', {
+    mockMedia('mxc://mock-server/understated-svg', {
       ok: true,
       text: svgOfSize(MAX_SVG_TEXT_BYTES + 1),
     });
@@ -845,7 +853,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
   test('an attached SVG exactly at the limit is sent as its markup', async () => {
     let svg = svgOfSize(MAX_SVG_TEXT_BYTES);
-    mockResponses.set('mxc://mock-server/limit-svg', { ok: true, text: svg });
+    mockMedia('mxc://mock-server/limit-svg', { ok: true, text: svg });
     let files = await attachSvg(
       'mxc://mock-server/limit-svg',
       'limit.svg',
@@ -1085,13 +1093,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/spaghetti-recipe-a.gts',
+                url: matrixMediaUrl('mxc://mock-server/spaghetti-recipe-a-gts'),
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/best-friends-a.txt',
+                url: matrixMediaUrl('mxc://mock-server/best-friends-a-txt'),
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
@@ -1146,26 +1154,28 @@ Current date and time: 2025-06-11T11:43:00.533Z
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/spaghetti-recipe-b.gts',
+                url: matrixMediaUrl('mxc://mock-server/spaghetti-recipe-b-gts'),
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/best-friends-b.txt',
+                url: matrixMediaUrl('mxc://mock-server/best-friends-b-txt'),
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl:
                   'http://test.com/my-realm/file-that-does-not-exist.txt',
-                url: 'http://test.com/file-that-does-not-exist.txt',
+                url: matrixMediaUrl(
+                  'mxc://mock-server/file-that-does-not-exist-txt',
+                ),
                 name: 'file-that-does-not-exist.txt',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test.com/my-realm/example.pdf',
-                url: 'http://test.com/example.pdf',
+                url: matrixMediaUrl('mxc://mock-server/example-pdf'),
                 name: 'example.pdf',
                 contentType: 'application/pdf',
               },
@@ -1220,13 +1230,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/spaghetti-recipe-c.gts',
+                url: matrixMediaUrl('mxc://mock-server/spaghetti-recipe-c-gts'),
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/best-friends-c.txt',
+                url: matrixMediaUrl('mxc://mock-server/best-friends-c-txt'),
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
@@ -1245,33 +1255,33 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
     // Set up mock responses for file downloads — every message's snapshot
     // is downloaded now, so each version needs a response.
-    mockResponses.set('http://test.com/spaghetti-recipe-a.gts', {
+    mockMedia('mxc://mock-server/spaghetti-recipe-a-gts', {
       ok: true,
       text: 'spaghetti content version a',
     });
-    mockResponses.set('http://test.com/best-friends-a.txt', {
+    mockMedia('mxc://mock-server/best-friends-a-txt', {
       ok: true,
       text: 'best friends version a',
     });
-    mockResponses.set('http://test.com/spaghetti-recipe-b.gts', {
+    mockMedia('mxc://mock-server/spaghetti-recipe-b-gts', {
       ok: true,
       text: 'spaghetti content version b',
     });
-    mockResponses.set('http://test.com/best-friends-b.txt', {
+    mockMedia('mxc://mock-server/best-friends-b-txt', {
       ok: true,
       text: 'best friends version b',
     });
-    mockResponses.set('http://test.com/spaghetti-recipe-c.gts', {
+    mockMedia('mxc://mock-server/spaghetti-recipe-c-gts', {
       ok: true,
       text: 'this is the content of the spaghetti-recipe.gts file',
     });
 
-    mockResponses.set('http://test.com/best-friends-c.txt', {
+    mockMedia('mxc://mock-server/best-friends-c-txt', {
       ok: true,
       text: 'this is the content of the best-friends.txt file',
     });
 
-    mockResponses.set('http://test.com/file-that-does-not-exist.txt', {
+    mockMedia('mxc://mock-server/file-that-does-not-exist-txt', {
       ok: false,
       text: 'Not found',
     });
@@ -2143,7 +2153,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for the skill card downloads
-    mockResponses.set('mxc://mock-server/abc123', {
+    mockMedia('mxc://mock-server/abc123', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2163,7 +2173,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/def456', {
+    mockMedia('mxc://mock-server/def456', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2223,7 +2233,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill card downloads
-    mockResponses.set('mxc://mock-server/skill_card_editing', {
+    mockMedia('mxc://mock-server/skill_card_editing', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2243,7 +2253,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill_card_pirate', {
+    mockMedia('mxc://mock-server/skill_card_pirate', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2263,7 +2273,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/product_requirement_document', {
+    mockMedia('mxc://mock-server/product_requirement_document', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2341,7 +2351,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill card downloads
-    mockResponses.set('mxc://mock-server/skill1', {
+    mockMedia('mxc://mock-server/skill1', {
       ok: true,
       text: JSON.stringify({
         type: 'SkillCard',
@@ -2353,7 +2363,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill2', {
+    mockMedia('mxc://mock-server/skill2', {
       ok: true,
       text: JSON.stringify({
         type: 'SkillCard',
@@ -2382,7 +2392,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
     // Set up mock responses for the skill card downloads
-    mockResponses.set('mxc://mock-server/skill1', {
+    mockMedia('mxc://mock-server/skill1', {
       ok: true,
       text: JSON.stringify({
         type: 'SkillCard',
@@ -2394,7 +2404,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill2', {
+    mockMedia('mxc://mock-server/skill2', {
       ok: true,
       text: JSON.stringify({
         type: 'SkillCard',
@@ -2475,7 +2485,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill cards
-    mockResponses.set('mxc://mock-server/skill_card_editing', {
+    mockMedia('mxc://mock-server/skill_card_editing', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2495,7 +2505,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill_card_no_id', {
+    mockMedia('mxc://mock-server/skill_card_no_id', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -2537,7 +2547,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
     );
 
-    mockResponses.set('skill-card-1', {
+    mockMedia('mxc://mock-server/skill-card-1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3221,7 +3231,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
     );
 
-    mockResponses.set('mxc://mock-server/weather-report-1', {
+    mockMedia('mxc://mock-server/weather-report-1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3272,7 +3282,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill card downloads
-    mockResponses.set('mxc://mock-server/skill_card_v1', {
+    mockMedia('mxc://mock-server/skill_card_v1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3291,7 +3301,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill_card_v2', {
+    mockMedia('mxc://mock-server/skill_card_v2', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3320,7 +3330,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/command_def_v2', {
+    mockMedia('mxc://mock-server/command_def_v2', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
@@ -3396,7 +3406,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
     );
 
-    mockResponses.set('mxc://mock-server/weather-report-1', {
+    mockMedia('mxc://mock-server/weather-report-1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3441,7 +3451,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
     );
 
-    mockResponses.set('mxc://mock-server/weather-report-1', {
+    mockMedia('mxc://mock-server/weather-report-1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3463,7 +3473,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/weather-report-2', {
+    mockMedia('mxc://mock-server/weather-report-2', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3522,7 +3532,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill cards
-    mockResponses.set('mxc://mock-server/skill_card_editing', {
+    mockMedia('mxc://mock-server/skill_card_editing', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3543,7 +3553,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill_card_switcher', {
+    mockMedia('mxc://mock-server/skill_card_switcher', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3574,7 +3584,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
 
     // Set up mock responses for command definitions
-    mockResponses.set('mxc://mock-server/command_def_editing', {
+    mockMedia('mxc://mock-server/command_def_editing', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
@@ -3606,7 +3616,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/command_def_switcher', {
+    mockMedia('mxc://mock-server/command_def_switcher', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
@@ -3678,7 +3688,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
         }
       }
     }
-    mockResponses.set('mxc://mock-server/skill_card_editing_disabled', {
+    mockMedia('mxc://mock-server/skill_card_editing_disabled', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3747,7 +3757,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill card downloads
-    mockResponses.set('mxc://mock-server/skill_card_v1', {
+    mockMedia('mxc://mock-server/skill_card_v1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3766,7 +3776,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/skill_card_v2', {
+    mockMedia('mxc://mock-server/skill_card_v2', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3795,7 +3805,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       }),
     });
 
-    mockResponses.set('mxc://mock-server/command_def_v2', {
+    mockMedia('mxc://mock-server/command_def_v2', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
@@ -3962,7 +3972,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Set up mock responses for skill card downloads
-    mockResponses.set('mxc://mock-server/skill_card_v1', {
+    mockMedia('mxc://mock-server/skill_card_v1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -3982,7 +3992,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
 
     // Set up mock responses for card downloads
-    mockResponses.set('mxc://mock-server/card_v1', {
+    mockMedia('mxc://mock-server/card_v1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -4001,7 +4011,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
 
     // Set up mock responses for card downloads
-    mockResponses.set('mxc://mock-server/card_v2', {
+    mockMedia('mxc://mock-server/card_v2', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -4237,7 +4247,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
     );
 
-    mockResponses.set('mxc://mock-server/postcard', {
+    mockMedia('mxc://mock-server/postcard', {
       ok: true,
       text: `export default Postcard extends CardDef {}
       `,
@@ -4276,7 +4286,7 @@ Attached Files (each shows its content as of this message; a later attachment of
       ),
     );
 
-    mockResponses.set('mxc://mock-server/nashville', {
+    mockMedia('mxc://mock-server/nashville', {
       ok: true,
       text: `{"data":{"type":"card","attributes":{"recipientName":"Jennifer Martinez","recipientAddress":{"streetAddress":"789 Pine Ridge Drive","city":"Austin","state":"TX","postalCode":"78701","country":"USA"},"postageAmount":0.68,"message":"# Howdy from the Music Capital!\n\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\n\n**Keep it weird!**  \n*Jake*","title":"Nashville","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../postcard","name":"Postcard"}}}}`,
     });
@@ -6553,7 +6563,7 @@ ${patchedFileSource}
         'utf-8',
       ),
     );
-    mockResponses.set('mxc://mock-server/weather-report-1', {
+    mockMedia('mxc://mock-server/weather-report-1', {
       ok: true,
       text: JSON.stringify({
         data: {
@@ -7006,7 +7016,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/config.json',
-                url: 'http://test.com/config-uploaded.json',
+                url: matrixMediaUrl('mxc://mock-server/config-uploaded-json'),
                 name: 'config.json',
                 contentType: 'text/plain',
               },
@@ -7050,7 +7060,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/utils.ts',
-                url: 'http://test.com/utils-uploaded.ts',
+                url: matrixMediaUrl('mxc://mock-server/utils-uploaded-ts'),
                 name: 'utils.ts',
                 contentType: 'text/plain',
               },
@@ -7064,11 +7074,11 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/config-uploaded.json', {
+    mockMedia('mxc://mock-server/config-uploaded-json', {
       ok: true,
       text: '{ "key": "value" }',
     });
-    mockResponses.set('http://test.com/utils-uploaded.ts', {
+    mockMedia('mxc://mock-server/utils-uploaded-ts', {
       ok: true,
       text: 'export function hello() { return "world"; }',
     });
@@ -7124,14 +7134,14 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/report.pdf',
-                url: 'http://test.com/report-uploaded.pdf',
+                url: matrixMediaUrl('mxc://mock-server/report-uploaded-pdf'),
                 name: 'report.pdf',
                 contentType: 'application/pdf',
                 contentSize: 102400,
               },
               {
                 sourceUrl: 'http://test.com/my-realm/diagram.png',
-                url: 'http://test.com/diagram-uploaded.png',
+                url: matrixMediaUrl('mxc://mock-server/diagram-uploaded-png'),
                 name: 'diagram.png',
                 contentType: 'image/png',
                 contentSize: 51200,
@@ -7205,13 +7215,13 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/person.json',
-                url: 'http://test.com/person-uploaded.json',
+                url: matrixMediaUrl('mxc://mock-server/person-uploaded-json'),
                 name: 'person.json',
                 contentType: 'application/vnd.card+json',
               },
               {
                 sourceUrl: 'http://test.com/my-realm/person.gts',
-                url: 'http://test.com/person-uploaded.gts',
+                url: matrixMediaUrl('mxc://mock-server/person-uploaded-gts'),
                 name: 'person.gts',
                 contentType: 'application/vnd.card+source',
               },
@@ -7225,11 +7235,11 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/person-uploaded.json', {
+    mockMedia('mxc://mock-server/person-uploaded-json', {
       ok: true,
       text: '{"data":{"type":"card","attributes":{"name":"Alice"}}}',
     });
-    mockResponses.set('http://test.com/person-uploaded.gts', {
+    mockMedia('mxc://mock-server/person-uploaded-gts', {
       ok: true,
       text: 'export class Person extends CardDef { @field name = contains(StringField); }',
     });
@@ -7278,7 +7288,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/diagram.png',
-                url: 'http://test.com/diagram-uploaded.png',
+                url: matrixMediaUrl('mxc://mock-server/diagram-uploaded-png'),
                 name: 'diagram.png',
                 contentType: 'image/png',
                 contentSize: 51200,
@@ -7373,7 +7383,9 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/screenshot.png',
-                url: 'http://test.com/screenshot-uploaded.png',
+                url: matrixMediaUrl(
+                  'mxc://mock-server/screenshot-uploaded-png',
+                ),
                 name: 'screenshot.png',
                 contentType: 'image/png',
                 contentSize: 1024,
@@ -7389,7 +7401,7 @@ ${patchedFileSource}
     ];
 
     // Mock binary image download (base64 of a tiny PNG)
-    mockResponses.set('http://test.com/screenshot-uploaded.png', {
+    mockMedia('mxc://mock-server/screenshot-uploaded-png', {
       ok: true,
       text: 'iVBORw0KGgoAAAANSUhEUg==',
     });
@@ -7447,19 +7459,16 @@ ${patchedFileSource}
     }
   });
 
-  test('image attachments fall back to canonical Matrix media URL when original URL fails', async () => {
-    let staleUrl =
+  test('an image stored under another media URL downloads from the homeserver', async () => {
+    let storedUrl =
       'http://stale-host/_matrix/media/v3/download/localhost/abc123/file.png';
-    let fallbackUrl = fakeMatrixClient.mxcUrlToHttp(
-      'mxc://localhost/abc123',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-    assert.ok(fallbackUrl, 'matrix client should resolve canonical mxc URL');
+    let homeserverUrl = matrixMediaUrl('mxc://localhost/abc123');
+    let fetched: string[] = [];
+    let mockFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string, init: unknown) => {
+      fetched.push(url);
+      return mockFetch(url, init);
+    };
 
     const history: DiscreteMatrixEvent[] = [
       {
@@ -7479,7 +7488,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/screenshot.png',
-                url: staleUrl,
+                url: storedUrl,
                 name: 'screenshot.png',
                 contentType: 'image/png',
                 contentSize: 1024,
@@ -7494,11 +7503,7 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set(staleUrl, {
-      ok: false,
-      text: 'not found',
-    });
-    mockResponses.set(fallbackUrl!, {
+    mockResponses.set(homeserverUrl, {
       ok: true,
       text: 'iVBORw0KGgoAAAANSUhEUg==',
     });
@@ -7511,21 +7516,143 @@ ${patchedFileSource}
       fakeMatrixClient,
     );
 
-    let trailingContent = prompt[prompt.length - 1]?.content;
-    assert.ok(
-      Array.isArray(trailingContent),
-      'Trailing message should use content parts when fallback media URL succeeds',
+    assert.deepEqual(
+      fetched,
+      [homeserverUrl],
+      'only the homeserver media URL is requested',
     );
-    if (Array.isArray(trailingContent)) {
-      let imageParts = (trailingContent as any[]).filter(
-        (part: any) => part.type === 'image_url',
-      );
-      assert.strictEqual(
-        imageParts.length,
-        1,
-        'Should include one image_url part after fallback download',
-      );
-    }
+    let trailingContent = prompt[prompt.length - 1]?.content;
+    let imageParts = Array.isArray(trailingContent)
+      ? (trailingContent as any[]).filter(
+          (part: any) => part.type === 'image_url',
+        )
+      : [];
+    assert.strictEqual(imageParts.length, 1, 'the image is sent');
+  });
+
+  test('attachments download only from the homeserver, and one that names no Matrix media item is never fetched', async () => {
+    let requests: { url: string; authorization?: string }[] = [];
+    let mockFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (
+      url: string,
+      init?: { headers?: Record<string, string> },
+    ) => {
+      requests.push({ url, authorization: init?.headers?.Authorization });
+      return mockFetch(url, init);
+    };
+    let elsewhere = 'https://elsewhere.example';
+    let eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Look at these',
+          data: {
+            context: { tools: [], submode: 'interact', functions: [] },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/photo.png',
+                url: `${elsewhere}/photo.png`,
+                name: 'photo.png',
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/notes.txt',
+                url: `${elsewhere}/notes.txt`,
+                name: 'notes.txt',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/diagram.png',
+                url: `${elsewhere}/_matrix/client/v1/media/download/mock-server/elsewhere-diagram`,
+                name: 'diagram.png',
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/readme.txt',
+                url: `${elsewhere}/_matrix/media/v3/download/mock-server/elsewhere-readme`,
+                name: 'readme.txt',
+                contentType: 'text/plain',
+              },
+            ],
+            attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                url: `${elsewhere}/Author/1`,
+                name: 'Author',
+                contentType: 'application/vnd.card+json',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+    mockMedia('mxc://mock-server/elsewhere-diagram', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+    mockMedia('mxc://mock-server/elsewhere-readme', {
+      ok: true,
+      text: 'README_CONTENT',
+    });
+
+    let { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.true(requests.length > 0, 'the media items are downloaded');
+    assert.deepEqual(
+      requests.filter(
+        ({ url, authorization }) =>
+          new URL(url).origin !== FAKE_HOMESERVER_URL ||
+          authorization !== 'Bearer fake-access-token',
+      ),
+      [],
+      'every request goes to the homeserver, carrying the access token',
+    );
+    assert.deepEqual(
+      [...new Set(requests.map(({ url }) => url))].sort(),
+      [
+        matrixMediaUrl('mxc://mock-server/elsewhere-diagram'),
+        matrixMediaUrl('mxc://mock-server/elsewhere-readme'),
+      ].sort(),
+      'only the two Matrix media items are requested',
+    );
+    let promptText = JSON.stringify(messages);
+    assert.true(
+      promptText.includes('README_CONTENT'),
+      "a text file named by another host's media URL is read from the homeserver",
+    );
+    assert.true(
+      promptText.includes(`Not a Matrix media URL: ${elsewhere}/notes.txt`),
+      'the text file that names no media item is reported, not read',
+    );
+    assert.true(
+      promptText.includes(`Not a Matrix media URL: ${elsewhere}/Author/1`),
+      'the card that names no media item is reported, not read',
+    );
+    let trailingContent = messages![messages!.length - 1]?.content;
+    let imageParts = Array.isArray(trailingContent)
+      ? (trailingContent as any[]).filter(
+          (part: any) => part.type === 'image_url',
+        )
+      : [];
+    assert.strictEqual(
+      imageParts.length,
+      1,
+      'only the image stored as Matrix media is sent',
+    );
   });
 
   test('PDF attachment produces native file content part', async () => {
@@ -7547,7 +7674,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/report.pdf',
-                url: 'http://test.com/report-uploaded.pdf',
+                url: matrixMediaUrl('mxc://mock-server/report-uploaded-pdf'),
                 name: 'report.pdf',
                 contentType: 'application/pdf',
                 contentSize: 102400,
@@ -7562,7 +7689,7 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/report-uploaded.pdf', {
+    mockMedia('mxc://mock-server/report-uploaded-pdf', {
       ok: true,
       text: 'JVBERi0xLjQK', // fake PDF base64
     });
@@ -7622,7 +7749,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/recording.mp3',
-                url: 'http://test.com/recording-uploaded.mp3',
+                url: matrixMediaUrl('mxc://mock-server/recording-uploaded-mp3'),
                 name: 'recording.mp3',
                 contentType: 'audio/mpeg',
                 contentSize: 204800,
@@ -7637,7 +7764,7 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/recording-uploaded.mp3', {
+    mockMedia('mxc://mock-server/recording-uploaded-mp3', {
       ok: true,
       text: 'AAAAAAAAAA==', // fake audio base64
     });
@@ -7701,7 +7828,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/clip.mp4',
-                url: 'http://test.com/clip-uploaded.mp4',
+                url: matrixMediaUrl('mxc://mock-server/clip-uploaded-mp4'),
                 name: 'clip.mp4',
                 contentType: 'video/mp4',
                 contentSize: 512000,
@@ -7716,7 +7843,7 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/clip-uploaded.mp4', {
+    mockMedia('mxc://mock-server/clip-uploaded-mp4', {
       ok: true,
       text: 'AAAAIGZ0eXA=', // fake MP4 base64
     });
@@ -7773,14 +7900,14 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/report.pdf',
-                url: 'http://test.com/report-uploaded.pdf',
+                url: matrixMediaUrl('mxc://mock-server/report-uploaded-pdf'),
                 name: 'report.pdf',
                 contentType: 'application/pdf',
                 contentSize: 102400,
               },
               {
                 sourceUrl: 'http://test.com/my-realm/photo.png',
-                url: 'http://test.com/photo-uploaded.png',
+                url: matrixMediaUrl('mxc://mock-server/photo-uploaded-png'),
                 name: 'photo.png',
                 contentType: 'image/png',
                 contentSize: 2048,
@@ -7795,7 +7922,7 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/photo-uploaded.png', {
+    mockMedia('mxc://mock-server/photo-uploaded-png', {
       ok: true,
       text: 'iVBORw0KGgoAAAANSUhEUg==',
     });
@@ -7876,14 +8003,14 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/photo.png',
-                url: 'http://test.com/photo-uploaded.png',
+                url: matrixMediaUrl('mxc://mock-server/photo-uploaded-png'),
                 name: 'photo.png',
                 contentType: 'image/png',
                 contentSize: 2048,
               },
               {
                 sourceUrl: 'http://test.com/my-realm/report.pdf',
-                url: 'http://test.com/report-uploaded.pdf',
+                url: matrixMediaUrl('mxc://mock-server/report-uploaded-pdf'),
                 name: 'report.pdf',
                 contentType: 'application/pdf',
                 contentSize: 102400,
@@ -7898,11 +8025,11 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/photo-uploaded.png', {
+    mockMedia('mxc://mock-server/photo-uploaded-png', {
       ok: true,
       text: 'iVBORw0KGgoAAAANSUhEUg==',
     });
-    mockResponses.set('http://test.com/report-uploaded.pdf', {
+    mockMedia('mxc://mock-server/report-uploaded-pdf', {
       ok: true,
       text: 'JVBERi0xLjQK',
     });
@@ -7984,11 +8111,11 @@ ${patchedFileSource}
         status: EventStatus.SENT,
       }) as unknown as DiscreteMatrixEvent;
 
-    mockResponses.set('http://test.com/first-uploaded.png', {
+    mockMedia('mxc://mock-server/first-uploaded-png', {
       ok: true,
       text: 'Zmlyc3QtaW1hZ2U=',
     });
-    mockResponses.set('http://test.com/second-uploaded.png', {
+    mockMedia('mxc://mock-server/second-uploaded-png', {
       ok: true,
       text: 'c2Vjb25kLWltYWdl',
     });
@@ -7998,7 +8125,7 @@ ${patchedFileSource}
       1,
       'What does this image show?',
       'first.png',
-      'http://test.com/first-uploaded.png',
+      matrixMediaUrl('mxc://mock-server/first-uploaded-png'),
     );
     let promptWhenFirstIsCurrent = await buildPromptForModel(
       [firstMessage],
@@ -8016,7 +8143,7 @@ ${patchedFileSource}
           2,
           'And this one?',
           'second.png',
-          'http://test.com/second-uploaded.png',
+          matrixMediaUrl('mxc://mock-server/second-uploaded-png'),
         ),
       ],
       '@aibot:localhost',
@@ -8361,7 +8488,7 @@ ${patchedFileSource}
     test('a result mixing text files and images embeds only the images', async () => {
       let screenshot = png('view.png');
       mockImage(screenshot);
-      mockResponses.set('http://test.com/card.gts-uploaded', {
+      mockMedia('mxc://mock-server/card-gts-uploaded', {
         ok: true,
         text: 'export class Card {}',
       });
@@ -8374,7 +8501,7 @@ ${patchedFileSource}
           attachedFiles: [
             {
               sourceUrl: 'http://localhost:4201/user/realm/card.gts',
-              url: 'http://test.com/card.gts-uploaded',
+              url: matrixMediaUrl('mxc://mock-server/card-gts-uploaded'),
               name: 'card.gts',
               contentType: 'text/plain',
             },
@@ -8508,7 +8635,7 @@ ${patchedFileSource}
           attachedFiles: [
             {
               sourceUrl: 'https://example.com/report.pdf',
-              url: 'http://test.com/report.pdf-uploaded',
+              url: matrixMediaUrl('mxc://mock-server/report-pdf-uploaded'),
               name: 'report.pdf',
               contentType: 'application/pdf',
               contentSize: 4096,
@@ -8853,7 +8980,7 @@ ${patchedFileSource}
           requestEventId: '5',
           attachedFiles: [
             {
-              url: 'http://test.com/notes-uploaded',
+              url: matrixMediaUrl('mxc://mock-server/notes-uploaded'),
               name: 'notes.md',
               contentType: 'text/markdown',
             },
@@ -8893,7 +9020,7 @@ ${patchedFileSource}
             attachedFiles: [
               {
                 sourceUrl: 'http://test.com/my-realm/allowed-file.ts',
-                url: 'http://test.com/allowed-uploaded.ts',
+                url: matrixMediaUrl('mxc://mock-server/allowed-uploaded-ts'),
                 name: 'allowed-file.ts',
                 contentType: 'text/plain',
               },
@@ -8955,11 +9082,11 @@ ${patchedFileSource}
       },
     ];
 
-    mockResponses.set('http://test.com/allowed-uploaded.ts', {
+    mockMedia('mxc://mock-server/allowed-uploaded-ts', {
       ok: true,
       text: 'export const allowed = true;',
     });
-    mockResponses.set('http://test.com/not-attached-uploaded.ts', {
+    mockMedia('mxc://mock-server/not-attached-uploaded-ts', {
       ok: true,
       text: 'export const secret = "should not be readable";',
     });
@@ -9686,6 +9813,10 @@ module('markdown skills', () => {
 module('markdown skill tools', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
+  // Stores a response under the homeserver download URL for a Matrix media
+  // item, the only URL the bot downloads it from.
+  let mockMedia = (mxcUrl: string, response: { ok: boolean; text: string }) =>
+    mockResponses.set(matrixMediaUrl(mxcUrl), response);
   let originalFetch: any;
 
   hooks.beforeEach(() => {
@@ -9815,7 +9946,7 @@ module('markdown skill tools', (hooks) => {
   // its uploaded definitions ('toolDefinitions', or the pre-rename
   // 'commandDefinitions' that old rooms replay).
   function skillsRoomFixture(definitionsKey: string) {
-    mockResponses.set('mxc://mock-server/switch-submode-def', {
+    mockMedia('mxc://mock-server/switch-submode-def', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
@@ -10162,7 +10293,7 @@ module('markdown skill tools', (hooks) => {
   test('a skill disabled in room state contributes no discovered tools', async () => {
     // Disabled skills' contents are downloaded to learn which names they
     // declare — the removable set.
-    mockResponses.set('mxc://mock-server/trip-planner', {
+    mockMedia('mxc://mock-server/trip-planner', {
       ok: true,
       text: [
         '---',
@@ -10219,7 +10350,7 @@ module('markdown skill tools', (hooks) => {
     // mid-session to drop a tool must not shrink the array: the historical
     // state event still carries the definition, and dropping it would
     // rewrite the request's leading bytes and reset the cache.
-    mockResponses.set('mxc://mock-server/removed-tool-def', {
+    mockMedia('mxc://mock-server/removed-tool-def', {
       ok: true,
       text: JSON.stringify({
         codeRef: {
