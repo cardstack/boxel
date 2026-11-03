@@ -43,6 +43,7 @@ import { keyReadiness } from '../lib/key-readiness.ts';
 import {
   setKeyLimitNoticeSender,
   setKeyLimitSink,
+  settleKeyLimitNoticeSends,
   setKeyLimitStore,
   type KeyLimitEvent,
 } from '../lib/key-limits.ts';
@@ -645,6 +646,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(told, [], 'nothing below the high-water mark');
 
     await call('shared');
+    await settleKeyLimitNoticeSends();
     assert.deepEqual(
       told.map(([user]) => user).sort(),
       recipients,
@@ -658,6 +660,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     told = [];
     await call('shared');
+    await settleKeyLimitNoticeSends();
     assert.deepEqual(
       told.map(([user]) => user).sort(),
       recipients,
@@ -666,7 +669,35 @@ module(basename(import.meta.filename), function (hooks) {
 
     told = [];
     assert.strictEqual((await call('shared')).code, 'over-budget');
+    await settleKeyLimitNoticeSends();
     assert.deepEqual(told, [], 'a refusal past the budget records nothing');
+  });
+
+  test('the call that crosses a threshold doesn’t wait for the push', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    let release!: () => void;
+    let held = new Promise<void>((resolve) => (release = resolve));
+    let started = 0;
+    setKeyLimitNoticeSender(async () => {
+      started++;
+      await held;
+    });
+    for (let i = 0; i < 4; i++) {
+      let response = await call('check');
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    }
+    assert.strictEqual(started, 1, 'the push started');
+    assert.strictEqual(
+      vendor.requests.length,
+      4,
+      'the call that crossed the high-water mark was sent while its push was still waiting',
+    );
+    release();
+    await settleKeyLimitNoticeSends();
   });
 
   test('a notice that can’t be sent is still recorded, and the call still goes through', async function (assert) {
@@ -812,6 +843,102 @@ module(basename(import.meta.filename), function (hooks) {
       2,
       'nor counted unread, since no page can show it to mark it read',
     );
+  });
+
+  test('a notice whose budget the owner has since raised is no longer listed or counted', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 5; i++) {
+      await call('check');
+    }
+    let before = await listLimitNotices(appSession(OWNER));
+    assert.strictEqual(before.body.meta.unread, 2, 'high-water and budget');
+
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      dailyBudget: 10,
+    });
+    let after = await listLimitNotices(appSession(OWNER));
+    assert.deepEqual(
+      after.body.data,
+      [],
+      'the key isn’t refused any more, so nothing says it is',
+    );
+    assert.strictEqual(after.body.meta.unread, 0);
+
+    for (let i = 0; i < 3; i++) {
+      await call('check');
+    }
+    let reached = await listLimitNotices(appSession(OWNER));
+    assert.deepEqual(
+      (
+        reached.body.data as {
+          attributes: { threshold: string; budget: number };
+        }[]
+      ).map(({ attributes }) => [attributes.threshold, attributes.budget]),
+      [['high-water', 10]],
+      'reaching the new budget’s high-water mark is a notice of its own',
+    );
+
+    await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
+      dailyBudget: 5,
+    });
+    assert.deepEqual(
+      (
+        (await listLimitNotices(appSession(OWNER))).body.data as {
+          attributes: { budget: number };
+        }[]
+      ).map(({ attributes }) => attributes.budget),
+      [10, 5, 5],
+      'a budget lowered below what a notice was for leaves it listed',
+    );
+  });
+
+  test('a share’s notices follow its owner and its realm’s writers as they are now', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    await approveInteractive(OWNER, 'shared', {
+      apiKey: { shareId: shared.id },
+    });
+    await setLimits(`/_key-shares/${shared.id}/limits`, OWNER, {
+      rateBurst: 100,
+    });
+    for (let i = 0; i < 4; i++) {
+      await call('shared');
+    }
+    let yours = async (user: string) =>
+      (
+        (await listLimitNotices(appSession(user))).body.data as {
+          attributes: { yours: boolean };
+        }[]
+      ).map(({ attributes }) => attributes.yours);
+    assert.deepEqual(await yours(OWNER), [true]);
+    assert.deepEqual(await yours(WRITER), [false]);
+
+    // The share now holds the writer's key: `yours` follows it, whoever the
+    // notice was recorded for.
+    await dbAdapter.execute(`UPDATE key_shares SET owner = $1 WHERE id = $2`, {
+      bind: [WRITER, shared.id],
+    });
+    assert.deepEqual(await yours(WRITER), [true]);
+    assert.deepEqual(await yours(OWNER), [false]);
+
+    await dbAdapter.execute(`UPDATE key_shares SET owner = $1 WHERE id = $2`, {
+      bind: [OWNER, shared.id],
+    });
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, WRITER] },
+    );
+    let lost = await listLimitNotices(appSession(WRITER));
+    assert.deepEqual(
+      lost.body.data,
+      [],
+      'a writer who lost direct write no longer sees the share',
+    );
+    assert.strictEqual(lost.body.meta.unread, 0);
   });
 
   test('only a secure session marks a recipient’s own limit notices read, and their sessions are told', async function (assert) {

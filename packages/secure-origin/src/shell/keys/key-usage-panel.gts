@@ -160,15 +160,18 @@ export default class KeyUsagePanel extends Component<Signature> {
     }
   }
 
-  // Opens the panel, unless it is open or opening, and brings it into view.
+  // Opens the panel, unless it is open or opening, and moves focus to its
+  // disclosure, which brings it into view.
   private show = () => {
     if (this.isClosed || this.failed) {
       this.load();
     }
     requestAnimationFrame(() =>
       document
-        .querySelector(`[data-usage-panel="${CSS.escape(this.args.key.id)}"]`)
-        ?.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+        .querySelector<HTMLElement>(
+          `[data-usage-panel="${CSS.escape(this.args.key.id)}"] > .toggle`,
+        )
+        ?.focus(),
     );
   };
 

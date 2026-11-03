@@ -1,6 +1,6 @@
 // Where the user's shares and keys stand against their budgets this UTC day
 // or month, as the key page shows it above the keys: one entry per share or
-// key and period, newest first, for the furthest threshold it reached. A
+// key and period, newest first, for where it stands now. A
 // budget used up comes first in weight: calls with that key are refused until
 // the period ends. Nearing one is quieter.
 //
@@ -22,22 +22,20 @@ import { addressOf } from './workspace-dropdown.gts';
 interface Signature {
   Args: {
     notices: KeyLimitNotice[];
+    // Whether the page shows this personal key's limits to change.
+    canChangeKeyLimits: (keyId: string) => boolean;
     onChangeKeyLimits: (keyId: string) => void;
     onOpenShareLimits: (notice: KeyLimitNotice) => void;
   };
 }
 
-// One entry per share or key and period: a budget reached says all a nearing
-// one would.
+// One entry per share or key and period: the newest, which says where it
+// stands now. The notices come newest first.
 function entries(notices: KeyLimitNotice[]): KeyLimitNotice[] {
   let shown = new Map<string, KeyLimitNotice>();
   for (let notice of notices) {
     let subject = `${notice.share ?? notice.key}|${notice.period}|${notice.periodEndsAt}`;
-    let seen = shown.get(subject);
-    if (
-      !seen ||
-      (seen.threshold === 'high-water' && notice.threshold === 'budget')
-    ) {
+    if (!shown.has(subject)) {
       shown.set(subject, notice);
     }
   }
@@ -140,7 +138,7 @@ const KeyLimitNotices: TOC<Signature> = <template>
                       data-test-key-limit-notice-change
                       {{on 'click' (fn @onOpenShareLimits notice)}}
                     >Change limits…</Button>
-                  {{else if notice.key}}
+                  {{else if (if notice.key (@canChangeKeyLimits notice.key))}}
                     <Button
                       @kind='primary'
                       @size='small'

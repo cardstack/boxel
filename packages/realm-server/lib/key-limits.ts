@@ -55,7 +55,7 @@ import { UserKeyError } from './user-keys.ts';
 //   writers each get one notice for that period (`key_limit_notices`).
 //   Each recipient a notice was recorded for is sent
 //   `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a session they have open shows that
-//   one is waiting.
+//   one is waiting. The call doesn't wait for those sends.
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
 // - **Callers who aren't signed in**, served by a share whose key allows
@@ -144,6 +144,15 @@ let noticeSender: SendEvent | undefined;
 
 export function setKeyLimitNoticeSender(next: SendEvent | undefined): void {
   noticeSender = next;
+}
+
+// The sends under way. A call that crosses a threshold doesn't wait for them,
+// so a slow homeserver never holds up its vendor request.
+let pendingSends = new Set<Promise<void>>();
+
+// Waits for every send started so far to settle. For tests.
+export async function settleKeyLimitNoticeSends(): Promise<void> {
+  await Promise.allSettled([...pendingSends]);
 }
 
 let channelLog: ReturnType<typeof logger> | undefined;
@@ -718,16 +727,24 @@ async function noticeThresholds(
       `could not record the ${thresholds.join(' and ')} notice for ${subject.kind} ${subject.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  let send = noticeSender;
+  if (!send) {
+    return;
+  }
   for (let recipient of told) {
-    try {
-      await noticeSender?.(recipient, KEY_NOTICES_UPDATED_EVENT_TYPE);
-    } catch (error) {
-      // The notice is recorded either way; the recipient sees it the next
-      // time their session asks.
-      log.warn(
-        `could not tell ${recipient} a key limit notice is waiting: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    let sending = (async () => {
+      try {
+        await send(recipient, KEY_NOTICES_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        // The notice is recorded either way; the recipient sees it the next
+        // time their session asks.
+        log.warn(
+          `could not tell ${recipient} a key limit notice is waiting: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    })();
+    pendingSends.add(sending);
+    void sending.finally(() => pendingSends.delete(sending));
   }
 }
 

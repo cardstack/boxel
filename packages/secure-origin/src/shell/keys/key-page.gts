@@ -127,6 +127,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
           {{else}}
             <KeyLimitNotices
               @notices={{this.state.limitNotices}}
+              @canChangeKeyLimits={{this.canChangeKeyLimits}}
               @onChangeKeyLimits={{this.showKeyLimits}}
               @onOpenShareLimits={{this.openShareLimits}}
             />
@@ -650,7 +651,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // through, which only connects accounts.
   // An OAuth client is never sent anywhere itself, so it has no use to show
   // and no limits to set; its connections do.
-  private hasUsage = (key: ListedKey) => key.kind !== 'oauth-client';
+  // Every key but an OAuth app that signs people in: one that signs in as
+  // itself (`client_credentials`) is sent as a key, so it is counted.
+  private hasUsage = (key: ListedKey) =>
+    key.kind !== 'oauth-client' ||
+    key.oauth?.client?.grantType === 'client_credentials';
 
   private usableWithCard = (key: ListedKey) =>
     key.kind !== 'oauth-client' ||
@@ -749,6 +754,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     } else {
       this.usagePanels.delete(keyId);
     }
+  };
+
+  // Whether the page shows this key's limits on its tile.
+  private canChangeKeyLimits = (keyId: string) => {
+    let key = this.state.keys.find((candidate) => candidate.id === keyId);
+    return !!key && this.hasUsage(key);
   };
 
   // A personal key's limits are changed on its own tile.

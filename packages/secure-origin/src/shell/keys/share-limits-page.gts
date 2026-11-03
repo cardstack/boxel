@@ -128,9 +128,24 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         </:actions>
       </EditPage>
     {{/if}}
+    {{! The pages above that have no buttons of their own still go back. }}
+    {{#if this.backBelow}}
+      <footer class='back'>
+        <Button
+          @kind='secondary'
+          data-test-share-limits-back
+          {{on 'click' this.backToKeys}}
+        >Back to your keys</Button>
+      </footer>
+    {{/if}}
     <style scoped>
       .busy {
         margin-top: var(--boxel-sp-xl);
+      }
+      .back {
+        display: flex;
+        justify-content: flex-end;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
       }
     </style>
   </template>
@@ -143,6 +158,11 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     'keys';
 
   private backToKeys = () => navigation.back(pageURL('keys'));
+
+  // A failed load and the needs-admin page draw no buttons of their own.
+  private get backBelow() {
+    return this.returnsToKeys && (!!this.loadFailed || !!this.needsAdmin);
+  }
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });

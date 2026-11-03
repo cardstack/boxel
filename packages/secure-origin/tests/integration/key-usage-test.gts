@@ -480,7 +480,20 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
         .hasValue('2400', 'the key’s limits are there to change');
+      assert
+        .dom('[data-test-key-usage-toggle]')
+        .isFocused('focus moves to the panel it opened');
       assert.deepEqual(navigations, [], 'it stays on the page');
+    });
+
+    test('a notice about a key whose limits the page doesn’t show offers nothing to click', async function (assert) {
+      serveNotices([
+        limitNotice('7', { key: 'key-elsewhere', label: 'Old key' }),
+      ]);
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-limit-notice="Old key"]');
+      assert.dom('[data-test-key-limit-notice-change]').doesNotExist();
     });
 
     test('a share of the user’s key nearing its budget opens the share’s limits, which come back here', async function (assert) {
@@ -714,6 +727,33 @@ module('Integration | key usage and limits', function (hooks) {
       assert
         .dom('[data-test-share-limits-back]')
         .doesNotExist('opened from the app, it has no key page to go back to');
+    });
+
+    test('opened from the key page by someone who can’t see the share, it still goes back there', async function (assert) {
+      let backTo: string[] = [];
+      navigation.back = (url: string) => backTo.push(url);
+      serve({
+        'POST _secure-window/context': () =>
+          json(200, {
+            data: {
+              type: 'secure-window-context',
+              attributes: {
+                realm: {
+                  url: REALM,
+                  name: 'Team Workspace',
+                  directWriter: false,
+                },
+              },
+            },
+          }),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1&then=keys`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-keys-needs-admin]');
+      await click('[data-test-share-limits-back]');
+      assert.strictEqual(backTo.length, 1);
     });
 
     test('opened from the key page, it goes back there', async function (assert) {
