@@ -3,12 +3,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
-import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
-
-import { isTesting } from '@embroider/macros';
 
 import Component from '@glimmer/component';
 
@@ -17,9 +12,8 @@ import { tracked, cached } from '@glimmer/tracking';
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
-import { dropTask } from 'ember-concurrency';
-import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
+import { motion } from 'glimmer-motion';
 
 import pluralize from 'pluralize';
 import { TrackedSet } from 'tracked-built-ins';
@@ -68,6 +62,7 @@ import {
 import {
   stackItemTypeToStoreReadType,
   type StackItem,
+  type StackItemOpening,
 } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
@@ -82,6 +77,7 @@ import CardRenderer from '../card-renderer';
 import ArchivedRealmState from './archived-realm-state';
 import CardError from './card-error';
 import DeleteModal from './delete-modal';
+import { STACK_ITEM_ROLE } from './motion/stack-motion';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 import FollowFocus from './stack-focus';
@@ -99,7 +95,21 @@ import type {
 
 export interface StackItemComponentAPI {
   deselectCard: (cardId: string) => void;
-  startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
+}
+
+// A card's identity for its stack's motion region (motion/stack-motion.gts).
+// An item and its clones share an opening, so a card that takes its saved id
+// or moves stacks keeps its identity: the region sees it kept, not entering
+// again. This module, not the state, holds the name (ADR 007 §1.1).
+const participantIds = new WeakMap<StackItemOpening, string>();
+let nextParticipantId = 0;
+function participantIdFor(item: StackItem): string {
+  let id = participantIds.get(item.opening);
+  if (!id) {
+    id = `stack-card-${++nextParticipantId}`;
+    participantIds.set(item.opening, id);
+  }
+  return id;
 }
 
 interface Signature {
@@ -110,7 +120,7 @@ interface Signature {
     requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     toolContext: ToolContext;
     close: (item: StackItem) => void;
-    dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
+    dismissStackedCardsAbove: (stackIndex: number) => void;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -152,13 +162,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked private numberOfCardsToDelete = 0;
   @tracked private isDeletingCards = false;
   @tracked private deleteError: string | undefined;
-  @tracked private animationType:
-    | 'opening'
-    | 'closing'
-    | 'movingForward'
-    | undefined = 'opening';
   @tracked private cardResource: ReturnType<getCard> | undefined;
-  private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
   get permissions(): Permissions | undefined {
@@ -181,8 +185,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
       deselectCard: this.deselectCard,
-      startAnimation: this.startAnimation.perform,
     });
+  }
+
+  private get participantId() {
+    return participantIdFor(this.args.item);
   }
 
   private makeCardResource = () => {
@@ -224,7 +231,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried && this.isWideFormat;
   }
 
-  private get styleForStackedCard(): SafeString {
+  // The card's place in the stacked layout. It goes to the element through
+  // the motion modifier, which owns the inline style: a bound style
+  // attribute would wipe a transform the engine wrote mid-flight.
+  private get stackedCardStyle(): Record<string, string | number> {
     const stackItemMaxWidth = 50; // unit: rem, 800px for 16px base
     const RATIO = 1.2;
     //  top card: 800px / (1.2 ^ 0) = 800px;
@@ -241,7 +251,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     // without fighting inline !important overrides. Mirrors host-mode
     // pattern: parent constrains height, children inherit.
     if (this.isExpanded || this.isPhoneLayout) {
-      return htmlSafe(`z-index: calc(${this.args.index} + 1);`);
+      return { zIndex: this.args.index + 1 };
     }
 
     let marginTopPx = 0;
@@ -263,18 +273,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
       ? '100%'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
-    let styles = `
-      height: calc(100% - ${marginTopPx}px);
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
-      z-index: calc(${this.args.index} + 1);
-      margin-top: ${marginTopPx}px;
-    `; // using margin-top instead of padding-top to hide scrolled content from view
-    // Transition (280ms ease-out, all geometric props) is on the .item
-    // CSS rule below — no inline override here, so expand/collapse
-    // morph + stacked-layout shifts all use the same curve.
-
-    return htmlSafe(styles);
+    // margin-top rather than padding-top, to hide scrolled content from view.
+    // A change of place or size is shown by the stack's motion region, which
+    // measures the card before and after the render.
+    //
+    // Width and height go through custom properties that the stylesheet
+    // reads, not inline width and height. A move borrows the inline width
+    // and height for its flight and hands back what they held when it began,
+    // so a size that changed mid-flight would be lost; with them empty, the
+    // stylesheet's size, read from these properties, stands when the move
+    // lets go.
+    return {
+      '--stacked-card-height': `calc(100% - ${marginTopPx}px)`,
+      '--stacked-card-width': width,
+      maxWidth: `${maxWidthPercent}%`,
+      zIndex: this.args.index + 1,
+      marginTop: `${marginTopPx}px`,
+    };
   }
 
   private get isBuried() {
@@ -312,7 +327,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  private closeItem = () => this._closeItem.perform();
+  private closeItem = () => {
+    // Clear any persisted expand intent for this item — the item is
+    // about to be removed from the stack, so the entry on the
+    // service map should not linger (would re-apply if a card with
+    // the same id ever returned).
+    this.operatorModeStateService.setStackItemExpanded(this.args.item, false);
+    this.args.dismissStackedCardsAbove(this.args.index - 1);
+  };
 
   // Per-card expanded state. Persisted on operatorModeStateService
   // (keyed by stack-item instance) so the user's expand intent survives:
@@ -350,120 +372,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       ? this.toggleExpanded
       : undefined;
   }
+  // The card's change of size is shown by the stack's motion region, as a
+  // move of the card it measured before and after the render.
   private toggleExpanded = () => {
     if (!this.canToggleExpanded) return;
-    const cardEl = this.itemEl;
-    const cardFrom = cardEl?.getBoundingClientRect();
-
     this.operatorModeStateService.setStackItemExpanded(
       this.args.item,
       !this.isExpandedIntent,
     );
-
-    // FLIP via Web Animations on the card body: measure rect before
-    // state change, animate inverse transform back to identity after
-    // re-render. Works around CSS transitions not firing when changing
-    // properties cross from inline-style to CSS-rule sources mid-frame.
-    if (!cardEl || !cardFrom) return;
-    this.pendingFlipEl = cardEl;
-    this.pendingFlipFrom = cardFrom;
-    scheduleOnce('afterRender', this, this.runExpandAnimation);
   };
-
-  private pendingFlipEl: HTMLElement | null = null;
-  private pendingFlipFrom: DOMRect | null = null;
-
-  private runExpandAnimation() {
-    const cardEl = this.pendingFlipEl;
-    const cardFrom = this.pendingFlipFrom;
-    this.pendingFlipEl = null;
-    this.pendingFlipFrom = null;
-    if (!cardEl || !cardFrom) return;
-    this.playFlip(cardEl, cardFrom, {
-      duration: 280,
-      easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-    });
-    // Header gets a lightweight fade + small Y slide — suggests
-    // direction without the full FLIP's visual noise. Expand: pill
-    // slides UP into the bar (starts 10px below). Restore: header
-    // slides DOWN onto the card (starts 10px above). A second afterRender
-    // pass lets {{#in-element}} settle before measuring.
-    scheduleOnce('afterRender', this, this.animateHeaderTransition);
-  }
-
-  private animateHeaderTransition() {
-    const headerTo = this.findHeaderEl();
-    if (!headerTo) return;
-    const fromOffsetY = this.isExpandedIntent ? 28 : -28;
-    headerTo.animate(
-      [
-        { opacity: 0, transform: `translateY(${fromOffsetY}px)` },
-        { opacity: 1, transform: 'translateY(0)' },
-      ],
-      {
-        duration: 280,
-        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-        fill: 'none',
-      },
-    );
-  }
-
-  private findHeaderEl(): HTMLElement | null {
-    // After expand: the portaled .expanded-card-header-pill in the bar.
-    // Before expand (or after restore): the inline .stack-item-header
-    // inside this stack-item's DOM.
-    const slot = this.operatorModeStateService.expandedCardHeaderElement;
-    const portaled = slot?.querySelector(
-      '.expanded-card-header-pill',
-    ) as HTMLElement | null;
-    if (portaled) return portaled;
-    return (
-      (this.itemEl?.querySelector(
-        '.stack-item-header',
-      ) as HTMLElement | null) ?? null
-    );
-  }
-
-  private playFlip(
-    el: HTMLElement,
-    fromRect: DOMRect,
-    opts: { duration: number; easing: string },
-  ) {
-    const toRect = el.getBoundingClientRect();
-    const dx = fromRect.left - toRect.left;
-    const dy = fromRect.top - toRect.top;
-    // Guard against zero target dimensions (e.g., during unmount or
-    // before layout settles) — Web Animations would NaN out otherwise.
-    if (toRect.width === 0 || toRect.height === 0) return;
-    const sx = fromRect.width / toRect.width;
-    const sy = fromRect.height / toRect.height;
-    el.animate(
-      [
-        {
-          transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
-          transformOrigin: 'top left',
-        },
-        {
-          transform: 'translate(0, 0) scale(1, 1)',
-          transformOrigin: 'top left',
-        },
-      ],
-      {
-        duration: opts.duration,
-        easing: opts.easing,
-        fill: 'none',
-      },
-    );
-  }
-
-  private _closeItem = dropTask(async () => {
-    // Clear any persisted expand intent for this item — the item is
-    // about to be removed from the stack, so the entry on the
-    // service map should not linger (would re-apply if a card with
-    // the same id ever returned).
-    this.operatorModeStateService.setStackItemExpanded(this.args.item, false);
-    await this.args.dismissStackedCardsAbove(this.args.index - 1);
-  });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
     const cardId = this.normalizeCardId(cardDefOrId);
@@ -798,75 +715,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.operatorModeStateService.setItemFormat(item, 'isolated', { request });
   };
 
-  private startAnimation = dropTask(
-    async (animationType: 'closing' | 'movingForward') => {
-      this.animationType = animationType;
-      await new Promise<void>((resolve) => {
-        scheduleOnce(
-          'afterRender',
-          this,
-          this.handleAnimationCompletion,
-          animationType,
-          resolve,
-        );
-      });
-    },
-  );
-
-  private handleAnimationCompletion(
-    animationName: 'opening' | 'closing' | 'movingForward',
-    resolve?: () => void,
-  ) {
-    if (!this.itemEl) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    const animations = this.itemEl.getAnimations?.() ?? [];
-    if (animations.length === 0) {
-      this.clearAnimationType(animationName);
-      resolve?.();
-      return;
-    }
-    Promise.all(animations.map((animation) => animation.finished))
-      .then(() => {
-        this.clearAnimationType(animationName);
-        resolve?.();
-      })
-      .catch((e) => {
-        // AbortError is expected in two scenarios:
-        // 1. Multiple stack items are animating in parallel (eg. closing and moving forward)
-        //    and some elements get removed before their animations complete
-        // 2. Tests running with animation-duration: 0s can cause
-        //    animations to abort before they're properly tracked
-        if (e.name === 'AbortError') {
-          this.clearAnimationType(animationName);
-          resolve?.();
-        } else {
-          console.error(e);
-        }
-      });
-  }
-
-  private clearAnimationType(
-    animationName: 'opening' | 'closing' | 'movingForward',
-  ) {
-    if (this.animationType === animationName) {
-      this.animationType = undefined;
-    }
-  }
-
-  private trackOpeningAnimation = () => {
-    if (this.animationType !== 'opening') {
-      return;
-    }
-    scheduleOnce('afterRender', this, this.finishOpeningAnimation);
-  };
-
-  private finishOpeningAnimation = () => {
-    this.handleAnimationCompletion('opening');
-  };
-
   private get canEdit() {
     return (
       this.card &&
@@ -935,32 +783,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private isTopCardNow = () => this.isTopCard;
 
-  private setupItemEl = (el: HTMLElement) => {
-    this.itemEl = el;
-    this.trackOpeningAnimation();
-  };
-
-  private get doOpeningAnimation() {
-    return (
-      this.isTopCard &&
-      this.animationType === 'opening' &&
-      !this.isEditing &&
-      !(this.args.item.format === 'isolated' && this.args.item.request) // Skip animation if we have a request and we're in isolated format, it means we're completing an edit operation
-    );
-  }
-
-  private get doClosingAnimation() {
-    return this.animationType === 'closing';
-  }
-
-  private get doMovingForwardAnimation() {
-    return this.animationType === 'movingForward';
-  }
-
-  private get isTesting() {
-    return isTesting();
-  }
-
   private setWindowTitle = () => {
     if (this.url && this.cardTitle) {
       this.operatorModeStateService.setCardTitle(this.url, this.cardTitle);
@@ -986,10 +808,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         buried=this.showsAsBuried
         expanded=this.isExpanded
         phone-layout=this.isPhoneLayout
-        opening-animation=this.doOpeningAnimation
-        closing-animation=this.doClosingAnimation
-        move-forward-animation=this.doMovingForwardAnimation
-        testing=this.isTesting
       }}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
@@ -1003,11 +821,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
       tabindex='-1'
       role='region'
       aria-label={{this.regionLabel}}
-      style={{this.styleForStackedCard}}
       {{on 'focusin' this.markInteracted}}
       {{! the card takes focus as it opens and hands it back as it closes }}
       {{FollowFocus item=@item stack=@stackItems isTopCard=this.isTopCardNow}}
-      {{ContentElement onSetup=this.setupItemEl}}
+      {{! a participant of the stack's motion region (motion/stack-motion.gts),
+      which shows the card opening, closing and moving; its stacked-layout
+      geometry goes through the modifier, which owns the inline style }}
+      {{motion
+        id=this.participantId
+        role=STACK_ITEM_ROLE
+        style=this.stackedCardStyle
+      }}
     >
       <CardContainer
         class={{cn 'stack-item-card' showing-card=this.isShowingCard}}
@@ -1200,46 +1024,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --stack-card-footer-height: 6rem;
       }
 
-      @keyframes scaleIn {
-        from {
-          transform: scale(0.1);
-          opacity: 0;
-        }
-        to {
-          transform: scale(1);
-          opacity: 1;
-        }
-      }
-      @keyframes fadeOut {
-        from {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        to {
-          opacity: 0;
-          transform: translateY(100%);
-        }
-      }
-
-      @keyframes moveForward {
-        from {
-          transform: translateY(0);
-          opacity: 0.8;
-        }
-        to {
-          transform: translateY(25px);
-          opacity: 1;
-        }
-      }
-      @keyframes slideUp {
-        from {
-          transform: translateY(100%);
-        }
-        to {
-          transform: translateY(0);
-        }
-      }
-
       .item {
         --stack-item-header-height: 3rem;
         justify-self: center;
@@ -1248,9 +1032,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
-        transition:
-          margin-top var(--boxel-transition),
-          width var(--boxel-transition);
+      }
+      /* A stacked card's size, from the custom properties stackedCardStyle
+         sets (expanded and phone cards set none and take the rules below) */
+      .item:not(.expanded, .phone-layout) {
+        width: var(--stacked-card-width);
+        height: var(--stacked-card-height);
       }
       /* the card takes focus as it opens, as focus is handed back to it, and
          as it is clicked. A ring shows where the keyboard brought focus, so a
@@ -1262,65 +1049,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         outline: 2px solid var(--ring, var(--boxel-highlight));
         outline-offset: -2px;
       }
-      .item.opening-animation {
-        animation: scaleIn 0.2s forwards;
-      }
-      .item.closing-animation {
-        animation: fadeOut 0.2s forwards;
-      }
-      .item.move-forward-animation {
-        animation: moveForward 0.2s none;
-      }
-      .item.opening-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.closing-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.move-forward-animation.testing {
-        animation-duration: 0s;
-      }
-      .item.phone-layout.opening-animation {
-        animation-name: slideUp;
-      }
-      .item.phone-layout.move-forward-animation {
-        animation: none;
-      }
-
-      /* reduced motion: a card fades in and out where it stands, on a phone
-         as on a wide screen, and the cards under it keep their places rather
-         than sliding */
-      @keyframes stackItemFadeIn {
-        from {
-          opacity: 0;
-        }
-      }
-
-      @keyframes stackItemFadeOut {
-        to {
-          opacity: 0;
-        }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .item {
-          transition: none;
-        }
-
-        .item.opening-animation,
-        .item.phone-layout.opening-animation {
-          animation-name: stackItemFadeIn;
-        }
-
-        .item.closing-animation {
-          animation-name: stackItemFadeOut;
-        }
-
-        .item.move-forward-animation {
-          animation: none;
-        }
-      }
-
       .item.buried {
         --stack-item-header-height: 2.5rem;
         --realm-icon-border-radius: 4px;
@@ -1335,15 +1063,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .item.expanded {
         pointer-events: auto;
       }
-      /* A buried phone card is covered by the top card, so it is shown
-         only while the card above it slides in or out. */
-      .item.phone-layout:not(
-          .expanded,
-          .closing-animation,
-          :has(+ .item.opening-animation),
-          :has(+ .item.closing-animation)
-        ) {
+      /* A buried phone card is covered by the top card, so it is hidden,
+         after a delay that keeps it in view under a card sliding over it.
+         The stack's motion region sets the delay to outlast the slide
+         (motion/stack-motion.gts); with motion off it is 0. A card that
+         closes leaves as a picture kept by the region, so the card it
+         uncovers shows at once. */
+      .item.phone-layout:not(.expanded) {
         visibility: hidden;
+        transition: visibility 0s linear var(--stack-item-covered-delay, 0s);
       }
       /* Its header moves to the top bar once it is the top card, so it
          is left out while buried to keep the content from jumping. */
@@ -1512,21 +1240,4 @@ export default class OperatorModeStackItem extends Component<Signature> {
       </DeleteModal>
     {{/if}}
   </template>
-}
-
-interface ContentElementSignature {
-  Args: {
-    Named: {
-      onSetup: (element: HTMLElement) => void;
-    };
-  };
-}
-class ContentElement extends Modifier<ContentElementSignature> {
-  modify(
-    element: HTMLElement,
-    _positional: [],
-    { onSetup }: ContentElementSignature['Args']['Named'],
-  ) {
-    onSetup(element);
-  }
 }
