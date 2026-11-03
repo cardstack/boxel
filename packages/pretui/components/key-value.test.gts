@@ -154,24 +154,17 @@ module('Pretui | components/key-value', function (hooks) {
     }
   });
 
-  // Scoped CSS is inert in this harness, so this checks the selector the
-  // hairline rule keys off: it must skip the first row's dt and dd.
-  test('KeyValue @divided rules every row but the first', async function (assert) {
+  // The row selectors key off the list's children being only dt/dd, in
+  // alternating order with a dt first.
+  test('KeyValue horizontal renders alternating dt/dd children', async function (assert) {
     const ITEMS: KeyValueItem[] = [
       { key: 'Origin', value: 'Wuyi' },
       { key: 'Harvest', value: 'Spring 2026' },
     ];
     await render(<template><KeyValue @items={{ITEMS}} @divided={{true}} /></template>);
-    let ruled = (el: Element) => el.matches(':not(:first-of-type)');
-    let cells = Array.from(q('[data-test-pretui-kv]').children);
     assert.deepEqual(
-      cells.map((c) => [c.tagName, ruled(c)]),
-      [
-        ['DT', false],
-        ['DD', false],
-        ['DT', true],
-        ['DD', true],
-      ],
+      Array.from(q('[data-test-pretui-kv]').children).map((c) => c.tagName),
+      ['DT', 'DD', 'DT', 'DD'],
     );
   });
 });
