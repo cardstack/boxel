@@ -1,23 +1,12 @@
-import config from '@cardstack/host/config/environment';
+import { copyCardURLToClipboard } from '@cardstack/boxel-ui/helpers';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
-export async function copyCardURLToClipboard(
-  card: CardDef | URL | string,
-): Promise<void> {
-  let copyableUrl;
-  if (typeof card === 'string') {
-    copyableUrl = card;
-  } else if (card instanceof URL) {
-    copyableUrl = card.href;
-  } else {
-    copyableUrl = card.id;
-  }
-  if (!copyableUrl) {
-    return;
-  }
-  if (config.environment === 'test') {
-    return; // navigator.clipboard is not available in test environment
-  }
-  await navigator.clipboard.writeText(copyableUrl);
+// Copies the URL a browser can open for an id, by the same rule card code's
+// stores use (`CardStore.openableURL`).
+export function copyOpenableURLToClipboard(
+  id: string,
+  virtualNetwork: VirtualNetwork,
+): Promise<boolean> {
+  return copyCardURLToClipboard(virtualNetwork.keyForIdentifier(id));
 }
