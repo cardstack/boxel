@@ -909,8 +909,9 @@ export default class MatrixService extends Service {
   // The sign-out the user asks for. The app signs out of its own session
   // first, exactly as `logout()` always does (the service worker's realm
   // tokens included, so the next user's images never carry them), and then
-  // sends the user to the secure origin to end its session too. That page comes back to the app's root, signed out, and
-  // the full navigation drops any card code that was running.
+  // sends the user to the secure origin to end its session too. That page
+  // goes on to the secure origin's sign-in, which hands the next sign-in back
+  // to the app's root. Leaving the app drops any card code that was running.
   //
   // A framed app is never navigated (the secure origin refuses to be framed):
   // it signs out of its own session only, and its signed-out page offers
