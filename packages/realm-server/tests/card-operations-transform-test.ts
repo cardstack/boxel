@@ -43,6 +43,7 @@ const REALM = 'http://example.com/test/';
 const REPORT = { module: `${REALM}report`, name: 'Report' } as CodeRef;
 const PERSON = { module: `${REALM}person`, name: 'Person' } as CodeRef;
 const STRING = { module: `${REALM}string`, name: 'default' } as CodeRef;
+const CLIP = { module: `${REALM}clip`, name: 'Clip' } as CodeRef;
 
 interface Commit {
   writes: Record<string, string>;
@@ -73,6 +74,7 @@ function stub(opts: StubOptions = {}): {
   let definitions: Record<string, Definition> = {
     Report: reportDefinition(),
     Person: personDefinition(),
+    Clip: clipDefinition(),
   };
 
   let core: BatchCore = {
@@ -191,6 +193,7 @@ function reportDefinition(): Definition {
       auditor: 'f3',
       reviewers: 'f4',
       curator: 'f5',
+      clips: 'f6',
     },
     fieldDefs: {
       f0: {
@@ -230,6 +233,37 @@ function reportDefinition(): Definition {
         type: 'linksTo',
         isPrimitive: false,
         isComputed: true,
+        fieldOrCard: PERSON,
+      },
+      // A stored list of contained values whose items hold a link of their
+      // own — a clip of a video, say.
+      f6: {
+        type: 'containsMany',
+        isPrimitive: false,
+        isComputed: false,
+        fieldOrCard: CLIP,
+      },
+    },
+  } as Definition;
+}
+
+function clipDefinition(): Definition {
+  return {
+    type: 'field-def',
+    codeRef: CLIP,
+    displayName: 'Clip',
+    fields: { vid: 'f0', video: 'f1' },
+    fieldDefs: {
+      f0: {
+        type: 'contains',
+        isPrimitive: true,
+        isComputed: false,
+        fieldOrCard: STRING,
+      },
+      f1: {
+        type: 'linksTo',
+        isPrimitive: false,
+        isComputed: false,
         fieldOrCard: PERSON,
       },
     },
@@ -627,6 +661,114 @@ module(basename(import.meta.filename), function () {
         attributesOf(commits[0], 'report-1.json').status,
         `${REALM}reviewer`,
         'the computed link the card never stores is read from the index',
+      );
+    });
+
+    // The index lags the file: a card written a moment ago still has its
+    // previous rendering in `pristine_doc` until the indexer visits it again,
+    // which under a re-index backlog can be minutes. A stored field the file
+    // has emptied is still the card's to write, whatever the index remembers.
+    test('a stored field the index holds an older value for stays writable', async function (assert) {
+      // Stale in both snapshots: `search_doc` carries the card's own fields
+      // beside the ones it expands, so it remembers the old value too.
+      let indexed = indexedReport();
+      indexed.searchDoc = { ...indexed.searchDoc, status: 'open' };
+      let { core, commits } = stub({
+        stored: { 'report-1.json': report({ status: null }) },
+        indexed: { [`${REALM}report-1`]: indexed },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'escalate',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.status="escalated";'),
+        },
+      ]);
+
+      assert.strictEqual(
+        attributesOf(commits[0], 'report-1.json').status,
+        'escalated',
+        'the stale indexed value does not make the stored field read-only',
+      );
+    });
+
+    test('a stored list of contained links the index holds older items for stays writable', async function (assert) {
+      // The file's list was cleared; the index still renders the items it had
+      // before, each with its own link.
+      let indexed = indexedReport();
+      let pristine = indexed.pristine!;
+      pristine.attributes = { ...pristine.attributes, clips: [{ vid: 'a' }] };
+      pristine.relationships = {
+        ...pristine.relationships,
+        'clips.0.video': { links: { self: `${REALM}reviewer` } },
+      };
+      let options = (): StubOptions => ({
+        stored: { 'report-1.json': report({ clips: [] }) },
+        indexed: { [`${REALM}report-1`]: indexed },
+      });
+
+      let cleared = stub(options());
+      await commitBatch(cleared.core, [
+        {
+          op: 'transform',
+          name: 'clearClips',
+          href: `${REALM}report-1`,
+          definition: transformOperation('.clips = [];'),
+        },
+      ]);
+      assert.deepEqual(
+        attributesOf(cleared.commits[0], 'report-1.json').clips,
+        [],
+        'clearing the stored list is not refused as a computed write',
+      );
+
+      let appended = stub(options());
+      await commitBatch(appended.core, [
+        {
+          op: 'transform',
+          name: 'addClip',
+          href: `${REALM}report-1`,
+          definition: transformOperation('append(.clips; {vid: "b"});'),
+        },
+      ]);
+      assert.deepEqual(
+        attributesOf(appended.commits[0], 'report-1.json').clips,
+        [{ vid: 'b' }],
+        'appending lands on the stored list alone, with no indexed item beside it',
+      );
+    });
+
+    test('an emptied link is not filled back in from the index', async function (assert) {
+      // The file no longer links an owner; the index still expands the one it
+      // linked before. Setting a new owner is a write to the card's own edge.
+      let stored = JSON.parse(report({}));
+      stored.data.relationships.owner = { links: { self: null } };
+      let { core, commits } = stub({
+        stored: {
+          'report-1.json': JSON.stringify(stored, null, 2),
+          'newcomer.json': JSON.stringify({
+            data: { type: 'card', meta: { adoptsFrom: PERSON } },
+          }),
+        },
+        indexed: { [`${REALM}report-1`]: indexedReport() },
+      });
+
+      await commitBatch(core, [
+        {
+          op: 'transform',
+          name: 'reassign',
+          href: `${REALM}report-1`,
+          definition: transformOperation(`.owner = card("${REALM}newcomer");`),
+        },
+      ]);
+
+      assert.strictEqual(
+        JSON.parse(commits[0].writes['report-1.json']).data.relationships.owner
+          .links.self,
+        `${REALM}newcomer`,
+        'the stale expansion does not make the stored edge read-only',
       );
     });
 

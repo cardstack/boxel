@@ -280,6 +280,8 @@ export {
   refusalSeenBy,
   unshareableFormatsOf,
   AUTHENTICATION_REQUIRED,
+  definitionNotReady,
+  DEFINITION_RETRY_AFTER_SECONDS,
 } from './types.ts';
 export {
   buildCallApiRequest,
