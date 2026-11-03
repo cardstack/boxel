@@ -29,6 +29,8 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import { setSystemKeyResponseCap } from '../lib/system-keys.ts';
 import { startSentryCapture } from './helpers/sentry-capture.ts';
 import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 
@@ -443,6 +445,152 @@ module(basename(import.meta.filename), function () {
         } finally {
           mockFetch.restore();
           global.fetch = originalFetch;
+        }
+      });
+
+      test("the OpenRouter key's own response size cap holds a passthrough call, streamed or not, and the generation-cost lookup after it", async function (assert) {
+        const KEY = 'system:https://openrouter.ai/api/v1/chat/completions';
+        // A path cap the responses below pass, so only the key's own cap
+        // lets them through.
+        configureOutbound({
+          responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+        });
+        let [{ id }] = await dbAdapter.execute(
+          `SELECT id FROM proxy_endpoints WHERE url = $1`,
+          { bind: ['https://openrouter.ai/api/v1/chat/completions'] },
+        );
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: 60_000,
+          note: 'raising the cap for larger completions, test',
+        });
+
+        const big = 'x'.repeat(20_000);
+        const originalFetch = global.fetch;
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async (input: string | URL | Request, init?: RequestInit) => {
+            const url = typeof input === 'string' ? input : input.toString();
+            if (url.startsWith('https://openrouter.ai/api/v1/generation?id=')) {
+              return new Response(
+                JSON.stringify({
+                  data: { id: 'gen-key-cap', total_cost: 0.002 },
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
+            if (url === 'https://openrouter.ai/api/v1/chat/completions') {
+              const streamed = JSON.parse(String(init?.body ?? '{}')).stream;
+              if (streamed) {
+                return new Response(
+                  `data: {"id":"gen-key-cap-stream","choices":[{"delta":{"content":"${big}"}}],"usage":{"cost":0.001}}\n\ndata: [DONE]\n\n`,
+                  {
+                    status: 200,
+                    headers: { 'content-type': 'text/event-stream' },
+                  },
+                );
+              }
+              // No inline cost, so the usage is priced by the generation id.
+              return new Response(
+                JSON.stringify({
+                  id: 'gen-key-cap',
+                  choices: [{ message: { role: 'assistant', content: big } }],
+                }),
+                {
+                  status: 200,
+                  headers: { 'content-type': 'application/json' },
+                },
+              );
+            }
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            });
+          },
+        );
+
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        const credits = () =>
+          sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user!.id,
+          });
+        try {
+          const lines = await logLinesDuring(['outbound'], async () => {
+            const plain = await request
+              .post('/_openrouter/chat/completions')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt}`)
+              .send({ model: 'test/model', messages: [] });
+            assert.strictEqual(
+              plain.status,
+              200,
+              "a response over the path's cap passes under the key's own",
+            );
+            // 50 - 0.002 × 1000 = 48, once the lookup has priced it.
+            await waitUntil(async () => (await credits()) === 48, {
+              timeoutMessage: 'the generation should be priced by its id',
+            });
+
+            const streamed = await request
+              .post('/_openrouter/chat/completions')
+              .set('Accept', 'text/event-stream')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt}`)
+              .send({ model: 'test/model', messages: [], stream: true });
+            assert.true(
+              streamed.text.includes('gen-key-cap-stream'),
+              'the streamed response is relayed',
+            );
+            assert.false(
+              streamed.text.includes('Response too large'),
+              "a streamed response over the path's cap passes under the key's own",
+            );
+            // 48 - 0.001 × 1000 = 47.
+            await waitUntil(async () => (await credits()) === 47, {
+              timeoutMessage: 'the stream should be charged its inline cost',
+            });
+          });
+          const sizeLines = lines
+            .map((line) => line.message)
+            .filter((message) => message.startsWith('outbound response size:'));
+          for (let destination of [
+            'https://openrouter.ai/api/v1/chat/completions',
+            'https://openrouter.ai/api/v1/generation',
+          ]) {
+            assert.true(
+              sizeLines.some(
+                (message) =>
+                  message.includes(`destination=${destination} `) &&
+                  message.includes('cap=60000 ') &&
+                  message.endsWith(`key=${KEY}`),
+              ),
+              `the call to ${destination} is held to the key's cap: ${sizeLines.join(' | ')}`,
+            );
+          }
+          assert.strictEqual(
+            sizeLines.filter((message) =>
+              message.includes(
+                'destination=https://openrouter.ai/api/v1/chat/completions ',
+              ),
+            ).length,
+            2,
+            'both the plain and the streamed call were measured',
+          );
+        } finally {
+          mockFetch.restore();
+          global.fetch = originalFetch;
+          resetOutbound();
         }
       });
 

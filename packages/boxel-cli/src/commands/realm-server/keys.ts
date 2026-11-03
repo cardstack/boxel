@@ -31,15 +31,20 @@ export interface SystemKey {
   supportsStreaming: boolean;
   hasValue: boolean;
   keyId: string | null;
+  // The key's own response size cap in bytes; null when it takes the
+  // system-key path's cap.
+  responseSizeCap: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface SystemKeyChange {
-  action: 'add' | 'replace' | 'delete';
+  action: 'add' | 'replace' | 'delete' | 'set-response-cap';
   destination: string;
   note: string;
   keyId: string | null;
+  // For `set-response-cap`, the cap it set, or null for one that cleared it.
+  responseSizeCap: number | null;
   changedAt: string;
   clientAddress: string | null;
   tokenIssuedAt: string | null;
@@ -108,7 +113,7 @@ export interface NewPlatformClient {
 async function operatorFetch(
   options: SystemKeysOptions,
   path: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<any> {
   let { url, response } = await operatorRequest(
@@ -188,6 +193,45 @@ export async function deleteSystemKey(
       change,
     )
   ).deleted;
+}
+
+// Sets a system key's own response size cap in bytes, or with `null` clears
+// it, so the key takes the system-key path's cap again. It applies to the
+// key's next call, with no deploy.
+export async function setSystemKeyResponseCap(
+  options: SystemKeysOptions,
+  id: string,
+  change: { bytes: number | null; note: string },
+): Promise<SystemKey> {
+  return (
+    await operatorFetch(
+      options,
+      `_system-keys/${encodeURIComponent(id)}/response-size-cap`,
+      'PUT',
+      change,
+    )
+  ).key;
+}
+
+/**
+ * The cap `set-response-cap` takes: a whole number of bytes, with no unit.
+ */
+export function parseResponseCapBytes(raw: string): number {
+  if (!/^[1-9][0-9]*$/.test(raw.trim())) {
+    throw new Error(
+      `The response size cap must be a whole number of bytes, such as 134217728 for 128 MiB (got "${raw}")`,
+    );
+  }
+  let bytes = Number(raw.trim());
+  if (!Number.isSafeInteger(bytes)) {
+    throw new Error(`The response size cap ${raw} is too large`);
+  }
+  return bytes;
+}
+
+function describeBytes(bytes: number): string {
+  let mib = bytes / (1024 * 1024);
+  return `${bytes} bytes (${Number.isInteger(mib) ? mib : mib.toFixed(1)} MiB)`;
 }
 
 export async function listPlatformClients(
@@ -362,6 +406,9 @@ function printKey(key: SystemKey): void {
   console.log(`  credit strategy: ${key.creditStrategy}`);
   console.log(`  streaming: ${key.supportsStreaming ? 'yes' : 'no'}`);
   console.log(
+    `  response size cap: ${key.responseSizeCap == null ? "the system-key path's (none of its own)" : describeBytes(key.responseSizeCap)}`,
+  );
+  console.log(
     `  value: ${key.hasValue ? (key.keyId ? `sealed under data key ${key.keyId}` : 'in plain text only, until the backfill seals it') : 'none'}`,
   );
   console.log(`  updated: ${key.updatedAt}`);
@@ -396,8 +443,12 @@ function printHistory(
     // earlier client deleted under that name: the vendor's client id tells
     // them apart.
     let client = 'clientId' in change ? ` (client id ${change.clientId})` : '';
+    let cap =
+      change.action === 'set-response-cap'
+        ? ` to ${change.responseSizeCap == null ? "the path's cap" : describeBytes(change.responseSizeCap)}`
+        : '';
     console.log(
-      `    ${change.changedAt} ${change.action}${client}: ${change.note}`,
+      `    ${change.changedAt} ${change.action}${client}${cap}: ${change.note}`,
     );
     console.log(
       `      from ${change.clientAddress ?? 'an unknown address'}, token signed ${change.tokenIssuedAt ?? 'at an unknown time'}`,
@@ -426,6 +477,7 @@ export interface KeysCliOptions {
   keyFile?: string;
   note?: string;
   yes?: boolean;
+  clear?: boolean;
   json?: boolean;
 }
 
@@ -782,6 +834,44 @@ export function registerKeysCommand(realmServer: Command): void {
           console.log(
             `${FG_GREEN}Deleted the system key for ${key.destination}.${RESET}`,
           );
+        });
+      }),
+    );
+
+  keys
+    .command('set-response-cap')
+    .description(
+      "Set a system key's own response size cap in bytes, or with --clear return it to the system-key path's cap. It applies to the key's next call, with no deploy",
+    )
+    .argument('[bytes]', 'The cap, a whole number of bytes')
+    .requiredOption('--realm-server <url>', 'The realm server to change')
+    .option('--id <id>', SELECT_HELP.id)
+    .option('--destination <url>', SELECT_HELP.destination)
+    .option('--clear', "Clear the key's own cap")
+    .option(
+      '--note <text>',
+      'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
+    )
+    .option('--json', 'Output JSON')
+    .action(async (raw: string | undefined, options: KeysCliOptions) =>
+      run(async () => {
+        refuseClientOptions(options);
+        if (options.clear && raw !== undefined) {
+          throw new Error('Pass a cap or --clear, not both');
+        }
+        if (!options.clear && raw === undefined) {
+          throw new Error('Pass the cap in bytes, or --clear');
+        }
+        let bytes = options.clear ? null : parseResponseCapBytes(raw!);
+        let seed = await seedOptions(options);
+        let id = await resolveSystemKeyId(seed, options);
+        let note = await readNote(options.note, { stdinUsed: false });
+        let key = await setSystemKeyResponseCap(seed, id, { bytes, note });
+        output(options.json, key, () => {
+          console.log(
+            `${FG_GREEN}${bytes === null ? 'Cleared the response size cap' : 'Set the response size cap'}.${RESET}`,
+          );
+          printKey(key);
         });
       }),
     );

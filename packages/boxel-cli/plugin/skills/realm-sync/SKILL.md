@@ -97,6 +97,7 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--dry-run` — Preview without making changes
 - `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--confirm-shared-keys` — Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking
 
 ### `boxel realm watch start <realm-url> <local-dir>`
 
@@ -136,6 +137,7 @@ Push local files to a Boxel realm
 - `--changed-since <revision>` — Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision
 - `--no-realm-events` — Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--confirm-shared-keys` — Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking
 
 ### `boxel realm pull <realm-url> <local-dir>`
 
