@@ -3,6 +3,7 @@ import type { BotTool } from '../types.ts';
 import { fulfillViewAttachmentCall } from './fulfillment.ts';
 import {
   roomAttachments,
+  type RoomAttachments,
   VIEW_ATTACHMENT_TOOL_NAME,
   viewAttachmentLabel,
   viewAttachmentTool,
@@ -27,13 +28,18 @@ export const viewAttachmentBotTool: BotTool = {
   },
 
   async startTurn(room) {
-    let attachments = roomAttachments(room.history, room.aiBotUserId);
-    let inputModalities = activeModelInputModalities(room.history);
+    // Read from history on the turn's first call: most turns make none.
+    let attachments: RoomAttachments | undefined;
+    let inputModalities: string[] | undefined;
     return {
       needsApproval() {
         return false;
       },
       async fulfill(call, target) {
+        if (!attachments) {
+          attachments = roomAttachments(room.history, room.aiBotUserId);
+          inputModalities = activeModelInputModalities(room.history);
+        }
         let { commandRequestId, published } = await fulfillViewAttachmentCall(
           call,
           { ...target, attachments, inputModalities },

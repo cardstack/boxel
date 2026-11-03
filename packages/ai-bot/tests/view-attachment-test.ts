@@ -408,6 +408,41 @@ module('viewAttachment', () => {
     );
   });
 
+  test('a turn reads the room history only once a call arrives', async () => {
+    let jpg = photo('trees.jpg');
+    let reads = 0;
+    let history = new Proxy([message(USER, [jpg])], {
+      get(target, key, receiver) {
+        reads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    let turn = await viewAttachmentBotTool.startTurn({
+      humanMemberCount: 1,
+      realmDelegation: false,
+      history,
+      aiBotUserId: BOT,
+      client: {} as any,
+      onBehalfOf: USER,
+      delegatedUserRealmSessions: {
+        getToken: async () => 'token',
+        invalidate: () => {},
+      },
+      offeredToolNames: new Set([VIEW_ATTACHMENT_TOOL_NAME]),
+    });
+    assert.strictEqual(reads, 0, 'starting the turn reads nothing');
+
+    let { client, sent } = fakeClient();
+    await turn.fulfill(viewCall([jpg.sourceUrl]), {
+      client,
+      roomId: ROOM_ID,
+      requestEventId: REQUEST_EVENT_ID,
+      agentId: AGENT_ID,
+    });
+    assert.ok(reads > 0, 'the first call reads the history');
+    assert.deepEqual(JSON.parse(sent[0].content.data).attachedFiles, [jpg]);
+  });
+
   test('a call that finds some files attaches them and names the rest', async () => {
     let jpg = photo('trees.jpg');
     let { outcome, content, data } = await view(
