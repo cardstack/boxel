@@ -22,7 +22,7 @@ import { EmptyState } from '@cardstack/pretui/components/empty-state';
 import { RelativeTime } from '@cardstack/pretui/components/relative-time';
 import { Spinner } from '@cardstack/pretui/components/spinner';
 import { Tabs } from '@cardstack/pretui/components/tabs';
-import { eq } from '@cardstack/pretui/helpers';
+import { and, eq } from '@cardstack/pretui/helpers';
 
 import {
   authoredBy,
@@ -97,6 +97,10 @@ interface SearchAnswer {
 }
 
 type Tab = 'review' | 'mine';
+
+// How often an open watcher asks GitHub again. Each time is two calls, which
+// count against the key's limits in Boxel.
+const POLL_EVERY_MS = 60_000;
 
 const NEW_FINE_GRAINED_TOKEN =
   'https://github.com/settings/personal-access-tokens/new';
@@ -229,10 +233,47 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   @tracked mine: WatchedPullRequest[] = [];
   @tracked truncated = false;
   @tracked rejected = false;
+  // A call refused for the key's limits, while the watcher waits it out.
+  @tracked limited: string | undefined;
   @tracked problem: string | undefined;
   // GitHub's errors for what it left out of an answer it otherwise gave.
   @tracked partial: string | undefined;
   openedWindow = false;
+  // Signing in leaves a connection that isn't approved for the watcher's
+  // calls yet, and readiness reads the same until it is.
+  @tracked signedIn = false;
+  // Calls wait until then after a refusal for the key's limits.
+  pausedUntil = 0;
+  poller: ReturnType<typeof setInterval> | undefined;
+
+  willDestroy() {
+    super.willDestroy();
+    this.stopPolling();
+  }
+
+  // Polls while the lists can load. A tick does nothing while the browser tab
+  // is hidden, while a load is still running, or before the time a limit
+  // refusal named.
+  startPolling() {
+    if (this.poller) {
+      return;
+    }
+    this.poller = setInterval(() => {
+      if (
+        document.visibilityState === 'hidden' ||
+        this.loading ||
+        Date.now() < this.pausedUntil
+      ) {
+        return;
+      }
+      this.load();
+    }, POLL_EVERY_MS);
+  }
+
+  stopPolling() {
+    clearInterval(this.poller);
+    this.poller = undefined;
+  }
 
   get record(): PRReviewWatcher {
     return this.args.model as PRReviewWatcher;
@@ -243,6 +284,13 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   }
 
   installApp = INSTALL_GITHUB_APP;
+
+  get loadedAtTime() {
+    return this.loadedAt?.toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
 
   get tabs() {
     return [
@@ -269,13 +317,19 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
   // person has no key for it, approving the watcher's requests when they
   // have one.
   readinessChanged = (readiness: string) => {
-    if (readiness === 'ready' && !this.loading) {
-      this.load();
-    } else if (this.openedWindow) {
+    if (readiness === 'ready') {
+      if (!this.loading) {
+        this.load();
+      }
+      this.startPolling();
+      return;
+    }
+    this.stopPolling();
+    if (this.openedWindow) {
       return;
     } else if (readiness === 'needs-connect') {
       this.openedWindow = true;
-      this.openWindow('connect');
+      this.signIn();
     } else if (readiness === 'needs-approval') {
       this.openedWindow = true;
       this.openWindow('approve');
@@ -311,11 +365,11 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       this.truncated = [review, authored].some(
         (a) => (a.total ?? 0) > (a.pullRequests?.length ?? 0),
       );
-      let errors = [review, authored].flatMap((a) => a.errors ?? []);
-      this.partial = errors.length
-        ? errors.map((e) => e.message).join('; ')
-        : undefined;
+      this.partial = describeLeftOut(
+        [review, authored].flatMap((a) => a.errors ?? []),
+      );
       this.rejected = false;
+      this.limited = undefined;
       this.loadedAt = new Date();
     } catch (err) {
       if (
@@ -323,8 +377,21 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         err.code === 'credential-rejected'
       ) {
         // Stop here: calling again only collects the same refusal until the
-        // token is replaced or GitHub accepts it again.
+        // key is replaced or GitHub accepts it again. Readiness reads ready
+        // again once that happens, which starts polling again.
         this.rejected = true;
+        this.stopPolling();
+        return;
+      }
+      if (
+        err instanceof OperationsError &&
+        (err.code === 'rate-limited' ||
+          err.code === 'over-budget' ||
+          err.code === 'rate-limit-unavailable')
+      ) {
+        // Keep the last lists and wait as long as the refusal says.
+        this.pausedUntil = Date.now() + (err.retryAfterSeconds ?? 60) * 1000;
+        this.limited = err.code;
         return;
       }
       this.problem =
@@ -356,7 +423,10 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       this.problem = e instanceof Error ? e.message : String(e);
     }
   };
-  signIn = () => this.openWindow('connect');
+  signIn = () => {
+    this.signedIn = true;
+    this.openWindow('connect');
+  };
   // The approve page's key choice adds a pasted key as well as choosing one.
   allow = () => this.openWindow('approve');
   review = () => this.openWindow('review-changes');
@@ -381,22 +451,41 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
           <div class='refresh'>
             {{#if this.loadedAt}}
               <span class='loaded'>
-                Loaded
-                <RelativeTime @date={{this.loadedAt}} @now={{this.loadedAt}} />
+                Updated at
+                {{this.loadedAtTime}}, every minute while open
               </span>
             {{/if}}
-            <Button
-              @appearance='outlined'
-              @size='s'
-              @busy={{this.loading}}
-              {{on 'click' this.load}}
-              data-test-refresh
-            >Refresh</Button>
+            {{#if this.loading}}<Spinner @size='xs' />{{/if}}
           </div>
         {{/if}}
       </header>
 
-      {{#if (eq this.readiness 'needs-connect')}}
+      {{#if (and (eq this.readiness 'needs-connect') this.signedIn)}}
+        <Alert
+          @tone='info'
+          @title='Allow the watcher to use your GitHub sign-in'
+          data-test-needs-approval
+        >
+          <:default>
+            Once you've signed in to GitHub, allow the watcher's two calls to
+            send your sign-in when you open the card. Choose
+            <strong>On a schedule and when the card is opened</strong>
+            in Boxel's secure window.
+          </:default>
+          <:action>
+            <Button
+              @tone='primary'
+              {{on 'click' this.allow}}
+              data-test-allow
+            >Allow</Button>
+            <Button
+              @appearance='outlined'
+              {{on 'click' this.signIn}}
+              data-test-sign-in
+            >Sign in again</Button>
+          </:action>
+        </Alert>
+      {{else if (eq this.readiness 'needs-connect')}}
         <Alert
           @tone='info'
           @title='Sign in to GitHub to see your pull requests'
@@ -460,11 +549,17 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
         </Alert>
       {{else if (eq this.readiness 'needs-sign-in')}}
         <Alert @tone='info' @title='Sign in to see your pull requests' />
-      {{else if (eq this.readiness 'rate-limited')}}
-        <Alert @tone='warning' @title='Too many refreshes'>
-          Try again in a moment. The lists below are the last ones loaded.
+      {{else if
+        (or (eq this.readiness 'rate-limited') (eq this.limited 'rate-limited'))
+      }}
+        <Alert @tone='warning' @title='Paused for a moment'>
+          Your GitHub key has made as many calls as its limit allows for now.
+          The watcher tries again shortly; the lists below are the last ones
+          loaded.
         </Alert>
-      {{else if (eq this.readiness 'over-budget')}}
+      {{else if
+        (or (eq this.readiness 'over-budget') (eq this.limited 'over-budget'))
+      }}
         <Alert @tone='warning' @title='Your limit for GitHub is reached'>
           The lists below are the last ones loaded.
         </Alert>
@@ -679,6 +774,28 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
       }
     </style>
   </template>
+}
+
+// GitHub reports one error for every part of an answer it held back, so the
+// same message can come back dozens of times. Each is said once, with how
+// often, and the one an app sees without permission to read the
+// organization's teams says what to do about it.
+function describeLeftOut(errors: { message: string }[]): string | undefined {
+  if (errors.length === 0) {
+    return undefined;
+  }
+  let counts = new Map<string, number>();
+  for (let { message } of errors) {
+    counts.set(message, (counts.get(message) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([message, count]) => {
+      let times = count > 1 ? ` (${count} times)` : '';
+      return message === 'Resource not accessible by integration'
+        ? `GitHub hid some review requests from a team${times}. The GitHub app needs read access to the organization's members to show which team was asked.`
+        : `${message}${times}`;
+    })
+    .join(' ');
 }
 
 function join(names: string[]) {
