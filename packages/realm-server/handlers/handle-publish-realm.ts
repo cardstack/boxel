@@ -19,6 +19,8 @@ import {
   baseRealm,
   effectiveHasError,
   realmPolicyCardNamed,
+  RealmPaths,
+  sameResourceIn,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
@@ -324,8 +326,15 @@ async function rebaseRealmPolicyPointer(
     return;
   }
   let card = realmPolicyCardNamed(attributes.policy, virtualNetwork);
-  if (card?.startsWith(sourceRealmURL)) {
-    attributes.policy = `${publishedRealmURL}${card.slice(sourceRealmURL.length)}`;
+  let copy = card
+    ? sameResourceIn(
+        new RealmPaths(new URL(sourceRealmURL)),
+        new RealmPaths(new URL(publishedRealmURL)),
+        new URL(card),
+      )
+    : undefined;
+  if (copy) {
+    attributes.policy = copy;
   } else {
     delete attributes.policy;
   }

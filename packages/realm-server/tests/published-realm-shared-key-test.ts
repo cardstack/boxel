@@ -77,8 +77,8 @@ const REALM_POLICY = {
   name: 'RealmPolicy',
 };
 
-// `forecast` sends the realm's shared key; `myStations` the invoking user's
-// own.
+// `forecast` sends the realm's shared key, and so does `todayReport`, which is
+// approved card by card; `myStations` sends the invoking user's own.
 function weatherModule(field = 'login') {
   return `import { CardDef } from '@cardstack/base/card-api';
 import { operation } from '@cardstack/base/operations';
@@ -92,6 +92,15 @@ export class Weather extends CardDef {
     url: '${VENDOR}/graphql',
     headers: { authorization: 'Bearer {{apiKey}}' },
     graphql: { document: 'query { viewer { ${field} } }' },
+  };
+
+  @operation static todayReport = {
+    base: 'callApi',
+    label: 'Read the report for this place',
+    perInstance: true,
+    url: '${VENDOR}/graphql',
+    headers: { authorization: 'Bearer {{apiKey}}' },
+    graphql: { document: 'query { viewer { id } }' },
   };
 
   @operation static myStations = {
@@ -251,6 +260,7 @@ module(basename(import.meta.filename), function (hooks) {
                 grants: [
                   { operation: 'forecast' },
                   { operation: 'forecast', where: ANONYMOUS },
+                  { operation: 'todayReport', where: ANONYMOUS },
                   { operation: 'myStations' },
                   { operation: 'create' },
                 ],
@@ -288,9 +298,14 @@ module(basename(import.meta.filename), function (hooks) {
     ).ticket;
   }
 
-  // Approves `forecast` in the source, filled from the share, for interactive
-  // use, naming the fingerprint the approval screen's preview shows.
-  async function approveForecast(shareId: string) {
+  // Approves `operation` in the source, filled from the share, for interactive
+  // use, naming the fingerprint the approval screen's preview shows, and for a
+  // per-card operation the source's card it is approved on.
+  async function approveForecast(
+    shareId: string,
+    operation = 'forecast',
+    instance?: string,
+  ) {
     let shown = (
       await request
         .get('/_key-bindings/preview')
@@ -298,7 +313,7 @@ module(basename(import.meta.filename), function (hooks) {
           realm: source.url,
           module: `${source.url}weather`,
           name: 'Weather',
-          operation: 'forecast',
+          operation,
         })
         .set('Authorization', await secureSessionAuth(dbAdapter, OWNER))
     ).body.data.attributes as {
@@ -317,7 +332,8 @@ module(basename(import.meta.filename), function (hooks) {
             operations: [
               {
                 codeRef: { module: `${source.url}weather`, name: 'Weather' },
-                operation: 'forecast',
+                operation,
+                ...(instance ? { instance } : {}),
                 expectedDestination: DESTINATION,
                 slots: Object.fromEntries(
                   shown.slots.map((s) => [
@@ -447,24 +463,27 @@ module(basename(import.meta.filename), function (hooks) {
 
   // What the realm tells a visitor who isn't signed in about `forecast` on
   // its `today` card, before they invoke it.
-  async function readiness(realmURL: string) {
+  async function readiness(realmURL: string, auth?: string) {
     let { host, pathname } = new URL(realmURL);
-    let response = await request
+    let req = request
       .post(`${pathname}_capabilities`)
       .set('Host', host)
       .set('Accept', SupportedMimeType.JSON)
-      .set('Content-Type', SupportedMimeType.JSON)
-      .send(
-        JSON.stringify({
-          checks: [
-            {
-              operation: 'forecast',
-              target: `${realmURL}today`,
-              readiness: true,
-            },
-          ],
-        }),
-      );
+      .set('Content-Type', SupportedMimeType.JSON);
+    if (auth) {
+      req = req.set('Authorization', auth);
+    }
+    let response = await req.send(
+      JSON.stringify({
+        checks: [
+          {
+            operation: 'forecast',
+            target: `${realmURL}today`,
+            readiness: true,
+          },
+        ],
+      }),
+    );
     return response.body?.checks?.[0];
   }
 
@@ -526,8 +545,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       grants,
-      ['forecast', 'forecast'],
-      "only the shared-key call's grants are kept: not the personal-key call's, nor the create",
+      ['forecast', 'forecast', 'todayReport'],
+      "only the shared-key calls' grants are kept: not the personal-key call's, nor the create",
     );
 
     let { host, pathname } = new URL(publishedRealmURL);
@@ -597,6 +616,17 @@ module(basename(import.meta.filename), function (hooks) {
       `approved again in the source: ${reapproved.text}`,
     );
 
+    // Publishing makes the source's owner an owner of the published realm,
+    // who may read it and write nothing in it.
+    let ownerAnswer = await readiness(
+      publishedRealmURL,
+      signedIn(publishedRealmURL, OWNER, ['read', 'realm-owner']),
+    );
+    assert.strictEqual(
+      ownerAnswer?.readiness,
+      'needs-admin',
+      `on the published realm, a change only the source can approve reads as needs-admin, even to its owner: ${JSON.stringify(ownerAnswer)}`,
+    );
     let stale = await invoke(publishedRealmURL, 'forecast');
     assert.strictEqual(stale.status, 409, JSON.stringify(stale.body));
     assert.strictEqual(stale.code, 'binding-needs-reapproval');
@@ -620,6 +650,86 @@ module(basename(import.meta.filename), function (hooks) {
       republished.status,
       200,
       'a republished snapshot is served again',
+    );
+  });
+  test('a per-card operation approved for a card in the source serves the published copy of that card', async function (assert) {
+    let { shareId } = await shareIntoSource();
+    let approved = await approveForecast(
+      shareId,
+      'todayReport',
+      `${source.url}today.json`,
+    );
+    assert.strictEqual(approved.status, 201, approved.text);
+    await publish();
+
+    let served = await invoke(publishedRealmURL, 'todayReport');
+    assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+    assert.strictEqual(
+      vendor.requests[0]?.headers.authorization,
+      `Bearer ${VALUE}`,
+      "the source's shared key is sent for the published copy of the card",
+    );
+  });
+
+  test("the published site's calls are recorded under it and shown in the share's usage, and a refusal there never names the source", async function (assert) {
+    let { shareId } = await shareIntoSource();
+    await publish();
+
+    assert.strictEqual(
+      (await invoke(publishedRealmURL, 'forecast')).status,
+      200,
+      'a visitor is served',
+    );
+    let refused = await invoke(publishedRealmURL, 'todayReport');
+    assert.strictEqual(refused.status, 409, JSON.stringify(refused.body));
+    assert.strictEqual(refused.code, 'binding-not-approved');
+    let told = JSON.stringify(refused.body);
+    assert.true(
+      told.includes(publishedRealmURL),
+      'the refusal names the published realm',
+    );
+    assert.false(
+      told.includes(source.url),
+      "the refusal doesn't name the source realm",
+    );
+    let fromSource = await invoke(
+      source.url,
+      'forecast',
+      signedIn(source.url, OWNER, ['read', 'write', 'realm-owner']),
+    );
+    assert.strictEqual(fromSource.status, 200, 'the source is served');
+
+    let rows = (await dbAdapter.execute(
+      `SELECT realm_url, outcome FROM key_uses WHERE share_id = $1 ORDER BY id`,
+      { bind: [shareId] },
+    )) as { realm_url: string; outcome: string }[];
+    assert.deepEqual(
+      rows.map((row) => [row.realm_url, row.outcome]),
+      [
+        [publishedRealmURL, 'sent'],
+        [source.url, 'sent'],
+      ],
+      'each call is recorded under the realm it was made in',
+    );
+
+    let usage = await request
+      .get(`/_key-shares/${shareId}/usage`)
+      .set('Accept', SupportedMimeType.JSONAPI)
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: OWNER, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      );
+    assert.strictEqual(usage.status, 200, usage.text);
+    assert.deepEqual(
+      usage.body.data.attributes.realms,
+      [
+        { realm: source.url, calls: 1 },
+        { realm: publishedRealmURL, calls: 1, published: true },
+      ],
+      "the share's usage says where it was used this month",
     );
   });
 });

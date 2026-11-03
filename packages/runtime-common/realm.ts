@@ -166,6 +166,7 @@ import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
   RealmPaths,
+  sameResourceIn,
   ensureTrailingSlash,
   isCaptureServingPath,
   withoutCaptureServingPrefix,
@@ -17726,10 +17727,12 @@ export class Realm {
     if (!source) {
       return codeRef;
     }
-    let module = this.#virtualNetwork.toURL(codeRef.module).href;
-    return module.startsWith(source)
-      ? { ...codeRef, module: rri(`${this.url}${module.slice(source.length)}`) }
-      : codeRef;
+    let copy = sameResourceIn(
+      new RealmPaths(new URL(source)),
+      new RealmPaths(new URL(this.url)),
+      this.#virtualNetwork.toURL(codeRef.module),
+    );
+    return copy ? { ...codeRef, module: copy } : codeRef;
   }
 
   // Indexes the policy card stored at `file` again, in the realm at `realmURL`

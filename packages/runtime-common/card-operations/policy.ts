@@ -1927,6 +1927,13 @@ function grantedOperation(
 // Whether an operation is a `callApi` every credential slot of which takes a
 // key shared with the realm: one that sends a key and none of them the
 // invoking user's own.
+//
+// What a published realm keeps of its policy. A keyless `callApi` writes
+// nothing either, and is still left out: every request a published site sends
+// is then one a key's owner approved for the realm, counted against that
+// share's budgets and the key's caps, whereas a keyless call has no approval
+// and no budget behind it, only its grant's rate limit, on a site anyone can
+// open.
 function sendsOnlySharedKeys(
   granted: NonNullable<ReturnType<typeof grantedOperation>>,
 ): boolean {

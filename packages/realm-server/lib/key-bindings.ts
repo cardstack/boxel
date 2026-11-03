@@ -1291,10 +1291,10 @@ function checkSlot(
 
 // The binding for each of the request's slots, checked (`checkSlots`). A
 // binding whose request has changed goes to `needs-reapproval` here, and its
-// owner gets one notice, unless the caller says its request may be older than
-// the one approved (`marksStaleBindings: false`): then the call is refused and
-// the binding is left as it is. Throws the refusal for the first slot that
-// fails.
+// owner gets one notice, unless the call came from a published realm
+// (`publishedRealmURL`), whose copy of the source's code may be older than
+// what was approved: then the call is refused and the binding is left as it
+// is. Throws the refusal for the first slot that fails.
 //
 // A call claims a rejected grant's or key's probe when one is due
 // (`claimProbe: true`); an admission only asks whether one is due, so a run
@@ -1309,13 +1309,17 @@ async function checkedBindings(
   rejection: {
     probeIntervalMs: number;
     claimProbe: boolean;
-    marksStaleBindings?: boolean;
+    publishedRealmURL?: string;
   },
 ): Promise<CheckedBinding[]> {
   let { request } = lookup;
   let refuseNotApproved = () =>
     new OperationFailure(
-      notApproved(lookup.operation, request, lookup.realmURL),
+      notApproved(
+        lookup.operation,
+        request,
+        rejection.publishedRealmURL ?? lookup.realmURL,
+      ),
     );
   let instance = bindingInstance(request, lookup.instance);
   if (instance === undefined) {
@@ -1361,7 +1365,7 @@ async function checkedBindings(
           ),
         );
       case 'binding-needs-reapproval':
-        if (rejection.marksStaleBindings !== false) {
+        if (!rejection.publishedRealmURL) {
           await markNeedsReapproval(
             dbAdapter,
             check.binding.id,
@@ -1615,6 +1619,16 @@ async function markNeedsReapproval(
   ]);
 }
 
+// How a call fills its slots. `publishedRealmURL` is set for a call made on a
+// published realm, whose lookup names the realm it was published from, where
+// its bindings are: a refusal it is told, and a use recorded for it, name the
+// published realm, and a binding approved for a later request than the
+// published copy sends refuses the call and stays approved for the source.
+export interface FillOptions {
+  probeIntervalMs?: number;
+  publishedRealmURL?: string;
+}
+
 // Fills every slot of a `callApi` request from its binding: the key's value
 // opened from the binding's grant, under the destination the grant stored,
 // with the slot's transform applied. A grant that is gone, belongs to another
@@ -1623,15 +1637,6 @@ async function markNeedsReapproval(
 // fills only the call that claims its probe; every other is refused
 // `credential-rejected`. Each slot reports its grant, so the sender can act on
 // the vendor's answer.
-// How a call fills its slots. `marksStaleBindings: false` is for a caller
-// whose request may be older than the one its bindings were approved for, such
-// as a published realm's snapshot of its source's code: a mismatch refuses its
-// call and leaves the binding approved for the source.
-export interface FillOptions {
-  probeIntervalMs?: number;
-  marksStaleBindings?: boolean;
-}
-
 export async function fillSlots(
   dbAdapter: DBAdapter,
   // Read only once a binding's grant is opened, so a slot nobody approved is
@@ -1647,7 +1652,11 @@ export async function fillSlots(
     return await fillCheckedSlots(dbAdapter, keyring, lookup, options);
   } catch (error) {
     if (error instanceof OperationFailure) {
-      await recordFillRefusal(dbAdapter, lookup, error);
+      await recordFillRefusal(
+        dbAdapter,
+        { ...lookup, realmURL: options.publishedRealmURL ?? lookup.realmURL },
+        error,
+      );
     }
     throw error;
   }
@@ -1659,19 +1668,27 @@ async function fillCheckedSlots(
   lookup: CallApiSlotLookup,
   {
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
-    marksStaleBindings,
+    publishedRealmURL,
   }: FillOptions,
 ): Promise<CallApiFilledSlot[]> {
   let filled: CallApiFilledSlot[] = [];
   for (let checked of await checkedBindings(dbAdapter, lookup, {
     probeIntervalMs,
     claimProbe: true,
-    ...(marksStaleBindings === false ? { marksStaleBindings } : {}),
+    ...(publishedRealmURL ? { publishedRealmURL } : {}),
   })) {
     // A refusal filling this slot, from an unusable grant or a credential
     // whose token can't be minted, is this binding's share's or key's.
     try {
-      filled.push(await fillCheckedSlot(dbAdapter, keyring, lookup, checked));
+      filled.push(
+        await fillCheckedSlot(
+          dbAdapter,
+          keyring,
+          lookup,
+          checked,
+          publishedRealmURL ?? lookup.realmURL,
+        ),
+      );
     } catch (error) {
       if (error instanceof OperationFailure && !subjectOfRefusal(error)) {
         refusedFrom(limitSubjectOf(checked.binding), error);
@@ -1687,6 +1704,8 @@ async function fillCheckedSlot(
   keyring: () => SecretsKeyring,
   lookup: CallApiSlotLookup,
   { slot, binding, probe, keyProbe }: CheckedBinding,
+  // The realm the caller invoked, which a refusal names.
+  invokedRealmURL: string,
 ): Promise<CallApiFilledSlot> {
   let opened: Awaited<ReturnType<typeof openGrantForSending>>;
   let ring = keyring();
@@ -1709,13 +1728,13 @@ async function fillCheckedSlot(
       throw error;
     }
     throw new OperationFailure(
-      notApproved(lookup.operation, lookup.request, lookup.realmURL),
+      notApproved(lookup.operation, lookup.request, invokedRealmURL),
     );
   }
   let bindingKey = binding.key_id ?? binding.share_key_id;
   if (opened.keyId !== bindingKey) {
     throw new OperationFailure(
-      notApproved(lookup.operation, lookup.request, lookup.realmURL),
+      notApproved(lookup.operation, lookup.request, invokedRealmURL),
     );
   }
   // A key that mints its access tokens sends the one it mints now; its
