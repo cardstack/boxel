@@ -465,9 +465,13 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     everyone who opens a card that uses it. This is the first
                     time opened cards can use this share, so set it to what your
                     plan with the service allows.</span>
-                  <span class='note budget-note' data-test-approve-budget-more>
+                  <span
+                    class='note budget-note budget-more'
+                    data-test-approve-budget-more
+                  >
                     Change its other limits on
                     <a
+                      class='limits-link'
                       href={{this.shareLimitsURL share}}
                       target='_blank'
                       rel='noopener noreferrer'
@@ -565,6 +569,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .budget-note {
         display: block;
+      }
+      .budget-more {
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .limits-link {
+        display: inline;
+        text-decoration: underline;
+      }
+      .limits-link:hover {
+        color: var(--foreground);
       }
       .add-key {
         width: fit-content;
