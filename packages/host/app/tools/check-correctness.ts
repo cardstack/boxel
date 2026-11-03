@@ -4,9 +4,10 @@ import {
   isCardDocumentString,
   isCardErrorJSONAPI,
   rri,
+  SupportedMimeType,
+  X_BOXEL_LINK_SHAPE_HEADER,
   type CardErrorJSONAPI,
-  type RenderResponse,
-  type SerializedError,
+  type RenderErrorSummary,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -30,23 +31,8 @@ import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 
-// How many instances of an edited module a check renders. Each one is a full
-// prerender visit, so this bounds what a module check adds.
-const maxInstanceRenders = 3;
-
-// The formats a card render produces, in the order the prerenderer renders
-// them, with the member of the render response that holds each one. The
-// prerenderer reports the first error a render hits and leaves the HTML of a
-// format that threw empty, so the first format with no HTML is the one the
-// error came from.
-const renderedFormats = [
-  ['isolated', 'isolatedHTML'],
-  ['head', 'headHTML'],
-  ['atom', 'atomHTML'],
-  ['markdown', 'markdown'],
-  ['fitted', 'fittedHTML'],
-  ['embedded', 'embeddedHTML'],
-] as const;
+// How many instances of an edited module a check reads render errors for.
+const maxInstanceChecks = 10;
 
 // An index event strips `.json` from every file it names, so a card instance
 // appears as its URL with no extension, and a name with an extension is some
@@ -141,7 +127,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     if (nonCardJsonError) {
       errors = [nonCardJsonError];
     } else if (targetType === 'file' && input.targetRef.endsWith('.gts')) {
-      errors = await this.collectModuleErrors(input.targetRef, roomId);
+      ({ errors, warnings } = await this.collectModuleErrors(
+        input.targetRef,
+        roomId,
+      ));
     } else if (targetType === 'card') {
       if (!cardId) {
         throw new Error('Card correctness checks require a targetRef.');
@@ -266,17 +255,20 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   private async collectModuleErrors(
     targetRef: string,
     roomId: string,
-  ): Promise<string[]> {
+  ): Promise<{ errors: string[]; warnings: string[] }> {
     let moduleInfo = this.moduleInfoFromFile(targetRef);
     if (!moduleInfo) {
-      return [
-        `${targetRef}: Unable to determine module URL or realm for correctness check`,
-      ];
+      return {
+        errors: [
+          `${targetRef}: Unable to determine module URL or realm for correctness check`,
+        ],
+        warnings: [],
+      };
     }
 
     let { moduleURL, realmURL, fileURL } = moduleInfo;
 
-    let invalidations =
+    let indexed =
       await this.toolService.waitForInvalidationAfterAIAssistantRequest(
         roomId,
         fileURL.href,
@@ -284,38 +276,67 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       );
 
     if (await this.isEmptyFileContent(targetRef)) {
-      return [];
+      return { errors: [], warnings: [] };
     }
 
     let errorMessage = await this.prerenderModule(moduleURL, realmURL);
 
     if (errorMessage) {
-      return [errorMessage];
+      return { errors: [errorMessage], warnings: [] };
     }
 
     // A module that loads can still break the cards that use it: a template
     // or a computed field throws only when an instance renders. The write's
-    // index pass reindexed those instances, so its invalidations name them.
-    // Without a tracked write there is nothing to render. A render can't tell
-    // an error the edit caused from one the instance already had, so an
-    // instance that already failed to render fails the check as well: either
-    // way it is a card of this module that doesn't render.
-    let instanceHrefs = await this.instancesToRender(
-      invalidations ?? [],
+    // index pass reindexed those instances, so its invalidations name them,
+    // and the render job it spawned renders them in every format. An error
+    // lands on an instance's document once that job has rendered it, so the
+    // check waits for the job and reads each instance's errors from its
+    // document. Without a tracked write, or an index event naming its
+    // generation, there is nothing to wait for. A read can't tell an error the
+    // edit caused from one the instance already had, so an instance that
+    // already failed to render fails the check as well: either way it is a
+    // card of this module that doesn't render.
+    if (indexed?.generation === undefined) {
+      return { errors: [], warnings: [] };
+    }
+    let instanceHrefs = await this.instancesToCheck(
+      indexed.invalidations,
       roomId,
     );
-    let renderErrors = await Promise.all(
-      instanceHrefs.map((href) => this.renderInstance(href, realmURL)),
+    if (instanceHrefs.length === 0) {
+      return { errors: [], warnings: [] };
+    }
+    let rendered = await this.toolService.waitForRenderedHTML(
+      realmURL,
+      instanceHrefs.map((href) => `${href}.json`),
+      indexed.generation,
+      cardIndexingTimeout,
     );
-    return renderErrors.filter((error): error is string => Boolean(error));
+    let errors: string[] = [];
+    let warnings: string[] = [];
+    await Promise.all(
+      instanceHrefs.map(async (href) => {
+        if (!rendered.has(`${href}.json`)) {
+          warnings.push(
+            `${this.network.virtualNetwork.unresolveURL(href)}: not checked, because it had not been rendered with the edited module ${Math.round(cardIndexingTimeout / 1000)}s after the write`,
+          );
+          return;
+        }
+        let instanceError = await this.instanceErrorOf(href);
+        if (instanceError) {
+          errors.push(instanceError);
+        }
+      }),
+    );
+    return { errors, warnings };
   }
 
   // The card instances among a write's invalidations, the ones the user is
-  // looking at first, capped at `maxInstanceRenders`. A name with no extension
+  // looking at first, capped at `maxInstanceChecks`. A name with no extension
   // can still be a JSON file that is not a card, a file with no extension, or
   // an instance deleted after the write was indexed, so a candidate counts
   // only once its source reads as a card document.
-  private async instancesToRender(
+  private async instancesToCheck(
     invalidations: string[],
     roomId: string,
   ): Promise<string[]> {
@@ -328,8 +349,8 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       .filter(hasNoExtension)
       .sort((a, b) => rank(a) - rank(b));
     let instances: string[] = [];
-    while (candidates.length > 0 && instances.length < maxInstanceRenders) {
-      let batch = candidates.splice(0, maxInstanceRenders - instances.length);
+    while (candidates.length > 0 && instances.length < maxInstanceChecks) {
+      let batch = candidates.splice(0, maxInstanceChecks - instances.length);
       let found = await Promise.all(
         batch.map((href) => this.checkIfFileIsACardInstance(`${href}.json`)),
       );
@@ -359,71 +380,43 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return hrefs;
   }
 
-  // Renders the instance in every format the indexer renders, and describes
-  // the first error the render hit.
-  private async renderInstance(
-    cardHref: string,
-    realmURL: string,
-  ): Promise<string | undefined> {
+  // What went wrong for the instance once the edit was indexed and rendered:
+  // the error its index visit recorded, which the realm answers with in place
+  // of the document, or the error its current render recorded, which the
+  // document carries as `meta.renderError`. A read that fails without a card
+  // error says nothing about the instance, so it is logged rather than
+  // reported.
+  private async instanceErrorOf(cardHref: string): Promise<string | undefined> {
     let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
-    let render = await this.prerenderCard(cardId, cardHref, realmURL);
-    let error = render?.error?.error;
-    if (!render || !error) {
-      return undefined;
-    }
-    let format = renderedFormats.find(([, member]) => render[member] == null);
-    let where = format ? `${cardId} (${format[0]} format)` : cardId;
-    return `${where}: ${this.describeRenderError(error)}`;
-  }
-
-  // A render request that fails says nothing about the instance, so it is
-  // logged rather than reported.
-  private async prerenderCard(
-    cardId: string,
-    cardHref: string,
-    realmURL: string,
-  ): Promise<RenderResponse | undefined> {
     try {
-      let prerenderURL = new URL('/_prerender-card', this.realmServer.url);
-      let response = await this.realmServer.authedFetch(prerenderURL.href, {
-        method: 'POST',
+      let response = await this.network.authedFetch(rri(cardHref), {
         headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
+          Accept: SupportedMimeType.CardJson,
+          [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only',
         },
-        body: JSON.stringify({
-          data: {
-            type: 'prerender-card-request',
-            attributes: {
-              realm: realmURL,
-              url: `${cardHref}.json`,
-            },
-          },
-        }),
       });
+      let body = await response.json().catch(() => undefined);
       if (!response.ok) {
-        let text = await response.text().catch(() => '');
+        let error = body?.errors?.[0];
+        if (response.status !== 404 && isCardErrorJSONAPI(error)) {
+          return this.describeCardError(cardId, error);
+        }
         console.warn(
-          `CheckCorrectnessTool: render of ${cardId} failed (${response.status}) ${text}`,
+          `CheckCorrectnessTool: reading ${cardId} for its errors failed (${response.status})`,
         );
         return undefined;
       }
-      return (await response.json())?.data?.attributes;
+      let renderError: RenderErrorSummary | undefined = body?.meta?.renderError;
+      return renderError
+        ? this.describeCardError(cardId, renderError)
+        : undefined;
     } catch (error) {
-      console.warn(`CheckCorrectnessTool: render of ${cardId} threw`, error);
+      console.warn(
+        `CheckCorrectnessTool: reading ${cardId} for its errors threw`,
+        error,
+      );
       return undefined;
     }
-  }
-
-  private describeRenderError(error: SerializedError): string {
-    let pieces = [error.title, error.message]
-      .filter((part): part is string => typeof part === 'string')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
-    if (pieces.length >= 2 && pieces[0] === pieces[1]) {
-      pieces = [pieces[0]];
-    }
-    return pieces.length > 0 ? pieces.join(' - ') : 'Unknown render error';
   }
 
   // The prerender request and the indexing wait both speak URLs: the
@@ -514,7 +507,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     }
   }
 
-  private describeCardError(cardId: string, error: CardErrorJSONAPI): string {
+  private describeCardError(
+    cardId: string,
+    error: { title?: string; message?: string },
+  ): string {
     let pieces = [error.title, error.message]
       .filter((part): part is string => typeof part === 'string')
       .map((part) => part.trim())
