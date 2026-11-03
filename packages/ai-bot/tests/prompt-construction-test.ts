@@ -49,10 +49,13 @@ import {
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
+  currentTurnMessageMedia,
   currentTurnToolResultMedia,
+  MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
   MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+  MEDIA_NOT_IN_HISTORY_NOTE,
   getAttachedFiles,
   getPromptParts,
   getRelevantCards,
@@ -8011,9 +8014,24 @@ ${patchedFileSource}
     let promptOnNextTurn = await buildPromptForModel(
       [
         firstMessage,
+        {
+          type: 'm.room.message',
+          event_id: '2',
+          origin_server_ts: 2,
+          content: {
+            msgtype: 'm.text',
+            format: 'org.matrix.custom.html',
+            body: 'It shows a diagram.',
+            isStreamingFinished: true,
+          },
+          sender: '@aibot:localhost',
+          room_id: 'room1',
+          unsigned: { age: 1000, transaction_id: '2' },
+          status: EventStatus.SENT,
+        } as unknown as DiscreteMatrixEvent,
         userImageMessage(
-          '2',
-          2,
+          '3',
+          3,
           'And this one?',
           'second.png',
           'http://test.com/second-uploaded.png',
@@ -8069,6 +8087,276 @@ ${patchedFileSource}
       ),
       'an older message renders byte-identical text once it stops being current',
     );
+  });
+
+  module('message media of the current turn', () => {
+    type AttachedFile = {
+      sourceUrl?: string;
+      url: string;
+      name: string;
+      contentType: string;
+      contentSize?: number;
+    };
+
+    let png = (name: string, contentSize: number | 'unknown' = 1024) => {
+      let file: AttachedFile = {
+        sourceUrl: `http://test.com/my-realm/${name}`,
+        url: `http://test.com/${name}-uploaded`,
+        name,
+        contentType: 'image/png',
+        contentSize: contentSize === 'unknown' ? undefined : contentSize,
+      };
+      mockResponses.set(file.url, { ok: true, text: `bytes-of-${name}` });
+      return file;
+    };
+
+    let dataUrlOf = (file: AttachedFile) =>
+      `data:image/png;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
+
+    let userMessage = (
+      eventId: string,
+      ts: number,
+      body: string,
+      attachedFiles: AttachedFile[] = [],
+    ) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: {
+            context: { tools: [], submode: 'code', functions: [] },
+            attachedFiles,
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let botAnswer = (
+      eventId: string,
+      ts: number,
+      body: string,
+      {
+        isCanceled = false,
+        isStreamingFinished = true,
+      }: { isCanceled?: boolean; isStreamingFinished?: boolean } = {},
+    ) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          isStreamingFinished,
+          ...(isCanceled ? { isCanceled: true } : {}),
+          data: { context: { tools: [], functions: [] } },
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let buildPrompt = (history: DiscreteMatrixEvent[]) =>
+      buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+    let trailingParts = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content) ? (content as any[]) : [];
+    };
+
+    let imageUrls = (prompt: { content?: unknown }[]) =>
+      trailingParts(prompt)
+        .filter((p) => p.type === 'image_url')
+        .map((p) => p.image_url.url);
+
+    let trailingText = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
+    };
+
+    // A history message as it goes on the wire, without the cache marker,
+    // which is allowed to move.
+    let wireBytes = (message: unknown) =>
+      JSON.stringify(message, (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      );
+
+    test('an image on a message whose answer was canceled reaches the model with the follow-up', async () => {
+      let sample = png('sample.png');
+      let messageA = userMessage('1', 1, 'Build an app from this image', [
+        sample,
+      ]);
+      let promptForA = await buildPrompt([messageA]);
+      let promptForB = await buildPrompt([
+        messageA,
+        botAnswer('2', 2, '', { isCanceled: true }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(promptForB), [dataUrlOf(sample)]);
+      let parts = trailingParts(promptForB);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        'Attached to a user message: sample.png (http://test.com/my-realm/sample.png)',
+        'a label naming the file precedes the image',
+      );
+      assert.strictEqual(
+        wireBytes(promptForB[1]),
+        wireBytes(promptForA[1]),
+        'message A serializes identically once a follow-up joins its turn',
+      );
+    });
+
+    test("a follow-up sent before the bot starts answering keeps both messages' images, oldest first", async () => {
+      let first = png('first.png');
+      let second = png('second.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Here is the first image', [first]),
+        userMessage('2', 2, 'And the second one', [second]),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(first),
+        dataUrlOf(second),
+      ]);
+    });
+
+    test("an answer still streaming leaves the earlier message's image in the turn", async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Looking at', { isStreamingFinished: false }),
+        userMessage('3', 3, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(sample)]);
+    });
+
+    test('an image from an answered turn stays out of the prompt, and its metadata says its content is not there', async () => {
+      let sample = png('sample.png');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Build an app from this image', [sample]),
+        botAnswer('2', 2, 'Here is your app.'),
+        userMessage('3', 3, 'Now make the title bigger'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), [], 'no image rides the request');
+      assert.notOk(
+        trailingText(prompt).includes('sample.png'),
+        'the trailing message does not name the answered image',
+      );
+      assert.ok(
+        messageText(prompt[1]).includes(
+          `[sample.png](http://test.com/my-realm/sample.png): [image/png, 1024 bytes] ${MEDIA_NOT_IN_HISTORY_NOTE}`,
+        ),
+        'the history metadata says the content is not in the message',
+      );
+    });
+
+    test('the note naming a left-out file asks the user to attach it again', async () => {
+      let sizeless = png('sizeless.png', 'unknown');
+      let prompt = await buildPrompt([
+        userMessage('1', 1, 'Here is the first image', [sizeless]),
+        userMessage('2', 2, 'Put it in my other workspace'),
+      ]);
+
+      assert.deepEqual(imageUrls(prompt), []);
+      let text = trailingText(prompt);
+      assert.ok(
+        text.includes(
+          "The following files attached to the user's messages were not sent to the model, so you cannot see them: sizeless.png (http://test.com/my-realm/sizeless.png): its size is unknown.",
+        ),
+        'the note names the file and the reason',
+      );
+      assert.ok(
+        text.includes('ask the user to attach it again'),
+        'the note tells the model to ask for the file',
+      );
+    });
+
+    test("currentTurnMessageMedia always keeps the newest message's media and fits earlier media in the budget, newest first", () => {
+      let quarter = MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / 4;
+      let old = png('old.png', 2 * quarter);
+      let sizeless = png('sizeless.png', 'unknown');
+      let recent = png('recent.png', quarter);
+      let newest = png('newest.png', 2 * quarter);
+      let names = (files: { name?: string }[]) => files.map((f) => f.name);
+
+      let media = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [old, sizeless, recent]),
+          botAnswer('2', 2, '', { isCanceled: true }),
+          userMessage('3', 3, 'Second', [newest]),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(names(media.included), ['recent.png', 'newest.png']);
+      assert.deepEqual(
+        media.omitted.map(({ file, reason }) => [file.name, reason]),
+        [
+          [
+            'old.png',
+            `newer attachments already fill the ${MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES / (1024 * 1024)} MiB sent per turn`,
+          ],
+          ['sizeless.png', 'its size is unknown'],
+        ],
+      );
+
+      let oversized = png(
+        'oversized.png',
+        MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES + 1,
+      );
+      let tooMuch = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [recent]),
+          userMessage('2', 2, 'Second', [oversized]),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(
+        names(tooMuch.included),
+        ['oversized.png'],
+        'the newest message is sent even over the budget',
+      );
+      assert.deepEqual(names(tooMuch.omitted.map(({ file }) => file)), [
+        'recent.png',
+      ]);
+
+      let withoutImageInput = currentTurnMessageMedia(
+        [
+          userMessage('1', 1, 'First', [sizeless]),
+          userMessage('2', 2, 'Second', [oversized]),
+        ],
+        '@aibot:localhost',
+        ['file'],
+      );
+      assert.deepEqual(
+        names(withoutImageInput.included),
+        ['sizeless.png', 'oversized.png'],
+        'files the model cannot take use none of the budget; the modality note names them',
+      );
+    });
   });
 
   module('tool-result media', () => {
@@ -8823,17 +9111,15 @@ ${patchedFileSource}
         dataUrlOf(captured),
       ]);
       let labels = trailingParts(prompt)
-        .filter(
-          (p) =>
-            p.type === 'text' && p.text.startsWith('Attached to a tool result'),
-        )
+        .filter((p) => p.type === 'text' && p.text.startsWith('Attached to'))
         .map((p) => p.text);
       assert.deepEqual(
         labels,
         [
+          'Attached to a user message: attached.png (https://example.com/attached.png)',
           'Attached to a tool result: captured.png (https://example.com/captured.png)',
         ],
-        "only the tool result's image is labelled",
+        'each image is labelled with where it came from',
       );
     });
 

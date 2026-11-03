@@ -134,11 +134,13 @@ function getLog() {
  *      size, or by the downloaded text when it declares none) is sent as
  *      metadata with a note that its markup was left out.
  *    - Media types are listed in history as metadata ([contentType,
- *      contentSize bytes]); their bodies are embedded only for the
- *      current turn — the current human message's attachments and those
- *      of every tool result since it (see currentTurnToolResultMedia) — as
- *      native content parts on the volatile trailing message (after the
- *      history cache breakpoint):
+ *      contentSize bytes], with a fixed note that the content is not in
+ *      that message); their bodies are embedded only for the current turn
+ *      — the attachments of every human message since the bot's last
+ *      completed answer (see currentTurnMessageMedia) and those of every
+ *      tool result since the last human message (see
+ *      currentTurnToolResultMedia) — as native content parts on the
+ *      volatile trailing message (after the history cache breakpoint):
  *      - Supported images (PNG, JPEG, WEBP, GIF) → `image_url` parts.
  *      - PDF (application/pdf) → `file` parts with base64 data URL in
  *        `file_data`.
@@ -890,6 +892,15 @@ function svgTooLarge(
   };
 }
 
+// Follows each media file's metadata wherever a message lists it. Media
+// bodies ride only on the last message of a request, and only while their
+// turn is open (see buildCurrentTurnMediaParts), so a model reading history
+// alone cannot tell whether it has seen a file. The note is the same at
+// every age of the message: a note that changed once the turn was answered
+// would rewrite already-sent history bytes and reset the cache prefix.
+export const MEDIA_NOT_IN_HISTORY_NOTE =
+  '(its content is not in this message; you can see it only if the last message of this request includes it)';
+
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
 ): string {
@@ -920,7 +931,9 @@ export function attachedFilesToMessage(
         ]
           .filter(Boolean)
           .join(', ');
-        return `${hyperlink}: [${meta}]`;
+        return requiredModality(f.contentType)
+          ? `${hyperlink}: [${meta}] ${MEDIA_NOT_IN_HISTORY_NOTE}`
+          : `${hyperlink}: [${meta}]`;
       } else {
         return `${hyperlink}`;
       }
@@ -2352,12 +2365,9 @@ export async function buildPromptForModel(
   // The correctness-summary instruction applies to this request only, so it
   // rides the volatile trailing message; a history entry that vanishes on
   // the next request would both churn the history and waste the marker.
-  let currentUserMessageEvent = findLast(history, (event) =>
-    isHumanMessage(event, aiBotUserId),
-  ) as MatrixEventWithBoxelContext | undefined;
   let { mediaParts, unsupportedNote } = await buildCurrentTurnMediaParts(
     client,
-    currentUserMessageEvent,
+    currentTurnMessageMedia(history, aiBotUserId, inputModalities),
     inputModalities,
     currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
   );
@@ -2375,7 +2385,7 @@ export async function buildPromptForModel(
   ]
     .filter(Boolean)
     .join('\n\n');
-  // The current message's media parts ride here too — see
+  // The current turn's media parts ride here too — see
   // buildCurrentTurnMediaParts for why they never ride in history.
   messages.push(
     mediaParts.length
@@ -2800,12 +2810,115 @@ export const MAX_TOOL_RESULT_MEDIA_FILE_BYTES = Math.floor(
 );
 export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES = 16 * 1024 * 1024;
 
-export interface CurrentTurnToolResultMedia {
+// The bytes of media the human messages of one turn embed, counted across
+// all of them: the per-turn budget tool-result media get, kept apart from
+// theirs. The newest message's own media are always sent, so only media from
+// the turn's earlier messages are ever left out to stay within it.
+export const MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES =
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES;
+
+export interface CurrentTurnMedia {
   // The files to embed, oldest first.
   included: SerializedFileDef[];
   // Media files the limits left out, each with the reason, so the model can
   // be told it cannot see them.
   omitted: { file: SerializedFileDef; reason: string }[];
+}
+
+// A bot message that answered the human messages before it. An answer that
+// was canceled (the user stopped it, or wrote again before it finished) or
+// is still streaming answered nothing, so the messages before it stay part of
+// the turn. An answer that ended in an error counts as answered: sending the
+// same media again would repeat whatever failed.
+function isCompletedAnswer(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): boolean {
+  if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
+    return false;
+  }
+  let { isStreamingFinished } = event.content as {
+    isStreamingFinished?: boolean;
+  };
+  return (
+    isStreamingFinished !== false &&
+    !isCanceledAnswer(event as CardMessageEvent)
+  );
+}
+
+// The human messages of the current turn, oldest first: the last message a
+// human sent and every human message before it back to the bot's last
+// completed answer. A user who writes again before the bot has answered adds
+// to the same turn, so what they attached to the earlier message still
+// reaches the model.
+function currentTurnHumanMessages(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): MatrixEventWithBoxelContext[] {
+  let messages: MatrixEventWithBoxelContext[] = [];
+  let lastHumanMessageIndex = findLastIndex(history, (event) =>
+    isHumanMessage(event, aiBotUserId),
+  );
+  for (let i = lastHumanMessageIndex; i >= 0; i--) {
+    let event = history[i];
+    if (isHumanMessage(event, aiBotUserId)) {
+      messages.unshift(event as MatrixEventWithBoxelContext);
+    } else if (isCompletedAnswer(event, aiBotUserId)) {
+      break;
+    }
+  }
+  return messages;
+}
+
+// The media files (images, PDFs, audio, video) attached to the current
+// turn's human messages (see currentTurnHumanMessages), oldest first. The
+// newest message's media are always included. Media from the turn's earlier
+// messages are added newest first while the turn's message media stay within
+// MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES; an earlier file with no recorded size
+// is left out, since its bytes cannot be counted against the budget. Files
+// the active model cannot take (per `inputModalities`, when given) use none
+// of the budget: they are included, and buildCurrentTurnMediaParts names
+// them in its note instead of sending them. Text-based attachments are
+// excluded: their content rides in the history message that attached them.
+export function currentTurnMessageMedia(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  inputModalities?: string[],
+): CurrentTurnMedia {
+  let messages = currentTurnHumanMessages(history, aiBotUserId);
+  let included: SerializedFileDef[] = [];
+  let omitted: CurrentTurnMedia['omitted'] = [];
+  let totalBytes = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    let isNewestMessage = i === messages.length - 1;
+    let attachedFiles: SerializedFileDef[] =
+      messages[i].content?.data?.attachedFiles ?? [];
+    let mediaFiles = attachedFiles
+      .filter((file) => file.url && requiredModality(file.contentType))
+      .map(toFileDefMetadata);
+    for (let file of mediaFiles.reverse()) {
+      let modality = requiredModality(file.contentType)!;
+      let sendable = !inputModalities || inputModalities.includes(modality);
+      let size = file.contentSize;
+      let reason: string | undefined;
+      if (sendable && !isNewestMessage) {
+        if (typeof size !== 'number') {
+          reason = 'its size is unknown';
+        } else if (totalBytes + size > MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES) {
+          reason = `newer attachments already fill the ${formatMiB(MAX_CURRENT_TURN_MESSAGE_MEDIA_BYTES)} sent per turn`;
+        }
+      }
+      if (reason) {
+        omitted.unshift({ file, reason });
+        continue;
+      }
+      included.unshift(file);
+      if (sendable && typeof size === 'number') {
+        totalBytes += size;
+      }
+    }
+  }
+  return { included, omitted };
 }
 
 // The media files (images, PDFs, audio, video) attached to the tool results
@@ -2825,7 +2938,7 @@ export function currentTurnToolResultMedia(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   inputModalities?: string[],
-): CurrentTurnToolResultMedia {
+): CurrentTurnMedia {
   let lastHumanMessageIndex = findLastIndex(history, (event) =>
     isHumanMessage(event, aiBotUserId),
   );
@@ -2852,7 +2965,7 @@ export function currentTurnToolResultMedia(
     }
   }
   let included: SerializedFileDef[] = [];
-  let omitted: CurrentTurnToolResultMedia['omitted'] = [];
+  let omitted: CurrentTurnMedia['omitted'] = [];
   let totalBytes = 0;
   for (let file of [...candidates].reverse()) {
     let size = file.contentSize;
@@ -2912,12 +3025,12 @@ function toolResultMediaDownloadUrl(
 
 // Downloads the current turn's media attachments (images, PDFs, audio,
 // video) and renders them as native content parts for the volatile trailing
-// message: the media attached to the current human message, then the media
-// attached to the current turn's tool results (see
-// currentTurnToolResultMedia), each of the latter preceded by a text part
-// naming the file so the model can tell which result an image came from.
-// Tool-result media the limits left out are named in the returned note, as
-// are files the model's input modalities exclude.
+// message: the media attached to the current turn's human messages (see
+// currentTurnMessageMedia), then the media attached to its tool results (see
+// currentTurnToolResultMedia). Each is preceded by a text part naming the
+// file, so the model can match it to the metadata history lists and tell
+// which message or result it came from. Media the limits left out are named
+// in the returned note, as are files the model's input modalities exclude.
 // Media bodies never ride in history: embedding them there would grow the
 // request by every media file ever attached — re-downloaded and re-encoded
 // on each turn, with nothing bounding it — while gating on "is this the
@@ -2928,17 +3041,14 @@ function toolResultMediaDownloadUrl(
 // stable metadata (see buildAttachmentsMessagePart).
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
-  matrixEvent: MatrixEventWithBoxelContext | undefined,
+  messageMedia: CurrentTurnMedia = { included: [], omitted: [] },
   inputModalities?: string[],
-  toolResultMedia: CurrentTurnToolResultMedia = { included: [], omitted: [] },
+  toolResultMedia: CurrentTurnMedia = { included: [], omitted: [] },
 ): Promise<{ mediaParts: ContentPart[]; unsupportedNote?: string }> => {
   let mediaParts: ContentPart[] = [];
-  let messageFiles = matrixEvent
-    ? await getAttachedFiles(client, matrixEvent)
-    : [];
   let unsupportedFiles: { name: string; contentType: string }[] = [];
   let files = [
-    ...messageFiles.map((file) => ({ file, fromToolResult: false })),
+    ...messageMedia.included.map((file) => ({ file, fromToolResult: false })),
     // Newest first, so the per-turn byte budget keeps the newest media;
     // their parts are put back in chronological order below.
     ...[...toolResultMedia.included].reverse().map((file) => ({
@@ -2947,7 +3057,7 @@ export const buildCurrentTurnMediaParts = async (
     })),
   ];
   let toolResultPartGroups: ContentPart[][] = [];
-  let omittedAtDownload: CurrentTurnToolResultMedia['omitted'] = [];
+  let omittedAtDownload: CurrentTurnMedia['omitted'] = [];
   // The bytes tool-result media actually downloaded this turn; declared
   // sizes chose the files, but the budget holds on what arrives.
   let toolResultBytes = 0;
@@ -3052,10 +3162,10 @@ export const buildCurrentTurnMediaParts = async (
       // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
-    if (fromToolResult && mediaParts.length > partCountBefore) {
+    if (mediaParts.length > partCountBefore) {
       mediaParts.splice(partCountBefore, 0, {
         type: 'text',
-        text: `Attached to a tool result: ${mediaFileLabel(f)}`,
+        text: `${fromToolResult ? 'Attached to a tool result' : 'Attached to a user message'}: ${mediaFileLabel(f)}`,
       });
     }
     if (fromToolResult) {
@@ -3071,6 +3181,14 @@ export const buildCurrentTurnMediaParts = async (
       .join(', ');
     notes.push(
       `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`,
+    );
+  }
+  if (messageMedia.omitted.length > 0) {
+    let fileList = messageMedia.omitted
+      .map(({ file, reason }) => `${mediaFileLabel(file)}: ${reason}`)
+      .join('; ');
+    notes.push(
+      `Note: The following files attached to the user's messages were not sent to the model, so you cannot see them: ${fileList}. Do not guess at their contents; if you need one, ask the user to attach it again.`,
     );
   }
   let omitted = [...toolResultMedia.omitted, ...omittedAtDownload];
