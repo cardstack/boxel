@@ -10,6 +10,7 @@ import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
+  createPrerenderAuth,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -64,6 +65,96 @@ function ticketDocument(
   );
 }
 
+// A Milestone card module whose isolated template is `template`. A template
+// that calls `isoDay` gets it defined: it reads a DateField value as an ISO
+// date string, which it is not, so an instance with a date throws "Invalid
+// time value" when it renders.
+function milestoneModule(template: string) {
+  let helper = template.includes('isoDay')
+    ? `
+function isoDay(value: unknown) {
+  return new Date(value + 'T12:00:00Z').toISOString();
+}
+`
+    : '';
+  return `import { contains, field, CardDef, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
+${helper}
+export class Milestone extends CardDef {
+  static displayName = 'Milestone';
+  @field title = contains(StringField);
+  @field date = contains(DateField);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      ${template}
+    </template>
+  };
+}
+`;
+}
+
+function milestoneDocument(title: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { title, date: '2026-11-08' },
+      meta: { adoptsFrom: { module: '../milestone', name: 'Milestone' } },
+    },
+  };
+}
+
+// Answers the realm server's prerender endpoints with the in-browser
+// prerenderer the test realm indexes with, and records the cards it is asked
+// to render.
+function mountPrerenderEndpoints() {
+  let localIndexer = getService('local-indexer');
+  let realmServerURL = getService('realm-server').url;
+  let renderedCards: string[] = [];
+  getService('network').virtualNetwork.mount(
+    async (request: Request) => {
+      let { origin, pathname } = new URL(request.url);
+      if (
+        origin !== realmServerURL.origin ||
+        (pathname !== '/_prerender-module' && pathname !== '/_prerender-card')
+      ) {
+        return null;
+      }
+      let { realm, url } = (await request.json()).data.attributes;
+      let args = {
+        affinityType: 'realm' as const,
+        affinityValue: realm,
+        realm,
+        url,
+        auth: createPrerenderAuth('@testuser:localhost', {}),
+      };
+      let attributes;
+      if (pathname === '/_prerender-module') {
+        attributes = await localIndexer.prerenderer.prerenderModule(args);
+      } else {
+        renderedCards.push(url);
+        attributes = (
+          await localIndexer.prerenderer.prerenderVisit({
+            ...args,
+            renderOptions: { cardRender: true },
+          })
+        ).card;
+      }
+      return new Response(
+        JSON.stringify({
+          data: { type: 'prerender-result', id: url, attributes },
+        }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/vnd.api+json' },
+        },
+      );
+    },
+    { prepend: true },
+  );
+  return renderedCards;
+}
+
 // A run-realm-code script that replaces the whole content of the existing
 // file at `path`.
 function overwriteScript(path: string, content: string) {
@@ -98,6 +189,8 @@ module('Integration | tools | check-correctness', function (hooks) {
       ({ realm: testRealm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
+          'milestone.gts': milestoneModule('<h1>{{@model.title}}</h1>'),
+          'Milestone/launch.json': milestoneDocument('Product launch'),
           'pet.gts': `
           import { contains, field, CardDef } from "@cardstack/base/card-api";
           import StringField from "@cardstack/base/string";
@@ -416,6 +509,118 @@ module('Integration | tools | check-correctness', function (hooks) {
     } finally {
       virtualNetwork.removeRealmMapping(testRealmPrefix);
     }
+  });
+
+  // Edits milestone.gts through run-realm-code and checks it, the way a
+  // tool-written module is checked after the write.
+  async function checkMilestoneEdit(template: string) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let roomId = '!room:example.com';
+    await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: testRealmURL,
+      roomId,
+      code: overwriteScript('milestone.gts', milestoneModule(template)),
+    });
+    return await new CheckCorrectnessTool(toolService.toolContext).execute({
+      targetType: 'file',
+      targetRef: `${testRealmURL}milestone.gts`,
+      roomId,
+    });
+  }
+
+  test('reports an instance whose render a module edit breaks', async function (assert) {
+    mountPrerenderEndpoints();
+
+    let result = await checkMilestoneEdit(
+      '<h1>{{@model.title}}</h1><p>{{isoDay @model.date}}</p>',
+    );
+
+    assert.false(result.correct, 'the broken render fails the check');
+    assert.strictEqual(result.errors.length, 1, 'one error');
+    assert.ok(
+      result.errors[0].startsWith(
+        `${testRealmURL}Milestone/launch (isolated format): `,
+      ),
+      `the error names the instance and the format: ${result.errors[0]}`,
+    );
+    assert.ok(
+      result.errors[0].includes('Invalid time value'),
+      'the error carries the render error message',
+    );
+  });
+
+  test('passes a module edit whose instances render', async function (assert) {
+    let renderedCards = mountPrerenderEndpoints();
+
+    let result = await checkMilestoneEdit('<h2>{{@model.title}}</h2>');
+
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.true(result.correct, 'the edit passes');
+    assert.deepEqual(
+      renderedCards,
+      [`${testRealmURL}Milestone/launch.json`],
+      'the instance of the edited module is rendered',
+    );
+  });
+
+  test('passes a module edit with no instances', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let renderedCards = mountPrerenderEndpoints();
+    let roomId = '!room:example.com';
+
+    await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: testRealmURL,
+      roomId,
+      code: writeTextScript(
+        'listing.gts',
+        milestoneModule('<h1>{{@model.title}}</h1>').replace(
+          /Milestone/g,
+          'Listing',
+        ),
+      ),
+    });
+    let result = await new CheckCorrectnessTool(
+      toolService.toolContext,
+    ).execute({
+      targetType: 'file',
+      targetRef: `${testRealmURL}listing.gts`,
+      roomId,
+    });
+
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.true(result.correct, 'the module passes');
+    assert.deepEqual(renderedCards, [], 'no instance is rendered');
+  });
+
+  test('renders the instances open in the workspace first', async function (assert) {
+    let renderedCards = mountPrerenderEndpoints();
+    for (let name of ['a', 'b', 'c', 'd', 'z-open']) {
+      await testRealm.write(
+        `Milestone/${name}.json`,
+        JSON.stringify(milestoneDocument(`Milestone ${name}`)),
+      );
+    }
+    let openCardId = `${testRealmURL}Milestone/z-open`;
+    getService('operator-mode-state-service').restore({
+      stacks: [[{ id: openCardId, format: 'isolated' }]],
+    });
+
+    let result = await checkMilestoneEdit('<h2>{{@model.title}}</h2>');
+
+    assert.true(result.correct, 'the edit passes');
+    assert.strictEqual(
+      renderedCards.length,
+      3,
+      'the check renders at most three instances',
+    );
+    assert.ok(
+      renderedCards.includes(`${openCardId}.json`),
+      `the open instance is among those rendered: ${renderedCards.join(', ')}`,
+    );
   });
 
   test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {

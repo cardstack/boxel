@@ -5,6 +5,8 @@ import {
   isCardErrorJSONAPI,
   rri,
   type CardErrorJSONAPI,
+  type RenderResponse,
+  type SerializedError,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -16,7 +18,9 @@ import {
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
+import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -25,6 +29,32 @@ import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
+
+// How many instances of an edited module a check renders. Each one is a full
+// prerender visit, so this bounds what a module check adds.
+const maxInstanceRenders = 3;
+
+// The formats a card render produces, in the order the prerenderer renders
+// them, with the member of the render response that holds each one. The
+// prerenderer reports the first error a render hits and leaves the HTML of a
+// format that threw empty, so the first format with no HTML is the one the
+// error came from.
+const renderedFormats = [
+  ['isolated', 'isolatedHTML'],
+  ['head', 'headHTML'],
+  ['atom', 'atomHTML'],
+  ['markdown', 'markdown'],
+  ['fitted', 'fittedHTML'],
+  ['embedded', 'embeddedHTML'],
+] as const;
+
+// An index event spells a card instance as its URL without `.json`, and every
+// other file with its extension. A card whose name holds a dot reads as a file
+// here and is not rendered.
+function isCardInstanceHref(href: string): boolean {
+  let name = href.split('/').pop() ?? '';
+  return name.length > 0 && !name.includes('.');
+}
 
 export default class CheckCorrectnessTool extends HostBaseTool<
   typeof BaseToolModule.CheckCorrectnessInput,
@@ -36,6 +66,8 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
   @service declare private network: NetworkService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   description =
     'Run post-change correctness checks for a specific file or card instance.';
@@ -243,11 +275,12 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
     let { moduleURL, realmURL, fileURL } = moduleInfo;
 
-    await this.toolService.waitForInvalidationAfterAIAssistantRequest(
-      roomId,
-      fileURL.href,
-      cardIndexingTimeout,
-    );
+    let invalidations =
+      await this.toolService.waitForInvalidationAfterAIAssistantRequest(
+        roomId,
+        fileURL.href,
+        cardIndexingTimeout,
+      );
 
     if (await this.isEmptyFileContent(targetRef)) {
       return [];
@@ -255,11 +288,121 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
     let errorMessage = await this.prerenderModule(moduleURL, realmURL);
 
-    if (!errorMessage) {
-      return [];
+    if (errorMessage) {
+      return [errorMessage];
     }
 
-    return [errorMessage];
+    // A module that loads can still break the cards that use it: a template
+    // or a computed field throws only when an instance renders. The write's
+    // index pass reindexed those instances, so its invalidations name them.
+    // Without a tracked write there is nothing to render.
+    let instanceHrefs = this.instancesToRender(invalidations ?? [], roomId);
+    let renderErrors = await Promise.all(
+      instanceHrefs.map((href) => this.renderInstance(href, realmURL)),
+    );
+    return renderErrors.filter((error): error is string => Boolean(error));
+  }
+
+  // The card instances among a write's invalidations, the ones the user is
+  // looking at first, capped at `maxInstanceRenders`.
+  private instancesToRender(invalidations: string[], roomId: string): string[] {
+    let contextHrefs = this.contextCardHrefs(roomId);
+    let rank = (href: string) => {
+      let index = contextHrefs.indexOf(href);
+      return index === -1 ? contextHrefs.length : index;
+    };
+    return invalidations
+      .filter(isCardInstanceHref)
+      .sort((a, b) => rank(a) - rank(b))
+      .slice(0, maxInstanceRenders);
+  }
+
+  // The cards the user is looking at, spelled as an index event spells them:
+  // the ones open in the workspace, then the ones attached in the room, newest
+  // first.
+  private contextCardHrefs(roomId: string): string[] {
+    let ids: string[] = [...this.operatorModeStateService.getOpenCardIds()];
+    let messages = this.matrixService.roomResources.get(roomId)?.messages ?? [];
+    for (let message of [...messages].reverse()) {
+      ids.push(...(message.attachedCardIds ?? []));
+    }
+    let { virtualNetwork } = this.network;
+    let hrefs: string[] = [];
+    for (let id of ids) {
+      try {
+        hrefs.push(virtualNetwork.toURLHref(id).replace(/\.json$/, ''));
+      } catch {
+        // an id no realm resolves can't match an invalidation
+      }
+    }
+    return hrefs;
+  }
+
+  // Renders the instance in every format the indexer renders, and describes
+  // the first error the render hit.
+  private async renderInstance(
+    cardHref: string,
+    realmURL: string,
+  ): Promise<string | undefined> {
+    let cardId = this.network.virtualNetwork.unresolveURL(cardHref);
+    let render = await this.prerenderCard(cardId, cardHref, realmURL);
+    let error = render?.error?.error;
+    if (!render || !error) {
+      return undefined;
+    }
+    let format = renderedFormats.find(([, member]) => render[member] == null);
+    let where = format ? `${cardId} (${format[0]} format)` : cardId;
+    return `${where}: ${this.describeRenderError(error)}`;
+  }
+
+  // A render request that fails says nothing about the instance, so it is
+  // logged rather than reported.
+  private async prerenderCard(
+    cardId: string,
+    cardHref: string,
+    realmURL: string,
+  ): Promise<RenderResponse | undefined> {
+    try {
+      let prerenderURL = new URL('/_prerender-card', this.realmServer.url);
+      let response = await this.realmServer.authedFetch(prerenderURL.href, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'prerender-card-request',
+            attributes: {
+              realm: realmURL,
+              url: `${cardHref}.json`,
+            },
+          },
+        }),
+      });
+      if (!response.ok) {
+        let text = await response.text().catch(() => '');
+        console.warn(
+          `CheckCorrectnessTool: render of ${cardId} failed (${response.status}) ${text}`,
+        );
+        return undefined;
+      }
+      return (await response.json())?.data?.attributes;
+    } catch (error) {
+      console.warn(`CheckCorrectnessTool: render of ${cardId} threw`, error);
+      return undefined;
+    }
+  }
+
+  private describeRenderError(error: SerializedError): string {
+    let pieces = [error.title, error.message]
+      .filter((part): part is string => typeof part === 'string')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    if (pieces.length >= 2 && pieces[0] === pieces[1]) {
+      pieces = [pieces[0]];
+    }
+    return pieces.length > 0 ? pieces.join(' - ') : 'Unknown render error';
   }
 
   // The prerender request and the indexing wait both speak URLs: the

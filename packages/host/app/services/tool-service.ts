@@ -479,7 +479,9 @@ export default class ToolService extends Service {
       clientRequestId: string;
       roomId: string;
       targetHref: string;
-      deferred: Deferred<void>;
+      // Settles with the index event's invalidations, or with undefined when
+      // the wait ends without one (replaced by a newer write, reset, timed out).
+      deferred: Deferred<string[] | undefined>;
     }
   >();
   private aiAssistantInvalidationWaiters = new Map<
@@ -505,7 +507,7 @@ export default class ToolService extends Service {
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
-      invalidation.deferred.fulfill();
+      invalidation.deferred.fulfill(undefined);
     }
     this.aiAssistantInvalidations.clear();
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
@@ -568,8 +570,8 @@ export default class ToolService extends Service {
       return clientRequestId;
     }
 
-    let deferred = new Deferred<void>();
-    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    let deferred = new Deferred<string[] | undefined>();
+    this.aiAssistantInvalidations.get(key)?.deferred.fulfill(undefined);
     this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
@@ -596,13 +598,13 @@ export default class ToolService extends Service {
       }
       this.cleanupInvalidationWaiter(key);
       let current = this.aiAssistantInvalidations.get(key);
-      current?.deferred.fulfill();
+      current?.deferred.fulfill(event.invalidations);
     });
     let timeoutId = setTimeout(
       () => {
         this.cleanupInvalidationWaiter(key);
         let current = this.aiAssistantInvalidations.get(key);
-        current?.deferred.fulfill();
+        current?.deferred.fulfill(undefined);
         this.aiAssistantInvalidations.delete(key);
       },
       5 * 60 * 1000,
@@ -631,29 +633,39 @@ export default class ToolService extends Service {
     this.aiAssistantInvalidationWaiters.delete(key);
   }
 
+  // Waits for the index event of the room's last tracked write to the target,
+  // and returns that event's invalidations: every file the write's index pass
+  // reindexed, the target's dependents included. Returns undefined when there
+  // is no tracked write to wait for, or when the wait ends without the event.
   async waitForInvalidationAfterAIAssistantRequest(
     roomId: string,
     targetHref: string,
     timeoutMs?: number,
-  ): Promise<void> {
+  ): Promise<string[] | undefined> {
     if (!roomId || !targetHref) {
-      return;
+      return undefined;
     }
     let key = this.invalidationKey(roomId, targetHref);
     let existing = this.aiAssistantInvalidations.get(key);
     if (!existing) {
-      return;
+      return undefined;
     }
 
-    let invalidated = existing.deferred.promise.then(() => true);
+    let invalidated = existing.deferred.promise.then((invalidations) => ({
+      invalidations,
+    }));
     let settled = timeoutMs
-      ? await Promise.race([invalidated, delay(timeoutMs).then(() => false)])
+      ? await Promise.race([
+          invalidated,
+          delay(timeoutMs).then(() => undefined),
+        ])
       : await invalidated;
     // Only a real invalidation consumes the entry. On timeout the deferred is
     // still live, and a later caller must still be able to wait on it.
     if (settled) {
       this.aiAssistantInvalidations.delete(key);
     }
+    return settled?.invalidations;
   }
 
   public queueEventForToolProcessing(event: Partial<IEvent>) {
