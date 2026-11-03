@@ -10,6 +10,7 @@ import {
   CAPABILITY_CHECK_CAP,
   identifyCard,
   isResolvedCodeRef,
+  realmURL as realmURLMeta,
   rri,
   SupportedMimeType,
   type CapabilityAnswer,
@@ -251,10 +252,30 @@ export default class CapabilitiesService
     if (!id) {
       return undefined;
     }
-    let realmURL = this.realm.realmOf(rri(id));
+    let realmURL =
+      this.realm.realmOf(rri(id)) ?? this.#unregisteredRealm(target);
     return realmURL
       ? { realmURL, check: { target: id, operation } }
       : undefined;
+  }
+
+  // The realm of a card the realm service has not learned about yet. A
+  // signed-out visitor's page registers no realm of its own accord — a
+  // published site knows only the base realm — so a card served there is in a
+  // realm this session has never been told of, and nothing would be asked.
+  //
+  // A loaded card says which realm it came from, so that is asked directly;
+  // the check needs no session, since the realm answers an anonymous caller
+  // for itself. A bare URL carries no such note, so its realm is looked up in
+  // the background, and the read that comes after the lookup lands finds it
+  // known: `info()` is what starts that lookup, and reading it here subscribes
+  // the caller to the lookup's result.
+  #unregisteredRealm(target: CardDef | string): string | undefined {
+    if (typeof target !== 'string') {
+      return target[realmURLMeta]?.href;
+    }
+    this.realm.info(target);
+    return undefined;
   }
 
   #isStale(key: string): boolean {

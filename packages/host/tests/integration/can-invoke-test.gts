@@ -9,6 +9,9 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   CAPABILITY_CHECK_CAP,
+  isCardErrorJSONAPI,
+  realmURL as realmURLMeta,
+  rri,
   type CapabilityCheck,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -51,6 +54,8 @@ const realmUnderTest = {
   holding: undefined as Promise<void> | undefined,
   release: undefined as (() => void) | undefined,
   failing: false,
+  // The URLs whose realm the fake realm service was asked to look up.
+  lookedUp: [] as string[],
   // What the fake message service was asked to deliver, per realm.
   listeners: new Map<string, ((event: RealmEventContent) => void)[]>(),
   hold() {
@@ -91,6 +96,10 @@ class FakeNetwork extends Service {
 class FakeRealm extends Service {
   realmOf = (id: string) =>
     [REALM, OTHER].find((realm) => id.startsWith(realm));
+  info = (url: string) => {
+    realmUnderTest.lookedUp.push(url);
+    return {};
+  };
 }
 
 class FakeMessageService extends Service {
@@ -119,8 +128,11 @@ function indexed(realmURL: string, invalidations: string[]) {
   }
 }
 
-function cardAt(id: string): CardDef {
-  return { id } as unknown as CardDef;
+function cardAt(id: string, fromRealm?: string): CardDef {
+  return {
+    id,
+    ...(fromRealm ? { [realmURLMeta]: new URL(fromRealm) } : {}),
+  } as unknown as CardDef;
 }
 
 // The two services the capability check reaches the realm through are faked,
@@ -136,6 +148,7 @@ module('Integration | canInvoke', function (hooks) {
     realmUnderTest.holding = undefined;
     realmUnderTest.release = undefined;
     realmUnderTest.failing = false;
+    realmUnderTest.lookedUp = [];
     realmUnderTest.listeners = new Map();
     this.owner.register('service:network', FakeNetwork);
     this.owner.register('service:realm', FakeRealm);
@@ -245,7 +258,7 @@ module('Integration | canInvoke', function (hooks) {
     assert.true(service.canInvoke('read', cardAt(`${REALM}a`)));
   });
 
-  test('a card with no id, and a realm this session does not know, ask nothing', async function (assert) {
+  test('a card with no id, and a URL in a realm this session does not know, ask nothing', async function (assert) {
     assert.strictEqual(
       service.canInvoke('read', {} as CardDef),
       undefined,
@@ -254,10 +267,43 @@ module('Integration | canInvoke', function (hooks) {
     assert.strictEqual(
       service.canInvoke('read', 'http://elsewhere/card'),
       undefined,
-      'and a realm this session does not know has nothing to be asked',
+      'and a URL whose realm is not known has no realm to be asked yet',
     );
     await settled();
     assert.deepEqual(realmUnderTest.sent, [], 'neither enrolled a pair');
+    assert.deepEqual(
+      realmUnderTest.lookedUp,
+      ['http://elsewhere/card'],
+      'the URL’s realm is looked up, so a later read can address it',
+    );
+  });
+
+  test('a loaded card from a realm this session does not know is asked about in the realm it came from', async function (assert) {
+    // A signed-out visitor's page registers no realm of its own accord, so a
+    // card it renders comes from a realm the realm service has never learned.
+    // The card says which realm that is.
+    let elsewhere = 'http://elsewhere/site/';
+    realmUnderTest.allow.add(`read ${elsewhere}card`);
+    assert.strictEqual(
+      service.canInvoke('read', cardAt(`${elsewhere}card`, elsewhere)),
+      undefined,
+      'nothing is known before the realm has been asked',
+    );
+    await settled();
+    assert.deepEqual(
+      realmUnderTest.sent.map((request) => request.url),
+      [`${elsewhere}_capabilities`],
+      'the check is addressed to the card’s own realm',
+    );
+    assert.true(
+      service.canInvoke('read', cardAt(`${elsewhere}card`, elsewhere)),
+      'and its answer is held like any other',
+    );
+    assert.deepEqual(
+      realmUnderTest.lookedUp,
+      [],
+      'with no lookup, since the card already named its realm',
+    );
   });
 
   test('nothing is asked or answered inside a prerender', async function (assert) {
@@ -630,3 +676,87 @@ module(
     });
   },
 );
+
+// A signed-out visitor, as on a published site: there is no Matrix client to
+// mint a session with, and the page has registered no realm of its own, so the
+// card it shows comes from a realm the realm service has never learned. The
+// realm answers an anonymous caller for itself, so the check needs neither.
+module('Integration | canInvoke | a signed-out visitor', function (hooks) {
+  const REALM_URL = 'http://test-realm/test-site/';
+  const CARD_URL = `${REALM_URL}Note/one`;
+
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+
+  // Nobody signed in, so no Matrix client is ever made.
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: REALM_URL,
+      permissions: { '*': ['read'] },
+      contents: {
+        ...SYSTEM_CARD_FIXTURE_CONTENTS,
+        'Note/one.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        },
+        'realm.json': realmConfigCardJSON({ name: 'Site' }),
+      },
+    });
+  });
+
+  test('a capability check made with no Matrix client is answered as the anonymous caller', async function (assert) {
+    let card = await getService('store').get(CARD_URL);
+    if (!card || isCardErrorJSONAPI(card)) {
+      throw new Error(
+        `expected ${CARD_URL} to load, got ${JSON.stringify(card)}`,
+      );
+    }
+    let realm = getService('realm');
+    realm.removeRealm(REALM_URL);
+    assert.false(
+      getService('realm-server').hasClient,
+      'there is no Matrix client to sign in with',
+    );
+    assert.strictEqual(
+      realm.realmOf(rri(CARD_URL)),
+      undefined,
+      'and the realm service does not know the card’s realm',
+    );
+
+    let service = getService('capabilities') as unknown as CapabilitiesService;
+    assert.strictEqual(
+      service.canInvoke('read', card as CardDef),
+      undefined,
+      'nothing is known before the realm has been asked',
+    );
+    await waitUntil(
+      () => service.canInvoke('read', card as CardDef) !== undefined,
+    );
+    assert.true(
+      service.canInvoke('read', card as CardDef),
+      'the realm admits an anonymous read, and the card hears it',
+    );
+    assert.strictEqual(
+      service.canInvoke('noSuchOperation', card as CardDef),
+      undefined,
+      'a second pair is enrolled the same way',
+    );
+    await waitUntil(
+      () => service.canInvoke('noSuchOperation', card as CardDef) !== undefined,
+    );
+    assert.false(
+      service.canInvoke('noSuchOperation', card as CardDef),
+      'and an operation the card does not carry is refused, so the answer is the realm’s',
+    );
+  });
+});
