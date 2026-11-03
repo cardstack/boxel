@@ -8,6 +8,7 @@
 // edited; a monthly budget the owner set stays put. These count calls, not
 // money: the service's own price for a call is the owner's to look up.
 import { on } from '@ember/modifier';
+import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
@@ -33,7 +34,13 @@ interface Signature {
 
 type Field = KeyLimitName;
 
-const COUNT = new Intl.NumberFormat('en-US');
+// Whole budgets with their thousands grouped, and a refill rate with every
+// decimal it carries.
+const COUNT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
+
+// The largest value a limit may hold: what the realm server's columns hold,
+// and the most an unset monthly budget can follow the daily budget to.
+const MAX_KEY_LIMIT = 2_147_483_647;
 
 // The fields' text: what the owner set, empty where they left the default.
 function textOf(limits: KeyLimits): Record<Field, string> {
@@ -47,10 +54,12 @@ function textOf(limits: KeyLimits): Record<Field, string> {
 }
 
 // A field's text as the limit it names, or undefined when it isn't one.
+// Thousands may be grouped with commas, as the defaults are shown.
 function limitOf(text: string, whole: boolean): number | undefined {
-  let value = Number(text.trim());
+  let plain = text.trim().replace(/,/g, '');
+  let value = Number(plain);
   let valid =
-    text.trim() !== '' &&
+    plain !== '' &&
     Number.isFinite(value) &&
     (whole ? Number.isInteger(value) && value >= 1 : value > 0);
   return valid ? value : undefined;
@@ -121,21 +130,24 @@ export default class LimitsForm extends Component<Signature> {
         <fieldset class='group' data-test-key-limit-group>
           <legend class='legend'>{{group.legend}}</legend>
           {{#each group.fields as |field|}}
-            <label class='field' data-test-key-limit={{field.name}}>
-              <span class='label'>{{field.label}}</span>
+            <div class='field' data-test-key-limit={{field.name}}>
+              <label class='label' for={{field.inputId}}>{{field.label}}</label>
               <BoxelInput
+                @id={{field.inputId}}
                 @value={{field.value}}
                 @onInput={{field.onInput}}
                 @placeholder={{field.placeholder}}
+                @describedBy='{{field.hintId}} {{field.noteId}}'
                 inputmode={{if field.whole 'numeric' 'decimal'}}
                 data-test-key-limit-input={{field.name}}
               />
-              <span class='hint'>{{field.hint}}</span>
+              <span class='hint' id={{field.hintId}}>{{field.hint}}</span>
               <span
-                class='hint default'
+                class='hint'
+                id={{field.noteId}}
                 data-test-key-limit-default={{field.name}}
               >{{field.defaultNote}}</span>
-            </label>
+            </div>
           {{/each}}
         </fieldset>
       {{/each}}
@@ -218,6 +230,8 @@ export default class LimitsForm extends Component<Signature> {
   // The limits the fields were last filled from, whose `set` a field is
   // compared against to tell whether it changed. Tracked, since the defaults
   // the fields show come from it.
+  private guid = guidFor(this);
+
   private filled = trackedObject({ limits: this.args.limits });
 
   private get current(): KeyLimits {
@@ -248,7 +262,10 @@ export default class LimitsForm extends Component<Signature> {
       rateBurst: defaults.rateBurst,
       rateRefillPerMinute: defaults.rateRefillPerMinute,
       dailyBudget: defaults.dailyBudget,
-      monthlyBudget: daily * defaults.monthlyBudgetDays,
+      monthlyBudget: Math.min(
+        MAX_KEY_LIMIT,
+        daily * defaults.monthlyBudgetDays,
+      ),
     };
   }
 
@@ -279,6 +296,9 @@ export default class LimitsForm extends Component<Signature> {
         ...field,
         value: this.values[field.name],
         placeholder: COUNT.format(this.defaults[field.name]),
+        inputId: `${this.guid}-${field.name}`,
+        hintId: `${this.guid}-${field.name}-hint`,
+        noteId: `${this.guid}-${field.name}-default`,
         defaultNote: this.defaultNote(field.name),
         onInput: (value: string) => {
           this.values[field.name] = value;

@@ -521,6 +521,74 @@ module('Integration | key usage and limits', function (hooks) {
         .hasAttribute('placeholder', '2,280');
     });
 
+    test('a limit may be typed with commas, as the defaults show, and each field is described by its default', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource('key-1', usage({ limits: limitsOf() })),
+        'PUT _user-keys/key-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: limitsAfter(LIMITS, body.data.attributes),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+
+      let input = document.querySelector(
+        '[data-test-key-limit-input="monthlyBudget"]',
+      )!;
+      let note = document.querySelector(
+        '[data-test-key-limit-default="monthlyBudget"]',
+      )!;
+      assert.true(
+        input.getAttribute('aria-describedby')!.split(' ').includes(note.id),
+        'the note under the field describes it',
+      );
+      assert.notOk(
+        note.closest('label'),
+        'and is not part of its label, which names the field alone',
+      );
+
+      await fillIn('[data-test-key-limit-input="monthlyBudget"]', '15,000');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(put.body.data.attributes, { monthlyBudget: 15000 });
+    });
+
+    test('defaults show as the realm server enforces them: a monthly budget no larger than a limit holds, a refill with its decimals', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource(
+            'key-1',
+            usage({
+              limits: {
+                ...limitsOf(),
+                rateRefillPerMinute: 0.0625,
+                defaults: { ...DEFAULTS, rateRefillPerMinute: 0.0625 },
+              },
+            }),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      assert
+        .dom('[data-test-key-limit-input="rateRefillPerMinute"]')
+        .hasAttribute('placeholder', '0.0625');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '100000000');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasAttribute('placeholder', '2,147,483,647');
+    });
+
     test('a usage that fails to load says so and offers to try again', async function (assert) {
       let fail = true;
       serve({
