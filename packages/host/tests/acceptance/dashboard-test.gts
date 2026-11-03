@@ -2958,7 +2958,7 @@ module('Acceptance | dashboard', function (hooks) {
 
         assert
           .dom('[data-test-get-started-count]')
-          .hasText('1 of 4 done · Next: Open a card in a workspace');
+          .hasText('1 of 3 done · Next: Open a card in a workspace');
         assert.dom('[data-test-get-started-step]').doesNotExist('folded');
         assert.dom('[data-test-get-started-toggle]').hasText('Show steps');
 
@@ -3042,7 +3042,7 @@ module('Acceptance | dashboard', function (hooks) {
           );
       });
 
-      test('picking a coding agent adds the agent step', async function (assert) {
+      test('picking a coding agent puts the agent step in place of the ask step', async function (assert) {
         await visitAsNewUser();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
@@ -3050,8 +3050,30 @@ module('Acceptance | dashboard', function (hooks) {
         });
         await settled();
 
-        assert.dom('[data-test-get-started-count]').hasText('0 of 4 done');
+        assert.dom('[data-test-get-started-count]').hasText('0 of 3 done');
+        assert.deepEqual(
+          findAll('[data-test-get-started-step]').map((el) =>
+            el.getAttribute('data-test-get-started-step'),
+          ),
+          ['open-card', 'agent', 'publish'],
+        );
         assert.strictEqual(stepDone('agent'), 'false');
+      });
+
+      test('a coding agent user finishes it without asking Boxel AI Assistant', async function (assert) {
+        await visitAsNewUser();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          agent: 'claude',
+          agentSetup: { claude: 1 },
+        });
+        (getService('recent-cards-service') as any).add(`${realmURL}index`);
+        markHosted(realmURL);
+        await settled();
+
+        let matrixService = getService('matrix-service') as MatrixService;
+        await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
+        assert.dom(GET_STARTED).doesNotExist();
       });
 
       test("the agent step's action shows the Agents section", async function (assert) {

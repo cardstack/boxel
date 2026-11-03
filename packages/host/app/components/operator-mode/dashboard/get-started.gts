@@ -101,27 +101,14 @@ export default class GetStarted extends Component<Signature> {
   // Read many times a render; aiSessionRooms walks and sorts every room.
   @cached
   private get steps(): Step[] {
-    let { agentSetup } = this.matrixService.dashboardState;
-    let steps: Step[] = [
+    return [
       {
         id: 'open-card',
         title: 'Open a card in a workspace',
         hint: 'Cards hold your data, documents and apps.',
         done: this.recentCardsService.recentCards.length > 0,
       },
-      {
-        id: 'ask-ai',
-        title: 'Ask Boxel AI Assistant to build something',
-        hint: 'It can make your first cards from a sentence.',
-        // Opening the panel makes an empty session, so only one with a
-        // message has been asked. The sync's first pass brings only each
-        // session's newest event, often the bot's rename rather than a
-        // message, so a renamed session counts too.
-        done: this.aiAssistantPanelService.aiSessionRooms.some(
-          (session) =>
-            Boolean(session.lastMessage) || session.name !== NEW_SESSION_NAME,
-        ),
-      },
+      this.buildStep,
       {
         id: 'publish',
         title: 'Put a workspace on the web',
@@ -131,19 +118,35 @@ export default class GetStarted extends Component<Signature> {
         ),
       },
     ];
-    // Only for users who have taken up a coding agent, so the checklist
-    // doesn't steer everyone else toward one.
+  }
+
+  // The user builds with Boxel AI Assistant or with their own agent, not
+  // both, so the step follows the one they've taken up.
+  private get buildStep(): Step {
+    let { agentSetup } = this.matrixService.dashboardState;
     if (usesCodingAgent(this.matrixService.dashboardAgent, agentSetup)) {
-      steps.push({
+      return {
         id: 'agent',
         title: 'Connect your own agent',
         hint: 'Claude Code or Codex can build in your workspaces through the Boxel plugin.',
         // Only listed agents: progress kept for one no longer offered
         // doesn't count.
         done: AGENT_KINDS.some(({ id }) => (agentSetup?.[id] ?? 0) > 0),
-      });
+      };
     }
-    return steps;
+    return {
+      id: 'ask-ai',
+      title: 'Ask Boxel AI Assistant to build something',
+      hint: 'It can make your first cards from a sentence.',
+      // Opening the panel makes an empty session, so only one with a
+      // message has been asked. The sync's first pass brings only each
+      // session's newest event, often the bot's rename rather than a
+      // message, so a renamed session counts too.
+      done: this.aiAssistantPanelService.aiSessionRooms.some(
+        (session) =>
+          Boolean(session.lastMessage) || session.name !== NEW_SESSION_NAME,
+      ),
+    };
   }
 
   private get doneCount() {
