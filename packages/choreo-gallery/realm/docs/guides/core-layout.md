@@ -60,17 +60,17 @@ This excerpt assumes `motion` is imported in the component. Only one representat
 
 ## Coordinating Related Elements
 
-Wrap related layout participants in `LayoutGroup` when they need to measure a shared layout change together. A filtered grid is a common example: the remaining cards move to their new positions while their real content stays mounted.
+A `layout` or `layoutId` element animates only when something measures it before Glimmer changes the DOM, so a `LayoutGroup` is not optional for a list that moves. Wrap the `{{#each}}` of a list or grid that reorders, filters or sorts, and any pair of `layoutId` elements that hand off, in a `LayoutGroup` (a Choreo region measures its contents the same way). The group goes around the `{{#each}}`, not inside each row: Glimmer moves a keyed row's DOM before it re-renders anything inside the row. Without a group the change lands in a single frame, and in development glimmer-motion logs a warning naming the element. A filtered grid is a common example: the remaining cards move to their new positions while their real content stays mounted.
 
 For a destination that represents a place, such as a trash bin, use [a beacon](interactive-beacons). Shared identity means “the same item appears here”; a beacon means “move this item here.”
 
 ## Checking the Measurement Boundary
 
-LayoutGroup also supplies the render observation that lets the binding capture old bounds before Glimmer changes the DOM. snapshotOnRender and closestLayoutGroup expose parts of that integration for specialized hosts; ordinary examples should use the component rather than duplicating the measurement pipeline. Outside an observing group, layoutChange wraps the state mutation that causes the reflow. Check layoutDependency when an element should only remeasure for a meaningful input, and use layoutScroll or layoutRoot where the actual container requires them. A working unscrolled fixture does not prove the same transition will land correctly in a fixed or scrolling panel.
+LayoutGroup also supplies the render observation that lets the binding capture old bounds before Glimmer changes the DOM. snapshotOnRender and closestLayoutGroup expose parts of that integration for specialized hosts; ordinary examples should use the component rather than duplicating the measurement pipeline. A host that calls snapshotOnRender from a render detector of its own renders `data-motion-render-detector` (`RENDER_DETECTOR_ATTRIBUTE`) on its element, as LayoutGroup, ReorderGroup and a Choreo region do. That marker tells glimmer-motion's development-mode check that the layout elements inside are measured, so it doesn't warn about them. Outside an observing group, layoutChange wraps the state mutation that causes the reflow. Check layoutDependency when an element should only remeasure for a meaningful input, and use layoutScroll or layoutRoot where the actual container requires them. A working unscrolled fixture does not prove the same transition will land correctly in a fixed or scrolling panel.
 
 ## API Coverage
 
-**glimmer-motion**: `layoutChange`, `closestLayoutGroup`, `LayoutGroup`, `snapshotOnRender`.
+**glimmer-motion**: `layoutChange`, `closestLayoutGroup`, `LayoutGroup`, `RENDER_DETECTOR_ATTRIBUTE`, `snapshotOnRender`.
 
 Read the implementation: [`layout.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout.ts), [`layout-group.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout-group.gts).
 

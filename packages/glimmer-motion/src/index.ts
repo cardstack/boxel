@@ -35,6 +35,7 @@ export {
 export {
   closestLayoutGroup,
   LayoutGroup,
+  RENDER_DETECTOR_ATTRIBUTE,
   snapshotOnRender,
 } from './layout-group.gts';
 export type { MotionEl, MotionProps } from './motion.ts';

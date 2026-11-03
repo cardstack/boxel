@@ -16,6 +16,18 @@ versions may change behavior until `1.0.0`.
 
 ### Added
 
+- **A development-mode warning for a `layout` or `layoutId` element nothing will snapshot.** Both
+  animate only when a render detector measures them before the DOM changes, and only
+  `<LayoutGroup>`, `<Presence>` (on a pass where its `@items` change), `<ReorderGroup>` and
+  `<Choreo>` carry one. The first such element
+  to mount with none of them above it logs a console warning with the element attached, so a keyed
+  list that reorders, or a `layoutId` hand-off, that jumps instead of animating says why.
+  Production builds skip it.
+- **`RENDER_DETECTOR_ATTRIBUTE`** (`data-motion-render-detector`) marks an element a render
+  detector stands above. `<LayoutGroup>` and `<ReorderGroup>` render it, and so does `<Choreo>`.
+  A component that calls `snapshotOnRender()` from a render detector of its own renders it too, so
+  the warning above knows the elements inside it are measured.
+
 - **`retime(root)`** restarts the motion already running at and under an element on its current
   transition. Motion reads a transition when an animation starts, so an edited `transition` with an
   unchanged target leaves a running spring or loop on its old timing; `retime` restarts the values
@@ -29,6 +41,11 @@ versions may change behavior until `1.0.0`.
   standalone `@glimmer/tracking` 1.x package, and Embroider then resolved glimmer-motion's `tracked` to
   that copy instead of ember-source's. Its tracked state never reached Ember's renderer, so a
   `<Presence>` leaver stayed in the DOM after its exit finished. ember-source provides the module.
+- **Development-only warnings stay out of production bundles.** The development check read
+  `typeof process` before `process.env.NODE_ENV`, and a bundler replaces only the second, so in a
+  production build of an app with no `process` global the check stayed true and warnings such as the
+  layout-loop guard's reached the console. It reads `process.env.NODE_ENV` alone, which a production
+  build replaces with `'production'`; with nothing replacing it, it counts as development.
 - **`LICENSE` carries Motion's MIT notice.** The files adapted or ported from
   Motion (listed in `VENDORED.md`) ship under Framer B.V.'s copyright as well
   as Cardstack's.
