@@ -35,6 +35,7 @@ import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
+import { isGatewayFailureStatus } from '@cardstack/runtime-common/error';
 
 import {
   recordCatalogSearch,
@@ -343,8 +344,19 @@ type UiAction =
   | { action: 'openWorkspace' };
 
 // Reads one card instance as JSON data, computed fields included, with every
-// URL in it absolute.
-type ReadCard = (id: string) => Promise<LooseSingleCardDocument>;
+// URL in it absolute, or says why there is none to read.
+type ReadCard = (id: string) => Promise<CardRead>;
+
+// What reading a card found. A card whose file the realm holds without an
+// index row is `indexing` while the realm is indexing, since the pass that is
+// running may add the row, and `unindexed` while it is not, since no pass is
+// coming to add it. `error` is a card the realm cannot serve, most often
+// because its index row records an error; `unreadable` is a read the user or
+// the network refused.
+type CardRead =
+  | { doc: LooseSingleCardDocument }
+  | { unread: 'indexing' | 'unindexed' | 'not-found' }
+  | { unread: 'error' | 'unreadable'; message: string };
 
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
@@ -1141,7 +1153,11 @@ class RealmFsSession {
       // model, and not an instance.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
-        let { data } = await this.readCard(id);
+        let read = await this.readCard(id);
+        if (!('doc' in read)) {
+          throw new Error(this.cardReadError(id, read));
+        }
+        let { data } = read.doc;
         // The same shape as a card `realm.cards.search` finds: the type, and
         // each link keyed by its field path (`field.0`, `field.1`, … for a
         // `linksToMany` field). Every URL is already absolute.
@@ -2007,6 +2023,42 @@ class RealmFsSession {
     return url.slice(this.realmURL.length);
   }
 
+  // Why realm.cards.get found no card, with the next step that helps: a read
+  // again only for a card a running index pass may still add, and otherwise
+  // the call that indexes the file or the fix its error needs. A model that
+  // is told to wait for a card no pass will add polls, or edits the card to
+  // make the realm index it.
+  private cardReadError(id: string, read: Exclude<CardRead, { doc: unknown }>) {
+    let path = `${this.relative(id)}.json`;
+    switch (read.unread) {
+      case 'indexing':
+        return `Card is not indexed yet: ${id}; read it again in a moment`;
+      case 'unindexed':
+        return (
+          `Card is not indexed: ${id}. Its file ${path} is in the workspace, ` +
+          `and the workspace is not indexing, so reading the card again ` +
+          `will not find it. ` +
+          (this.mayWrite
+            ? `Index the file with realm.index.invalidate('${path}'), then ` +
+              `read the card again. Do not edit the card to make the ` +
+              `workspace index it`
+            : `You can only read this workspace, so tell the user that ` +
+              `${path} needs indexing again by someone who can write to it`)
+        );
+      case 'not-found':
+        return `Card not found: ${id}`;
+      case 'error':
+        return (
+          `Card failed to index: ${id}: ${read.message.replace(/[.\s]+$/, '')}. ` +
+          `Reading it again gives the same error until its cause is fixed, ` +
+          `in ${path}, in the definition it adopts from, or in a card it ` +
+          `links to`
+        );
+      case 'unreadable':
+        return `Unable to read card ${id}: ${read.message}`;
+    }
+  }
+
   private async searchCards(raw: unknown): Promise<{
     cards: FoundCard[];
     total: number;
@@ -2556,7 +2608,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
     'can change the skills and model of this room with room.*, and can ' +
-    'refresh the index of the workspace with realm.index.*. In a workspace ' +
+    'refresh the index of the workspace with realm.index.*. A card that ' +
+    'realm.cards.get reports as not indexed while the workspace is not ' +
+    'indexing will not index by waiting: run ' +
+    "realm.index.invalidate('<card path>.json') and read it again, and " +
+    "never edit a card's data to make the workspace index it. In a workspace " +
     'the user can only read, reads work and each write is refused. realm ' +
     'is the root of the workspace, and paths are relative to it, so a file ' +
     'in a folder is named with its folder (folder/file.json). Return ' +
@@ -2741,7 +2797,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
               }),
         (reference, base) =>
           this.network.virtualNetwork.resolveURL(reference, base).href,
-        (id) => this.readCard(id),
+        (id) => this.readCard(id, realmURL),
         (query, realms) => this.store.searchEntries(query, realms),
         // Resolved before the search, so the search and its telemetry
         // record name the same realms.
@@ -3401,30 +3457,47 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
   }
 
-  private async readCard(id: string): Promise<LooseSingleCardDocument> {
+  private async readCard(id: string, realmURL: string): Promise<CardRead> {
     // The store's cached instance can lag a write this run just made, or hold
     // edits not saved yet, so the card is read from the realm.
     let card = await this.store.getWithoutCache(id);
     if (!isCardInstance(card)) {
       if (card.awaitingIndex) {
-        throw new Error(
-          `Card is not indexed yet: ${id}; read it again in a moment`,
-        );
+        // The realm holds the card's file and has no index row for it, which
+        // is the same answer for a file a queued pass is about to index and
+        // for one no pass will index. The realm's index events are what tell
+        // them apart: between a pass's start and its end, the row may still
+        // come.
+        return {
+          unread: this.realm.info(realmURL).isIndexing
+            ? 'indexing'
+            : 'unindexed',
+        };
       }
-      throw new Error(
-        card.status === 404
-          ? `Card not found: ${id}`
-          : `Unable to read card ${id}: ${card.message}`,
-      );
+      if (card.status === 404) {
+        return { unread: 'not-found' };
+      }
+      // Refused by the realm's permissions, or by the network between this
+      // tab and the realm: nothing about the card itself to fix.
+      if (
+        card.status === 401 ||
+        card.status === 403 ||
+        isGatewayFailureStatus(card.status)
+      ) {
+        return { unread: 'unreadable', message: card.message };
+      }
+      return { unread: 'error', message: card.message };
     }
     let { default: Base64ImageField } = await this.loaderService.loader.import<{
       default: typeof Base64ImageFieldType;
     }>('@cardstack/base/base64-image');
-    return await this.cardService.serializeCard(card, {
-      omitFields: [Base64ImageField],
-      useAbsoluteURL: true,
-      includeComputeds: true,
-    });
+    return {
+      doc: await this.cardService.serializeCard(card, {
+        omitFields: [Base64ImageField],
+        useAbsoluteURL: true,
+        includeComputeds: true,
+      }),
+    };
   }
 
   // Checks the realm still holds what the run saved, and deletes the file.
