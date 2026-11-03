@@ -313,7 +313,18 @@ module('Integration | motion | layout | ungrouped warning', function (hooks) {
     assert.strictEqual(ungrouped().length, 0);
   });
 
-  test('inside a participant host (a <Choreo> region) it does not warn', async function (assert) {
+  test('inside an element marked as a render detector, as a <Choreo> region is, it does not warn', async function (assert) {
+    await render(
+      <template>
+        <div data-motion-render-detector>
+          <div {{motion layout=true}}></div>
+        </div>
+      </template>,
+    );
+    assert.strictEqual(ungrouped().length, 0);
+  });
+
+  test('a participant host without the render-detector marker does not quiet it', async function (assert) {
     await render(
       <template>
         <div data-motion-host>
@@ -321,7 +332,7 @@ module('Integration | motion | layout | ungrouped warning', function (hooks) {
         </div>
       </template>,
     );
-    assert.strictEqual(ungrouped().length, 0);
+    assert.strictEqual(ungrouped().length, 1);
   });
 
   test('a portalled element does not warn, since its DOM ancestors are not its template ancestors', async function (assert) {

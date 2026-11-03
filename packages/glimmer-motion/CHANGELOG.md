@@ -20,8 +20,12 @@ versions may change behavior until `1.0.0`.
   animate only when a render detector measures them before the DOM changes, and only
   `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` and `<Choreo>` carry one. The first such element
   to mount with none of them above it logs a console warning with the element attached, so a keyed
-  list that reorders, or a `layoutId` hand-off, that jumps instead of animating says why. `<ReorderGroup>` renders a
-  `data-reorder-group` attribute on its list for that check. Production builds skip it.
+  list that reorders, or a `layoutId` hand-off, that jumps instead of animating says why.
+  Production builds skip it.
+- **`RENDER_DETECTOR_ATTRIBUTE`** (`data-motion-render-detector`) marks an element a render
+  detector stands above. `<LayoutGroup>` and `<ReorderGroup>` render it, and so does `<Choreo>`.
+  A component that calls `snapshotOnRender()` from a render detector of its own renders it too, so
+  the warning above knows the elements inside it are measured.
 
 - **`retime(root)`** restarts the motion already running at and under an element on its current
   transition. Motion reads a transition when an animation starts, so an edited `transition` with an

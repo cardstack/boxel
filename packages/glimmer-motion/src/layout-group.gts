@@ -62,13 +62,16 @@ export function snapshotOnRender() {
 }
 
 /**
- * The elements a render detector stands above: a <LayoutGroup>, a
- * <ReorderGroup>, and a participant host (a <Choreo> region). <Presence>
- * renders no element of its own, so a node finds it through its presence
+ * The attribute an element renders when a render detector stands above
+ * everything inside it. <LayoutGroup>, <ReorderGroup> and a <Choreo> region
+ * render it, and so does any component that calls `snapshotOnRender()` from
+ * a render detector of its own. The development-mode check for an ungrouped
+ * `layout` or `layoutId` element looks for it at or above the element.
+ * <Presence> renders no element, so a node finds it through its presence
  * handle instead.
  */
-const RENDER_DETECTOR_HOSTS =
-  '[data-layout-group], [data-reorder-group], [data-motion-host]';
+export const RENDER_DETECTOR_ATTRIBUTE = 'data-motion-render-detector';
+const RENDER_DETECTOR = `[${RENDER_DETECTOR_ATTRIBUTE}]`;
 
 /**
  * A portalled subtree (`{{#in-element}}`, marked with Motion's portal
@@ -99,7 +102,7 @@ export function warnIfNothingSnapshots(el: Element, inPresence: boolean) {
     warnedUngroupedLayout ||
     inPresence ||
     !el.isConnected ||
-    el.closest(RENDER_DETECTOR_HOSTS) ||
+    el.closest(RENDER_DETECTOR) ||
     el.closest(PORTALLED)
   ) {
     return;
@@ -183,7 +186,12 @@ export class LayoutGroup extends Component<Signature> {
 
   <template>
     {{this.renderDetector}}
-    <div data-layout-group style='display: contents' {{this.register}}>
+    <div
+      data-layout-group
+      data-motion-render-detector
+      style='display: contents'
+      {{this.register}}
+    >
       {{yield this.context}}
     </div>
   </template>

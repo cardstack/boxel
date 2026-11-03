@@ -66,11 +66,11 @@ For a destination that represents a place, such as a trash bin, use [a beacon](i
 
 ## Checking the Measurement Boundary
 
-LayoutGroup also supplies the render observation that lets the binding capture old bounds before Glimmer changes the DOM. snapshotOnRender and closestLayoutGroup expose parts of that integration for specialized hosts; ordinary examples should use the component rather than duplicating the measurement pipeline. Outside an observing group, layoutChange wraps the state mutation that causes the reflow. Check layoutDependency when an element should only remeasure for a meaningful input, and use layoutScroll or layoutRoot where the actual container requires them. A working unscrolled fixture does not prove the same transition will land correctly in a fixed or scrolling panel.
+LayoutGroup also supplies the render observation that lets the binding capture old bounds before Glimmer changes the DOM. snapshotOnRender and closestLayoutGroup expose parts of that integration for specialized hosts; ordinary examples should use the component rather than duplicating the measurement pipeline. A host that calls snapshotOnRender from a render detector of its own renders `data-motion-render-detector` (`RENDER_DETECTOR_ATTRIBUTE`) on its element, as LayoutGroup, ReorderGroup and a Choreo region do. That marker tells glimmer-motion's development-mode check that the layout elements inside are measured, so it doesn't warn about them. Outside an observing group, layoutChange wraps the state mutation that causes the reflow. Check layoutDependency when an element should only remeasure for a meaningful input, and use layoutScroll or layoutRoot where the actual container requires them. A working unscrolled fixture does not prove the same transition will land correctly in a fixed or scrolling panel.
 
 ## API Coverage
 
-**glimmer-motion**: `layoutChange`, `closestLayoutGroup`, `LayoutGroup`, `snapshotOnRender`.
+**glimmer-motion**: `layoutChange`, `closestLayoutGroup`, `LayoutGroup`, `RENDER_DETECTOR_ATTRIBUTE`, `snapshotOnRender`.
 
 Read the implementation: [`layout.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout.ts), [`layout-group.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout-group.gts).
 

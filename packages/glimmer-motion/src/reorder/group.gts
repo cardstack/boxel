@@ -130,9 +130,10 @@ export class ReorderGroup<V> extends Component<Signature<V>> {
 
   <template>
     {{this.renderDetector}}
+    {{! the render-detector marker goes after the splat, so a caller cannot drop it: the ungrouped-layout check finds the list by it }}
     <ul
       ...attributes
-      data-reorder-group
+      data-motion-render-detector
       {{captureGroup this.groupRef}}
       {{motion style=this.style layout=@layout transition=@transition}}
     >

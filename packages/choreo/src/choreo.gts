@@ -1667,6 +1667,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     <div
       data-choreo={{if @id @id ''}}
       data-motion-host
+      data-motion-render-detector
       {{this.host}}
       ...attributes
     >
