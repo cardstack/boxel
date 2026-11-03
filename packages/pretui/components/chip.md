@@ -6,13 +6,13 @@ A small pill for a categorical value: a status, a tag, a label. It is display on
 
 ```
 @label?, @tone? (default neutral), @hue?, @dot? (default true),
-@appearance? ('outlined' default | 'soft'), @shape? ('rounded' default | 'pill')
+@appearance? ('outlined' default | 'soft' | 'plain')
 <:default>   — used when @label is absent
 ```
 
 **Tone outlines, hue colors the dot.** A neutral chip (the default) is the theme's `--muted` surface with `--foreground` text. Any other `@tone` outlines it on `--card` instead: the tone's `-ink` (`--success-ink`, `--destructive-ink` for `danger`…) for the text and the ring, and the tone itself for the dot, the same tone names and inks Button and Alert use. `@hue` recolors only the dot (any CSS color, or a `var(--chart-3)`).
 
-**`@appearance='soft'` tints instead of outlining.** The fill becomes the hue mixed 12% into `--card` and the ring drops; the text stays the tone's `-ink` (`--foreground` when neutral). Soft badges are the common pattern in dense tables and lists, where a column of rings is noisy. `@shape='pill'` swaps the small radius for `--boxel-border-radius-pill`. Both default to the existing look.
+**`@appearance` picks the frame.** `soft` tints instead of outlining: the fill becomes the hue mixed 12% into `--card` and the ring drops. `plain` drops the frame entirely, with no fill, ring, radius or side padding, leaving dot + text as one compound unit. Use it in table cells and dense lists, where a frame inside an already-rounded card is noise. The dot is always shown on a plain chip, even with `@dot={{false}}`, so the category never rests on colour alone. In every appearance the text stays the tone's `-ink` (`--foreground` when neutral). `outlined` is the default and is unchanged.
 
 **The dot is on by default.** That is the decision most kits get backwards: without it, a row of chips is distinguished only by fill colour, and colour alone is a WCAG 1.4.1 problem _and_ hard to scan. The dot gives the hue a saturated anchor next to muted ink, so the category reads at a glance even when the fills are close. Turn it off (`@dot={{false}}`) only when the chip's own text already names the category unambiguously.
 

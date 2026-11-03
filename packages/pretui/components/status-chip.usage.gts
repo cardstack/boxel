@@ -17,13 +17,8 @@ class StatusChipUsage extends GlimmerComponent {
         <StatusChip @value='overdue' />
         <StatusChip @value='review' />
         <StatusChip @value='active' />
-        <StatusChip @value='interviewing' @appearance='soft' @shape='pill' />
-        <StatusChip
-          @value='offer'
-          @tone='success'
-          @appearance='soft'
-          @shape='pill'
-        />
+        <StatusChip @value='interviewing' @appearance='soft' />
+        <StatusChip @value='offer' @appearance='plain' />
       </:example>
       <:api as |Args|>
         <Args.String

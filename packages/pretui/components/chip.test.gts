@@ -14,41 +14,41 @@ function chip(): HTMLElement {
 module('Pretui | components/chip', function (hooks) {
   setupCardTest(hooks);
 
-  test('defaults to outlined and rounded', async function (assert) {
+  test('defaults to outlined', async function (assert) {
     await render(<template><Chip @label='draft' /></template>);
     assert.strictEqual(chip().dataset['appearance'], 'outlined');
-    assert.strictEqual(chip().dataset['shape'], 'rounded');
   });
 
-  test('takes soft and pill', async function (assert) {
+  test('takes soft', async function (assert) {
     await render(
       <template>
-        <Chip @label='live' @tone='success' @appearance='soft' @shape='pill' />
+        <Chip @label='live' @tone='success' @appearance='soft' />
       </template>,
     );
     assert.strictEqual(chip().dataset['appearance'], 'soft');
-    assert.strictEqual(chip().dataset['shape'], 'pill');
     assert.strictEqual(chip().dataset['tone'], 'success');
   });
 
-  test('StatusChip forwards appearance, shape and dot', async function (assert) {
+  test('plain keeps the dot even when @dot is false', async function (assert) {
     await render(
       <template>
-        <StatusChip
-          @value='offer'
-          @appearance='soft'
-          @shape='pill'
-          @dot={{false}}
-        />
+        <Chip @label='screening' @appearance='plain' @dot={{false}} />
+      </template>,
+    );
+    assert.strictEqual(chip().dataset['appearance'], 'plain');
+    // the dot is the chip's only child element
+    assert.strictEqual(chip().children.length, 1);
+  });
+
+  test('StatusChip forwards appearance and dot', async function (assert) {
+    await render(
+      <template>
+        <StatusChip @value='offer' @appearance='soft' @dot={{false}} />
       </template>,
     );
     assert
       .dom('[data-test-pretui-status-chip]')
       .hasAttribute('data-appearance', 'soft');
-    assert
-      .dom('[data-test-pretui-status-chip]')
-      .hasAttribute('data-shape', 'pill');
-    // the dot is the chip's only child element
     assert.strictEqual(chip().children.length, 0);
   });
 });

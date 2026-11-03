@@ -17,10 +17,9 @@ export interface ChipSignature {
      * that tone, with its -ink as the text */
     tone?: PretuiToneArg;
     /** 'outlined' (the default) keeps the treatment above; 'soft' tints the
-     * fill with the hue and drops the ring, the tone's -ink stays the text */
-    appearance?: 'outlined' | 'soft';
-    /** 'rounded' (the default) or 'pill' */
-    shape?: 'rounded' | 'pill';
+     * fill with the hue and drops the ring; 'plain' drops the whole frame to
+     * dot + text, for dense tables and lists. The tone's -ink stays the text */
+    appearance?: 'outlined' | 'soft' | 'plain';
     dot?: boolean;
   };
   Blocks: { default: [] };
@@ -28,17 +27,16 @@ export interface ChipSignature {
 }
 
 export class Chip extends Component<ChipSignature> {
+  // plain has no frame, so the dot always stays: never hue or fill alone
   get showDot() {
-    return this.args.dot ?? true;
+    return this.appearance === 'plain' || (this.args.dot ?? true);
   }
   get tone(): PretuiTone {
     return resolveTone(this.args.tone, PRETUI_TONES, 'neutral');
   }
   get appearance() {
-    return this.args.appearance === 'soft' ? 'soft' : 'outlined';
-  }
-  get shape() {
-    return this.args.shape === 'pill' ? 'pill' : 'rounded';
+    let a = this.args.appearance;
+    return a === 'soft' || a === 'plain' ? a : 'outlined';
   }
   get style() {
     return hueStyle('--pretui-chip-hue', this.args.hue);
@@ -49,7 +47,6 @@ export class Chip extends Component<ChipSignature> {
       style={{this.style}}
       data-tone={{this.tone}}
       data-appearance={{this.appearance}}
-      data-shape={{this.shape}}
       data-test-pretui-chip
       ...attributes
     >
@@ -146,8 +143,12 @@ export class Chip extends Component<ChipSignature> {
           );
           box-shadow: none;
         }
-        .pretui-chip[data-shape='pill'] {
-          border-radius: var(--boxel-border-radius-pill);
+        /* plain: no fill, ring or radius, just dot + text in the tone's -ink */
+        .pretui-chip[data-appearance='plain'] {
+          padding-inline: 0;
+          border-radius: 0;
+          background: none;
+          box-shadow: none;
         }
         .pretui-chip-dot {
           width: var(--pretui-chip-dot-size);

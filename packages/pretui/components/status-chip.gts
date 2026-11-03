@@ -13,10 +13,8 @@ export interface StatusChipSignature {
     value: string;
     hue?: string;
     tone?: PretuiToneArg;
-    /** passed to Chip: 'outlined' (default) or 'soft' */
-    appearance?: 'outlined' | 'soft';
-    /** passed to Chip: 'rounded' (default) or 'pill' */
-    shape?: 'rounded' | 'pill';
+    /** passed to Chip: 'outlined' (default), 'soft' or 'plain' */
+    appearance?: 'outlined' | 'soft' | 'plain';
     /** passed to Chip: false drops the dot (default true) */
     dot?: boolean;
   };
@@ -41,7 +39,6 @@ export class StatusChip extends Component<StatusChipSignature> {
       @hue={{this.dotHue}}
       @tone={{@tone}}
       @appearance={{@appearance}}
-      @shape={{@shape}}
       @dot={{@dot}}
       data-test-pretui-status-chip
       ...attributes
