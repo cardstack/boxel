@@ -814,10 +814,12 @@ return { show: 'Pet/missing' };`,
     let command = new RunRealmCodeTool(toolService.toolContext);
 
     assert.true(
-      command.description.includes(
-        `a ${LOCAL_SOURCE_URL_PREFIX} URL names a file attached to the chat or an image a capture took, which is in no workspace, so realm.capture refuses it`,
-      ),
-      'a model choosing a capture target reads that an attachment is not one',
+      command.description.includes(`a ${LOCAL_SOURCE_URL_PREFIX} URL`),
+      'the description names the prefix of a file attached from the computer',
+    );
+    assert.true(
+      command.description.includes('so realm.capture refuses it'),
+      'a model choosing a capture target reads that such a file is not one',
     );
   });
 
