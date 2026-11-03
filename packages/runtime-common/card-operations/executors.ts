@@ -47,6 +47,7 @@ import {
 } from './json-splice.ts';
 import {
   OperationFailure,
+  definitionNotReady,
   isOperationFailure,
   type OperationDefinition,
   type EntryPosition,
@@ -1512,6 +1513,8 @@ async function transform(
   let overlays = await gatherOverlays(
     definition,
     url,
+    resource,
+    fileURL,
     schema,
     (resource, against) =>
       bxl.snapshotBxlCardSource({ data: resource }, against, {
@@ -1872,10 +1875,17 @@ function reasonFor(
 //
 // Two snapshots come back as overlay layers: `pristine_doc`, the card with its
 // computed fields filled in, and `search_doc`, the fields of the cards it
-// links to denormalized into its own row. Both carry the card's own stored
-// fields alongside the ones only they can answer, which is fine and is why
-// they are handed over whole — an overlay answers only where the stored
-// document holds nothing.
+// links to denormalized into its own row. Both also carry the card's own
+// stored fields, and those are cut away before either is handed over. An
+// overlay answers where the stored document holds nothing, and the index lags
+// the file: a list the file has just emptied, a field it has just cleared or a
+// link it has just dropped is still rendered with its old value until the
+// indexer visits the card again — minutes, under a re-index backlog. Handed
+// over whole, that old value would answer for the emptied place as a computed
+// one, and every write to the card's own field would be refused as
+// `computed-read-only` until the index caught up. So the computed layer
+// carries only what the definition marks computed, and the linked layer only
+// the expansion of a link the stored document still holds.
 //
 // What the realm could *not* supply is listed as well, and that list is what
 // makes an absent value fail loudly instead of reading as empty. It names only
@@ -1903,6 +1913,8 @@ function reasonFor(
 async function gatherOverlays(
   definition: Definition,
   url: URL,
+  stored: CardResource,
+  fileURL: URL,
   schema: unknown,
   project: (resource: CardResource, schema: unknown) => unknown,
   ctx: StagingContext,
@@ -1959,10 +1971,209 @@ async function gatherOverlays(
     }
   }
   return {
-    ...(row?.pristine ? { computeds: project(row.pristine, schema) } : {}),
-    ...(row?.searchDoc ? { linked: row.searchDoc } : {}),
+    ...(row?.pristine
+      ? {
+          computeds: project(
+            await computedOnly(row.pristine, definition, url, ctx),
+            schema,
+          ),
+        }
+      : {}),
+    ...(row?.searchDoc
+      ? {
+          linked: linkedOnly(
+            row.searchDoc,
+            definition,
+            (field) => storedEdge(stored, field, fileURL, ctx),
+            (field) => own(row?.pristine?.relationships, field),
+          ),
+        }
+      : {}),
     unavailable,
   };
+}
+
+// The indexed resource cut down to its computed values: a computed field
+// whole, and inside a stored contained value only the computed fields under
+// it. Everything else in the row is the card's own, which the stored document
+// answers for — and answers for more recently than the row does.
+//
+// A stored `containsMany` is dropped whole, computed members and all. No
+// overlay reaches inside a stored list anyway (see `reachableInStored` in the
+// planner), so the only thing one could ever contribute is a whole list in
+// place of an empty stored one, which is exactly the stale answer this exists
+// to keep out.
+async function computedOnly(
+  pristine: CardResource,
+  definition: Definition,
+  url: URL,
+  ctx: StagingContext,
+): Promise<CardResource> {
+  let attributes = await computedAttributes(
+    pristine.attributes ?? {},
+    definition,
+    url,
+    ctx,
+  );
+  let relationships: NonNullable<CardResource['relationships']> = {};
+  for (let [key, relationship] of Object.entries(
+    pristine.relationships ?? {},
+  )) {
+    if (await isComputedPath(key.split('.'), definition, url, ctx)) {
+      relationships[key] = relationship;
+    }
+  }
+  return { ...pristine, attributes, relationships };
+}
+
+async function computedAttributes(
+  values: Record<string, unknown>,
+  definition: Definition,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Record<string, unknown>> {
+  let kept: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(values)) {
+    let fieldDef = immediateFieldDef(definition, key);
+    if (!fieldDef) {
+      continue;
+    }
+    if (fieldDef.isComputed) {
+      kept[key] = value;
+      continue;
+    }
+    if (
+      fieldDef.type !== 'contains' ||
+      fieldDef.isPrimitive ||
+      !isPlainRecord(value)
+    ) {
+      continue;
+    }
+    let nested = await computedAttributes(
+      value,
+      await containedDefinition(fieldDef, url, ctx),
+      url,
+      ctx,
+    );
+    if (Object.keys(nested).length > 0) {
+      kept[key] = nested;
+    }
+  }
+  return kept;
+}
+
+// Whether a relationship key of the indexed resource (`curator`,
+// `address.owner`, `clips.0.video`) sits at or under a computed field. The
+// walk descends only through stored single contained values; any other stored
+// field ends it, since what lies under one is the card's own.
+async function isComputedPath(
+  segments: string[],
+  definition: Definition,
+  url: URL,
+  ctx: StagingContext,
+): Promise<boolean> {
+  let current = definition;
+  for (let segment of segments) {
+    let fieldDef = immediateFieldDef(current, segment);
+    if (!fieldDef) {
+      return false;
+    }
+    if (fieldDef.isComputed) {
+      return true;
+    }
+    if (fieldDef.type !== 'contains' || fieldDef.isPrimitive) {
+      return false;
+    }
+    current = await containedDefinition(fieldDef, url, ctx);
+  }
+  return false;
+}
+
+// The definition of a stored contained value, needed to tell its computed
+// members from its stored ones. Without it that cannot be told, and guessing
+// either way is wrong: claiming the members computed refuses writes to the
+// card's own values, and dropping them hands a program an empty read where the
+// index had a value. The definition is missing only while its module is being
+// rebuilt, so the refusal says to retry.
+async function containedDefinition(
+  fieldDef: FieldDefinition,
+  url: URL,
+  ctx: StagingContext,
+): Promise<Definition> {
+  let definition = await ctx.lookupDefinition(fieldDef.fieldOrCard, url);
+  if (!definition) {
+    throw definitionNotReady(url.href, fieldDef.fieldOrCard);
+  }
+  return definition;
+}
+
+// The `search_doc` cut down to what the linked layer is for: the expansion of
+// a link the stored document still holds to the same card, and the values of
+// computed fields. A stored field's own value, and the expansion of a link the
+// file has since dropped or pointed elsewhere, are the row remembering an
+// older card.
+function linkedOnly(
+  searchDoc: Record<string, unknown>,
+  definition: Definition,
+  storedEdgeFor: (field: string) => string | undefined,
+  indexedEdgeFor: (field: string) => unknown,
+): Record<string, unknown> {
+  let kept: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(searchDoc)) {
+    if (key.startsWith('_')) {
+      // The index's own bookkeeping, which the planner already ignores.
+      kept[key] = value;
+      continue;
+    }
+    let fieldDef = immediateFieldDef(definition, key);
+    if (!fieldDef) {
+      continue;
+    }
+    if (fieldDef.isComputed) {
+      kept[key] = value;
+      continue;
+    }
+    if (fieldDef.type !== 'linksTo') {
+      continue;
+    }
+    let edge = storedEdgeFor(key);
+    if (edge === undefined) {
+      continue;
+    }
+    let expandedId = isPlainRecord(value) ? value.id : undefined;
+    let indexed = indexedEdgeFor(key) as
+      | { links?: { self?: unknown } }
+      | undefined;
+    let indexedId = expandedId ?? indexed?.links?.self;
+    if (indexedId === undefined || indexedId === edge) {
+      kept[key] = value;
+    }
+  }
+  return kept;
+}
+
+// The card a stored `linksTo` points at, resolved the way the realm resolves
+// it, or undefined when the stored document holds no edge there.
+function storedEdge(
+  stored: CardResource,
+  field: string,
+  fileURL: URL,
+  ctx: StagingContext,
+): string | undefined {
+  let self = (
+    own(stored.relationships, field) as
+      | { links?: { self?: unknown } }
+      | undefined
+  )?.links?.self;
+  return typeof self === 'string' ? ctx.resolvedLink(self, fileURL) : undefined;
+}
+
+function immediateFieldDef(
+  definition: Definition,
+  field: string,
+): FieldDefinition | undefined {
+  let defId = own(definition.fields, field);
+  return typeof defId === 'string' ? definition.fieldDefs[defId] : undefined;
 }
 
 // The fields of a linked card that its link's row would carry, `id` excepted.
