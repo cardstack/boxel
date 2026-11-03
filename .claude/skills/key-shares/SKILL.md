@@ -213,8 +213,11 @@ Once a confirmed write lands, each listed share's owner gets a row in
 `key_policy_notices`: `visitors-use` for a key that allows anonymous use,
 `visitors-wanted` for one that doesn't, unless their latest notice for the
 share already says the same. The owner reads their own, newest first, at
-`GET /_key-policy-notices`; the secure origin's key page lists them and offers
-to allow the key (`keys#anonymous=<key id>` opens that setting). A notice that
+`GET /_key-policy-notices`. A `visitors-wanted` notice is a request: the secure
+origin's key page shows it as needing an answer, and the owner either allows
+anonymous use on the key (`keys#anonymous=<key id>` opens that setting) or
+declines it (`POST /_key-policy-notices/:id/decline`, from a secure session),
+which sets `declined_at` and changes nothing about the key. A notice that
 can't be recorded is logged on `realm:policy-share-audit` and costs the write
 nothing.
 

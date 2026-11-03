@@ -493,6 +493,7 @@ module(basename(import.meta.filename), function (hooks) {
         savedBy: ORG_ADMIN,
         reason: 'visitors-use',
         operations: [FORECAST],
+        declinedAt: null,
         createdAt: 'string',
       },
       'the owner of a key that allows it is told visitors now use it',
@@ -783,5 +784,73 @@ module(basename(import.meta.filename), function (hooks) {
       allowed.includes(POLICY_AUDIT_CONFIRMATION_HEADER),
       `the preflight allows ${POLICY_AUDIT_CONFIRMATION_HEADER}`,
     );
+  });
+  test('an owner can decline a workspace’s request that visitors use their key, and the same request isn’t made again', async function (assert) {
+    await shareBoth();
+    let opened = policy(['forecast', 'alerts']);
+    let refused = await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+    );
+    let { confirmation } = auditOf(refused)!;
+    await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+      confirmation,
+    );
+
+    let decline = async (owner: string, id: string) =>
+      await request
+        .post(`/_key-policy-notices/${id}/decline`)
+        .set('Authorization', await secureSessionAuth(dbAdapter, owner))
+        .set('Origin', secureOriginURL.origin);
+
+    let ownerNotices = await request
+      .get('/_key-policy-notices')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OWNER));
+    let visitorsUseId = ownerNotices.body.data[0].id as string;
+    let otherNotices = await request
+      .get('/_key-policy-notices')
+      .set('Authorization', await secureSessionAuth(dbAdapter, OTHER_OWNER));
+    let requestId = otherNotices.body.data[0].id as string;
+
+    assert.strictEqual(
+      (await decline(OWNER, requestId)).status,
+      404,
+      'another owner’s request is not theirs to see',
+    );
+    assert.strictEqual(
+      (await decline(OWNER, visitorsUseId)).status,
+      409,
+      'a notice that visitors use a key asks for no answer',
+    );
+    let declined = await decline(OTHER_OWNER, requestId);
+    assert.strictEqual(declined.status, 200, declined.text);
+    assert.strictEqual(
+      typeof declined.body.data.attributes.declinedAt,
+      'string',
+    );
+    assert.strictEqual(
+      (await decline(OTHER_OWNER, requestId)).status,
+      409,
+      'a declined request is declined once',
+    );
+    let [listed] = await notices(OTHER_OWNER);
+    assert.strictEqual(typeof listed.declinedAt, 'string');
+
+    // Saving the same policy again, before its index pass lands, is
+    // audited again; it makes no new request of the owner who declined.
+    await writeSource(
+      org,
+      ORG_ADMIN,
+      'policies/team.json',
+      opened,
+      confirmation,
+    );
+    assert.strictEqual((await notices(OTHER_OWNER)).length, 1);
   });
 });

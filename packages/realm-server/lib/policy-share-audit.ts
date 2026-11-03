@@ -19,7 +19,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
-import { servesVisitorsSQL } from './user-keys.ts';
+import { servesVisitorsSQL, UserKeyError } from './user-keys.ts';
 
 // The realm server's side of the policy audit (`policy-share-audit.ts` in
 // runtime-common): which realms a write's policy change governs, which shares
@@ -399,6 +399,8 @@ export interface KeyPolicyNotice {
   savedBy: string | null;
   reason: 'visitors-use' | 'visitors-wanted';
   operations: string[];
+  // When the owner declined a `visitors-wanted` request; null otherwise.
+  declinedAt: string | null;
   createdAt: string;
 }
 
@@ -408,12 +410,18 @@ export async function listOwnPolicyNotices(
   owner: string,
 ): Promise<KeyPolicyNotice[]> {
   let rows = (await query(dbAdapter, [
-    `SELECT id, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, created_at
-       FROM key_policy_notices WHERE owner = `,
+    `SELECT ${NOTICE_COLUMNS} FROM key_policy_notices WHERE owner = `,
     param(owner),
     ` ORDER BY created_at DESC, id DESC LIMIT 100`,
   ])) as Record<string, any>[];
-  return rows.map((row) => ({
+  return rows.map(noticeOf);
+}
+
+const NOTICE_COLUMNS =
+  'id, share_id, key_id, realm_url, label, policy_card, saved_by, reason, operations, declined_at, created_at';
+
+function noticeOf(row: Record<string, any>): KeyPolicyNotice {
+  return {
     id: String(row.id),
     realm: row.realm_url,
     share: row.share_id,
@@ -426,8 +434,52 @@ export async function listOwnPolicyNotices(
       typeof row.operations === 'string'
         ? JSON.parse(row.operations)
         : row.operations,
+    declinedAt: row.declined_at
+      ? new Date(row.declined_at).toISOString()
+      : null,
     createdAt: new Date(row.created_at).toISOString(),
-  }));
+  };
+}
+
+// The owner declines a workspace's request that visitors use one of their
+// keys. It changes nothing about the key: visitors there stay refused, as
+// they are until the key allows them. The request isn't shown again, and the
+// same request isn't made again by saving the same policy (see
+// `recordPolicyNotices`). Only a `visitors-wanted` notice of the owner's own,
+// not yet declined, can be.
+export async function declinePolicyNotice(
+  dbAdapter: DBAdapter,
+  owner: string,
+  id: string,
+): Promise<KeyPolicyNotice> {
+  if (!/^[0-9]+$/.test(id)) {
+    throw new UserKeyError(404, 'no such notice');
+  }
+  let [row] = (await query(dbAdapter, [
+    `UPDATE key_policy_notices SET declined_at = NOW() WHERE id = `,
+    param(Number(id)),
+    ` AND owner = `,
+    param(owner),
+    ` AND reason = 'visitors-wanted' AND declined_at IS NULL RETURNING ${NOTICE_COLUMNS}`,
+  ])) as Record<string, any>[];
+  if (!row) {
+    let [existing] = (await query(dbAdapter, [
+      `SELECT reason, declined_at FROM key_policy_notices WHERE id = `,
+      param(Number(id)),
+      ` AND owner = `,
+      param(owner),
+    ])) as { reason: string; declined_at: string | null }[];
+    if (!existing) {
+      throw new UserKeyError(404, 'no such notice');
+    }
+    throw new UserKeyError(
+      409,
+      existing.reason === 'visitors-wanted'
+        ? 'this request is already declined'
+        : 'only a request that visitors use a key can be declined',
+    );
+  }
+  return noticeOf(row);
 }
 
 // An operation as a notice and a confirmation name it, the way

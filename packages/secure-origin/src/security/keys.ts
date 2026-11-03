@@ -432,6 +432,8 @@ export interface KeyPolicyNotice {
   savedBy: string | null;
   reason: 'visitors-use' | 'visitors-wanted';
   operations: string[];
+  // When the owner declined a `visitors-wanted` request; null otherwise.
+  declinedAt: string | null;
   createdAt: string;
 }
 
@@ -441,6 +443,19 @@ export async function policyNotices(
 ): Promise<KeyPolicyNotice[]> {
   return resources<KeyPolicyNotice>(
     await authorizedRequest(config, '_key-policy-notices', { method: 'GET' }),
+  );
+}
+
+// Declines a workspace's request that visitors use one of the user's keys.
+// The key is unchanged, and visitors there stay refused.
+export async function declinePolicyNotice(
+  config: Config,
+  noticeId: string,
+): Promise<void> {
+  await authorizedRequest(
+    config,
+    `_key-policy-notices/${encodeURIComponent(noticeId)}/decline`,
+    { method: 'POST' },
   );
 }
 

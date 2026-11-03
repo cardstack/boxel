@@ -62,7 +62,16 @@ export function describePolicyAudit(audit: PolicyShareAudit): string[] {
       ...entryLines(refusing),
     );
   }
-  lines.push("Each key's owner is told once the change is saved.");
+  if (refusing.length) {
+    lines.push(
+      "Owners of keys that don't allow it yet will be asked to approve anonymous use.",
+    );
+  }
+  if (starting.length) {
+    lines.push(
+      'Keys that already allow it are used as soon as the change is saved, and their owners are told.',
+    );
+  }
   return lines;
 }
 
