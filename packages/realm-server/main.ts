@@ -31,6 +31,7 @@ import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
+import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -718,6 +719,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+  // One journal shared by every realm this server mounts. Each write appends
+  // its change event through it, on the write's own transaction, for the
+  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
+  // switch: no realm gets a journal, so no write touches it.
+  let changeJournal =
+    process.env.REALM_HISTORY_JOURNAL === 'off'
+      ? undefined
+      : new PostgresChangeJournal();
 
   // One card+json response cache for the whole process, shared across every
   // realm it mounts: entries are keyed on absolute card URLs, and the byte
@@ -886,6 +895,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
           }),
           policyWriteAuditor,
+          ...(changeJournal ? { history: { journal: changeJournal } } : {}),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

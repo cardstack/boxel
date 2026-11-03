@@ -718,6 +718,50 @@ export function emitKeyUse(event: KeyUseEvent): void {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Change journal
+// ---------------------------------------------------------------------------
+
+// One record per change-journal insert the write path attempted: how long it
+// took and whether it wrote a row, wrote none because the realm records no
+// history, or failed. A failure never fails the write; it rolls back to the
+// journal's savepoint and the write's file meta still commits, and this
+// record is what shows the realm's history is missing the change.
+export const CHANGE_JOURNAL_CHANNEL = 'boxel:change-journal';
+
+export type ChangeJournalOutcome = 'written' | 'skipped' | 'failed';
+
+export interface ChangeJournalEvent {
+  realm: string;
+  outcome: ChangeJournalOutcome;
+  durationMs: number;
+  paths: number;
+  partial: boolean;
+  error?: string;
+}
+
+let changeJournalSink: ((event: ChangeJournalEvent) => void) | undefined;
+
+export function setChangeJournalSink(
+  sink: ((event: ChangeJournalEvent) => void) | undefined,
+): void {
+  changeJournalSink = sink;
+}
+
+let changeJournalLog: ReturnType<typeof logger> | undefined;
+
+export function emitChangeJournal(event: ChangeJournalEvent): void {
+  recordSafely('change journal insert', () => {
+    if (changeJournalSink) {
+      changeJournalSink(event);
+      return;
+    }
+    (changeJournalLog ??= logger(CHANGE_JOURNAL_CHANNEL)).info(
+      JSON.stringify({ channel: CHANGE_JOURNAL_CHANNEL, ...event }),
+    );
+  });
+}
+
 // Build and write one record, logging and swallowing anything that throws on
 // the way. A record describes a decision and never changes one: a sink or a
 // log transport that throws must not turn an admitted invocation into a 500,
