@@ -1162,7 +1162,8 @@ export async function logUnreadableFileRows(
       `SELECT i.url, i.generation, i.is_deleted, i.has_error,
               i.error_doc->>'message' AS index_error,
               ph.generation AS render_generation,
-              left(ph.error_doc::text, 2000) AS render_error,
+              ph.error_doc->>'message' AS render_error,
+              left(ph.error_doc->>'stack', 800) AS render_stack,
               left(ph.diagnostics::text, 1000) AS render_diagnostics
        FROM boxel_index i
        LEFT JOIN prerendered_html ph
@@ -1182,6 +1183,7 @@ export async function logUnreadableFileRows(
           `index_error=${r.index_error ?? 'none'} ` +
           `render_generation=${r.render_generation ?? 'none'} ` +
           `render_error=${r.render_error ?? 'none'} ` +
+          `render_stack=${r.render_stack ?? 'none'} ` +
           `render_diagnostics=${r.render_diagnostics ?? 'none'}`,
       );
     }
