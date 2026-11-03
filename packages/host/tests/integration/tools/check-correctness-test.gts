@@ -512,8 +512,12 @@ module('Integration | tools | check-correctness', function (hooks) {
   });
 
   // Edits milestone.gts through run-realm-code and checks it, the way a
-  // tool-written module is checked after the write.
-  async function checkMilestoneEdit(template: string) {
+  // tool-written module is checked after the write. `afterWrite` runs between
+  // the write and the check.
+  async function checkMilestoneEdit(
+    template: string,
+    afterWrite?: () => Promise<void>,
+  ) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;
     };
@@ -523,6 +527,7 @@ module('Integration | tools | check-correctness', function (hooks) {
       roomId,
       code: overwriteScript('milestone.gts', milestoneModule(template)),
     });
+    await afterWrite?.();
     return await new CheckCorrectnessTool(toolService.toolContext).execute({
       targetType: 'file',
       targetRef: `${testRealmURL}milestone.gts`,
@@ -563,6 +568,21 @@ module('Integration | tools | check-correctness', function (hooks) {
       [`${testRealmURL}Milestone/launch.json`],
       'the instance of the edited module is rendered',
     );
+  });
+
+  test('does not render an instance deleted after the module write', async function (assert) {
+    let renderedCards = mountPrerenderEndpoints();
+
+    let result = await checkMilestoneEdit(
+      '<h2>{{@model.title}}</h2>',
+      async () => {
+        await testRealm.delete('Milestone/launch.json');
+      },
+    );
+
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.true(result.correct, 'the edit passes');
+    assert.deepEqual(renderedCards, [], 'the deleted instance is not rendered');
   });
 
   test('passes a module edit with no instances', async function (assert) {

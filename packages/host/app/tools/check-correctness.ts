@@ -48,10 +48,11 @@ const renderedFormats = [
   ['embedded', 'embeddedHTML'],
 ] as const;
 
-// An index event spells a card instance as its URL without `.json`, and every
-// other file with its extension. A card whose name holds a dot reads as a file
-// here and is not rendered.
-function isCardInstanceHref(href: string): boolean {
+// An index event strips `.json` from every file it names, so a card instance
+// appears as its URL with no extension, and a name with an extension is some
+// other file. A card whose name holds a dot reads as a file here and is not
+// rendered.
+function hasNoExtension(href: string): boolean {
   let name = href.split('/').pop() ?? '';
   return name.length > 0 && !name.includes('.');
 }
@@ -296,7 +297,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // or a computed field throws only when an instance renders. The write's
     // index pass reindexed those instances, so its invalidations name them.
     // Without a tracked write there is nothing to render.
-    let instanceHrefs = this.instancesToRender(invalidations ?? [], roomId);
+    let instanceHrefs = await this.instancesToRender(
+      invalidations ?? [],
+      roomId,
+    );
     let renderErrors = await Promise.all(
       instanceHrefs.map((href) => this.renderInstance(href, realmURL)),
     );
@@ -304,17 +308,31 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   }
 
   // The card instances among a write's invalidations, the ones the user is
-  // looking at first, capped at `maxInstanceRenders`.
-  private instancesToRender(invalidations: string[], roomId: string): string[] {
+  // looking at first, capped at `maxInstanceRenders`. A name with no extension
+  // can still be a JSON file that is not a card, a file with no extension, or
+  // an instance deleted after the write was indexed, so a candidate counts
+  // only once its source reads as a card document.
+  private async instancesToRender(
+    invalidations: string[],
+    roomId: string,
+  ): Promise<string[]> {
     let contextHrefs = this.contextCardHrefs(roomId);
     let rank = (href: string) => {
       let index = contextHrefs.indexOf(href);
       return index === -1 ? contextHrefs.length : index;
     };
-    return invalidations
-      .filter(isCardInstanceHref)
-      .sort((a, b) => rank(a) - rank(b))
-      .slice(0, maxInstanceRenders);
+    let candidates = invalidations
+      .filter(hasNoExtension)
+      .sort((a, b) => rank(a) - rank(b));
+    let instances: string[] = [];
+    while (candidates.length > 0 && instances.length < maxInstanceRenders) {
+      let batch = candidates.splice(0, maxInstanceRenders - instances.length);
+      let found = await Promise.all(
+        batch.map((href) => this.checkIfFileIsACardInstance(`${href}.json`)),
+      );
+      instances.push(...batch.filter((_href, index) => found[index]));
+    }
+    return instances;
   }
 
   // The cards the user is looking at, spelled as an index event spells them:
