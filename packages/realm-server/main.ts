@@ -62,6 +62,7 @@ import {
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
 import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
 import {
@@ -811,6 +812,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             virtualNetwork,
           })
         : null,
+    sendEvent: createSendEvent({ matrixClient, dbAdapter }),
   });
 
   // Construct the reconciler before the server so the server can hold a

@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { Badge } from '@cardstack/pretui/components/badge';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -58,6 +59,7 @@ import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type AssistantQuickLookService from '../../services/assistant-quick-look';
+import type KeyNoticesService from '../../services/key-notices';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
@@ -145,6 +147,7 @@ export default class SubmodeLayout extends Component<Signature> {
   });
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
+  @service declare private keyNotices: KeyNoticesService;
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service('assistant-quick-look')
@@ -548,17 +551,31 @@ export default class SubmodeLayout extends Component<Signature> {
               {{yield to='topBar'}}
             {{/if}}
 
-            <button
-              class='profile-icon-button'
-              {{on 'click' this.toggleProfileSummary}}
-              data-test-profile-icon-button
+            {{! How many key notices the user hasn't seen, as the profile
+                menu's API Keys item shows too. }}
+            <Badge
+              class='profile-icon-badge'
+              @circular={{true}}
+              @count={{this.keyNotices.unread}}
+              @label='unseen key notices'
+              @invisible={{not this.keyNotices.unread}}
+              data-test-profile-icon-key-notices-badge={{if
+                this.keyNotices.unread
+                'unread'
+              }}
             >
-              <Avatar
-                @isReady={{this.matrixService.profile.isLoaded}}
-                @userId={{this.matrixService.userId}}
-                @displayName={{this.matrixService.profile.displayName}}
-              />
-            </button>
+              <button
+                class='profile-icon-button'
+                {{on 'click' this.toggleProfileSummary}}
+                data-test-profile-icon-button
+              >
+                <Avatar
+                  @isReady={{this.matrixService.profile.isLoaded}}
+                  @userId={{this.matrixService.userId}}
+                  @displayName={{this.matrixService.profile.displayName}}
+                />
+              </button>
+            </Badge>
           </div>
           {{! Ahead of the page, so Tab reaches the rail right after the top
               bar, as it reads. }}
@@ -816,11 +833,16 @@ export default class SubmodeLayout extends Component<Signature> {
         background: none;
 
         padding: 0;
-        margin-left: auto;
 
         border: none;
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
+      }
+      /* The badge wraps the button, so it is the top bar's item and carries
+         its stacking. The button takes none of its own, which would lift the
+         avatar over the badge's mark. */
+      .profile-icon-badge {
+        margin-left: auto;
         z-index: var(--host-profile-z-index);
       }
 

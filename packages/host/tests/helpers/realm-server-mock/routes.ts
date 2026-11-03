@@ -684,6 +684,20 @@ function registerAuthRoutes() {
       req.method === 'DELETE' ? new Response(null, { status: 204 }) : null,
   });
 
+  // The app asks how many key notices the user hasn't seen when a session
+  // starts. The mock keeps none, so the badge stays hidden unless a test
+  // stands in its own listing.
+  registerRealmServerRoute({
+    path: '/_key-policy-notices',
+    handler: async (req) =>
+      req.method === 'GET'
+        ? new Response(JSON.stringify({ data: [], meta: { unread: 0 } }), {
+            status: 200,
+            headers: { 'content-type': 'application/vnd.api+json' },
+          })
+        : null,
+  });
+
   registerRealmServerRoute({
     path: '/_delete-realm',
     handler: async (req, _url, state: RealmServerMockState) => {

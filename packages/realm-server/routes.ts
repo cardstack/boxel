@@ -164,6 +164,7 @@ import {
   handleListKeyPolicyNotices,
   handleListKeyShareNotices,
   handleListKeyShares,
+  handleMarkKeyPolicyNoticesRead,
   handleResumeKeyShare,
   handleShareKey,
   handleSuspendKeyShare,
@@ -527,6 +528,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     KEY_POLICY_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyPolicyNotices(args),
+  );
+  router.post(
+    `${KEY_POLICY_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyPolicyNoticesRead(args),
   );
   router.post(
     `${KEY_POLICY_NOTICES_PATH}/:id/decline`,

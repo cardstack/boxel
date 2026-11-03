@@ -434,6 +434,9 @@ export interface KeyPolicyNotice {
   operations: string[];
   // When the owner declined a `visitors-wanted` request; null otherwise.
   declinedAt: string | null;
+  // When this page first listed it; null while it is unread, which the app
+  // shows as a badge on the user's avatar.
+  readAt: string | null;
   createdAt: string;
 }
 
@@ -457,6 +460,20 @@ export async function declinePolicyNotice(
     `_key-policy-notices/${encodeURIComponent(noticeId)}/decline`,
     { method: 'POST' },
   );
+}
+
+// Marks the notices this page has shown read, which clears the app's badge
+// for them. Only the secure origin's own session may.
+export async function markPolicyNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-policy-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-policy-notice', id })),
+    },
+  });
 }
 
 // The shares holding one of the user's keys: those deleting it suspends.
