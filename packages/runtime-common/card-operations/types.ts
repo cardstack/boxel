@@ -1802,6 +1802,36 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
 }
 
+// How long a caller turned away over a definition that is still being built is
+// told to wait before it tries again. A definition render that misses the
+// cache takes a few seconds; longer than that and the caller is only waiting
+// on the queue.
+export const DEFINITION_RETRY_AFTER_SECONDS = 5;
+
+// A refusal over a type definition the realm cannot produce yet: its module is
+// being rebuilt, or its render is queued behind other work and did not finish
+// within the request's deadline. Nothing was done, and nothing the caller sent
+// is wrong, so it carries `target-not-indexed` — the code that says waiting
+// resolves it — as a 503 with `meta.retryAfterSeconds`, which the operations
+// response turns into a `Retry-After`.
+export function definitionNotReady(
+  id: string | undefined,
+  codeRef: unknown,
+  reason = 'is not available yet',
+): OperationFailure {
+  return new OperationFailure({
+    ...(id ? { id } : {}),
+    status: 503,
+    code: 'target-not-indexed',
+    title: 'Definition not ready',
+    detail: `the definition of ${JSON.stringify(codeRef)} ${reason}; retry shortly`,
+    meta: {
+      awaitingIndex: true,
+      retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+    },
+  });
+}
+
 // A refusal as a caller the realm ACL would not let read the realm is told it.
 //
 // Such a caller is not told which cards exist. A card no grant admits and a

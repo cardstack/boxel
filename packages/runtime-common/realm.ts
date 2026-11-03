@@ -348,6 +348,7 @@ import {
   type TargetRealm,
 } from './card-operations/explain.ts';
 import type { CallApiSender } from './card-operations/call-api.ts';
+import { requestDefinitionLookup } from './card-operations/request-definition-lookup.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -2860,6 +2861,7 @@ export class Realm {
   #policyTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
+  #requestDefinitions: ReturnType<typeof requestDefinitionLookup> | undefined;
   #adapter: RealmAdapter;
   #router: Router;
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
@@ -8136,6 +8138,19 @@ export class Realm {
     return this.#realmIndexQueryEngine;
   }
 
+  // The definition lookup an operation reads through: a cache miss renders at
+  // user priority, ahead of background re-index work, and a render that does
+  // not finish in time refuses with a retryable 503 rather than holding the
+  // request open. See `requestDefinitionLookup`.
+  get #requestDefinitionLookup(): ReturnType<typeof requestDefinitionLookup> {
+    if (!this.#requestDefinitions) {
+      this.#requestDefinitions = requestDefinitionLookup(
+        this.#definitionLookup,
+      );
+    }
+    return this.#requestDefinitions;
+  }
+
   // The operation core, built from the realm's own collaborators. What it is
   // handed is deliberately narrow: the definition cache and the index query
   // engine, plus plain functions for the few resolutions that belong to the
@@ -8149,7 +8164,7 @@ export class Realm {
     if (!this.#operationCore) {
       this.#operationCore = {
         realmURL: this.url,
-        definitionLookup: this.#definitionLookup,
+        definitionLookup: this.#requestDefinitionLookup,
         indexQueryEngine: this.#realmIndexQueryEngine,
         readFileAsText: async (localPath) =>
           (await this.readFileAsText(localPath))?.content,
@@ -8639,7 +8654,7 @@ export class Realm {
           if (!isResolvedCodeRef(absolute)) {
             return undefined;
           }
-          return await this.#definitionLookup.lookupDefinition(absolute);
+          return await this.#requestDefinitionLookup.lookupDefinition(absolute);
         },
         // The same parse every card response reads its realm info from, minus
         // the half that response carries. An executor never opens the realm's
