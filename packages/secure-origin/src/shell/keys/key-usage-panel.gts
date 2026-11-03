@@ -56,6 +56,7 @@ export default class KeyUsagePanel extends Component<Signature> {
         class='toggle'
         aria-expanded={{if this.isClosed 'false' 'true'}}
         aria-describedby='key-name-{{@key.id}}'
+        data-usage-panel-toggle
         data-test-key-usage-toggle
         {{on 'click' this.toggle}}
       >Usage and limits</button>
@@ -169,7 +170,7 @@ export default class KeyUsagePanel extends Component<Signature> {
     requestAnimationFrame(() =>
       document
         .querySelector<HTMLElement>(
-          `[data-usage-panel="${CSS.escape(this.args.key.id)}"] > .toggle`,
+          `[data-usage-panel="${CSS.escape(this.args.key.id)}"] [data-usage-panel-toggle]`,
         )
         ?.focus(),
     );

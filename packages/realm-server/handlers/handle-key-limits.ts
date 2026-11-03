@@ -147,7 +147,7 @@ export function handleListKeyLimitNotices({
         id,
         attributes,
       })),
-      meta: { unread: await countUnreadLimitNotices(dbAdapter, recipient) },
+      meta: { unread: notices.filter((notice) => !notice.readAt).length },
     });
   });
 }
