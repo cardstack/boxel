@@ -4,6 +4,8 @@
 // a test gives for its method and path. A request no handler answers fails
 // the test, so a page that asks for something unexpected is caught.
 
+import { waitedFetch } from './waiters.ts';
+
 export const MATRIX_URL = 'https://matrix.example.test/';
 export const REALM_SERVER_URL = 'https://realm-server.example.test/';
 
@@ -62,7 +64,7 @@ export function setupMockServers(hooks: NestedHooks): MockServers {
       metas.push(meta);
     }
     originalFetch = window.fetch;
-    window.fetch = async (input, init = {}) => {
+    window.fetch = waitedFetch(async (input, init = {}) => {
       let url = new URL(String(input));
       let server: SeenRequest['server'];
       let path: string;
@@ -100,7 +102,7 @@ export function setupMockServers(hooks: NestedHooks): MockServers {
         status,
         headers: { 'Content-Type': 'application/json' },
       });
-    };
+    });
   });
 
   hooks.afterEach(function () {

@@ -36,17 +36,13 @@ module('Integration | Component | matrix/secure-sign-in', function (hooks) {
   setupRenderingTest(hooks);
 
   let { setLoginWithTokenInterceptor } = setupMockMatrix(hooks, {});
-  let originalFlag: boolean;
 
   hooks.beforeEach(function () {
-    originalFlag = ENV.signInOnSecureOrigin;
-    ENV.signInOnSecureOrigin = true;
     window.sessionStorage.clear();
     window.location.href = APP_PAGE;
   });
 
   hooks.afterEach(function () {
-    ENV.signInOnSecureOrigin = originalFlag;
     window.sessionStorage.clear();
   });
 

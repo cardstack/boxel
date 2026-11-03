@@ -59,6 +59,7 @@ class DataTableUsage extends Component {
   @tracked size: ListingSizeArg = 'm';
   @tracked pinFirst = false;
   @tracked striped = true;
+  @tracked flush = false;
   @tracked pageSize = 6;
   @tracked showDetail = true;
   @tracked lastSort = '—';
@@ -69,6 +70,7 @@ class DataTableUsage extends Component {
   setSize = (v: string) => (this.size = v as ListingSizeArg);
   setPinFirst = (v: boolean) => (this.pinFirst = v);
   setStriped = (v: boolean) => (this.striped = v);
+  setFlush = (v: boolean) => (this.flush = v);
   setPageSize = (v: number) => (this.pageSize = v);
   setShowDetail = (v: boolean) => (this.showDetail = v);
 
@@ -145,6 +147,7 @@ class DataTableUsage extends Component {
               @size={{this.size}}
               @selectionMode={{this.selectionMode}}
               @striped={{this.striped}}
+              @flush={{this.flush}}
               @pageSize={{this.pageSize}}
               @itemNoun='lot'
               @minWidth='46rem'
@@ -193,6 +196,7 @@ class DataTableUsage extends Component {
               @size={{this.size}}
               @selectionMode={{this.selectionMode}}
               @striped={{this.striped}}
+              @flush={{this.flush}}
               @pageSize={{this.pageSize}}
               @itemNoun='lot'
               @minWidth='46rem'
@@ -247,6 +251,13 @@ class DataTableUsage extends Component {
           @defaultValue={{true}}
           @description='Zebra rows. Pinned cells take the row’s computed background, so striping, hover and selection all survive the pin.'
           @onInput={{this.setStriped}}
+        />
+        <Args.Bool
+          @name='flush'
+          @value={{this.flush}}
+          @defaultValue={{false}}
+          @description='Drops the table’s own frame (ring, radius, header fill) and the outer cell inset, for a table inside a Panel or card that already frames it, so the page does not draw a frame inside a frame. Turn it on to see the table sit flush on the artboard.'
+          @onInput={{this.setFlush}}
         />
         <Args.Number
           @name='pageSize'

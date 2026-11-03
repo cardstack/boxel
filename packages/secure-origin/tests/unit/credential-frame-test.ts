@@ -120,23 +120,32 @@ module('Unit | credential frame protocol', function () {
   module('the frame URL and page', function () {
     test('reads the form and the app origin from the fragment', function (assert) {
       let params = readParams(
-        'https://secure.example.test/credentials#form=login&origin=http%3A%2F%2Flocalhost%3A4200',
+        'https://secure.example.test/credentials#form=change-password&origin=http%3A%2F%2Flocalhost%3A4200',
       );
-      assert.strictEqual(params.formName, 'login');
-      assert.strictEqual(params.form, FORMS.login);
+      assert.strictEqual(params.formName, 'change-password');
+      assert.strictEqual(params.form, FORMS['change-password']);
       assert.strictEqual(params.appOrigin, 'http://localhost:4200');
     });
 
     test('reads the query when the fragment names no form', function (assert) {
       let params = readParams(
-        'https://secure.example.test/credentials?form=reset&origin=https%3A%2F%2Fapp.example.test#other=1',
+        'https://secure.example.test/credentials?form=confirm-password&origin=https%3A%2F%2Fapp.example.test#other=1',
       );
-      assert.strictEqual(params.form, FORMS.reset);
+      assert.strictEqual(params.form, FORMS['confirm-password']);
       assert.strictEqual(params.appOrigin, APP_ORIGIN);
     });
 
     test('names no form for one it does not know', function (assert) {
-      for (let name of ['unknown', 'toString', '__proto__', '']) {
+      for (let name of [
+        'unknown',
+        'login',
+        'cli-login',
+        'register',
+        'reset',
+        'toString',
+        '__proto__',
+        '',
+      ]) {
         assert.strictEqual(
           readParams(`https://secure.example.test/credentials#form=${name}`)
             .form,
@@ -164,7 +173,7 @@ module('Unit | credential frame protocol', function () {
       let appOrigins = [APP_ORIGIN, 'https://*.preview.example.test'];
       let start = (overrides: Record<string, unknown>) =>
         mayStart({
-          form: FORMS.login,
+          form: FORMS['change-password'],
           appOrigin: APP_ORIGIN,
           appOrigins,
           framed: true,
@@ -201,34 +210,6 @@ module('Unit | credential frame protocol', function () {
         ]),
       );
       assert.deepEqual(shape, {
-        login: {
-          fields: [
-            ['username', 'text', 'username'],
-            ['password', 'password', 'current-password'],
-          ],
-          operations: ['login'],
-        },
-        'cli-login': {
-          fields: [
-            ['username', 'text', 'username'],
-            ['password', 'password', 'current-password'],
-          ],
-          operations: ['cli-login'],
-        },
-        register: {
-          fields: [
-            ['password', 'password', 'new-password'],
-            ['confirm', 'password', 'new-password'],
-          ],
-          operations: ['register'],
-        },
-        reset: {
-          fields: [
-            ['password', 'password', 'new-password'],
-            ['confirm', 'password', 'new-password'],
-          ],
-          operations: ['set-password'],
-        },
         'change-password': {
           fields: [
             ['current', 'password', 'current-password'],
@@ -245,14 +226,9 @@ module('Unit | credential frame protocol', function () {
     });
 
     test('a form refuses any request but its own', async function (assert) {
-      let h = harness('login');
-      fill(h, { username: 'example-user', password: 'a-long-password' });
-      for (let operation of [
-        'set-password',
-        'register',
-        'add-threepid',
-        'toString',
-      ]) {
+      let h = harness('confirm-password');
+      fill(h, { current: 'the-password' });
+      for (let operation of ['set-password', 'login', 'register', 'toString']) {
         let result = await submit(h, operation);
         assert.deepEqual(
           result,
@@ -271,10 +247,16 @@ module('Unit | credential frame protocol', function () {
     });
 
     test('a request waits for every field to be filled in and valid', async function (assert) {
-      let h = harness('reset');
-      fill(h, { password: 'a-long-password', confirm: 'a-different-one' });
+      let h = harness('change-password');
+      fill(h, {
+        current: 'the-old-password',
+        password: 'a-long-password',
+        confirm: 'a-different-one',
+      });
       h.frame.blur('confirm');
-      let result = await submit(h, 'set-password', { account: 'someone' });
+      let result = await submit(h, 'set-password', {
+        accessToken: 'app-token',
+      });
       assert.false(result.ok);
       assert.deepEqual(h.requests, []);
       assert.deepEqual(h.changes, []);
@@ -283,7 +265,7 @@ module('Unit | credential frame protocol', function () {
 
   module('messages', function () {
     test('answers only its parent window, on the app origin', function (assert) {
-      let h = harness('login');
+      let h = harness('change-password');
       h.receive(
         { type: 'context', username: 'from-elsewhere' },
         { source: {} },
@@ -294,36 +276,37 @@ module('Unit | credential frame protocol', function () {
       );
       h.receive('context');
       h.receive(null);
-      assert.strictEqual(
-        h.frame.value('username'),
-        '',
-        'nothing was filled in',
-      );
+      assert.strictEqual(h.frame.hiddenUsername, '', 'nothing was taken');
 
       h.receive({ type: 'context', username: 'example-user' });
-      assert.strictEqual(h.frame.value('username'), 'example-user');
+      assert.strictEqual(h.frame.hiddenUsername, 'example-user');
     });
 
     test('reports whether each field is filled in, never what is in it, and only on a change', function (assert) {
-      let h = harness('login');
+      let h = harness('change-password');
       h.frame.ready(['--credential-layout']);
-      fill(h, { username: 'example-user' });
-      fill(h, { username: 'example-user2' });
-      fill(h, { password: 'a-long-password' });
+      fill(h, { current: 'the-old-password' });
+      fill(h, { current: 'the-old-password2' });
+      fill(h, { password: 'a-long-password', confirm: 'a-long-password' });
       assert.deepEqual(h.sentOfType('state'), [
         {
           type: 'state',
-          filled: { username: false, password: false },
+          filled: { current: false, password: false, confirm: false },
           complete: false,
         },
         {
           type: 'state',
-          filled: { username: true, password: false },
+          filled: { current: true, password: false, confirm: false },
           complete: false,
         },
         {
           type: 'state',
-          filled: { username: true, password: true },
+          filled: { current: true, password: true, confirm: false },
+          complete: false,
+        },
+        {
+          type: 'state',
+          filled: { current: true, password: true, confirm: true },
           complete: true,
         },
       ]);
@@ -337,26 +320,26 @@ module('Unit | credential frame protocol', function () {
     });
 
     test('reports the first keystroke into a field after it was marked invalid', function (assert) {
-      let h = harness('login');
-      fill(h, { password: 'a' });
-      fill(h, { password: 'ab' });
+      let h = harness('confirm-password');
+      fill(h, { current: 'a' });
+      fill(h, { current: 'ab' });
       assert.deepEqual(h.sentOfType('input'), [
-        { type: 'input', field: 'password' },
+        { type: 'input', field: 'current' },
       ]);
       h.receive({
         type: 'field-error',
-        field: 'password',
+        field: 'current',
         message: 'Wrong password',
       });
-      assert.strictEqual(h.frame.error('password'), 'Wrong password');
+      assert.strictEqual(h.frame.error('current'), 'Wrong password');
       assert.false(h.frame.isComplete());
-      fill(h, { password: 'abc' });
-      assert.strictEqual(h.frame.error('password'), undefined, 'cleared');
+      fill(h, { current: 'abc' });
+      assert.strictEqual(h.frame.error('current'), undefined, 'cleared');
       assert.strictEqual(h.sentOfType('input').length, 2);
     });
 
     test('checks a new password and its confirmation as each field is left', function (assert) {
-      let h = harness('register');
+      let h = harness('change-password');
       fill(h, { password: 'short' });
       h.frame.blur('password');
       assert.strictEqual(
@@ -366,10 +349,9 @@ module('Unit | credential frame protocol', function () {
       fill(h, { password: 'a-long-password', confirm: 'something-else' });
       h.frame.blur('confirm');
       assert.strictEqual(h.frame.error('confirm'), 'Passwords do not match');
-      assert.false(h.frame.showsHint('confirm'));
-      assert.true(h.frame.showsHint('password'), 'password is valid');
       fill(h, { confirm: 'a-long-password' });
-      assert.true(h.frame.showsHint('confirm'), 'passwords match');
+      h.frame.blur('confirm');
+      assert.strictEqual(h.frame.error('confirm'), undefined, 'they match');
       h.frame.blur('password');
       h.frame.input('password', '');
       h.frame.blur('password');
@@ -397,25 +379,8 @@ module('Unit | credential frame protocol', function () {
       assert.false(h.sentOfType('state').at(-1).complete);
     });
 
-    test('fills a username the page knows into an empty username field, and the hidden one', function (assert) {
-      let login = harness('login');
-      login.receive({ type: 'context', username: 'example-user' });
-      assert.strictEqual(login.frame.value('username'), 'example-user');
-      login.frame.input('username', 'typed-user');
-      login.receive({ type: 'context', username: 'example-user' });
-      assert.strictEqual(
-        login.frame.value('username'),
-        'typed-user',
-        'a typed username stays',
-      );
-
-      let register = harness('register');
-      register.receive({ type: 'context', username: 'new-user' });
-      assert.strictEqual(register.frame.hiddenUsername, 'new-user');
-    });
-
     test('Enter asks the app to submit', function (assert) {
-      let h = harness('login');
+      let h = harness('confirm-password');
       h.frame.enter();
       assert.deepEqual(h.sent, [{ type: 'submit-request' }]);
     });
@@ -465,70 +430,19 @@ module('Unit | credential frame protocol', function () {
   });
 
   module('requests', function () {
-    test('signs in by username, then by email address', async function (assert) {
-      let h = harness('login', {
-        respond: (_path, body) =>
-          body.identifier.type === 'm.id.thirdparty'
-            ? {
-                status: 200,
-                body: { user_id: '@example-user:example.test' },
-              }
-            : { status: 403, body: { errcode: 'M_FORBIDDEN' } },
-      });
-      fill(h, {
-        username: 'user@example.test',
-        password: 'a-long-password',
-      });
-      let result = await submit(h, 'login');
-      assert.strictEqual(h.submitted.count, 1, 'the form is submitted');
-      assert.deepEqual(
-        h.requests.map((request) => [request.url, request.body]),
-        [
-          [
-            'https://matrix.example.test/_matrix/client/v3/login',
-            {
-              identifier: { type: 'm.id.user', user: 'user@example.test' },
-              password: 'a-long-password',
-              type: 'm.login.password',
-            },
-          ],
-          [
-            'https://matrix.example.test/_matrix/client/v3/login',
-            {
-              identifier: {
-                type: 'm.id.thirdparty',
-                medium: 'email',
-                address: 'user@example.test',
-              },
-              password: 'a-long-password',
-              type: 'm.login.password',
-            },
-          ],
-        ],
-      );
-      assert.deepEqual(result, {
-        type: 'result',
-        id: 'request-1',
-        ok: true,
-        status: 200,
-        body: { user_id: '@example-user:example.test' },
-      });
-    });
-
     test("a response goes back with the fields' passwords cut out", async function (assert) {
-      let h = harness('login', {
+      let h = harness('confirm-password', {
         respond: (_path, body) => ({
-          status: 403,
-          body: {
-            error: `bad password ${body.password} for ${body.identifier.user}`,
-          },
+          status: 401,
+          body: { error: `bad password ${body.auth.password}` },
         }),
       });
-      fill(h, { username: 'example-user', password: 'a-long-password' });
-      let result = await submit(h, 'login');
-      assert.deepEqual(result.body, {
-        error: 'bad password [redacted] for example-user',
+      fill(h, { current: 'a-long-password' });
+      let result = await submit(h, 'add-threepid', {
+        auth: { type: 'm.login.password', session: 'session-1' },
+        accessToken: 'app-token',
       });
+      assert.deepEqual(result.body, { error: 'bad password [redacted]' });
     });
 
     test("set-password asks the realm server to change the password, with the passwords from its fields and the app's token", async function (assert) {
@@ -558,68 +472,22 @@ module('Unit | credential frame protocol', function () {
       ]);
     });
 
-    test('set-password asks the realm server to reset the password with the email validation session, for the account the app names', async function (assert) {
-      let h = harness('reset');
-      fill(h, { password: 'the-new-password', confirm: 'the-new-password' });
+    test('set-password makes a change only, whatever the app sends', async function (assert) {
+      let h = harness('change-password');
+      fill(h, {
+        current: 'the-old-password',
+        password: 'the-new-password',
+        confirm: 'the-new-password',
+      });
       let result = await submit(h, 'set-password', {
         auth: {
           type: 'm.login.email.identity',
           threepid_creds: { sid: 'sid-1', client_secret: 'client-secret' },
         },
-        account: 'user@example.test',
-      });
-      assert.true(result.ok);
-      assert.deepEqual(h.requests, [], 'nothing goes to the Matrix server');
-      assert.deepEqual(h.changes, [
-        {
-          newPassword: 'the-new-password',
-          sid: 'sid-1',
-          clientSecret: 'client-secret',
-          email: 'user@example.test',
-        },
-      ]);
-    });
-
-    test('set-password takes the request it makes from the form, not from what the app sends', async function (assert) {
-      let resetCreds = {
-        type: 'm.login.email.identity',
-        threepid_creds: { sid: 'sid-1', client_secret: 'client-secret' },
-      };
-      let change = harness('change-password');
-      fill(change, {
-        current: 'the-old-password',
-        password: 'the-new-password',
-        confirm: 'the-new-password',
-      });
-      let result = await submit(change, 'set-password', {
-        auth: resetCreds,
         account: 'someone-else@example.test',
       });
-      assert.false(result.ok, 'the change form makes no reset');
-      assert.deepEqual(change.changes, [], 'and sends nothing');
-
-      let reset = harness('reset');
-      fill(reset, {
-        password: 'the-new-password',
-        confirm: 'the-new-password',
-      });
-      await submit(reset, 'set-password', {
-        auth: resetCreds,
-        accessToken: 'app-token',
-        account: 'user@example.test',
-      });
-      assert.deepEqual(
-        reset.changes,
-        [
-          {
-            newPassword: 'the-new-password',
-            sid: 'sid-1',
-            clientSecret: 'client-secret',
-            email: 'user@example.test',
-          },
-        ],
-        'the reset form makes a reset, whatever token it is sent',
-      );
+      assert.false(result.ok, 'no change without the app’s token');
+      assert.deepEqual(h.changes, [], 'and no reset in its place');
     });
 
     test("set-password answers with the Matrix server's refusal, with the passwords redacted", async function (assert) {
@@ -649,20 +517,6 @@ module('Unit | credential frame protocol', function () {
       });
     });
 
-    test('register sends the username the app names with the password from its field', async function (assert) {
-      let h = harness('register');
-      fill(h, { password: 'the-new-password', confirm: 'the-new-password' });
-      await submit(h, 'register', {
-        username: 'new-user',
-        auth: { type: 'm.login.dummy', session: 'session-1' },
-      });
-      assert.deepEqual(h.requests[0].body, {
-        username: 'new-user',
-        password: 'the-new-password',
-        auth: { type: 'm.login.dummy', session: 'session-1' },
-      });
-    });
-
     test('add-threepid confirms with the password from its field', async function (assert) {
       let h = harness('confirm-password');
       fill(h, { current: 'the-password' });
@@ -689,21 +543,31 @@ module('Unit | credential frame protocol', function () {
 
     test('makes requests one at a time, in the order asked', async function (assert) {
       let order: string[] = [];
-      let h = harness('login', {
+      let h = harness('confirm-password', {
         respond: (_path, body) => {
-          order.push(body.identifier.type);
+          order.push(body.sid);
           return { status: 200, body: {} };
         },
       });
-      fill(h, { username: 'example-user', password: 'a-long-password' });
-      h.receive({ type: 'submit', id: 'first', operation: 'login' });
-      h.receive({ type: 'submit', id: 'second', operation: 'login' });
+      fill(h, { current: 'the-password' });
+      h.receive({
+        type: 'submit',
+        id: 'first',
+        operation: 'add-threepid',
+        args: { sid: 'sid-1' },
+      });
+      h.receive({
+        type: 'submit',
+        id: 'second',
+        operation: 'add-threepid',
+        args: { sid: 'sid-2' },
+      });
       await h.frame.queue;
       assert.deepEqual(
         h.sentOfType('result').map((result) => result.id),
         ['first', 'second'],
       );
-      assert.deepEqual(order, ['m.id.user', 'm.id.user']);
+      assert.deepEqual(order, ['sid-1', 'sid-2']);
     });
   });
 });

@@ -14,6 +14,7 @@ import {
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
+  publishedSpaceHost,
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
@@ -21,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
+import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
 import { join } from 'path';
 import fsExtra from 'fs-extra';
@@ -43,6 +45,7 @@ const {
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForError,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
@@ -60,6 +63,12 @@ import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-r
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 
 const log = logger('handle-publish');
+
+class PublishedRealmURLTakenError extends Error {
+  constructor(publishedRealmURL: string) {
+    super(`${publishedRealmURL} is already published from another realm`);
+  }
+}
 
 // A base CardDef can be referenced two equivalent ways in a
 // `meta.adoptsFrom.module` field — the absolute base-realm URL, or
@@ -131,6 +140,7 @@ function parseOverrideHost(rawOverride: string): OverrideHost | null {
 async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
+  matrixServerName: string,
   sourceRealmURL: string,
   publishedRealmURL: string,
 ): Promise<{ applied: boolean; publishedRealmURL: string }> {
@@ -164,12 +174,16 @@ async function maybeApplyPublishedRealmOverride(
     dbAdapter,
     new URL(sourceRealmURL),
   );
-  let effectivePermissions = new Set([
-    ...(permissions['*'] ?? []),
-    ...(permissions['users'] ?? []),
-    ...(permissions[ownerUserId] ?? []),
-  ]);
-  if (!effectivePermissions.has('write')) {
+  // The publisher is the signed-in user of this request, whose account the
+  // realm server verified when it issued their session, so the `users` row
+  // applies whenever they are on the paired homeserver (ADR 004 §1.4).
+  let effectivePermissions = await effectiveRealmPermissions(
+    permissions,
+    ownerUserId,
+    matrixServerName,
+    async () => true,
+  );
+  if (!effectivePermissions.includes('write')) {
     return { applied: false, publishedRealmURL };
   }
 
@@ -467,6 +481,7 @@ export default function handlePublishRealm({
     let overrideResult = await maybeApplyPublishedRealmOverride(
       dbAdapter,
       ownerUserId,
+      matrixClient.serverName,
       sourceRealmURL,
       publishedRealmURL,
     );
@@ -521,19 +536,21 @@ export default function handlePublishRealm({
         return;
       }
 
-      // Within the owner's own published space (`<username>.<spaceDomain>`), a
+      // Within the owner's own published space (`publishedSpaceHost`), a
       // subdirectory publish may target only the realm-name path (the "Your
       // Boxel Space" target) or the server-issued unlisted-link slug — never an
       // arbitrary, client-chosen path — so the unlisted link's unguessable
       // path can't be hand-picked through a direct API call. Publishes to any
       // other host (claimed custom domains, etc.) are left permissive.
       let spaceDomain = domainsForPublishedRealms?.boxelSpace;
-      let matrixUsername = getMatrixUsername(ownerUserId);
       let publishedURLForPath = new URL(publishedRealmURL);
+      let ownerSpaceHost = spaceDomain
+        ? publishedSpaceHost(getMatrixUsername(ownerUserId), spaceDomain)
+        : undefined;
       let isOwnerSpaceHost =
-        !!spaceDomain &&
-        (publishedURLForPath.host === `${matrixUsername}.${spaceDomain}` ||
-          publishedURLForPath.hostname === `${matrixUsername}.${spaceDomain}`);
+        !!ownerSpaceHost &&
+        (publishedURLForPath.host === ownerSpaceHost ||
+          publishedURLForPath.hostname === ownerSpaceHost);
       if (isOwnerSpaceHost) {
         let publishedPath = publishedURLForPath.pathname
           .split('/')
@@ -623,14 +640,28 @@ export default function handlePublishRealm({
       let { lastPublishedAt, publishedRealmId, isNewRealm, renderEveryCard } =
         await dbAdapter.withWriteLock(publishedRealmURL, async () => {
           let existingRows = (await query(dbAdapter, [
-            `SELECT disk_id, owner_username, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
+            `SELECT disk_id, owner_username, source_url, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
           ])) as {
             disk_id: string;
             owner_username: string;
+            source_url: string;
             last_published_at: string | number | null;
           }[];
           let isNewRealm = existingRows.length === 0;
+
+          // A published URL belongs to the realm it was first published
+          // from. Republishing it from any other source realm would replace
+          // someone else's site, e.g. when two usernames map to the same
+          // Boxel Space host (see `publishedSpaceSubdomain`). Checked inside
+          // the write lock so two first-time publishes of one URL cannot
+          // both pass it.
+          if (
+            !isNewRealm &&
+            ensureTrailingSlash(existingRows[0].source_url) !== sourceRealmURL
+          ) {
+            throw new PublishedRealmURLTakenError(publishedRealmURL);
+          }
 
           let publishedRealmId: string;
           let realmUsername: string;
@@ -1014,6 +1045,10 @@ export default function handlePublishRealm({
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {
+      if (error instanceof PublishedRealmURLTakenError) {
+        await sendResponseForError(ctxt, 409, 'Conflict', error.message);
+        return;
+      }
       log.error('Error publishing realm:', error);
       await sendResponseForSystemError(ctxt, error.message);
     }

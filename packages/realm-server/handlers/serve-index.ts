@@ -33,7 +33,6 @@ import {
   retrieveIsolatedHTML,
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
-import { matrixServerName } from '../lib/secure-session.ts';
 import { fullRequestURL } from '../middleware/index.ts';
 import {
   findOrMountRealm,
@@ -44,6 +43,10 @@ import {
   type RealmRoutingDeps,
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import {
+  prefixRealmURLsOf,
+  type PrefixRealmSource,
+} from '@cardstack/runtime-common/prefix-realm-network';
 
 // The prerendered formats the host-mode page for the card or file at `readURL`
 // serves data-only, asked of the realm holding it: the one the request was
@@ -83,6 +86,12 @@ export type ServeIndexDeps = {
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
   getIndexHTML: () => Promise<string>;
+  /**
+   * The server's own network, whose realm mappings say where each prefix
+   * realm is served. The served index HTML carries that map to the host, and
+   * `/_prefix-realms` carries the same map to every other client.
+   */
+  virtualNetwork: PrefixRealmSource;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
   audioSizeLimitBytes: number;
@@ -208,6 +217,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     dbAdapter,
     matrixClient,
     getIndexHTML,
+    virtualNetwork,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -246,9 +256,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     };
 
     let work = (async () => {
-      let serverName =
-        process.env.MATRIX_SERVER_NAME ||
-        (await matrixServerName({ matrixClient }));
       let indexHTML = (await getIndexHTML()).replace(
         // Closing matches both HTML5-style `">` and Vite's XHTML-style `" />`
         // so the rewrite runs against both production build and Vite dev HTML.
@@ -274,7 +281,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
             matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
-            matrixServerName: serverName,
+            // The configured name of this realm server's Matrix server, which
+            // can differ from the homeserver's hostname (ADR 004 §1.2).
+            matrixServerName: matrixClient.serverName,
             realmServerURL: serverURL.href,
             // Stamp the deployed environment the host is running in so client
             // telemetry (and anything else) can report it, rather than the
@@ -284,28 +293,19 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
               process.env.REALM_SENTRY_ENVIRONMENT ||
               config.hostedEnvironment ||
               'local',
-            // Both views of every prefix realm, rewritten from the one
-            // declaration: the realm-list property each realm is named by, and
-            // the served-at map the host registers its prefixes from. Hand
-            // listing these is how a realm gets added to the declaration and
-            // missed here — which ships worse than an absent prefix, because
-            // the host keeps the build-time URL while the realm-server serves
-            // that realm somewhere else. `merge` ignores undefined sources, so
-            // a realm absent from the served config stays absent.
+            // The realm-list property each prefix realm is named by, rewritten
+            // from the one declaration. Hand listing these is how a realm gets
+            // added to the declaration and missed here — which ships worse
+            // than an absent prefix, because the host keeps the build-time URL
+            // while the realm-server serves that realm somewhere else. `merge`
+            // ignores undefined sources, so a realm absent from the served
+            // config stays absent.
             ...Object.fromEntries(
               PREFIX_REALMS.map(({ hostConfigKey }) => [
                 hostConfigKey,
                 rewriteRealmURL(
                   (config as Record<string, string | undefined>)[hostConfigKey],
                 ),
-              ]),
-            ),
-            prefixRealmURLs: Object.fromEntries(
-              Object.entries(
-                (config.prefixRealmURLs ?? {}) as Record<string, string>,
-              ).map(([prefix, servedAt]) => [
-                prefix,
-                rewriteRealmURL(servedAt),
               ]),
             ),
             cardSizeLimitBytes,
@@ -315,15 +315,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             publishedRealmDomainOverrides:
               process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
               config.publishedRealmDomainOverrides,
-            // Read here, per deployment, so turning sign-in on the secure
-            // origin on or off needs no host rebuild. Outside development the
-            // page is built once per process, so a changed value takes effect
-            // when the realm server next starts.
-            signInOnSecureOrigin:
-              process.env.SIGN_IN_ON_SECURE_ORIGIN === undefined
-                ? Boolean(config.signInOnSecureOrigin)
-                : process.env.SIGN_IN_ON_SECURE_ORIGIN === 'true',
           });
+          // The served-at map the host registers its prefixes from, read off
+          // this server's own network so it is the same map `/_prefix-realms`
+          // serves every other client: where this server was told to serve
+          // each prefix realm, not where the host's build guessed it would be.
+          // Assigned rather than merged: `merge` is deep, and would keep any
+          // prefix the build lists and this server does not register, at the
+          // build's own origin.
+          config.prefixRealmURLs = prefixRealmURLsOf(virtualNetwork);
           return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
         },
       );

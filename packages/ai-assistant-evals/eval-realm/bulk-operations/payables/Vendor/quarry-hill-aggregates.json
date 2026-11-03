@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Quarry Hill Aggregates",
+      "category": "raw materials",
+      "city": "Knoxville",
+      "contactEmail": "accounts@quarryhillaggregat.example.com",
+      "paymentTerms": "net_60"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

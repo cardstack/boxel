@@ -12,15 +12,19 @@
 //   rendered and until its data loaded, and how the load ended;
 // - `client-error` for an uncaught throw or unhandled rejection;
 // - `keepalive` while the window is quiet, with the longest the main thread
-//   went without running a timer.
+//   went without running a timer;
+// - `wedge` when the main thread froze for 10s or more, attributed to the
+//   scripts that blocked it.
 //
 // This origin holds secrets, so the events are built so they can't carry one:
 // a request is reduced to its endpoint label, method, status, timing and size
 // (never its URL, query, headers or either body); a page is named by its label
-// (never its address or fragment); and an error's text is scrubbed of anything
-// it quotes, any URL or Matrix ID, and, for a refused request, the server's own
-// message, which the page already shows the user. The test drives each page
-// with known secrets and checks no beacon carries one.
+// (never its address or fragment); a freeze is attributed by script URL,
+// reduced to its origin and path, and function name; and an error's text is
+// scrubbed of anything it quotes, any URL or Matrix ID, and, for a refused
+// request, the server's own message, which the page already shows the user.
+// The test drives each page with known secrets and checks no beacon carries
+// one.
 //
 // Nothing here may make a page fail: every hook swallows its own errors, and a
 // beacon that fails is dropped.
@@ -50,6 +54,24 @@ const MAX_FLUSH_BODY_BYTES = 60 * 1024;
 const MAX_ERROR_EVENTS_PER_FLUSH = 12;
 const MAX_FOLDED_SIGNATURES = 500;
 const OVERFLOW_ERROR_KEY = 'overflow';
+// A heartbeat gap this long or longer is a wedge: a freeze a person notices,
+// not the jank `keepalive.max_gap_ms` already shows.
+const WEDGE_GAP_MS = 10_000;
+// A real freeze leaves long-animation-frame or longtask entries that span it,
+// but their observer's callback can arrive a little after the heartbeat that
+// saw the gap. A wake from OS sleep runs no task during the gap, at most a
+// short one as it wakes, so a gap whose entries still span less than this
+// share of it after these retries is dropped. A real freeze's entries span
+// nearly all of it.
+const WEDGE_MIN_COVERAGE = 0.5;
+const WEDGE_CORROBORATION_GRACE_MS = 120;
+const WEDGE_CORROBORATION_RETRIES = 2;
+const MAX_LOAF_SCRIPTS = 10;
+// The observer entries kept for attributing a wedge.
+const MAX_LOAF_HISTORY = 100;
+// What a script URL may end in to be reported: a script file. Anything else
+// (the document's own address, a `blob:` or `data:` URL) reports as none.
+const SCRIPT_PATH = /\.(?:[cm]?js|ts|gts|gjs)$/;
 
 interface BaseEvent {
   event_type: string;
@@ -110,11 +132,42 @@ export interface KeepaliveEvent extends BaseEvent {
   max_gap_ms: number;
 }
 
+// The host's `wedge` event, without its JS self-profiler stacks: the secure
+// origin's pages aren't served with `Document-Policy: js-profiling`. A script
+// is named by its URL's origin and path and its function name, never by what
+// invoked it (an element or a URL with its query).
+export interface WedgeEvent extends BaseEvent {
+  event_type: 'wedge';
+  duration_ms: number;
+  worst_gap_ms: number;
+  blocked_ms: number;
+  longtask_count: number;
+  // The worst blocking script, as flat fields a dashboard can group by: Loki's
+  // `| json` doesn't reach into `loaf_scripts`. Empty, and -1 for the offset,
+  // when only a longtask entry is available.
+  top_frame_function: string;
+  top_frame_url: string;
+  top_frame_char: number;
+  top_frame_blocked_ms: number;
+  // The worst three, as `fn @ url:char`.
+  top_frames: string;
+  loaf_scripts: Array<{
+    source_url: string;
+    function_name: string;
+    char_position: number;
+    // How the script was entered: `user-callback`, `event-listener`,
+    // `resolve-promise`, `classic-script` and so on.
+    invoker_type: string;
+    blocking_duration_ms: number;
+  }>;
+}
+
 export type TelemetryEvent =
   | ServerRequestEvent
   | PageLoadEvent
   | ClientErrorEvent
-  | KeepaliveEvent;
+  | KeepaliveEvent
+  | WedgeEvent;
 
 export interface TelemetryDeps {
   window: Window;
@@ -126,6 +179,18 @@ export interface TelemetryDeps {
   session: () => { token: string; user: string } | undefined;
   fetch?: typeof fetch;
   now?: () => number;
+}
+
+interface LoafEntry {
+  startTime: number;
+  duration: number;
+  blockingDuration: number;
+  scripts: Array<Record<string, unknown>>;
+}
+
+interface LongtaskEntry {
+  startTime: number;
+  duration: number;
 }
 
 // How a page that loads data reports how its load ended (`pageAwaitsData`).
@@ -162,6 +227,9 @@ export class SecureTelemetry {
   #lastKeepaliveAt = 0;
   #lastHeartbeatAt = 0;
   #maxGapSinceKeepalive = 0;
+  #observingFrames = false;
+  #loafHistory: LoafEntry[] = [];
+  #longtaskHistory: LongtaskEntry[] = [];
   #visit: Visit | undefined;
   #visits = 0;
   #errorDedup = new Map<string, ClientErrorEvent>();
@@ -237,6 +305,7 @@ export class SecureTelemetry {
       () => win.removeEventListener('error', onError),
       () => win.removeEventListener('unhandledrejection', onRejection),
       stopObserving,
+      this.#observeFrames(),
     ];
   }
 
@@ -252,6 +321,8 @@ export class SecureTelemetry {
         release();
       }
       this.#release = [];
+      this.#loafHistory = [];
+      this.#longtaskHistory = [];
     }
   }
 
@@ -488,6 +559,168 @@ export class SecureTelemetry {
     if (gap > this.#maxGapSinceKeepalive) {
       this.#maxGapSinceKeepalive = gap;
     }
+    if (gap >= WEDGE_GAP_MS) {
+      // A macrotask later, so the observer callbacks for the frames that
+      // blocked, queued behind them, have run.
+      let windowStart = n - gap;
+      this.#deps.window.setTimeout(
+        () => this.#guard(() => this.#emitWedge(windowStart, n, gap)),
+        0,
+      );
+    }
+  }
+
+  // ── Wedges ───────────────────────────────────────────────────────────────
+
+  #emitWedge(
+    windowStart: number,
+    windowEnd: number,
+    gap: number,
+    retriesLeft = WEDGE_CORROBORATION_RETRIES,
+  ): void {
+    if (!this.#started) {
+      return;
+    }
+    // What of an entry falls inside the gap. A frame can open before the
+    // gap does, with the heartbeat that ran just before the freeze, so an
+    // entry counts by how much of it overlaps the gap, not by where it
+    // starts.
+    let overlap = (e: { startTime: number; duration: number }) =>
+      Math.max(
+        0,
+        Math.min(e.startTime + e.duration, windowEnd) -
+          Math.max(e.startTime, windowStart),
+      );
+    let loafs = this.#loafHistory.filter((e) => overlap(e) > 0);
+    let longtasks = this.#longtaskHistory.filter((e) => overlap(e) > 0);
+    let spanned = 0;
+    for (let entry of [...loafs, ...longtasks]) {
+      spanned += overlap(entry);
+    }
+    // Without an observer the heartbeat is the only signal, so the gap is
+    // reported as it is.
+    if (this.#observingFrames && spanned < gap * WEDGE_MIN_COVERAGE) {
+      if (retriesLeft > 0) {
+        this.#deps.window.setTimeout(
+          () =>
+            this.#guard(() =>
+              this.#emitWedge(windowStart, windowEnd, gap, retriesLeft - 1),
+            ),
+          WEDGE_CORROBORATION_GRACE_MS,
+        );
+      }
+      return;
+    }
+    let blockedMs = 0;
+    let scripts: WedgeEvent['loaf_scripts'] = [];
+    for (let entry of loafs) {
+      blockedMs += entry.blockingDuration;
+      for (let script of entry.scripts) {
+        scripts.push({
+          source_url: scriptURL(script.sourceURL),
+          function_name: String(script.sourceFunctionName ?? ''),
+          char_position: Number(script.sourceCharPosition ?? -1),
+          invoker_type: String(script.invokerType ?? ''),
+          blocking_duration_ms: Math.round(Number(script.duration ?? 0)),
+        });
+      }
+    }
+    if (loafs.length === 0) {
+      for (let entry of longtasks) {
+        blockedMs += entry.duration;
+      }
+    }
+    scripts.sort((a, b) => b.blocking_duration_ms - a.blocking_duration_ms);
+    let top = scripts[0];
+    this.#record({
+      event_type: 'wedge',
+      duration_ms: Math.round(gap),
+      worst_gap_ms: Math.round(gap),
+      blocked_ms: Math.round(blockedMs),
+      longtask_count: loafs.length > 0 ? loafs.length : longtasks.length,
+      top_frame_function: top?.function_name ?? '',
+      top_frame_url: top?.source_url ?? '',
+      top_frame_char: top?.char_position ?? -1,
+      top_frame_blocked_ms: top?.blocking_duration_ms ?? 0,
+      top_frames: scripts
+        .slice(0, 3)
+        .map(
+          (s) =>
+            `${s.function_name || '(anonymous)'} @ ${s.source_url || '?'}:${
+              s.char_position
+            }`,
+        )
+        .join('  |  '),
+      loaf_scripts: scripts.slice(0, MAX_LOAF_SCRIPTS),
+    });
+  }
+
+  // Keeps the window's recent long-animation-frame entries, or its longtask
+  // entries where the browser has no LoAF, for attributing a wedge. Returns
+  // what stops it.
+  #observeFrames(): () => void {
+    try {
+      return this.#startObservingFrames();
+    } catch {
+      // Without an observer a wedge is still reported, unattributed.
+      return () => {};
+    }
+  }
+
+  #startObservingFrames(): () => void {
+    let Observer = (this.#deps.window as Window & typeof globalThis)
+      .PerformanceObserver;
+    let supported = Observer?.supportedEntryTypes ?? [];
+    let observer: PerformanceObserver;
+    if (supported.includes('long-animation-frame')) {
+      observer = new Observer((list) =>
+        this.#guard(() => {
+          for (let entry of list.getEntries()) {
+            let e = entry as PerformanceEntry & {
+              blockingDuration?: number;
+              scripts?: Array<Record<string, unknown>>;
+            };
+            this.#loafHistory.push({
+              startTime: e.startTime,
+              duration: e.duration,
+              blockingDuration: e.blockingDuration ?? 0,
+              scripts: Array.isArray(e.scripts) ? e.scripts : [],
+            });
+          }
+          this.#loafHistory.splice(
+            0,
+            Math.max(0, this.#loafHistory.length - MAX_LOAF_HISTORY),
+          );
+        }),
+      );
+      observer.observe({
+        type: 'long-animation-frame',
+        buffered: true,
+      });
+    } else if (supported.includes('longtask')) {
+      observer = new Observer((list) =>
+        this.#guard(() => {
+          for (let entry of list.getEntries()) {
+            this.#longtaskHistory.push({
+              startTime: entry.startTime,
+              duration: entry.duration,
+            });
+          }
+          this.#longtaskHistory.splice(
+            0,
+            Math.max(0, this.#longtaskHistory.length - MAX_LOAF_HISTORY),
+          );
+        }),
+      );
+      observer.observe({ type: 'longtask', buffered: true });
+    } else {
+      return () => {};
+    }
+    this.#observingFrames = true;
+    return () => {
+      this.#observingFrames = false;
+      observer.disconnect();
+    };
   }
 
   // Sends one batch from the front of the buffer, as large as fits the caps.
@@ -580,6 +813,28 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
 
 function round(ms: number | null): number | null {
   return ms === null ? null : Math.round(ms);
+}
+
+// A script's URL as a wedge reports it: its origin and path, when the path is a
+// script file's, and otherwise none. Never its query or fragment, and never the
+// document's own address, which names the page's key and carries what the page
+// was told.
+export function scriptURL(value: unknown): string {
+  if (typeof value !== 'string' || !value) {
+    return '';
+  }
+  try {
+    let url = new URL(value);
+    if (
+      (url.protocol !== 'https:' && url.protocol !== 'http:') ||
+      !SCRIPT_PATH.test(url.pathname)
+    ) {
+      return '';
+    }
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '';
+  }
 }
 
 function byteLength(text: string): number {

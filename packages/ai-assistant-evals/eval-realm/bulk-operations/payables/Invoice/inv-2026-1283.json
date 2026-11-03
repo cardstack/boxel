@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "invoiceNumber": "INV-2026-1283",
+      "amount": 17973.33,
+      "issuedOn": "2026-07-06",
+      "dueDate": "2026-07-21",
+      "status": "paid"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/northwind-polymers"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

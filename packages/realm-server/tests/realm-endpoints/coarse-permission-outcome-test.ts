@@ -788,6 +788,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
     test('the sign-in and the readiness check answer an anonymous caller', async function (assert) {
       let matrixClient = new MatrixClient({
+        serverName: 'localhost',
         matrixURL: realmServerTestMatrix.url,
         username: realmServerTestMatrix.username,
         seed: realmSecretSeed,

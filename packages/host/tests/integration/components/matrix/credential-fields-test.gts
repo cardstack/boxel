@@ -1,12 +1,18 @@
-import { click, render } from '@ember/test-helpers';
+import { click, render, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import Login from '@cardstack/host/components/matrix/login';
+import CredentialFieldsFrame, {
+  FRAME_WAIT_LIMITS,
+} from '@cardstack/host/components/matrix/credential-fields';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
+import {
+  CredentialFields,
+  type CredentialForm,
+} from '@cardstack/host/lib/credential-fields';
 
 import {
   testRealmURL,
@@ -161,48 +167,104 @@ module('Integration | credential fields', function (hooks) {
     );
   }
 
-  test('a card on the page cannot read the sign-in fields', async function (assert) {
-    let CardComponent = await snoopingCard();
-    await render(
-      <template>
-        <Login @setMode={{noop}} />
-        <CardComponent @format='isolated' />
-      </template>,
-    );
-
-    assertFrameShown(assert, 'login');
-    assert
-      .dom('#boxel-login-password')
-      .doesNotExist('the password input is not in the app page');
-    assert
-      .dom('[data-test-login-btn]')
-      .isDisabled('signing in waits on fields the app cannot read');
-
-    await click('[data-test-snoop]');
-    assertNothingToRead(assert, 'login', snooped());
-  });
-
   // A filter in front of a deployed secure origin refuses a query string
   // naming a loopback origin, so a host app on this machine gets the frame
   // only when what the frame is told rides in the fragment, which is never
   // sent. The test page is on this machine.
   test('the frame is told its form and the page origin in the fragment, not the query', async function (assert) {
-    await render(<template><Login @setMode={{noop}} /></template>);
+    let fields = new CredentialFields();
+    await render(
+      <template>
+        <CredentialFieldsFrame @form='confirm-password' @fields={{fields}} />
+      </template>,
+    );
 
-    assertFrameShown(assert, 'login');
+    assertFrameShown(assert, 'confirm-password');
     let src = new URL(
       document.querySelector<HTMLIFrameElement>(
-        '[data-test-credential-fields-frame="login"]',
+        '[data-test-credential-fields-frame="confirm-password"]',
       )!.src,
     );
     assert.strictEqual(src.search, '', 'the frame URL has no query');
     let params = new URLSearchParams(src.hash.slice(1));
-    assert.strictEqual(params.get('form'), 'login', 'the form');
+    assert.strictEqual(params.get('form'), 'confirm-password', 'the form');
     assert.strictEqual(
       params.get('origin'),
       window.location.origin,
       "the page's origin",
     );
+  });
+
+  test('a stylesheet the page loads after the fields were styled restyles them', async function (assert) {
+    let fields = new CredentialFields();
+    await render(
+      <template>
+        <CredentialFieldsFrame @form='change-password' @fields={{fields}} />
+      </template>,
+    );
+    assertFrameShown(assert, 'change-password');
+    let element = document.querySelector<HTMLElement>(
+      '[data-test-credential-fields="change-password"]',
+    )!;
+    let before = parseFloat(element.style.height);
+
+    let url = URL.createObjectURL(
+      new Blob(['.credential-fields { --boxel-form-control-height: 120px; }'], {
+        type: 'text/css',
+      }),
+    );
+    let link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = url;
+    document.head.append(link);
+    try {
+      await waitUntil(() => parseFloat(element.style.height) > before + 100, {
+        timeout: 10000,
+        timeoutMessage: 'the fields were not restyled',
+      });
+      assert.ok(true, 'the fields took the taller controls');
+    } finally {
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+  });
+
+  test('a frame that never says it is ready is loaded once more', async function (assert) {
+    let limits = { ...FRAME_WAIT_LIMITS };
+    FRAME_WAIT_LIMITS.readyMs = 200;
+    FRAME_WAIT_LIMITS.loadMs = 500;
+    // The frame refuses to start for a form it does not know, so it never
+    // says it is ready.
+    let form = 'no-such-form' as CredentialForm;
+    let fields = new CredentialFields();
+    try {
+      let rendering = render(
+        <template>
+          <CredentialFieldsFrame @form={{form}} @fields={{fields}} />
+        </template>,
+      );
+      let frame = await waitUntil(() =>
+        document.querySelector<HTMLIFrameElement>(
+          '[data-test-credential-fields-frame="no-such-form"]',
+        ),
+      );
+      let src = frame!.src;
+      let loaded: string[] = [];
+      frame!.addEventListener('load', () => loaded.push(frame!.src));
+      await rendering;
+      await waitUntil(
+        () => loaded.includes('about:blank') && loaded.at(-1) === src,
+        { timeout: 10000, timeoutMessage: 'the frame was not loaded again' },
+      );
+      assert.deepEqual(
+        loaded.slice(-2),
+        ['about:blank', src],
+        'the frame was emptied and loaded again',
+      );
+      assert.strictEqual(frame!.src, src, 'it is back at its own page');
+    } finally {
+      Object.assign(FRAME_WAIT_LIMITS, limits);
+    }
   });
 
   test('a card on the page cannot read the change-password fields', async function (assert) {

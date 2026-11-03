@@ -36,7 +36,6 @@ import {
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
 import { retireRealmEventRoom } from '../realm-event-rooms.ts';
-import { matrixServerName } from '../lib/secure-session.ts';
 
 interface DeleteRealmJSON {
   data: {
@@ -140,8 +139,7 @@ export default function handleDeleteRealm({
       let ownerNamespace = getRealmNamespace(parsedRealmURL);
       if (
         !ownerNamespace ||
-        ownerUserId !==
-          `@${ownerNamespace}:${await matrixServerName({ matrixClient })}`
+        ownerUserId !== `@${ownerNamespace}:${matrixClient.serverName}`
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

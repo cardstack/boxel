@@ -60,7 +60,16 @@ import {
   isDeployedServerURL,
   startOutboundGuard,
 } from './lib/outbound/client.ts';
-import { callApiSender } from './lib/outbound/call-api-sender.ts';
+import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
+import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { setKeyLimitNoticeSender } from './lib/key-limits.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
+import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
+import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
+import {
+  keyLimitDefaultsFromEnv,
+  setKeyLimitDefaults,
+} from './lib/key-limit-settings.ts';
 import {
   reportPlaintextCensus,
   reportSealedCensus,
@@ -71,6 +80,10 @@ import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
+import {
+  matrixFederationAllowlistFromEnv,
+  matrixServerNameFromEnv,
+} from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -213,6 +226,11 @@ const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
 // skipping their boot index removes both the ~minutes-long startup wait and
 // the prerender-pool contention that index would create with the tests.
 const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
+
+// How long a grant whose key the vendor rejected waits between probes.
+const KEY_GRANT_PROBE_INTERVAL_MS = probeIntervalFromEnv();
+// The limits a share or key gets where its owner set none.
+setKeyLimitDefaults(keyLimitDefaultsFromEnv());
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -667,6 +685,8 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
 
   let matrixClient = new MatrixClient({
     matrixURL: new URL(MATRIX_URL),
+    serverName: matrixServerNameFromEnv(),
+    federationAllowlist: matrixFederationAllowlistFromEnv(),
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
@@ -776,6 +796,31 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
+  // Tells a user a notice about their keys was recorded for them, so a session
+  // they have open shows that one is waiting.
+  let sendKeyNoticeEvent = createSendEvent({ matrixClient, dbAdapter });
+  setKeyLimitNoticeSender(sendKeyNoticeEvent);
+
+  // One for every realm this process serves: a policy card in one realm can
+  // govern another, so the audit of a write looks across all of them.
+  let policyWriteAuditor = createPolicyWriteAuditor({
+    dbAdapter,
+    realmFor: (url: URL) =>
+      reconciler
+        ? findRealm(url, { realms, reconciler, dbAdapter })
+        : Promise.resolve(undefined),
+    virtualNetwork,
+    policyPointerOf: async (url: string) =>
+      reconciler
+        ? await realmPolicyPointer(url, {
+            reconciler,
+            realmsRootPath,
+            virtualNetwork,
+          })
+        : null,
+    sendEvent: sendKeyNoticeEvent,
+  });
+
   // Construct the reconciler before the server so the server can hold a
   // reference to it. The reconciler doesn't begin its background poll
   // loop until reconciler.start() is called below, after server.start()
@@ -837,7 +882,10 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             reconciler
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
-          callApi: callApiSender,
+          callApi: createCallApiSender(dbAdapter, {
+            probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
+          }),
+          policyWriteAuditor,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

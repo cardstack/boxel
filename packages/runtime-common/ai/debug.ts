@@ -1,3 +1,5 @@
+import { CATALOG_REALM_PREFIX } from '../realm-prefixes.ts';
+
 export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 
 // The skill features a room can enable, with what each one does. A feature
@@ -19,7 +21,7 @@ export const SKILL_FEATURES = {
 export const SKILL_FEATURE_REALMS: {
   [feature in keyof typeof SKILL_FEATURES]?: string[];
 } = {
-  'catalog-reuse': ['@cardstack/catalog/'],
+  'catalog-reuse': [CATALOG_REALM_PREFIX],
 };
 
 // The realms gated behind a feature that `enabledFeatures` does not include.

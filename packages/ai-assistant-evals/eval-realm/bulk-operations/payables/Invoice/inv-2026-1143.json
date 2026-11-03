@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "invoiceNumber": "INV-2026-1143",
+      "amount": 2123.59,
+      "issuedOn": "2026-08-03",
+      "dueDate": "2026-08-18",
+      "status": "unpaid"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/tidewater-cold-storage"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

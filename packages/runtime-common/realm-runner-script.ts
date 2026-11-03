@@ -12,7 +12,9 @@ export function wrapRealmRunnerScript(code: string): string {
 
 export const REALM_RUNNER_SCRIPT_FILE_NAME = 'realm-code.js';
 
-const WRAPPER_LINES = 1;
+// The wrapper adds one line above the script, so the script's line N is line
+// N + 1 of what QuickJS evaluates.
+export const REALM_RUNNER_WRAPPER_LINES = 1;
 
 // Turns an error from the script itself into a message the model can act on:
 // the error, the line of its own script it points at with the lines around
@@ -35,7 +37,7 @@ export function describeScriptError(dumped: unknown, code: string): string {
   let lines = code.split('\n');
   let line =
     typeof error.lineNumber === 'number'
-      ? error.lineNumber - WRAPPER_LINES
+      ? error.lineNumber - REALM_RUNNER_WRAPPER_LINES
       : undefined;
   let parts = [
     `${name} in the script${line ? ` at line ${line}` : ''}: ${message}`,

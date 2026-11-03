@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Meridian Security Systems",
+      "category": "IT services",
+      "city": "Atlanta",
+      "contactEmail": "accounts@meridiansecuritysy.example.com",
+      "paymentTerms": "net_15"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

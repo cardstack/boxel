@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Jasmine Silver Needle",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-005-050",
+          "size": "50 g",
+          "price": 11.29
+        },
+        {
+          "sku": "TE-005-100",
+          "size": "100 g",
+          "price": 20.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

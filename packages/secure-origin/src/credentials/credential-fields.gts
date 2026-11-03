@@ -1,19 +1,16 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import AuthFormField from '../components/auth-form-field.gts';
 import FieldContainer from '../components/field-container.gts';
 import BoxelInput from '../components/input.gts';
-import ValidationHint from '../components/validation-hint.gts';
 import cn from '../helpers/cn.ts';
 import { modifier, testAttribute } from '../modifiers/modifier.ts';
 import type { CredentialFrame } from '../security/credentials.js';
 import type { Changes } from './changes.ts';
 
 // The credential fields the app frames, drawn the way the app draws its own:
-// a sign-in, registration or password-reset form's fields each in an
-// AuthFormField, the settings modal's in a horizontal FieldContainer, and the
-// change-email modal's confirmation in a vertical one. What the fields hold,
+// the settings modal's in a horizontal FieldContainer, and the change-email
+// modal's confirmation in a vertical one. What the fields hold,
 // and everything said to the app about them, is the `CredentialFrame`'s; this
 // only draws it and reports to it what is typed.
 
@@ -28,7 +25,6 @@ interface Field {
   testId: string;
   accessibleName?: string;
   validate?: 'new' | 'confirm';
-  validHint?: { text: string; testId: string };
 }
 
 interface Signature {
@@ -43,7 +39,6 @@ interface FieldView {
   field: Field;
   value: string;
   error: string | undefined;
-  hint: boolean;
 }
 
 // The frame reports the height of the fields whenever their layout changes
@@ -59,7 +54,7 @@ export default class CredentialFields extends Component<Signature> {
     return this.args.frame;
   }
 
-  private get layout(): 'auth' | 'settings' | 'modal' {
+  private get layout(): 'settings' | 'modal' {
     return this.frame.form.layout;
   }
 
@@ -80,7 +75,6 @@ export default class CredentialFields extends Component<Signature> {
       field,
       value,
       error,
-      hint: this.frame.showsHint(field.name),
     }));
   }
 
@@ -152,32 +146,7 @@ export default class CredentialFields extends Component<Signature> {
         {{! template-lint-enable require-input-label }}
       {{/if}}
       {{#each this.fields key='name' as |entry|}}
-        {{#if (this.isLayout 'auth')}}
-          <AuthFormField @label={{entry.field.label}} as |labelId|>
-            <BoxelInput
-              @id={{entry.field.id}}
-              @type={{entry.field.type}}
-              @autocomplete={{entry.field.autocomplete}}
-              @placeholder={{entry.field.placeholder}}
-              @value={{entry.value}}
-              @state={{this.state entry.error}}
-              @errorMessage={{entry.error}}
-              @onInput={{this.input entry.name}}
-              @onBlur={{this.blur entry.name}}
-              @onChange={{this.change entry.name}}
-              name={{entry.field.inputName}}
-              aria-labelledby={{labelId}}
-              aria-label={{entry.field.accessibleName}}
-              {{on 'keydown' this.keydown}}
-              {{testAttribute entry.field.testId}}
-            />
-            {{#if entry.hint}}
-              <ValidationHint
-                {{testAttribute entry.field.validHint.testId}}
-              >{{entry.field.validHint.text}}</ValidationHint>
-            {{/if}}
-          </AuthFormField>
-        {{else if (this.isLayout 'settings')}}
+        {{#if (this.isLayout 'settings')}}
           <FieldContainer
             @label={{entry.field.label}}
             @tag='label'

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Costa Rica Tarrazú Natural",
+      "category": "coffee",
+      "origin": "Tarrazú, Costa Rica",
+      "variants": [
+        {
+          "sku": "CF-027-250",
+          "size": "250 g",
+          "price": 16.49
+        },
+        {
+          "sku": "CF-027-500",
+          "size": "500 g",
+          "price": 30.99
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

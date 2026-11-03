@@ -8,6 +8,7 @@ import { parseListedOrigin } from '@cardstack/secure-origin/security/app-origins
 import {
   PAGE_PATHS,
   keyOfSharePath,
+  keyOfUsePath,
 } from '@cardstack/secure-origin/shell/pages.js';
 
 // The secure origin is where a user types a credential: a page on an origin
@@ -289,8 +290,9 @@ export function createSecureOrigin(
       : {}),
   };
   // The shell is one document at its own address and at each of its pages'
-  // paths (`PAGE_PATHS`, and a key's share page at `keys/<key id>/share`,
-  // matched in `route`); its router shows the page the path names.
+  // paths (`PAGE_PATHS`, and a key's share page at `keys/<key id>/share` and
+  // its page for using it with a card at `keys/<key id>/use`, matched in
+  // `route`); its router shows the page the path names.
   routes.set(shellBase, shell);
   routes.set(`${shellBase}/`, shell);
   for (let page of PAGE_PATHS) {
@@ -306,8 +308,9 @@ export function createSecureOrigin(
     addCredentialFieldRoutes(routes, shellBase, build, credentialFields);
   }
   function keySharePage(path: string) {
+    let page = path.slice(shellBase.length + 1);
     return path.startsWith(`${shellBase}/`) &&
-      keyOfSharePath(path.slice(shellBase.length + 1))
+      (keyOfSharePath(page) || keyOfUsePath(page))
       ? shell
       : undefined;
   }

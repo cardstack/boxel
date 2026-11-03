@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Saltmarsh Shipping",
+      "category": "logistics",
+      "city": "Charleston",
+      "contactEmail": "accounts@saltmarshshipping.example.com",
+      "paymentTerms": "net_45"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

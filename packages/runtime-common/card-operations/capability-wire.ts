@@ -6,7 +6,8 @@ import type { OperationErrorCode } from './types.ts';
 //
 // Kept apart from the check itself so both ends can read it. The decision runs
 // in the realm and reaches the operation core (and through it bxl); a card
-// module asking `@context.canInvoke` only ever holds these shapes, and has to
+// module asking `@context.canInvoke` or `@context.keyReadiness` only ever holds
+// these shapes, and has to
 // be able to import them from the barrel without taking that typecheck program
 // on.
 // ============================================================================
@@ -27,10 +28,45 @@ export const CAPABILITY_CHECK_CAP = 100;
 // A target names either a stored card, by URL, or a type, by code ref — the
 // second being what a "New Classroom" button asks about, where the card it
 // would create does not exist yet.
+//
+// A pair that also asks for `readiness` is asked whether the call would get
+// the credentials it sends, and what would fix it if not (`KeyReadiness`).
 export interface CapabilityCheck {
   target: string | ResolvedCodeRef;
   operation: string;
+  readiness?: true;
 }
+
+// Whether a `callApi` would have the credentials it sends when this caller
+// invokes it from a card, and if not, what would fix it. It names what to show
+// rather than why: a reader is never told who owns a share, a budget or the
+// names of a realm's shares, so none of those is in an answer.
+//
+// - `ready`: every slot would be filled. An operation that sends no key, or
+//   that is not a `callApi`, is ready as far as keys go.
+// - `needs-connect`: a `{{userKey}}` slot has no approval, and none of the
+//   caller's keys has a grant covering the operation's destination.
+// - `needs-approval`: the caller has a key that could fill it, but the
+//   operation isn't approved here, or not for interactive use.
+// - `needs-reapproval`: what the operation sends changed since it was
+//   approved.
+// - `needs-admin`: a slot the realm fills from a share has no share approved
+//   for it, or one that is suspended or not approved for this use, and the
+//   caller isn't the one who could approve it.
+// - `needs-sign-in`: the caller isn't signed in, and a slot takes their own
+//   key.
+// - `rate-limited`, `over-budget`, `credential-rejected`: the caller's limit,
+//   the share's budget, or the vendor refusing the key.
+export type KeyReadiness =
+  | 'ready'
+  | 'needs-connect'
+  | 'needs-approval'
+  | 'needs-reapproval'
+  | 'needs-admin'
+  | 'needs-sign-in'
+  | 'rate-limited'
+  | 'over-budget'
+  | 'credential-rejected';
 
 // One answer, in the position its question was asked in.
 export interface CapabilityAnswer {
@@ -52,4 +88,11 @@ export interface CapabilityAnswer {
   // Withheld from a caller who may not read the realm, for whom every refusal
   // reads the same.
   reason?: OperationErrorCode;
+  // For a pair that asked for it, where `allowed` is true: a caller the realm
+  // won't let invoke the operation has no credentials to be ready with. The
+  // one refusal that carries it is `actor-required` to a caller who may read
+  // the realm, since signing in is what would fix it, and what they would
+  // need after that is what the card shows. Absent where the realm can't
+  // tell, such as one that sends no request to an outside service.
+  readiness?: KeyReadiness;
 }

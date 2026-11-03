@@ -4,7 +4,10 @@ import { modifier } from 'ember-modifier';
 
 import FileIcon from '@cardstack/boxel-icons/file';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  decodedLastSegmentOfIdentifier,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import type { ComponentLike } from '@glint/template';
 import { now } from '../helpers/clock';
@@ -125,17 +128,6 @@ export async function fetchRealmFile(
   return response;
 }
 
-// The decoded last segment of a URL's path, or the raw segment when it holds
-// an escape that isn't valid UTF-8, which `decodeURIComponent` throws on.
-function lastPathSegment(url: string): string {
-  let segment = new URL(url).pathname.split('/').pop() ?? '';
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
 export type DownloadState = 'idle' | 'pending' | 'failed';
 
 // What a Download link reads in each state. The state is in the label, not
@@ -208,7 +200,8 @@ export const downloadViaFetch = modifier(
         // A blob: URL has no meaningful name of its own, so a nameless file
         // falls back to the last segment of its URL rather than a random id.
         save.download =
-          element.getAttribute('download') || lastPathSegment(element.href);
+          element.getAttribute('download') ||
+          decodedLastSegmentOfIdentifier(element.href);
         save.hidden = true;
         document.body.append(save);
         save.click();

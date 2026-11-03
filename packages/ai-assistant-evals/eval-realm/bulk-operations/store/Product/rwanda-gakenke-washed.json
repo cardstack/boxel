@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Rwanda Gakenke Washed",
+      "category": "coffee",
+      "origin": "Gakenke, Rwanda",
+      "variants": [
+        {
+          "sku": "CF-097-250",
+          "size": "250 g",
+          "price": 18.29
+        },
+        {
+          "sku": "CF-097-500",
+          "size": "500 g",
+          "price": 32.5
+        },
+        {
+          "sku": "CF-097-1KG",
+          "size": "1 kg",
+          "price": 62.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

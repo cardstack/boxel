@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ethiopia Yirgacheffe Washed",
+      "category": "coffee",
+      "origin": "Yirgacheffe, Ethiopia",
+      "variants": [
+        {
+          "sku": "CF-046-250",
+          "size": "250 g",
+          "price": 14.79
+        },
+        {
+          "sku": "CF-046-500",
+          "size": "500 g",
+          "price": 28.49
+        },
+        {
+          "sku": "CF-046-1KG",
+          "size": "1 kg",
+          "price": 48.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

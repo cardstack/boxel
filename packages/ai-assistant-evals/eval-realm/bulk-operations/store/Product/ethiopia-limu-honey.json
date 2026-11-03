@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ethiopia Limu Honey",
+      "category": "coffee",
+      "origin": "Limu, Ethiopia",
+      "variants": [
+        {
+          "sku": "CF-040-250",
+          "size": "250 g",
+          "price": 19.49
+        },
+        {
+          "sku": "CF-040-500",
+          "size": "500 g",
+          "price": 35.99
+        },
+        {
+          "sku": "CF-040-1KG",
+          "size": "1 kg",
+          "price": 66.99
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

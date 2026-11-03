@@ -183,7 +183,7 @@ export async function capture(
 
   // Resolve each card identifier to an absolute, extensionless instance URL.
   for (let job of jobs) {
-    let resolved = resolveRealmIdentifier(job.card, {
+    let resolved = await resolveRealmIdentifier(job.card, {
       profileManager: options.profileManager,
     });
     if (!resolved.ok) {

@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Darjeeling First Flush",
+      "category": "tea",
+      "origin": null,
+      "variants": [
+        {
+          "sku": "TE-001-050",
+          "size": "50 g",
+          "price": 13.79
+        },
+        {
+          "sku": "TE-001-100",
+          "size": "100 g",
+          "price": 24.49
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

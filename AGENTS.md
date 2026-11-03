@@ -121,7 +121,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 - Use scalable units such as rem
   - Exception: hairline values stay in px — border widths (`1px`), focus outline widths and offsets (`2px`), box-shadow offsets, blurs and spreads, and similar small strokes. They should stay crisp rather than scale with font size.
-- Use CSS variables from packages/boxel-ui/src/styles/variables.css
+- Use the shared design tokens, never literals: the semantic theme tokens for color (`--background`/`--foreground`, `--card`/`--card-foreground`, `--primary`/`--primary-foreground`, `--muted`/`--muted-foreground`, `--accent`/`--accent-foreground`, `--destructive`, `--border`, `--ring`), and the `--boxel-*` tokens for spacing (`--boxel-sp-*`), type (`--boxel-font-*`, `--boxel-font-size-*`, `--boxel-line-height-*`, `--boxel-lsp-*`), radii (`--boxel-border-radius*`), shadows (`--boxel-box-shadow*`) and motion (`--boxel-transition`). The `gts-component-conventions` skill (§3) says how to choose between them.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -140,9 +140,10 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 - To run the tests from the command line:
   - First make sure that the matrix server is not already running. You can stop the matrix server
     `pnpm stop:synapse`
-  - Ensure that host and realm server are running:
-    `cd ../host && pnpm start`
+  - Ensure that host and realm server are running, the host with the dashboard on (the specs drive it, as CI's matrix host build does):
+    `cd ../host && DASHBOARD_V2=true pnpm start`
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
+  - The flag is baked in at build time. `test-services:matrix` reuses whatever host already answers on port 4200, so restart a dev server started without the flag. With no dev server it serves `packages/host/dist`: build that with `DASHBOARD_V2=true pnpm build` first, and rebuild it without the flag before running host tests or the AI assistant evals (`packages/ai-assistant-evals`) from it. The evals drive the workspace chooser, so they hang against a host with the flag.
   - Run tests:
     `pnpm test`
   - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
@@ -242,7 +243,7 @@ A bumpable prefix is necessary but not sufficient: each flow also asks whether t
 
 - A change to a card or field template, a component defined in a realm, or their scoped styles is checked against the UI review procedure of the `boxel-ui-guidelines` skill (`references/ui-review-procedure.md`, with `references/checklist.md` and `references/theme-token-contract.md`), when writing the change and when reviewing it. The procedure runs whole, starting with its step-0 grep over each touched file. Every hit is either fixed or listed, with the reason it was left, in the report the procedure ends with.
 - The skill comes from the `boxel-skills` plugin. Without it, run `pnpm --filter @cardstack/boxel-cli fetch:skills` and read `skills/boxel-ui-guidelines/` in `packages/boxel-cli/.boxel-skills-cache/<tag>/`, where `<tag>` is the pinned `ref`.
-- A review of a UI change — `pr-review`, the built-in `/code-review`, or `review-branch` — also runs the UI lens in `.claude/skills/pr-review/references/ui-lens.md`: the procedure above plus the `interfaces` plugin's better-interface review. `.claude/settings.json` registers the plugin's marketplace; install it with `/plugin install interfaces@interfaces`.
+- A review of a UI change — `pr-review`, the built-in `/code-review`, `review-branch`, or `ui-code-review` for local, unpushed changes — also runs the UI lens in `.claude/skills/pr-review/references/ui-lens.md`: the procedure above plus the `interfaces` plugin's better-interface review. Reading `ui-lens.md` is not running it: each skill it names is loaded with the Skill tool, and the `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses to post a review of a UI change until the ones the session can load have been, and until its body names any it can't as not reviewed. `.claude/settings.json` registers both plugins' marketplaces and enables `interfaces@interfaces` and `boxel-skills@cardstack-boxel`, which turns them on but doesn't fetch `boxel-skills` onto a machine that lacks it. The `SessionStart` hook (`.claude/hooks/session-start.sh`) says at the start of a session which of the two this machine lacks; the user installs each with `claude plugin install <plugin> --scope local`, then `/reload-plugins`.
 
 ## `.gts` file gotcha: regex literals can break content-tag
 
@@ -303,8 +304,8 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's Remediation section lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
-- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed under Remediation. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. It also prints the known gaps each proposed ADR lists for those paths. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's remediation file (`docs/adr/remediation/<number>.md`) lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed in its remediation file. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
 
 ## Linear Ticket Process (Reusable)
 
@@ -322,12 +323,11 @@ This end-to-end workflow can be used as a template for future tickets.
 - Assign the issue to yourself.
 - Move the issue to **In Progress**.
 
-## 3) Create an implementation plan doc
+## 3) Write an implementation plan
 
-- Create a short plan in `docs/` named after the issue, e.g.
-  - `docs/cs-<id>-<short-title>-plan.md`
-- Include: goals, assumptions, steps, target files, testing notes.
-- Ask the user to review the doc before proceeding.
+- Write a short plan: goals, assumptions, steps, target files, testing notes.
+- Give it to the user for review before proceeding, in the chat or as a file in the session scratchpad.
+- Never put the plan in the repo. A per-ticket plan in `docs/` names a private tracker ID and goes stale when the PR merges; CI Lint fails on one (`scripts/check-docs-dir.mts`). A decision in the plan that outlives the PR goes in an ADR (see [Architecture decision records](#architecture-decision-records)).
 
 ## 4) Implement changes
 
@@ -363,9 +363,9 @@ This end-to-end workflow can be used as a template for future tickets.
 - Push branch: `git push -u origin <branch>`
 - Open PR with short summary
 
-## 10) Save plan doc on Linear issue
+## 10) Save the plan on the Linear issue
 
-- Post the contents of the plan .md doc as a comment om the Linear issue
+- Post the plan, as built, as a comment on the Linear issue.
 
 ## 11) Share PR link
 

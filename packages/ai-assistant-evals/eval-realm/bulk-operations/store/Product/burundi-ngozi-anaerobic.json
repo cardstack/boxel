@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Burundi Ngozi Anaerobic",
+      "category": "coffee",
+      "origin": "Ngozi, Burundi",
+      "variants": [
+        {
+          "sku": "CF-010-250",
+          "size": "250 g",
+          "price": 14.5
+        },
+        {
+          "sku": "CF-010-500",
+          "size": "500 g",
+          "price": 27.5
+        },
+        {
+          "sku": "CF-010-1KG",
+          "size": "1 kg",
+          "price": 49.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

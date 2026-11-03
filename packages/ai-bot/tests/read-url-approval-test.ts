@@ -10,7 +10,13 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { getPromptParts, isApprovalResult } from '@cardstack/runtime-common/ai';
+import {
+  approvalReaction,
+  declinedByReactionReason,
+  getPromptParts,
+  isApprovalResult,
+} from '@cardstack/runtime-common/ai';
+import { readStopState } from '@cardstack/runtime-common/ai/stop';
 import {
   carriesEncodedData,
   collectPreapprovedUrls,
@@ -20,8 +26,12 @@ import {
 } from '../lib/bot-tools/read-url/read.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
+import { answerDeclinedToolCalls } from '../lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
+  claimDeclinedToolCalls,
+  declinedToolCalls,
+  handlesRoomEvent,
   releasedToolCalls,
   unreleasedApproval,
 } from '../lib/bot-tools/approval.ts';
@@ -35,6 +45,27 @@ const readUrlCallsReleasedByApprovals = (
 
 const BOT = '@aibot:localhost';
 const USER = '@user:localhost';
+const OTHER = '@rupert:localhost';
+
+function reaction(
+  targetEventId: string,
+  key: string,
+  sender: string,
+  id = `$reaction-${key}-${sender}`,
+): DiscreteMatrixEvent {
+  return {
+    type: 'm.reaction',
+    event_id: id,
+    sender,
+    content: {
+      'm.relates_to': {
+        rel_type: 'm.annotation',
+        event_id: targetEventId,
+        key,
+      },
+    },
+  } as unknown as DiscreteMatrixEvent;
+}
 
 function humanMessage(
   body: string,
@@ -506,5 +537,366 @@ module('readUrl approval', () => {
   test('isApprovalResult recognises only the approved key', () => {
     assert.true(isApprovalResult(result('x', 'approved', USER) as any));
     assert.false(isApprovalResult(result('x', 'applied', BOT) as any));
+  });
+  test('a 👍 on the message approves every held call on it', () => {
+    let history = [
+      humanMessage('Find their docs'),
+      streamedBotMessage([
+        readUrlRequest('held-a', 'https://a.example/', true),
+        readUrlRequest('held-b', 'https://b.example/', true),
+      ]),
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map((entry) => [
+        entry.call.id,
+        entry.requestEventId,
+      ]),
+      [
+        ['held-a', '$bot'],
+        ['held-b', '$bot'],
+      ],
+    );
+    assert.deepEqual(declinedToolCalls(history, BOT, BOT_TOOL_NAMES), []);
+  });
+
+  test('a call released by a 👍 keeps the agent its message answered', () => {
+    let held = botMessage([
+      readUrlRequest('held-a', 'https://a.example/', true),
+    ]);
+    (held.content as Record<string, unknown>).data = JSON.stringify({
+      context: { agentId: 'agent-1' },
+    });
+    let history = [
+      humanMessage('Find their docs'),
+      held,
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map(
+        (entry) => entry.agentId,
+      ),
+      ['agent-1'],
+    );
+  });
+
+  test('any skin tone or presentation of the thumb answers', () => {
+    for (let key of ['👍🏽', '👍️', '👎🏿']) {
+      assert.ok(approvalReaction(reaction('$bot', key, USER) as any), key);
+    }
+    for (let key of ['❤️', '✅', 'approve']) {
+      assert.strictEqual(
+        approvalReaction(reaction('$bot', key, USER) as any),
+        undefined,
+        key,
+      );
+    }
+  });
+
+  test('a 👎 declines the held calls, naming who declined', () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    assert.deepEqual(readUrlCallsReleasedByApprovals(history, BOT), []);
+    let declined = declinedToolCalls(history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      declined.map((entry) => [entry.call.id, entry.reaction.sender]),
+      [['held', OTHER]],
+    );
+    assert.deepEqual(
+      declinedToolCalls(
+        [...history, result('held', 'invalid', BOT)],
+        BOT,
+        BOT_TOOL_NAMES,
+      ),
+      [],
+      'once its result lands the call is settled',
+    );
+  });
+
+  test('the first human answer decides; the bot and other messages never answer', () => {
+    let held = readUrlRequest('held', 'https://a.example/', true);
+    let firstWins = [
+      botMessage([held]),
+      reaction('$bot', '👎', OTHER),
+      reaction('$bot', '👍', USER),
+    ];
+    assert.deepEqual(readUrlCallsReleasedByApprovals(firstWins, BOT), []);
+    assert.strictEqual(
+      declinedToolCalls(firstWins, BOT, BOT_TOOL_NAMES).length,
+      1,
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [botMessage([held]), reaction('$bot', '👍', BOT)],
+        BOT,
+      ),
+      [],
+      "the bot's own 👍 approves nothing",
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [
+          botMessage([held]),
+          botMessage([], '$answer'),
+          reaction('$answer', '👍', USER),
+        ],
+        BOT,
+      ),
+      [],
+      'a 👍 on another message approves nothing',
+    );
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(
+        [
+          botMessage([held]),
+          { ...reaction('$bot', '👍', USER), content: {} } as any,
+        ],
+        BOT,
+      ),
+      [],
+      'a redacted 👍 approves nothing',
+    );
+  });
+
+  test('a 👍 on a held call lifts a stop; a 👍 on an answer does not', () => {
+    let stop = {
+      type: 'app.boxel.stopGenerating',
+      sender: USER,
+      event_id: '$stop',
+      content: {},
+    };
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    let answer = botMessage([], '$answer');
+    assert.strictEqual(
+      readStopState(
+        [humanMessage('go'), held, stop, reaction('$bot', '👍', USER)] as any,
+        BOT,
+      ).inForce,
+      undefined,
+    );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          answer,
+          stop,
+          reaction('$answer', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+    );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          held,
+          reaction('$bot', '👎', OTHER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      'a 👍 after a 👎 already answered the call does not lift the stop',
+    );
+    assert.ok(
+      readStopState(
+        [
+          humanMessage('go'),
+          held,
+          result('held', 'approved', USER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      'a 👍 that follows a result for every held call does not lift the stop',
+    );
+    let twoHeld = botMessage([
+      readUrlRequest('first', 'https://a.example/', true),
+      readUrlRequest('second', 'https://b.example/', true),
+    ]);
+    assert.strictEqual(
+      readStopState(
+        [
+          humanMessage('go'),
+          twoHeld,
+          result('first', 'invalid', USER),
+          stop,
+          reaction('$bot', '👍', USER),
+        ] as any,
+        BOT,
+      ).inForce,
+      undefined,
+      'a 👍 lifts the stop while a held call on the message has no result',
+    );
+  });
+  // The event handler's gate, with events as the matrix SDK hands them.
+  function sdkEvent(event: DiscreteMatrixEvent) {
+    return { getContent: () => event.content as Record<string, any> };
+  }
+
+  test('a 👍 on a message that holds no call starts nothing', () => {
+    let answer = humanMessage('An answer', '$answer');
+    let thumbsUp = approvalReaction(reaction('$answer', '👍', USER) as any);
+    assert.ok(thumbsUp, 'it is an approval reaction');
+    assert.false(
+      handlesRoomEvent(thumbsUp, sdkEvent(answer), () => true),
+      'a reaction on an ordinary answer is only a reaction',
+    );
+  });
+
+  test('a 👍 on a message holding a call, or beyond the loaded timeline, goes on', () => {
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    let thumbsUp = approvalReaction(reaction('$bot', '👍', USER) as any);
+    assert.true(handlesRoomEvent(thumbsUp, sdkEvent(held), () => false));
+    assert.true(
+      handlesRoomEvent(thumbsUp, undefined, () => false),
+      'the history decides for a message outside the loaded timeline',
+    );
+  });
+
+  test('an event that is not a reaction goes on only if it can produce a response', () => {
+    assert.true(handlesRoomEvent(undefined, undefined, () => true));
+    assert.false(handlesRoomEvent(undefined, undefined, () => false));
+  });
+
+  test("the host's Approve, an approved result and a 👍, runs the call once", () => {
+    let held = readUrlRequest('held', 'https://a.example/', true);
+    let history = [
+      humanMessage('Find their docs'),
+      streamedBotMessage([held]),
+      result('held', 'approved', USER),
+      reaction('$bot', '👍', USER),
+    ];
+    let released = readUrlCallsReleasedByApprovals(history, BOT);
+    let claims = new ApprovalClaims();
+    // one handler for the result event, one for the reaction
+    let first = claims.claim(history, released);
+    let second = claims.claim(history, released);
+    assert.deepEqual(
+      first.map((entry) => entry.call.id),
+      ['held'],
+    );
+    assert.deepEqual(second, [], 'the second answer finds the call taken');
+  });
+  test("a 👎's handler claims the declined calls, so they are answered once", () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    // the reaction's own handler, then a later event's handler
+    let first = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    let second = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      first.map((entry) => [entry.call.id, entry.reaction.sender]),
+      [['held', OTHER]],
+    );
+    assert.deepEqual(second, [], 'the later handler finds the call taken');
+  });
+
+  test('a declined call is answered as invalid, naming who declined it', async () => {
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    (held.content as Record<string, unknown>).data = JSON.stringify({
+      context: { agentId: 'agent-1' },
+    });
+    let history = [
+      humanMessage('Find their docs'),
+      held,
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let client = new FakeMatrixClient();
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client, roomId: 'room1', agentId: 'fallback-agent' },
+      (userId) => (userId === OTHER ? 'Rupert' : undefined),
+    );
+
+    let sent = client.getSentEvents();
+    assert.strictEqual(sent.length, 1, 'one result is posted');
+    assert.strictEqual(sent[0].roomId, 'room1');
+    assert.strictEqual(sent[0].eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
+    let content = sent[0].content as Record<string, any>;
+    assert.strictEqual(content.commandRequestId, 'held');
+    assert.strictEqual(
+      content.failureReason,
+      declinedByReactionReason(READ_URL_TOOL_NAME, 'Rupert'),
+    );
+    assert.deepEqual(content['m.relates_to'], {
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+      key: 'invalid',
+      event_id: '$bot',
+    });
+    assert.strictEqual(
+      JSON.parse(content.data).context.agentId,
+      'agent-1',
+      "the result belongs to the agent of the call's message",
+    );
+  });
+
+  test("a decline by someone the room doesn't know names their user id", async () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let client = new FakeMatrixClient();
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client, roomId: 'room1', agentId: 'fallback-agent' },
+      () => undefined,
+    );
+    let content = client.getSentEvents()[0].content as Record<string, any>;
+    assert.strictEqual(
+      content.failureReason,
+      declinedByReactionReason(READ_URL_TOOL_NAME, OTHER),
+    );
+    assert.strictEqual(
+      JSON.parse(content.data).context.agentId,
+      'fallback-agent',
+      'a message that names no agent takes the run agent',
+    );
+  });
+
+  test('a declined call whose result was not posted is answered by a later run', async () => {
+    let history = [
+      humanMessage('Find their docs'),
+      botMessage([readUrlRequest('held', 'https://a.example/', true)]),
+      reaction('$bot', '👎', OTHER),
+    ];
+    let claims = new ApprovalClaims();
+    let failing = new FakeMatrixClient();
+    failing.sendEvent = async () => {
+      throw new Error('homeserver unavailable');
+    };
+    await answerDeclinedToolCalls(
+      claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES),
+      claims,
+      { client: failing, roomId: 'room1', agentId: undefined },
+      () => undefined,
+    );
+
+    let client = new FakeMatrixClient();
+    let retried = claimDeclinedToolCalls(claims, history, BOT, BOT_TOOL_NAMES);
+    assert.deepEqual(
+      retried.map((entry) => entry.call.id),
+      ['held'],
+      'the claim was released',
+    );
+    await answerDeclinedToolCalls(
+      retried,
+      claims,
+      { client, roomId: 'room1', agentId: undefined },
+      () => undefined,
+    );
+    assert.strictEqual(client.getSentEvents().length, 1, 'the retry posts');
   });
 });

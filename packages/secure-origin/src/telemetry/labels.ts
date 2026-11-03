@@ -11,11 +11,27 @@
 const REALM_SERVER_ENDPOINTS = [
   '_user-keys',
   '_user-keys/:id',
+  '_user-keys/:id/usage',
+  '_user-keys/:id/limits',
   '_key-shares',
   '_key-shares/:id/swap',
+  '_key-shares/:id/usage',
+  '_key-shares/:id/limits',
   '_key-write-tickets',
+  '_key-bindings',
+  '_key-bindings/batch',
+  '_key-policy-notices',
+  '_key-policy-notices/read',
+  '_key-policy-notices/:id/decline',
+  '_key-limit-notices',
+  '_key-limit-notices/read',
+  '_user-key-grants/:id',
+  '_oauth/clients',
+  '_oauth/connections',
+  '_oauth/connections/complete',
   '_secure-window/context',
   '_secure-window/realms',
+  '_secure-window/cards',
   '_secure-origin',
   '_secure-session',
   '_secure-session/google',
@@ -71,13 +87,15 @@ export function endpointLabel(url: string | URL): string {
 }
 
 // The shell's page for one of its router's routes: the page's path beneath
-// the shell (`pages.js`), with a key's share page as `keys/share`. The shell's
+// the shell (`pages.js`), with a key's share page as `keys/share` and its
+// page for using it with a card as `keys/use`. The shell's
 // own address shows the key page.
 const PAGES: Record<string, string> = {
   index: 'keys',
   'keys.index': 'keys',
   'keys.add': 'keys/add',
   'keys.share': 'keys/share',
+  'keys.use': 'keys/use',
   'sign-in': 'sign-in',
   'cli-sign-in': 'cli-sign-in',
   'cli-auth': 'cli-auth',
@@ -90,6 +108,12 @@ const PAGES: Record<string, string> = {
   'enter-key': 'enter-key',
   'share-key': 'share-key',
   'swap-key': 'swap-key',
+  'share-limits': 'share-limits',
+  'replace-key': 'replace-key',
+  connect: 'connect',
+  connected: 'connected',
+  approve: 'approve',
+  'review-changes': 'review-changes',
 };
 
 export function pageLabel(routeName: string | undefined): string {

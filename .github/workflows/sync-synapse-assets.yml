@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - "packages/matrix/support/synapse/templates/**"
-      - "packages/matrix/support/synapse/modules/**"
   workflow_dispatch:
     inputs:
       environment:
@@ -59,14 +58,6 @@ jobs:
         run: |
           sed -i "s/http:\/\/localhost:4200/https:\/\/${{ env.HOST_DOMAIN }}/" packages/matrix/support/synapse/templates/registration_success.html
 
-      - name: Replace login URL in SSO error template
-        run: |
-          sed -i "s/https:\/\/localhost:4200\//https:\/\/${{ env.HOST_DOMAIN }}\//" packages/matrix/support/synapse/templates/sso_error.html
-          if grep -q "localhost:4200" packages/matrix/support/synapse/templates/sso_error.html; then
-            echo "sso_error.html still names the dev host after substitution"
-            exit 1
-          fi
-
       - name: Replace icon URL with one from matching subdomain
         run: |
           sed -i "s/d12nxmpmo97fii.cloudfront.net\/boxel-icon.png/${{ env.BOXEL_ICON_DOMAIN_AND_PATH }}/" packages/matrix/support/synapse/templates/_base.html
@@ -74,10 +65,6 @@ jobs:
       - name: S3 Sync templates
         run: |
           aws s3 sync packages/matrix/support/synapse/templates s3://${{ env.AWS_S3_BUCKET }}/templates
-
-      - name: S3 Sync modules
-        run: |
-          aws s3 sync packages/matrix/support/synapse/modules s3://${{ env.AWS_S3_BUCKET }}/modules --exclude "test_*"
 
       - name: Restart Synapse ECS Service
         run: |

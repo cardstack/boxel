@@ -2,8 +2,11 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  getToolRequests,
   isToolResultEventType,
+  latestEventContent,
 } from '../matrix-constants.ts';
+import { approvalReaction } from './approval-reaction.ts';
 
 export interface StopRuleEvent {
   type: string;
@@ -23,8 +26,11 @@ export interface StopRuleEvent {
 // not started may start, and no result in it starts another answer. The stop
 // holds until the person writes again, or asks for one of the turn's calls to
 // go ahead after all (Run, Retry, Accept All, Approve): the host marks the
-// result of such a call with `resumesAssistant`, which lifts the stop. A
-// decline or an automatic result never lifts it.
+// result of such a call with `resumesAssistant`, which lifts the stop, and a
+// 👍 on a bot message holding a call for approval lifts it the same way (see
+// approval-reaction.ts), when it is the first 👍 or 👎 that message got and a
+// call on it has no answer yet. A 👍 on any other message is only a reaction. A decline or an automatic result
+// never lifts it.
 export interface StopState<T extends StopRuleEvent> {
   // The stop that holds at the end of the timeline, or undefined when the
   // loop is not stopped.
@@ -55,6 +61,13 @@ export function readStopState<T extends StopRuleEvent>(
   let lastStop: T | undefined;
   let stoppedGroups = new Set<MessageIds>();
   let everStoppedMessageIds = new Set<string>();
+  // The calls each bot message holds for approval
+  let heldCalls = new Map<MessageIds, Set<string>>();
+  // The calls a result answered, whatever the result says
+  let answeredCallIds = new Set<string>();
+  // The held messages a reaction already answered: ai-bot acts on the
+  // first 👍 or 👎 only, so a later one decides nothing.
+  let answeredGroups = new Set<MessageIds>();
 
   let endTurn = () => {
     if (turnStopped) {
@@ -68,12 +81,24 @@ export function readStopState<T extends StopRuleEvent>(
     if (!event.sender) {
       continue;
     }
+    if (isToolResultEventType(event.type)) {
+      let callId = content(event)?.commandRequestId;
+      if (typeof callId === 'string') {
+        answeredCallIds.add(callId);
+      }
+    }
     if (event.sender === aiBotUserId) {
       if (event.type !== 'm.room.message') {
         continue;
       }
       let group = groupFor(event, groupById);
       currentTurn.add(group);
+      let held = heldCallIds(event);
+      if (held.length) {
+        let calls = heldCalls.get(group) ?? new Set();
+        held.forEach((id) => calls.add(id));
+        heldCalls.set(group, calls);
+      }
       if (turnStopped) {
         for (let id of group) {
           everStoppedMessageIds.add(id);
@@ -93,7 +118,16 @@ export function readStopState<T extends StopRuleEvent>(
           everStoppedMessageIds.add(id);
         }
       }
-    } else if (isResumingResult(event)) {
+    } else if (
+      isResumingResult(event) ||
+      isApprovingReaction(
+        event,
+        groupById,
+        heldCalls,
+        answeredCallIds,
+        answeredGroups,
+      )
+    ) {
       turnStopped = false;
       let answered = relatedEventId(event);
       let group = answered ? groupById.get(answered) : undefined;
@@ -155,6 +189,48 @@ function isPersonMessage(event: StopRuleEvent): boolean {
   return (
     msgtype !== APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE &&
     msgtype !== APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
+  );
+}
+
+// A person's 👍 on a bot message that holds a call for approval, when it is
+// the first answer that message got and a call on it has no result yet. A
+// 👍 that comes after every call was answered (the host's own 👍 follows its
+// approved result) releases nothing.
+function isApprovingReaction(
+  event: StopRuleEvent,
+  groupById: Map<string, MessageIds>,
+  heldCalls: Map<MessageIds, Set<string>>,
+  answeredCallIds: Set<string>,
+  answeredGroups: Set<MessageIds>,
+): boolean {
+  let reaction = approvalReaction(event);
+  if (!reaction) {
+    return false;
+  }
+  let group = groupById.get(reaction.targetEventId);
+  let calls = group ? heldCalls.get(group) : undefined;
+  if (!group || !calls || answeredGroups.has(group)) {
+    return false;
+  }
+  answeredGroups.add(group);
+  return (
+    reaction.verdict === 'approve' &&
+    [...calls].some((id) => !answeredCallIds.has(id))
+  );
+}
+
+// the ids of the calls a bot message holds for approval
+function heldCallIds(event: StopRuleEvent): string[] {
+  let eventContent = content(event);
+  let contents = [
+    latestEventContent(event as { content?: Record<string, any> }),
+    eventContent?.['m.new_content'],
+  ];
+  return contents.flatMap((c) =>
+    (getToolRequests<{ id?: string; approvalRequired?: boolean }>(c) ?? [])
+      .filter((request) => request?.approvalRequired === true)
+      .map((request) => request.id)
+      .filter((id): id is string => typeof id === 'string'),
   );
 }
 

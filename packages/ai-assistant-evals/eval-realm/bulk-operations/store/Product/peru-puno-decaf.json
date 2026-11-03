@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Peru Puno Decaf",
+      "category": "coffee",
+      "origin": "Puno, Peru",
+      "variants": [
+        {
+          "sku": "CF-095-250",
+          "size": "250 g",
+          "price": 17.49
+        },
+        {
+          "sku": "CF-095-500",
+          "size": "500 g",
+          "price": 32.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

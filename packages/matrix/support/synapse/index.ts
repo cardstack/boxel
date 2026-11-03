@@ -59,24 +59,13 @@ const registrationSecretFile = path.resolve(
 
 const templatesDir = path.join(import.meta.dirname, 'templates');
 
-// templates/sso_error.html sends a browser whose single sign-on failed back to
-// the Boxel login page at this URL, the dev host's. Each Synapse launch writes
-// the templates into its config dir with the URL of the host it serves, and the
-// Synapse asset sync workflow does the same for staging and production.
-export const TEMPLATE_LOGIN_URL = 'https://localhost:4200/';
-
-export async function writeTemplates(configDir: string, loginUrl: string) {
+// Each Synapse launch writes the templates into its config dir.
+export async function writeTemplates(configDir: string) {
   let dest = path.join(configDir, 'templates');
   // A persistent data dir keeps the previous launch's copy; start clean so a
   // template removed from the repo doesn't outlive it there.
   await fse.remove(dest);
   await fse.copy(templatesDir, dest);
-  let ssoError = path.join(dest, 'sso_error.html');
-  let contents = await fse.readFile(ssoError, 'utf8');
-  await fse.writeFile(
-    ssoError,
-    contents.split(TEMPLATE_LOGIN_URL).join(loginUrl),
-  );
 }
 
 interface SynapseConfig {
@@ -136,46 +125,12 @@ function isPortBindError(error: unknown): boolean {
   return /address already in use|port is already allocated/i.test(message);
 }
 
-// The Google OIDC block is gated on env vars so a developer without a Google
-// OAuth client can still run Synapse for unrelated work. When either env var is
-// missing, the whole `# BEGIN_GOOGLE_OIDC ... # END_GOOGLE_OIDC` block is
-// stripped — Synapse refuses to boot with an `oidc_providers` entry whose
-// `client_id` is empty. When both are present, the secrets are interpolated.
-export function applyGoogleOidcGating(
-  hsYaml: string,
-  clientId: string,
-  clientSecret: string,
-): string {
-  if (clientId && clientSecret) {
-    return hsYaml
-      .replace(/{{GOOGLE_OAUTH_CLIENT_ID}}/g, clientId)
-      .replace(/{{GOOGLE_OAUTH_CLIENT_SECRET}}/g, clientSecret);
-  }
-  return hsYaml.replace(/# BEGIN_GOOGLE_OIDC[\s\S]*?# END_GOOGLE_OIDC\n?/g, '');
-}
-
-// The test template carries a Google OIDC block pointed at
-// navikt/mock-oauth2-server for the Playwright SSO suite. It is gated on
-// `issuer` (set by the matrix global setup once the mock container is up) so
-// every other suite — which never starts the mock — boots Synapse without a
-// dangling provider whose discovery would never resolve.
-export function applyTestOidcGating(
-  hsYaml: string,
-  issuer: string | undefined,
-): string {
-  if (issuer) {
-    return hsYaml.replace(/{{MOCK_OAUTH2_ISSUER}}/g, issuer);
-  }
-  return hsYaml.replace(/# BEGIN_TEST_OIDC[\s\S]*?# END_TEST_OIDC\n?/g, '');
-}
-
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
   options?: {
     publicBaseUrl?: string;
     port?: number;
-    loginUrl?: string;
   },
 ): Promise<SynapseConfig> {
   const templateDir = path.join(import.meta.dirname, template);
@@ -212,16 +167,8 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
 
-  hsYaml = applyGoogleOidcGating(
-    hsYaml,
-    process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
-  );
-
-  hsYaml = applyTestOidcGating(hsYaml, process.env.MOCK_OAUTH2_ISSUER);
-
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
-  await writeTemplates(configDir, options?.loginUrl ?? TEMPLATE_LOGIN_URL);
+  await writeTemplates(configDir);
 
   // now generate a signing key (we could use synapse's config generation for
   // this, or we could just do this...)
@@ -275,10 +222,6 @@ export function synapseDockerParams(args: {
     `${SYNAPSE_OWNER_HOST_LABEL}=${args.ownerHost}`,
     '-v',
     `${args.configDir}:/data`,
-    '-v',
-    `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
-    '-e',
-    'PYTHONPATH=/custom/modules',
     // When the host runs as root (e.g. the Claude-web cloud VM), the synapse
     // image would otherwise drop privileges to its default uid 991, which
     // cannot write the root-owned config dir mounted at /data. Telling the
@@ -469,9 +412,6 @@ export async function synapseStart(
     synCfg = await cfgDirFromTemplate(template, opts?.dataDir, {
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
-      // The test templates serve the Playwright suite's host; dev serves the
-      // dev host the templates already name.
-      loginUrl: template === 'dev' ? undefined : `${appURL}/`,
     });
     // On a host without IPv6, rewrite the generated config's listeners to bind
     // IPv4 only — synapse is reached via localhost:8008 in dev regardless, so
@@ -510,8 +450,7 @@ export async function synapseStart(
         // If you bump this version, bump every other pin of this image with
         // it, so CI keeps caching it from the GHCR mirror and every test runs
         // the same version: .github/workflows/mirror-test-images.yml,
-        // .github/actions/warm-test-images/action.yml,
-        // packages/matrix/scripts/test-oidc-mapping-provider.sh and
+        // .github/actions/warm-test-images/action.yml and
         // .devcontainer/claude-web-setup.sh.
         image: 'matrixdotorg/synapse:v1.163.0',
         containerName,

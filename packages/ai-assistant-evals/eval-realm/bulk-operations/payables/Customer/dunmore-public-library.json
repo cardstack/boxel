@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Dunmore Public Library",
+      "billingEmail": "billing@dunmorepubliclibra.example.com",
+      "paymentTerms": "due_on_receipt"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

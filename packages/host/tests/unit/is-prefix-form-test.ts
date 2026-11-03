@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { isPrefixForm } from '@cardstack/runtime-common';
+import { isAbsoluteIdentifier, isPrefixForm } from '@cardstack/runtime-common';
 
 module('Unit | isPrefixForm', function () {
   test('a prefix-form identifier is in prefix form', function (assert) {
@@ -18,5 +18,24 @@ module('Unit | isPrefixForm', function () {
     assert.false(isPrefixForm('./person'));
     assert.false(isPrefixForm('../person'));
     assert.false(isPrefixForm(''));
+  });
+});
+
+module('Unit | isAbsoluteIdentifier', function () {
+  test('http(s) URLs and prefix-form identifiers are absolute', function (assert) {
+    assert.true(isAbsoluteIdentifier('https://realms.example.test/r/person'));
+    assert.true(isAbsoluteIdentifier('http://localhost:4201/catalog/'));
+    assert.true(isAbsoluteIdentifier('@cardstack/base/card-api'));
+    assert.true(isAbsoluteIdentifier('@unregistered/realm/thing'));
+  });
+
+  test('relative references, bare specifiers and other schemes are not', function (assert) {
+    assert.false(isAbsoluteIdentifier('./person'));
+    assert.false(isAbsoluteIdentifier('../person'));
+    assert.false(isAbsoluteIdentifier('/person'));
+    assert.false(isAbsoluteIdentifier('lodash'));
+    assert.false(isAbsoluteIdentifier('data:text/plain,hi'));
+    assert.false(isAbsoluteIdentifier('blob:https://realms.example.test/1'));
+    assert.false(isAbsoluteIdentifier(''));
   });
 });

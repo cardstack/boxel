@@ -3,7 +3,7 @@ import { module, test } from 'qunit';
 import {
   formatRelativeTime,
   formatUpdatedTime,
-} from '@cardstack/host/components/operator-mode/workspace-chooser/workspace';
+} from '@cardstack/host/lib/workspace-actions';
 
 // Both formatters are relative to "now", so every case is expressed as an
 // offset from a fixed instant that stands in for the current time.
@@ -78,6 +78,38 @@ module('Unit | workspace timestamp labels', function (hooks) {
       assert.strictEqual(
         formatUpdatedTime(ago(90, 'day')),
         'Updated 3 months ago',
+      );
+    });
+
+    test('spells out abbreviated units when spoken', function (assert) {
+      let spoken = { spoken: true };
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'sec'), spoken),
+        'Updated 1 second ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(59, 'sec'), spoken),
+        'Updated 59 seconds ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'min'), spoken),
+        'Updated 1 minute ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(2, 'min'), spoken),
+        'Updated 2 minutes ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(1, 'hr'), spoken),
+        'Updated 1 hour ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(5, 'hr'), spoken),
+        'Updated 5 hours ago',
+      );
+      assert.strictEqual(
+        formatUpdatedTime(ago(3, 'day'), spoken),
+        'Updated 3 days ago',
       );
     });
 

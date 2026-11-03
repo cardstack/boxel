@@ -337,7 +337,7 @@ Three plain-text warnings belong with it: `could not count a request to <realm> 
 - **The hop configuration shows up two ways.** `ip-undetermined` usually means `BOXEL_TRUSTED_PROXY_HOPS` is set higher than the proxies in front of the realm server. Many visitors sharing one `clientIP` that is the load balancer's address means it is unset: with no trusted hops the address is the socket peer.
 - **`blocklist-invalid` closes the grant** to every caller who isn't signed in until what its `blocklist` reads is fixed: the policy card, or the realm `config` value it names. A `realmConfig("key")` for a key the realm's `config` doesn't hold produces nothing, which closes the grant the same way; an empty string blocks nobody.
 - **A rate limit that reads text falls back silently.** `rateLimitRequests` / `rateLimitWindowSeconds` must produce a number: a `config` value of `"300"` (text) is no limit, so the platform default applies with no warning, and the record's `requestsFrom` / `windowSecondsFrom` reads `platform`.
-- **Capability checks count, explains don't.** A page that asks `canInvoke` about many controls spends a unit per pair.
+- **Capability checks count, explains don't.** A page that asks `canInvoke` about many controls spends a unit per pair. A `keyReadiness` read is a pair of its own, so a control gated on both spends two.
 - **A write's acting user is a real account.** Its index jobs run in that user's writer lane, and its reads wait for them. A realm that names a person who edits it sees their own edits slow down under visitor traffic.
 
 ### Recipes

@@ -32,7 +32,12 @@ export interface Config {
   directRooms?: string[];
   systemCardAccountData?: { id?: string };
   uploadContentInterceptor?: () => Promise<void>;
-  sendEventInterceptor?: () => Promise<void>;
+  // Called after a sent event's local echo, before the event reaches the
+  // server; the send waits for the returned promise.
+  sendEventInterceptor?: (event: {
+    type: string;
+    content: Record<string, any>;
+  }) => Promise<void>;
   workspaceFavorites?: string[];
   // Public realms the user added to their dashboard's Catalogs section.
   catalogRealms?: string[];
@@ -43,8 +48,6 @@ export interface Config {
   // While set, sync echoes of raw dashboard writes are held here, in write
   // order, until a test releases them.
   heldDashboardEchoes?: (() => void)[];
-  loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
-  ssoLoginUrl?: string;
   // `deviceId` is the device a hand-off from the secure origin names.
   loginWithTokenInterceptor?: (
     token: string,

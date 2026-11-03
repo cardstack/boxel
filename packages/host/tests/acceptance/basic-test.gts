@@ -124,23 +124,26 @@ module('Acceptance | basic tests', function (hooks) {
     // Reproduce the post-boot login-reset race deterministically. The persisted
     // auth is left intact (a genuine logout clears it), but postLoginCompleted
     // gets cleared — exactly what a resetState() racing a re-navigation does.
-    // The <Auth/> gate is reactive, so the app swaps to the login form at once.
+    // The signed-out gate is reactive, so the app swaps to the signed-out
+    // landing at once.
     let matrixService = getService('matrix-service');
     matrixService.resetState();
     await settled();
     assert
-      .dom('[data-test-login-form]')
-      .exists('clearing postLoginCompleted strands the app on the login form');
+      .dom('[data-test-secure-sign-in-landing]')
+      .exists(
+        'clearing postLoginCompleted strands the app on the signed-out landing',
+      );
 
     // Re-run the index route model (as any re-navigation would). The one-shot
     // start() guard already latched on boot, so re-establishing the session is
     // the only path back to the app — assert the route takes it rather than
-    // rendering <Auth/>.
+    // rendering the signed-out landing.
     await getService('router').refresh();
     await settled();
 
     assert
-      .dom('[data-test-login-form]')
+      .dom('[data-test-secure-sign-in-landing]')
       .doesNotExist(
         'the index route recovers the session instead of stranding',
       );

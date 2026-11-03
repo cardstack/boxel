@@ -81,4 +81,20 @@ module('Pretui | components/stat', function (hooks) {
     await render(<template><Stat @label='Lots' @value='' @roll={{false}} @placeholder='—' /></template>);
     assert.strictEqual(q('.pretui-stat-value').textContent?.trim(), '—');
   });
+  test('Stat draws no status dot without @tone', async function (assert) {
+    await render(<template><Stat @label='Lots' @value={{10}} /></template>);
+    assert.dom('[data-test-pretui-stat-dot]').doesNotExist('no @tone = today\'s output');
+  });
+
+  test('Stat @tone draws a decorative dot before the label, in that tone', async function (assert) {
+    await render(<template><Stat @tone='warning' @label='At risk' @value={{7}} /></template>);
+    assert.dom('[data-test-pretui-stat-label] [data-test-pretui-stat-dot]').exists();
+    assert.dom('[data-test-pretui-stat-dot]').hasAttribute('data-tone', 'warning').hasAttribute('aria-hidden', 'true');
+    assert.dom('[data-test-pretui-stat-label]').hasText('At risk', 'the label text still states the status');
+  });
+
+  test('Stat @tone accepts the kit\'s tone aliases', async function (assert) {
+    await render(<template><Stat @tone='error' @label='Blocked' @value={{3}} /></template>);
+    assert.dom('[data-test-pretui-stat-dot]').hasAttribute('data-tone', 'danger');
+  });
 });

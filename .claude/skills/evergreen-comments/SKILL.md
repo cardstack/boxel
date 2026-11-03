@@ -30,7 +30,7 @@ Always cut:
 
 Never write a _real_ one of these into code comments, skill files, PR descriptions, or review replies. (Clearly-fake illustrative placeholders — like the anti-pattern examples in this very skill — are the obvious exception; you can't teach the rule without showing what it forbids.)
 
-- **Ticket IDs** — a real `CS-…` identifier; the private tracker is meaningless and opaque to outside readers
+- **Ticket IDs** — a real `CS-…` identifier; the private tracker is meaningless and opaque to outside readers. This includes a ticket ID in a committed filename, such as a per-ticket plan file: the plan goes on the ticket, not in the repo.
 - **PR numbers / PR-letter labels** — `#4863`, "PR A", "PR B", "stacked PR N", "in this PR we…"
 - **Sibling-change references** — "same pattern the prior PR added", "see also that other PR's comments"
 

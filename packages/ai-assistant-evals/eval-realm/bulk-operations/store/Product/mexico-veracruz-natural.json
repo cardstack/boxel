@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Mexico Veracruz Natural",
+      "category": "coffee",
+      "origin": "Veracruz, Mexico",
+      "variants": [
+        {
+          "sku": "CF-084-250",
+          "size": "250 g",
+          "price": 19.4
+        },
+        {
+          "sku": "CF-084-500",
+          "size": "500 g",
+          "price": 35.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

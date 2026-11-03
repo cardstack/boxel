@@ -1,5 +1,9 @@
+import { fn } from '@ember/helper';
+import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+import { beacon } from '@cardstack/choreo';
 
 import type {
   CardErrorJSONAPI,
@@ -11,13 +15,14 @@ import FilePill from '@cardstack/host/components/file-pill';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
+import type AssistantQuickLookService from '@cardstack/host/services/assistant-quick-look';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLUListElement;
   Args: {
     items?: (ReturnType<getCardCollection> | FileDef)[];
     attachedCardsAsFiles?: FileDef[] | undefined;
@@ -34,6 +39,25 @@ function findAttachedCardAsFile(
 
 export default class Attachments extends Component<Signature> {
   @service declare private network: NetworkService;
+  @service('assistant-quick-look')
+  declare private quickLook: AssistantQuickLookService;
+
+  // Each pill publishes its box as a beacon, the place Quick Look's sheet
+  // comes out of and goes back to; the key is this list's and the item's,
+  // so two messages attaching the same card stay two places.
+  private beaconKey = (id: string | undefined) =>
+    id ? `ql:${guidFor(this)}:${id}` : '';
+
+  // A card or a realm file in the reader's bubble opens in Quick Look
+  // first, over the transcript.
+  private look = (kind: 'card' | 'file', id: string, event: Event) => {
+    this.quickLook.open({
+      kind,
+      id,
+      sourceKey: this.beaconKey(id),
+      trigger: (event.currentTarget as HTMLElement | null) ?? undefined,
+    });
+  };
 
   private cardErrorRealm = (cardError: CardErrorJSONAPI) => {
     if (cardError.realm) {
@@ -77,7 +101,7 @@ export default class Attachments extends Component<Signature> {
   };
 
   <template>
-    <ul class='items' data-test-message-items>
+    <ul class='items' data-test-message-items ...attributes>
       {{#each @items as |item|}}
         {{#if (isCardCollectionResource item)}}
           {{#each item.cards as |card|}}
@@ -92,6 +116,8 @@ export default class Attachments extends Component<Signature> {
                   @borderType='solid'
                   @urlForRealmLookup={{urlForRealmLookup card}}
                   @fileActionsEnabled={{if file true false}}
+                  @onClick={{fn this.look 'card' card.id}}
+                  {{beacon (this.beaconKey card.id)}}
                 />
               {{/let}}
             </li>
@@ -119,12 +145,22 @@ export default class Attachments extends Component<Signature> {
               @borderType='solid'
               @onDownload={{onDownload item @downloadFile}}
               @fileActionsEnabled={{true}}
+              @onClick={{if
+                item.sourceUrl
+                (fn this.look 'file' item.sourceUrl)
+              }}
+              {{beacon (this.beaconKey item.sourceUrl)}}
             />
           </li>
         {{/if}}
       {{/each}}
     </ul>
     <style scoped>
+      /* the same context as the user's last message: the chips already
+         said it, so they step aside rather than repeat on every turn */
+      .items.repeats-context {
+        display: none;
+      }
       .items {
         list-style-type: none;
         padding-inline-start: 0;

@@ -16,6 +16,7 @@ import {
   isDeployedServerURL,
   outboundFetch,
   OutboundRefusedError,
+  OutboundResponseTooLargeError,
   OutboundSendError,
   type OutboundCredential,
   outboundSettingsFromEnv,
@@ -26,6 +27,7 @@ import {
 } from '../lib/outbound/client.ts';
 import { scrubError } from '../lib/outbound/scrub-error.ts';
 import { CredentialScrubber, REDACTED } from '../lib/outbound/scrubber.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import {
   startSentryCapture,
@@ -161,6 +163,7 @@ module(basename(import.meta.filename), function () {
         headers: { 'content-type': 'application/json', 'x-vendor': 'one' },
         body: JSON.stringify({ hello: 'world' }),
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       let echoed = await response.json();
       assert.strictEqual(echoed.headers['x-vendor'], 'one');
@@ -169,16 +172,29 @@ module(basename(import.meta.filename), function () {
     });
 
     test('refuses plain HTTP to a host the allowlist does not name', async function (assert) {
-      let error = await refusal(
-        outboundFetch({
-          url: 'http://vendor.example/v1',
-          method: 'GET',
-          headers: {},
-          sizePath: 'system-key',
-        }),
-      );
+      let error: unknown;
+      let lines = await logLinesDuring(['outbound'], async () => {
+        error = await refusal(
+          outboundFetch({
+            url: 'http://vendor.example/v1?key=secret',
+            method: 'GET',
+            headers: {},
+            sizePath: 'system-key',
+            destinationSetBy: 'platform',
+          }),
+        );
+      });
       assert.true(error instanceof OutboundRefusedError);
       assert.strictEqual((error as OutboundRefusedError).reason, 'scheme');
+      assert.deepEqual(
+        lines
+          .map((line) => line.message)
+          .filter((message) => message.startsWith('outbound guard refused')),
+        [
+          'outbound guard refused: path=system-key host=vendor.example reason=scheme destinationSetBy=platform',
+        ],
+        'the refusal is logged with who set the destination, and the host alone',
+      );
     });
 
     test('refuses an IP literal destination that is not public, in both families', async function (assert) {
@@ -195,6 +211,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -221,6 +238,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -238,6 +256,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.true(error instanceof OutboundRefusedError);
@@ -252,6 +271,7 @@ module(basename(import.meta.filename), function () {
             method: 'GET',
             headers: {},
             sizePath: 'system-key',
+            destinationSetBy: 'platform',
           }),
         );
         assert.strictEqual(
@@ -269,6 +289,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual((error as OutboundRefusedError)?.reason, 'scheme');
@@ -285,6 +306,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: {},
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential,
       });
       await sameOrigin.text();
@@ -301,6 +323,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: { 'x-vendor': 'kept' },
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
         credential,
       });
       let echoed = await crossOrigin.json();
@@ -318,6 +341,7 @@ module(basename(import.meta.filename), function () {
         headers: { 'content-type': 'application/json' },
         body: '{"a":1}',
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       let echoed = await response.json();
       assert.strictEqual(echoed.method, 'GET');
@@ -332,6 +356,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual(
@@ -349,6 +374,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.true(error instanceof OutboundTimeoutError, 'a timeout error');
@@ -364,6 +390,7 @@ module(basename(import.meta.filename), function () {
         headers: {},
         signal: controller.signal,
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       controller.abort(new Error('client went away'));
       let error = await refusal(pending);
@@ -378,6 +405,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: { 'X-Boxel-Consuming-Realm': 'http://example/' },
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         }),
       );
       assert.strictEqual(
@@ -393,6 +421,7 @@ module(basename(import.meta.filename), function () {
         method: 'GET',
         headers: {},
         sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
       assert.strictEqual(response.status, 429);
       assert.deepEqual(await response.json(), { status: 429 });
@@ -405,6 +434,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'call-api',
+          destinationSetBy: 'platform',
         });
         await response.text();
       });
@@ -416,82 +446,298 @@ module(basename(import.meta.filename), function () {
       assert.true(size!.message.includes('bytes=1000'));
       assert.true(size!.message.includes('outcome=complete'));
       assert.false(
-        lines.some((line) => line.message.includes('wouldRefuse')),
-        'nothing under the cap is flagged',
+        lines.some((line) => line.message.includes('refused=')),
+        'nothing under the cap is refused',
       );
     });
 
-    test('observe mode logs a declared length over the cap and still delivers the body', async function (assert) {
+    test('a body exactly at the cap is delivered whole', async function (assert) {
       configureOutbound({
         responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
       });
-      let body = '';
-      let lines = await outboundLogDuring(async () => {
-        let response = await outboundFetch({
-          url: `${vendor.url}/large?bytes=50000`,
-          method: 'GET',
-          headers: {},
-          sizePath: 'system-key',
-        });
-        body = await response.text();
+      let response = await outboundFetch({
+        url: `${vendor.url}/large?bytes=10000`,
+        method: 'GET',
+        headers: {},
+        sizePath: 'system-key',
+        destinationSetBy: 'platform',
       });
-      assert.strictEqual(body.length, 50_000, 'the whole body is delivered');
-      let declared = lines.find((line) =>
-        line.message.includes('wouldRefuse=declared-length'),
-      );
-      assert.ok(declared, 'the declared length over the cap is logged');
-      assert.strictEqual(declared!.level, 'warn');
-      assert.true(declared!.message.includes('declaredBytes=50000'));
-      assert.true(
-        lines.some((line) =>
-          line.message.includes('wouldRefuse=stream-reached-cap'),
-        ),
-        'the stream passing the cap is logged too',
-      );
+      assert.strictEqual((await response.text()).length, 10_000);
     });
 
-    test('observe mode counts a gzip bomb in decompressed bytes and still delivers it', async function (assert) {
-      let decompressedBytes = 8 * 1024 * 1024;
+    test('a declared length over the cap is refused before the body is read', async function (assert) {
       configureOutbound({
-        responseSizeCaps: {
-          'system-key': 1024 * 1024,
-          'call-api': 1024 * 1024,
-        },
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let error: unknown;
+      let lines = await outboundLogDuring(async () => {
+        error = await refusal(
+          outboundFetch({
+            url: `${vendor.url}/large?bytes=50000`,
+            method: 'GET',
+            headers: {},
+            sizePath: 'system-key',
+            destinationSetBy: 'platform',
+            credential: {
+              name: 'system:test',
+              value: 'sk-test-0123456789abcdefghij',
+              placement: { in: 'header', header: 'Authorization' },
+            },
+          }),
+        );
+      });
+      assert.true(
+        error instanceof OutboundResponseTooLargeError,
+        'the call is refused for size',
+      );
+      let tooLarge = error as OutboundResponseTooLargeError;
+      assert.strictEqual(tooLarge.measured, 'declared-length');
+      assert.strictEqual(tooLarge.cap, 10_000);
+      assert.deepEqual(
+        tooLarge.context,
+        { keyName: 'system:test', url: `${vendor.url}/large` },
+        'the error names the key and the URL as given',
+      );
+      let declared = lines.find((line) =>
+        line.message.includes('refused=declared-length'),
+      );
+      assert.ok(declared, 'the refusal is logged');
+      assert.strictEqual(declared!.level, 'warn');
+      assert.true(declared!.message.includes('declaredBytes=50000'));
+      assert.true(declared!.message.includes('path=system-key'));
+    });
+
+    test('a body with no declared length ends at the cap with an error, never a truncated body', async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
       });
       let received = 0;
+      let error: unknown;
+      let lines = await outboundLogDuring(async () => {
+        let response = await outboundFetch({
+          url: `${vendor.url}/respond`,
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            chunks: ['a'.repeat(6_000), 'b'.repeat(6_000), 'c'.repeat(6_000)],
+          }),
+          sizePath: 'call-api',
+          destinationSetBy: 'user',
+        });
+        assert.strictEqual(
+          response.headers.get('content-length'),
+          null,
+          'the vendor declares no length',
+        );
+        let reader = response.body!.getReader();
+        try {
+          for (;;) {
+            let { done, value } = await reader.read();
+            if (done) break;
+            received += value!.byteLength;
+          }
+        } catch (e) {
+          error = e;
+        }
+      });
+      assert.true(
+        error instanceof OutboundResponseTooLargeError,
+        'the stream ends with a size refusal rather than ending normally',
+      );
+      assert.strictEqual(
+        (error as OutboundResponseTooLargeError).measured,
+        'stream-reached-cap',
+      );
+      assert.true(
+        received <= 10_000,
+        `no byte past the cap reaches the caller (received ${received})`,
+      );
+      assert.ok(
+        lines.find(
+          (line) =>
+            line.level === 'warn' &&
+            line.message.includes('refused=stream-reached-cap') &&
+            line.message.includes('path=call-api'),
+        ),
+        'the refusal is logged',
+      );
+      let size = lines.find((line) =>
+        line.message.startsWith('outbound response size:'),
+      );
+      assert.true(size?.message.includes('outcome=too-large'));
+    });
+
+    test('a gzip bomb is refused on its decompressed bytes', async function (assert) {
+      let decompressedBytes = 8 * 1024 * 1024;
+      let cap = 1024 * 1024;
+      configureOutbound({
+        responseSizeCaps: { 'system-key': cap, 'call-api': cap },
+      });
+      let received = 0;
+      let error: unknown;
       let lines = await outboundLogDuring(async () => {
         let response = await outboundFetch({
           url: `${vendor.url}/gzip-bomb?bytes=${decompressedBytes}`,
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
         });
         let reader = response.body!.getReader();
-        for (;;) {
-          let { done, value } = await reader.read();
-          if (done) break;
-          received += value!.byteLength;
+        try {
+          for (;;) {
+            let { done, value } = await reader.read();
+            if (done) break;
+            received += value!.byteLength;
+          }
+        } catch (e) {
+          error = e;
         }
       });
-      assert.strictEqual(received, decompressedBytes, 'nothing is refused yet');
+      assert.true(
+        error instanceof OutboundResponseTooLargeError,
+        'the decompressed body passing the cap is refused',
+      );
+      assert.strictEqual(
+        (error as OutboundResponseTooLargeError).measured,
+        'stream-reached-cap',
+      );
+      assert.true(
+        received <= cap,
+        `no decompressed byte past the cap reaches the caller (received ${received})`,
+      );
       assert.false(
-        lines.some((line) =>
-          line.message.includes('wouldRefuse=declared-length'),
-        ),
+        lines.some((line) => line.message.includes('refused=declared-length')),
         'the compressed declared length is under the cap',
       );
-      let reached = lines.find((line) =>
-        line.message.includes('wouldRefuse=stream-reached-cap'),
+      assert.ok(
+        lines.find((line) =>
+          line.message.includes('refused=stream-reached-cap'),
+        ),
+        'the refusal is logged',
       );
-      assert.ok(reached, 'the decompressed stream passing the cap is logged');
-      let size = lines.find((line) =>
+    });
+
+    test('a response with no body is not refused for the length it declares', async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let response = await outboundFetch({
+        url: `${vendor.url}/large?bytes=50000`,
+        method: 'HEAD',
+        headers: {},
+        sizePath: 'call-api',
+        destinationSetBy: 'user',
+      });
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.headers.get('content-length'), '50000');
+    });
+
+    test('the size and refusal lines end with the name of the key the call attached', async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let credential = {
+        name: 'system:https://vendor.test/v1',
+        value: 'sk-test-0123456789abcdefghij',
+        placement: { in: 'header' as const, header: 'Authorization' },
+      };
+      let lines = await outboundLogDuring(async () => {
+        let response = await outboundFetch({
+          url: `${vendor.url}/large?bytes=1000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          destinationSetBy: 'platform',
+          credential,
+        });
+        await response.text();
+        await refusal(
+          outboundFetch({
+            url: `${vendor.url}/large?bytes=50000`,
+            method: 'GET',
+            headers: {},
+            sizePath: 'system-key',
+            destinationSetBy: 'platform',
+            credential,
+          }),
+        );
+        let unnamed = await outboundFetch({
+          url: `${vendor.url}/large?bytes=10`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'call-api',
+          destinationSetBy: 'user',
+        });
+        await unnamed.text();
+      });
+      let sizes = lines.filter((line) =>
         line.message.startsWith('outbound response size:'),
       );
       assert.true(
-        size?.message.includes(`bytes=${decompressedBytes}`),
-        'the size logged is the decompressed size',
+        sizes[0]?.message.endsWith(
+          'bytes=1000 outcome=complete key=system:https://vendor.test/v1',
+        ),
+        `the size line names the key (${sizes[0]?.message})`,
       );
-      assert.true(size?.message.includes('overCap=true'));
+      let refused = lines.find((line) =>
+        line.message.startsWith('outbound response over size cap:'),
+      );
+      assert.true(
+        refused?.message.endsWith(
+          'refused=declared-length key=system:https://vendor.test/v1',
+        ),
+        `the refusal line names the key (${refused?.message})`,
+      );
+      assert.true(
+        sizes[1]?.message.endsWith('outcome=complete key=(none)'),
+        `a call with no named key says so (${sizes[1]?.message})`,
+      );
+    });
+
+    test("a call's own response size cap takes the place of its path's", async function (assert) {
+      configureOutbound({
+        responseSizeCaps: { 'system-key': 10_000, 'call-api': 10_000 },
+      });
+      let lines = await outboundLogDuring(async () => {
+        let raised = await outboundFetch({
+          url: `${vendor.url}/large?bytes=50000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          responseSizeCap: 60_000,
+          destinationSetBy: 'platform',
+        });
+        assert.strictEqual(
+          (await raised.text()).length,
+          50_000,
+          'a raised cap lets a response over the path cap through whole',
+        );
+      });
+      assert.true(
+        lines.some(
+          (line) =>
+            line.message.startsWith('outbound response size:') &&
+            line.message.includes('cap=60000 bytes=50000 outcome=complete'),
+        ),
+        'the size line reports the cap the call was held to',
+      );
+
+      let error = await refusal(
+        outboundFetch({
+          url: `${vendor.url}/large?bytes=5000`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          responseSizeCap: 1_000,
+          destinationSetBy: 'platform',
+        }),
+      );
+      assert.true(
+        error instanceof OutboundResponseTooLargeError,
+        'a lowered cap refuses a response under the path cap',
+      );
+      assert.strictEqual((error as OutboundResponseTooLargeError).cap, 1_000);
     });
   });
 
@@ -612,6 +858,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();
@@ -642,6 +889,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: {
             name: 'stub-vendor-key',
             value,
@@ -681,6 +929,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: {
             name: 'stub-vendor-key',
             value: `\t${key}\nabcdef\r\n`,
@@ -714,6 +963,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         }),
       );
@@ -750,6 +1000,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();
@@ -774,6 +1025,7 @@ module(basename(import.meta.filename), function () {
           method: 'GET',
           headers: {},
           sizePath: 'system-key',
+          destinationSetBy: 'platform',
           credential: queryCredential(),
         });
         await response.text();

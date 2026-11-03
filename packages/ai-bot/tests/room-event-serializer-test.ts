@@ -31,6 +31,20 @@ module('Room event serializer', () => {
     c!();
   });
 
+  test('an event that does not supersede never makes an older event stand down', async (assert) => {
+    let serializer = new RoomEventSerializer();
+    let messageClaim = serializer.claim('!room', '$message');
+    let reactionClaim = serializer.claim('!room', '$reaction', {
+      supersedes: false,
+    });
+    let releaseMessage = await messageClaim;
+    assert.ok(releaseMessage, 'the message goes ahead');
+    releaseMessage!();
+    let releaseReaction = await reactionClaim;
+    assert.ok(releaseReaction, 'the reaction goes ahead after the message');
+    releaseReaction!();
+  });
+
   test('an event that arrives while the room is busy waits for the release', async (assert) => {
     let serializer = new RoomEventSerializer();
     let releaseA = (await serializer.claim('!room', '$a'))!;

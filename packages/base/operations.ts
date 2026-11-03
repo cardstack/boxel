@@ -838,6 +838,11 @@ export interface CallApiOperationDeclaration extends OperationCommon {
     readonly document: string;
     readonly variables?: { readonly [name: string]: OperationValue };
   };
+  // True when each card needs its own key, such as one webhook per channel
+  // card: a key's owner approves the operation for each instance, and it is
+  // invoked only on an instance. Absent, one approval in a realm serves every
+  // invocation there.
+  readonly perInstance?: boolean;
 }
 
 export type OperationDeclaration =
@@ -959,6 +964,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
 const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   read: ['links', 'html'],
   query: ['links', 'html'],
+  callApi: ['perInstance'],
 };
 
 // Clauses without which an authored declaration names no work at all: a
@@ -2406,6 +2412,10 @@ export type {
   SearchInvokeOptions,
 } from '@cardstack/runtime-common';
 export { OperationsError } from '@cardstack/runtime-common';
+export type {
+  CredentialRejectedReason,
+  OperationsErrorMeta,
+} from '@cardstack/runtime-common';
 
 // The payload an operation takes, as an argument list. A declaration's own
 // `params` schema is the single source for it, so an operation that declares

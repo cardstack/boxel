@@ -1,7 +1,7 @@
 import { escapeHtml } from './helpers/html.ts';
 import { resolveRRIReference, trimJsonExtension } from './url.ts';
 import {
-  isPrefixForm,
+  isAbsoluteIdentifier,
   type RealmResourceIdentifier,
 } from './realm-identifiers.ts';
 import { FITTED_FORMATS } from './formats.ts';
@@ -39,11 +39,7 @@ function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   // prefix-form RRI. A reference that couldn't be made absolute (e.g. a
   // relative ref with no base) is dropped rather than emitted as a bare,
   // unmatchable query value.
-  return resolved.startsWith('http://') ||
-    resolved.startsWith('https://') ||
-    isPrefixForm(resolved)
-    ? resolved
-    : null;
+  return isAbsoluteIdentifier(resolved) ? resolved : null;
 }
 
 // ── BFM size spec parsing ──
@@ -217,7 +213,7 @@ export function bfmRefFormatAndSize(
   widthAttr: string | undefined,
   heightAttr: string | undefined,
   defaultFormat: BfmRefFormat = 'embedded',
-): { format: BfmRefFormat; sizeStyle?: string } {
+): { format: BfmRefFormat; sizeStyle?: string; hasHeight: boolean } {
   let format: BfmRefFormat =
     formatAttr === 'atom' ||
     formatAttr === 'embedded' ||
@@ -226,9 +222,10 @@ export function bfmRefFormatAndSize(
       ? formatAttr
       : defaultFormat;
   if (format !== 'fitted') {
-    return { format };
+    return { format, hasHeight: false };
   }
   let parts: string[] = [];
+  let hasHeight = false;
   if (widthAttr && /^\d+%$/.test(widthAttr)) {
     parts.push(`width: ${widthAttr}`);
   } else if (widthAttr && /^\d+$/.test(widthAttr)) {
@@ -236,8 +233,13 @@ export function bfmRefFormatAndSize(
   }
   if (heightAttr && /^\d+$/.test(heightAttr)) {
     parts.push(`height: ${heightAttr}px`);
+    hasHeight = true;
   }
-  return { format, sizeStyle: parts.length ? parts.join('; ') : undefined };
+  return {
+    format,
+    sizeStyle: parts.length ? parts.join('; ') : undefined,
+    hasHeight,
+  };
 }
 
 /**

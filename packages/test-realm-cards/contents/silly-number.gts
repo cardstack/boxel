@@ -4,7 +4,7 @@ import {
   queryableValue,
   formatQuery,
   primitive,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 class View extends Component<typeof SillyNumberField> {
   <template>{{this.value}}</template>

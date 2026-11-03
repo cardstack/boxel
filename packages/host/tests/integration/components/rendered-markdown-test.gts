@@ -266,10 +266,10 @@ module('Integration | rendered-markdown', function (hooks) {
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
       .hasAttribute('title', cardUrl, 'pill has URL as title');
-    // cardTypeName extracts "Pet" from the URL path
+    // the pill names the card by its id, as a reply's card links do
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
-      .containsText('Pet', 'pill shows extracted type name');
+      .containsText('Unknown', 'pill names the card by its id');
   });
 
   test('unresolved block card reference shows pill fallback', async function (assert) {
@@ -298,7 +298,7 @@ module('Integration | rendered-markdown', function (hooks) {
       .hasAttribute('title', cardUrl, 'pill has URL as title');
     assert
       .dom('[data-test-markdown-bfm-unresolved-block]')
-      .containsText('BlogPost', 'pill shows extracted type name');
+      .containsText('Unknown', 'pill names the card by its id');
   });
 
   test('multiple card references create separate placeholders', async function (assert) {
