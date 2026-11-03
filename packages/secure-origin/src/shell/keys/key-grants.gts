@@ -3,7 +3,7 @@
 // (an operation, on a card, in a workspace). A key used across a few cards
 // and workspaces has dozens of approvals, so each grant shows only how many
 // it has until its count is opened. Removing a grant first lists those
-// approvals, opening the list if it is closed, since removing it revokes
+// approvals, holding the list open while it asks, since removing it revokes
 // every one, then hands the grant to `@onRemove`, which removes it and
 // answers whether it did. A card that needs the key there again asks for its
 // approval again.
@@ -13,6 +13,8 @@ import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
 import Button from '../../components/button.gts';
+import cn from '../../helpers/cn.ts';
+import DisclosureToggle from '../../components/disclosure-toggle.gts';
 import { eq, not } from '../../helpers/truth-helpers.ts';
 
 import type { KeyBinding, KeyGrant, ListedKey } from '../../security/keys.ts';
@@ -38,25 +40,25 @@ export default class KeyGrants extends Component<Signature> {
       <ul class='grants' data-test-key-grants>
         {{#each @key.grants key='id' as |grant|}}
           <li
-            class='grant'
+            class={{cn 'grant' open=(this.isExpanded grant)}}
             data-test-key-grant={{hostAndPath grant.destination}}
           >
             <div class='grant-row'>
-              <span class='where'>{{hostAndPath grant.destination}}</span>
+              <span
+                class='where'
+                id='key-grant-where-{{grant.id}}'
+              >{{hostAndPath grant.destination}}</span>
               {{#if @bindings}}
                 {{#let (this.bindingsOf grant) as |bindings|}}
                   {{#if bindings.length}}
-                    {{! A disclosure, drawn as the page's "Usage and limits"
-                        is: a marker that turns as the list opens. }}
-                    <button
-                      type='button'
+                    {{! Held open while Remove asks, since its confirmation
+                        names the approvals listed above it. }}
+                    <DisclosureToggle
                       class='count toggle'
-                      aria-expanded={{if
-                        (this.isExpanded grant)
-                        'true'
-                        'false'
-                      }}
+                      @expanded={{this.isExpanded grant}}
+                      @disabled={{this.isRemoving grant}}
                       aria-controls='key-grant-bindings-{{grant.id}}'
+                      aria-describedby='key-grant-where-{{grant.id}}'
                       data-test-key-grant-count
                       {{on 'click' (fn this.toggle grant)}}
                     >{{bindings.length}}
@@ -64,7 +66,7 @@ export default class KeyGrants extends Component<Signature> {
                         (eq bindings.length 1)
                         'approval'
                         'approvals'
-                      }}</button>
+                      }}</DisclosureToggle>
                   {{else}}
                     <span class='count' data-test-key-grant-count>0 approvals</span>
                   {{/if}}
@@ -148,9 +150,14 @@ export default class KeyGrants extends Component<Signature> {
         margin: 0;
         padding: 0;
         display: grid;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-5xs);
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
+      }
+      /* Closed grants stack as tightly as the rows above them; an open one
+         keeps its list clear of the next grant. */
+      .grant.open:not(:last-child) {
+        padding-bottom: var(--boxel-sp-xs);
       }
       .grant-row {
         display: flex;
@@ -165,42 +172,8 @@ export default class KeyGrants extends Component<Signature> {
       .count {
         color: var(--muted-foreground);
       }
-      .toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        padding: 0;
-        border: none;
-        background: none;
-        font-family: inherit;
-        font-size: inherit;
-        line-height: inherit;
-        cursor: pointer;
-      }
-      .toggle::before {
-        content: '';
-        width: 0;
-        height: 0;
-        border-top: 0.3em solid transparent;
-        border-bottom: 0.3em solid transparent;
-        border-left: 0.45em solid currentColor;
-        transition: transform 0.15s ease;
-      }
-      .toggle[aria-expanded='true']::before {
-        transform: rotate(90deg);
-      }
-      .toggle:hover {
+      .toggle:enabled:hover {
         color: var(--foreground);
-      }
-      .toggle:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-        border-radius: var(--boxel-border-radius-xs, 2px);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .toggle::before {
-          transition: none;
-        }
       }
       .bindings {
         margin: var(--boxel-sp-5xs) 0 0;
@@ -229,7 +202,7 @@ export default class KeyGrants extends Component<Signature> {
   private state = trackedObject({
     removing: false,
     grant: undefined as string | undefined,
-    // The grants whose approvals are listed; every grant starts collapsed.
+    // The grants whose approvals the user opened; every grant starts closed.
     expanded: [] as string[],
   });
 
@@ -238,22 +211,20 @@ export default class KeyGrants extends Component<Signature> {
 
   private isRemoving = (grant: KeyGrant) => this.state.grant === grant.id;
 
+  // Removing's confirmation names the approvals above it, so they are listed
+  // while it is open, whatever the user had opened; Cancel returns the list
+  // to how they left it.
   private isExpanded = (grant: KeyGrant) =>
-    this.state.expanded.includes(grant.id);
+    this.isRemoving(grant) || this.state.expanded.includes(grant.id);
 
   private toggle = (grant: KeyGrant) => {
-    this.state.expanded = this.isExpanded(grant)
+    this.state.expanded = this.state.expanded.includes(grant.id)
       ? this.state.expanded.filter((id) => id !== grant.id)
       : [...this.state.expanded, grant.id];
   };
 
-  // The confirmation names the approvals above, so they are listed while it
-  // is open.
   private startRemove = (grant: KeyGrant) => {
     this.state.grant = grant.id;
-    if (!this.isExpanded(grant)) {
-      this.state.expanded = [...this.state.expanded, grant.id];
-    }
   };
 
   private cancel = () => {
