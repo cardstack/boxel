@@ -67,6 +67,10 @@ export class PostgresChangeJournal implements ChangeJournal {
       'FROM event, jsonb_array_elements_text(',
       param(JSON.stringify(paths)),
       '::jsonb) AS changed(path)',
+      // A write may name one path twice, such as a batch that deletes a path
+      // it also wrote. The event keeps every change; the path table holds
+      // each path once per event.
+      'ON CONFLICT (realm_id, path, seq) DO NOTHING',
       ')',
       'SELECT seq, pg_notify(',
       param(REALM_CHANGE_EVENTS_CHANNEL),
