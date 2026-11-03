@@ -56,7 +56,7 @@ class SearchInputUsage extends Component {
           @value={{this.display}}
           @options={{this.displays}}
           @defaultValue='field'
-          @description="field is the whole field. collapsed is a square button, as wide as the field is high, showing only the magnifier; a click or Tab opens the full field over the row (--pretui-search-open-w, 15rem by default), Escape closes it and returns focus to the button, and the value carries across. --pretui-field-h sets the height."
+          @description="field is the whole field. collapsed is a square button, as wide as the field is high, showing only the magnifier; a click opens the full field over the row (--pretui-search-open-w, 15rem by default), Escape closes it and returns focus to the button, and the value carries across. --pretui-field-h sets the height."
           @onInput={{this.setDisplay}}
         />
         <Args.Bool

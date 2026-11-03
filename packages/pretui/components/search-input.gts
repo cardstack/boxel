@@ -1,5 +1,6 @@
 // Pretui — SearchInput: a search field with a clear button.
 import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
@@ -22,6 +23,53 @@ const SEARCH_METRICS = htmlSafe(
   `${TYPED_BLOCK_RULES} ${SEARCH_START_PADDING} padding-inline-end: 1.75rem;`,
 );
 
+interface SearchFieldSignature {
+  Args: {
+    value: string;
+    placeholder?: string;
+    disabled?: boolean;
+    controlId?: string;
+    showClear: boolean;
+    onInput: (value: string) => void;
+    onClear: (event: Event) => void;
+  };
+  Element: HTMLDivElement;
+}
+
+// the field both displays share; the input is named from the placeholder
+// unless the caller labels it through @controlId
+const SearchField: TemplateOnlyComponent<SearchFieldSignature> = <template>
+  <FieldDress data-filled={{if @showClear 'true'}} ...attributes>
+    <BoxelInput
+      @value={{@value}}
+      @placeholder={{@placeholder}}
+      @disabled={{@disabled}}
+      @onInput={{@onInput}}
+      id={{@controlId}}
+      aria-label={{unless @controlId (if @placeholder @placeholder 'Search')}}
+      style={{SEARCH_METRICS}}
+    />
+    <SearchGlyph @dimmed={{@disabled}} />
+    {{#if @showClear}}
+      <button
+        type='button'
+        class='pretui-searchclear'
+        aria-label='Clear search'
+        data-test-pretui-search-clear
+        {{on 'click' @onClear}}
+      >
+        <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'><path
+            d='M3 3l6 6M9 3l-6 6'
+            fill='none'
+            stroke='currentColor'
+            stroke-width='1.5'
+            stroke-linecap='round'
+          /></svg>
+      </button>
+    {{/if}}
+  </FieldDress>
+</template>;
+
 export interface SearchInputSignature {
   Args: ControlAliasArgs & {
     value?: string;
@@ -33,7 +81,7 @@ export interface SearchInputSignature {
     onInput?: (value: string) => void;
     /** 'field' (default) the whole field; 'collapsed' a square button
      * showing the magnifier, which opens the full field over the row on
-     * click or focus; Escape or leaving it closes it again */
+     * click; Escape or leaving it closes it again */
     display?: 'field' | 'collapsed';
   };
   Element: HTMLDivElement;
@@ -42,8 +90,6 @@ export interface SearchInputSignature {
 export class SearchInput extends Component<SearchInputSignature> {
   @tracked internal = this.args.value ?? '';
   @tracked open = false;
-  // set while Escape hands focus back, so that focus doesn't reopen it
-  private returning = false;
 
   get collapsed() {
     return this.args.display === 'collapsed';
@@ -56,9 +102,9 @@ export class SearchInput extends Component<SearchInputSignature> {
     return this.current ? `${name}: ${this.current}` : name;
   }
   expand = () => {
-    // focus and click both fire on one activation; writing open twice in
-    // one render is an autotracking error
-    if (this.open || this.returning || this.disabled) {
+    // a second activation inside one render would write open twice, an
+    // autotracking error
+    if (this.open || this.disabled) {
       return;
     }
     this.open = true;
@@ -77,24 +123,31 @@ export class SearchInput extends Component<SearchInputSignature> {
       return;
     }
     event.preventDefault();
+    // keep an enclosing dialog or card from also closing on this Escape
+    event.stopPropagation();
     let root = (event.currentTarget as HTMLElement).closest(
       '[data-pretui-search-collapsible]',
     );
     this.open = false;
     // the button renders in the same frame the field leaves
     requestAnimationFrame(() => {
-      this.returning = true;
       root
         ?.querySelector<HTMLElement>('[data-pretui-search-toggle]')
         ?.focus();
-      this.returning = false;
     });
   };
   private closeOnLeave = (event: FocusEvent) => {
     let root = event.currentTarget as HTMLElement;
-    if (!root.contains(event.relatedTarget as Node | null)) {
-      this.open = false;
-    }
+    // Deferred: unmounting the toggle fires focusout while the field is still
+    // rendering, and tracked state can't change inside that render. By the
+    // microtask focusOnOpen has moved focus into the field. Safari and Firefox
+    // on macOS don't focus a button on mouse press, so activeElement is body
+    // while the pointer is down on the clear button; :active covers that.
+    queueMicrotask(() => {
+      if (!root.contains(document.activeElement) && !root.matches(':active')) {
+        this.open = false;
+      }
+    });
   };
   focusOnOpen = modifier((el: HTMLElement) => {
     el.querySelector('input')?.focus();
@@ -140,38 +193,20 @@ export class SearchInput extends Component<SearchInputSignature> {
         ...attributes
       >
         {{#if this.open}}
-          <FieldDress
+          <SearchField
             class='pretui-searchcollapse-field'
-            data-filled={{if this.showClear 'true'}}
+            @value={{this.current}}
+            @placeholder={{@placeholder}}
+            @disabled={{this.disabled}}
+            @onInput={{this.handleInput}}
+            @controlId={{@controlId}}
+            @showClear={{this.showClear}}
+            @onClear={{this.clear}}
             {{this.focusOnOpen}}
-          >
-      <BoxelInput
-        @value={{this.current}}
-        @placeholder={{@placeholder}}
-        @disabled={{this.disabled}}
-        @onInput={{this.handleInput}}
-        id={{@controlId}}
-        style={{SEARCH_METRICS}}
-      />
-      <SearchGlyph @dimmed={{this.disabled}} />
-      {{#if this.showClear}}
-        <button
-          type='button'
-          class='pretui-searchclear'
-          aria-label='Clear search'
-          {{on 'click' this.clear}}
-        >
-          <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'><path
-              d='M3 3l6 6M9 3l-6 6'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='1.5'
-              stroke-linecap='round'
-            /></svg>
-        </button>
-      {{/if}}
-          </FieldDress>
+          />
         {{else}}
+          {{! a raw button, not Button: the square is the field's own face
+              (--field, --input), which Button's variants don't draw }}
           <button
             type='button'
             class='pretui-searchtoggle'
@@ -180,7 +215,6 @@ export class SearchInput extends Component<SearchInputSignature> {
             disabled={{this.disabled}}
             data-pretui-search-toggle
             {{on 'click' this.expand}}
-            {{on 'focus' this.expand}}
             data-test-pretui-search-toggle
           >
             <SearchIcon width='14' height='14' aria-hidden='true' />
@@ -188,37 +222,17 @@ export class SearchInput extends Component<SearchInputSignature> {
         {{/if}}
       </div>
     {{else}}
-    <FieldDress
-      data-filled={{if this.showClear 'true'}}
-      data-test-pretui-search-input
-      ...attributes
-    >
-      <BoxelInput
+      <SearchField
         @value={{this.current}}
         @placeholder={{@placeholder}}
         @disabled={{this.disabled}}
         @onInput={{this.handleInput}}
-        id={{@controlId}}
-        style={{SEARCH_METRICS}}
+        @controlId={{@controlId}}
+        @showClear={{this.showClear}}
+        @onClear={{this.clear}}
+        data-test-pretui-search-input
+        ...attributes
       />
-      <SearchGlyph @dimmed={{this.disabled}} />
-      {{#if this.showClear}}
-        <button
-          type='button'
-          class='pretui-searchclear'
-          aria-label='Clear search'
-          {{on 'click' this.clear}}
-        >
-          <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'><path
-              d='M3 3l6 6M9 3l-6 6'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='1.5'
-              stroke-linecap='round'
-            /></svg>
-        </button>
-      {{/if}}
-    </FieldDress>
     {{/if}}
     <style scoped>
       @layer PretComponent {

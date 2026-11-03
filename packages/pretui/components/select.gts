@@ -25,7 +25,6 @@ type SelectIcon = ComponentLike<{ Element: SVGSVGElement }>;
 const SelectIconFace: TemplateOnlyComponent<{ Args: { icon: SelectIcon } }> =
   <template>
     <@icon
-      class='pretui-select-icon'
       width='1.25em'
       height='1.25em'
       aria-hidden='true'
@@ -412,8 +411,13 @@ export class Select extends Component<SelectSignature> {
            these reach its trigger, dressed to match Input. */
         .pretui-selectwrap :deep(.pretui-selecttrigger) {
           align-items: center;
-          /* per-instance knob, inherited (LayoutControl sets it) */
-          height: var(--pretui-select-h, var(--boxel-form-control-height-sm));
+          /* per-instance knob, inherited (LayoutControl sets it); falls back to
+             the shared field knob so a row-level --pretui-field-h sizes Select
+             with Input and Search */
+          height: var(
+            --pretui-select-h,
+            var(--pretui-field-h, var(--boxel-form-control-height-sm))
+          );
           border: 1px solid var(--input);
           width: 100%;
           text-align: start;

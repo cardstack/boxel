@@ -586,10 +586,16 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn-icon {
           flex: none;
         }
-        /* @display 'icon': IconButton's square */
+        /* @display 'icon': the square IconButton draws for a bare icon. Button
+           keeps its own path so the face swaps in place when a row runs
+           short of room; the width tracks min-height, including the xs
+           24px floor, so the two stay square together. */
         .pretui-btn[data-display='icon'] {
           padding: 0;
           width: var(--pretui-button-h, 2.24em);
+        }
+        .pretui-btn[data-display='icon'][data-size='xs'] {
+          width: max(var(--pretui-button-h, 2.24em), 1.5rem);
         }
         .pretui-btn[data-state='busy'] .pretui-btn-label {
           opacity: 0;

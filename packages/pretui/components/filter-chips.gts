@@ -60,6 +60,9 @@ export interface FilterChipsSignature {
     display?: 'all' | 'few';
     /** chips shown under @display 'few' (default 3) */
     visibleCount?: number;
+    /** the '+N' trigger's name after its visible '+N', and the overflow
+     * menu's name when @label is absent (default 'more filters') */
+    moreLabel?: string;
   };
   Element: HTMLDivElement;
 }
@@ -108,6 +111,9 @@ export class FilterChips extends Component<FilterChipsSignature> {
     this.args.multiple
       ? this.values.includes(option.value)
       : this.value === option.value;
+  get moreLabel() {
+    return this.args.moreLabel ?? 'more filters';
+  }
   get few() {
     return this.args.display === 'few';
   }
@@ -192,12 +198,14 @@ export class FilterChips extends Component<FilterChipsSignature> {
         </label>
       {{/each}}
       {{#if this.hiddenOptions.length}}
-        <Menu @items={{this.overflowItems}} @label={{if @label @label 'More filters'}}>
+        <Menu @items={{this.overflowItems}} @label={{if @label @label this.moreLabel}}>
           <:trigger as |_open toggle|>
+            {{! a raw button, not Button: it wears the chip's own face and
+                height, which Button's variants don't draw }}
             <button
               type='button'
               class='pretui-filterchip pretui-filterchip-more'
-              aria-label='{{this.hiddenOptions.length}} more filters'
+              aria-label='+{{this.hiddenOptions.length}} {{this.moreLabel}}'
               {{on 'click' toggle}}
               data-test-pretui-filter-chips-more
             >+{{this.hiddenOptions.length}}<svg
@@ -221,7 +229,7 @@ export class FilterChips extends Component<FilterChipsSignature> {
         .pretui-filterchips {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 0.25rem;
           flex-wrap: wrap;
         }
         .pretui-filterchips[data-display='few'] {
@@ -233,15 +241,17 @@ export class FilterChips extends Component<FilterChipsSignature> {
         .pretui-filterchip {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 0.375rem;
           position: relative;
           /* --pretui-filterchip-h: opt-in height knob (LayoutControl sets it) */
-          height: var(--pretui-filterchip-h, 1.625rem);
-          border-radius: 13px;
-          padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
+          height: var(--_chip-h);
+          /* a full pill at any height */
+          --_chip-h: var(--pretui-filterchip-h, 1.625rem);
+          border-radius: calc(var(--_chip-h) / 2);
+          padding: 0 calc(0.375rem * var(--pretui-capsule-base, 1.35) + 0.8125rem * var(--pretui-radius-encroach, 0.35));
           border: 0;
           font: inherit;
-          font-size: var(--text-ui, 12px);
+          font-size: var(--text-ui, 0.75rem);
           font-weight: 500;
           letter-spacing: inherit;
           color: var(--muted-foreground);
@@ -275,8 +285,8 @@ export class FilterChips extends Component<FilterChipsSignature> {
           box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
         }
         .pretui-filterdot {
-          width: 6px;
-          height: 6px;
+          width: 0.375rem;
+          height: 0.375rem;
           border-radius: 50%;
           flex: none;
         }
@@ -284,11 +294,11 @@ export class FilterChips extends Component<FilterChipsSignature> {
            at least `--pretui-filterchip-count-ch` digits wide, so a row of
            chips does not re-flow as each count resolves. */
         .pretui-filterchip-count {
-          border-radius: 4px;
-          padding: 0 4px;
+          border-radius: 0.25rem;
+          padding: 0 0.25rem;
           min-width: calc(var(--pretui-filterchip-count-ch, 2) * 1ch);
           text-align: center;
-          font-size: 10.5px;
+          font-size: 0.65625rem;
           font-variant-numeric: tabular-nums;
           color: var(--ink-3, var(--boxel-400));
         }
@@ -298,7 +308,7 @@ export class FilterChips extends Component<FilterChipsSignature> {
         }
         @media (any-pointer: coarse) {
           .pretui-filterchip {
-            min-height: 34px;
+            min-height: 2.125rem;
           }
         }
       }

@@ -50,10 +50,36 @@ module('Pretui | components/search-input', function (hooks) {
     assert.strictEqual(input()?.value, 'bug', 'the value survives the round trip');
   });
 
-  test("@display 'collapsed' opens when tabbed to", async function (assert) {
+  test("@display 'collapsed' stays closed when focused and opens on click only", async function (assert) {
     await render(<template><SearchInput @display='collapsed' /></template>);
     await focus(toggle() as HTMLElement);
-    assert.strictEqual(document.activeElement, input());
-    assert.strictEqual(toggle(), null);
+    assert.strictEqual(input(), null, 'focus alone does not open it');
+    await click(toggle() as HTMLElement);
+    assert.ok(input(), 'a click does');
+  });
+
+  test('Escape does not bubble past the open field', async function (assert) {
+    let seen = false;
+    let spy = () => (seen = true);
+    document.addEventListener('keydown', spy);
+    try {
+      await render(<template><SearchInput @display='collapsed' /></template>);
+      await click(toggle() as HTMLElement);
+      await triggerKeyEvent(input() as HTMLInputElement, 'keydown', 'Escape');
+      assert.false(seen, 'the Escape stops at the field');
+    } finally {
+      document.removeEventListener('keydown', spy);
+    }
+  });
+
+  test('clear keeps focus in the field', async function (assert) {
+    await render(<template><SearchInput @value='bug' /></template>);
+    await click('[data-test-pretui-search-clear]');
+    assert.strictEqual(document.activeElement, input(), 'default field');
+  });
+
+  test('the input is named from its placeholder', async function (assert) {
+    await render(<template><SearchInput @placeholder='Search tasks' /></template>);
+    assert.strictEqual(input()?.getAttribute('aria-label'), 'Search tasks');
   });
 });
