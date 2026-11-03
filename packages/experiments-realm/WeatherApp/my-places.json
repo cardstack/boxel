@@ -2,7 +2,6 @@
   "data": {
     "type": "card",
     "attributes": {
-      "cardTitle": "Weather",
       "units": "metric",
       "locations": [
         {

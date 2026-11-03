@@ -24,7 +24,10 @@ import { realmURL, type KeyReadiness } from '@cardstack/runtime-common';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
+import { Field } from '@cardstack/pretui/components/field';
+import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input as TextInput } from '@cardstack/pretui/components/input';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { Skeleton } from '@cardstack/pretui/components/skeleton';
 import ListRealmKeySharesTool from '@cardstack/boxel-host/tools/list-realm-key-shares';
@@ -48,6 +51,7 @@ import SunsetIcon from '@cardstack/boxel-icons/sunset';
 import TrashIcon from '@cardstack/boxel-icons/trash-2';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, task } from 'ember-concurrency';
@@ -84,7 +88,29 @@ const OPERATION: Record<Family, Record<KeySource, string>> = {
   findCity: { shared: 'findCityShared', own: 'findCityOwn' },
 };
 
-const SHARED_OPERATIONS = Object.values(OPERATION).map((o) => o.shared);
+const FAMILIES: Family[] = ['current', 'forecast', 'airQuality', 'findCity'];
+
+const SHARED_OPERATIONS = FAMILIES.map((f) => OPERATION[f].shared);
+
+// What a key needs before the app can call with it: a readiness answer, or
+// `not-allowed` where the realm's policy doesn't let the caller invoke the
+// operation at all (readiness is never answered for one of those).
+type Need = KeyReadiness | 'not-allowed';
+
+// Which of several operations' needs decides what the app shows: the one
+// furthest from being fixed by the caller comes first, the way readiness
+// itself ranks a request's slots.
+const NEED_ORDER: Need[] = [
+  'not-allowed',
+  'needs-admin',
+  'credential-rejected',
+  'over-budget',
+  'rate-limited',
+  'needs-sign-in',
+  'needs-connect',
+  'needs-reapproval',
+  'needs-approval',
+];
 
 const KEY_NOTE =
   'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
@@ -108,8 +134,8 @@ export class WeatherLocation extends FieldDef {
 
 export class WeatherApp extends CardDef {
   static displayName = 'Weather';
+  static icon = SunIcon;
 
-  @field cardTitle = contains(StringField);
   // `metric` or `imperial`: what the app shows first. A reader can switch
   // for themselves without changing the card.
   @field units = contains(StringField);
@@ -215,7 +241,7 @@ export class WeatherApp extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='weather-embedded'>
-        <h3>{{if @model.cardTitle @model.cardTitle 'Weather'}}</h3>
+        <h3>{{@model.cardTitle}}</h3>
         <ul>
           {{#each @model.locations as |location|}}
             <li>{{location.name}}</li>
@@ -240,9 +266,14 @@ export class WeatherApp extends CardDef {
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <div class='weather-fitted'>
-        <SunIcon class='fitted-icon' />
+        <SunIcon
+          class='fitted-icon'
+          width='32'
+          height='32'
+          aria-hidden='true'
+        />
         <div>
-          <strong>{{if @model.cardTitle @model.cardTitle 'Weather'}}</strong>
+          <strong>{{@model.cardTitle}}</strong>
           <span>{{@model.locations.length}} places</span>
         </div>
       </div>
@@ -256,8 +287,6 @@ export class WeatherApp extends CardDef {
           overflow: hidden;
         }
         .fitted-icon {
-          width: 2rem;
-          height: 2rem;
           flex-shrink: 0;
         }
         .weather-fitted div {
@@ -344,6 +373,8 @@ interface CityMatch {
 interface Problem {
   code: string;
   source: KeySource;
+  // The operation the refused call invoked.
+  operation?: string;
   message: string;
   retryAfterSeconds?: number;
 }
@@ -397,6 +428,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   // modifier that starts a load must not re-run because the load changed
   // state it read, or every load would start another.
   #requestedFrom: KeySource | undefined;
+  // The operation each refused call invoked, so a fix opens the secure window
+  // for the call that needs it.
+  #failedOperation = new WeakMap<object, string>();
 
   get units(): Units {
     return (
@@ -422,21 +456,59 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     return Boolean(this.args.context?.keyReadiness);
   }
 
-  readiness(name: string): KeyReadiness | undefined {
-    return this.args.context?.keyReadiness?.(name, this.args.model);
+  need(name: string): Need | undefined {
+    let context = this.args.context;
+    if (context?.canInvoke?.(name, this.args.model) === false) {
+      return 'not-allowed';
+    }
+    return context?.keyReadiness?.(name, this.args.model);
   }
 
-  get sharedReadiness() {
-    return this.readiness(OPERATION.current.shared);
+  // What one key needs across every operation the app calls with it, and the
+  // operation that needs it, which is the one the secure window is opened
+  // for. Each operation has its own binding, so one can need re-approval or
+  // be unapproved while the others are ready. Undefined until every answer is
+  // in.
+  needOf(source: KeySource): { need: Need | undefined; operation: string } {
+    let answers = FAMILIES.map((family) => {
+      let operation = OPERATION[family][source];
+      return { operation, need: this.need(operation) };
+    });
+    let first = { operation: OPERATION.current[source], need: undefined };
+    if (answers.some((a) => a.need === undefined)) {
+      return first;
+    }
+    let pending = answers
+      .filter((a) => a.need !== 'ready')
+      .sort(
+        (a, b) =>
+          NEED_ORDER.indexOf(a.need as Need) -
+          NEED_ORDER.indexOf(b.need as Need),
+      );
+    return (
+      pending[0] ?? { operation: OPERATION.current[source], need: 'ready' }
+    );
   }
 
-  get ownReadiness() {
-    return this.readiness(OPERATION.current.own);
+  get sharedReadiness(): Need | undefined {
+    return this.needOf('shared').need;
   }
 
-  // Which key the app calls with: the workspace's when its operation is
-  // ready, otherwise the reader's own when theirs is. Undefined while neither
-  // is ready, which is what the key panel explains.
+  get ownReadiness(): Need | undefined {
+    return this.needOf('own').need;
+  }
+
+  get sharedOperation(): string {
+    return this.needOf('shared').operation;
+  }
+
+  get ownOperation(): string {
+    return this.needOf('own').operation;
+  }
+
+  // Which key the app calls with: the workspace's when every operation it
+  // calls with that key is ready, otherwise the reader's own when theirs are.
+  // Undefined while neither is ready, which is what the key panel explains.
   get source(): KeySource | undefined {
     if (this.sharedReadiness === 'ready') {
       return 'shared';
@@ -482,6 +554,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       return {
         index,
         location,
+        removeLabel: `Remove ${location.name}`,
         temp: weather ? `${Math.round(weather.current.main.temp)}°` : '—',
         condition: weather?.current.weather[0]?.description,
         range: today
@@ -645,11 +718,20 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       string,
       (payload: Record<string, unknown>) => Promise<unknown>
     >;
-    let answer = (await bucket[OPERATION[family][source]](payload)) as {
+    let name = OPERATION[family][source];
+    let answer: {
       status: number;
       body: unknown;
       callApi?: { status: number; body: unknown };
     };
+    try {
+      answer = (await bucket[name](payload)) as typeof answer;
+    } catch (err) {
+      if (err && typeof err === 'object') {
+        this.#failedOperation.set(err, name);
+      }
+      throw err;
+    }
     let response = answer.callApi ?? answer;
     if (response.status < 200 || response.status >= 300) {
       throw new ServiceError(response.status, response.body);
@@ -662,6 +744,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       this.problem = {
         code: err.code ?? 'refused',
         source,
+        operation: this.#failedOperation.get(err),
         message: err.detail ?? err.title ?? err.message,
         retryAfterSeconds: err.retryAfterSeconds,
       };
@@ -776,35 +859,35 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   useOwnKey = () =>
     this.openWindow.perform({
       mode: 'approve',
-      operation: OPERATION.current.own,
+      operation: this.ownOperation,
       reason: `Weather needs your OpenWeatherMap key. ${KEY_NOTE}`,
     });
 
   approveOwn = () =>
     this.openWindow.perform({
       mode: 'approve',
-      operation: OPERATION.current.own,
+      operation: this.ownOperation,
       reason: 'Let Weather use your OpenWeatherMap key',
     });
 
   reviewOwn = () =>
     this.openWindow.perform({
       mode: 'review-changes',
-      operation: OPERATION.current.own,
+      operation: this.ownOperation,
       reason: 'What Weather sends with your key has changed',
     });
 
   approveShared = () =>
     this.openWindow.perform({
       mode: 'approve',
-      operation: OPERATION.current.shared,
+      operation: this.sharedOperation,
       reason: 'Let Weather use the key you shared with this workspace',
     });
 
   reviewShared = () =>
     this.openWindow.perform({
       mode: 'review-changes',
-      operation: OPERATION.current.shared,
+      operation: this.sharedOperation,
       reason: 'What Weather sends with the shared key has changed',
     });
 
@@ -812,9 +895,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     this.openWindow.perform({
       mode: 'replace-key',
       operation:
-        this.problem?.source === 'shared'
-          ? OPERATION.current.shared
-          : OPERATION.current.own,
+        this.problem?.operation ??
+        (this.problem?.source === 'shared'
+          ? this.sharedOperation
+          : this.ownOperation),
       reason: `OpenWeatherMap rejected the key. ${KEY_NOTE}`,
     });
 
@@ -890,6 +974,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         return 'The workspace’s key has had too many requests. Try again shortly.';
       case 'credential-rejected':
         return 'OpenWeatherMap rejected the workspace’s key.';
+      case 'not-allowed':
+        return 'This workspace doesn’t let you use its weather key here.';
       default:
         return 'The workspace’s weather key isn’t available.';
     }
@@ -911,6 +997,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         return 'Your key has had too many requests. Try again shortly.';
       case 'credential-rejected':
         return 'OpenWeatherMap rejected your key.';
+      case 'not-allowed':
+        return 'This workspace doesn’t let you use your own key here.';
       default:
         return undefined;
     }
@@ -928,6 +1016,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         return 'Too many requests';
       case 'share-suspended':
         return 'The workspace’s weather key is unavailable';
+      case 'binding-not-approved':
+      case 'interactive-use-not-approved':
+        return 'One of the app’s calls isn’t approved';
+      case 'binding-needs-reapproval':
+        return 'One of the app’s calls changed since it was approved';
       default:
         return 'The weather couldn’t be loaded';
     }
@@ -956,6 +1049,43 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     return this.problem?.code === 'credential-rejected';
   }
 
+  // A refusal the approve page fixes: an operation whose binding is missing,
+  // approved for pipelines only, or changed since it was approved. The page
+  // gathers every other operation on the card that needs the same.
+  get problemNeedsApproval(): boolean {
+    let code = this.problem?.code;
+    return (
+      code === 'binding-not-approved' ||
+      code === 'interactive-use-not-approved' ||
+      code === 'binding-needs-reapproval'
+    );
+  }
+
+  approveProblem = () => {
+    let problem = this.problem;
+    if (!problem?.operation) {
+      return;
+    }
+    this.openWindow.perform({
+      mode:
+        problem.code === 'binding-needs-reapproval'
+          ? 'review-changes'
+          : 'approve',
+      operation: problem.operation,
+      reason:
+        problem.source === 'shared'
+          ? 'Let Weather use the key shared with this workspace'
+          : 'Let Weather use your OpenWeatherMap key',
+    });
+  };
+
+  get notAllowed(): boolean {
+    return (
+      this.sharedReadiness === 'not-allowed' &&
+      this.ownReadiness === 'not-allowed'
+    );
+  }
+
   get problemIsRateLimit(): boolean {
     let code = this.problem?.code;
     return (
@@ -971,11 +1101,13 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
 
   get canUseOwn(): boolean {
     let own = this.ownReadiness;
-    return own !== undefined && own !== 'needs-sign-in';
+    return (
+      own !== undefined && own !== 'needs-sign-in' && own !== 'not-allowed'
+    );
   }
 
   get blockedRateLimited(): boolean {
-    let limited = (r: KeyReadiness | undefined) =>
+    let limited = (r: Need | undefined) =>
       r === 'rate-limited' || r === 'over-budget';
     return (
       limited(this.sharedReadiness) &&
@@ -1043,12 +1175,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             data-test-weather-back
           >‹ Places</Button>
         {{else}}
-          <h1>{{if @model.cardTitle @model.cardTitle 'Weather'}}</h1>
+          <h1>{{@model.cardTitle}}</h1>
         {{/if}}
         <div class='app-bar-tools'>
           {{#if this.sourceLabel}}
-            <Chip @tone='info' data-test-weather-key-source>
-              <KeyIcon class='chip-icon' />
+            <Chip @tone='info' @dot={{false}} data-test-weather-key-source>
+              <KeyIcon width='1em' height='1em' aria-hidden='true' />
               {{this.sourceLabel}}
             </Chip>
           {{/if}}
@@ -1066,7 +1198,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             {{on 'click' this.refresh}}
             data-test-weather-refresh
           >
-            <RefreshIcon class='button-icon' />
+            <RefreshIcon width='16' height='16' aria-hidden='true' />
             Refresh
           </Button>
         </div>
@@ -1089,6 +1221,13 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 {{on 'click' this.replaceKey}}
                 data-test-weather-replace-key
               >Replace the key</Button>
+            {{else if this.problemNeedsApproval}}
+              <Button
+                @size='sm'
+                @tone='primary'
+                {{on 'click' this.approveProblem}}
+                data-test-weather-approve-problem
+              >Review the calls</Button>
             {{else}}
               <Button @size='sm' {{on 'click' this.refresh}}>Try again</Button>
             {{/if}}
@@ -1136,7 +1275,16 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       {{else if this.isLive}}
         {{! No key the app may use: say whose key would serve, and what fixes it }}
         <section class='key-panel' data-test-weather-key-panel>
-          {{#if this.blockedRateLimited}}
+          {{#if this.notAllowed}}
+            <Alert
+              @tone='info'
+              @title='The weather isn’t available to you here'
+              data-test-weather-state='not-allowed'
+            >
+              This workspace doesn’t let you get the weather here. Whoever
+              manages it can allow it.
+            </Alert>
+          {{else if this.blockedRateLimited}}
             <Alert
               @tone='warning'
               @title='Too many requests'
@@ -1251,6 +1399,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         <ul class='places' data-test-weather-places>
           {{#each this.rows as |row|}}
             <li>
+              {{! A native button: the tile is a sky-colored panel with its own
+                layout, which none of Button's appearances draws. }}
               <button
                 type='button'
                 class='place sky-{{row.tone}}'
@@ -1267,7 +1417,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 </span>
                 <span class='place-side'>
                   {{#if row.icon}}
-                    <row.icon class='place-icon' />
+                    <row.icon width='24' height='24' aria-hidden='true' />
                   {{/if}}
                   <span class='place-temp'>{{row.temp}}</span>
                   {{#if row.range}}
@@ -1276,15 +1426,14 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 </span>
               </button>
               {{#if @canEdit}}
-                <button
-                  type='button'
-                  class='remove'
-                  aria-label='Remove {{row.location.name}}'
+                <IconButton
+                  @label={{row.removeLabel}}
+                  @icon={{TrashIcon}}
+                  @appearance='plain'
+                  @size='sm'
                   {{on 'click' (fn this.removeCity row.index)}}
                   data-test-weather-remove={{row.location.name}}
-                >
-                  <TrashIcon />
-                </button>
+                />
               {{/if}}
             </li>
           {{else}}
@@ -1294,12 +1443,15 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
 
         {{#if this.canAddCity}}
           <form class='add-city' {{on 'submit' this.search}}>
-            <TextInput
-              @value={{this.query}}
-              @onInput={{this.setQuery}}
-              placeholder='Add a city: Lisbon, Austin TX…'
-              data-test-weather-city-query
-            />
+            <Field @label='Add a city' as |controlId|>
+              <TextInput
+                @controlId={{controlId}}
+                @value={{this.query}}
+                @onInput={{this.setQuery}}
+                placeholder='Lisbon, Austin TX…'
+                data-test-weather-city-query
+              />
+            </Field>
             <Button
               @busy={{this.findCity.isRunning}}
               type='submit'
@@ -1313,15 +1465,16 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
             <ul class='matches'>
               {{#each this.matches as |match|}}
                 <li>
-                  <button
-                    type='button'
+                  <Button
+                    @appearance='outlined'
+                    @size='sm'
                     {{on 'click' (fn this.addCity match)}}
                     data-test-weather-city-match={{match.name}}
                   >
-                    <MapPinIcon class='button-icon' />
+                    <MapPinIcon width='16' height='16' aria-hidden='true' />
                     {{match.name}}{{#if match.state}}, {{match.state}}{{/if}},
                     {{match.country}}
-                  </button>
+                  </Button>
                 </li>
               {{/each}}
             </ul>
@@ -1336,15 +1489,18 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     </div>
     <style scoped>
       .weather-app {
-        --weather-sky-day: #4a90d9;
-        --weather-sky-day-end: #7fb5ea;
-        --weather-sky-night: #1d2b4f;
-        --weather-sky-night-end: #3a4a72;
-        --weather-sky-cloud: #6f8094;
-        --weather-sky-cloud-end: #9aa8b8;
-        --weather-sky-rain: #4d5d70;
-        --weather-sky-rain-end: #6e7f92;
-        --weather-on-sky: #ffffff;
+        /* The sky behind each place: fixed colors rather than theme tokens,
+           since they stand for the weather, each dark enough for white text
+           at 4.5:1. */
+        --_weather-sky-day: #1f5c99;
+        --_weather-sky-day-end: #2b6cb0;
+        --_weather-sky-night: #1d2b4f;
+        --_weather-sky-night-end: #33416a;
+        --_weather-sky-cloud: #4b5866;
+        --_weather-sky-cloud-end: #5c6978;
+        --_weather-sky-rain: #3c4a5a;
+        --_weather-sky-rain-end: #4f5d6d;
+        --_weather-on-sky: #ffffff;
         display: grid;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp-lg);
@@ -1358,7 +1514,6 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         gap: var(--boxel-sp-sm);
       }
       h1 {
-        margin: 0;
         font-size: var(--boxel-font-size-xl);
       }
       .app-bar-tools {
@@ -1367,15 +1522,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      .chip-icon,
-      .button-icon {
-        width: 1rem;
-        height: 1rem;
-        vertical-align: middle;
-      }
       .fallback-note,
       .search-message {
-        margin: 0;
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-sm);
       }
@@ -1417,38 +1565,38 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
         border: none;
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--weather-on-sky);
+        color: var(--_weather-on-sky);
         text-align: left;
         cursor: pointer;
         background: linear-gradient(
           135deg,
-          var(--weather-sky-cloud),
-          var(--weather-sky-cloud-end)
+          var(--_weather-sky-cloud),
+          var(--_weather-sky-cloud-end)
         );
       }
       .place:focus-visible {
-        outline: 2px solid var(--primary);
+        outline: 2px solid var(--ring);
         outline-offset: 2px;
       }
       .sky-day {
         background: linear-gradient(
           135deg,
-          var(--weather-sky-day),
-          var(--weather-sky-day-end)
+          var(--_weather-sky-day),
+          var(--_weather-sky-day-end)
         );
       }
       .sky-night {
         background: linear-gradient(
           135deg,
-          var(--weather-sky-night),
-          var(--weather-sky-night-end)
+          var(--_weather-sky-night),
+          var(--_weather-sky-night-end)
         );
       }
       .sky-rain {
         background: linear-gradient(
           135deg,
-          var(--weather-sky-rain),
-          var(--weather-sky-rain-end)
+          var(--_weather-sky-rain),
+          var(--_weather-sky-rain-end)
         );
       }
       .place-main,
@@ -1468,55 +1616,25 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       .place-condition,
       .place-range {
         font-size: var(--boxel-font-size-sm);
-        opacity: 0.9;
       }
       .place-condition::first-letter {
         text-transform: uppercase;
-      }
-      .place-icon {
-        width: 1.5rem;
-        height: 1.5rem;
       }
       .place-temp {
         font-size: 2.5rem;
         font-weight: 300;
         line-height: 1;
       }
-      .remove {
-        flex-shrink: 0;
-        padding: var(--boxel-sp-xs);
-        border: none;
-        background: none;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .remove:hover,
-      .remove:focus-visible {
-        color: var(--destructive, var(--foreground));
-      }
-      .remove svg {
-        width: 1rem;
-        height: 1rem;
-      }
       .empty {
         color: var(--muted-foreground);
       }
       .add-city {
         display: flex;
+        align-items: flex-end;
         gap: var(--boxel-sp-xs);
       }
       .add-city > :first-child {
         flex: 1;
-      }
-      .matches button {
-        width: 100%;
-        text-align: left;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius);
-        background: var(--card);
-        color: var(--card-foreground);
-        cursor: pointer;
       }
       .checking {
         max-width: 20rem;
@@ -1554,7 +1672,7 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   replaceOwnKey = () =>
     this.openWindow.perform({
       mode: 'replace-key',
-      operation: OPERATION.current.own,
+      operation: this.ownOperation,
       reason: `OpenWeatherMap rejected your key. ${KEY_NOTE}`,
     });
 }
@@ -1634,6 +1752,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
             temp: Math.round(current.main.temp),
             pop: undefined,
             icon: iconFor(current.weather[0]),
+            condition: current.weather[0]?.description,
           },
         ]
       : [];
@@ -1644,6 +1763,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         temp: Math.round(step.temp),
         pop: step.pop >= 0.2 ? `${Math.round(step.pop * 100)}%` : undefined,
         icon: iconFor(step.condition),
+        condition: step.condition?.description,
       })),
     ];
   }
@@ -1660,11 +1780,15 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
     return days.map((day, i) => ({
       label: i === 0 ? 'Today' : dayIn(offset, day.dt),
       icon: iconFor(day.condition),
+      condition: day.condition?.description,
       pop: day.pop >= 0.2 ? `${Math.round(day.pop * 100)}%` : undefined,
       low: Math.round(day.min),
       high: Math.round(day.max),
       // Where this day's range sits within the week's, as percentages.
-      barStyle: `left: ${(((day.min - low) / span) * 100).toFixed(1)}%; right: ${(((high - day.max) / span) * 100).toFixed(1)}%;`,
+      // The values are numbers computed here, so the string is safe as a style.
+      barStyle: htmlSafe(
+        `left: ${(((day.min - low) / span) * 100).toFixed(1)}%; right: ${(((high - day.max) / span) * 100).toFixed(1)}%;`,
+      ),
     }));
   }
 
@@ -1725,7 +1849,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
             {{this.temp}}°
           </div>
           <div class='hero-condition'>
-            <this.icon class='hero-icon' />
+            <this.icon width='24' height='24' aria-hidden='true' />
             <span>{{this.condition.description}}</span>
           </div>
           {{#if this.range}}
@@ -1743,7 +1867,8 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
             {{#each this.hourly as |hour|}}
               <li>
                 <span class='hour-label'>{{hour.label}}</span>
-                <hour.icon class='hour-icon' />
+                <hour.icon width='24' height='24' aria-hidden='true' />
+                <VisuallyHidden>{{hour.condition}}</VisuallyHidden>
                 {{#if hour.pop}}<span class='pop'>{{hour.pop}}</span>{{/if}}
                 <span class='hour-temp'>{{hour.temp}}°</span>
               </li>
@@ -1759,7 +1884,8 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
                 <li>
                   <span class='day-label'>{{day.label}}</span>
                   <span class='day-icon'>
-                    <day.icon />
+                    <day.icon width='20' height='20' aria-hidden='true' />
+                    <VisuallyHidden>{{day.condition}}</VisuallyHidden>
                     {{#if day.pop}}<span class='pop'>{{day.pop}}</span>{{/if}}
                   </span>
                   <span class='day-low'>{{day.low}}°</span>
@@ -1794,10 +1920,18 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
           <div class='tile'>
             <span class='tile-label'>Sunrise &amp; sunset</span>
             <span class='tile-value sun'>
-              <SunriseIcon class='sun-icon' />{{this.sunrise}}
+              <SunriseIcon
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />{{this.sunrise}}
             </span>
             <span class='tile-hint sun'>
-              <SunsetIcon class='sun-icon' />{{this.sunset}}
+              <SunsetIcon
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />{{this.sunset}}
             </span>
           </div>
         </section>
@@ -1814,36 +1948,35 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         gap: var(--boxel-sp-4xs);
         padding: var(--boxel-sp-xl) var(--boxel-sp);
         border-radius: var(--boxel-border-radius-xl);
-        color: var(--weather-on-sky);
+        color: var(--_weather-on-sky);
         background: linear-gradient(
           180deg,
-          var(--weather-sky-cloud),
-          var(--weather-sky-cloud-end)
+          var(--_weather-sky-cloud),
+          var(--_weather-sky-cloud-end)
         );
       }
       .sky-day {
         background: linear-gradient(
           180deg,
-          var(--weather-sky-day),
-          var(--weather-sky-day-end)
+          var(--_weather-sky-day),
+          var(--_weather-sky-day-end)
         );
       }
       .sky-night {
         background: linear-gradient(
           180deg,
-          var(--weather-sky-night),
-          var(--weather-sky-night-end)
+          var(--_weather-sky-night),
+          var(--_weather-sky-night-end)
         );
       }
       .sky-rain {
         background: linear-gradient(
           180deg,
-          var(--weather-sky-rain),
-          var(--weather-sky-rain-end)
+          var(--_weather-sky-rain),
+          var(--_weather-sky-rain-end)
         );
       }
       h2 {
-        margin: 0;
         font-size: var(--boxel-font-size-xl);
         font-weight: 500;
       }
@@ -1858,10 +1991,6 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         gap: var(--boxel-sp-xs);
         text-transform: capitalize;
       }
-      .hero-icon {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
       .panel {
         padding: var(--boxel-sp);
         border: 1px solid var(--border);
@@ -1872,9 +2001,11 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
       }
       h3 {
         margin: 0 0 var(--boxel-sp-sm);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        letter-spacing: 0.5px;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
@@ -1895,16 +2026,12 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
       .hour-label {
         font-size: var(--boxel-font-size-sm);
       }
-      .hour-icon {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
       .hour-temp {
         font-weight: 600;
       }
       .pop {
         font-size: var(--boxel-font-size-xs);
-        color: var(--info, var(--primary));
+        color: var(--info-ink);
         font-weight: 600;
       }
       .columns {
@@ -1938,10 +2065,6 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         display: grid;
         justify-items: center;
       }
-      .day-icon svg {
-        width: 1.25rem;
-        height: 1.25rem;
-      }
       .day-low {
         color: var(--muted-foreground);
         text-align: right;
@@ -1960,11 +2083,7 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         top: 0;
         bottom: 0;
         border-radius: 999px;
-        background: linear-gradient(
-          90deg,
-          var(--weather-range-cool, var(--info, var(--primary))),
-          var(--weather-range-warm, var(--warning, var(--primary)))
-        );
+        background: linear-gradient(90deg, var(--info), var(--warning));
       }
       .tiles {
         display: grid;
@@ -1982,9 +2101,11 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         color: var(--card-foreground);
       }
       .tile-label {
-        font-size: var(--boxel-font-size-xs);
+        font-family: var(--boxel-eyebrow-font-family);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
         color: var(--muted-foreground);
       }
       .tile-value {
@@ -1999,10 +2120,6 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-4xs);
-      }
-      .sun-icon {
-        width: 1rem;
-        height: 1rem;
       }
     </style>
   </template>
@@ -2090,12 +2207,13 @@ class RadarMap extends GlimmerComponent<RadarSignature> {
   get pinStyle() {
     let center = this.center;
     if (!center) {
-      return '';
+      return htmlSafe('');
     }
     let half = Math.floor(MAP_TILES / 2);
     let left = ((center.x - Math.floor(center.x) + half) / MAP_TILES) * 100;
     let top = ((center.y - Math.floor(center.y) + half) / MAP_TILES) * 100;
-    return `left: ${left.toFixed(2)}%; top: ${top.toFixed(2)}%;`;
+    // Numbers computed here, so the string is safe as a style.
+    return htmlSafe(`left: ${left.toFixed(2)}%; top: ${top.toFixed(2)}%;`);
   }
 
   get frameTime() {
@@ -2119,7 +2237,7 @@ class RadarMap extends GlimmerComponent<RadarSignature> {
           </div>
         {{/each}}
         <span class='pin' style={{this.pinStyle}}>
-          <MapPinIcon />
+          <MapPinIcon width='28' height='28' aria-hidden='true' />
         </span>
       </div>
       <figcaption>
@@ -2171,11 +2289,9 @@ class RadarMap extends GlimmerComponent<RadarSignature> {
       .pin {
         position: absolute;
         transform: translate(-50%, -100%);
-        color: var(--destructive, var(--primary));
+        color: var(--destructive-ink);
       }
       .pin svg {
-        width: 1.75rem;
-        height: 1.75rem;
         fill: var(--background);
       }
       figcaption {
@@ -2283,8 +2399,14 @@ function toWeather(
   if (!byDay.has(today)) {
     byDay.set(today, []);
   }
+  // The forecast runs 120 hours from now, so the last day it reaches is
+  // usually only a few morning steps; a day with no step from noon on would
+  // show a morning temperature as its high, so it is left out.
+  let reachesAfternoon = (daySteps: typeof steps) =>
+    daySteps.some((s) => atOffset(offset, s.dt).getUTCHours() >= 12);
   let days = [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
+    .filter(([day, daySteps]) => day === today || reachesAfternoon(daySteps))
     .map(([day, daySteps]) => {
       let temps = daySteps.flatMap((s) => [s.min, s.max]);
       if (day === today) {

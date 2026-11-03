@@ -331,6 +331,14 @@ let name =
 let answer = name && (await operations(model)[name]({ lat, lon }));
 ```
 
+A card that calls several operations with each key asks about all of them
+and treats a key as ready only when every one is: each operation has its own
+binding, so one can need re-approval, or be left unticked on the approve page,
+while the rest are ready. Ask `@context.canInvoke` about the same pairs too.
+Readiness is never answered for an operation the realm's policy doesn't let
+the caller invoke, so `undefined` alone can't tell "still asking" from
+"refused"; `canInvoke` answering `false` can.
+
 It says which key it is using, and when neither is ready, it shows both
 answers and offers what fixes each. Opening the secure window does this:
 `approve` for the caller's own operation at `needs-connect` or
