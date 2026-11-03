@@ -358,7 +358,15 @@ dashboard's "Response size cap" row charts both (see `key-outage-triage`).
 
 ### The values, and revisiting them
 
-**CAP_VALUES**
+| Path         | Default             | Why                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system-key` | 32 MiB (`33554432`) | The largest responses on this path are OpenRouter image generations, which return each image as a base64 data URL inside the JSON body. One image runs to several megabytes, and a call may return more than one. 32 MiB leaves room for a multi-image response while still stopping an unbounded one. Chat completions, the generation-cost lookup and token responses are kilobytes. |
+| `call-api`   | 10 MiB (`10485760`) | `callApi` carries vendor JSON (GitHub, Google and similar REST APIs), and the whole body is held in memory and handed to the card. A single page of such an API is well under a megabyte. 10 MiB lets a large page through and refuses an export or file download, which belongs on a file-transfer path rather than an operation result.                                              |
+
+When the caps were switched on, neither environment had live integration
+traffic to measure, so these values come from the payloads each path is
+expected to carry rather than from a measured distribution. The first week
+of real traffic is the first chance to check them.
 
 Revisit the caps when a `refused=` line names a legitimate vendor, or when a
 path's max on the dashboard closes on its dashed cap line. Pull each path's
