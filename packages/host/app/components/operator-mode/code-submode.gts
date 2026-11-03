@@ -737,7 +737,14 @@ export default class CodeSubmode extends Component<Signature> {
   private async deleteCardsUsing(cardsUsing: CardsUsingDefinition) {
     let realmPaths = new RealmPaths(new URL(cardsUsing.realmURL));
     let failed = 0;
-    for (let id of await this.idsOfCardsUsing(cardsUsing)) {
+    let ids: string[];
+    try {
+      ids = await this.idsOfCardsUsing(cardsUsing);
+    } catch (error) {
+      console.warn('Could not find the cards to delete', error);
+      return cardsUsing.total;
+    }
+    for (let id of ids) {
       try {
         await this.operatorModeStateService.deleteCard(id);
       } catch (error) {
