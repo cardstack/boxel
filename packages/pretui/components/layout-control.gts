@@ -352,6 +352,10 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     if (!same) {
       this.levels = next;
     }
+    // an unfolded slot's panel closes for good, so folding again doesn't reopen it
+    if (this.fallbackSlot && !this.fallbackSlot.folded) {
+      this.closeFallback();
+    }
     this.scheduleFit();
   }
 
