@@ -29,13 +29,6 @@ services:
       # committed provisioning/datasources/ tree only and never sees this
       # override. See provisioning/local-only/synapse-prometheus.yaml.
       - ./provisioning/local-only/synapse-prometheus.yaml:/etc/grafana/provisioning/datasources/synapse-prometheus.yaml:ro
-      # The Techops contact point the response size cap alerts in
-      # provisioning/alerting/keys-group.json route to. Hosted, it emails
-      # techops and posts to the alarms Discord channel
-      # (provisioning/alerting-hosted/<env>/contact-points/techops.json);
-      # locally it is an email contact point with no SMTP behind it, so the
-      # rules provision and nothing leaves the machine.
-      - ./provisioning/local-only/techops-contact-point.json:/etc/grafana/provisioning/alerting/techops-contact-point.json:ro
       # Dashboards arrive via grafanactl resources push (Phase 3 / CS-10922).
       # Local file-based dashboard provisioning is also possible — uncomment
       # the next line if a dev wants dashboards baked into the container.

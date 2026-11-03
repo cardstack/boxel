@@ -1217,7 +1217,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Decompressed response sizes the outbound client measured (the outbound channel's \"outbound response size\" line), by path. The dashed lines are each path's configured cap; a max approaching one is a legitimate response the cap is about to refuse (see the outbound-guard skill for revisiting the caps).",
+        "description": "Decompressed response sizes the outbound client measured (the outbound channel's \"outbound response size\" line), by path. The dashed lines are the largest cap any response on the path was held to: the path's own cap, or a system key's own cap when one is larger. A max approaching one is a legitimate response the cap is about to refuse; the Largest responses by destination table has each response's own cap (see the outbound-guard skill for revisiting the caps).",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1330,7 +1330,7 @@
             },
             "editorMode": "code",
             "expr": "max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"outbound response size:\" | json | drop __error__, __error_details__ | line_format `{{ if .log }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" .log \"\" }}{{ else }}{{ regexReplaceAll \"^\\\\[worker [^\\\\]]+\\\\]: \" __line__ \"\" }}{{ end }}` | regexp \"path=(?P<path>\\\\S+) destination=(?P<destination>\\\\S+) status=(?P<status>\\\\d+) cap=(?P<cap>\\\\d+) bytes=(?P<bytes>\\\\d+)\" | unwrap cap [$__interval]) by (path)",
-            "legendFormat": "{{path}} cap",
+            "legendFormat": "{{path}} largest cap",
             "refId": "D",
             "queryType": "range"
           }
@@ -1410,7 +1410,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "The largest decompressed response from each destination (origin and path) in the selected range, against its path's cap.",
+        "description": "The largest decompressed response from each destination (origin and path) in the selected range, against the cap it was held to: its path's, or its system key's own.",
         "fieldConfig": {
           "defaults": {},
           "overrides": [

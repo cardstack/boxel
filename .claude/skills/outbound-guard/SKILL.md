@@ -443,8 +443,8 @@ key's note.
 ### The alerts
 
 Two rules in the `keys-group` rule group read the size lines of system keys
-and notify techops by email and the alarms Discord channel (the `Techops`
-contact point), one notification per key:
+and email techops@cardstack.com (the `Techops` contact point), one
+notification per key:
 
 - **System key responses near the size cap** fires when a response on a
   system key passes 75% of the key's current cap within 10 minutes.

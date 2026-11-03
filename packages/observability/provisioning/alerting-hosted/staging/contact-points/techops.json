@@ -15,17 +15,6 @@
             "subject": "{{ if eq .Status \"resolved\" }}[RESOLVED] {{ end }}{{ if .CommonAnnotations.title }}{{ .CommonAnnotations.title }}{{ else }}{{ template \"default.title\" . }}{{ end }}",
             "message": "{{ range .Alerts.Firing }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}\nDashboard: {{ .PanelURL }}\n\n{{ end }}{{ if .Alerts.Resolved }}Resolved: {{ range .Alerts.Resolved }}{{ .Labels.alertname }} on {{ .Labels.key }} at {{ .Labels.destination }}. {{ end }}{{ end }}"
           }
-        },
-        {
-          "uid": "techops-discord",
-          "type": "discord",
-          "disableResolveMessage": false,
-          "settings": {
-            "url": "${DISCORD_ALARMS_WEBHOOK}",
-            "use_discord_username": false,
-            "title": "{{ if eq .Status \"resolved\" }}[RESOLVED] {{ end }}{{ if .CommonAnnotations.title }}{{ .CommonAnnotations.title }}{{ else }}{{ template \"default.title\" . }}{{ end }}",
-            "message": "{{ range .Alerts.Firing }}{{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}{{ .Annotations.summary }}{{ end }}\nDashboard: {{ .PanelURL }}\n\n{{ end }}{{ if .Alerts.Resolved }}Resolved: {{ range .Alerts.Resolved }}{{ .Labels.alertname }} on {{ .Labels.key }} at {{ .Labels.destination }}. {{ end }}{{ end }}"
-          }
         }
       ]
     }

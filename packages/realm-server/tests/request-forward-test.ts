@@ -2485,6 +2485,66 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test("a system key's own response size cap holds a streamed forward", async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1', 'localhost'],
+          responseSizeCaps: { 'system-key': 64 * 1024, 'call-api': 64 * 1024 },
+        });
+        let [{ id }] = await dbAdapter.execute(
+          `SELECT id FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        await setSystemKeyResponseCap(dbAdapter, String(id), {
+          bytes: 256 * 1024,
+          note: 'raising the cap for larger streams, test',
+        });
+        let heldToKeyCap = (lines: { message: string }[]) =>
+          lines.some(
+            (line) =>
+              line.message.startsWith('outbound response size:') &&
+              line.message.includes(`cap=${256 * 1024} `) &&
+              line.message.endsWith(`key=system:${vendor.url}/`),
+          );
+        let lines = await logLinesDuring(['outbound'], async (captured) => {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/respond`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+                chunks: [
+                  'data: {"id":"gen-stream-key-cap","choices":[{"delta":{"content":"Hi"}}]}\n\n',
+                  `data: {"choices":[{"delta":{"content":"${'x'.repeat(96 * 1024)}"}}]}\n\n`,
+                  'data: {"usage":{"cost":0.004}}\n\n',
+                  'data: [DONE]\n\n',
+                ],
+              }),
+              stream: true,
+            });
+          assert.false(
+            response.text.includes('Response too large'),
+            "a stream over the path's cap passes under the key's own",
+          );
+          assert.true(response.text.trimEnd().endsWith('data: [DONE]'));
+          // The forward stops reading at `[DONE]`, so the stream's size line
+          // is logged once the upstream read is cancelled, which can be after
+          // the caller's response has ended.
+          await waitUntil(async () => heldToKeyCap(captured), {
+            timeoutMessage: "the stream's size line should name the key's cap",
+          });
+        });
+        assert.true(heldToKeyCap(lines), "the stream is held to the key's cap");
+        // 0.004 USD × 1000 = 4 credits, from the usage the stream carried.
+        await waitUntil(async () => (await extraCredits()) === 46, {
+          timeoutMessage: 'the stream should be charged (50 - 4 = 46)',
+        });
+      });
+
       test('a JSON response that passes the cap mid-body resets the caller and is charged for the generation', async function (assert) {
         configureOutbound({
           devAllowlist: ['127.0.0.1', 'localhost'],
