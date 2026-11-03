@@ -22,7 +22,11 @@
 // when a card is opened, in the browser, the AI assistant or the CLI.
 // Choosing the second shows what it allows, once, for the user's own keys and
 // for a workspace's share, and asks for the daily budget of a share approved
-// for interactive use for the first time. An operation approved for pipelines
+// for interactive use for the first time, linking to the share's
+// `share-limits` page, in a new tab, for its other limits: each person's rate
+// and the share's monthly budget. That page changes the daily budget too, so
+// coming back to this window re-reads the budget in force for a field the
+// user hasn't typed in. An operation approved for pipelines
 // only is in the batch only for that second choice. The choice starts on
 // interactive use when the batch is already approved for it, or holds nothing
 // else. An operation last approved for interactive use is marked, and
@@ -58,6 +62,7 @@ import { trackedObject } from '@ember/reactive/collections';
 import {
   approvalBatch,
   approveOperations,
+  shareUsage,
   windowContext,
   type ApprovalBatch,
   type BatchOperation,
@@ -463,6 +468,20 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                     everyone who opens a card that uses it. This is the first
                     time opened cards can use this share, so set it to what your
                     plan with the service allows.</span>
+                  <span
+                    class='note budget-note budget-more'
+                    data-test-approve-budget-more
+                  >
+                    <a
+                      class='limits-link'
+                      href={{this.shareLimitsURL share}}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      data-test-approve-budget-limits-link
+                    >Open the limits for {{share.label}} in a new tab</a>
+                    to change its other limits: how fast each person can make
+                    calls, and how many calls this share makes in a month, in
+                    total across everyone.</span>
                 </FieldContainer>
               {{/each}}
             {{/if}}
@@ -553,6 +572,16 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       }
       .budget-note {
         display: block;
+      }
+      .budget-more {
+        margin-top: var(--boxel-sp-xxs);
+      }
+      .limits-link {
+        display: inline;
+        text-decoration: underline;
+      }
+      .limits-link:hover {
+        color: var(--foreground);
       }
       .add-key {
         width: fit-content;
@@ -776,6 +805,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   constructor(owner: Owner, args: ApproveArgs) {
     super(owner, args);
     this.load();
+    document.addEventListener('visibilitychange', this.refreshBudgets);
+    window.addEventListener('focus', this.refreshBudgets);
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    document.removeEventListener('visibilitychange', this.refreshBudgets);
+    window.removeEventListener('focus', this.refreshBudgets);
   }
 
   private get heading() {
@@ -891,6 +928,68 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     this.budgetValid(share)
       ? undefined
       : 'A whole number of calls, at least one';
+
+  // A share's usage and limits page, where its owner changes the limits this
+  // page doesn't ask for. It opens in a tab of its own, so the batch being
+  // approved here stays as it is.
+  private shareLimitsURL = (share: { id: string }) => {
+    let realm = this.choosing?.batch.realm.url;
+    return realm
+      ? `${pageURL('share-limits')}#${new URLSearchParams({ realm, share: share.id })}`
+      : undefined;
+  };
+
+  // The share-limits page this page links to changes a share's daily budget
+  // too, and approving writes the budget the field holds. So when the window
+  // comes back into view, each budget field the user hasn't typed in takes the
+  // budget in force, and approving never puts back one changed meanwhile. A
+  // budget the user typed is what they see, and stays. Approving waits for a
+  // re-read under way: coming back to the window by clicking Approve starts
+  // one on that same click.
+  private budgetRefresh: Promise<void> | undefined;
+
+  private refreshBudgets = () => {
+    let refresh = this.readBudgetsInForce();
+    this.budgetRefresh = refresh;
+    return refresh;
+  };
+
+  private readBudgetsInForce = async () => {
+    let state = this.choosing;
+    if (document.visibilityState !== 'visible' || !state || this.form.saving) {
+      return;
+    }
+    let untyped = this.budgetShares.filter(
+      (share) => this.form.budgets[share.id] === undefined,
+    );
+    let { config } = this.args.api;
+    let inForce = new Map<string, number>();
+    await Promise.all(
+      untyped.map(async (share) => {
+        try {
+          let { limits } = await shareUsage(config, share.id);
+          inForce.set(share.id, limits.dailyBudget);
+        } catch {
+          // The field keeps the budget it has; a session that ended is the
+          // window's to notice.
+        }
+      }),
+    );
+    if (inForce.size === 0 || this.page.state !== state) {
+      return;
+    }
+    this.page.state = {
+      ...state,
+      batch: {
+        ...state.batch,
+        shares: state.batch.shares.map((share) =>
+          inForce.has(share.id)
+            ? { ...share, dailyBudget: inForce.get(share.id)! }
+            : share,
+        ),
+      },
+    };
+  };
 
   private setBudget = (shareId: string, value: string) => {
     this.form.budgets = { ...this.form.budgets, [shareId]: value };
@@ -1077,7 +1176,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
-    await this.args.api.saving(() => this.approve(state));
+    await this.args.api.saving(async () => {
+      await this.budgetRefresh;
+      await this.approve(this.choosing ?? state);
+    });
   };
 
   private approve = async (state: ChoosingState) => {

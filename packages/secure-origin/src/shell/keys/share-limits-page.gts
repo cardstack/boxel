@@ -79,10 +79,9 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         data-test-share-limits
       >
         <:intro>Your key, shared with
-          <strong>{{this.editing.context.realm.name}}</strong>. Limits apply to
-          every card there that uses it, and to the AI assistant and the CLI.
-          They count calls; what the service charges for one is set by your plan
-          with it.</:intro>
+          <strong>{{this.editing.context.realm.name}}</strong>. These limits
+          count the calls made with it by every card there, the AI assistant and
+          the CLI. What each call costs depends on your plan with the service.</:intro>
         <:default>
           <OpenedForSummary
             @context={{this.editing.context}}
