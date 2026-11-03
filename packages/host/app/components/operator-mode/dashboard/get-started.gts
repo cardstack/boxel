@@ -414,7 +414,7 @@ export default class GetStarted extends Component<Signature> {
       .get-started-actions {
         display: flex;
         gap: var(--boxel-sp-xs);
-        margin-left: auto;
+        margin-inline-start: auto;
       }
       .get-started-steps {
         margin: var(--boxel-sp-sm) 0 0;
@@ -475,7 +475,7 @@ export default class GetStarted extends Component<Signature> {
       }
       @container get-started (max-width: 30rem) {
         .get-started-actions {
-          margin-left: 0;
+          margin-inline-start: 0;
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);

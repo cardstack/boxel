@@ -340,7 +340,6 @@ export default class Agents extends Component<Signature> {
         </header>
 
         <RadioCard
-          class='agent-picker'
           @options={{this.agentOptions}}
           @value={{this.kind.id}}
           @onValueChange={{this.pickAgent}}
@@ -562,7 +561,7 @@ export default class Agents extends Component<Signature> {
         margin: 0;
         font-size: var(--boxel-font-size-md);
         font-weight: 700;
-        letter-spacing: -0.015em;
+        letter-spacing: calc(-1 * var(--boxel-lsp-sm));
       }
       .pitch-body {
         margin: 0;
@@ -599,12 +598,6 @@ export default class Agents extends Component<Signature> {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
-      }
-
-      /* The theme's hover is a translucent white, which on an opaque card
-         reads as the card fading out; this is the next shade up instead. */
-      .agent-picker {
-        --hover: var(--boxel-600);
       }
 
       .step-list {
@@ -691,14 +684,17 @@ export default class Agents extends Component<Signature> {
         flex: 1;
         min-width: 0;
         min-height: var(--_agents-code-line-height);
-        padding: 0.125rem var(--boxel-sp-xs);
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-sm);
         background-color: var(--muted);
         color: var(--muted-foreground);
+        /* The text is an anonymous flex item, which won't shrink below its
+           min-content width; only anywhere lets a long URL count as
+           breakable there. */
         overflow-wrap: anywhere;
         font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-xs);
-        line-height: 1.5;
+        line-height: var(--boxel-line-height-xs);
       }
       .copy {
         --pretui-button-h: var(--_agents-code-line-height);
