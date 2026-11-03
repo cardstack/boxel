@@ -8028,13 +8028,23 @@ export class Realm {
     }
   }
 
-  async deleteAll(paths: LocalPath[]): Promise<void> {
+  async deleteAll(
+    paths: LocalPath[],
+    options?: {
+      // The user whose request removes the files, recorded as the author of
+      // the change. Absent for a system-originated removal.
+      initiatingUser?: string | null;
+    },
+  ): Promise<void> {
     await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
-      this._deleteAllUnlocked(paths),
+      this._deleteAllUnlocked(paths, options),
     );
   }
 
-  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
+  private async _deleteAllUnlocked(
+    paths: LocalPath[],
+    options?: { initiatingUser?: string | null },
+  ): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -8065,7 +8075,7 @@ export class Realm {
       addedFiles: [],
       updatedFiles: [],
       appendedPaths: new Set(),
-      initiatingUser: null,
+      initiatingUser: options?.initiatingUser ?? null,
       partial: false,
     });
     let { invalidations, generation, invalidatedTypes, sharedPass } =
