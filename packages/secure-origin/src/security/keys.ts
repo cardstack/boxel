@@ -404,6 +404,33 @@ export async function deleteKey(
   });
 }
 
+// A notice the user is owed as a key's owner: a workspace's policy came to
+// let people who aren't signed in make calls with one of their shares there.
+// `visitors-use` is for a key that allows it, which they now use there;
+// `visitors-wanted` for one that doesn't, which the workspace wants them to
+// use. `key` is null once the key is deleted.
+export interface KeyPolicyNotice {
+  id: string;
+  realm: string;
+  share: string;
+  label: string;
+  key: string | null;
+  policy: string | null;
+  savedBy: string | null;
+  reason: 'visitors-use' | 'visitors-wanted';
+  operations: string[];
+  createdAt: string;
+}
+
+// The user's notices as a key's owner, newest first.
+export async function policyNotices(
+  config: Config,
+): Promise<KeyPolicyNotice[]> {
+  return resources<KeyPolicyNotice>(
+    await authorizedRequest(config, '_key-policy-notices', { method: 'GET' }),
+  );
+}
+
 // The shares holding one of the user's keys: those deleting it suspends.
 export async function sharesOfKey(
   config: Config,

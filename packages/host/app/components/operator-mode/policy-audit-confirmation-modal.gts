@@ -1,0 +1,193 @@
+import type { TOC } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+
+import type { PolicyShareAuditEntry } from '@cardstack/runtime-common';
+
+import type PolicyAuditConfirmationService from '@cardstack/host/services/policy-audit-confirmation';
+
+// The operation's class and name: the module is the realm's, and shown on
+// the entry already.
+function operationLabel(operation: string) {
+  let hash = operation.lastIndexOf('#');
+  return hash === -1 ? operation : operation.slice(hash + 1);
+}
+
+const EntryItem: TOC<{ Args: { entry: PolicyShareAuditEntry } }> = <template>
+  <li class='entry' data-test-policy-audit-entry={{@entry.label}}>
+    <div class='label'>{{@entry.label}}</div>
+    <div class='detail'>
+      Shared by
+      {{@entry.owner}}
+      into
+      {{@entry.realm}}
+    </div>
+    <div class='operations'>
+      {{#each @entry.operations as |operation|}}
+        <code>{{operationLabel operation}}</code>
+      {{/each}}
+    </div>
+  </li>
+  <style scoped>
+    .entry {
+      padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+    }
+    .entry + .entry {
+      border-top: 1px solid var(--boxel-200);
+    }
+    .label {
+      font-weight: 600;
+    }
+    .detail {
+      color: var(--boxel-450);
+      font: var(--boxel-font-xs);
+      overflow-wrap: anywhere;
+    }
+    .operations {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--boxel-sp-xxxs);
+      margin-top: var(--boxel-sp-xxxs);
+    }
+    code {
+      font: var(--boxel-font-xs);
+      background: var(--boxel-100);
+      padding: 0 var(--boxel-sp-xxxs);
+      border-radius: var(--boxel-border-radius-xs);
+    }
+  </style>
+</template>;
+
+// The confirmation a policy save needs when it opens shared keys to people
+// who aren't signed in: which keys visitors will start using, and which will
+// refuse them until their owners allow it on the key. Saving tells each
+// key's owner.
+export default class PolicyAuditConfirmationModal extends Component {
+  @service
+  declare private policyAuditConfirmation: PolicyAuditConfirmationService;
+
+  private get audit() {
+    return this.policyAuditConfirmation.pending;
+  }
+
+  private get starting() {
+    return this.audit?.entries.filter((entry) => entry.keyAllowsAnonymous);
+  }
+
+  private get refusing() {
+    return this.audit?.entries.filter((entry) => !entry.keyAllowsAnonymous);
+  }
+
+  private answer = (confirmed: boolean) => {
+    this.policyAuditConfirmation.answer(confirmed);
+  };
+
+  private cancel = () => this.answer(false);
+
+  <template>
+    {{#if this.audit}}
+      <Modal
+        data-test-policy-audit-modal
+        @layer='urgent'
+        @size='medium'
+        @isOpen={{true}}
+        @onClose={{this.cancel}}
+        style={{cssVar boxel-modal-offset-top='20vh'}}
+        data-theme='light'
+      >
+        <section class='policy-audit'>
+          <header>
+            <h2>Let people who aren't signed in use shared keys?</h2>
+            <p>
+              This change lets people who aren't signed in make calls that send
+              a key shared into the workspace. Each key's owner will be told.
+            </p>
+          </header>
+          {{#if this.starting.length}}
+            <div class='group' data-test-policy-audit-starting>
+              <h3>They will start using</h3>
+              <ul>
+                {{#each this.starting as |entry|}}
+                  <EntryItem @entry={{entry}} />
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          {{#if this.refusing.length}}
+            <div class='group' data-test-policy-audit-refusing>
+              <h3>These keys will refuse them until their owners allow it</h3>
+              <ul>
+                {{#each this.refusing as |entry|}}
+                  <EntryItem @entry={{entry}} />
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+          <footer>
+            <BoxelButton
+              data-test-policy-audit-cancel
+              @size='tall'
+              @kind='secondary-light'
+              {{on 'click' this.cancel}}
+            >
+              Don't save
+            </BoxelButton>
+            <BoxelButton
+              data-test-policy-audit-confirm
+              @size='tall'
+              @kind='primary'
+              {{on 'click' (fn this.answer true)}}
+            >
+              Save and tell the owners
+            </BoxelButton>
+          </footer>
+        </section>
+      </Modal>
+    {{/if}}
+
+    <style scoped>
+      .policy-audit {
+        padding: var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius-xl);
+        box-shadow: var(--boxel-deep-box-shadow);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      h2 {
+        margin: 0 0 var(--boxel-sp-xs);
+        font: 600 var(--boxel-font-lg);
+      }
+      header p {
+        margin: 0;
+        line-height: 1.4;
+      }
+      .group {
+        margin-top: var(--boxel-sp);
+      }
+      h3 {
+        margin: 0 0 var(--boxel-sp-xxs);
+        font: 600 var(--boxel-font-sm);
+      }
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius);
+      }
+      footer {
+        margin-top: var(--boxel-sp-lg);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}

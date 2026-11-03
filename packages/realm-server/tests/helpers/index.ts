@@ -366,6 +366,7 @@ import {
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
 import { createCallApiSender } from '../../lib/outbound/call-api-sender.ts';
+import { createPolicyWriteAuditor } from '../../lib/policy-share-audit.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -1643,7 +1644,16 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
-      ...(realmFor ? { realmFor } : {}),
+      ...(realmFor
+        ? {
+            realmFor,
+            policyWriteAuditor: createPolicyWriteAuditor({
+              dbAdapter,
+              realmFor,
+              virtualNetwork,
+            }),
+          }
+        : {}),
       callApi: createCallApiSender(dbAdapter),
     },
     {

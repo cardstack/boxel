@@ -649,7 +649,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 72969,
+      "bytes": 73791,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -821,6 +821,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/9f7d8083c6.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/a0b3760b6c.css"
         },
         {
@@ -918,7 +922,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 336782,
+      "bytes": 340580,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1103,7 +1107,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/keys.ts",
-          "size": 7839
+          "size": 7974
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1193,12 +1197,17 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-page.gts",
-          "size": 22301
+          "size": 23093
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/key-picker.gts",
           "size": 2113
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/key-policy-notices.gts",
+          "size": 3752
         },
         {
           "package": "@cardstack/secure-origin",

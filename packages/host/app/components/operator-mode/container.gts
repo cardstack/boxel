@@ -45,11 +45,13 @@ import type MessageService from '@cardstack/host/services/message-service';
 
 import CardChooserModal from '../card-chooser/modal';
 import FileChooserModal from '../file-chooser/modal';
+
 import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
 import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
 
 import CreateListingModal from './create-listing-modal';
+import PolicyAuditConfirmationModal from './policy-audit-confirmation-modal';
 
 import type CapabilitiesService from '../../services/capabilities';
 import type CardService from '../../services/card-service';
@@ -219,6 +221,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     <div class='operator-mode' ...attributes>
       <FileChooserModal />
+      <PolicyAuditConfirmationModal />
       <CreateListingModal />
       <CardChooserModal />
       <MarkdownEmbedChooserModal />

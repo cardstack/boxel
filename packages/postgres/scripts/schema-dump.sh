@@ -43,6 +43,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=user_key_grant_notices \
   --exclude-table-and-children=key_limit_notices \
   --exclude-table-and-children=key_uses \
+  --exclude-table-and-children=key_policy_notices \
   --exclude-table-and-children=oauth_clients \
   --exclude-table-and-children=platform_oauth_clients \
   --exclude-table-and-children=oauth_connections \
