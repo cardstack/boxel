@@ -1428,6 +1428,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           background: none;
         }
         /* 2px, not 0: room for an edge control's ring, which the scroller clips */
+        /* the caption lines up with the first column's flush edge */
+        .pretui-dt[data-flush] .pretui-dt-caption {
+          padding-inline: 2px;
+        }
         .pretui-dt[data-flush] .pretui-dt-table :is(th, td):first-child {
           padding-inline-start: 2px;
         }
