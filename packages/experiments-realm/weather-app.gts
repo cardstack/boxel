@@ -121,6 +121,29 @@ const KEY_USE =
 const KEY_NOTE =
   'Any OpenWeatherMap key works, including one on the free plan. A new key can take a couple of hours to start working.';
 
+// A place's country, spelled out ("Portugal" for "PT"), so two cities with
+// the same name can't be confused. Left out when it would repeat the city's
+// own name, as for Singapore.
+function countryOf(location: {
+  name?: string;
+  country?: string;
+}): string | undefined {
+  let code = location.country?.trim();
+  if (!code) {
+    return undefined;
+  }
+  let name = code;
+  try {
+    name =
+      new Intl.DisplayNames(['en'], { type: 'region' }).of(
+        code.toUpperCase(),
+      ) ?? code;
+  } catch {
+    // Not a region code; show it as it was saved.
+  }
+  return name === location.name ? undefined : name;
+}
+
 export class WeatherLocation extends FieldDef {
   static displayName = 'Weather Location';
   @field name = contains(StringField);
@@ -132,7 +155,8 @@ export class WeatherLocation extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <span class='weather-location'>
-        <@fields.name />{{#if @model.country}}, {{@model.country}}{{/if}}
+        <@fields.name />{{#let (countryOf @model) as |country|}}{{#if country}},
+            {{country}}{{/if}}{{/let}}
       </span>
     </template>
   };
@@ -250,7 +274,9 @@ export class WeatherApp extends CardDef {
         <h3>{{@model.cardTitle}}</h3>
         <ul>
           {{#each @model.locations as |location|}}
-            <li>{{location.name}}</li>
+            <li>{{location.name}}{{#let (countryOf location) as |country|}}{{#if
+                  country
+                }}, {{country}}{{/if}}{{/let}}</li>
           {{/each}}
         </ul>
       </div>
@@ -559,10 +585,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     return this.args.model.locations.map((location, index) => {
       let weather = this.places.get(index)?.weather;
       let today = weather?.days[0];
+      let country = countryOf(location);
       return {
         index,
         location,
-        removeLabel: `Remove ${location.name}`,
+        country,
+        removeLabel: `Remove ${location.name}${country ? `, ${country}` : ''}`,
         temp: weather ? `${Math.round(weather.current.main.temp)}°` : '—',
         condition: weather?.current.weather[0]?.description,
         range: today
@@ -1353,8 +1381,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                       {{on 'click' (fn this.addCity match)}}
                       data-test-weather-city-match={{match.name}}
                     >
-                      {{match.name}}{{#if match.state}}, {{match.state}}{{/if}},
-                      {{match.country}}
+                      {{match.name}}{{#if match.state}},
+                        {{match.state}}{{/if}}{{#let
+                        (countryOf match)
+                        as |country|
+                      }}{{#if country}}, {{country}}{{/if}}{{/let}}
                     </Button>
                   </li>
                 {{/each}}
@@ -1376,7 +1407,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
                 data-test-weather-place={{row.location.name}}
               >
                 <span class='place-main'>
-                  <span class='place-name'>{{row.location.name}}</span>
+                  <span class='place-name'>{{row.location.name}}{{#if
+                      row.country
+                    }}<span class='place-country'>,
+                        {{row.country}}</span>{{/if}}</span>
                   <span class='place-sub'>
                     {{#if row.time}}{{row.time}}{{else}}{{row.location.region}}
                       {{row.location.country}}{{/if}}
@@ -1643,6 +1677,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       .place-name {
         font-size: var(--boxel-font-size-lg);
         font-weight: 700;
+      }
+      .place-country {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        opacity: 0.85;
       }
       .place-sub,
       .place-condition,
@@ -1916,7 +1955,10 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
           season-{{this.theme.season}}
           motif-{{this.theme.motif}}'
       >
-        <h2>{{@location.name}}</h2>
+        <h2>{{@location.name}}{{#let (countryOf @location) as |country|}}{{#if
+              country
+            }}<span class='hero-country'>,
+                {{country}}</span>{{/if}}{{/let}}</h2>
         {{#if this.current}}
           <div class='hero-temp' data-test-weather-current-temp>
             {{this.temp}}°
@@ -2104,6 +2146,11 @@ class PlaceView extends GlimmerComponent<PlaceSignature> {
       h2 {
         font-size: var(--boxel-font-size-xl);
         font-weight: 500;
+      }
+      .hero-country {
+        font-size: var(--boxel-font-size);
+        font-weight: 400;
+        opacity: 0.85;
       }
       .hero-temp {
         font-size: 5rem;

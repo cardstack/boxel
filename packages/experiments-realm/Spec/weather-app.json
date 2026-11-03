@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Weather",
+      "cardDescription": "Current conditions, the 5-day forecast, air quality and a radar map for the places you save, from OpenWeatherMap with the workspace's shared key or your own.",
+      "specType": "card",
+      "ref": {
+        "module": "../weather-app",
+        "name": "WeatherApp"
+      },
+      "readMe": "# Weather\n\nCurrent conditions, the next day in 3-hour steps, the 5-day forecast, air quality and a precipitation radar map for the places you save, from [OpenWeatherMap](https://openweathermap.org/). Each place is colored by its temperature, with a motif for the season where it is.\n\n![Saved places](https://raw.githubusercontent.com/cardstack/boxel/3e7828faf4a03772af8249b5c0a4fcdb1c2d31ea/.pr-images/weather-app-v4/04-places.png)\n\n![A place in full](https://raw.githubusercontent.com/cardstack/boxel/3e7828faf4a03772af8249b5c0a4fcdb1c2d31ea/.pr-images/weather-app-v4/05-full-view-lisbon.png)\n\n## Getting started\n\n1. In your workspace, choose **New → Choose a card type → Weather**.\n2. The first time you open it, the secure window asks for your OpenWeatherMap key. Any key works, including a free one. Choose **Add a new key** (or pick one you have), then **On a schedule and when the card is opened**, and approve.\n3. Use **Add a city** to save places. The weather loads whenever you open the card or press **Refresh**.\n\n![The card asking for your key](https://raw.githubusercontent.com/cardstack/boxel/a95e43fd4a11510ad52725848ba8a09fbf827cb0/.pr-images/weather-app-demos/a-02-secure-window-auto.png)\n\n## The workspace's key or your own\n\nThe card can call OpenWeatherMap with a key someone shared into the workspace, or with the reader's own. Every request is declared twice, once with the workspace's key (`{{apiKey}}`) and once with your own (`{{userKey}}`). The card uses the workspace's key when it's ready and your own otherwise, so whose key pays is always one or the other, never a quiet fallback.\n\nTo let everyone in a workspace use one key:\n\n1. Share your key with the workspace (**Share with Workspace** on the key's page in the secure window).\n2. Open the card. It asks you to approve the key you shared for it; approve it for **when the card is opened**.\n\nPeople who can read the workspace then see the weather without a key of their own. Readers who only have read access need the workspace's policy to grant the card's operations, since a call to OpenWeatherMap travels as a write.\n\n## People who aren't signed in\n\nTo let visitors who aren't signed in use the shared key, the workspace's policy grants them `read` on Weather cards and the four calls that send the shared key, each with `where: actor() == \"anonymous\"`:\n\n- `currentShared`, `forecastShared`, `airQualityShared`, `findCityShared`\n\nThe key's owner must also allow anonymous use on the key itself; sharing it then warns that visitors will use it.\n\n![Approving the shared key for visitors](https://raw.githubusercontent.com/cardstack/boxel/a95e43fd4a11510ad52725848ba8a09fbf827cb0/.pr-images/weather-app-demos/b-04-approve-shared.png)\n\n## What the card calls\n\n| Operation | Endpoint |\n| --- | --- |\n| `current…` | `GET /data/2.5/weather` |\n| `forecast…` | `GET /data/2.5/forecast` |\n| `airQuality…` | `GET /data/2.5/air_pollution` |\n| `findCity…` | `GET /geo/1.0/direct` |\n\nEach comes in a `…Shared` and an `…Own` version. The key goes in the `appid` query parameter. The radar map is RainViewer's latest frame over OpenStreetMap tiles, which need no key.\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../WeatherApp/my-places"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
