@@ -16,6 +16,11 @@ export interface ChipSignature {
     /** neutral (the default) is the muted pill; any other tone is outlined in
      * that tone, with its -ink as the text */
     tone?: PretuiToneArg;
+    /** 'outlined' (the default) keeps the treatment above; 'soft' tints the
+     * fill with the hue and drops the ring, the tone's -ink stays the text */
+    appearance?: 'outlined' | 'soft';
+    /** 'rounded' (the default) or 'pill' */
+    shape?: 'rounded' | 'pill';
     dot?: boolean;
   };
   Blocks: { default: [] };
@@ -29,6 +34,12 @@ export class Chip extends Component<ChipSignature> {
   get tone(): PretuiTone {
     return resolveTone(this.args.tone, PRETUI_TONES, 'neutral');
   }
+  get appearance() {
+    return this.args.appearance === 'soft' ? 'soft' : 'outlined';
+  }
+  get shape() {
+    return this.args.shape === 'pill' ? 'pill' : 'rounded';
+  }
   get style() {
     return hueStyle('--pretui-chip-hue', this.args.hue);
   }
@@ -37,6 +48,8 @@ export class Chip extends Component<ChipSignature> {
       class='pretui-chip'
       style={{this.style}}
       data-tone={{this.tone}}
+      data-appearance={{this.appearance}}
+      data-shape={{this.shape}}
       data-test-pretui-chip
       ...attributes
     >
@@ -122,6 +135,19 @@ export class Chip extends Component<ChipSignature> {
           --pretui-chip-hue: var(--attention);
 
           color: var(--attention-ink);
+        }
+        /* soft: the hue tints the fill and the ring drops; the tone's -ink
+           (or --foreground when neutral) stays the text */
+        .pretui-chip[data-appearance='soft'] {
+          background-color: color-mix(
+            in oklch,
+            var(--pretui-chip-hue) 12%,
+            var(--card)
+          );
+          box-shadow: none;
+        }
+        .pretui-chip[data-shape='pill'] {
+          border-radius: var(--boxel-border-radius-pill);
         }
         .pretui-chip-dot {
           width: var(--pretui-chip-dot-size);

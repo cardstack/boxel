@@ -7,6 +7,8 @@ import { HUE_OPTIONS } from '../demo-ink-feedback';
 import { PRETUI_TONES, type PretuiTone } from '../pretui-primitives';
 
 const TONE_OPTIONS = [...PRETUI_TONES];
+const APPEARANCE_OPTIONS = ['outlined', 'soft'];
+const SHAPE_OPTIONS = ['rounded', 'pill'];
 
 // ── Chip ← pill/usage.gts + tag/usage.gts ────────────────────────────────
 // Dropped knobs: kind (Chip is never a button), variant + size (no
@@ -18,6 +20,10 @@ class ChipUsage extends GlimmerComponent {
   @tracked hue = '';
   @tracked tone: PretuiTone = 'neutral';
   @tracked dot = true;
+  @tracked appearance: 'outlined' | 'soft' = 'outlined';
+  @tracked shape: 'rounded' | 'pill' = 'rounded';
+  setAppearance = (v: string) => (this.appearance = v as 'outlined' | 'soft');
+  setShape = (v: string) => (this.shape = v as 'rounded' | 'pill');
   setLabel = (v: string) => (this.label = v);
   setHue = (v: string) => (this.hue = v);
   setTone = (v: string) => (this.tone = v as PretuiTone);
@@ -32,6 +38,12 @@ class ChipUsage extends GlimmerComponent {
     }
     if (this.hue) {
       bits.push(`@hue='${this.hue}'`);
+    }
+    if (this.appearance !== 'outlined') {
+      bits.push(`@appearance='${this.appearance}'`);
+    }
+    if (this.shape !== 'rounded') {
+      bits.push(`@shape='${this.shape}'`);
     }
     if (!this.dot) {
       bits.push('@dot={{false}}');
@@ -50,6 +62,8 @@ class ChipUsage extends GlimmerComponent {
           @tone={{this.tone}}
           @hue={{this.hueVal}}
           @dot={{this.dot}}
+          @appearance={{this.appearance}}
+          @shape={{this.shape}}
         />
         <Chip @label='Gelato' @hue='var(--chart-3)' />
         <Chip @label='Catering' @hue='var(--chart-4)' />
@@ -57,6 +71,19 @@ class ChipUsage extends GlimmerComponent {
         <Chip @label='draft' />
         <Chip @label='live' @tone='success' />
         <Chip @label='blocked' @tone='danger' />
+        <Chip @label='hired' @tone='success' @appearance='soft' @shape='pill' />
+        <Chip
+          @label='on hold'
+          @tone='warning'
+          @appearance='soft'
+          @shape='pill'
+        />
+        <Chip
+          @label='rejected'
+          @tone='danger'
+          @appearance='soft'
+          @shape='pill'
+        />
       </:example>
       <:api as |Args|>
         <Args.String
@@ -79,6 +106,22 @@ class ChipUsage extends GlimmerComponent {
           @defaultValue='neutral'
           @value={{this.tone}}
           @onInput={{this.setTone}}
+        />
+        <Args.String
+          @name='appearance'
+          @description='outlined (default) keeps the tone treatment; soft tints the fill with the hue and drops the ring.'
+          @options={{APPEARANCE_OPTIONS}}
+          @defaultValue='outlined'
+          @value={{this.appearance}}
+          @onInput={{this.setAppearance}}
+        />
+        <Args.String
+          @name='shape'
+          @description='rounded (default) or pill.'
+          @options={{SHAPE_OPTIONS}}
+          @defaultValue='rounded'
+          @value={{this.shape}}
+          @onInput={{this.setShape}}
         />
         <Args.Bool
           @name='dot'
