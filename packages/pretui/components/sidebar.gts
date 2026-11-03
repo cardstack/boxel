@@ -150,10 +150,12 @@ const restoresOpen = modifier(
 const measuresPane = modifier(
   (
     element: HTMLElement,
-    // the breakpoints ride along unused so a change re-runs the modifier,
-    // and the fresh observer's first report re-sorts the current width
-    [apply]: [(width: number) => void, ...unknown[]],
+    // the breakpoints ride along so a change re-runs the modifier, and the
+    // fresh observer's first report re-sorts the current width; they must be
+    // read here, since a function modifier only tracks the args it reads
+    [apply, ...breakpoints]: [(width: number) => void, ...unknown[]],
   ) => {
+    void breakpoints;
     let observer = new ResizeObserver((entries) => {
       let entry = entries[0];
       if (!entry) {
