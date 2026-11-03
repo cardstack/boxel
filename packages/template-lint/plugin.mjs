@@ -28,6 +28,16 @@ export default {
         'no-unused-block-params': false,
         'no-unused-block-params-except-underscore': true,
 
+        // Only a <details> element's <summary> is its control, so controls in
+        // the disclosure's open panel are not nested in it. Upstream counts
+        // <details> itself as an interactive parent and reports them.
+        // Ignoring <details> leaves the <summary> as the interactive parent,
+        // so a control inside the <summary> is still reported, as is any
+        // control nested in another interactive element. What goes
+        // unreported is a <details> element itself inside another control;
+        // a <summary> in it is still reported there.
+        'no-nested-interactive': { ignoredTags: ['details'] },
+
         'require-button-type': false,
         'no-negated-condition': false,
 
