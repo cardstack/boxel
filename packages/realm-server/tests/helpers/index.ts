@@ -1064,8 +1064,10 @@ async function waitForQueueIdle(
 //      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
 //      even though instances exist (matched = NONE while instances > 0).
 // Logged unconditionally as a one-liner; degraded/error instance rows are
-// dumped only when something looks off. Wrapped so a diagnostics failure can
-// never affect a test result.
+// dumped only when something looks off. Every file row a file read cannot see
+// (tombstoned, or errored in either channel) is listed on every call,
+// including rows a fixture errors on purpose (see `logUnreadableFileRows`).
+// Wrapped so a diagnostics failure can never affect a test result.
 export async function logRealmIndexDiagnostics(
   dbAdapter: PgAdapter,
   realmURL: string,
@@ -1150,8 +1152,11 @@ export async function logRealmIndexDiagnostics(
 // skip a row that is tombstoned, that carries an index error, or whose
 // `prerendered_html` row holds a render error at or above the index row's
 // generation. A raw-SQL assertion passing beside a failing file read points
-// at one of these three, and this dump names which. Pure diagnostics: wrapped
-// so it can never affect a test result.
+// at one of these three, and this dump names which. For a render error it
+// also says whether the render request itself failed (`visitRequestFailure`,
+// a row the reconcile sweep retries) or the render returned an error verdict
+// (which stands), and when the row was rendered. Pure diagnostics: wrapped so
+// it can never affect a test result.
 export async function logUnreadableFileRows(
   dbAdapter: DBAdapter,
   realmURL: string,
@@ -1163,6 +1168,9 @@ export async function logUnreadableFileRows(
               i.error_doc->>'message' AS index_error,
               ph.generation AS render_generation,
               ph.error_doc->>'message' AS render_error,
+              ph.error_doc->>'status' AS render_status,
+              ph.error_doc->>'visitRequestFailure' AS visit_request_failure,
+              ph.rendered_at,
               left(ph.error_doc->>'stack', 800) AS render_stack,
               left(ph.diagnostics::text, 1000) AS render_diagnostics
        FROM boxel_index i
@@ -1183,6 +1191,9 @@ export async function logUnreadableFileRows(
           `index_error=${r.index_error ?? 'none'} ` +
           `render_generation=${r.render_generation ?? 'none'} ` +
           `render_error=${r.render_error ?? 'none'} ` +
+          `render_status=${r.render_status ?? 'none'} ` +
+          `visit_request_failure=${r.visit_request_failure ?? 'false'} ` +
+          `rendered_at=${r.rendered_at ?? 'none'} ` +
           `render_stack=${r.render_stack ?? 'none'} ` +
           `render_diagnostics=${r.render_diagnostics ?? 'none'}`,
       );
