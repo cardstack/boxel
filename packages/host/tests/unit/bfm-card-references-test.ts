@@ -960,19 +960,21 @@ module('Unit | bfm-card-references', function () {
     test('defaults to embedded with no sizeStyle when format attr is missing', function (assert) {
       assert.deepEqual(bfmRefFormatAndSize(undefined, undefined, undefined), {
         format: 'embedded',
+        hasHeight: false,
       });
     });
 
     test('honors an explicit defaultFormat when the format attr is missing', function (assert) {
       assert.deepEqual(
         bfmRefFormatAndSize(undefined, undefined, undefined, 'atom'),
-        { format: 'atom' },
+        { format: 'atom', hasHeight: false },
       );
     });
 
     test('defaults to embedded when format attr is unrecognized', function (assert) {
       assert.deepEqual(bfmRefFormatAndSize('something', '400', '200'), {
         format: 'embedded',
+        hasHeight: false,
       });
     });
 
@@ -981,6 +983,7 @@ module('Unit | bfm-card-references', function () {
         bfmRefFormatAndSize('something', undefined, undefined, 'atom'),
         {
           format: 'atom',
+          hasHeight: false,
         },
       );
     });
@@ -988,12 +991,14 @@ module('Unit | bfm-card-references', function () {
     test('passes atom through and ignores width/height', function (assert) {
       assert.deepEqual(bfmRefFormatAndSize('atom', '400', '200'), {
         format: 'atom',
+        hasHeight: false,
       });
     });
 
     test('passes isolated through and ignores width/height', function (assert) {
       assert.deepEqual(bfmRefFormatAndSize('isolated', '400', '200'), {
         format: 'isolated',
+        hasHeight: false,
       });
     });
 
@@ -1001,6 +1006,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', undefined, undefined), {
         format: 'fitted',
         sizeStyle: undefined,
+        hasHeight: false,
       });
     });
 
@@ -1008,6 +1014,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', '400', undefined), {
         format: 'fitted',
         sizeStyle: 'width: 400px',
+        hasHeight: false,
       });
     });
 
@@ -1015,6 +1022,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', '50%', undefined), {
         format: 'fitted',
         sizeStyle: 'width: 50%',
+        hasHeight: false,
       });
     });
 
@@ -1022,6 +1030,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', undefined, '200'), {
         format: 'fitted',
         sizeStyle: 'height: 200px',
+        hasHeight: true,
       });
     });
 
@@ -1029,6 +1038,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', '400', '200'), {
         format: 'fitted',
         sizeStyle: 'width: 400px; height: 200px',
+        hasHeight: true,
       });
     });
 
@@ -1037,6 +1047,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', '100em', '200'), {
         format: 'fitted',
         sizeStyle: 'height: 200px',
+        hasHeight: true,
       });
     });
 
@@ -1044,6 +1055,7 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(bfmRefFormatAndSize('fitted', '400', '50%'), {
         format: 'fitted',
         sizeStyle: 'width: 400px',
+        hasHeight: false,
       });
     });
   });

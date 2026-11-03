@@ -172,7 +172,7 @@ export default defineConfig([
       ...boxel.configs.recommended.rules,
       '@cardstack/boxel/template-missing-invokable': [
         'error',
-        { invokables: MISSING_INVOKABLES_CONFIG.invokables },
+        { invokables: MISSING_INVOKABLES_CONFIG.boxelUiInvokables },
       ],
       '@cardstack/boxel/no-raf-for-state': 'error',
       'ember/no-runloop': 'off',

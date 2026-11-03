@@ -1,6 +1,6 @@
 ---
 name: local-host-against-remote
-description: Running a local host app (`pnpm start` in `packages/host`) against staging or production — the env vars that point it at the environment, how signing in works from `localhost` (email and password through the secure origin's credential frame, Google through Synapse SSO), why it works and what must never be changed to make it work, and how to diagnose a blank password frame. Use when an operator or developer wants a local host against staging or production, when sign-in from a local host fails, and before adding an origin to `--secureOriginAppOrigin` or anything that hands the secure origin an origin or URL. Triggers on "local host against staging", "run the host against production", "point my local host at staging", "password frame blank on localhost", "localhost sign-in", "sign in from localhost", "can't sign in locally to staging".
+description: Running a local host app (`pnpm start` in `packages/host`) against staging or production — the env vars that point it at the environment, how signing in works from `localhost` (on the secure origin's sign-in page, which asks before handing a local page its sign-in), how the profile modal's password fields work there, why it works and what must never be changed to make it work, and how to diagnose a blank password frame. Use when an operator or developer wants a local host against staging or production, when sign-in from a local host fails, and before adding an origin to `--secureOriginAppOrigin` or anything that hands the secure origin an origin or URL. Triggers on "local host against staging", "run the host against production", "point my local host at staging", "password frame blank on localhost", "localhost sign-in", "sign in from localhost", "can't sign in locally to staging".
 ---
 
 # A local host app against staging or production
@@ -59,9 +59,10 @@ pnpm start
 
 ## Signing in
 
-- **Email and password** work from `https://localhost:<port>`, `http://localhost:<port>`, and the same on `127.0.0.1`. The fields are a frame from the environment's secure origin, which accepts those origins on any port (see below).
-- **Google** goes through Synapse's SSO, not the frame, and works from a local host too. In production, Synapse shows a confirmation page before it redirects back to `localhost`, because production's SSO client whitelist doesn't list it. Confirm it.
+- **A signed-out local host sends you to the environment's secure origin** to sign in, with the page to come back to in the URL's fragment. Email and password, Google, registering and a password reset all happen there. The secure origin's `return` allowlist includes `http://localhost:*`, `https://localhost:*` and the same on `127.0.0.1`, so it hands the sign-in back to the local page.
+- **The secure page asks "Continue to http://localhost:<port>?"** before it hands a loopback page its login token, since any program on your machine can listen on a loopback port. Continue only if you started the sign-in from that host.
 - **Registering** on staging needs an invite code: its Synapse requires a registration token. Production's doesn't.
+- **The profile modal's password fields** (change password, and confirming your password to change your email) are a frame from the environment's secure origin, which accepts those origins on any port (see below).
 
 ## Why it works, and what not to do
 
@@ -78,7 +79,7 @@ So:
 
 ## Troubleshooting
 
-**The password area of the sign-in form is blank.** The frame loaded nothing, or loaded and refused to start. Check, in this order:
+**The password area of the profile modal's change-password or confirm-your-password form is blank.** The frame loaded nothing, or loaded and refused to start. Check, in this order:
 
 1. **The WAF.** In the network panel, the request for `credentials` on the secure origin comes back 403. Something put a loopback origin in the query string; from a local host the frame URL must have no `?`.
 2. **`frame-ancestors`.** The console reports that framing the secure origin violates its `frame-ancestors` directive. The page's origin isn't listed: a host on a hostname other than `localhost` / `127.0.0.1`, or a realm server whose `--secureOriginAppOrigin` doesn't list the loopback origins. Read the `Content-Security-Policy` response header on that same `credentials` request to see what is listed.

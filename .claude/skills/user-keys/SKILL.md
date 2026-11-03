@@ -106,18 +106,20 @@ the ticket goes in `meta`. A body is at most
 exceed that. A query string on these routes is ignored, and left out of the
 request log line and Sentry breadcrumbs.
 
-| Route                      | Does                                                                                                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                      |
-| `GET /_user-keys`          | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                          |
-| `GET /_user-keys/:id`      | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                    |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account`                            |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                      |
-| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
+| Route                        | Does                                                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`   | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}`                                      |
+| `GET /_user-keys`            | List the user's keys' metadata, by name, each with its `grants`, `usedWith` and `sharedInto`                                                                                          |
+| `GET /_user-keys/:id`        | One key's metadata, with its `grants`, `usedWith` and `sharedInto`                                                                                                                    |
+| `POST /_user-keys`           | Add: `attributes.{name, kind?, value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `add`); `subject` and `scopes` only for a `google-service-account`                            |
+| `PATCH /_user-keys/:id`      | Replace the value: `attributes.{value, subject?, scopes?}`, `meta.{ticket}` (a ticket to `replace` this key), as the key's own kind; re-seals every grant's copy                      |
+| `DELETE /_user-keys/:id`     | Delete: `meta.{ticket}` (a ticket to `delete` this key); revokes its own bindings, deletes its grants, suspends every share holding it (`GET /_key-shares?key=<id>` lists them first) |
+| `PUT /_user-keys/:id/limits` | Set the key's limits on its owner's interactive calls, from a secure session, no ticket (see the `key-limits` skill)                                                                  |
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
-A listed or shown key says where it is used, so the key page draws every key's
+A listed or shown key carries its `limits` (see the `key-limits` skill), and
+says where it is used, so the key page draws every key's
 tile from the one listing. `usedWith` is the services its grants send to, each
 grant's destination host reduced to its registrable domain (`registrableDomain`
 in `lib/secure-window.ts`, the one the key pages show for a destination), each
@@ -143,7 +145,11 @@ its requests with the profile's secure session, signing in through the
 browser first when the profile has none, and mints a ticket for that one
 change. It prints a refusal as `Refused (HTTP <status>):
 <reason>`, and under `--json` passes the response's `errors` through
-unchanged, so a user's report carries the server's own words.
+unchanged, so a user's report carries the server's own words. `approve`,
+`revoke`, `pending` and `ungrant` (`commands/keys/approve.ts`) manage the
+bindings and grants (see the `key-bindings` skill, _From the terminal_): an
+approval or a swap that would give a key a destination none of its grants
+covers is confirmed in the secure window, never created from the terminal.
 
 | Status | Means                                                                                                                                                                                  |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

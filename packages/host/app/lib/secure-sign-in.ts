@@ -1,24 +1,19 @@
 import window from 'ember-window-mock';
 
-import type { ResetPasswordParams } from '@cardstack/host/components/matrix/forgot-password';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import type { ResetPasswordParams } from '@cardstack/host/lib/reset-password-link';
 
-// Signing in to Boxel on the secure origin's own page. With
-// `signInOnSecureOrigin` on, the app never draws a sign-in form: a signed-out
-// app sends the user to the secure origin with the page to come back to, and
-// the secure origin sends them back with a single-use Matrix login token,
-// which the app redeems for its Matrix session (see the secure origin's
-// `security/app-handoff.js`).
+// Signing in to Boxel on the secure origin's own page. The app never draws a
+// sign-in form: a signed-out app sends the user to the secure origin with the
+// page to come back to, and the secure origin sends them back with a
+// single-use Matrix login token, which the app redeems for its Matrix session
+// (see the secure origin's `security/app-handoff.js`).
 //
 // Anything that names an origin or a URL travels to the secure origin in the
 // fragment, never the query string: a firewall in front of a deployment
 // refuses a query string that names a loopback origin, and a fragment never
 // leaves the browser.
-
-export function signInOnSecureOrigin(): boolean {
-  return Boolean(ENV.signInOnSecureOrigin);
-}
 
 // The address of one of the secure origin's pages: each is at its own path
 // beneath the secure origin's URL.

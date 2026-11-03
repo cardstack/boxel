@@ -174,26 +174,31 @@ export function validateValueAndNote(value: unknown, note: unknown): void {
   }
 }
 
-// A note is printed as it is by `boxel realm-server keys show`, so it may not
-// carry control characters (C0, DEL or C1): a line break would print a fake
-// history entry, and an escape sequence would run in the reader's terminal.
 export function validateNote(note: unknown): void {
+  let refusal = operatorNoteRefusal(note);
+  if (refusal) {
+    throw new SystemKeyError(400, refusal);
+  }
+}
+
+// Why an operator note is refused, or undefined for a note that may be
+// recorded. A note is printed as it is by `boxel realm-server keys show`, so
+// it may not carry control characters (C0, DEL or C1): a line break would
+// print a fake history entry, and an escape sequence would run in the
+// reader's terminal. Platform OAuth clients take their notes by the same
+// rules.
+export function operatorNoteRefusal(note: unknown): string | undefined {
   if (typeof note !== 'string' || note.trim().length === 0) {
-    throw new SystemKeyError(400, 'an operator note is required');
+    return 'an operator note is required';
   }
   if (note.length > MAX_SYSTEM_KEY_NOTE_LENGTH) {
-    throw new SystemKeyError(
-      400,
-      `the note is longer than ${MAX_SYSTEM_KEY_NOTE_LENGTH} characters`,
-    );
+    return `the note is longer than ${MAX_SYSTEM_KEY_NOTE_LENGTH} characters`;
   }
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f-\u009f]/.test(note)) {
-    throw new SystemKeyError(
-      400,
-      'the note must not contain control characters or line breaks',
-    );
+    return 'the note must not contain control characters or line breaks';
   }
+  return undefined;
 }
 
 const SYSTEM_KEY_COLUMNS = `id, url, auth_method, auth_parameter_name,

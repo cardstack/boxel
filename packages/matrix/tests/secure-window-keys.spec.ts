@@ -6,6 +6,7 @@ import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
   getSharedSQLExecutor,
+  assertLoggedOut,
   logout,
   postCardSource,
   postNewCard,
@@ -665,7 +666,7 @@ test.describe('the secure window’s key pages', () => {
 
     await page.bringToFront();
     await logout(page);
-    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+    await assertLoggedOut(page);
     // The app's sign-out ends the window's session on the server. The window
     // asks again when the user comes back to it.
     await expect(async () => {

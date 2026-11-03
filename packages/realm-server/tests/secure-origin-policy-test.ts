@@ -15,7 +15,10 @@ import { PAGE_PATHS } from '@cardstack/secure-origin/shell/pages.js';
 // shows up here as a `securitypolicyviolation` event.
 //
 // The built pages are also where the theme's tokens resolve, so this is where
-// the error and muted text colours are checked against WCAG AA contrast.
+// the error and muted text colours are checked against WCAG AA contrast, and
+// the key panel's focus rings and choice indicators (the chosen radio tile's
+// ring, a checkbox's edge, a radio's accent) against WCAG's 3:1 for a non-text
+// indicator.
 
 const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
 // The window's own sign-in form: the CLI's sign-in pages draw the same form,
@@ -202,14 +205,7 @@ const LEGACY_ADDRESSES: { legacy: string; landed: string; marker: string }[] = [
 ];
 
 // Every form the credential fields present.
-const CREDENTIAL_FORMS = [
-  'login',
-  'cli-login',
-  'register',
-  'reset',
-  'change-password',
-  'confirm-password',
-];
+const CREDENTIAL_FORMS = ['change-password', 'confirm-password'];
 
 // Records every policy violation in a frame, from before any of its own
 // script runs.
@@ -548,11 +544,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  function assertContrast(
-    assert: Assert,
-    where: string,
-    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
-  ) {
+  // WCAG's contrast ratio between two sRGB colours.
+  function contrast(a: number[], b: number[]) {
     let luminance = (rgb: number[]) => {
       let [r, g, b] = rgb.map((channel) => {
         let c = channel / 255;
@@ -560,11 +553,15 @@ module(basename(import.meta.filename), function (hooks) {
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    let contrast = (a: number[], b: number[]) => {
-      let [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-      return (light + 0.05) / (dark + 0.05);
-    };
+    let [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (light + 0.05) / (dark + 0.05);
+  }
 
+  function assertContrast(
+    assert: Assert,
+    where: string,
+    { background, colors, nested }: Awaited<ReturnType<typeof textColors>>,
+  ) {
     assert.ok(
       colors.length > 1,
       `${where}: the shell's stylesheets hold error rules (${colors.length - 1})`,
@@ -615,6 +612,218 @@ module(basename(import.meta.filename), function (hooks) {
       'key pages',
       await textColors('[data-test-keys-panel]', /^\.keys-error(\[[^\]]+\])?$/),
     );
+  });
+
+  test("the chosen radio tile's ring meets WCAG's 3:1 against the key panel, and a hovered tile's is thinner", async function (assert) {
+    // The radio tile's rules ship with the shell, so the signed-out key page
+    // holds them, under the panel whose theme and background the tiles sit
+    // on.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, rings } = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let backgroundColor = getComputedStyle(panel).backgroundColor;
+      let toRGB = (color: string) => {
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      // A ring is a box shadow with no offset or blur: its spread is its
+      // width, and its colour is resolved under the panel's theme.
+      let ring = (boxShadow: string) => {
+        let probe = document.createElement('span');
+        probe.style.setProperty('box-shadow', boxShadow);
+        panel.append(probe);
+        let computed = getComputedStyle(probe).boxShadow;
+        probe.remove();
+        let [, color, spread] =
+          /^(\w+\([^)]*\)) 0px 0px 0px (\d+(?:\.\d+)?)px$/.exec(computed) ?? [];
+        return color
+          ? { rgb: toRGB(color), width: Number(spread) }
+          : { rgb: [], width: 0 };
+      };
+      let rings: Record<string, ReturnType<typeof ring> & { rule: string }> =
+        {};
+      let visit = (rules: CSSRuleList) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules);
+            continue;
+          }
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+          let state =
+            /^\.radio-tile(?:\[[^\]]+\])*(:hover|:has\(input:checked\))$/.exec(
+              rule.selectorText,
+            )?.[1];
+          let boxShadow = rule.style.getPropertyValue('box-shadow');
+          if (state && boxShadow) {
+            rings[state === ':hover' ? 'hover' : 'chosen'] = {
+              rule: `${rule.selectorText} { box-shadow: ${boxShadow} }`,
+              ...ring(boxShadow),
+            };
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      return { background: toRGB(backgroundColor), rings };
+    });
+
+    let { chosen, hover } = rings;
+    assert.ok(chosen, "the shell's stylesheets ring a chosen radio tile");
+    assert.ok(hover, "the shell's stylesheets ring a hovered radio tile");
+    let ratio = contrast(chosen.rgb, background);
+    assert.ok(
+      ratio >= 3,
+      `${chosen.rule}: rgb(${chosen.rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+    );
+    assert.ok(hover.width > 0, `a hovered tile is ringed (${hover.width}px)`);
+    assert.ok(
+      hover.width < chosen.width,
+      `a hovered tile's ring (${hover.width}px) is thinner than a chosen one's (${chosen.width}px)`,
+    );
+  });
+
+  test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
+    // Every stylesheet the shell ships is on the signed-out key page, so this
+    // reads every outline a `:focus` or `:focus-visible` rule draws, each
+    // checkbox edge and each accent colour, and resolves each under the panel
+    // the key pages draw their controls on.
+    await page.goto(`${secureOrigin}/secure/keys`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-keys-panel]', { timeout: 10000 });
+    let { background, indicators } = await page.evaluate(() => {
+      let panel = document.querySelector('[data-test-keys-panel]')!;
+      let canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      let context = canvas.getContext('2d', { willReadFrequently: true })!;
+      let backgroundColor = getComputedStyle(panel).backgroundColor;
+      let toRGB = (color: string) => {
+        context.fillStyle = backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      // The colour a declaration paints, set on a probe under the panel so
+      // the panel's theme resolves it. The probe sits in a wrapper of a
+      // sentinel colour, which a value that doesn't resolve falls back to,
+      // so it fails rather than passing as the panel's own text colour.
+      const SENTINEL = 'rgb(1, 2, 3)';
+      let paints = (property: string, value: string, read: string) => {
+        let wrapper = document.createElement('span');
+        wrapper.style.setProperty('color', SENTINEL);
+        let probe = document.createElement('span');
+        probe.style.setProperty(property, value);
+        wrapper.append(probe);
+        panel.append(wrapper);
+        let color = getComputedStyle(probe).getPropertyValue(read);
+        wrapper.remove();
+        return color === SENTINEL ? undefined : toRGB(color);
+      };
+      let indicators: { label: string; rgb: number[] | undefined }[] = [];
+      let visit = (rules: CSSRuleList) => {
+        for (let rule of rules) {
+          if (rule instanceof CSSGroupingRule) {
+            visit(rule.cssRules);
+            continue;
+          }
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+          let selector = rule.selectorText;
+          let style = rule.style;
+          if (
+            /:focus(-visible)?(?![-\w])/.test(selector) &&
+            !selector.includes(':not(:focus-visible)') &&
+            // A rule that takes the outline away draws no ring.
+            style.getPropertyValue('outline-style') !== 'none'
+          ) {
+            for (let property of ['outline', 'outline-color']) {
+              let value = style.getPropertyValue(property);
+              // An outline drawn transparent on purpose shows nothing to
+              // measure.
+              if (value && !/transparent|none|rgba\([^)]*,\s*0\)/.test(value)) {
+                indicators.push({
+                  label: `${selector} { ${property}: ${value} }`,
+                  rgb: paints(property, value, 'outline-color'),
+                });
+              }
+            }
+          }
+          // An unticked checkbox is drawn by its edge alone, and a ticked one
+          // keeps an edge around its fill.
+          for (let property of [
+            '--checkbox-border-color',
+            '--checkbox-checked-border-color',
+          ]) {
+            let edge = style.getPropertyValue(property);
+            if (edge) {
+              indicators.push({
+                label: `${selector} { ${property}: ${edge} }`,
+                rgb: paints('color', edge, 'color'),
+              });
+            }
+          }
+          let accent = style.getPropertyValue('accent-color');
+          if (accent) {
+            indicators.push({
+              label: `${selector} { accent-color: ${accent} }`,
+              rgb: paints('color', accent, 'color'),
+            });
+          }
+        }
+      };
+      for (let sheet of document.styleSheets) {
+        visit(sheet.cssRules);
+      }
+      return { background: toRGB(backgroundColor), indicators };
+    });
+
+    assert.ok(
+      indicators.some(({ label }) => label.includes('.radio-tile')),
+      "the radio tile's focus ring is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => label.includes('--checkbox-border-color')),
+      "the checkbox's edge is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) =>
+        label.includes('--checkbox-checked-border-color'),
+      ),
+      "a ticked checkbox's edge is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => /^a:focus /.test(label)),
+      'the global link focus outline is among them',
+    );
+    assert.ok(
+      indicators.some(({ label }) => label.includes('accent-color')),
+      "the radio choices' accent is among them",
+    );
+    for (let { label, rgb } of indicators) {
+      if (!rgb) {
+        assert.ok(false, `${label}: the colour doesn't resolve on the panel`);
+        continue;
+      }
+      let ratio = contrast(rgb, background);
+      assert.ok(
+        ratio >= 3,
+        `${label}: rgb(${rgb.join(', ')}) on rgb(${background.join(', ')}) is ${ratio.toFixed(2)}:1`,
+      );
+    }
   });
 
   test('each credential form runs under the policy, framed by the app', async function (assert) {

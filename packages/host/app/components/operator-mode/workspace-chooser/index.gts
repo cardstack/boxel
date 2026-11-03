@@ -579,9 +579,6 @@ export default class WorkspaceChooser extends Component<Signature> {
                   @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
                   @selectionActive={{this.isSelectionActive}}
                 />
-                {{#if this.matrixService.isInitializingNewUser}}
-                  <WorkspaceLoadingIndicator />
-                {{/if}}
                 {{#each
                   this.filteredUserRealmIdentifiers
                   as |realmIdentifier i|

@@ -9,6 +9,11 @@ import type { Querier } from '@cardstack/runtime-common/expression';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
+import {
+  KEY_LIMIT_COLUMNS,
+  limitsOf,
+  type KeyLimits,
+} from './key-limit-settings.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
 
@@ -74,6 +79,10 @@ export interface KeyShare {
   suspendedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // How much of the key anyone may spend through the share, its owner's
+  // settings with the platform's defaults filled in. Seen only by the share's
+  // owner and the realm's direct writers, as every share is.
+  limits: KeyLimits;
   // In a realm's listing: the operations the share is approved for there,
   // one per binding, so the realm's writers see what each share is used by.
   operations?: KeyShareOperation[];
@@ -86,6 +95,10 @@ export interface KeyShareOperation {
   instance: string | null;
   slot: string;
   state: 'active' | 'needs-reapproval' | 'suspended';
+  // Where it sends, as last approved: the destination a key swapped into the
+  // share is granted for it, so a swapper can tell beforehand which of them
+  // their key has no grant for.
+  destination: string;
 }
 
 export interface KeyShareNotice {
@@ -103,7 +116,7 @@ export interface KeyShareNotice {
 // The most notices a realm's listing returns, newest first.
 export const MAX_KEY_SHARE_NOTICES = 100;
 
-const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at`;
+const SHARE_COLUMNS = `id, realm_url, label, owner, key_id, state, suspension_reason, suspended_by, suspended_at, created_at, updated_at, ${KEY_LIMIT_COLUMNS}`;
 
 function iso(value: unknown): string | null {
   return value == null ? null : new Date(value as string).toISOString();
@@ -126,6 +139,7 @@ function toShare(
     suspendedAt: iso(row.suspended_at),
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
+    limits: limitsOf(row),
   };
 }
 
@@ -545,8 +559,23 @@ export async function swapKeyIntoShare(
     if (row.state !== 'suspended') {
       throw new UserKeyError(409, 'only a suspended share takes another key');
     }
+    // Limits are the key owner's to set, so a share taken over by another
+    // writer starts from the platform's defaults rather than spending the new
+    // owner's key under limits someone else chose. A writer swapping another
+    // of their own keys into their own share keeps the limits they set.
     let [updated] = await txQuery([
-      `UPDATE key_shares SET owner = `,
+      `UPDATE key_shares SET `,
+      ...[
+        'rate_burst',
+        'rate_refill_per_minute',
+        'daily_budget',
+        'monthly_budget',
+      ].flatMap((column, index) => [
+        `${index === 0 ? '' : ', '}${column} = CASE WHEN owner = `,
+        param(user),
+        ` THEN ${column} END`,
+      ]),
+      `, owner = `,
       param(user),
       `, key_id = `,
       param(keyId),
@@ -703,12 +732,14 @@ export async function listRealmShares(
   let operations = new Map<string, KeyShareOperation[]>();
   if (rows.length > 0) {
     let bindings = await query(dbAdapter, [
-      `SELECT id, share_id, definition_url, export_name, operation_name, instance_url, slot, state FROM key_bindings WHERE share_id IN (`,
+      `SELECT b.id, b.share_id, b.definition_url, b.export_name, b.operation_name, b.instance_url, b.slot, b.state, last.destination
+         FROM key_bindings b JOIN key_binding_approvals last ON last.id = b.approval_id
+        WHERE b.share_id IN (`,
       ...rows.flatMap((row, i) => [
         ...(i > 0 ? [', '] : []),
         param(row.id as string),
       ]),
-      `) ORDER BY definition_url, export_name, operation_name, instance_url NULLS FIRST, slot`,
+      `) ORDER BY b.definition_url, b.export_name, b.operation_name, b.instance_url NULLS FIRST, b.slot`,
     ]);
     for (let binding of bindings) {
       let shareId = binding.share_id as string;
@@ -723,6 +754,7 @@ export async function listRealmShares(
         instance: (binding.instance_url as string | null) ?? null,
         slot: binding.slot as string,
         state: binding.state as KeyShareOperation['state'],
+        destination: binding.destination as string,
       });
       operations.set(shareId, list);
     }

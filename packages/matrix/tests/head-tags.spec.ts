@@ -6,6 +6,7 @@ import {
   clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
+  enterWorkspace,
   openRoot,
   postCardSource,
   waitForPublishedMarker,
@@ -45,10 +46,8 @@ test.describe('Head tags', () => {
   ) {
     await openRoot(page, appURL);
     await page.locator('[data-test-workspace-chooser-toggle]').click();
-    await expect(page.locator('[data-test-workspace-chooser]')).toBeVisible();
-    await page
-      .locator(`[data-test-workspace="${workspaceDisplayName}"]`)
-      .click();
+    await expect(page.locator('[data-test-dashboard]')).toBeVisible();
+    await enterWorkspace(page, workspaceDisplayName);
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
 

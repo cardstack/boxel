@@ -643,12 +643,17 @@ export async function approveOperations(
 }
 
 // One of the user's approvals: an operation in a realm, a slot it fills, and
-// the grant it sends under.
+// the grant it sends under. It is named as the approve page names it: by its
+// operation's label and its card's display name, or, for a card the user
+// can't read, by the operation's name split into words and the card's export
+// name.
 export interface KeyBinding {
   id: string;
   realm: string;
   type: { module: string; name: string };
   operation: string;
+  operationLabel: string;
+  cardName: string;
   instance: string | null;
   slot: string;
   keyId: string | null;

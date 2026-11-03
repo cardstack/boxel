@@ -10,7 +10,6 @@ scope:
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/ai-assistant-panel-service.ts
   - packages/host/app/tools/**
-  - packages/host/app/components/matrix/register-user.gts
   - packages/ai-bot/**
   - packages/bot-runner/**
   - packages/matrix/support/synapse/**

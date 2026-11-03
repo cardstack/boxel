@@ -8,7 +8,7 @@
       "cardInfo": {
         "name": "Missing key: open the secure window",
         "summary": "The workspace holds a Weather Station card whose `forecast` operation sends the user's own key to an outside weather service. An operation that carries a credential slot is refused \"Binding not approved\", and the refusal names the slot as one for the invoking user's own key. The prompt asks for the forecast. This eval tests whether the assistant opens the secure window once for the user's key, says what it opened and why, does not reopen it on a repeated refusal, and never asks for the key in the chat.",
-        "notes": "Run on a deployment that signs users in on the secure origin (`SIGN_IN_ON_SECURE_ORIGIN=true`); without it the tool refuses to open the window, and criterion 2 is judged on the call alone. The browser's popup blocker may block the window, which shows the app's \"Open the secure window\" button; either outcome passes criterion 2. The seed has no theme and is not graded on design.",
+        "notes": "The browser's popup blocker may block the window, which shows the app's \"Open the secure window\" button; either outcome passes criterion 2. The seed has no theme and is not graded on design.",
         "cardThumbnailURL": null
       },
       "secondsPerPrompt": 200

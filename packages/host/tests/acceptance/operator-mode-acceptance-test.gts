@@ -57,7 +57,6 @@ import {
   setupRealmServerEndpoints,
   realmConfigCardJSON,
 } from '../helpers';
-import { signInThroughCredentialFields } from '../helpers/credential-fields';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
@@ -69,6 +68,7 @@ import {
   getRecentFiles,
   setRecentFiles,
 } from '../helpers/recent-files-cards';
+import { signInThroughSecureOrigin } from '../helpers/secure-sign-in';
 import { setupApplicationTest } from '../helpers/setup';
 
 const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
@@ -1284,20 +1284,20 @@ module('Acceptance | operator mode tests', function (hooks) {
       })!;
       await click('[data-test-profile-icon-button]');
       await click('[data-test-signout-button]');
-      assert.dom('[data-test-login-btn]').exists();
+      assert.dom('[data-test-secure-sign-in-landing]').exists();
 
       await visit('/?openProfileSettings=subscription');
 
-      // The model hook returns before the login form renders, so consuming
-      // the param there would swallow it with no modal to show.
-      assert.dom('[data-test-login-btn]').exists();
+      // The model hook returns before the signed-out landing renders, so
+      // consuming the param there would swallow it with no modal to show.
+      assert.dom('[data-test-secure-sign-in-landing]').exists();
       assert.dom('[data-test-settings-modal]').doesNotExist();
       assert.ok(
         currentURL().includes('openProfileSettings=subscription'),
-        'the param must outlive the login form',
+        'the param must outlive the signed-out landing',
       );
 
-      await signInThroughCredentialFields();
+      await signInThroughSecureOrigin();
 
       // Three things have to line up for the modal to be on screen, and the
       // assertion alone cannot say which one is missing. Report the session's
@@ -1784,7 +1784,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         'AI assistant open preference is cleared on logout',
       );
 
-      assert.dom('[data-test-login-btn]').exists();
+      assert.dom('[data-test-secure-sign-in-landing]').exists();
     });
   });
 
@@ -1823,7 +1823,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       // Not awaited: `click` waits for every test waiter to settle, and the
       // request to the realm server is one of them until it is answered.
       let signedOut = click('[data-test-signout-button]');
-      await waitFor('[data-test-login-btn]');
+      await waitFor('[data-test-secure-sign-in-landing]');
       return signedOut;
     }
 
@@ -1831,7 +1831,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       answerSignOut(new Response(null, { status: 204 }));
       await signOut();
 
-      assert.dom('[data-test-login-btn]').exists();
+      assert.dom('[data-test-secure-sign-in-landing]').exists();
       assert.strictEqual(signOuts.length, 1, 'the realm server is told once');
       let [{ method, url, user }] = signOuts;
       assert.strictEqual(method, 'DELETE');
@@ -1849,9 +1849,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test("a realm server that doesn't answer doesn't hold sign-out up", async function (assert) {
       let signedOut = signOut();
-      await waitFor('[data-test-login-btn]');
+      await waitFor('[data-test-secure-sign-in-landing]');
 
-      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.dom('[data-test-secure-sign-in-landing]').exists('signed out');
       assert.strictEqual(signOuts.length, 1, 'still waiting on the server');
       answerSignOut(new Response(null, { status: 204 }));
       await signedOut;
@@ -1861,7 +1861,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       answerSignOut(new Response('unavailable', { status: 503 }));
       await signOut();
 
-      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.dom('[data-test-secure-sign-in-landing]').exists('signed out');
       assert.strictEqual(signOuts.length, 1);
     });
   });

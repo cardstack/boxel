@@ -143,6 +143,23 @@ const SERVICE_ACCOUNT_FILE = JSON.stringify(
   2,
 );
 
+type QUnitAssert = Parameters<Parameters<typeof test>[1]>[0];
+
+// Asserts the Scopes field holds these scopes one per line and is tall enough
+// to show every one of them without scrolling.
+function assertShowsEveryScope(assert: QUnitAssert, scopes: string[]) {
+  assert
+    .dom('[data-test-service-account-scopes]')
+    .hasValue(scopes.join('\n'), 'each scope is on a line of its own');
+  let field = document.querySelector<HTMLTextAreaElement>(
+    '[data-test-service-account-scopes]',
+  )!;
+  assert.ok(
+    field.scrollHeight <= field.clientHeight + 1,
+    `the field shows all ${scopes.length} scopes without scrolling (${field.scrollHeight}px of content in ${field.clientHeight}px)`,
+  );
+}
+
 // Chooses a key file. The module waits on file reads
 // (`setupWaitedBrowserWork`), so this returns once the page has read it.
 // Choosing a file and typing, without settling: for a test that holds a
@@ -1143,6 +1160,50 @@ module('Integration | key pages', function (hooks) {
       assert.dom('[data-test-error-detail="Message"]').hasText('Not found.');
     });
 
+    test('reached from an approve page the CLI opened, Close tells the CLI the approval was cancelled', async function (assert) {
+      let submitted: [string, string][][] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push([...new FormData(this).entries()] as [string, string][]);
+      };
+      try {
+        let cli = `cli_port=51234&cli_state=${'c'.repeat(32)}`;
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&then=approve&${cli}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          [
+            ['state', 'c'.repeat(32)],
+            ['window_outcome', 'cancelled'],
+          ],
+        ]);
+        assert.deepEqual(navigations, [], 'the window goes to the CLI');
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    test('opened with a CLI listener but not from an approve page, Close only closes', async function (assert) {
+      let submitted = 0;
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = () => submitted++;
+      try {
+        visitShell(
+          `enter-key#card=${encodeURIComponent(CARD)}&operation=forecast&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(EnterKeyPage);
+        await waitFor('[data-test-keys-load-failed]');
+        await click('[data-test-keys-close]');
+        assert.strictEqual(submitted, 0);
+        assert.deepEqual(navigations, [{ how: 'close' }]);
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
     test('refused access, says so and doesn’t offer to try again', async function (assert) {
       serve({
         'POST _secure-window/context': () =>
@@ -1527,6 +1588,7 @@ module('Integration | key pages', function (hooks) {
     test('the key page shows a service account’s email, subject and scopes, and a replace starts from them', async function (assert) {
       const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
       const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
       let serviceAccount = {
         ...KEYS[1],
         id: 'key-sa',
@@ -1535,7 +1597,7 @@ module('Integration | key pages', function (hooks) {
         serviceAccount: {
           email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
       };
       let actsAsItself = {
@@ -1573,7 +1635,7 @@ module('Integration | key pages', function (hooks) {
             `${row} [data-test-service-account-scope]`,
           ),
         ].map((scope) => scope.textContent?.trim()),
-        [SHEETS, DRIVE],
+        [SHEETS, DRIVE, CALENDAR],
       );
       assert
         .dom(
@@ -1592,9 +1654,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
-      assert
-        .dom('[data-test-service-account-scopes]')
-        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
       assert
         .dom('[data-test-key-replace-save]')
         .isDisabled('the key file is still chosen anew');
@@ -1610,7 +1670,7 @@ module('Integration | key pages', function (hooks) {
         {
           value: SERVICE_ACCOUNT_FILE,
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
         'leaving the fields as they are keeps them',
       );
@@ -2004,6 +2064,112 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(navigations, [{ how: 'close' }]);
     });
 
+    test('opened by the CLI, tells it once the key is in, and only then', async function (assert) {
+      let submitted: { action: string; fields: [string, string][] }[] = [];
+      let submit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+        submitted.push({
+          action: this.action,
+          fields: [...new FormData(this).entries()] as [string, string][],
+        });
+      };
+      try {
+        serve({
+          'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+          'GET _key-shares': shares(SHARE),
+          'POST _key-shares/share-4/swap': () =>
+            json(200, {
+              data: {
+                type: 'key-share',
+                id: 'share-4',
+                attributes: { ...SHARE, state: 'active', keyId: 'key-1' },
+              },
+            }),
+        });
+        visitShell(
+          `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+        );
+        await render(SwapKeyPage);
+        await waitFor('[data-test-swap-key-form]');
+        await click('[data-test-key-choice="Weather service"] input');
+        await click('[data-test-swap-key-save]');
+        await waitFor('[data-test-keys-done]');
+        await click('[data-test-keys-close]');
+        assert.deepEqual(submitted, [
+          {
+            action: 'http://127.0.0.1:51234/callback',
+            fields: [
+              ['state', 'c'.repeat(32)],
+              ['window_outcome', 'done'],
+            ],
+          },
+        ]);
+        assert.deepEqual(
+          navigations,
+          [{ how: 'close' }],
+          'the window goes to the CLI, and Close after that only closes',
+        );
+      } finally {
+        HTMLFormElement.prototype.submit = submit;
+      }
+    });
+
+    for (let [name, button] of [
+      ['Cancel', '[data-test-keys-cancel]'],
+      ['Close', '[data-test-keys-close]'],
+    ]) {
+      test(`opened by the CLI, ${name} tells it the swap was cancelled, and swaps nothing`, async function (assert) {
+        let submitted: { action: string; fields: [string, string][] }[] = [];
+        let submit = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function (this: HTMLFormElement) {
+          submitted.push({
+            action: this.action,
+            fields: [...new FormData(this).entries()] as [string, string][],
+          });
+        };
+        try {
+          serve({
+            'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+            'GET _key-shares': shares(SHARE),
+          });
+          visitShell(
+            `swap-key#realm=${encodeURIComponent(REALM)}&share=share-4&cli_port=51234&cli_state=${'c'.repeat(32)}`,
+          );
+          await render(SwapKeyPage);
+          await waitFor('[data-test-swap-key-form]');
+          await click('[data-test-key-choice="Weather service"] input');
+          await click(button!);
+          assert.deepEqual(submitted, [
+            {
+              action: 'http://127.0.0.1:51234/callback',
+              fields: [
+                ['state', 'c'.repeat(32)],
+                ['window_outcome', 'cancelled'],
+              ],
+            },
+          ]);
+          assert.false(
+            requests.some((r) => r.path === '_key-shares/share-4/swap'),
+            'nothing is swapped',
+          );
+          assert.deepEqual(navigations, [], 'the window goes to the CLI');
+        } finally {
+          HTMLFormElement.prototype.submit = submit;
+        }
+      });
+    }
+
+    test('opened without the CLI, offers no Cancel', async function (assert) {
+      serve({
+        'POST _secure-window/context': () => context({ realm: WORKSPACE }),
+        'GET _key-shares': shares(SHARE),
+      });
+      visitShell(`swap-key#realm=${encodeURIComponent(REALM)}&share=share-4`);
+      await render(SwapKeyPage);
+      await waitFor('[data-test-swap-key-form]');
+      assert.dom('[data-test-keys-cancel]').doesNotExist();
+    });
+
     test('a link naming a share the workspace doesn’t have says so and doesn’t offer to try again', async function (assert) {
       serve({
         'POST _secure-window/context': () => context({ realm: WORKSPACE }),
@@ -2284,13 +2450,14 @@ module('Integration | key pages', function (hooks) {
     test('a service account whose details are known starts from the user it acts as and its scopes', async function (assert) {
       const SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
       const DRIVE = 'https://www.googleapis.com/auth/drive.readonly';
+      const CALENDAR = 'https://www.googleapis.com/auth/calendar.events';
       serve({
         'POST _secure-window/context': () => serviceAccountSlot(),
         'GET _user-keys/key-1': () =>
           serviceAccountKey({
             email: 'sheets-bot@boxel-test.iam.gserviceaccount.com',
             subject: 'owner@example.com',
-            scopes: [SHEETS, DRIVE],
+            scopes: [SHEETS, DRIVE, CALENDAR],
           }),
         'PATCH _user-keys/key-1': () =>
           json(200, {
@@ -2312,9 +2479,7 @@ module('Integration | key pages', function (hooks) {
       assert
         .dom('[data-test-service-account-subject]')
         .hasValue('owner@example.com', 'Act as starts as it is');
-      assert
-        .dom('[data-test-service-account-scopes]')
-        .hasValue(`${SHEETS} ${DRIVE}`, 'Scopes start as they are');
+      assertShowsEveryScope(assert, [SHEETS, DRIVE, CALENDAR]);
       assert
         .dom('[data-test-replace-key-save]')
         .isDisabled('the key file is still chosen anew');
@@ -2331,7 +2496,7 @@ module('Integration | key pages', function (hooks) {
         {
           value: SERVICE_ACCOUNT_FILE,
           subject: 'owner@example.com',
-          scopes: [SHEETS, DRIVE],
+          scopes: [SHEETS, DRIVE, CALENDAR],
         },
         'leaving the fields as they are keeps them',
       );

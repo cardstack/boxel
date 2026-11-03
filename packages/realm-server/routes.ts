@@ -167,6 +167,10 @@ import {
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
 import {
+  handleSetKeyShareLimits,
+  handleSetUserKeyLimits,
+} from './handlers/handle-key-limits.ts';
+import {
   handleSecureWindowContext,
   handleSecureWindowRealms,
   handleSecureWindowCards,
@@ -179,6 +183,7 @@ import {
   handleListPlatformClients,
   handleOAuthCallback,
   handleReplacePlatformClient,
+  handleShowPlatformClient,
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
 
@@ -414,6 +419,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
   );
+  router.put(
+    `${USER_KEYS_PATH}/:keyId/limits`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetUserKeyLimits(args),
+  );
   router.post(
     USER_KEY_GRANTS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -478,6 +488,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${KEY_SHARES_PATH}/:shareId/swap`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSwapKeyIntoShare(args),
+  );
+  router.put(
+    `${KEY_SHARES_PATH}/:shareId/limits`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetKeyShareLimits(args),
   );
   router.get(
     KEY_SHARE_NOTICES_PATH,
@@ -714,6 +729,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     PLATFORM_OAUTH_CLIENTS_PATH,
     systemKeysAuthorization,
     handleAddPlatformClient(args),
+  );
+  router.get(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleShowPlatformClient(args),
   );
   router.patch(
     `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
