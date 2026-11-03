@@ -248,7 +248,16 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(added.body.data.type, 'user-key');
       assert.deepEqual(
         Object.keys(added.body.data.attributes).sort(),
-        ['createdAt', 'kind', 'limits', 'name', 'state', 'updatedAt'],
+        [
+          'anonymous',
+          'anonymousDailyCap',
+          'createdAt',
+          'kind',
+          'limits',
+          'name',
+          'state',
+          'updatedAt',
+        ],
         'the response carries metadata only',
       );
       assert.strictEqual(added.body.data.attributes.name, 'weather');

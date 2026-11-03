@@ -6785,6 +6785,9 @@ export class Realm {
               this.#pipelineRequests.has(request)
                 ? { callApiMode: 'pipeline' as const }
                 : {}),
+              ...(definition.base === 'callApi'
+                ? this.#callApiAnonymous(requestContext)
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -7284,6 +7287,7 @@ export class Realm {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
           anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
+          ...this.#callApiAnonymous(requestContext),
           ...lanes,
         },
       );
@@ -7388,6 +7392,9 @@ export class Realm {
           ? { writesDeclinedOutright: true as const }
           : {}),
         ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+        ...(writeCaller?.rateLimitKey
+          ? { callApiAnonymous: { address: writeCaller.rateLimitKey } }
+          : {}),
       };
     }
     return {
@@ -8037,6 +8044,16 @@ export class Realm {
   ): Pick<RunOperationOptions, 'anonymousRequest'> {
     let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
     return anonymousRequest ? { anonymousRequest } : {};
+  }
+
+  // Where a caller the realm admitted without a session called from, which a
+  // `callApi` filled from a share counts them by. Nothing for a signed-in
+  // caller, or for one whose address the realm server couldn't work out.
+  #callApiAnonymous(
+    requestContext: RequestContext,
+  ): Pick<RunOperationOptions, 'callApiAnonymous'> {
+    let address = requestContext.anonymousCaller?.rateLimitKey;
+    return address ? { callApiAnonymous: { address } } : {};
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor
@@ -17247,6 +17264,44 @@ export class Realm {
   // compile.
   async getAnonymousAdmission(): Promise<AnonymousOpenings> {
     return await this.#policyCache.anonymousAdmission();
+  }
+
+  // The operations on `codeRef`'s cards that the realm's policy opens to
+  // callers who aren't signed in and that send a key shared with the realm: a
+  // live grant naming `"anonymous"` on such a `callApi`, in a rule for the
+  // type or one it descends from. The secure window reads it to say which
+  // calls such callers can make through a share. Empty for a realm whose
+  // policy opens none, or won't compile.
+  async sharedKeyOperationsOpenToAnonymous(
+    codeRef: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let policy = await this.getCompiledPolicy();
+    let rules = (policy?.anonymous ? policy.rules : []).filter((rule) =>
+      rule.grants.some((grant) => grant.anonymous?.sendsSharedKey),
+    );
+    if (rules.length === 0) {
+      return [];
+    }
+    let chain: string[];
+    try {
+      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
+    } catch {
+      return [];
+    }
+    let names = new Set<string>();
+    for (let rule of rules) {
+      let keys = await this.#realmIndexQueryEngine.typeKeysFor(rule.targetType);
+      if (!keys.some((key) => chain.includes(key))) {
+        continue;
+      }
+      for (let grant of rule.grants) {
+        if (grant.anonymous?.sendsSharedKey) {
+          names.add(grant.operation);
+        }
+      }
+    }
+    return [...names];
   }
 
   __testOnlyPolicyCacheStats(): {

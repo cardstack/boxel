@@ -4,6 +4,7 @@ date: 2026-10-20
 scope:
   - packages/host/app/**/*motion*
   - packages/host/app/components/operator-mode/**
+  - packages/host/app/components/host-mode/**
   - packages/host/app/components/search-sheet/**
   - packages/host/app/components/pill-menu/**
   - packages/host/app/services/operator-mode-state-service.ts

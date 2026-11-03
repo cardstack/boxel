@@ -41,7 +41,9 @@ export async function listFiles(
     };
   }
 
-  let resolvedRealm = resolveRealmIdentifier(realmUrl, { profileManager: pm });
+  let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
+    profileManager: pm,
+  });
   if (!resolvedRealm.ok) {
     return { filenames: [], error: resolvedRealm.error };
   }

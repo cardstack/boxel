@@ -8,7 +8,11 @@ import {
 import type { Querier } from '@cardstack/runtime-common/expression';
 import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
-import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
+import {
+  consumeKeyWriteTicket,
+  servesVisitorsSQL,
+  UserKeyError,
+} from './user-keys.ts';
 import { moveShareBindingsIn } from './key-bindings.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
 
@@ -249,18 +253,20 @@ async function lockDirectWriters(
 }
 
 // The user's own key, locked against a concurrent delete until the caller's
-// transaction ends. Another user's key answers as one that doesn't exist.
+// transaction ends, with whether it can serve people who aren't signed in
+// and whether its owner lets them. Another user's key answers as one that
+// doesn't exist.
 async function lockOwnKey(
   txQuery: Querier,
   owner: string,
   keyId: string,
-): Promise<void> {
+): Promise<{ anonymous: boolean; servesVisitors: boolean }> {
   let rows = await txQuery([
-    `SELECT kind FROM user_keys WHERE id = `,
+    `SELECT k.kind, k.anonymous, ${servesVisitorsSQL('k', 'c')} AS serves_visitors FROM user_keys k LEFT JOIN oauth_clients c ON c.key_id = k.id WHERE k.id = `,
     param(keyId),
-    ` AND owner = `,
+    ` AND k.owner = `,
     param(owner),
-    ` FOR SHARE`,
+    ` FOR SHARE OF k`,
   ]);
   if (rows.length === 0) {
     throw noSuchKey();
@@ -274,6 +280,10 @@ async function lockOwnKey(
       "a connection is its owner's own sign-in and is never shared: share the OAuth client, and each teammate connects through it",
     );
   }
+  return {
+    anonymous: Boolean(rows[0].anonymous),
+    servesVisitors: Boolean(rows[0].serves_visitors),
+  };
 }
 
 // The share, locked for the caller's change, if `user` may see it: as its
@@ -334,6 +344,17 @@ async function lockVisibleShare(
   }
 }
 
+// Shares a key. Who can use a shared key is the realm's policy's to say, and
+// whether people who aren't signed in may use this key is its owner's, made
+// for the key itself (`anonymous` on the key, see `user-keys.ts`), never when
+// sharing. `opensToAnonymous`, read from the realm's policy by the caller,
+// says whether the realm lets such people make a call that sends a shared
+// key; sharing into it means they will use the key, so a key that doesn't
+// allow them isn't shared there, and a visitor the policy admits when the key
+// is shared is never refused for want of it. The policy is asked only once
+// the ticket and the owner's direct write are checked, so nobody else learns
+// from the answer what it opens. A policy that changes later is a matter for
+// its own audit.
 export async function shareKey(
   dbAdapter: DBAdapter,
   {
@@ -341,12 +362,15 @@ export async function shareKey(
     realm,
     keyId,
     label,
+    opensToAnonymous = async () => false,
     ticket,
   }: {
     owner: string;
     realm: unknown;
     keyId: unknown;
     label: unknown;
+    // Absent where the caller knows the realm opens nothing to such people.
+    opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
     ticket: unknown;
   },
 ): Promise<KeyShare> {
@@ -372,7 +396,20 @@ export async function shareKey(
         'a key is shared only into a realm its owner is a direct writer of',
       );
     }
-    await lockOwnKey(txQuery, owner, keyId);
+    let key = await lockOwnKey(txQuery, owner, keyId);
+    // Refusing rolls the transaction back, so the ticket isn't spent.
+    // A sign-in app never serves someone who isn't signed in, so sharing it
+    // puts it in front of nobody it can't serve.
+    if (
+      key.servesVisitors &&
+      !key.anonymous &&
+      (await opensToAnonymous(realmURL))
+    ) {
+      throw new UserKeyError(
+        400,
+        "this realm's policy lets people who aren't signed in make calls that send a shared key, so sharing a key into it means they will use it, and this key doesn't allow them. Its owner allows it for the key first (the key's page, or `boxel keys anonymous <name> on`)",
+      );
+    }
     let [row] = await txQuery([
       `INSERT INTO key_shares (id, realm_url, label, owner, key_id, state) VALUES (`,
       param(id),
@@ -500,12 +537,17 @@ export async function swapKeyIntoShare(
     keyId,
     ticket,
     via,
+    opensToAnonymous = async () => false,
   }: {
     user: string;
     shareId: string;
     keyId: unknown;
     ticket: unknown;
     via: SecureSessionClient | undefined;
+    // As for sharing: whether the share's realm lets people who aren't
+    // signed in make a call that sends a shared key. Absent where the caller
+    // knows it opens nothing to them.
+    opensToAnonymous?: (realmURL: URL) => Promise<boolean>;
   },
 ): Promise<{ share: KeyShare; reapprovedBindings: string[] }> {
   if (keyId === undefined || keyId === null) {
@@ -533,10 +575,26 @@ export async function swapKeyIntoShare(
     if (row.state !== 'suspended') {
       throw new UserKeyError(409, 'only a suspended share takes another key');
     }
+    // Swapping a key in puts it where sharing would: in a realm that lets
+    // people who aren't signed in use its shared keys, they will use this
+    // one, so it is held to the same rule as sharing.
+    let key = await lockOwnKey(txQuery, user, keyId);
+    if (
+      key.servesVisitors &&
+      !key.anonymous &&
+      (await opensToAnonymous(new URL(row.realm_url as string)))
+    ) {
+      throw new UserKeyError(
+        400,
+        "this realm's policy lets people who aren't signed in make calls that send a shared key, so swapping a key into one of its shares means they will use it, and this key doesn't allow them. Its owner allows it for the key first (the key's page, or `boxel keys anonymous <name> on`)",
+      );
+    }
     // Limits are the key owner's to set, so a share taken over by another
     // writer starts from the platform's defaults rather than spending the new
     // owner's key under limits someone else chose. A writer swapping another
     // of their own keys into their own share keeps the limits they set.
+    // Whether people who aren't signed in may use it follows the key swapped
+    // in, as its owner set it.
     let [updated] = await txQuery([
       `UPDATE key_shares SET `,
       ...[

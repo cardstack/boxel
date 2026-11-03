@@ -66,7 +66,8 @@ export interface AnonymousDispatch {
   // The operations the route invokes, any one of which the policy has to open
   // to such callers. `any` is a route that runs whatever its request names,
   // admitted wherever the policy opens anything; `any-write`, wherever it
-  // opens a write, whether a base operation or one a type declares.
+  // opens something in the write lane: a write, whether a base operation or
+  // one a type declares, or a `callApi`, which travels as one.
   operations: readonly string[] | 'any' | 'any-write';
   // - `once-served`: one unit once the request serves what it asked for
   //   (see `AnonymousCaller.served`).
@@ -249,12 +250,19 @@ export class AnonymousAdmission {
     // A route that runs whatever its request names is admitted wherever the
     // policy opens anything of that kind to such callers, and recorded as `*`.
     let wanted = dispatch.operations;
+    // The write lane carries a `callApi` as well as a write.
+    let inWriteLane = (grant: (typeof opened.grants)[number]) =>
+      grant.anonymous!.writes || grant.anonymous!.sendsOutside === true;
     let operation =
-      wanted === 'any' || wanted === 'any-write'
-        ? (wanted === 'any' ? opened.operations : opened.writes).size > 0
+      wanted === 'any'
+        ? opened.operations.size > 0
           ? '*'
           : undefined
-        : wanted.find((name) => opened.operations.has(name));
+        : wanted === 'any-write'
+          ? opened.writes.size > 0 || opened.grants.some(inWriteLane)
+            ? '*'
+            : undefined
+          : wanted.find((name) => opened.operations.has(name));
     if (operation === undefined) {
       return undefined;
     }
@@ -262,7 +270,7 @@ export class AnonymousAdmission {
       wanted === 'any'
         ? true
         : wanted === 'any-write'
-          ? grant.anonymous!.writes
+          ? inWriteLane(grant)
           : wanted.includes(grant.operation),
     );
     let ipText = request.headers.get(CLIENT_IP_HEADER);

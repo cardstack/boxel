@@ -19,6 +19,7 @@
       "Integration | a realm that checks permissions"
     ],
     "realmServer": [
+      "anonymous-key-use-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "realm-endpoints/search-test",

@@ -7,6 +7,11 @@
 // derives one. A workspace the user can no longer read has no name, and is
 // shown by its address alone.
 //
+// A key that can be shared also says whether people who aren't signed in can
+// use it, with its anonymous cap, and offers to change that
+// (`@onChangeAnonymousUse`). It is the key's own setting: a workspace it is
+// shared into decides only whether such people can use its cards there.
+//
 // Each workspace can be unshared. Unshare asks first, saying what stops, and
 // then hands the key and the workspace to `@onUnshare`, which takes the key's shares
 // there out and answers whether it did. The key stays shared everywhere else.
@@ -18,8 +23,10 @@ import { trackedObject } from '@ember/reactive/collections';
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
+import Users from '../../components/icons/users.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
+import { anonymousUseSummary } from './anonymous-use-fields.gts';
 import type { ListedKey, SharedWorkspace } from './context.ts';
 import { addressOf } from './workspace-dropdown.gts';
 
@@ -27,6 +34,9 @@ interface Signature {
   Args: {
     key: ListedKey;
     onUnshare: (key: ListedKey, workspace: SharedWorkspace) => Promise<boolean>;
+    // Given for a key that can be shared: changing whether people who aren't
+    // signed in can use it.
+    onChangeAnonymousUse?: (key: ListedKey) => void;
   };
   // Rows of the key's own, such as an OAuth key's details, listed first.
   Blocks: { default: [] };
@@ -148,6 +158,24 @@ export default class KeyUse extends Component<Signature> {
           <p class='use-text none'>Not shared with any workspace</p>
         {{/if}}
       </div>
+      {{#if @onChangeAnonymousUse}}
+        <div class='use-row' data-test-key-anonymous-use>
+          <Users class='use-icon' aria-hidden='true' />
+          <div class='anonymous'>
+            <p class='use-text' data-test-key-anonymous-use-summary>
+              {{anonymousUseSummary @key}}
+            </p>
+            <Button
+              type='button'
+              @kind='secondary'
+              @size='extra-small'
+              aria-label='Change whether people who aren’t signed in can use {{@key.name}}'
+              data-test-key-anonymous-use-change
+              {{on 'click' (fn @onChangeAnonymousUse @key)}}
+            >Change</Button>
+          </div>
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
@@ -182,6 +210,12 @@ export default class KeyUse extends Component<Signature> {
       .heading,
       .workspace-name {
         font-weight: 600;
+      }
+      .anonymous {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        align-items: start;
       }
       .workspaces {
         list-style: none;

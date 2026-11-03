@@ -90,6 +90,12 @@ jobs:
       #                 (TargetGroupArn's trailing `targetgroup/<name>/<hash>` segment)
       REALM_SERVER_LOG_GROUP_NAME: ecs-boxel-realm-server-production
       REALM_SERVER_LOG_GROUP_ACCOUNT_ID: "120317779495"
+      # The secrets key's Decrypt log group (keys-group.json), which
+      # cardstack/infra:configs/boxel-secrets-kms names `/aws/events/<env>-boxel-secrets-decrypts`.
+      SECRETS_DECRYPTS_LOG_GROUP_NAME: /aws/events/production-boxel-secrets-decrypts
+      SECRETS_DECRYPTS_LOG_GROUP_ACCOUNT_ID: "120317779495"
+      # The environment in its task role names, `boxel-<service>-<env>-ecs-task`.
+      SECRETS_DECRYPTS_ENV: production
       REALM_SERVER_ALB_FULL_NAME: app/boxel-realm-server-production/e1d83dcf1a10d92f
       REALM_SERVER_TARGET_GROUP_FULL_NAME: targetgroup/boxel-realm-server-production/f5582cefd78674e5
 
