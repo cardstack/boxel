@@ -81,7 +81,7 @@ const BOOTSTRAP = `
       operations: Object.freeze({
         invoke: (path, name, payload) =>
           call('operations.invoke', [path, name, payload]),
-        invokeAtomic: (entries) => call('operations.invokeAtomic', [entries]),
+        invokeBatchOperation: (entries) => call('operations.invokeBatchOperation', [entries]),
       }),
       entries: Object.freeze({
         search: (query, options) =>
@@ -178,7 +178,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'cards.get',
   'cards.update',
   'operations.invoke',
-  'operations.invokeAtomic',
+  'operations.invokeBatchOperation',
   'entries.search',
   'fs.delete',
   'capture',

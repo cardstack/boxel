@@ -478,7 +478,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   // by write access to the workspace, so it can run where the user can only
   // read. The realm refuses one the policy does not allow.
   'operations.invoke': false,
-  'operations.invokeAtomic': false,
+  'operations.invokeBatchOperation': false,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -1234,11 +1234,11 @@ class RealmFsSession {
         let [answer] = await this.runOperationEntries([entry], false);
         return answer;
       }
-      case 'operations.invokeAtomic': {
+      case 'operations.invokeBatchOperation': {
         let list = args[0];
         if (!Array.isArray(list) || list.length === 0) {
           throw new TypeError(
-            'realm.operations.invokeAtomic expects a non-empty array of { path, operation, payload } entries',
+            'realm.operations.invokeBatchOperation expects a non-empty array of { path, operation, payload } entries',
           );
         }
         let entries = list.map((item: unknown) => {
@@ -1248,7 +1248,7 @@ class RealmFsSession {
             Array.isArray(item)
           ) {
             throw new TypeError(
-              'each realm.operations.invokeAtomic entry is { path, operation, payload }',
+              'each realm.operations.invokeBatchOperation entry is { path, operation, payload }',
             );
           }
           let { path, operation, payload } = item as Record<string, unknown>;
@@ -1757,6 +1757,14 @@ class RealmFsSession {
 
   // Sends the operations at once, not when the script finishes: the realm
   // can refuse one, and the script reads the answer.
+  //
+  // invoke and invokeBatchOperation both reach the realm's `_operations`
+  // endpoint, not `_atomic`: the realm applies each declaration and its policy
+  // authorizes each entry. They differ in what one failure leaves behind. A
+  // loop of invoke is one request per card, each committed on its own, so
+  // when card 40 of 100 is refused, cards 1 to 39 stay changed. A batch is one
+  // request, one commit under one write lock and one indexing pass, and the
+  // realm carries out every entry or none.
   private async runOperationEntries(
     entries: OperationEntry[],
     atomic: boolean,
@@ -2747,11 +2755,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'cards with realm.cards.search, reads cards as JSON data with ' +
     'realm.cards.get, changes card fields with realm.cards.update, runs ' +
     'the operations a card type declares (its @operation statics) with ' +
-    'realm.operations.invoke(path, operation, payload), or several as one ' +
-    'all-or-nothing batch with realm.operations.invokeAtomic([{ path, operation, ' +
-    'payload }]) for a bulk change (prefer them over realm.cards.update when ' +
-    'the type declares one for the change; each runs at once and answers ' +
-    '{ path, operation, id, version } for a write), finds ' +
+    'realm.operations.invoke(path, operation, payload), or several in one ' +
+    'request with realm.operations.invokeBatchOperation([{ path, operation, ' +
+    'payload }]) (prefer them over realm.cards.update when the type ' +
+    'declares one for the change; each runs at once and answers { path, ' +
+    'operation, id, version } for a write). invoke in a loop sends one ' +
+    'request per card, and when one fails the cards before it stay ' +
+    'changed; invokeBatchOperation sends all of them in one request that ' +
+    'the realm carries out whole or not at all, so use it when the changes ' +
+    'must go together or there are many cards. finds ' +
     'cards, specs and files across realms with ' +
     'realm.entries.search, can look at cards and files with realm.capture ' +
     '(a path in the realm, or the URL of a card or file in any workspace ' +
@@ -3662,9 +3674,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     let answers: unknown[];
     if (atomic) {
-      // The batch is opened on the first card; every other card joins it by
-      // `on`, and must be in the same realm, since a batch commits under one
-      // realm's write lock.
+      // One `_operations` request with every entry, carried out whole or not
+      // at all. The batch is opened on the first card; every other card joins
+      // it by `on`, and must be in the same realm, since a batch commits under
+      // one realm's write lock.
       let first = cards[0];
       let atomicOf = bucketFor(first)[BATCH_MEMBER] as (
         build: (builder: any) => unknown[],

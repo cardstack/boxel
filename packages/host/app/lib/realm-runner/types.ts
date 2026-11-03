@@ -15,7 +15,7 @@ export type RealmRunnerCallMethod =
   | 'cards.get'
   | 'cards.update'
   | 'operations.invoke'
-  | 'operations.invokeAtomic'
+  | 'operations.invokeBatchOperation'
   | 'entries.search'
   | 'fs.delete'
   | 'capture'

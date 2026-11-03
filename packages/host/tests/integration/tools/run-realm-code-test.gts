@@ -5533,7 +5533,7 @@ return await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' 
 
     // The example the realm runner is for: find the patients of a ward, then
     // record their vitals in one batch that the realm carries out whole.
-    test('realm.operations.invokeAtomic updates many patients in one batch', async function (assert) {
+    test('realm.operations.invokeBatchOperation updates many patients in one batch', async function (assert) {
       let result = await run(`
 let found = await realm.cards.search({
   filter: {
@@ -5541,7 +5541,7 @@ let found = await realm.cards.search({
     eq: { ward: 'Cardiology' },
   },
 });
-let answers = await realm.operations.invokeAtomic(
+let answers = await realm.operations.invokeBatchOperation(
   found.cards.map((patient) => ({
     path: patient.path,
     operation: 'recordVitals',
@@ -5573,10 +5573,12 @@ return answers.map((answer) => answer.path).sort();`);
       );
     });
 
+    // Ana's entry is correct and Ben's has no reading. A loop of invoke would
+    // change Ana and then fail on Ben; the batch changes neither.
     test('a batch with one bad entry changes no card', async function (assert) {
       let result = await run(`
 try {
-  await realm.operations.invokeAtomic([
+  await realm.operations.invokeBatchOperation([
     { path: 'Patient/ana', operation: 'recordVitals', payload: { reading: 'HR 80' } },
     { path: 'Patient/ben', operation: 'recordVitals', payload: {} },
   ]);
