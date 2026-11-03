@@ -63,11 +63,6 @@ export interface TaskArgs {
   // `prerender_html` job. A test harness affordance, empty everywhere else —
   // see `--skipPrerenderHtmlRealm` in realm-server/worker.ts for what it costs.
   skipPrerenderHtmlRealms?: string[];
-  // The delays an index or prerender-html pass re-reads a file through when
-  // it reads as missing although the pass expects it (see
-  // WRITTEN_FILE_REREAD_DELAYS_MS). A test harness affordance for readers that
-  // hold no files; unset everywhere else.
-  writtenFileRereadDelaysMs?: readonly number[];
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth: CreatePrerenderAuth;
