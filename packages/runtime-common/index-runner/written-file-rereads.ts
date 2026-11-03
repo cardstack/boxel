@@ -5,10 +5,9 @@
 // filesystem, and the instance that answers a read can still hold a cached
 // "this name is not here" from a lookup it made just before another instance
 // wrote the file. The cross-instance directory refresh (see
-// DirectoryViewRefresher) clears that entry in most cases. It does not when
-// the answering instance had itself written into the same directory moments
-// earlier: the entry then lasts until the kernel's attribute cache for the
-// directory expires, which takes anywhere from under a second to a minute.
+// DirectoryViewRefresher) usually clears that entry, but not always, and an
+// entry it leaves behind lasts until the kernel's attribute cache for the
+// directory expires: anywhere from under a second to a minute.
 // Taking the first miss as a removal drops a file the realm just wrote from
 // the index, and nothing indexes it again until the file changes. Re-reading
 // through that window is what keeps the file.
