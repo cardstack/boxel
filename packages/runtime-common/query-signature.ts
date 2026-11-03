@@ -5,6 +5,7 @@ import {
   normalizeQueryForSignature,
   type Query,
 } from './query.ts';
+import { rri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 // A spelling-tolerant identity signature for a query. Two queries that differ
@@ -75,7 +76,7 @@ function canonicalizeNode(
     // A code-ref-shaped node ({ module, name }) — `on`/`type` gates and sort
     // entries — compares by its resolved module identity.
     if (typeof out.module === 'string' && typeof out.name === 'string') {
-      out.module = canonicalModuleKey(out.module, virtualNetwork);
+      out.module = canonicalModuleKey(rri(out.module), virtualNetwork);
     }
     return out;
   }
@@ -102,7 +103,7 @@ function canonicalizeReferenceValue(
   virtualNetwork: VirtualNetwork,
 ): unknown {
   if (typeof value === 'string') {
-    return canonicalModuleKey(value, virtualNetwork);
+    return canonicalModuleKey(rri(value), virtualNetwork);
   }
   if (Array.isArray(value)) {
     return value.map((entry) =>

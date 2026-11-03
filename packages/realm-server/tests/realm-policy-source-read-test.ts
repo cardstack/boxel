@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
-import { writeFileSync } from 'fs';
+import { unlinkSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
@@ -1689,41 +1689,357 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a module compiled for a granted caller shares no cache with a reader', async function (assert) {
+      test('a granted caller is served the module a reader compiled', async function (assert) {
         await policy('anyCode');
-        // A reader's compile fills the module cache, and answers nobody the
-        // gate admitted.
-        await get(MODULE_SOURCE, '*/*', AS.reader());
-        let warmed = await get(MODULE_SOURCE, '*/*', AS.reader());
-        assert.strictEqual(
-          warmed.get('x-boxel-cache'),
-          'hit',
-          "a reader's second read is answered from the cache",
-        );
+        let read = await get(MODULE_SOURCE, '*/*', AS.reader());
+        let compiles = education.__testOnlyGetTranspileCallCount();
         let granted = await get(MODULE_SOURCE, '*/*', AS.teacher());
         assert.strictEqual(granted.status, 200, 'the granted caller reads it');
         assert.strictEqual(
           granted.get('x-boxel-cache'),
-          'miss',
-          'compiled for them rather than answered from the cache',
+          'hit',
+          "from the module cache the reader's compile filled",
         );
-        // A granted caller's compile is left nowhere a reader reads.
-        education.__testOnlyClearCaches();
-        let compiles = education.__testOnlyGetTranspileCallCount();
-        await get(TS_MODULE, '*/*', AS.teacher());
-        await get(TS_MODULE, '*/*', AS.teacher());
         assert.strictEqual(
           education.__testOnlyGetTranspileCallCount() - compiles,
-          2,
-          'each of their reads compiles the module',
+          0,
+          'without a compile of their own',
         );
+        assert.strictEqual(
+          textOf(granted),
+          textOf(read),
+          'the module a reader imports',
+        );
+        assert.true(
+          /^private\b/.test(granted.get('cache-control') ?? ''),
+          'served privately',
+        );
+        // Past the in-memory cache, the module is in the transpile cache.
         compiles = education.__testOnlyGetTranspileCallCount();
+        let fromRow = await get(MODULE_SOURCE, '*/*', AS.teacher(), {
+          'X-Boxel-Disable-Module-Cache': 'true',
+        });
+        assert.strictEqual(fromRow.status, 200, 'read again');
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount() - compiles,
+          0,
+          'from the transpile cache, without a compile',
+        );
+        assert.strictEqual(textOf(fromRow), textOf(read), 'the same module');
+        assert.true(
+          /^private\b/.test(fromRow.get('cache-control') ?? ''),
+          'and privately',
+        );
+      });
+
+      test("a granted caller's compile fills the caches a reader reads", async function (assert) {
+        await policy('anyCode');
+        education.__testOnlyClearCaches();
+        let granted = await get(TS_MODULE, '*/*', AS.teacher());
+        assert.strictEqual(granted.status, 200, 'the granted caller reads it');
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount(),
+          1,
+          'compiled for their read',
+        );
+        let read = await get(TS_MODULE, '*/*', AS.reader());
+        assert.strictEqual(
+          read.get('x-boxel-cache'),
+          'hit',
+          'a reader is answered from the cache their compile filled',
+        );
+        assert.strictEqual(
+          read.get('cache-control'),
+          'public, max-age=0',
+          'with the headers a reader is always served',
+        );
+        let again = await get(TS_MODULE, '*/*', AS.teacher());
+        assert.strictEqual(
+          again.get('x-boxel-cache'),
+          'hit',
+          'as is the next granted caller',
+        );
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount(),
+          1,
+          'one compile serves all three',
+        );
+      });
+
+      test('a granted caller and a reader asking at once share one compile', async function (assert) {
+        await policy('anyCode');
+        education.__testOnlyClearCaches();
+        let release!: () => void;
+        let parked = new Promise<void>((resolve) => (release = resolve));
+        education.__testOnlyDelayTranspile(() => parked);
+        try {
+          let granted = get(TS_MODULE, '*/*', AS.teacher()).then((r) => r);
+          let waitedFor = Date.now();
+          while (education.__testOnlyGetInFlightTranspileCount() === 0) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error("the granted caller's compile never started");
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          let read = get(TS_MODULE, '*/*', AS.reader()).then((r) => r);
+          while (education.__testOnlyGetTranspileJoinCount() === 0) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error(
+                "the reader never joined the granted caller's compile",
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          release();
+          let [grantedResponse, readResponse] = await Promise.all([
+            granted,
+            read,
+          ]);
+          assert.strictEqual(grantedResponse.status, 200, 'the granted caller');
+          assert.strictEqual(readResponse.status, 200, 'and the reader');
+          assert.strictEqual(
+            textOf(grantedResponse),
+            textOf(readResponse),
+            'are served the same module',
+          );
+          assert.true(
+            /^private\b/.test(grantedResponse.get('cache-control') ?? ''),
+            'privately to the granted caller',
+          );
+          assert.strictEqual(
+            readResponse.get('cache-control'),
+            'public, max-age=0',
+            'as always to the reader',
+          );
+          assert.strictEqual(
+            education.__testOnlyGetTranspileCallCount(),
+            1,
+            'from one compile',
+          );
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('a caller the gate refuses reaches no cache and costs no compile', async function (assert) {
+        await policy('codeForTeacher');
+        education.__testOnlyClearCaches();
+        let cold = await get(MODULE_SOURCE, '*/*', AS.colleague());
+        assert.strictEqual(cold.status, 404, 'refused while nothing is cached');
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount(),
+          0,
+          'without a compile',
+        );
+        await get(MODULE_SOURCE, '*/*', AS.teacher());
+        let compiles = education.__testOnlyGetTranspileCallCount();
+        let warm = await get(MODULE_SOURCE, '*/*', AS.colleague());
+        assert.strictEqual(warm.status, 404, 'and once it is');
+        assertSameAnswer(
+          assert,
+          warm,
+          await get(GONE_MODULE_SOURCE, '*/*', AS.colleague()),
+          {
+            actual: nameOf(MODULE_SOURCE),
+            expected: nameOf(GONE_MODULE_SOURCE),
+          },
+          'as a missing module is',
+        );
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount() - compiles,
+          0,
+          'still without a compile',
+        );
+      });
+
+      test('a granted caller is not served a module from memory that is not the version the gate judged', async function (assert) {
+        await policy('anyCode');
         await get(TS_MODULE, '*/*', AS.reader());
+        // New bytes the realm is not told about, so the reader's compile of
+        // the old ones stays in memory under the name.
+        storeUnindexed('format.ts', "export const format = 'rewritten';\n");
+        let compiles = education.__testOnlyGetTranspileCallCount();
+        let granted = await get(TS_MODULE, '*/*', AS.teacher());
+        assert.strictEqual(granted.status, 200, 'the granted caller reads it');
+        assert.strictEqual(
+          granted.get('x-boxel-cache'),
+          'miss',
+          'not from the entry compiled from the old bytes',
+        );
+        assert.true(
+          textOf(granted).includes('rewritten'),
+          'but compiled from the bytes on disk',
+        );
         assert.strictEqual(
           education.__testOnlyGetTranspileCallCount() - compiles,
           1,
-          "and a reader's next read finds nothing they left, and compiles it",
+          'in a compile of its own',
         );
+      });
+
+      // Two modules one import name resolves to, the `.ts` ahead of the
+      // `.gts`, and a grant that opens only the `.gts`.
+      async function twins(tsSource = "export const twin = 'from-ts';\n") {
+        await policy('gtsCode');
+        await education.write('twin.ts', tsSource);
+        await education.write('twin.gts', "export const twin = 'from-gts';\n");
+        await education.indexing();
+        education.__testOnlyClearCaches();
+      }
+
+      // Parks the first compile, of the reader's import of `twin`, until the
+      // returned release is called. Later compiles run at once.
+      async function parkReadersCompile() {
+        let release!: () => void;
+        let parked = new Promise<void>((resolve) => (release = resolve));
+        let calls = 0;
+        education.__testOnlyDelayTranspile(() =>
+          calls++ === 0 ? parked : Promise.resolve(),
+        );
+        let read = get(`${EDUCATION}twin`, '*/*', AS.reader()).then((r) => r);
+        let waitedFor = Date.now();
+        while (calls === 0) {
+          if (Date.now() - waitedFor > 10_000) {
+            throw new Error("the reader's compile never started");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        return { read, release };
+      }
+
+      test('a granted caller who joins a compile of another file under the same name is not served it', async function (assert) {
+        await twins();
+        let { read, release } = await parkReadersCompile();
+        try {
+          // The `.ts` goes without the realm hearing of it, so the compile
+          // in flight under `twin` stays where a request for the name finds
+          // it.
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let granted = get(`${EDUCATION}twin`, '*/*', AS.teacher()).then(
+            (r) => r,
+          );
+          let waitedFor = Date.now();
+          while (education.__testOnlyGetTranspileJoinCount() === joins) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error(
+                "the granted caller never joined the reader's compile",
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          release();
+          let response = await granted;
+          assert.strictEqual(response.status, 200, 'the granted caller');
+          assert.true(
+            response.get('x-boxel-canonical-path')?.endsWith('/twin.gts'),
+            'is served the module the gate judged',
+          );
+          assert.true(
+            textOf(response).includes('from-gts'),
+            'compiled from the `.gts`',
+          );
+          assert.false(
+            textOf(response).includes('from-ts'),
+            "and not the compile of the `.ts` they joined, which their grant doesn't open",
+          );
+          await read;
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('a granted caller who joins a failed compile of another file under the same name is served the file the gate judged', async function (assert) {
+        await twins("export const twin = 'from-ts' +;\n");
+        let { read, release } = await parkReadersCompile();
+        try {
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let granted = get(`${EDUCATION}twin`, '*/*', AS.teacher()).then(
+            (r) => r,
+          );
+          let waitedFor = Date.now();
+          while (education.__testOnlyGetTranspileJoinCount() === joins) {
+            if (Date.now() - waitedFor > 10_000) {
+              throw new Error(
+                "the granted caller never joined the reader's compile",
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          release();
+          assert.notStrictEqual(
+            (await read).status,
+            200,
+            "the reader's compile of the `.ts` fails",
+          );
+          let response = await granted;
+          assert.strictEqual(
+            response.status,
+            200,
+            'the granted caller is not answered with its failure',
+          );
+          assert.true(
+            textOf(response).includes('from-gts'),
+            'but with the module the gate judged',
+          );
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test("a file's invalidation drops the compile in flight under its import name", async function (assert) {
+        await twins();
+        let { read, release } = await parkReadersCompile();
+        try {
+          // The `.ts` is deleted where the realm hears of it only by path, as
+          // it hears of a change another server made.
+          unlinkSync(join(realmsRootPath, 'realm_0', 'twin.ts'));
+          education.invalidateCache('twin.ts');
+          let joins = education.__testOnlyGetTranspileJoinCount();
+          let settled = false;
+          let pending = get(`${EDUCATION}twin`, '*/*', AS.reader()).then(
+            (r) => {
+              settled = true;
+              return r;
+            },
+          );
+          // Answered while the old compile is still parked, or parked behind
+          // it after joining it: one or the other, whichever comes first.
+          let waitedFor = Date.now();
+          while (
+            !settled &&
+            education.__testOnlyGetTranspileJoinCount() === joins &&
+            Date.now() - waitedFor < 10_000
+          ) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          assert.strictEqual(
+            education.__testOnlyGetTranspileJoinCount() - joins,
+            0,
+            'a reader asking for the name after the invalidation starts a compile of its own',
+          );
+          release();
+          let after = await pending;
+          assert.true(
+            textOf(after).includes('from-gts'),
+            'of the module the name resolves to now',
+          );
+          release();
+          await read;
+          let later = await get(`${EDUCATION}twin`, '*/*', AS.reader());
+          assert.strictEqual(later.get('x-boxel-cache'), 'hit', 'cached');
+          assert.true(
+            textOf(later).includes('from-gts'),
+            'and what the cache holds under the name is that module',
+          );
+        } finally {
+          release();
+          education.__testOnlyDelayTranspile(undefined);
+        }
       });
 
       test("a granted caller's validator is honored once the gate admits them", async function (assert) {

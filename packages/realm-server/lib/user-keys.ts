@@ -20,6 +20,11 @@ import {
   serializeGoogleServiceAccount,
 } from './outbound/google-service-account.ts';
 import { clearKeyRejected, clearKeyRejections } from './key-grant-rejection.ts';
+import {
+  KEY_LIMIT_COLUMNS,
+  limitsOf,
+  type KeyLimits,
+} from './key-limit-settings.ts';
 
 // Keys that belong to people. Every key has one owner, the user who created
 // it, and only that owner lists, shows, replaces or deletes it. A key's value
@@ -100,6 +105,9 @@ export interface UserKeyMetadata {
   updatedAt: string;
   // Only a google-service-account key has one.
   serviceAccount?: ServiceAccountDetails;
+  // How much of the key its owner's own interactive calls may spend, their
+  // settings with the platform's defaults filled in.
+  limits: KeyLimits;
 }
 
 // What a google-service-account key acts as, none of it secret: the service
@@ -446,7 +454,7 @@ export function grantCopyBinding({
 // sealed value: they carry the `updated_at` of the statement that wrote them,
 // and anything that seals a new value without writing them moves `updated_at`
 // past that stamp.
-const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current`;
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at, service_account_email, service_account_subject, service_account_scopes, (service_account_details_at IS NOT DISTINCT FROM updated_at) AS service_account_current, ${KEY_LIMIT_COLUMNS}`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
@@ -456,6 +464,7 @@ function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
+    limits: limitsOf(row),
     ...(typeof row.service_account_email === 'string' &&
     row.service_account_current
       ? {

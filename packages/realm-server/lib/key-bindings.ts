@@ -61,6 +61,7 @@ import {
   markKeyRejected,
   probeDue,
 } from './key-grant-rejection.ts';
+import { chargeInteractiveCall, type LimitSubject } from './key-limits.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
 // to send a chosen key in one of the operation's credential slots. Card code
@@ -90,6 +91,10 @@ import {
 //   AI assistant, the CLI — is refused `interactive-use-not-approved`, since
 //   no binding is approved for interactive use. A pipeline the realm server
 //   runs as its payer (`Realm.handlePipeline`) is served.
+// - **Within the owner's limits.** An interactive call counts against the
+//   limits of the share or key filling each slot, and is refused
+//   `rate-limited`, `over-budget` or `rate-limit-unavailable` before anything
+//   is opened (`key-limits.ts`). A pipeline's call doesn't count.
 // - **Approved only on the secure origin.** Approving and revoking take a
 //   session signed in on the secure origin, from the secure window or the CLI
 //   (`handle-key-bindings.ts`), never the app page's session, which card code
@@ -1178,7 +1183,11 @@ function checkSlot(
 //
 // A call claims a rejected grant's or key's probe when one is due
 // (`claimProbe: true`); an admission only asks whether one is due, so a run
-// that would probe is admitted and one that would be refused is not.
+// that would probe is admitted and one that would be refused is not. A call
+// (`claimProbe: true`) that arrived interactively is counted against the
+// limits of the shares and keys filling its slots once every slot has passed
+// its checks, and before any probe is claimed, so a call refused for a limit
+// uses up no probe.
 async function checkedBindings(
   dbAdapter: DBAdapter,
   lookup: CallApiSlotLookup,
@@ -1275,6 +1284,14 @@ async function checkedBindings(
     }
     checked.push({ slot, binding: check.binding, probe, keyProbe });
   }
+  if (rejection.claimProbe && lookup.mode === 'interactive') {
+    await chargeInteractiveCall(dbAdapter, {
+      realmURL: lookup.realmURL,
+      operation: lookup.operation,
+      caller: lookup.caller,
+      subjects: checked.map(({ binding }) => limitSubjectOf(binding)),
+    });
+  }
   if (rejection.claimProbe && (rejected.size > 0 || rejectedKeys.size > 0)) {
     // Two slots can send under one grant, and two grants of one key share
     // the key's one probe; one claim covers each. A claim is the check again,
@@ -1294,6 +1311,16 @@ async function checkedBindings(
     });
   }
   return checked;
+}
+
+// What a slot's use counts against: the share it is filled from, or the
+// personal key it is filled with.
+export function limitSubjectOf(
+  binding: Pick<CheckedSlotBinding, 'share_id' | 'key_id'>,
+): LimitSubject {
+  return binding.share_id
+    ? { kind: 'share', id: binding.share_id }
+    : { kind: 'key', id: binding.key_id! };
 }
 
 // A binding that passed every check, with whether the call is the probe of

@@ -14,8 +14,8 @@ import {
   StringField,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import { Skill } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/card-api';
+import { Skill } from '@cardstack/base/skill';
 
 export class WeatherLocationInput extends CardDef {
   @field location = contains(StringField);

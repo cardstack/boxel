@@ -53,9 +53,9 @@ reindexing controls, catalog/listing operations, and more.
 - `/components` — `Button`, `Pill`, `Avatar`, `BoxelInput`, `BoxelSelect`,
   `CardContainer`, `Modal`, `Drawer`, `Toast`, `FieldContainer`,
   `KanbanPlane` (+ drag/drop helpers), and more.
-- `/helpers` — logic (`eq`, `cn`, `gt`, `and`, `or`, …), formatters
-  (`formatDateTime`, `formatNumber`, `formatCurrency`,
-  `formatRelativeTime`, …), `markdownEscape`.
+- `/helpers` — `cn`, formatters (`formatDateTime`, `formatNumber`,
+  `formatCurrency`, `formatRelativeTime`, …), `markdownEscape`. Logic
+  helpers (`eq`, `gt`, `and`, `or`, …) come from `@cardstack/pretui/helpers`.
 - `/icons/<name>` — curated icon set; broader set at `@cardstack/boxel-icons/<name>`.
 
 ### 5. CardContext — `@context` in templates

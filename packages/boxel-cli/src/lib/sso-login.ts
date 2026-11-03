@@ -151,6 +151,10 @@ export interface PostedSecureSession {
 //   `boxel keys connect` started: the service's one-use code and the
 //   sign-in's state, which the CLI finishes with its own secure session, or
 //   why the sign-in ended without them.
+// - a page of the secure window the CLI opened to finish a change there (an
+//   approval that grants a key a new destination, or a swap that does),
+//   POSTing how it ended. It carries no session and no result to act on: the
+//   CLI reads what changed from the realm server.
 export type LoopbackResult =
   | {
       kind: 'loginToken';
@@ -162,7 +166,15 @@ export type LoopbackResult =
   | {
       kind: 'oauth';
       outcome: { code: string; state: string } | { error: string };
-    };
+    }
+  | { kind: 'window'; outcome: WindowOutcome };
+
+// How a page of the secure window the CLI opened ended: the change it was
+// opened for was made (`done`), or the user cancelled or closed the window
+// first (`cancelled`). Only the realm server says what changed.
+export type WindowOutcome = 'done' | 'cancelled';
+
+const WINDOW_OUTCOMES: readonly string[] = ['done', 'cancelled'];
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -265,6 +277,24 @@ export async function startLoopbackCallback(opts?: {
           res,
           'This sign-in request was not recognized.',
           'callback did not carry the expected state value',
+        );
+        return;
+      }
+
+      if (posted?.has('window_outcome')) {
+        const outcome = posted.get('window_outcome') ?? '';
+        if (!WINDOW_OUTCOMES.includes(outcome)) {
+          fail(
+            res,
+            'That response from the secure window was not recognized.',
+            'callback POST named an unknown window_outcome',
+          );
+          return;
+        }
+        succeed(
+          res,
+          { kind: 'window', outcome: outcome as WindowOutcome },
+          'Back to your terminal',
         );
         return;
       }

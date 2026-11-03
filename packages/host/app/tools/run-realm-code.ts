@@ -37,6 +37,10 @@ import {
 } from '@cardstack/runtime-common/ai/debug';
 
 import {
+  recordCatalogSearch,
+  type CatalogSearch,
+} from '../lib/catalog-search-telemetry';
+import {
   generateImage,
   IMAGE_EXTENSION_RE,
   IMAGE_FILE_EXTENSIONS,
@@ -108,6 +112,7 @@ import OpenWorkspaceTool from './open-workspace';
 import PreviewFormatTool from './preview-format';
 import {
   composeSearchEntriesQuery,
+  resolveSearchEntryScope,
   searchEntrySummaries,
   type EntrySummary,
   type SearchEntriesFn,
@@ -124,6 +129,7 @@ import type {
 } from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
@@ -451,6 +457,13 @@ type SearchCards = (
 // relative to `base` — to a URL.
 type ResolveURL = (reference: string, base?: string) => string;
 
+// Told about each realm.entries.search that was sent: what it asked for, the
+// realms it was sent to, and what it found or the error it ended with. A
+// query refused before it is sent is not reported.
+type RecordEntriesSearch = (
+  search: Pick<CatalogSearch, 'query' | 'realms' | 'found' | 'error'>,
+) => void;
+
 // One card a search found, as plain data. `id` is the card's URL and `path`
 // its file relative to the realm root, which `realm.fs` takes. The type and
 // links are full URLs, so a type can go back into a query's `on` or `type`.
@@ -595,6 +608,10 @@ class RealmFsSession {
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
     private searchEntries: SearchEntriesFn,
+    // The realms a search of `realms` is sent to, none when the room's feature
+    // gate keeps out every realm it would reach. Refuses a realm identifier
+    // that names no realm the host knows.
+    private resolveSearchRealms: (realms: string[] | undefined) => string[],
     captureURL: CaptureURL,
     // Whether a URL or card id is held by this realm itself rather than by
     // another workspace, including one nested under this realm's URL.
@@ -609,6 +626,7 @@ class RealmFsSession {
     private cardSizeLimitBytes: number,
     readonly room: RoomActions,
     private research: Research,
+    private recordEntriesSearch: RecordEntriesSearch,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -1714,22 +1732,46 @@ class RealmFsSession {
         : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
     let query = pruneEmptyQueryParts(rawQuery as Query);
     assertQuery(query);
-    let { rows, total, incomplete } = await searchEntrySummaries(
-      this.searchEntries,
-      query,
-      { scope, limit: size, realms: realms as string[] | undefined },
-    );
+    // Refused here rather than in the search, so a call refused before
+    // anything is sent is not reported as a failed search.
+    resolveSearchEntryScope(scope);
+    let searchRealms = this.resolveSearchRealms(realms as string[] | undefined);
+    if (searchRealms.length === 0) {
+      return { entries: [], total: 0, truncated: false, incomplete: false };
+    }
+    let found;
+    try {
+      found = await searchEntrySummaries(this.searchEntries, query, {
+        scope,
+        limit: size,
+        realms: searchRealms,
+      });
+    } catch (error) {
+      this.recordEntriesSearch({ query, realms: searchRealms, error });
+      throw error;
+    }
+    let { rows, total, incomplete, realmTotals } = found;
+    let record = (error?: unknown) =>
+      this.recordEntriesSearch({
+        query,
+        realms: searchRealms,
+        found: { total, realmTotals, rowURLs: rows.map((row) => row.url) },
+        error,
+      });
     let resultSize = 0;
     for (let [index, row] of rows.entries()) {
       resultSize += JSON.stringify(row).length;
       if (resultSize > MAX_ENTRY_RESULT_SIZE) {
-        throw new Error(
+        let error = new Error(
           index > 0
             ? `These entries are too large to return; search again with limit ${index} or less`
             : `The entry ${row.url} is too large to return from a search`,
         );
+        record(error);
+        throw error;
       }
     }
+    record();
     for (let row of rows) {
       let seen = this.found.get(row.url);
       if (!seen || (row.matchRelevance ?? 0) > (seen.matchRelevance ?? 0)) {
@@ -2479,6 +2521,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -2671,8 +2714,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let callDeadlineMs = CALL_DEADLINE_MS + extraTime;
     // The room's features can't change during a run, so read them once, on
     // the first search: reading the room's events loads the room.
-    let gatedRealmsOfRun: RealmIdentifier[] | undefined;
-    let gatedRealms = () => (gatedRealmsOfRun ??= this.gatedRealms(roomId));
+    let gateOfRun: ((realm: string) => boolean) | undefined;
+    let isGated = (realm: string) =>
+      (gateOfRun ??= this.featureGate(roomId))(realm);
     // A script fixed after a failure runs again in a fresh session: it made
     // no realm call the first time, so there is nothing to carry over.
     let newSession = () =>
@@ -2690,7 +2734,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         // are not asked for. A script run in a feature-gated realm finds
         // nothing there unless the room enabled the feature.
         async (query) =>
-          this.isGatedRealm(gatedRealms(), realmURL)
+          isGated(realmURL)
             ? noSearchResults()
             : await this.store.searchEntries(query, [realmURL], {
                 linksOnly: true,
@@ -2698,13 +2742,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
         (reference, base) =>
           this.network.virtualNetwork.resolveURL(reference, base).href,
         (id) => this.readCard(id),
-        async (query, realms) => {
+        (query, realms) => this.store.searchEntries(query, realms),
+        // Resolved before the search, so the search and its telemetry
+        // record name the same realms.
+        (realms) => {
           this.assertKnownRealmIdentifiers(realms);
-          let searchable = this.searchableRealms(gatedRealms(), realms);
-          // An empty list would make the store search every realm.
-          return searchable?.length === 0
-            ? noSearchResults()
-            : await this.store.searchEntries(query, searchable);
+          return this.store
+            .searchRealmsFor(realms)
+            .filter((realm) => !isGated(realm));
         },
         (url, options, doneBy, signal) =>
           this.captureURL(url, options, doneBy, signal),
@@ -2742,6 +2787,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
           knownModels: () => this.matrixService.pickableModelIds(roomId),
         }),
         this.research(roomId),
+        (search) =>
+          recordCatalogSearch(
+            {
+              clientTelemetry: this.clientTelemetry,
+              network: this.network,
+              realmServer: this.realmServer,
+            },
+            { ...search, tool: 'run-realm-code', realm: rootURL },
+          ),
       );
     let session = newSession();
     session.onActivity = this.publishActivity;
@@ -3619,8 +3673,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // A realm gated behind a skill feature (SKILL_FEATURE_REALMS) is searched
   // only in a room that enabled the feature; elsewhere it is left out of every
   // entry and card search, whether the script named it, ran in it, or relied
-  // on the default of every readable realm.
-  private gatedRealms(roomId: string): RealmIdentifier[] {
+  // on the default of every readable realm. Answers whether a realm is gated
+  // in the room.
+  private featureGate(roomId: string): (realm: string) => boolean {
     // Only delivered events: one still sending, or that failed to send, has
     // not reached the bot that built the prompt.
     let events = (
@@ -3631,34 +3686,23 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let aiBotUserId = this.matrixService.userId
       ? this.matrixService.aiBotUserId
       : '';
+    let { virtualNetwork } = this.network;
     // Named by prefix, which every build registers: a test build clears the
     // catalog's URL but keeps the prefix.
-    return realmsOfDisabledFeatures(
+    let gated = realmsOfDisabledFeatures(
       sessionSkillFeatures(events, aiBotUserId),
-    ).map((realm) =>
-      canonicalRealmIdentifier(this.network.virtualNetwork, realm),
+    ).map(
+      (realm) =>
+        new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
     );
-  }
-
-  // A path beneath a gated realm, such as one of its folders, is gated too.
-  private isGatedRealm(gated: RealmIdentifier[], realm: string): boolean {
-    let identifier = canonicalRealmIdentifier(
-      this.network.virtualNetwork,
-      realm,
-    );
-    return gated.some((gatedRealm) => identifier.startsWith(gatedRealm));
-  }
-
-  private searchableRealms(
-    gated: RealmIdentifier[],
-    realms: string[] | undefined,
-  ): string[] | undefined {
-    if (gated.length === 0) {
-      return realms;
-    }
-    return (
-      realms?.length ? realms : this.realmServer.availableRealmIdentifiers
-    ).filter((realm) => !this.isGatedRealm(gated, realm));
+    // A path beneath a gated realm, such as one of its folders, is gated too.
+    return (realm) => {
+      if (gated.length === 0) {
+        return false;
+      }
+      let id = rri(canonicalRealmIdentifier(virtualNetwork, realm));
+      return gated.some((paths) => paths.inRealm(id));
+    };
   }
 
   // A scoped identifier the host has no mapping for would reach the realm

@@ -19,6 +19,14 @@
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
 // starts chosen, and the page goes back to the key page when done.
+//
+// Opened by `boxel keys approve` (`#cli_port=…&cli_state=…`), for an approval
+// that grants a key a destination it has none for, the operations the CLI
+// listed (`#operations=<name>,…`) start ticked and the others unticked, and
+// the page tells the CLI's listener when the approval is made, or that it was
+// cancelled when the user cancels or closes the window first (`KeysWindow`).
+// It hands over nothing but that: the CLI reads the approval from the realm
+// server.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -69,13 +77,14 @@ import EditPage from './edit-page.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { contextRequest, openedFor } from './opened-for.ts';
+import { cliOpenedFor, contextRequest, openedFor } from './opened-for.ts';
 
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'choosing'; batch: ApprovalBatch; context: WindowContext }
   | { name: 'done'; count: number; card: string; realm: string };
+type ChoosingState = Extract<State, { name: 'choosing' }>;
 
 interface ApproveArgs {
   api: KeysWindowAPI;
@@ -330,13 +339,23 @@ class Approve extends Component<{ Args: ApproveArgs }> {
                   for the first time.
                 </p>
               {{/if}}
-              <Button
-                type='submit'
-                @kind='primary'
-                @disabled={{this.submitDisabled}}
-                @loading={{this.form.saving}}
-                data-test-approve-save
-              >{{this.saveLabel}}</Button>
+              <div class='confirm-buttons'>
+                {{#if @api.forCli}}
+                  <Button
+                    @kind='secondary'
+                    @disabled={{this.form.saving}}
+                    data-test-keys-cancel
+                    {{on 'click' @api.close}}
+                  >Cancel</Button>
+                {{/if}}
+                <Button
+                  type='submit'
+                  @kind='primary'
+                  @disabled={{this.submitDisabled}}
+                  @loading={{this.form.saving}}
+                  data-test-approve-save
+                >{{this.saveLabel}}</Button>
+              </div>
             </div>
           </:actions>
         </EditPage>
@@ -514,6 +533,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         padding-top: var(--boxel-sp);
         border-top: 1px solid var(--border);
       }
+      .confirm-buttons {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        flex-shrink: 0;
+      }
       .confirm-note {
         flex: 1;
         margin: 0;
@@ -544,6 +568,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   </template>
 
   private opened = openedFor();
+  private fromCli = cliOpenedFor();
   // Reached from a key's "Use with a card" on the key page.
   private fromKeyPage =
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
@@ -706,6 +731,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
           realm: batch.realm.name,
         };
         this.args.api.visit.loaded();
+        this.args.api.tellCliDone();
         return;
       }
       let choices = slotChoices(batch);
@@ -721,9 +747,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         }),
       );
       let keys = operations.map(operationKey);
+      let named = this.fromCli.operations;
       this.form.ticked = keep
         ? new Set(keys.filter((k) => keep.ticked.has(k)))
-        : new Set(keys);
+        : named
+          ? new Set(
+              operations.filter((o) => named.has(o.name)).map(operationKey),
+            )
+          : new Set(keys);
       this.page.state = { name: 'choosing', batch, context };
       this.args.api.visit.loaded();
     } catch (e) {
@@ -748,6 +779,9 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   };
 
   private finish = () => {
+    if (this.args.api.tellCliDone()) {
+      return;
+    }
     if (this.fromKeyPage) {
       navigation.back(pageURL('keys'));
     } else {
@@ -763,6 +797,10 @@ class Approve extends Component<{ Args: ApproveArgs }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
+    await this.args.api.saving(() => this.approve(state));
+  };
+
+  private approve = async (state: ChoosingState) => {
     try {
       let operations = approvalOf(
         state.batch,
@@ -780,7 +818,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
         card: state.batch.card.name,
         realm: state.batch.realm.name,
       };
-      if (!this.fromKeyPage) {
+      if (!this.args.api.tellCliDone() && !this.fromKeyPage) {
         this.args.api.close();
       }
     } catch (e) {
@@ -806,10 +844,17 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
 export class ApprovePage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Approve requests' @page='approve' as |api|>
+    <KeysWindow
+      @title='Boxel · Approve requests'
+      @page='approve'
+      @cli={{this.cli}}
+      as |api|
+    >
       <Approve @api={{api}} @review={{false}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }
 
 export class ReviewChangesPage extends Component {
@@ -817,9 +862,12 @@ export class ReviewChangesPage extends Component {
     <KeysWindow
       @title='Boxel · Review changed requests'
       @page='review-changes'
+      @cli={{this.cli}}
       as |api|
     >
       <Approve @api={{api}} @review={{true}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }

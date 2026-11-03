@@ -6,8 +6,8 @@ import {
   createSubscribedUserAndLogin,
 } from '../helpers/index.ts';
 
-test.describe('Workspace Chooser', () => {
-  test('back button from a workspace returns to the workspace chooser', async ({
+test.describe('Dashboard', () => {
+  test('back button from a workspace returns to the dashboard', async ({
     page,
   }) => {
     const serverIndexUrl = new URL(appURL).origin;
@@ -15,7 +15,7 @@ test.describe('Workspace Chooser', () => {
     const realm1Name = 'realm1';
     let { username } = await createSubscribedUserAndLogin(
       page,
-      'workspace-chooser',
+      'dashboard',
       serverIndexUrl,
     );
     await createRealm(page, realm1Name);
@@ -23,12 +23,16 @@ test.describe('Workspace Chooser', () => {
 
     await page.goBack();
 
-    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-
-    // realm1, skills, and catalog realm
-    await expect(page.locator('[data-test-workspace]')).toHaveCount(3);
+    await expect(page.locator('[data-test-dashboard]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-test-workspace-list] [data-test-workspace]'),
+    ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-workspace-list] [data-test-workspace="realm1"]`),
     ).toHaveCount(1);
+    // the skills and catalog realms
+    await expect(
+      page.locator('[data-test-catalog-list] [data-test-workspace]'),
+    ).toHaveCount(2);
   });
 });

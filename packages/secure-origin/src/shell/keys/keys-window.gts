@@ -11,6 +11,18 @@
 // storage, from the realm server when the window comes back into view or
 // focus, and from any request of its pages that the server refuses as signed
 // out.
+//
+// A window opened for the CLI (`@cli`, the listener the CLI waits on) tells
+// that listener how it ended, once: `done` when its page has made the change,
+// or `cancelled` when the user closes the window or cancels before then, from
+// whatever the window shows, so the terminal stops waiting at once. A close
+// while a page's change is being saved (`api.saving`) waits for the save to
+// settle: a save that made the change has told the CLI `done` by then, and
+// only one that didn't leaves `cancelled` to tell. Closing
+// the browser's own window or tab tells it nothing: a page that is closing
+// can't start the navigation that reaches the listener, and the origin's
+// `connect-src` names no loopback address for a request to. The CLI waits
+// out its timeout then.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -26,6 +38,8 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import BoxelIcon from '../../components/icons/boxel-icon.gts';
 import IconX from '../../components/icons/icon-x.gts';
+import { handToCli } from '../../security/cli-handoff.js';
+import type { CliCallback } from '../../security/cli-handoff.js';
 import { navigation } from '../navigation.js';
 import { pageAwaitsData } from '../telemetry.ts';
 import type { PageVisit } from '../../telemetry/instrument.ts';
@@ -42,7 +56,16 @@ export interface KeysWindowAPI {
   signedOut: () => void;
   // Where a page reports how loading its data ended, for the telemetry.
   visit: PageVisit;
+  // Closes the window, or for a window opened for the CLI that hasn't told
+  // it yet, tells it the change was cancelled.
   close: () => void;
+  // Whether the window was opened for the CLI.
+  forCli: boolean;
+  // Tells the CLI the change is made, and answers whether it did: false when
+  // the window wasn't opened for the CLI, or has told it already.
+  tellCliDone: () => boolean;
+  // Runs a page's save, during which a close waits for it to settle.
+  saving: <T>(save: () => Promise<T>) => Promise<T>;
 }
 
 interface Signature {
@@ -52,6 +75,8 @@ interface Signature {
     // Which key page this is, for tests to tell the pages apart while the
     // window shows only that it is signed out.
     page: string;
+    // The CLI listener the window was opened for, if any.
+    cli?: CliCallback;
   };
   Blocks: { default: [KeysWindowAPI] };
 }
@@ -212,6 +237,9 @@ export default class KeysWindow extends Component<Signature> {
       signedOut: this.ended,
       close: this.close,
       visit: this.visit,
+      forCli: Boolean(this.args.cli),
+      tellCliDone: () => this.tellCli('done'),
+      saving: this.saving,
     };
   }
 
@@ -265,5 +293,41 @@ export default class KeysWindow extends Component<Signature> {
     this.page.state = 'signed-out';
   };
 
-  private close = () => navigation.close();
+  private toldCli = false;
+  private tellCli(outcome: 'done' | 'cancelled'): boolean {
+    let { cli } = this.args;
+    if (!cli || this.toldCli) {
+      return false;
+    }
+    this.toldCli = true;
+    handToCli(cli, { window: outcome });
+    return true;
+  }
+  private saves = 0;
+  private closeAfterSave = false;
+  private saving = async <T,>(save: () => Promise<T>): Promise<T> => {
+    this.saves++;
+    try {
+      return await save();
+    } finally {
+      this.saves--;
+      if (this.saves === 0 && this.closeAfterSave) {
+        this.closeAfterSave = false;
+        // A save that made the change has sent the window to the CLI's
+        // listener already; closing now could stop that navigation.
+        if (!this.toldCli) {
+          this.close();
+        }
+      }
+    }
+  };
+  private close = () => {
+    if (this.args.cli && !this.toldCli && this.saves > 0) {
+      this.closeAfterSave = true;
+      return;
+    }
+    if (!this.tellCli('cancelled')) {
+      navigation.close();
+    }
+  };
 }
