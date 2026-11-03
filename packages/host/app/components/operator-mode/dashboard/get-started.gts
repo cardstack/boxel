@@ -137,7 +137,7 @@ export default class GetStarted extends Component<Signature> {
       steps.push({
         id: 'agent',
         title: 'Connect your own agent',
-        hint: 'Claude Code and others build in your workspaces through the Boxel plugin.',
+        hint: 'Claude Code or Codex can build in your workspaces through the Boxel plugin.',
         // Only listed agents: progress kept for one no longer offered
         // doesn't count.
         done: AGENT_KINDS.some(({ id }) => (agentSetup?.[id] ?? 0) > 0),
