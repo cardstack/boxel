@@ -17,6 +17,7 @@ import OpenSecureWindowTool from '@cardstack/boxel-host/tools/open-secure-window
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
+import { Collapsible } from '@cardstack/pretui/components/collapsible';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
 import { RelativeTime } from '@cardstack/pretui/components/relative-time';
 import { Spinner } from '@cardstack/pretui/components/spinner';
@@ -89,6 +90,108 @@ interface SearchAnswer {
 }
 
 type Tab = 'review' | 'mine';
+
+const NEW_FINE_GRAINED_TOKEN =
+  'https://github.com/settings/personal-access-tokens/new';
+const NEW_CLASSIC_TOKEN =
+  'https://github.com/settings/tokens/new?description=Boxel%20PR%20review%20watcher&scopes=repo,read:org';
+
+// Step by step, how to make the token the watcher needs on GitHub, for
+// whoever opens the card without one.
+class TokenGuide extends Component<{
+  Args: { org: string | undefined; defaultOpen?: boolean };
+}> {
+  fineGrained = NEW_FINE_GRAINED_TOKEN;
+  classic = NEW_CLASSIC_TOKEN;
+
+  <template>
+    <Collapsible
+      @label='How to make a GitHub token'
+      @defaultOpen={{@defaultOpen}}
+      class='token-guide'
+      data-test-token-guide
+    >
+      <ol class='steps'>
+        <li>
+          Open
+          <a
+            href={{this.fineGrained}}
+            target='_blank'
+            rel='noopener noreferrer'
+          >
+            GitHub's page for a new fine-grained token</a>.
+        </li>
+        <li>
+          Name it (for example, "Boxel PR review watcher") and choose when it
+          expires.
+        </li>
+        <li>
+          Under
+          <strong>Resource owner</strong>, choose
+          <strong>{{@org}}</strong>. The organization's owners approve a token
+          before it can read the organization's private repositories.
+        </li>
+        <li>
+          Under
+          <strong>Repository access</strong>, choose
+          <strong>All repositories</strong>.
+        </li>
+        <li>
+          Under
+          <strong>Permissions</strong>, give
+          <strong>Pull requests</strong>
+          (a repository permission) and
+          <strong>Members</strong>
+          (an organization permission) read-only access. GitHub adds read-only
+          Metadata for you. The watcher needs nothing else, and nothing that
+          writes.
+        </li>
+        <li>
+          Choose
+          <strong>Generate token</strong>
+          and copy it. GitHub shows it only once.
+        </li>
+        <li>
+          Back here, choose
+          <strong>Connect GitHub</strong>. In the window that opens, check that
+          its address bar shows Boxel's secure address, choose
+          <strong>Add a new key</strong>, and paste the token there. Never paste
+          it into a card, a chat or a file.
+        </li>
+      </ol>
+      <p class='alternative'>
+        A
+        <a href={{this.classic}} target='_blank' rel='noopener noreferrer'>
+          classic token</a>
+        with the
+        <code>repo</code>
+        and
+        <code>read:org</code>
+        scopes works too, without waiting for approval, but it can also write to
+        every repository you can. If
+        {{@org}}
+        signs in with single sign-on, choose
+        <strong>Configure SSO</strong>
+        beside the classic token on GitHub and authorize it for
+        {{@org}}.
+      </p>
+    </Collapsible>
+    <style scoped>
+      .steps {
+        margin: var(--boxel-sp-xs) 0;
+        padding-left: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+      }
+      .alternative {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
+      }
+    </style>
+  </template>
+}
 
 // Runs `act` with the readiness answer whenever it changes, after the render
 // that showed it, so loading the lists or opening the secure window is never
@@ -304,6 +407,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
             >Connect GitHub</Button>
           </:action>
         </Alert>
+        <TokenGuide @org={{@model.org}} @defaultOpen={{true}} />
       {{else if (eq this.readiness 'needs-reapproval')}}
         <Alert @tone='warning' @title='The watcher changed what it sends'>
           <:default>
@@ -348,6 +452,7 @@ class PRReviewWatcherIsolated extends Component<typeof PRReviewWatcher> {
             >Try again</Button>
           </:action>
         </Alert>
+        <TokenGuide @org={{@model.org}} />
       {{/if}}
 
       {{#if this.problem}}
@@ -578,7 +683,7 @@ export class PRReviewWatcher extends CardDef {
   @operation static waitingOnMyReview = {
     base: 'callApi',
     label:
-      "List your organization's open pull requests by others, with their review requests, reviews and comments",
+      "List others' open pull requests in your organization, with their reviews",
     url: GITHUB_GRAPHQL,
     headers: AUTH,
     graphql: {
@@ -591,7 +696,7 @@ export class PRReviewWatcher extends CardDef {
   @operation static myPullRequests = {
     base: 'callApi',
     label:
-      'List your open pull requests, with their review requests, reviews and comments',
+      'List your open pull requests in your organization, with their reviews',
     url: GITHUB_GRAPHQL,
     headers: AUTH,
     graphql: {
