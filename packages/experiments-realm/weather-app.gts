@@ -129,7 +129,27 @@ const ASKED = new Set<string>();
 
 // This module, as a share's approvals name it: they're made per module, so a
 // copy of the app in another realm needs its own.
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
 const HERE = withoutExtension(import.meta.url);
+
+// When to try again, as a reader would say it: seconds for a short wait,
+// minutes for a longer one, and a time of day beyond an hour.
+function tryAgain(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) {
+    return 'Try again shortly.';
+  }
+  if (seconds < 90) {
+    return `Try again in ${Math.ceil(seconds)} seconds.`;
+  }
+  if (seconds < 60 * 60) {
+    return `Try again in about ${Math.ceil(seconds / 60)} minutes.`;
+  }
+  let at = new Date(Date.now() + seconds * 1000).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `Try again after ${at}.`;
+}
 
 function withoutExtension(url: string | undefined): string | undefined {
   return url?.replace(/\.(gts|ts|gjs|js)$/, '');
@@ -1053,8 +1073,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         return this.problem.source === 'shared'
           ? 'OpenWeatherMap rejected the workspace’s key'
           : 'OpenWeatherMap rejected your key';
-      case 'rate-limited':
       case 'over-budget':
+        return this.problem.source === 'shared'
+          ? 'Today’s weather limit for this workspace is used up'
+          : 'Today’s limit for your key is used up';
+      case 'rate-limited':
       case 'rate-limit-unavailable':
         return 'Too many requests';
       case 'share-suspended':
@@ -1077,12 +1100,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     switch (problem.code) {
       case 'credential-rejected':
         return `It may have expired or been revoked. ${KEY_NOTE}`;
-      case 'rate-limited':
       case 'over-budget':
+      case 'rate-limited':
       case 'rate-limit-unavailable':
-        return problem.retryAfterSeconds
-          ? `Try again in ${problem.retryAfterSeconds} seconds.`
-          : 'Try again shortly.';
+        return tryAgain(problem.retryAfterSeconds);
       default:
         return problem.message;
     }
@@ -1153,6 +1174,12 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
       limited(this.sharedReadiness) &&
       (limited(this.ownReadiness) || !this.canUseOwn)
     );
+  }
+
+  get blockedTitle(): string {
+    return this.sharedReadiness === 'over-budget'
+      ? 'Today’s weather limit for this workspace is used up'
+      : 'Too many requests';
   }
 
   get ownRejected() {
@@ -1301,10 +1328,10 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
           {{else if this.blockedRateLimited}}
             <Alert
               @tone='warning'
-              @title='Too many requests'
+              @title={{this.blockedTitle}}
               data-test-weather-state='rate-limited'
             >
-              Try again shortly.
+              Try again later.
             </Alert>
           {{else if this.signedOut}}
             <Alert
