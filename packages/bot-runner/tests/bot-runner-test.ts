@@ -45,10 +45,15 @@ function makeRoom(membership: string, creator = '@alice:localhost') {
   } as unknown as Room;
 }
 
-function makeMembershipEvent(originServerTs: number) {
+// Synapse sends the invite as stripped state (MSC4319): type, state_key,
+// content and sender only, with no origin_server_ts.
+function makeStrippedInviteEvent(userId: string) {
   return {
     event: {
-      origin_server_ts: originServerTs,
+      type: 'm.room.member',
+      state_key: userId,
+      content: { membership: 'invite' },
+      sender: '@alice:localhost',
     },
   } as unknown as MatrixEvent;
 }
@@ -71,14 +76,13 @@ module('membership handler', () => {
       },
     }),
     authUserId: '@submissionbot:localhost',
-    startTime: 1000,
   });
 
   test('auto-joins room after membership invite event for submissionbot', async (assert) => {
     joinedRooms = [];
 
     await handleMembershipEvent(
-      makeMembershipEvent(1001),
+      makeStrippedInviteEvent('@submissionbot:localhost'),
       makeMember({
         membership: 'invite',
         userId: '@submissionbot:localhost',
@@ -92,6 +96,22 @@ module('membership handler', () => {
       ['!room-id:localhost'],
       'joins the invited room for the bot user',
     );
+  });
+
+  test('does not join when another user is invited', async (assert) => {
+    joinedRooms = [];
+
+    await handleMembershipEvent(
+      makeStrippedInviteEvent('@alice:localhost'),
+      makeMember({
+        membership: 'invite',
+        userId: '@alice:localhost',
+        roomId: '!room-id:localhost',
+        name: 'alice',
+      }),
+    );
+
+    assert.deepEqual(joinedRooms, [], 'ignores invites for other users');
   });
 });
 
