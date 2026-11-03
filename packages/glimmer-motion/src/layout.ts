@@ -70,14 +70,24 @@ registerBusyProbe(() => settlePending && 'projection settle pending');
 const BURST_LIMIT = 60;
 
 /**
- * `process` is not a browser global; a bundler replaces this expression at
- * build time. Declared locally rather than pulling in Node's types for one
- * string, and defaulting to "warn" when nothing replaced it — a warning that
- * should not have fired is cheap, and a silent hang is not.
+ * `process` is not a browser global; a bundler replaces
+ * `process.env.NODE_ENV` at build time. That expression is the only one read
+ * here, so a production build folds this to `"production"` and the check to
+ * false. A guard like `typeof process` would survive the replacement and stay
+ * true in a browser. Declared locally rather than pulling in Node's types for
+ * one string, and defaulting to "warn" when nothing replaced it and there is
+ * no `process` global — a warning that should not have fired is cheap, and a
+ * silent hang is not.
  */
-declare const process: { env?: { NODE_ENV?: string } } | undefined;
-export const isDev = () =>
-  typeof process === 'undefined' || process?.env?.NODE_ENV !== 'production';
+declare const process: { env: { NODE_ENV?: string } };
+function nodeEnv(): string | undefined {
+  try {
+    return process.env.NODE_ENV;
+  } catch {
+    return undefined;
+  }
+}
+export const isDev = () => nodeEnv() !== 'production';
 let burst = 0;
 let frameBooked = false;
 let breakerTripped = false;
