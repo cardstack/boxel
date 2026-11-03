@@ -386,12 +386,29 @@ export default class CatalogShelf extends Component<Signature> {
         box-shadow:
           0 0 0 1px var(--_story-edge),
           var(--shadow-md);
-        transition: transform var(--boxel-transition);
       }
-      @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-        .story:hover {
-          transform: translateY(-0.125rem);
+      /* The hover ring; the transparent outline shows it in forced-colors
+         mode. */
+      .story::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: 0 0 0 2px
+          color-mix(in oklch, var(--foreground) 30%, transparent);
+        outline: 2px solid transparent;
+        opacity: 0;
+        transition: opacity var(--boxel-transition);
+        pointer-events: none;
+      }
+      @media (hover: hover) {
+        .story:not(.is-pending):hover::after {
+          opacity: 1;
         }
+      }
+      /* Keeps the hover ring off the keyboard ring. */
+      .story:has(.story-open:focus-visible)::after {
+        opacity: 0;
       }
       /* The story draws the keyboard ring around the whole card. */
       .story:has(.story-open:focus-visible) {
