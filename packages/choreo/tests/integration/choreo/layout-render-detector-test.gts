@@ -16,7 +16,8 @@ import { module, test } from 'qunit';
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
 import { nextFrame } from '../../helpers/motion';
 
-const slow = { duration: 1, ease: 'linear' } as const;
+/** long enough that a slow runner's three frames barely dent it: after 1s the row is still 1.8 rows away */
+const slow = { duration: 10, ease: 'linear' } as const;
 
 class Rows {
   @tracked order = ['a', 'b', 'c'];

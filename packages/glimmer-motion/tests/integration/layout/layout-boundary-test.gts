@@ -30,7 +30,11 @@ import { setupFixtureViewport } from '../../helpers/layout-fixture';
  * The first two modules pin that down; the third covers the development-mode
  * warning an element raises when it registers with no such boundary above it.
  */
-const slow = { duration: 1, ease: 'linear' } as const;
+/**
+ * Long enough that a slow runner's three frames barely dent it: after 1s the
+ * promoted row is still 1.8 rows away, and the hand-off still 270px.
+ */
+const slow = { duration: 10, ease: 'linear' } as const;
 
 class Rows {
   @tracked order = ['a', 'b', 'c'];
