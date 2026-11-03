@@ -6,7 +6,7 @@ description: >-
   values, SVG. Use when one element animates on its own in glimmer-motion /
   Choreo code in this repo (packages/glimmer-motion, packages/choreo, the
   Choreo gallery, host UI that animates with them) — including
-  the three Glimmer-specific rules that silently break motion when violated.
+  the four Glimmer-specific rules that silently break motion when violated.
 ---
 
 # One element: the `{{motion}}` modifier
@@ -80,7 +80,7 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
 `glimmer-motion` the way the demos do, or better, don't hand-roll (see
 `choreo-scene`).
 
-## The three Glimmer rules (each costs an afternoon when broken)
+## The four Glimmer rules (each costs an afternoon when broken)
 
 1. **Motion owns the inline style.** Never put a bound `style="…"` attribute
    on a motion element — Glimmer rewrites the whole declaration on re-render
@@ -96,6 +96,14 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
    `{{motion layout=true style=(styles borderRadius='14px')}}`.
 3. **A leaving child stays live** (see `motion-presence`) — exit content must
    ride on the yielded item, not be re-read from moved-on state.
+4. **`layout` animates only under a render detector.** Nothing snapshots a
+   `layout=true` element before Glimmer patches the DOM unless a
+   `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` or `<Choreo>` is above it
+   (or the change runs through `layoutChange()`). Without one, a keyed list
+   that reorders, filters or sorts jumps. Wrap the list, and key rows by a
+   stable id: a position-derived key changes when rows shift, and a changed
+   key is a new element with no old box to animate from. In development the
+   first unwrapped element logs a warning (see `motion-layout`).
 
 ## Canonical demos
 

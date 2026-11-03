@@ -16,6 +16,13 @@ versions may change behavior until `1.0.0`.
 
 ### Added
 
+- **A development-mode warning for a `layout` element nothing will snapshot.** A `{{motion layout}}`
+  element animates only when a render detector measures it before the DOM changes, and only
+  `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` and `<Choreo>` carry one. The first `layout`
+  element to mount with none of them above it logs a console warning with the element attached,
+  so a keyed list that reorders without animating says why. `<ReorderGroup>` renders a
+  `data-reorder-group` attribute on its list for that check. Production builds skip it.
+
 - **`retime(root)`** restarts the motion already running at and under an element on its current
   transition. Motion reads a transition when an animation starts, so an edited `transition` with an
   unchanged target leaves a running spring or loop on its old timing; `retime` restarts the values

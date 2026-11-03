@@ -194,22 +194,22 @@ one.
 
 ### React → Glimmer
 
-| React                            | here                                                      |
-| -------------------------------- | --------------------------------------------------------- |
-| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
-| `ref`                            | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                           |
-| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
-| `useIsPresent()`                 | `h.isPresent`                                             |
-| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
-| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element      |
-| `useDragControls()`              | `createDragControls()`                                    |
-| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                        |
+| React                            | here                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG                                                           |
+| `ref`                            | the element, or a `{current}` object filled by a modifier                                               |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                                                                         |
+| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                                                              |
+| `useIsPresent()`                 | `h.isPresent`                                                                                           |
+| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>` or `<Choreo>`, or `layoutChange()` |
+| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element                                                    |
+| `useDragControls()`              | `createDragControls()`                                                                                  |
+| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                                                                      |
 
-### Three rules React does not need
+### Four rules React does not need
 
-React's model hides three things that Glimmer's doesn't, and each surfaced while porting a real app
-onto this binding. They are the only places where the port isn't a mechanical translation.
+React's model hides four things that Glimmer's doesn't. They are the only places where the port
+isn't a mechanical translation.
 
 **1. Motion owns a motion element's inline style, so pass CSS through the modifier, not a `style`
 attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
@@ -244,6 +244,35 @@ Motion and every frame is corrected.
 
 {{! ✓ corrected per frame, against whatever scale the layout animation is applying }}
 <article class='card' {{motion layout=true style=(styles borderRadius='14px')}}></article>
+```
+
+**4. A layout animation needs a render detector above it, so wrap a list that moves in
+`<LayoutGroup>`.** React snapshots each motion component as it re-renders, in
+`getSnapshotBeforeUpdate`. Glimmer has no such hook, so the box a layout animation starts from is
+measured by a render detector at the start of the render pass, and only `<LayoutGroup>`, `<Presence>`,
+`<ReorderGroup>` and `<Choreo>` carry one. A keyed `{{#each}}` of `layout=true` rows with none of
+them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
+places. In development the first such element logs a console warning with the element attached.
+Key the rows by a stable id as well: a key derived from position changes when the rows before it
+shift, and Glimmer replaces a row whose key changed with a new element, which has no earlier box to
+animate from.
+
+```gts
+{{! ✗ a sort lands in one frame: nothing measured the rows before they moved }}
+<ul>
+  {{#each this.sorted key='id' as |row|}}
+    <li {{motion layout=true}}>{{row.name}}</li>
+  {{/each}}
+</ul>
+
+{{! ✓ the group snapshots every row before each render pass patches the DOM }}
+<LayoutGroup>
+  <ul>
+    {{#each this.sorted key='id' as |row|}}
+      <li {{motion layout=true}}>{{row.name}}</li>
+    {{/each}}
+  </ul>
+</LayoutGroup>
 ```
 
 ## Testing

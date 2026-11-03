@@ -36,6 +36,26 @@ while their content keeps running).
 
 ## Rules
 
+- **`layout=true` needs a render detector above it.** The box an animation
+  starts from is measured at the start of a render pass, before Glimmer
+  patches the DOM, and only `<LayoutGroup>`, `<Presence>`, `<ReorderGroup>`
+  and `<Choreo>` do that measuring (`layoutChange(fn)` does it by hand).
+  A keyed `{{#each}}` of `layout=true` rows with none of them above it moves
+  its DOM nodes unmeasured, and the rows jump. In development the first such
+  element logs a console warning with the element attached.
+  ```gts
+  <LayoutGroup>
+    <ul>
+      {{#each this.sorted key='id' as |row|}}
+        <li {{motion layout=true}}>{{row.name}}</li>
+      {{/each}}
+    </ul>
+  </LayoutGroup>
+  ```
+- **Key moving rows by a stable id, never by position.** A key built from an
+  index changes when the rows before it shift (a removal, a sort), and
+  Glimmer replaces a row whose key changed with a new element, which has no
+  old box to animate from.
 - **Radius and shadow must go through the modifier.** Layout animation
   scales the element, corners included. The engine corrects `borderRadius`
   and `boxShadow` per frame — but only values it holds:
