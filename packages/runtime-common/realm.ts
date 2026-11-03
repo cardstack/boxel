@@ -6395,8 +6395,17 @@ export class Realm {
       ...removedFiles.map((path) => ({ path, status: 'D' as const })),
     ];
     let journal = this.#history?.journal;
+    if (!journal) {
+      // No history, so nothing to commit together: the rows are written as
+      // the adapter's own statements. The in-browser realm's SQLite adapter
+      // runs one connection with no transaction nesting, so a realm that
+      // records nothing never opens a transaction here.
+      let createdMap = await this.persistFileMeta(fileMetaRows);
+      await this.removeFileMeta(removedFiles);
+      return createdMap;
+    }
     let event: ChangeEventInput | undefined =
-      journal && changes.length > 0
+      changes.length > 0
         ? {
             realmURL: this.url,
             // The effective authenticated user, never a client-supplied
@@ -6411,7 +6420,7 @@ export class Realm {
       async (querier) => {
         let createdMap = await this.persistFileMeta(fileMetaRows, querier);
         await this.removeFileMeta(removedFiles, querier);
-        if (journal && event) {
+        if (event) {
           let started = performance.now();
           await querier(['SAVEPOINT change_journal']);
           try {
