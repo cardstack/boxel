@@ -31,21 +31,19 @@ import {
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
-  type BaseOperation,
-  type OperationWriteResult,
+  OperationsError,
+  type OperationsAnswer,
+  type OperationsEnvelope,
 } from '@cardstack/runtime-common';
 import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
 import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
-import { isWrite } from '@cardstack/runtime-common/card-operations';
 
 import {
-  BATCH_MEMBER,
   assertInstanceOperation,
   assertPayloadSuppliesParams,
-  type OperationsBucket,
 } from '../lib/card-operation-invocation';
 import {
   recordCatalogSearch,
@@ -144,6 +142,7 @@ import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
+import type OperationsService from '../services/operations';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
@@ -151,7 +150,6 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
-import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 import type * as OperationsModule from '@cardstack/base/operations';
 
@@ -163,8 +161,8 @@ const MAX_FILES = 20;
 // search found must not stop at MAX_FILES. The updates are saved in one
 // request when the script finishes, not one save each.
 const MAX_CARD_UPDATES = 200;
-// realm.operations calls in one run, each entry of an atomic batch counted
-// on its own, so a bulk change can reach as many cards as cards.update can.
+// realm.operations calls in one run, each entry of a batch counted on its
+// own, so a bulk change can reach as many cards as cards.update can.
 const MAX_OPERATIONS = 200;
 const MAX_FILE_SIZE = 500_000;
 // A UTF-8 character is at most 4 bytes, so a larger body is always too large.
@@ -390,11 +388,12 @@ interface OperationAnswer {
   document?: Record<string, unknown>;
 }
 
-// Runs operations on cards of this realm, one alone or several as one
-// all-or-nothing batch, and answers each in the order it was given.
+// Sends operations on cards of a realm in one `_operations` request, which
+// the realm carries out whole or not at all, and answers each in the order it
+// was given.
 type RunOperations = (
+  realmURL: string,
   entries: OperationEntry[],
-  atomic: boolean,
 ) => Promise<OperationAnswer[]>;
 
 // Lists one directory. `entries` is empty unless `status` is 200.
@@ -1231,7 +1230,7 @@ class RealmFsSession {
         return await this.updateCard(args[0], args[1]);
       case 'operations.invoke': {
         let entry = this.operationEntry(method, args[0], args[1], args[2]);
-        let [answer] = await this.runOperationEntries([entry], false);
+        let [answer] = await this.runOperationEntries([entry]);
         return answer;
       }
       case 'operations.invokeBatchOperation': {
@@ -1254,7 +1253,7 @@ class RealmFsSession {
           let { path, operation, payload } = item as Record<string, unknown>;
           return this.operationEntry(method, path, operation, payload);
         });
-        return await this.runOperationEntries(entries, true);
+        return await this.runOperationEntries(entries);
       }
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
@@ -1765,10 +1764,7 @@ class RealmFsSession {
   // when card 40 of 100 is refused, cards 1 to 39 stay changed. A batch is one
   // request, one commit under one write lock and one indexing pass, and the
   // realm carries out every entry or none.
-  private async runOperationEntries(
-    entries: OperationEntry[],
-    atomic: boolean,
-  ) {
+  private async runOperationEntries(entries: OperationEntry[]) {
     if (this.operationCount + entries.length > MAX_OPERATIONS) {
       throw new Error(
         `Realm code may run at most ${MAX_OPERATIONS} operations per run`,
@@ -1779,7 +1775,7 @@ class RealmFsSession {
       this.refused += 1;
       throw new Error('The run has ended; the operations were not run');
     }
-    let answers = await this.runOperations(entries, atomic);
+    let answers = await this.runOperations(this.realmURL, entries);
     return entries.map((entry, index) => {
       let path = `${this.relative(entry.cardId)}.json`;
       // The card's text changed on the realm, so this run reads it again.
@@ -2729,6 +2725,28 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+// One entry's result as the script reads it. A write names the card it wrote
+// and the version that card now holds; a read answers the document, which is
+// the one result that carries attributes; a delete answers nothing.
+function operationAnswer(result: unknown): OperationAnswer {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return {};
+  }
+  let data = (result as { data?: Record<string, unknown> | null }).data;
+  if (!data) {
+    return {};
+  }
+  if (data.attributes !== undefined || typeof data.id !== 'string') {
+    return { document: result as Record<string, unknown> };
+  }
+  let meta = (data.meta ?? {}) as Record<string, unknown>;
+  return {
+    id: data.id,
+    version: String(meta.version ?? ''),
+    indexPending: meta.indexPending === true,
+  };
+}
+
 // What a search answers when every realm it would reach is gated.
 function noSearchResults() {
   return { data: [], meta: { page: { total: 0 } } };
@@ -2744,6 +2762,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
+  @service('operations') declare private operationsService: OperationsService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private recentFilesService: RecentFilesService;
@@ -2979,7 +2998,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         (reference, base) =>
           this.network.virtualNetwork.resolveURL(reference, base).href,
         (id) => this.readCard(id, realmURL),
-        (entries, atomic) => this.runOperations(entries, atomic),
+        (realm, entries) => this.runOperations(realm, entries),
         (query, realms) => this.store.searchEntries(query, realms),
         // Resolved before the search, so the search and its telemetry
         // record name the same realms.
@@ -3639,72 +3658,75 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
   }
 
-  // Runs operations a card's type declares, on cards in the run's realm. Each
-  // is checked as invoke-card-operation checks it, so a wrong name is refused
-  // with the names the card declares before anything is sent. A batch is one
-  // request the realm carries out whole or not at all.
+  // Runs operations a card's type declares, on cards in the run's realm, as
+  // one `_operations` request: one entry per card, named by the card's URL.
+  // The cards are not loaded first, so a batch of 100 is one request and not
+  // 100 reads and a write. The realm checks each name and payload against the
+  // declaration and refuses the whole batch when one is wrong.
+  //
+  // Two cases load a card. A name that is also a behavior every card carries
+  // (update, delete, …) runs that behavior unless the type declares the name,
+  // and only the type can say which, so such an entry is checked before it is
+  // sent. And when the realm refuses an entry, its card is loaded to say what
+  // the type declares, as invoke-card-operation does.
   private async runOperations(
+    realmURL: string,
     entries: OperationEntry[],
-    atomic: boolean,
   ): Promise<OperationAnswer[]> {
     let operationsModule = await this.loaderService.loader.import<
       typeof OperationsModule
     >('@cardstack/base/operations');
-    let bucketFor = operationsModule.operations as (
-      target: unknown,
-    ) => OperationsBucket;
-    let cards: CardDef[] = [];
-    let bases: BaseOperation[] = [];
+    let baseNames = new Set<string>(operationsModule.BASE_OPERATIONS);
     for (let entry of entries) {
-      let card = await this.store.getWithoutCache(entry.cardId);
-      if (!isCardInstance(card)) {
-        throw new Error(
-          `cannot run "${entry.operation}": ${entry.cardId} did not load: ${card.message}`,
-        );
+      if (baseNames.has(entry.operation)) {
+        await this.assertOperationOnCard(operationsModule, entry);
       }
-      bases.push(
-        assertInstanceOperation(operationsModule, card, entry.operation),
-      );
-      assertPayloadSuppliesParams(
-        entry.operation,
-        operationsModule.getDeclaredOperations(card)[entry.operation],
-        entry.payload,
-      );
-      cards.push(card as CardDef);
     }
-    let answers: unknown[];
-    if (atomic) {
-      // One `_operations` request with every entry, carried out whole or not
-      // at all. The batch is opened on the first card; every other card joins
-      // it by `on`, and must be in the same realm, since a batch commits under
-      // one realm's write lock.
-      let first = cards[0];
-      let atomicOf = bucketFor(first)[BATCH_MEMBER] as (
-        build: (builder: any) => unknown[],
-      ) => Promise<unknown[]>;
-      answers = await atomicOf((builder) =>
-        entries.map((entry, index) => {
-          let target =
-            cards[index].id === first.id ? builder : builder.on(cards[index]);
-          return target[entry.operation](entry.payload);
-        }),
-      );
-    } else {
-      let member = bucketFor(cards[0])[entries[0].operation] as (
-        payload?: unknown,
-      ) => Promise<unknown>;
-      answers = [await member(entries[0].payload)];
+    let envelope: OperationsEnvelope = {
+      'boxel:operations': entries.map((entry) => ({
+        op: 'invoke' as const,
+        'boxel:name': entry.operation,
+        href: entry.cardId,
+        ...(entry.payload ? { data: { ...entry.payload } } : {}),
+      })),
+    };
+    let answer: OperationsAnswer;
+    try {
+      answer = await this.operationsService.send(realmURL, 'POST', envelope);
+    } catch (error) {
+      let refused =
+        error instanceof OperationsError && typeof error.entry === 'number'
+          ? entries[error.entry]
+          : undefined;
+      if (refused) {
+        // Throws the reason the card's type gives, when it gives one.
+        await this.assertOperationOnCard(operationsModule, refused);
+      }
+      throw error;
     }
-    return answers.map((answer, index) => {
-      if (answer === null || answer === undefined) {
-        return {};
-      }
-      if (!isWrite(bases[index])) {
-        return { document: answer as Record<string, unknown> };
-      }
-      let { id, version, indexPending } = answer as OperationWriteResult;
-      return { id, version, indexPending: indexPending === true };
-    });
+    let results = answer['atomic:results'] ?? [];
+    return entries.map((_entry, index) => operationAnswer(results[index]));
+  }
+
+  // Loads the card an entry names and checks the entry against its type: the
+  // name is one the type declares and is not a query, and the payload has
+  // every param the declaration requires.
+  private async assertOperationOnCard(
+    operationsModule: typeof OperationsModule,
+    entry: OperationEntry,
+  ): Promise<void> {
+    let card = await this.store.getWithoutCache(entry.cardId);
+    if (!isCardInstance(card)) {
+      throw new Error(
+        `cannot run "${entry.operation}": ${entry.cardId} did not load: ${card.message}`,
+      );
+    }
+    assertInstanceOperation(operationsModule, card, entry.operation);
+    assertPayloadSuppliesParams(
+      entry.operation,
+      operationsModule.getDeclaredOperations(card)[entry.operation],
+      entry.payload,
+    );
   }
 
   private async readCard(id: string, realmURL: string): Promise<CardRead> {
