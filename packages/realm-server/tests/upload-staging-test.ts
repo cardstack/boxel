@@ -284,12 +284,15 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await readFile(join(live, 'keep'), 'utf8'), 'active');
   });
 
-  test('200 MB HTTP upload stays bounded under a 64 MB heap', async function (assert) {
+  test('200 MB HTTP upload stays bounded in memory', async function (assert) {
     let output = '';
     let child = spawn(
       process.execPath,
       [
-        '--max-old-space-size=64',
+        // Room for the realm-server modules the child imports. The bound on
+        // the upload itself is asserted below, as growth from a baseline.
+        '--max-old-space-size=256',
+        '--expose-gc',
         join(import.meta.dirname, 'fixtures/upload-staging-child.ts'),
         dir,
       ],
@@ -312,6 +315,10 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(
         result.maxBuffers < 40 * 1024 ** 2,
         `peak byte buffers: ${result.maxBuffers}`,
+      );
+      assert.true(
+        result.heapGrowth < 32 * 1024 ** 2,
+        `heap growth during the upload: ${result.heapGrowth}`,
       );
     }
   });

@@ -11,11 +11,18 @@ import { buildRequest } from '@cardstack/runtime-common/virtual-network';
 let size = 200 * 1024 ** 2;
 let target = join(process.argv[2], 'large.bin');
 let staging = new UploadStaging(size * 2);
+// What the upload retains, not the garbage it leaves for the collector: each
+// sample collects first, so the numbers don't depend on when V8 chooses to.
+let gc = (globalThis as { gc?: () => void }).gc;
+if (!gc) throw new Error('run with --expose-gc');
 let maxBuffers = 0;
+let maxHeap = 0;
 let sample = () => {
-  maxBuffers = Math.max(maxBuffers, process.memoryUsage().arrayBuffers);
+  gc!();
+  let usage = process.memoryUsage();
+  maxBuffers = Math.max(maxBuffers, usage.arrayBuffers);
+  maxHeap = Math.max(maxHeap, usage.heapUsed);
 };
-let timer = setInterval(sample, 1);
 let resultHash: string | undefined;
 let app = new Koa();
 app.use(async (context) => {
@@ -42,6 +49,12 @@ app.use(async (context) => {
 });
 let server = app.listen(0, '127.0.0.1');
 await once(server, 'listening');
+// The realm-server modules imported above take most of the heap on their own,
+// so what is measured is the heap's growth while the upload runs, from a
+// collected baseline.
+gc();
+let baseHeap = process.memoryUsage().heapUsed;
+maxHeap = baseHeap;
 try {
   let address = server.address();
   if (!address || typeof address === 'string')
@@ -70,7 +83,8 @@ try {
       for (let sent = 0; sent < size; sent += chunk.length) {
         hash.update(chunk);
         if (!upload.write(chunk)) await once(upload, 'drain');
-        sample();
+        // Every 10 MB sent, while the server is part-way through the body.
+        if (sent % (160 * chunk.length) === 0) sample();
       }
       upload.end();
       await once(upload, 'response');
@@ -81,9 +95,12 @@ try {
   if ((await response) !== 204) throw new Error('Upload failed');
   sample();
   process.stdout.write(
-    JSON.stringify({ size: (await stat(target)).size, maxBuffers }),
+    JSON.stringify({
+      size: (await stat(target)).size,
+      maxBuffers,
+      heapGrowth: maxHeap - baseHeap,
+    }),
   );
 } finally {
-  clearInterval(timer);
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }
