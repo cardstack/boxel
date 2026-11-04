@@ -61,6 +61,7 @@ export class LeaseManager {
   #timer: ReturnType<typeof setInterval> | undefined;
   #ticking: Promise<void> | undefined;
   #onLost: ((error: LeaseLostError) => void) | undefined;
+  #onGain: (() => void) | undefined;
 
   constructor(db: DBAdapter, options: LeaseOptions) {
     this.#db = db;
@@ -83,9 +84,14 @@ export class LeaseManager {
 
   // Runs the first tick, then one every `renewMs`. `onLost` is called with the
   // error of a renewal that finds a held shard taken; the manager then holds
-  // nothing and renews nothing further.
-  async start(onLost: (error: LeaseLostError) => void): Promise<void> {
+  // nothing and renews nothing further. `onGain` is called after a tick that
+  // claimed a shard.
+  async start(
+    onLost: (error: LeaseLostError) => void,
+    onGain?: () => void,
+  ): Promise<void> {
     this.#onLost = onLost;
+    this.#onGain = onGain;
     await this.tick();
     this.#timer = setInterval(() => {
       if (this.#ticking) {
@@ -131,6 +137,7 @@ export class LeaseManager {
     if (this.#held.size > 0) {
       await this.#renew();
     }
+    let gained = false;
     for (
       let shard = 0;
       shard < this.#options.shardCount && this.#held.size < this.share;
@@ -138,8 +145,12 @@ export class LeaseManager {
     ) {
       if (!this.#held.has(shard) && (await this.#claim(shard))) {
         this.#held.add(shard);
+        gained = true;
         log.info(`${this.#options.holder} holds shard ${shard}`);
       }
+    }
+    if (gained) {
+      this.#onGain?.();
     }
   }
 

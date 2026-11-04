@@ -1,24 +1,26 @@
 // The main loop. A task waits for a shard lease, listens for journal wakeups,
 // loads the realms of the shards it holds, and consumes their events on each
-// wakeup or every second, beating the heartbeat on every turn so the health
-// endpoint reports it alive while it waits as well as while it records.
+// wakeup or every second, beating the heartbeat on every turn and between
+// events so the health endpoint reports it alive while it waits as well as
+// while it catches up.
 //
 // The loop exits rather than run degraded: a lost lease, a query that fails
 // or a loss of the listening connection the adapter can't re-establish ends
 // `run()` with the error, and the process exits non-zero. A stop request
-// finishes the turn in progress, releases the lease and ends `run()` without
+// finishes the event in progress, releases the lease and ends `run()` without
 // error.
 
 import { mkdir } from 'node:fs/promises';
 import { logger, REALM_CHANGE_EVENTS_CHANNEL } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 import { LeaseManager, shardOf, type LeaseOptions } from './lease.ts';
-import { Consumer, journalTail, type RealmRecorder } from './consumer.ts';
 import {
-  loadRecordedRealms,
-  lowestCursor,
-  type RecordedRealm,
-} from './realms.ts';
+  Consumer,
+  currentHorizon,
+  positionOfCursors,
+  type RealmRecorder,
+} from './consumer.ts';
+import { cursorsOf, loadRecordedRealms, type RecordedRealm } from './realms.ts';
 import type { Heartbeat } from './health.ts';
 
 const log = logger('realm-historian');
@@ -43,6 +45,8 @@ export class Historian {
   #lease: LeaseManager;
   #realms = new Map<string, RecordedRealm>();
   #recorders = new Map<string, RealmRecorder>();
+  // The shards whose realms the consumer's position accounts for.
+  #loadedShards = new Set<number>();
   #realmsStale = true;
   #consumer: Consumer | undefined;
   #stopped = false;
@@ -74,8 +78,8 @@ export class Historian {
     return this.#done;
   }
 
-  // Asks the loop to finish its turn, release the lease and exit. Resolves
-  // when `run()` has settled.
+  // Asks the loop to finish the event in progress, release the lease and
+  // exit. Resolves when `run()` has settled.
   async stop(): Promise<void> {
     this.#stopped = true;
     this.#wakeUp();
@@ -91,32 +95,40 @@ export class Historian {
     await mkdir(historyRoot, { recursive: true });
     let subscription: NotificationSubscription | undefined;
     try {
-      await this.#lease.start((error) => this.#fail(error));
+      await this.#lease.start(
+        (error) => this.#fail(error),
+        () => this.#wakeUp(),
+      );
       subscription = await db.subscribe(
         REALM_CHANGE_EVENTS_CHANNEL,
         (notification) => this.#onNotification(notification.payload ?? ''),
-        // Wakeups sent while the connection was down are lost; a poll
-        // reads whatever they announced.
-        { onReconnect: () => this.#wakeUp() },
+        // Wakeups sent while the connection was down are lost, among them
+        // the first wakeup of a realm enabled meanwhile: load the realms
+        // again and poll.
+        {
+          onReconnect: () => {
+            this.#realmsStale = true;
+            this.#wakeUp();
+          },
+        },
       );
       log.info(
         `${lease.holder} running, ${lease.shardCount} shard(s) across ${lease.taskCount} task(s)`,
       );
-      let heldBefore = '';
-      while (!this.#stopped && !this.#failure) {
+      while (this.#running()) {
         this.#options.heartbeat.beat();
-        let held = this.#lease.held.join(',');
-        if (held !== heldBefore) {
-          this.#realmsStale = true;
-          heldBefore = held;
-        }
-        if (held !== '') {
-          if (this.#realmsStale) {
+        if (this.#lease.held.length > 0) {
+          if (this.#realmsStale || this.#shardsChanged()) {
             await this.#loadRealms();
           }
-          await this.#consumer!.poll();
+          await this.#consumer!.poll(() => {
+            this.#options.heartbeat.beat();
+            return this.#running();
+          });
         }
-        await this.#sleep(pollMs);
+        if (this.#running()) {
+          await this.#sleep(pollMs);
+        }
       }
       if (this.#failure) {
         throw this.#failure;
@@ -127,8 +139,27 @@ export class Historian {
     }
   }
 
+  #running(): boolean {
+    return !this.#stopped && !this.#failure;
+  }
+
+  #shardsChanged(): boolean {
+    let held = this.#lease.held;
+    return (
+      held.length !== this.#loadedShards.size ||
+      held.some((shard) => !this.#loadedShards.has(shard))
+    );
+  }
+
+  // Loads the realms of the held shards. The consumer's position only
+  // advances, with one exception: a shard gained while the task runs brings
+  // realms whose cursors may lie behind the position, so the position moves
+  // back to the lowest of them, and their recorders ignore what they already
+  // recorded. A realm enabled in a shard the task already held starts from
+  // the events after the position; its earlier history is the backfill's.
   async #loadRealms(): Promise<void> {
     let { db, realmsRoot, lease } = this.#options;
+    let held = this.#lease.held;
     this.#realms = await loadRecordedRealms({
       db,
       realmsRoot,
@@ -141,26 +172,43 @@ export class Historian {
       }
     }
     this.#realmsStale = false;
-    // The read position only advances: a realm enabled while the task runs
-    // starts from the events after the position, and its earlier history is
-    // the backfill's.
     if (!this.#consumer) {
-      let readPosition =
-        lowestCursor(this.#realms.values()) ?? (await journalTail(db));
+      let cursors = cursorsOf(this.#realms.values());
+      let position =
+        cursors.length > 0
+          ? await positionOfCursors(db, cursors)
+          : { xid: await currentHorizon(db), seq: 0 };
       this.#consumer = new Consumer(
         { db, recorderFor: (realmId) => this.#recorderFor(realmId) },
-        readPosition,
+        position,
       );
       log.info(
-        `recording ${this.#realms.size} realm(s) from seq ${readPosition}`,
+        `recording ${this.#realms.size} realm(s) from xid ${position.xid}, seq ${position.seq}`,
       );
     } else {
+      let gained = [...this.#realms.values()].filter(
+        (realm) => !this.#loadedShards.has(realm.shard),
+      );
+      if (gained.length > 0) {
+        this.#consumer.rewindTo(await positionOfCursors(db, cursorsOf(gained)));
+      }
       log.info(`recording ${this.#realms.size} realm(s)`);
     }
+    this.#loadedShards = new Set(held);
   }
 
-  #recorderFor(realmId: string): RealmRecorder | undefined {
+  // A realm the task has not loaded, in a shard it holds, is a realm enabled
+  // since the last load: the realms are loaded again before its event is
+  // given up on.
+  async #recorderFor(realmId: string): Promise<RealmRecorder | undefined> {
     let realm = this.#realms.get(realmId);
+    if (
+      !realm &&
+      this.#lease.holds(shardOf(realmId, this.#options.lease.shardCount))
+    ) {
+      await this.#loadRealms();
+      realm = this.#realms.get(realmId);
+    }
     if (!realm) {
       return undefined;
     }
@@ -175,18 +223,13 @@ export class Historian {
   }
 
   // An empty payload wakes the task. A payload naming a realm wakes it only
-  // when the realm's shard is held; a realm the task has not loaded is a
-  // realm enabled since the last load, so the realms are loaded again first.
+  // when the realm's shard is held.
   #onNotification(payload: string): void {
-    if (payload !== '') {
-      if (
-        !this.#lease.holds(shardOf(payload, this.#options.lease.shardCount))
-      ) {
-        return;
-      }
-      if (!this.#realms.has(payload)) {
-        this.#realmsStale = true;
-      }
+    if (
+      payload !== '' &&
+      !this.#lease.holds(shardOf(payload, this.#options.lease.shardCount))
+    ) {
+      return;
     }
     this.#wakeUp();
   }

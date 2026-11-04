@@ -63,16 +63,7 @@ export async function loadRecordedRealms({
   return realms;
 }
 
-// Where the consumer starts: the lowest cursor among the realms, so no
-// realm's unrecorded events are passed over.
-export function lowestCursor(
-  realms: Iterable<RecordedRealm>,
-): number | undefined {
-  let lowest: number | undefined;
-  for (let realm of realms) {
-    if (lowest === undefined || realm.cursorSeq < lowest) {
-      lowest = realm.cursorSeq;
-    }
-  }
-  return lowest;
+// The cursors of the realms, for the consumer's starting position.
+export function cursorsOf(realms: Iterable<RecordedRealm>): number[] {
+  return [...realms].map((realm) => realm.cursorSeq);
 }

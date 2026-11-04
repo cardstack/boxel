@@ -141,9 +141,11 @@ export interface ChangeEventInput extends WriteContext {
   changes: ChangeEventChange[];
 }
 
-// A journal row as a reader sees it.
+// A journal row as a reader sees it. `xid` is the inserting transaction's id,
+// a `xid8` carried as text, by which realm-historian orders its reads.
 export interface ChangeEvent extends ChangeEventInput {
   seq: number;
+  xid: string;
   realmId: string;
   occurredAt: string;
 }

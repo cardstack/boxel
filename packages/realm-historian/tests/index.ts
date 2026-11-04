@@ -4,6 +4,7 @@ import '../setup-logger.ts';
 import './lease-test.ts';
 import './consumer-test.ts';
 import './health-test.ts';
+import './historian-test.ts';
 import './process-test.ts';
 
 QUnit.start();
