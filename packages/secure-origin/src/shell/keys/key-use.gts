@@ -310,6 +310,7 @@ export default class KeyUse extends Component<Signature> {
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
         background-color: var(--muted);
+        color: var(--muted-foreground);
       }
       .unapproved-text {
         margin: 0;

@@ -10,9 +10,9 @@
 // that send it there; removing a grant lists those first, then revokes them.
 // Use with a card sets a key up for a card's requests ahead of the card
 // asking, on the approve page. A share that no operation is approved to send
-// says so, with Approve for a card, which does the same for that share. Usage and limits opens what the key spent
-// against its budgets, who used it and how, and its limits, which the owner
-// changes there.
+// says so, with Approve for a card, which does the same for that share.
+// Usage and limits opens what the key spent against its budgets, who used it
+// and how, and its limits, which the owner changes there.
 // Above the keys, where a share's or key's use reached its high-water mark or
 // its budget this day or month, each with what to do about it (see
 // `key-limit-notices.gts`), and what workspaces' policies did with the user's

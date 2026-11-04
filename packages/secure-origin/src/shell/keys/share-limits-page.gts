@@ -169,6 +169,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius);
         background-color: var(--muted);
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-size-sm);
         line-height: var(--boxel-line-height-sm);
       }
