@@ -151,7 +151,7 @@ let { data: matching } = await indexer.search({
 
 ### Vector search (`near`)
 
-A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; 256 dimensions by default, up to 2,000). Queries reach it two ways:
+A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; Qwen3-Embedding-8B at 1024 dimensions by default, any size up to 2,000 through a subclass that sets `dimensions` and `embeddingModel`). Queries reach it two ways:
 
 - **Ranking**: a sort entry with a `near` target ranks by cosine similarity to it, most similar first (`direction` defaults to `desc`). Cards with no vector at the path sort last. Each result carries `meta._nearSimilarity` (1 = same direction, -1 = opposite), the way a `_matchRelevance` sort carries `meta._matchRelevance`. The k most similar cards are a near sort plus `page: { size: k }`.
 - **Threshold**: a `near` filter, keyed by the field path like `range`, keeps cards whose vector has at least `minSimilarity` to `to`. Without `minSimilarity` it keeps every card that has a vector of `to`'s dimension there. It nests under `every`/`any`/`not`, so it combines with other filters and with realm policy.

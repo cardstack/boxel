@@ -117,19 +117,32 @@ class Embedded extends Component<typeof VectorField> {
 //
 //   sort: [{ on: momentRef, by: 'embedding', near: [ ... ] }]
 //
-// The default dimension is 256. Declare another with a subclass:
+// A vector only compares with vectors from the same model at the same size,
+// so the field names both. The default is Qwen3-Embedding-8B at 1024
+// dimensions: the model emits 4,096 and can be trimmed to any size from 32
+// up, and 1024 is a quarter of the full size that stays under pgvector's
+// 2,000-dimension index limit. Declare another model or size with a
+// subclass:
 //
-//   class Embedding1024 extends VectorField { static dimensions = 1024; }
+//   class ClipEmbedding extends VectorField {
+//     static dimensions = 256;
+//     static embeddingModel = 'qwen/qwen3-embedding-8b';
+//   }
 //
-// A stored vector of any other dimension fails indexing with an error on the
-// card. Vectors are written by code (an embedding command), so the edit
-// format shows the same read-only summary.
+// Whatever writes the vectors, and whatever builds a `near` target, embeds
+// with `embeddingModel` at `dimensions`. A stored vector of any other
+// dimension fails indexing with an error on the card. Vectors are written
+// by code (an embedding command), so the edit format shows the same
+// read-only summary.
 export default class VectorField extends FieldDef {
   static displayName = 'Vector';
   static icon = ChartDotsIcon;
   static [primitive]: Vector;
   static [fieldSerializer] = 'vector';
-  static dimensions = 256;
+  static dimensions = 1024;
+  // An OpenRouter model id. Declarative for now: the platform does not call
+  // the model itself.
+  static embeddingModel = 'qwen/qwen3-embedding-8b';
   static embedded = Embedded;
   static atom = Atom;
   static edit = Embedded;
