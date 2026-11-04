@@ -10,7 +10,7 @@ import type { NodePath } from '@babel/traverse';
 // the module marks it by wrapping the call in `markDefinition` — `export const
 // Status = markDefinition(enumField(StringField, ...))` — and it is tagged by a
 // statement after the binding, once the call has returned it.
-export const exportIdentitySymbolKey = 'ident';
+export const exportIdentitySymbolKey = 'cardstack-ident';
 
 // The one specifier `markDefinition` is recognized by. Importing it by any
 // other spelling of a base module is a compile error.
@@ -57,7 +57,7 @@ export function exportIdentityPlugin(babel: typeof Babel): PluginObj<State> {
     );
   }
 
-  // Object.defineProperty(X, Symbol.for("ident"), {
+  // Object.defineProperty(X, Symbol.for("cardstack-ident"), {
   //   value: [moduleIdentifier, exportedName], configurable: true,
   //   writable: true });
   function identityStatement(

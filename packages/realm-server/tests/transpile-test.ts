@@ -39,10 +39,10 @@ module(basename(import.meta.filename), function () {
       `
       class Helper {}
       export class Person {
-        static [Symbol.for('ident')] = ['@cardstack/catalog/person', 'Person'];
+        static [Symbol.for('cardstack-ident')] = ['@cardstack/catalog/person', 'Person'];
       }
       export default class {
-        static [Symbol.for('ident')] = ['@cardstack/catalog/person', 'default'];
+        static [Symbol.for('cardstack-ident')] = ['@cardstack/catalog/person', 'default'];
       }
       `,
     );

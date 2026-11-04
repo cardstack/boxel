@@ -55,8 +55,9 @@ const compiler = {
 // that makes the same source compile differently must bump this, or output
 // from before the change outlives it. Version 2 tags exported classes with
 // their identity; version 3 tags the definitions a module marks with
-// `markDefinition`, in place of the results of a fixed list of factories.
-export const TRANSPILE_VERSION = 3;
+// `markDefinition`, in place of the results of a fixed list of factories;
+// version 4 keys the tag by `Symbol.for('cardstack-ident')`.
+export const TRANSPILE_VERSION = 4;
 
 // `identity.moduleIdentifier` names the module in its canonical form: the
 // canonical name of the realm that serves it, followed by its path. When

@@ -182,6 +182,7 @@ import {
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
   getCardMeta,
+  unidentifiedDefinitionError,
 } from './card-serialization';
 import {
   assertScalar,
@@ -5475,9 +5476,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!resource) {
     let adoptsFrom = identifyCard(card);
     if (!adoptsFrom) {
-      throw new Error(
-        `bug: could not determine identity for card '${card.name}'`,
-      );
+      throw unidentifiedDefinitionError(card, 'cannot deserialize a card');
     }
     // in this case we are dealing with an empty instance
     resource = { meta: { adoptsFrom } };
@@ -6408,7 +6407,8 @@ class FallbackCardStore implements CardStore {
   openableURL(id: string): string {
     let vn: VirtualNetwork | undefined;
     try {
-      vn = myLoader().getVirtualNetwork();
+      // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+      vn = import.meta.loader.getVirtualNetwork();
     } catch {
       return id;
     }

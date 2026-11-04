@@ -155,7 +155,7 @@ This is the closed list of ways the Loader departs from native ESM.
    modules, or tell a Loader to clear its module map, for example when a realm
    mapping changes. No other path removes a module from a Loader.
 5. **Identity tags.** A class a module exports carries a static member keyed
-   by `Symbol.for('ident')`, whose value is the module's canonical identifier
+   by `Symbol.for('cardstack-ident')`, whose value is the module's canonical identifier
    (ADR 002) and the name the class is exported under. The compiler that
    produces the module writes it, in
    `packages/runtime-common/export-identity-plugin.ts`:

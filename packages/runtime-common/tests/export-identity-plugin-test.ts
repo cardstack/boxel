@@ -41,7 +41,7 @@ const tests = Object.freeze({
       `),
       `
         export class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Dog'];
           bark() {}
         }
       `,
@@ -55,7 +55,7 @@ const tests = Object.freeze({
       `),
       `
         export default class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'default'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'default'];
         }
       `,
     );
@@ -68,7 +68,7 @@ const tests = Object.freeze({
       `),
       `
         export default class {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'default'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'default'];
         }
       `,
     );
@@ -82,7 +82,7 @@ const tests = Object.freeze({
       `),
       `
         class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Dog'];
         }
         export { Dog };
       `,
@@ -99,7 +99,7 @@ const tests = Object.freeze({
       `),
       `
         class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Puppy'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Puppy'];
         }
         export { Dog as Puppy };
       `,
@@ -114,7 +114,7 @@ const tests = Object.freeze({
       `),
       `
         class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'good-dog'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'good-dog'];
         }
         export { Dog as 'good-dog' };
       `,
@@ -129,7 +129,7 @@ const tests = Object.freeze({
       `),
       `
         class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'default'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'default'];
         }
         export default Dog;
       `,
@@ -145,7 +145,7 @@ const tests = Object.freeze({
       `),
       `
         export const Dog = class {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Dog'];
         };
       `,
     );
@@ -159,7 +159,7 @@ const tests = Object.freeze({
       `),
       `
         const Dog = class InnerDog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Puppy'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Puppy'];
         };
         export { Dog as Puppy };
       `,
@@ -177,7 +177,7 @@ const tests = Object.freeze({
         `),
         `
           class Dog {
-            static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Puppy'];
+            static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Puppy'];
           }
           export { Dog as Puppy };
           export default Dog;
@@ -247,13 +247,13 @@ const tests = Object.freeze({
       `),
       `
         export class Dog {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Dog'];
         }
         class Cat {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'Kitten'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'Kitten'];
         }
         export default class {
-          static [Symbol.for('ident')] = ['https://example.com/pets/dog', 'default'];
+          static [Symbol.for('cardstack-ident')] = ['https://example.com/pets/dog', 'default'];
         }
         export { Cat as Kitten };
       `,
@@ -275,7 +275,7 @@ const tests = Object.freeze({
       output,
       `
         export class Dog {
-          static [Symbol.for('ident')] = ['pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['pets/dog', 'Dog'];
         }
       `,
     );
@@ -286,7 +286,7 @@ const tests = Object.freeze({
       transform(`export class Dog {}`, { moduleIdentifier: '@pets/dog' }),
       `
         export class Dog {
-          static [Symbol.for('ident')] = ['@pets/dog', 'Dog'];
+          static [Symbol.for('cardstack-ident')] = ['@pets/dog', 'Dog'];
         }
       `,
     );
@@ -324,7 +324,7 @@ const tests = Object.freeze({
         import { markDefinition } from '@cardstack/base/mark-definition';
         import enumField from '@cardstack/base/enum';
         export const DogStatus = markDefinition(enumField(StringField, { options: ['good'] }));
-        Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        Object.defineProperty(DogStatus, Symbol.for('cardstack-ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
       `,
     );
   },
@@ -341,7 +341,7 @@ const tests = Object.freeze({
       `
         import { markDefinition } from '@cardstack/base/mark-definition';
         const Status = markDefinition(enumField(StringField, { options: ['good'] }));
-        Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        Object.defineProperty(Status, Symbol.for('cardstack-ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
         export { Status as DogStatus };
       `,
     );
@@ -356,7 +356,7 @@ const tests = Object.freeze({
       `
         import { markDefinition } from '@cardstack/base/mark-definition';
         const _default = markDefinition(enumField(StringField, { options: ['good'] }));
-        Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
+        Object.defineProperty(_default, Symbol.for('cardstack-ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
         export default _default;
       `,
     );
@@ -375,9 +375,9 @@ const tests = Object.freeze({
           import { markDefinition as mark } from '@cardstack/base/mark-definition';
           import * as base from '@cardstack/base/mark-definition';
           export const DogStatus = mark(enumField(StringField, { options: ['good'] })) as typeof StringField;
-          Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+          Object.defineProperty(DogStatus, Symbol.for('cardstack-ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
           export const TicketStatus = base.markDefinition(statusField({ options: [] }));
-          Object.defineProperty(TicketStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
+          Object.defineProperty(TicketStatus, Symbol.for('cardstack-ident'), { value: ['https://example.com/pets/dog', 'TicketStatus'], configurable: true, writable: true });
         `,
       );
     },

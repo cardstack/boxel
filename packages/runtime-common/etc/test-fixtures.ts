@@ -43,7 +43,7 @@ import StringField from '@cardstack/base/string';
 import { setComponentTemplate } from "@ember/component";
 import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {
-  static [Symbol.for("ident")] = [${JSON.stringify(moduleIdentifier)}, "Person"];
+  static [Symbol.for("cardstack-ident")] = [${JSON.stringify(moduleIdentifier)}, "Person"];
   static displayName = 'Person';
   static {
     dt7948.g(this.prototype, "firstName", [field], function () {

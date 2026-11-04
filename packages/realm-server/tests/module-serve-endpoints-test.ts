@@ -159,7 +159,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.true(
           response.text.includes(
-            `static [Symbol.for("ident")] = ["${testRealmHref}serve-identity", "ServeIdentity"];`,
+            `static [Symbol.for("cardstack-ident")] = ["${testRealmHref}serve-identity", "ServeIdentity"];`,
           ),
           'the class carries the module URL without its extension and its export name',
         );
