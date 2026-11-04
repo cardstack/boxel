@@ -1184,18 +1184,27 @@ export async function logUnreadableFileRows(
        LIMIT 25`,
       { bind: [realmURL] },
     );
+    // Each row stays on one prefixed line, so a grep on the prefix keeps every
+    // field: free text that can span lines (error messages, the stack) is
+    // JSON-encoded, and the stack, the only truncated field, goes last.
+    let text = (value: unknown) =>
+      value == null ? 'none' : JSON.stringify(String(value));
     for (let r of rows) {
       console.log(
         `[realm-index-diag ${label}]   file ${r.url} generation=${r.generation} ` +
           `is_deleted=${r.is_deleted} has_error=${r.has_error} ` +
-          `index_error=${r.index_error ?? 'none'} ` +
+          `index_error=${text(r.index_error)} ` +
           `render_generation=${r.render_generation ?? 'none'} ` +
-          `render_error=${r.render_error ?? 'none'} ` +
+          `render_error=${text(r.render_error)} ` +
           `render_status=${r.render_status ?? 'none'} ` +
           `visit_request_failure=${r.visit_request_failure ?? 'false'} ` +
-          `rendered_at=${r.rendered_at ?? 'none'} ` +
-          `render_stack=${r.render_stack ?? 'none'} ` +
-          `render_diagnostics=${r.render_diagnostics ?? 'none'}`,
+          `rendered_at=${
+            r.rendered_at != null
+              ? new Date(Number(r.rendered_at)).toISOString()
+              : 'none'
+          } ` +
+          `render_diagnostics=${r.render_diagnostics ?? 'none'} ` +
+          `render_stack=${text(r.render_stack)}`,
       );
     }
   } catch (e) {
