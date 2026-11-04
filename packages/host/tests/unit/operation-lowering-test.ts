@@ -17,6 +17,7 @@ import {
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
   lowerOperationDeclarations,
+  slotKeyKinds,
 } from '@cardstack/runtime-common/card-operations';
 
 import ENV from '@cardstack/host/config/environment';
@@ -2379,6 +2380,133 @@ module('Unit | operation lowering', function (hooks) {
       perInstance: 'yes',
     });
     assert.deepEqual(codes(notABoolean), ['invalid-request']);
+  });
+
+  test('a declared key kind is kept on the slots it names', async function (assert) {
+    let everySlot = await lowerRequest({
+      url: 'https://sheets.googleapis.com/v4/spreadsheets/abc',
+      headers: { authorization: 'Bearer {{userKey}}' },
+      keyKind: 'google-service-account',
+    });
+    assert.deepEqual(codes(everySlot), []);
+    assert.deepEqual(everySlot.operations.fetch.callApi?.slots, [
+      {
+        name: 'userKey',
+        key: 'userKey',
+        placement: 'header',
+        at: 'headers.authorization',
+        keyKind: 'google-service-account',
+      },
+    ]);
+
+    let bySlot = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: {
+        authorization: 'Bearer {{userKey:token}}',
+        'x-tenant': '{{userKey:tenant}}',
+      },
+      keyKind: { token: 'oauth' },
+    });
+    assert.deepEqual(codes(bySlot), []);
+    assert.deepEqual(
+      bySlot.operations.fetch.callApi?.slots.map((slot) => slot.keyKind),
+      ['oauth', undefined],
+      'a slot the declaration leaves out has no declared kind',
+    );
+
+    let unknownKind = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Bearer {{userKey}}' },
+      keyKind: 'password',
+    });
+    assert.deepEqual(codes(unknownKind), ['invalid-request']);
+    assert.strictEqual(unknownKind.issues[0]?.path, 'keyKind');
+
+    let unknownSlot = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Bearer {{userKey}}' },
+      keyKind: { token: 'oauth' },
+    });
+    assert.deepEqual(codes(unknownSlot), ['invalid-request']);
+    assert.strictEqual(unknownSlot.issues[0]?.path, 'keyKind.token');
+
+    let badSlotKind = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Bearer {{userKey}}' },
+      keyKind: { userKey: 'jwt' },
+    });
+    assert.deepEqual(codes(badSlotKind), ['invalid-request']);
+    assert.strictEqual(badSlotKind.issues[0]?.path, 'keyKind.userKey');
+  });
+
+  test('the kinds of key a slot takes follow from where it stands, unless declared', async function (assert) {
+    let kindsOf = async (request: Record<string, unknown>) => {
+      let result = await lowerRequest(request);
+      assert.deepEqual(codes(result), []);
+      let callApi = result.operations.fetch.callApi!;
+      return callApi.slots.map((slot) => slotKeyKinds(slot, callApi));
+    };
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.github.com/user',
+        headers: { authorization: 'Bearer {{userKey}}' },
+      }),
+      [['static', 'oauth']],
+      'a bearer credential is a pasted key or a connected account',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.github.com/user',
+        headers: { Authorization: ' token {{ userKey }} ' },
+      }),
+      [['static', 'oauth']],
+      'any scheme but Basic, written in any case and spacing',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://www.googleapis.com/drive/v3/files',
+        headers: { authorization: 'Bearer {{userKey}}' },
+      }),
+      [['static', 'google-service-account', 'oauth']],
+      'a Google API also takes a service account',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://maps.googleapis.com/maps/api/geocode/json',
+        query: { key: '{{userKey}}' },
+      }),
+      [['static']],
+      'a query value takes only a pasted key',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.example.com/items',
+        headers: {
+          authorization: 'Basic {{userKey|basic}}',
+          'x-api-key': '{{apiKey}}',
+        },
+        json: { token: '{{apiKey:body}}' },
+      }),
+      [['static'], ['static'], ['static']],
+      'a Basic credential, another header and the body take only a pasted key',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.example.com/items',
+        headers: { authorization: 'Bearer {{userKey}} extra' },
+      }),
+      [['static']],
+      'a credential that is only part of the header is a pasted key',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.example.com/items',
+        query: { access_token: '{{userKey}}' },
+        keyKind: 'oauth',
+      }),
+      [['oauth']],
+      'a declared kind stands wherever the slot does',
+    );
   });
 
   test('the URL lowers to its normalized form and its destination', async function (assert) {

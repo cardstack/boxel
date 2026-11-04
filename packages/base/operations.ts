@@ -777,6 +777,21 @@ export const CALL_API_METHODS = [
 ] as const;
 export type CallApiMethod = (typeof CALL_API_METHODS)[number];
 
+// The kinds of key a credential slot can be filled with:
+//
+//   * `static` — a key or token the user copies from the service and pastes,
+//     sent as it is;
+//   * `google-service-account` — a Google service account's JSON key file,
+//     from which the realm server mints the access tokens it sends;
+//   * `oauth` — an account the user connects through a sign-in app, whose
+//     access tokens the realm server mints.
+export const CALL_API_KEY_KINDS = [
+  'static',
+  'google-service-account',
+  'oauth',
+] as const;
+export type CallApiKeyKind = (typeof CALL_API_KEY_KINDS)[number];
+
 // A request to a service outside the realm, declared as data and sent by the
 // realm server. Nothing of the card runs when it is invoked: the realm builds
 // the request from this declaration as it was lowered when the card's module
@@ -815,6 +830,17 @@ export type CallApiMethod = (typeof CALL_API_METHODS)[number];
 // the destination has been checked against the request as declared, and it is
 // never carried across a redirect to another destination. Nothing that
 // records the request — logs, errors, telemetry — ever sees a filled one.
+//
+// `keyKind` says what kind of key fills a slot, so the window where the user
+// enters one asks for that kind without making them choose:
+//
+//   keyKind: 'google-service-account',          // every slot
+//   keyKind: { token: 'oauth', id: 'static' },  // by slot name
+//
+// Left out, the kind follows from where the slot stands: a minted access
+// token is a credential sent whole after an Authorization scheme other than
+// Basic (`Bearer {{userKey}}`), so a slot anywhere else takes a pasted key,
+// and a Google service account's tokens are only for Google's APIs.
 export interface CallApiOperationDeclaration extends OperationCommon {
   readonly base: 'callApi';
   // Absent, `GET` for a request with no body and `POST` for one with a body.
@@ -843,6 +869,10 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   // invoked only on an instance. Absent, one approval in a realm serves every
   // invocation there.
   readonly perInstance?: boolean;
+  // The kind of key every slot takes, or each slot's by its name.
+  readonly keyKind?:
+    | CallApiKeyKind
+    | { readonly [slot: string]: CallApiKeyKind };
 }
 
 export type OperationDeclaration =
@@ -964,7 +994,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
 const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
   read: ['links', 'html'],
   query: ['links', 'html'],
-  callApi: ['perInstance'],
+  callApi: ['perInstance', 'keyKind'],
 };
 
 // Clauses without which an authored declaration names no work at all: a

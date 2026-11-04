@@ -72,6 +72,37 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           base: 'callApi',
           url: 'https://api.github.com/repos/cities',
         };
+
+        @operation static readSheet = {
+          base: 'callApi',
+          url: 'https://sheets.googleapis.com/v4/spreadsheets/abc',
+          headers: { authorization: 'Bearer {{userKey}}' },
+        };
+
+        @operation static geocode = {
+          base: 'callApi',
+          url: 'https://maps.googleapis.com/maps/api/geocode/json',
+          query: { key: '{{userKey}}' },
+          headers: { authorization: 'Basic {{apiKey:basic|basic}}' },
+        };
+
+        @operation static appendRow = {
+          base: 'callApi',
+          url: 'https://sheets.googleapis.com/v4/spreadsheets/abc:append',
+          json: { values: [] },
+          headers: { authorization: 'Bearer {{userKey}}' },
+          keyKind: 'google-service-account',
+        };
+
+        @operation static mixed = {
+          base: 'callApi',
+          url: 'https://api.example.com/v1/items',
+          headers: {
+            authorization: 'Bearer {{userKey:token}}',
+            'x-tenant': '{{userKey:tenant}}',
+          },
+          keyKind: { token: 'oauth' },
+        };
       }
     `,
     'today.json': {
@@ -452,9 +483,54 @@ module(basename(import.meta.filename), function () {
             path: '/v3/forecast/',
             registrableDomain: 'weather.co.uk',
           },
-          slots: [{ name: 'userKey', key: 'userKey' }],
+          slots: [
+            { name: 'userKey', key: 'userKey', kinds: ['static', 'oauth'] },
+          ],
         },
       });
+    });
+
+    test('says which kinds of key fill each slot: as declared, or as fit where it stands', async function (assert) {
+      let kindsOf = async (operation: string) => {
+        let response = await ask(WRITER, {
+          target: { kind: 'instance', url: `${REALM.href}today` },
+          operation,
+        });
+        assert.strictEqual(response.status, 200, response.text);
+        return Object.fromEntries(
+          (
+            response.body.data.attributes.operation.slots as {
+              name: string;
+              kinds: string[];
+            }[]
+          ).map(({ name, kinds }) => [name, kinds]),
+        );
+      };
+      assert.deepEqual(
+        await kindsOf('forecast'),
+        { userKey: ['static', 'oauth'] },
+        'a bearer credential takes a pasted key or a connected account',
+      );
+      assert.deepEqual(
+        await kindsOf('readSheet'),
+        { userKey: ['static', 'google-service-account', 'oauth'] },
+        'one sent to a Google API may also be a service account',
+      );
+      assert.deepEqual(
+        await kindsOf('geocode'),
+        { userKey: ['static'], basic: ['static'] },
+        'a query value or a Basic credential takes only a pasted key',
+      );
+      assert.deepEqual(
+        await kindsOf('appendRow'),
+        { userKey: ['google-service-account'] },
+        'a declared kind is the only one',
+      );
+      assert.deepEqual(
+        await kindsOf('mixed'),
+        { token: ['oauth'], tenant: ['static'] },
+        'a kind declared for one slot leaves the others as they stand',
+      );
     });
 
     test('describes an operation on a type, labelled by its name when it has no label', async function (assert) {

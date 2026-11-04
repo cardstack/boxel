@@ -35,7 +35,14 @@ export interface WindowContext {
     base: string;
     method?: string;
     destination?: DestinationDisplay;
-    slots: { name: string; key: string; bound?: SlotBound | null }[];
+    // `kinds`: the kinds of key that can fill the slot (`static`,
+    // `google-service-account`, `oauth`).
+    slots: {
+      name: string;
+      key: string;
+      kinds?: string[];
+      bound?: SlotBound | null;
+    }[];
   };
 }
 

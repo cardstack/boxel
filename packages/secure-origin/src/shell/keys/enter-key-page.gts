@@ -10,7 +10,13 @@
 // settings go beside it. Accounts are then connected through the app on the
 // `connect` page.
 //
-// What tells a secret and a service account apart is what the user has in
+// Opened for an operation, the page asks only for the kinds of key the
+// operation's `userKey` slots take, as the realm server says (the card's
+// declared `keyKind`, or what fits where the slot stands). One kind is asked
+// for without a choice; when that is a sign-in app, the page also offers the
+// `connect` page, for an app that is set up already. Opened for nothing, or
+// for an operation that leaves several kinds open, the user chooses. What
+// tells a secret and a service account apart is then what the user has in
 // hand, not the service: Google's own APIs take plain API keys too. So each
 // kind says what it is for; a service account's key file pasted as a secret
 // is caught and offered as a service account; and a window opened for an
@@ -79,7 +85,7 @@ import {
   openedFor,
   returnsToKeyPage,
 } from './opened-for.ts';
-import RadioChoices from './radio-choices.gts';
+import RadioChoices, { type RadioChoice } from './radio-choices.gts';
 import { ServiceAccountEntry } from './service-account-entry.ts';
 import ServiceAccountFields from './service-account-fields.gts';
 import {
@@ -89,19 +95,31 @@ import {
 
 type Kind = 'static' | 'google-service-account' | 'oauth-client';
 
-const KINDS = [
+// Each kind the page adds, with the kind of key the realm server says a slot
+// takes (`slotKind`) and the article its label reads with in a sentence.
+const KINDS: (RadioChoice & {
+  value: Kind;
+  slotKind: string;
+  article: string;
+})[] = [
   {
     value: 'static',
+    slotKind: 'static',
+    article: 'an',
     label: 'API key or token',
     hint: 'A key or token you copy from the service and paste here, such as a GitHub token or a Google Maps API key.',
   },
   {
     value: 'google-service-account',
+    slotKind: 'google-service-account',
+    article: 'a',
     label: 'Google service account',
     hint: 'For Google APIs such as Sheets and Drive, when you have a service account’s key file (a .json file from Google Cloud). Boxel sends Google a short-lived token made from it, never the file itself.',
   },
   {
     value: 'oauth-client',
+    slotKind: 'oauth',
+    article: 'a',
     label: 'Sign-in app (OAuth)',
     hint: 'Lets people sign in with their own account on a site such as GitHub, instead of pasting a key. You create the app in that site’s developer settings, and it gives you a client ID and secret to enter here.',
   },
@@ -163,14 +181,37 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                 @reason={{this.opened.reason}}
               />
             {{/if}}
-            <RadioChoices
-              @label='Kind'
-              @icon={{Tag}}
-              @name='kind'
-              @choices={{KINDS}}
-              @selected={{this.form.kind}}
-              @onSelect={{this.setKind}}
-            />
+            {{#if this.onlyKind}}
+              <p class='kind-hint' data-test-only-kind={{this.onlyKind.value}}>
+                {{this.cardName}}
+                needs
+                {{this.onlyKind.article}}
+                <strong>{{this.onlyKind.label}}</strong>.
+                {{this.onlyKind.hint}}
+              </p>
+              {{#if this.isOAuthClient}}
+                <div class='kind-hint' data-test-connect-instead>
+                  <p>If a sign-in app for this site is set up already, connect
+                    your account through it instead.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-go-to-connect
+                    {{on 'click' this.goToConnect}}
+                  >Connect an account</Button>
+                </div>
+              {{/if}}
+            {{else}}
+              <RadioChoices
+                @label='Kind'
+                @icon={{Tag}}
+                @name='kind'
+                @choices={{this.kindChoices}}
+                @selected={{this.form.kind}}
+                @onSelect={{this.setKind}}
+              />
+            {{/if}}
             {{#if this.suggestsServiceAccount}}
               <p class='kind-hint' data-test-google-destination-hint>
                 This request goes to a Google API. If you were given a JSON key
@@ -226,13 +267,18 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                   <p>This is a Google service account’s JSON key file. It can’t
                     be sent as it is: Boxel makes short-lived tokens from it for
                     Google instead.</p>
-                  <Button
-                    type='button'
-                    @kind='secondary'
-                    @size='small'
-                    data-test-use-service-account
-                    {{on 'click' this.usePastedKeyFile}}
-                  >Use it as a Google service account</Button>
+                  {{#if this.takesServiceAccount}}
+                    <Button
+                      type='button'
+                      @kind='secondary'
+                      @size='small'
+                      data-test-use-service-account
+                      {{on 'click' this.usePastedKeyFile}}
+                    >Use it as a Google service account</Button>
+                  {{else}}
+                    <p>{{this.cardName}}
+                      needs a key or token sent as it is, not a service account.</p>
+                  {{/if}}
                 </div>
               {{/if}}
             {{/if}}
@@ -383,6 +429,11 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         request,
       )) as WindowContext;
       this.page.state = { name: 'entering', context };
+      // The page starts on the first kind the operation takes.
+      let [first] = this.kindChoices;
+      if (first && first.value !== this.form.kind) {
+        this.setKind(first.value);
+      }
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -398,6 +449,15 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
   };
 
   private back = () => navigation.back(pageURL('keys'));
+
+  // Connecting an account through an app that is set up already is the
+  // `connect` page's, opened for the same card and operation.
+  private goToConnect = () => {
+    let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    fragment.delete('then');
+    fragment.delete('after');
+    navigation.assign(`${pageURL('connect')}#${fragment}`);
+  };
 
   private get isOAuthClient() {
     return this.form.kind === 'oauth-client';
@@ -417,12 +477,43 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     );
   }
 
+  // The kinds the page offers: those the operation's `userKey` slots take, as
+  // the realm server says, or every kind when it says nothing of them.
+  private get kindChoices() {
+    let slots = (this.entering?.context?.operation?.slots ?? []).filter(
+      (slot) => slot.key === 'userKey' && slot.kinds,
+    );
+    if (slots.length === 0) {
+      return KINDS;
+    }
+    let taken = new Set(slots.flatMap((slot) => slot.kinds!));
+    let choices = KINDS.filter((kind) => taken.has(kind.slotKind));
+    return choices.length > 0 ? choices : KINDS;
+  }
+
+  // The one kind the operation takes, asked for without a choice.
+  private get onlyKind() {
+    let choices = this.kindChoices;
+    return choices.length === 1 ? choices[0] : undefined;
+  }
+
+  private get takesServiceAccount() {
+    return this.kindChoices.some(
+      (kind) => kind.value === 'google-service-account',
+    );
+  }
+
+  private get cardName() {
+    return this.entering?.context?.card?.name ?? 'This card';
+  }
+
   // Opened for an operation that sends to a Google API, the page says when a
   // service account fits. It doesn't choose one: Google's APIs take plain API
   // keys too.
   private get suggestsServiceAccount() {
     return (
       this.form.kind === 'static' &&
+      this.takesServiceAccount &&
       isGoogleAPIHost(this.entering?.context?.operation?.destination?.host)
     );
   }

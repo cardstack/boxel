@@ -21,7 +21,13 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
-import type { CallApiMethod } from '@cardstack/base/operations';
+import {
+  CALL_API_KEY_KINDS,
+  type CallApiKeyKind,
+  type CallApiMethod,
+} from '@cardstack/base/operations';
+
+export type { CallApiKeyKind };
 
 // ============================================================================
 // callApi: a request to a service outside the realm, declared as data on a
@@ -128,6 +134,7 @@ export interface CallApiClauses {
   json?: unknown;
   graphql?: unknown;
   perInstance?: unknown;
+  keyKind?: unknown;
 }
 
 const METHODS: readonly CallApiMethod[] = [
@@ -400,6 +407,9 @@ export function lowerCallApi(
     );
   }
 
+  // The kind of key each slot takes, where the declaration says.
+  let declaredKind = lowerKeyKind(clauses.keyKind, byName, fail);
+
   if (!ok || !lowered?.url || !lowered.destination) {
     return undefined;
   }
@@ -411,9 +421,126 @@ export function lowerCallApi(
     ...(headers ? { headers } : {}),
     ...(query ? { query } : {}),
     ...(body ? { body } : {}),
-    slots: slots.map(({ text: _text, ...slot }) => slot),
+    slots: slots.map(({ text: _text, ...slot }) => {
+      let keyKind = declaredKind(slot.name);
+      return keyKind ? { ...slot, keyKind } : slot;
+    }),
     ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
+}
+
+function isKeyKind(value: unknown): value is CallApiKeyKind {
+  return (CALL_API_KEY_KINDS as readonly unknown[]).includes(value);
+}
+
+const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
+
+// `keyKind` as declared: one kind for every slot, or a kind for each slot
+// named. Answers the kind declared for a slot, by its name.
+function lowerKeyKind(
+  keyKind: unknown,
+  slots: Map<string, unknown>,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+): (slot: string) => CallApiKeyKind | undefined {
+  if (keyKind === undefined) {
+    return () => undefined;
+  }
+  if (isKeyKind(keyKind)) {
+    return () => keyKind;
+  }
+  if (!isPlainObject(keyKind)) {
+    fail(
+      'invalid-request',
+      'keyKind',
+      `\`keyKind\` is one of ${KEY_KIND_LIST} for every slot, or an object giving one for each slot by its name`,
+    );
+    return () => undefined;
+  }
+  let bySlot = new Map<string, CallApiKeyKind>();
+  for (let [name, kind] of Object.entries(keyKind)) {
+    if (!slots.has(name)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `the request has no "${name}" slot for \`keyKind.${name}\` to describe`,
+      );
+    } else if (!isKeyKind(kind)) {
+      fail(
+        'invalid-request',
+        `keyKind.${name}`,
+        `\`keyKind.${name}\` must be one of ${KEY_KIND_LIST}`,
+      );
+    } else {
+      bySlot.set(name, kind);
+    }
+  }
+  return (slot) => bySlot.get(slot);
+}
+
+// The kinds of key that can fill a slot, in `CALL_API_KEY_KINDS` order: the
+// one its declaration names, or else every kind that can work where it
+// stands. A minted access token is a credential sent whole after an
+// Authorization scheme, and Basic encodes a user and password instead, so a
+// slot anywhere else takes only a key sent as it is. A Google service
+// account's tokens are only for Google's APIs.
+export function slotKeyKinds(
+  slot: CallApiSlot,
+  request: Pick<OperationCallApi, 'headers' | 'destination'>,
+): CallApiKeyKind[] {
+  if (slot.keyKind) {
+    return [slot.keyKind];
+  }
+  if (slot.transform || !sentAsAuthorizationCredential(slot, request)) {
+    return ['static'];
+  }
+  return isGoogleAPIDestination(request.destination)
+    ? [...CALL_API_KEY_KINDS]
+    : ['static', 'oauth'];
+}
+
+// Whether a header slot is the whole credential of an Authorization header
+// whose scheme isn't Basic, as `Bearer {{userKey}}` is.
+function sentAsAuthorizationCredential(
+  slot: CallApiSlot,
+  request: Pick<OperationCallApi, 'headers'>,
+): boolean {
+  if (slot.placement !== 'header') {
+    return false;
+  }
+  let header = Object.entries(request.headers ?? {}).find(
+    ([name]) => `headers.${name}` === slot.at,
+  );
+  if (!header || header[0].toLowerCase() !== 'authorization') {
+    return false;
+  }
+  let value = header[1];
+  if (typeof value !== 'string') {
+    return false;
+  }
+  let match =
+    /^\s*([A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]*)\s+(\{\{[^}]*\}\})\s*$/.exec(
+      value,
+    );
+  if (!match || match[1].toLowerCase() === 'basic') {
+    return false;
+  }
+  let [only] = slotsIn(match[2]).slots;
+  return only?.name === slot.name;
+}
+
+// Whether a request's destination is one of Google's APIs.
+function isGoogleAPIDestination(destination: string): boolean {
+  let host: string;
+  try {
+    host = new URL(destination).hostname;
+  } catch {
+    return false;
+  }
+  return host === 'googleapis.com' || host.endsWith('.googleapis.com');
 }
 
 interface LoweredUrl {

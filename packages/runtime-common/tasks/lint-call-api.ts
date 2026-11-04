@@ -51,6 +51,7 @@ const REQUEST_MEMBERS = [
   'json',
   'graphql',
   'perInstance',
+  'keyKind',
 ] as const;
 
 function isUnknown(value: unknown): boolean {
