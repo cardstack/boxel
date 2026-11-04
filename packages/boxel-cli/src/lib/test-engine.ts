@@ -16,6 +16,7 @@ import { listFiles } from '../commands/file/list.ts';
 import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
+import { trimExecutableExtension } from '@cardstack/runtime-common/executable-extensions';
 
 // The host rewrites every bare `@cardstack/boxel-icons/<name>` import to
 // a module fetch against `iconsURL`, which the bundled host config points
@@ -1014,7 +1015,9 @@ export async function startTestPageServer(
                 // its exported classes are tagged with, as a realm-server
                 // tags the modules it serves.
                 body: await transpileJS(source, '/' + normalized, {
-                  moduleIdentifier: `${realmUrl}${normalized.replace(/\.(gts|ts)$/, '')}`,
+                  moduleIdentifier: trimExecutableExtension(
+                    `${realmUrl}${normalized}`,
+                  ),
                 }),
               };
             } catch (err) {

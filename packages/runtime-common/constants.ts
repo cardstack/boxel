@@ -27,12 +27,12 @@ export function baseRRI(path: string): RealmResourceIdentifier {
 // skill the system card's `defaultSkillFiles` names.
 export const skillsIndexLocalPath = 'index.md';
 
-// The extensions the realm serves as compiled modules rather than as stored
-// content. Declared here, in a leaf, rather than in the barrel: modules low in
-// the import graph read it while their own body runs, and reaching the barrel
-// from one of them is a cycle — `index.ts` re-exports them, so a const
-// declared there is still in temporal dead zone at that point.
-export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+// Declared in a leaf that imports nothing, which dependency-light consumers
+// (boxel-cli) can import; re-exported here for everything else.
+export {
+  executableExtensions,
+  trimExecutableExtension,
+} from './executable-extensions.ts';
 
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,

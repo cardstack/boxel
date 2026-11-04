@@ -1,5 +1,6 @@
 import * as QUnit from 'qunit';
 
+import { trimExecutableExtension } from '@cardstack/runtime-common';
 import { exportIdentitySymbolKey } from '@cardstack/runtime-common/export-identity-plugin';
 
 // A class a test defines and shims as a module stands in for one a realm
@@ -31,7 +32,7 @@ export function tagTestModuleExports<T extends object>(
   moduleIdentifier: string,
   exports: T,
 ): T {
-  let moduleName = moduleIdentifier.replace(/\.(gts|ts|gjs|js)$/, '');
+  let moduleName = trimExecutableExtension(moduleIdentifier);
   for (let [name, value] of Object.entries(exports)) {
     if (
       typeof value !== 'function' ||

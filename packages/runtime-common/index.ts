@@ -1979,7 +1979,7 @@ export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
 export * from './policy-file-def.ts';
 
-import { executableExtensions } from './constants.ts';
+import { executableExtensions, trimExecutableExtension } from './constants.ts';
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
@@ -2479,22 +2479,6 @@ export function hasCardExtension(path: string): boolean {
     }
   }
   return false;
-}
-
-// Trimming preserves the form of what it is given: an identifier stays an
-// identifier, and a plain string — a URL href, say — stays a plain string
-// rather than acquiring a brand it does not warrant.
-export function trimExecutableExtension(
-  input: RealmResourceIdentifier,
-): RealmResourceIdentifier;
-export function trimExecutableExtension(input: string): string;
-export function trimExecutableExtension(input: string): string {
-  for (let extension of executableExtensions) {
-    if (input.endsWith(extension)) {
-      return input.replace(new RegExp(`\\${extension}$`), '');
-    }
-  }
-  return input;
 }
 
 export function internalKeyFor(
