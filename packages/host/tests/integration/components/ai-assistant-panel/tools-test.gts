@@ -2630,6 +2630,36 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
+  // The declaring skill loads, but importing the tool's command module
+  // throws, so resolving the tool rejects rather than finding no command.
+  // Patched on the prototype so a loader reset mid-test is covered too.
+  function failCommandModuleImport() {
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    let importsRefused = 0;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        importsRefused++;
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    return {
+      get importsRefused() {
+        return importsRefused;
+      },
+      restore() {
+        loaderPrototype.import = originalImport;
+      },
+    };
+  }
+
   function finalEditWithHostTool(
     streamingEventId: string,
     body: string,
@@ -2951,23 +2981,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
-    // The declaring skill loads, but importing the tool's command module
-    // throws, so resolving the tool rejects rather than finding no command.
-    // Patched on the prototype so a loader reset mid-test is covered too.
-    let loaderPrototype = Object.getPrototypeOf(
-      getService('loader-service').loader,
-    );
-    let originalImport = loaderPrototype.import;
-    loaderPrototype.import = async function (
-      this: unknown,
-      moduleId: string,
-      ...rest: unknown[]
-    ) {
-      if (String(moduleId).includes('read-file-for-ai-assistant')) {
-        throw new Error('simulated command module load failure');
-      }
-      return originalImport.call(this, moduleId, ...rest);
-    };
+    // This test is about the rejection, not the validation timeout. On a busy
+    // runner, loading the declaring skill before the import can take longer
+    // than the 3s test timeout, and then the call fails for the timeout.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let fail = failCommandModuleImport();
     try {
       simulateRemoteMessage(
         roomId,
@@ -2976,7 +2996,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
       await settled();
     } finally {
-      loaderPrototype.import = originalImport;
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
     }
 
     let hostToolResults = getRoomEvents(roomId).filter(
@@ -2999,6 +3020,123 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-tool-call-apply="applying"]')
       .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test('a validation that times out and then finds the call invalid leaves only the failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // Hold the skill load past a short validation timeout, so the drain sends
+    // a failed result for the timeout. Then let the resolve continue into an
+    // import that throws, so the validation that kept running finds the call
+    // invalid after the drain has already answered it.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    let hold = holdDiscoveredSkillLoads();
+    toolService.validateTimeoutMs = 200;
+    let fail = failCommandModuleImport();
+    let toolResults = () =>
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'slow-host-read',
+      );
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await waitUntil(() => toolResults().length > 0, {
+        timeout: 5000,
+        timeoutMessage: 'the drain never reported the validation timeout',
+      });
+    } finally {
+      hold.release();
+    }
+    try {
+      // `settled()` does not wait for a validation the drain stopped waiting
+      // for, so wait for it to end explicitly.
+      await waitUntil(() => toolService.validationsInFlight === 0, {
+        timeout: 10_000,
+        timeoutMessage: 'the timed-out validation never finished',
+      });
+      await settled();
+    } finally {
+      fail.restore();
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    assert.true(
+      fail.importsRefused > 0,
+      'the timed-out validation went on to the command module import',
+    );
+    assert.deepEqual(
+      toolResults().map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'only the timeout result, no contradictory invalid',
+    );
+  });
+
+  test('a call whose invalid result cannot be sent still gets a failed result', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The call is invalid because its command module fails to load, and the
+    // send of that invalid result fails.
+    let toolService = getService('tool-service');
+    let originalValidateTimeoutMs = toolService.validateTimeoutMs;
+    toolService.validateTimeoutMs = 60_000;
+    let matrixService = getService('matrix-service');
+    let originalSend = matrixService.sendToolResultEvent;
+    let refusedSends = 0;
+    (matrixService as any).sendToolResultEvent = async function (
+      params: { status: string },
+      ...rest: unknown[]
+    ) {
+      if (params.status === 'invalid') {
+        refusedSends++;
+        throw new Error('simulated invalid result send failure');
+      }
+      return (originalSend as any).call(matrixService, params, ...rest);
+    };
+    let fail = failCommandModuleImport();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      fail.restore();
+      (matrixService as any).sendToolResultEvent = originalSend;
+      toolService.validateTimeoutMs = originalValidateTimeoutMs;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(refusedSends, 1, 'the invalid result was refused');
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['failed'],
+      'the call still gets a terminal result',
+    );
+    let failureReason = String(hostToolResults[0]?.content.failureReason);
+    assert.true(
+      failureReason.includes(
+        'could not be prepared (simulated command module load failure)',
+      ),
+      `the reason still says why the call was invalid: ${failureReason}`,
+    );
+    assert.true(
+      failureReason.includes('simulated invalid result send failure'),
+      `the reason names the send failure: ${failureReason}`,
+    );
   });
 
   test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
@@ -3127,7 +3265,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       if (!heldToolIds || heldToolIds.includes(messageTool.id ?? '')) {
         await released;
       }
-      return true;
+      return { valid: true };
     };
     let results: Array<{
       toolCallId: string;
