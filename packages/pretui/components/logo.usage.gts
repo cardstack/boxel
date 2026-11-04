@@ -83,7 +83,7 @@ export class LogoUsage extends GlimmerComponent {
 
           <div class='logo-stages'>
             <div class='logo-stage' data-logo-sidebar='expanded'>
-              <Sidebar @label='Expanded' @open={{true}} @collapsible='rail'>
+              <Sidebar @label='Expanded' @open={{true}} @collapsible='rail' @mobile={{false}}>
                 <:header as |bar|>
                   <Logo
                     @src={{if bar.collapsed MARK WORDMARK}}
@@ -95,7 +95,7 @@ export class LogoUsage extends GlimmerComponent {
               </Sidebar>
             </div>
             <div class='logo-stage' data-logo-sidebar='rail'>
-              <Sidebar @label='Rail' @open={{false}} @collapsible='rail'>
+              <Sidebar @label='Rail' @open={{false}} @collapsible='rail' @mobile={{false}}>
                 <:header as |bar|>
                   <Logo
                     @src={{if bar.collapsed MARK WORDMARK}}
@@ -107,7 +107,7 @@ export class LogoUsage extends GlimmerComponent {
               </Sidebar>
             </div>
             <div class='logo-stage' data-logo-sidebar='text'>
-              <Sidebar @label='Text only' @open={{false}} @collapsible='rail'>
+              <Sidebar @label='Text only' @open={{false}} @collapsible='rail' @mobile={{false}}>
                 <:header as |bar|>
                   <Logo
                     @name='Acme Studio'

@@ -28,7 +28,7 @@ Where Pretui differs: the fallback is part of the component (name or initials, a
 
 - **The name comes from `@name`.** An image gets it as `alt`; a wordmark is its own text; a text mark (initials) is `role='img'` with `aria-label` set to the whole name, so a reader says "Acme Studio", not "AS".
 - **`@decorative`** gives the image an empty `alt` and puts `aria-hidden='true'` on the host. Use it when text beside the logo already says the name, such as a heading, so the name is not read twice.
-- A logo is exempt from the 3:1 non-text contrast rule (WCAG 1.4.11), and the image is the caller's. The text uses `--foreground`, and the initials tile `--foreground` on `--muted`; both pass WCAG 4.5:1 and APCA Lc 60 in the default theme, light and dark.
+- A logo image is exempt from the 3:1 non-text contrast rule (WCAG 1.4.11) and is the caller's. The text uses `--foreground`; measured in the default theme, the wordmark is 21:1 (APCA Lc 106) on `--background` in light and 15.3:1 (Lc 105) in dark, and the initials on `--muted` are 19.7:1 (Lc 101) in light and 12.7:1 (Lc 102) in dark.
 - A broken image falls back to text; the swap does not move focus or announce.
 
 ## Theming
