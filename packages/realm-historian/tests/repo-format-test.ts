@@ -315,6 +315,18 @@ module('repo format', (hooks) => {
     );
   });
 
+  test('a trailer value may hold a line separator or a carriage return', (assert) => {
+    let trailers = {
+      channel: ['api'],
+      superseded: ['Author/odd\u2028name.json', 'Author/odd\u2029name.json'],
+      journalSeq: ['7\r'],
+    };
+    assert.deepEqual(
+      parseTrailers(buildMessage('Update 2 files in Author/', trailers)),
+      trailers,
+    );
+  });
+
   test('a message without a trailer block has no trailers', (assert) => {
     assert.strictEqual(
       buildMessage('Initial snapshot', {}),
