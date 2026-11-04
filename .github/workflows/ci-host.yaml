@@ -415,7 +415,7 @@ jobs:
             echo "skills content already present, skipping clone"
           else
             rm -rf contents
-            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+            git clone --depth=1 --branch skills-realm-root-files https://github.com/cardstack/boxel-skills.git contents
           fi
           ls contents/Skill/ | head -5
 
@@ -718,7 +718,7 @@ jobs:
             echo "skills content already present, skipping clone"
           else
             rm -rf contents
-            git clone --depth=1 https://github.com/cardstack/boxel-skills.git contents
+            git clone --depth=1 --branch skills-realm-root-files https://github.com/cardstack/boxel-skills.git contents
           fi
           ls contents/Skill/ | head -5
 

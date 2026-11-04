@@ -28,8 +28,8 @@ clone() {
   # visible it prints "Permission denied (publickey)" on every CI run, which
   # reads like the cause when you are scanning a log for a real failure.
   echo "Cloning boxel-skills ..."
-  git clone --quiet "$SSH_URL" contents 2>/dev/null ||
-    git clone --quiet "$HTTPS_URL" contents || {
+  git clone --quiet --branch skills-realm-root-files "$SSH_URL" contents 2>/dev/null ||
+    git clone --quiet --branch skills-realm-root-files "$HTTPS_URL" contents || {
       echo "both ssh and https clone of boxel-skills failed; check GitHub auth and network" >&2
       exit 1
     }
