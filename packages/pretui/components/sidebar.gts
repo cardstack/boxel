@@ -327,11 +327,9 @@ export class Sidebar extends Component<SidebarSignature> {
   @tracked private measured = false;
   /** Dragged width in px; unset leaves `@width` in charge. */
   @tracked private dragWidth: number | undefined;
-  /** Set when a pointer moved the seam, so the click that ends it doesn't
-   * toggle. */
+  /** Set when a pressed pointer moves on the seam, so the click that ends
+   * the drag doesn't toggle, even when the drag changed no size (at a bound). */
   private dragged = false;
-  /** Set by a key press on the seam, so its resize isn't taken for a drag. */
-  private keying = false;
   /** With rail bands on, the rail stays invisible until the first
    * measurement, so a pane that opens in the rail band doesn't flash the
    * full rail for a frame first. */
@@ -388,11 +386,19 @@ export class Sidebar extends Component<SidebarSignature> {
   get resizePlacement(): 'start' | 'end' {
     return this.placement === 'end' ? 'start' : 'end';
   }
-  get minWidth(): ResizeHandleLength {
-    return this.args.minWidth ?? '12rem';
+  /** The bounds in px, the max floored at the min, so the handle, a restore
+   * and a resize all clamp to the same range. */
+  get minPx(): number {
+    return resolveLength(this.args.minWidth ?? '12rem') ?? 0;
   }
-  get maxWidth(): ResizeHandleLength {
-    return this.args.maxWidth ?? '24rem';
+  get maxPx(): number {
+    return Math.max(
+      resolveLength(this.args.maxWidth ?? '24rem') ?? Infinity,
+      this.minPx,
+    );
+  }
+  private clampWidth(width: number): number {
+    return Math.min(this.maxPx, Math.max(width, this.minPx));
   }
   get defaultWidth(): string {
     return this.args.width ?? '16rem';
@@ -458,10 +464,12 @@ export class Sidebar extends Component<SidebarSignature> {
     this.setOpen(!this.open);
   };
   restoreWidth = (width: number) => {
-    this.dragWidth = width;
+    this.dragWidth = this.clampWidth(width);
   };
-  keySeam = () => {
-    this.keying = true;
+  moveSeam = (event: Event) => {
+    if ((event as PointerEvent).buttons !== 0) {
+      this.dragged = true;
+    }
   };
   clickSeam = () => {
     if (!this.dragged) {
@@ -472,17 +480,11 @@ export class Sidebar extends Component<SidebarSignature> {
   /** The separator runs from 0 (folded) so a drag past `@minWidth` can fold
    * the rail; a width between 0 and the minimum folds rather than renders. */
   resize = (size: number) => {
-    if (this.keying) {
-      this.keying = false;
-    } else {
-      this.dragged = true;
-    }
-    let min = resolveLength(this.minWidth) ?? 0;
-    if (size < min && this.collapsible !== 'none') {
+    if (size < this.minPx && this.collapsible !== 'none') {
       this.setOpen(false);
       return;
     }
-    this.dragWidth = Math.max(size, min);
+    this.dragWidth = this.clampWidth(size);
     let key = this.args.persistKey;
     if (!key || typeof localStorage === 'undefined') {
       return;
@@ -706,14 +708,14 @@ export class Sidebar extends Component<SidebarSignature> {
             class='pretui-sidebar-resize'
             @size={{this.dragWidth}}
             @min={{0}}
-            @max={{this.maxWidth}}
+            @max={{this.maxPx}}
             @defaultSize={{this.defaultWidth}}
             @onSizeChange={{this.resize}}
             @placement={{this.resizePlacement}}
             @label={{concat 'Resize ' this.label}}
             @controls={{this.railId}}
             data-test-pretui-sidebar-resize
-            {{on 'keydown' this.keySeam capture=true}}
+            {{on 'pointermove' this.moveSeam}}
             {{on 'click' this.clickSeam}}
           />
         {{else if this.showHandle}}

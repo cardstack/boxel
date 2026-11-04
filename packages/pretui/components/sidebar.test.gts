@@ -307,6 +307,29 @@ module('Pretui | components/sidebar', function (hooks) {
     localStorage.removeItem('pretui-sidebar:t-width:width');
   });
 
+  test('@resizable: a drag past a bound is still a drag, not a click', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='300px' @maxWidth={{300}}><:nav>Lots</:nav></Sidebar></template>);
+    await drag(300, 900);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300');
+    assert.strictEqual(state(), 'expanded', 'no size change, still no toggle');
+  });
+
+  test('@resizable: a restored width is clamped to the current bounds', async function (assert) {
+    localStorage.setItem('pretui-sidebar:t-clamp:width', '500');
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @maxWidth={{300}} @persistKey='t-clamp'><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300');
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '300px', 'the rail matches what is announced');
+    localStorage.removeItem('pretui-sidebar:t-clamp:width');
+  });
+
+  test('@resizable: @maxWidth below @minWidth is floored at the minimum', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='300px' @minWidth={{300}} @maxWidth={{200}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuemax', '300');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'announces the width it renders');
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'held at the floored max');
+  });
+
   test('without @resizable the seam is the plain toggle', async function (assert) {
     await render(<template><Sidebar @label='Library' @mobile={{false}}><:nav>Lots</:nav></Sidebar></template>);
     assert.dom('[data-test-pretui-sidebar-resize]').doesNotExist();
