@@ -1,7 +1,8 @@
 import { service } from '@ember/service';
 
 import {
-  baseRealmRRI,
+  CATALOG_REALM_PREFIX,
+  PREFIX_REALM_PREFIXES,
   isScopedCSSRequest,
   rri,
   trimExecutableExtension,
@@ -20,6 +21,12 @@ const GLOBAL_URL_STEMS = [
   'https://packages',
   'https://boxel-icons.boxel.ai',
 ];
+
+// The platform's own realms (base, Pret UI, skills and the rest). The catalog
+// is left in: a catalog card's listing is made from catalog modules.
+const PLATFORM_REALM_PREFIXES = PREFIX_REALM_PREFIXES.filter(
+  (prefix) => prefix !== CATALOG_REALM_PREFIX,
+);
 
 export default class SanitizeModuleListTool extends HostBaseTool<
   typeof BaseToolModule.SanitizeModuleListInput,
@@ -62,10 +69,13 @@ export default class SanitizeModuleListTool extends HostBaseTool<
         if (GLOBAL_URL_STEMS.some((urlStem) => dep.startsWith(urlStem))) {
           return null;
         }
-        // The base realm is readable but is not a listing's own code, in any
-        // of its spellings: its prefix, its alias URL, or the URL it's served at.
+        // Readable, but never a listing's own code, whether spelled by prefix
+        // or by the URL the realm is served at.
+        let unresolved = this.network.virtualNetwork.unresolveURL(dep);
         if (
-          this.network.virtualNetwork.unresolveURL(dep).startsWith(baseRealmRRI)
+          PLATFORM_REALM_PREFIXES.some((prefix) =>
+            unresolved.startsWith(prefix),
+          )
         ) {
           return null;
         }

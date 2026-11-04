@@ -85,22 +85,30 @@ module('Integration | tools | sanitize-module-list', function (hooks) {
     ]);
   });
 
-  test('excludes base realm modules in every spelling, though the base realm is readable', async function (assert) {
+  test('excludes platform realm modules in every spelling, though those realms are readable', async function (assert) {
     let network = getService('network');
     let baseServedAt = network.virtualNetwork.toURLHref('@cardstack/base/');
-    readableRealms = new Set([testRealmURL, '@cardstack/base/', baseServedAt]);
+    readableRealms = new Set([
+      testRealmURL,
+      '@cardstack/base/',
+      baseServedAt,
+      '@cardstack/pretui/',
+      '@cardstack/catalog/',
+    ]);
     let toolService = getService('tool-service');
     let command = new SanitizeModuleListTool(toolService.toolContext);
     let result = await command.execute({
       moduleIdentifiers: [
         `${testRealmURL}my-module.gts`,
         '@cardstack/base/card-api',
-        '@cardstack/base/string',
         `${baseServedAt}field-component`,
+        '@cardstack/pretui/components/button',
+        '@cardstack/catalog/fields/rating',
       ],
     });
     assert.deepEqual(result.moduleIdentifiers, [
       `${testRealmURL}my-module.gts`,
+      '@cardstack/catalog/fields/rating',
     ]);
   });
 
