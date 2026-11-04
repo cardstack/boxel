@@ -590,6 +590,65 @@ module('Integration | key usage and limits', function (hooks) {
         .hasAttribute('placeholder', '2,147,483,647');
     });
 
+    test('a comma out of place is not a number', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () => usageResource('key-1', usage()),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      for (let typed of ['1,2,3', ',,5', '15,00']) {
+        await fillIn('[data-test-key-limit-input="monthlyBudget"]', typed);
+        await click('[data-test-key-limits-save]');
+        assert
+          .dom('[data-test-key-limits-error]')
+          .hasText(
+            'Calls a month must be a whole number of at least 1.',
+            `${typed} is refused`,
+          );
+      }
+      assert.false(requests.some((r) => r.method === 'PUT'));
+    });
+
+    test('limits from a realm server that doesn’t say which were set fill every field and claim no defaults', async function (assert) {
+      let {
+        set: _set,
+        defaults: _defaults,
+        ...inForce
+      } = limitsOf({
+        dailyBudget: 500,
+      });
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource('key-1', usage({ limits: inForce })),
+        'PUT _user-keys/key-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: { ...inForce, ...body.data.attributes },
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('15000')
+        .doesNotHaveAttribute('placeholder');
+      assert.dom('[data-test-key-limit-default="monthlyBudget"]').hasText('');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(put.body.data.attributes, { dailyBudget: 76 });
+    });
+
     test('a usage that fails to load says so and offers to try again', async function (assert) {
       let fail = true;
       serve({

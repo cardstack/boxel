@@ -939,7 +939,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 360276,
+      "bytes": 360838,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1264,7 +1264,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/limits-form.gts",
-          "size": 7642
+          "size": 8492
         },
         {
           "package": "@cardstack/secure-origin",

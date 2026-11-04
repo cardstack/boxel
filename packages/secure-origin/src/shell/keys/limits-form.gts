@@ -42,6 +42,38 @@ const COUNT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
 // and the most an unset monthly budget can follow the daily budget to.
 const MAX_KEY_LIMIT = 2_147_483_647;
 
+// Whether the realm server said which limits the owner set and what the
+// defaults are. One that answers only the limits in force (an older task
+// still serving while a deploy rolls out) doesn't.
+function knowsDefaults(limits: KeyLimits): boolean {
+  return Boolean(limits.set && limits.defaults);
+}
+
+// Limits as the form reads them. Limits that don't say which the owner set
+// are read as if the owner had set each of them: every field filled with the
+// limit in force, and, since `knowsDefaults` is false, no field described or
+// placeheld as a default.
+function limitsView(limits: KeyLimits): KeyLimits {
+  if (knowsDefaults(limits)) {
+    return limits;
+  }
+  return {
+    ...limits,
+    set: {
+      rateBurst: limits.rateBurst,
+      rateRefillPerMinute: limits.rateRefillPerMinute,
+      dailyBudget: limits.dailyBudget,
+      monthlyBudget: limits.monthlyBudget,
+    },
+    defaults: {
+      rateBurst: limits.rateBurst,
+      rateRefillPerMinute: limits.rateRefillPerMinute,
+      dailyBudget: limits.dailyBudget,
+      monthlyBudgetDays: 30,
+    },
+  };
+}
+
 // The fields' text: what the owner set, empty where they left the default.
 function textOf(limits: KeyLimits): Record<Field, string> {
   let text = (value: number | null) => (value == null ? '' : String(value));
@@ -53,10 +85,17 @@ function textOf(limits: KeyLimits): Record<Field, string> {
   };
 }
 
+// A number as typed: plain digits, or thousands grouped by commas the way
+// the defaults are shown. Misplaced commas (`1,2,3`) are not a number.
+const TYPED_NUMBER = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
+
 // A field's text as the limit it names, or undefined when it isn't one.
-// Thousands may be grouped with commas, as the defaults are shown.
 function limitOf(text: string, whole: boolean): number | undefined {
-  let plain = text.trim().replace(/,/g, '');
+  let typed = text.trim();
+  if (!TYPED_NUMBER.test(typed)) {
+    return undefined;
+  }
+  let plain = typed.replace(/,/g, '');
   let value = Number(plain);
   let valid =
     plain !== '' &&
@@ -232,19 +271,23 @@ export default class LimitsForm extends Component<Signature> {
   // the fields show come from it.
   private guid = guidFor(this);
 
-  private filled = trackedObject({ limits: this.args.limits });
+  private filled = trackedObject({
+    limits: limitsView(this.args.limits),
+    knowsDefaults: knowsDefaults(this.args.limits),
+  });
 
   private get current(): KeyLimits {
     return this.filled.limits;
   }
 
   private values = trackedObject<Record<Field, string>>(
-    textOf(this.args.limits),
+    textOf(this.filled.limits),
   );
 
   private fill(limits: KeyLimits) {
-    this.filled.limits = limits;
-    Object.assign(this.values, textOf(limits));
+    this.filled.limits = limitsView(limits);
+    this.filled.knowsDefaults = knowsDefaults(limits);
+    Object.assign(this.values, textOf(this.filled.limits));
   }
 
   private state = trackedObject({
@@ -295,11 +338,15 @@ export default class LimitsForm extends Component<Signature> {
       fields: group.fields.map((field) => ({
         ...field,
         value: this.values[field.name],
-        placeholder: COUNT.format(this.defaults[field.name]),
+        placeholder: this.filled.knowsDefaults
+          ? COUNT.format(this.defaults[field.name])
+          : undefined,
         inputId: `${this.guid}-${field.name}`,
         hintId: `${this.guid}-${field.name}-hint`,
         noteId: `${this.guid}-${field.name}-default`,
-        defaultNote: this.defaultNote(field.name),
+        defaultNote: this.filled.knowsDefaults
+          ? this.defaultNote(field.name)
+          : '',
         onInput: (value: string) => {
           this.values[field.name] = value;
           this.state.saved = false;
