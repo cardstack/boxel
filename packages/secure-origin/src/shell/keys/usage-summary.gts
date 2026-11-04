@@ -4,11 +4,12 @@
 // published where its calls came from, the calls refused and why, how the
 // service answered, and where the key may be sent, with any destination whose
 // service rejected it. Nothing here is a value or a request: only counts,
-// codes, statuses, hosts, sites and who called.
+// codes, statuses, destinations, sites and who called.
 import Component from '@glimmer/component';
 
 import { eq } from '../../helpers/truth-helpers.ts';
 import type { KeyUsage } from '../../security/keys.ts';
+import { hostAndPath } from './key-grants.gts';
 
 interface Signature {
   Args: { usage: KeyUsage };
@@ -234,15 +235,17 @@ export default class UsageSummary extends Component<Signature> {
             </div>
           {{/if}}
           {{#if @usage.grants.length}}
-            <div class='group' data-test-key-usage-grants>
+            <div class='group destinations' data-test-key-usage-grants>
               <h4 class='group-title'>Sent to</h4>
               <ul class='counts'>
                 {{#each @usage.grants as |grant|}}
+                  {{! A key has a grant per destination, and several can share
+                      a host, so each is named by its host and path. }}
                   <li
-                    data-test-key-usage-grant={{grant.host}}
+                    data-test-key-usage-grant={{hostAndPath grant.destination}}
                     data-test-key-usage-grant-state={{grant.state}}
                   >
-                    <span class='name'>{{grant.host}}</span>
+                    <span class='name'>{{hostAndPath grant.destination}}</span>
                     {{#if (eq grant.state 'rejected')}}
                       <span class='flag rejected'>Rejected</span>
                     {{else if grant.lastForbiddenAt}}
@@ -341,6 +344,16 @@ export default class UsageSummary extends Component<Signature> {
       .n {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
+      }
+      /* A destination's host and path is longer than a count's name, so its
+         list takes the whole width, and each flag follows its destination
+         rather than sitting at the far edge. */
+      .destinations {
+        grid-column: 1 / -1;
+      }
+      .destinations li {
+        justify-content: flex-start;
+        flex-wrap: wrap;
       }
       .flag {
         flex-shrink: 0;

@@ -144,7 +144,6 @@ export interface KeyShareUsage {
   }[];
   grants: {
     id: string;
-    host: string;
     destination: string;
     state: 'active' | 'rejected';
     rejectedAt: string | null;
