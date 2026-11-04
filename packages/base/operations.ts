@@ -1,6 +1,8 @@
 import {
   assertQuery,
   buildOperations,
+  CALL_API_KEY_KINDS,
+  type CallApiKeyKind,
   codeRefForDef,
   type CallApiResponse,
   getOperationsTransport,
@@ -777,20 +779,9 @@ export const CALL_API_METHODS = [
 ] as const;
 export type CallApiMethod = (typeof CALL_API_METHODS)[number];
 
-// The kinds of key a credential slot can be filled with:
-//
-//   * `static` — a key or token the user copies from the service and pastes,
-//     sent as it is;
-//   * `google-service-account` — a Google service account's JSON key file,
-//     from which the realm server mints the access tokens it sends;
-//   * `oauth` — an account the user connects through a sign-in app, whose
-//     access tokens the realm server mints.
-export const CALL_API_KEY_KINDS = [
-  'static',
-  'google-service-account',
-  'oauth',
-] as const;
-export type CallApiKeyKind = (typeof CALL_API_KEY_KINDS)[number];
+// The kinds of key a credential slot can be filled with
+// (`call-api-key-kind.ts` in runtime-common).
+export { CALL_API_KEY_KINDS, type CallApiKeyKind };
 
 // A request to a service outside the realm, declared as data and sent by the
 // realm server. Nothing of the card runs when it is invoked: the realm builds

@@ -17,9 +17,9 @@ import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
 } from '../prerendered-html-format.ts';
+import type { CallApiKeyKind } from '../call-api-key-kind.ts';
 import type {
   BaseOperationName,
-  CallApiKeyKind,
   CallApiMethod,
   HtmlDeclaration,
   HtmlSharing,

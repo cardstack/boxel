@@ -21,11 +21,12 @@ export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
+import type { CallApiMethod } from '@cardstack/base/operations';
 import {
   CALL_API_KEY_KINDS,
+  isCallApiKeyKind,
   type CallApiKeyKind,
-  type CallApiMethod,
-} from '@cardstack/base/operations';
+} from '../call-api-key-kind.ts';
 
 export type { CallApiKeyKind };
 
@@ -429,10 +430,6 @@ export function lowerCallApi(
   };
 }
 
-function isKeyKind(value: unknown): value is CallApiKeyKind {
-  return (CALL_API_KEY_KINDS as readonly unknown[]).includes(value);
-}
-
 const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
 
 // `keyKind` as declared: one kind for every slot, or a kind for each slot
@@ -449,7 +446,7 @@ function lowerKeyKind(
   if (keyKind === undefined) {
     return () => undefined;
   }
-  if (isKeyKind(keyKind)) {
+  if (isCallApiKeyKind(keyKind)) {
     return () => keyKind;
   }
   if (!isPlainObject(keyKind)) {
@@ -468,7 +465,7 @@ function lowerKeyKind(
         `keyKind.${name}`,
         `the request has no "${name}" slot for \`keyKind.${name}\` to describe`,
       );
-    } else if (!isKeyKind(kind)) {
+    } else if (!isCallApiKeyKind(kind)) {
       fail(
         'invalid-request',
         `keyKind.${name}`,
