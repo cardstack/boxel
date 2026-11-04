@@ -236,7 +236,10 @@ export async function stageRuntimeTree({ sourceRoot, destination }) {
           relative === 'host' ||
           relative === 'boxel-icons' ||
           relative === 'boxel-ui' ||
-          relative === 'boxel-local-runtime'
+          relative === 'boxel-local-runtime' ||
+          // The realm server serves the secure origin from its build and
+          // refuses to start without it.
+          relative === 'secure-origin'
         ) {
           await cp(path.join(directory, 'dist'), path.join(target, 'dist'), {
             recursive: true,
