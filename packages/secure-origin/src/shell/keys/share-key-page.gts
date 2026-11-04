@@ -52,7 +52,7 @@ import Users from '../../components/icons/users.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
-import { pageTitle, withWayBack } from './trail.ts';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -522,7 +522,7 @@ class ShareKey extends Component<{ Args: ShareKeyArgs }> {
   // whose trail leads back here.
   private goToKeys = () =>
     this.fromKeyPage
-      ? navigation.back(pageURL('keys'))
+      ? navigation.back(keyPageURL())
       : navigation.assign(withWayBack(pageURL('keys')));
 
   // Done, a share started from the key page goes back to it; one opened for a

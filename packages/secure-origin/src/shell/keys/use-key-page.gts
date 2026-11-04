@@ -32,7 +32,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
-import { pageTitle, withWayBack } from './trail.ts';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   failureMessage,
@@ -381,7 +381,7 @@ class UseKey extends Component<{
     this.form.card = card;
   };
 
-  private goToKeys = () => navigation.back(pageURL('keys'));
+  private goToKeys = () => navigation.back(keyPageURL());
 
   // The approve page reads what it is for from its fragment, so it loads as a
   // document of its own.

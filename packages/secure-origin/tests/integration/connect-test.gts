@@ -525,6 +525,29 @@ module('Integration | connecting an account', function (hooks) {
       ]);
     });
 
+    test('reached from a key page with a trail, Back to your keys goes back to that key page as it was', async function (assert) {
+      serve({
+        'GET _user-keys/conn-1': () =>
+          json(200, { data: connection('rejected') }),
+      });
+      let keys = `keys#${new URLSearchParams({ back: 'swap-key#realm=https%3A%2F%2Frealm-server.test%2Fsomeone%2Fworkspace%2F' })}`;
+      visitShell(
+        `connect#${new URLSearchParams({ reconnect: 'conn-1', back: keys })}`,
+      );
+      await render(ConnectPage);
+      await waitFor('[data-test-connect-form]');
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-breadcrumbs] li')].map((li) =>
+          li.textContent!.replace('›', '').trim(),
+        ),
+        ['Swap key', 'Your keys', 'Reconnect'],
+      );
+      await click('[data-test-connect-back]');
+      assert.deepEqual(navigations, [
+        { how: 'replace', url: `/secure/${keys}` },
+      ]);
+    });
+
     test('reconnecting signs the connection in again, with a ticket to replace it', async function (assert) {
       serve({
         'GET _user-keys/conn-1': () =>

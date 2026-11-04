@@ -1264,6 +1264,23 @@ module('Integration | key usage and limits', function (hooks) {
       );
     });
 
+    test('opened from a key page with a trail, it goes back to that key page as it was, trail and all', async function (assert) {
+      let backTo: string[] = [];
+      navigation.back = (url: string) => backTo.push(url);
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource('share-1', usage()),
+      });
+      let keys = `keys#${new URLSearchParams({ back: `swap-key#realm=${encodeURIComponent(REALM)}` })}`;
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1&then=keys&${new URLSearchParams({ back: keys })}`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      await click('[data-test-share-limits-back]');
+      assert.deepEqual(backTo, [`/secure/${keys}`]);
+    });
+
     test('a link naming no shared key in the workspace says so', async function (assert) {
       visitShell(
         `share-limits#realm=${encodeURIComponent(REALM)}&share=share-9`,

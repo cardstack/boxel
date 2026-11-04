@@ -73,7 +73,7 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { addressAbove, pageTitle } from './trail.ts';
+import { addressAbove, keyPageURL, pageTitle } from './trail.ts';
 import {
   cliOpenedFor,
   contextRequest,
@@ -400,7 +400,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
     }
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
 
   private get isOAuthClient() {
     return this.form.kind === 'oauth-client';
@@ -594,7 +594,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       this.form.value = '';
       this.serviceAccount.clear();
       if (this.returnsToKeyPage) {
-        navigation.back(pageURL('keys'));
+        navigation.back(keyPageURL());
         return;
       }
       let approval = approvalPageAfter(key.id);

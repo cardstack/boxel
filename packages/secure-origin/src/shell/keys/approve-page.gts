@@ -84,7 +84,7 @@ import RadioTile from '../../components/radio-tile.gts';
 import { eq, gt } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
-import { pageTitle, withWayBack } from './trail.ts';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 
 import {
   anonymousConfirmation,
@@ -1187,7 +1187,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       return;
     }
     if (this.fromKeyPage) {
-      navigation.back(pageURL('keys'));
+      navigation.back(keyPageURL());
     } else {
       this.args.api.close();
     }

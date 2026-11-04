@@ -24,7 +24,7 @@
 
 import { documentAddress, navigation } from '../navigation.js';
 import { keyOfSharePath, keyOfUsePath } from '../pages.js';
-import { currentPage, shellPath } from '../urls.js';
+import { currentPage, pageURL, shellPath } from '../urls.js';
 
 export interface Crumb {
   label: string;
@@ -91,6 +91,25 @@ export function withWayBack(url: string): string {
   let fragment = new URLSearchParams(at === -1 ? '' : url.slice(at + 1));
   fragment.set(BACK, currentAddress());
   return `${address}#${fragment}`;
+}
+
+// Whether `address` is the key page's.
+export function isKeyPageAddress(address: string): boolean {
+  return isKeyPage(split(address).page);
+}
+
+// The key page to go back to from a page that returns there: the nearest one
+// above this page in its trail, as it was, so its own trail stays; or, with
+// none in the trail, the key page itself.
+export function keyPageURL(): string {
+  let address = parentOf(currentAddress());
+  for (let step = 0; address !== undefined && step < MAX_CRUMBS; step++) {
+    if (isKeyPageAddress(address)) {
+      return `${shellPath()}${address}`;
+    }
+    address = parentOf(address);
+  }
+  return pageURL('keys');
 }
 
 // The page just above this one in its trail, as its path beneath the shell's

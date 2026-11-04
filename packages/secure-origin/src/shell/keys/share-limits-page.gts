@@ -28,7 +28,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
-import { pageTitle, withWayBack } from './trail.ts';
+import { keyPageURL, pageTitle, withWayBack } from './trail.ts';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
@@ -193,7 +193,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
     'keys';
 
-  private backToKeys = () => navigation.back(pageURL('keys'));
+  private backToKeys = () => navigation.back(keyPageURL());
 
   // A failed load and the needs-admin page draw no buttons of their own.
   private get backBelow() {

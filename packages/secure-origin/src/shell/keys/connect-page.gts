@@ -32,8 +32,12 @@ import KeyRound from '../../components/icons/key-round.gts';
 import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
-import { addressAbove, pageTitle } from './trail.ts';
+import {
+  addressAbove,
+  isKeyPageAddress,
+  keyPageURL,
+  pageTitle,
+} from './trail.ts';
 
 import ClientPicker from './client-picker.gts';
 import {
@@ -342,7 +346,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     this.form.error = undefined;
   };
 
-  private back = () => navigation.back(pageURL('keys'));
+  private back = () => navigation.back(keyPageURL());
 
   // Opened for nothing, the page offers the way back to the key page. Reached
   // from another key page (replacing a key, say), its trail leads back there
@@ -351,7 +355,7 @@ class Connect extends Component<{ Args: { api: KeysWindowAPI } }> {
     let above = addressAbove();
     return (
       !this.choosing?.context &&
-      (above === undefined || ['', 'keys'].includes(above.split('#')[0]))
+      (above === undefined || isKeyPageAddress(above))
     );
   }
 
