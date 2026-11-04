@@ -1017,8 +1017,11 @@ export class ChoreoRun implements Run {
    *   stretch of work, so a pass late in a long one would date it back to
    *   that reading and its first frame would show that much of it gone; it
    *   opens at zero instead. A tween resuming with the run is dated from
-   *   the same reading less its held time, and keeps it. A `continuing`
-   *   run moves them one ordinary frame further, as its clock moves;
+   *   the same reading less its held time, and keeps it. Every way the
+   *   clock stops (a pause, a gate, a seek) holds the run's tweens first,
+   *   and no gate stands inside a parallel, so no tween is still running
+   *   when the clock starts again. A `continuing` run moves them one
+   *   ordinary frame further, as its clock moves;
    * - after that, with a cap, on by the time past the cap since the last
    *   frame: it resumes from where the last frame left it, plus one step.
    *   Without a cap this runs on the first frame only.
