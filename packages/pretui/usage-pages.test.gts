@@ -150,6 +150,7 @@ import { DEMOS_LIST } from './components/list.usage';
 import { DEMOS_LOADER } from './components/loader.usage';
 import { DEMOS_LOADING_OVERLAY } from './components/loading-overlay.usage';
 import { DEMOS_LOADING_STATE } from './components/loading-state.usage';
+import { DEMOS_LOGO } from './components/logo.usage';
 import { DEMOS_LOOKUP } from './components/lookup.usage';
 import { DEMOS_MAGNETIC } from './components/magnetic.usage';
 import { DEMOS_MARQUEE } from './components/marquee.usage';
@@ -446,6 +447,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_LOADER,
   DEMOS_LOADING_OVERLAY,
   DEMOS_LOADING_STATE,
+  DEMOS_LOGO,
   DEMOS_LOOKUP,
   DEMOS_MAGNETIC,
   DEMOS_MARQUEE,
