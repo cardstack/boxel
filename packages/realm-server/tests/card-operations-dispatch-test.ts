@@ -1247,6 +1247,34 @@ module(basename(import.meta.filename), function () {
         'a card target',
       );
     });
+    // The card+json routes read through this dispatch. A read that resolves
+    // no definition is the built-in one and serves the document whole, so a
+    // type whose `read` declares an `output` has its card refused, not served
+    // unprojected, while its definition is not ready.
+    test('a card whose type projects its read is refused while the definition is not ready, not served whole', async function (assert) {
+      let { core } = stub({
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            output: { source: '{id:.id}', syntax: 'solidified' },
+          },
+        },
+      });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'read')),
+      );
+      assert.strictEqual(error.status, 503);
+      assert.strictEqual(error.code, 'target-not-indexed');
+    });
     test('a card whose type entry is unreadable still reads', async function (assert) {
       // The built-in `read` consults no definition, so refusing here would make
       // every card of a broken module unreadable.
