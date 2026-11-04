@@ -16,7 +16,7 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 
 | Arg              | On   | Meaning                                                                                                                                                                                                                                                          |
 | ---------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                    |
+| `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                  |
 | `@controlHeight` | bar  | any CSS length; sets `--control-height` on the bar so every control shares one height (default: inherited from an ancestor, else the row's own height)                                                                                                           |
 | `@overflowLabel` | bar  | name of the ⋯ button (default `'More options'`)                                                                                                                                                                                                                  |
 | `@id`            | Slot | stable id, unique in the bar                                                                                                                                                                                                                                     |
@@ -58,6 +58,8 @@ The bar yields `{ Slot, overflow: { active, folded } }`; each Slot yields the ch
 Real widths (from renders that fit) are cached per slot + form and replace `minWidth`. A form that wrapped or overflowed is remembered only for bar widths below the one it failed at; once the bar is 16px wider than that, the form is tried again and re-measured, so growing the bar always returns to the richer forms. Each resize gets at most 8 measure-and-step frames, so a bad guess costs a frame or two and can't loop. A slot whose content grows later (new chips, longer labels), or whose `@forms` change, is re-measured on the next resize, not at once. Children are not restyled: a component that wraps internally simply gets stepped to its next form.
 
 Only the chosen form is rendered. Alternatives are never hidden with CSS, so they never reach the accessibility tree or the tab order.
+
+An `icon` form must still do the job of the richer form. For a search slot that means `<SearchInput @display='collapsed' />`: the square opens the field over the row with focus in it, and Escape or leaving collapses it and returns focus. Hold the text in your own state (`@value` + `@onInput`), since changing form remounts the control and an uncontrolled field would lose it.
 
 ## Prior art
 

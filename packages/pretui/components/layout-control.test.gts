@@ -1,7 +1,9 @@
 // Pretui — LayoutControl: the pure chooser, then folding into ⋯ in a render.
 import { module, test } from 'qunit';
-import { render, click, waitUntil } from '@ember/test-helpers';
+import { render, click, fillIn, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { SearchInput } from './search-input';
+import { eq } from '../helpers';
 import { applyHysteresis, chooseForms, HYSTERESIS_PX, LayoutControl } from './layout-control';
 import type { LayoutControlChoice, LayoutControlSlotSpec } from './layout-control';
 
@@ -117,5 +119,39 @@ module('Pretui | components/layout-control | folding', function (hooks) {
         document.querySelector('[data-test-pretui-layout-control-sheet] [data-test-search]'),
     );
     assert.ok(moved, 'the slot’s own block opens in the popover (or sheet)');
+  });
+
+  test('a search slot at its icon form opens a focused field on click and Escape closes it', async function (assert) {
+    const SEARCH = [
+      { name: 'field', minWidth: 40 },
+      { name: 'icon', minWidth: 2 },
+    ];
+    await render(
+      <template>
+        <div style={{NARROW}}>
+          <LayoutControl @label='Candidates' as |lc|>
+            <lc.Slot @id='search' @forms={{SEARCH}} @label='Search' as |form|>
+              {{#if (eq form 'icon')}}
+                <SearchInput @display='collapsed' @placeholder='Search candidates' />
+              {{else}}
+                <SearchInput @placeholder='Search candidates' />
+              {{/if}}
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+      </template>,
+    );
+    let toggle = () => document.querySelector<HTMLElement>('[data-test-pretui-search-toggle]');
+    let input = () => document.querySelector<HTMLInputElement>('[data-test-pretui-search-input] input');
+    await waitUntil(toggle);
+    assert.notOk(input(), 'only the square shows at this width');
+
+    await click(toggle()!);
+    assert.strictEqual(document.activeElement, input(), 'the field opens with focus in it');
+    await fillIn(input()!, 'ada');
+    await triggerKeyEvent(input()!, 'keydown', 'Escape');
+    await waitUntil(() => document.activeElement === toggle());
+    assert.notOk(input(), 'Escape collapses back to the square');
+    assert.strictEqual(document.activeElement, toggle(), 'focus returns to the square');
   });
 });
