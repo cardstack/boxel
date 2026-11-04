@@ -68,8 +68,9 @@ export const WRITE_CONTEXT_HEADERS = [
   PUSH_FINAL_HEADER,
 ] as const;
 
-// The Postgres channel the journal notifies on each insert, with no payload
-// while there is one shard.
+// The Postgres channel the journal notifies on each insert. The payload is the
+// realm's registry id, so a realm-historian task wakes only for the realms of
+// the shards it holds; an empty payload wakes every task.
 export const REALM_CHANGE_EVENTS_CHANNEL = 'realm_change_events';
 
 // The git trailers a revision carries. They are the metadata contract of the

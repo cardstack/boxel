@@ -3668,6 +3668,37 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/realm-historian:
+    dependencies:
+      '@cardstack/postgres':
+        specifier: workspace:*
+        version: link:../postgres
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+    devDependencies:
+      '@cardstack/local-types':
+        specifier: workspace:*
+        version: link:../local-types
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      qunit:
+        specifier: 'catalog:'
+        version: 2.26.0
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/realm-server:
     dependencies:
       '@aws-sdk/client-kms':

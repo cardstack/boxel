@@ -120,6 +120,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/postgres
+      - name: Lint Realm Historian
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/realm-historian
       - name: Lint Base Realm
         if: ${{ !cancelled() }}
         run: pnpm run lint
