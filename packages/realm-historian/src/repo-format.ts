@@ -109,10 +109,11 @@ function seconds(time: string | Date): number {
 }
 
 // What a revision's subject line is made from. `changes` is every path the
-// revision records, with its status; `writeCount` is the number of change
-// events the revision covers; `contentNotKept` says every path was
-// superseded, so the revision records that the writes happened and nothing
-// of their content.
+// revision's events changed, with its status, superseded paths included:
+// the subject names what was written, whether or not the content was kept.
+// `writeCount` is the number of change events the revision covers;
+// `contentNotKept` says every path was superseded, so the revision records
+// that the writes happened and nothing of their content.
 export type RevisionSubject =
   | { kind: 'changes'; changes: { path: string; status: 'A' | 'M' | 'D' }[] }
   | { kind: 'revert'; path: string; revision: string }
@@ -169,7 +170,7 @@ function changesText(
   changes: { path: string; status: 'A' | 'M' | 'D' }[],
 ): string {
   if (changes.length === 0) {
-    return 'No changes';
+    throw new Error('a revision subject needs at least one change');
   }
   if (changes.length === 1) {
     let [{ path, status }] = changes;
