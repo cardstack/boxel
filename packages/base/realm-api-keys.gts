@@ -133,7 +133,10 @@ function shortDate(iso: string | undefined): string {
 }
 
 // A destination as the key pages name it: its host and path, the prefix a
-// request must start with to be sent the key.
+// request must start with to be sent the key. The secure origin's key pages
+// name it with their own `hostAndPath` (`shell/keys/key-grants.gts`), which
+// base can't import, so the two must produce the same text. This one also
+// takes an absent destination, which a `KeyUsageGrantField` may hold.
 function hostAndPath(destination: string | undefined): string {
   if (!destination) {
     return '';
