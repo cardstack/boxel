@@ -483,9 +483,12 @@ SELECT created_at, owner FROM key_binding_notices WHERE binding_id = '<id>';
   interactive use; readiness answers `needs-approval`, whose button opens the
   approve page.
 
-The binding tables hold no secret, but like the keys tables they are withheld
-from `readonly_role` and excluded from the SQLite schema dump; query them as
-the application role.
+The binding tables hold no secret, and all three are excluded from the SQLite
+schema dump. `readonly_role` (dashboards and read-only database access, such
+as `claude_readonly_user` in staging and production) can read `key_bindings`,
+so which operations a realm has bound, to which key or share, can be checked
+while triaging. `key_binding_approvals` and `key_binding_notices` are withheld
+from it, like the keys tables; query those as the application role.
 
 ## Tests
 
