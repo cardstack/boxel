@@ -3,7 +3,7 @@
 // trigger naming the chosen workspace, opening a list capped in height that
 // scrolls, with a search field above it that filters by name, so a person
 // with hundreds of workspaces finds one by typing. boxel-ui can't ship on the
-// secure origin (ADR 008 §1.3), so its look is brought here.
+// secure origin (ADR 019 §1.3), so its look is brought here.
 //
 // The app shows each workspace's icon image. The secure origin loads no
 // realm or remote images, so each workspace gets a letter tile drawn here

@@ -10,7 +10,7 @@ import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';
 
 // boxel-ui's BoxelInput, for the inputs the secure origin's pages draw.
-// boxel-ui's can't ship on the secure origin (ADR 008 §1.3), so its template
+// boxel-ui's can't ship on the secure origin (ADR 019 §1.3), so its template
 // and styles are brought here, kept as they are there, but for what the pages
 // don't draw: other kinds of input (search, checkbox, color), the large size,
 // the flat bottom, the loading state, helper text, the optional marker, and

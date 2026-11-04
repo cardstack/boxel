@@ -1,0 +1,258 @@
+---
+status: proposed
+date: 2026-11-04
+supersedes: 008
+scope:
+  - packages/secure-origin/**
+  - packages/pretui/**
+  - packages/realm-server/lib/secure-origin.ts
+  - packages/realm-server/realm-server.Dockerfile
+  - packages/realm-server/scripts/start-staging.sh
+  - packages/realm-server/scripts/start-production.sh
+  - packages/realm-server/tests/helpers/index.ts
+  - packages/realm-server/tests/scripts/run-qunit-with-test-pg.sh
+  - packages/realm-server/tests/secure-origin-policy-test.ts
+  - packages/boxel-cli/tests/scripts/run-integration-with-test-pg.sh
+  - packages/matrix/support/isolated-realm-server.ts
+  - packages/matrix/tests/global.setup.ts
+  - mise-tasks/services/realm-server
+  - mise-tasks/test-services/**
+  - packages/host/app/components/matrix/account-switch-failed.gts
+  - packages/host/app/components/matrix/secure-sign-in.gts
+  - packages/boxel-ui/src/styles/variables.css
+  - packages/boxel-ui/src/styles/theme.css
+  - .github/workflows/ci.yaml
+---
+
+# 019. Build the secure origin's pages as their own Ember app, on Pret UI
+
+Every other screen in Boxel is a component in the host app. The secure
+origin's pages (the secure window, and the credential fields the app frames)
+are the deliberate exception. One script served anywhere on the secure origin
+can read every password typed on it, so all the code the origin serves is
+trusted code. It has to be small enough to review, and nothing else may change
+it without that review. So the pages get a package of their own: an Ember app
+with an import allowlist enforced by the build, and a reviewed record of
+everything it ships. The pages are built from Pret UI's components, the
+library the rest of Boxel's new UI uses (ADR 009), rather than from copies the
+package keeps of boxel-ui's. A Pret UI module ships on the origin only when it
+meets the origin's policy, and a change to one shows in the build record of
+the pull request that makes it.
+
+## 1. Decision
+
+### 1.1. A package of their own
+
+The secure origin's pages MUST be built from their own package,
+`packages/secure-origin`. The realm server MUST serve on the secure origin only
+that package's build output, and the files allowed by §1.4. The build MUST run
+before any process that serves the secure origin starts, including the
+realm-server image, the development and test stacks, and test helpers that
+start the secure origin in-process. The realm server MUST NOT build anything
+at request time.
+
+### 1.2. Ember, with templates compiled at build time
+
+The pages SHOULD be an Ember app, written as Glimmer components. Templates
+MUST be compiled at build time, Pret UI's included. The build MUST NOT include
+Ember's runtime template compiler.
+
+### 1.3. What the package may import
+
+The package MAY import Pret UI's components, helpers and modifiers
+(`@cardstack/pretui`), each by its own module path. It MUST NOT import from
+`packages/host`, `@cardstack/runtime-common`, the base realm, any realm or
+card module, or any script from `@cardstack/boxel-ui`, directly or through a
+Pret UI module. Every module in the build's output MUST come from the package
+itself or from a package named in its allowlist. A plugin in the package's
+build MUST fail the build when the output holds any other module, or any
+module of Ember's runtime template compiler (§1.2). Adding a package to the
+allowlist is a change to the secure origin's trusted code, and MUST be
+reviewed as one. That holds for a package that a Pret UI module imports as
+much as for one the package imports by name.
+
+### 1.4. Styles
+
+The pages MAY use boxel-ui's `variables.css`, `theme.css` and typeface,
+served as files, so their tokens are the app's. They MUST NOT load any other
+boxel-ui file.
+
+The package's components SHOULD follow the host's CSS conventions, so the
+pages look and change like the app's screens. Each component SHOULD style
+itself with scoped CSS (`<style scoped>`, compiled by `glimmer-scoped-css`), as
+the host's and Pret UI's components do. Styles SHOULD use the theme's and
+boxel-ui's CSS variables for color, spacing and type, and scalable units such
+as `rem`.
+
+### 1.5. The policy stays as it is
+
+The build output MUST run under the secure origin's Content Security Policy
+unchanged, with no `unsafe-inline` and no `unsafe-eval`. Templates MUST NOT
+bind or set a `style` attribute, and this includes the template of every Pret
+UI module the build ships. The package's template lint MUST enable
+`no-inline-styles` with `allowDynamicStyles: false`, and the package's lint
+MUST apply the same rule to each Pret UI module the build ships. Code that
+styles an element at run time MUST use the CSSOM
+(`element.style.setProperty`). Scoped CSS MUST be emitted as files. Entry
+documents MUST hold no inline script or style. A test MUST load each built
+page under the policy and fail on any `securitypolicyviolation` event. The
+secure origin MUST NOT be served by a development server that injects styles
+inline.
+
+### 1.6. Security logic stays plain modules
+
+The credential frame's message protocol and fixed forms, the Matrix requests,
+the session handling, origin matching and response redaction MUST live in
+`packages/secure-origin/src/security/`. Modules there MUST import nothing from
+Ember, Glimmer, Pret UI or the package's components, and a lint rule
+(`no-restricted-imports`) on that directory MUST enforce it. Components call
+these modules. They MUST be testable without rendering.
+
+### 1.7. Serving
+
+The build MUST emit one entry document for the shell and one for the
+credential fields, and a manifest that maps each entry to the files it loads.
+The realm server MUST read the manifest and the files once, at startup. The
+shell's path is configured per environment (`/` deployed, `/secure` in
+development). So the build MUST write asset URLs under a fixed placeholder
+base, and the realm server MUST replace that base with the configured path
+when it reads the files. The credential fields SHOULD have their own entry and
+bundle. Framing and headers MUST stay per path, as `secureOriginHeaders()`
+sets them.
+
+### 1.8. Reviewing what ships
+
+The package MUST commit a record of its build output: each module's package
+name and version, and its size. A module from another package in this
+repository, such as Pret UI, MUST also be recorded with a hash of its source, since such a
+package's version doesn't change when its code does. CI MUST rebuild the
+package and fail when the output differs from the record. CI MUST also run
+the package's component tests and the policy test (§1.5) on a change to any
+package in this repository whose modules the build ships. So a change to
+Ember, to an allowed package or to a Pret UI module the origin ships shows, in
+the pull request that makes it, exactly what changes on the origin.
+
+### 1.9. One implementation of the sign-in screens
+
+The host SHOULD render its own sign-in, registration and password-reset
+screens from the package's presentational components, so that one
+implementation serves both origins. The host MAY import from the package. The
+package MUST NOT import from the host (§1.3).
+
+### 1.10. TypeScript
+
+The package's code SHOULD be TypeScript: components in `.gts` files, and
+other modules, scripts, tests and build configuration in `.ts` files. Its
+TypeScript MUST use only erasable syntax, so that Node runs the package's
+scripts and tests without a compile step. The package's build compiles its
+`.ts` and `.gts` files. The package's lint MUST type-check them.
+
+### 1.11. Pret UI first
+
+The pages MUST use a Pret UI component, helper or modifier where Pret UI has
+one for the job that can ship under §1.3 and §1.5. The package MUST NOT keep
+a component, helper, modifier or icon of its own for such a job. Icons come
+from boxel-icons (`@cardstack/boxel-icons`), as ADR 009 §1.3 sets out. Where
+Pret UI's counterpart can't ship yet, because it imports boxel-ui or binds a
+`style` attribute, the package MAY keep its own, and the fix SHOULD be made in
+Pret UI so the package's copy can go.
+
+## 2. Rationale
+
+The rest of the UI is the host app, and new screens are expected to follow
+it. The secure origin can't. It exists so that card code in the app page
+can't read a credential, and the browser's same-origin policy does the
+isolating. That protects the origin, not a page on it, so every script the
+origin serves can read every window open on it [1][2]. All that code is
+trusted. What decides the architecture is how much trusted code there is, who
+writes it, and how a change to it gets reviewed. The host bundle is ruled out
+outright: it evaluates card code.
+
+An Ember app of the pages' own is the stack the team already writes and
+reviews. A minimal Ember application (router, resolver and one component) is
+293 KB of minified script, 91 KB gzipped, in a production build, and runs under
+the policy with no violation [3]. That runtime is a fixed body of code from a
+widely used, pinned release. It needs no `unsafe-eval` once templates are
+compiled at build time. The security logic stays as plain modules in one
+directory (§1.6), because that code is what a reviewer of the origin has to
+read closely. Plain modules keep it readable without knowing the framework,
+and testable on its own.
+
+Building the pages from no component library at all costs a copy of every
+component they draw. The package keeps ports of boxel-ui's Button,
+FieldContainer, Label, Input, InputGroup, Checkbox and LoadingIndicator, the
+host's ErrorDisplay and workspace dropdown, and twenty icons copied from
+boxel-ui and boxel-icons: about 3,200 lines that follow their originals by
+hand [4]. The
+key pages keep gaining screens, so the copies keep growing, and they copy
+boxel-ui, which ADR 009 deprecates. Pret UI is where the app's new UI goes,
+so the pages drawn from it look and behave like the app, and a fix made there
+reaches both.
+
+The reasons that ruled out boxel-ui's components [3] don't carry over to Pret
+UI, or are met by the rules above:
+
+- **Size.** boxel-ui's components shipped 1,265 KB through its index modules,
+  since boxel-ui declares no `sideEffects`. Pret UI exports each component
+  from its own module, with no index to pull in, so a page ships what it
+  imports (§1.3), and the build record shows its size (§1.8).
+- **Style attributes.** boxel-ui's LoadingIndicator and BoxelIcon set
+  `style` attributes the policy refuses. Some of Pret UI's components do too,
+  so §1.5 applies to every Pret UI module the build ships. One that binds
+  `style` can't ship until it sets its properties through the CSSOM, which
+  Pret UI's own `keepStyle` modifier already does for a component's custom
+  properties.
+- **Every change ships onto the origin.** It still does, for the Pret UI
+  modules the origin ships, but no longer unseen. The source hash in the
+  build record (§1.8) fails CI on a Pret UI change that reaches the origin
+  until the same pull request updates the record, and the origin's tests and
+  policy test run on it. The change is then reviewed as a change to the
+  origin, as one to the package itself is.
+
+Pret UI is also source in this repository, compiled by the package's own
+build, so what ships is what a reviewer reads here. boxel-ui still can't ship
+(§1.3), and a Pret UI module that imports it can't either. Those imports are
+gaps ADR 009 §1.6 already lists.
+
+## 3. Considered options
+
+- **The package's own Ember app, on Pret UI (chosen).**
+- **The package's own Ember app, with its own components.** This was the
+  decision ADR 008 recorded. It keeps the trusted code to the package alone,
+  but every component the pages draw is a hand-kept copy of the app's, and
+  the copies grow with each key page.
+- **The host app bundle.** It evaluates card code.
+- **An Ember app on boxel-ui's components.** A sign-in form built from them
+  shipped 321 KB minified, and 1,265 KB through boxel-ui's index modules.
+  LoadingIndicator and the BoxelIcon logo set `style` attributes the policy
+  refuses. boxel-ui is also deprecated (ADR 009).
+- **Plain JavaScript, in the realm server or in its own package.** It is the
+  smallest trusted code, but it means a hand-copied second implementation of
+  every screen, which grows with each screen the window gains.
+- **A small view library, such as Preact or Lit.** It is smaller than Ember,
+  but it is a second UI stack for the team to learn and review.
+- **Relaxing the policy with `style-src-attr 'unsafe-inline'`, so more of Pret
+  UI ships as it is.** It would also let any style attribute that injected
+  markup carries take effect.
+
+## 4. Consequences
+
+Pret UI's authors work under §1.5 for the modules the origin ships: a
+change that adds a `style` binding to one of them fails the package's lint.
+Removing boxel-ui from Pret UI's form controls (ADR 009 §1.6) is what lets the
+pages use Pret UI's inputs.
+
+## 5. Sources
+
+1. `.claude/skills/secure-origin/SKILL.md`, "The governing fact".
+2. [ADR 005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md)
+   §1.4, the secure origin's pages and their policy.
+3. [ADR 008](008-build-the-secure-origins-pages-as-their-own-ember-app.md),
+   which this ADR supersedes: §2 for the Ember app's size, and §3 for the
+   measurements of an app on boxel-ui's components.
+4. `packages/secure-origin/src/components/` and
+   `packages/secure-origin/src/shell/keys/workspace-dropdown.gts`.
+
+## 6. Remediation
+
+Known gaps are listed in [remediation/019.md](remediation/019.md).

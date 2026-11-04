@@ -41,6 +41,10 @@ A rule that restyles a boxel-ui component goes in `PretComponent` too: Pret UI's
 
 The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries and `pretui-component.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
 
+## On the secure origin
+
+The secure origin's pages (`packages/secure-origin`) use Pret UI's components where they can ship there, and everything that origin serves can read every password typed on it. So a Pret UI module the pages ship is held to the origin's rules ([ADR 019](../../docs/adr/019-build-the-secure-origins-pages-as-their-own-ember-app-on-pret-ui.md)): nothing it reaches may import `@cardstack/boxel-ui` (§1.3), and its template may not bind a `style` attribute (§1.5). Set a per-instance custom property through the CSSOM instead, as `keepStyle` does. The origin's lint and its build record cover each module it ships (§1.5, §1.8), so a change to one is reviewed as a change to the origin.
+
 ## Development
 
 ```sh

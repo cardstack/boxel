@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 // boxel-ui's Label, drawn as a `div` at its default size. boxel-ui's can't
-// ship on the secure origin (ADR 008 §1.3), so its template and styles are
+// ship on the secure origin (ADR 019 §1.3), so its template and styles are
 // brought here, kept as they are there, but for the sizes the secure origin's
 // pages don't draw.
 interface Signature {

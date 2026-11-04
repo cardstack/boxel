@@ -39,9 +39,16 @@ module.exports = {
           {
             patterns: [
               {
-                group: ['@ember/*', '@glimmer/*', 'ember-*', 'ember'],
+                group: [
+                  '@ember/*',
+                  '@glimmer/*',
+                  'ember-*',
+                  'ember',
+                  '@cardstack/pretui',
+                  '@cardstack/pretui/*',
+                ],
                 message:
-                  'src/security/ imports nothing from Ember or Glimmer: components call these modules, not the other way round.',
+                  'src/security/ imports nothing from Ember, Glimmer or Pret UI: components call these modules, not the other way round.',
               },
               {
                 group: ['../*', '!../security/*'],

@@ -2,7 +2,7 @@
 // frame sits, every custom property the fields' styles read and the text
 // styles they inherit, and sends them over; these write them onto the frame's
 // document through the CSSOM, which the secure origin's policy allows where it
-// refuses a `style` attribute (ADR 008 §1.5).
+// refuses a `style` attribute (ADR 019 §1.5).
 
 export interface StyleMessage {
   properties?: Record<string, unknown>;

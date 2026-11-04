@@ -7,7 +7,7 @@ import type { IconComponent } from './icons/types.ts';
 import Label from './label.gts';
 
 // boxel-ui's FieldContainer, drawn as a `label` or a `div`. boxel-ui's can't
-// ship on the secure origin (ADR 008 §1.3), so its template and styles are
+// ship on the secure origin (ADR 019 §1.3), so its template and styles are
 // brought here, kept as they are there, but for the variants the secure
 // origin's pages don't draw (inline, centered, a small or differently sized
 // label, a field nested in another).
