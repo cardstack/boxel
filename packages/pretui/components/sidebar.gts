@@ -1085,6 +1085,7 @@ export interface SidebarItemSignature {
  * carry. Here the name is an argument, so it cannot go missing.
  */
 export class SidebarItem extends Component<SidebarItemSignature> {
+  badgeId = `${guidFor(this)}-badge`;
   get isLink(): boolean {
     return this.args.href !== undefined && !this.args.disabled;
   }
@@ -1140,6 +1141,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         class='pretui-sbitem'
         href={{@href}}
         aria-label={{@label}}
+        aria-describedby={{if @badge this.badgeId}}
         aria-current={{this.current}}
         data-active={{if @active 'true' 'false'}}
         data-collapsed='false'
@@ -1149,7 +1151,11 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
         <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge' data-test-pretui-sidebar-item-badge>{{@badge}}</span>
+          <span
+            id={{this.badgeId}}
+            class='pretui-sbitem-badge'
+            data-test-pretui-sidebar-item-badge
+          >{{@badge}}</span>
         {{/if}}
       </a>
     {{else}}
@@ -1157,6 +1163,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         type='button'
         class='pretui-sbitem'
         aria-label={{@label}}
+        aria-describedby={{if @badge this.badgeId}}
         aria-current={{this.current}}
         aria-disabled={{if @disabled 'true'}}
         data-active={{if @active 'true' 'false'}}
@@ -1168,7 +1175,11 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
         <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge' data-test-pretui-sidebar-item-badge>{{@badge}}</span>
+          <span
+            id={{this.badgeId}}
+            class='pretui-sbitem-badge'
+            data-test-pretui-sidebar-item-badge
+          >{{@badge}}</span>
         {{/if}}
       </button>
     {{/if}}

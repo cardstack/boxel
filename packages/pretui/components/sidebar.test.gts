@@ -198,6 +198,11 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.dom('[data-test-pretui-sidebar-item-label]').exists({ count: 2 }, 'the text is rendered, for the rail CSS to hide');
     assert.dom('[data-test-pretui-sidebar-item-badge]').exists({ count: 1 });
     assert.strictEqual(
+      document.querySelector('[data-test-pretui-sidebar-item]')?.getAttribute('aria-describedby'),
+      document.querySelector('[data-test-pretui-sidebar-item-badge]')?.id,
+      'the badge stays reachable as the item description',
+    );
+    assert.strictEqual(
       document.querySelector('[data-test-pretui-sidebar-group]')?.getAttribute('aria-labelledby'),
       document.querySelector('[data-test-pretui-sidebar-group-label]')?.id,
       'the group is named by its label',

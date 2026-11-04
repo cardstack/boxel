@@ -183,7 +183,12 @@ export class SidebarUsage extends Component {
           names live on the tooltip and the accessible name, group labels
           become hairlines and badges are dropped.</p>
         <div class='shell-stage shell-stage-rail' data-test-sidebar-rail-example>
-          <Sidebar @label='Collapsed workspace' @open={{false}} @bordered={{true}}>
+          <Sidebar
+            @label='Collapsed workspace'
+            @mobile={{false}}
+            @open={{false}}
+            @bordered={{true}}
+          >
             <:nav as |bar|>
               <SidebarGroup @label='Library'>
                 {{#each this.library key='id' as |row|}}
