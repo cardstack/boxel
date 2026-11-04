@@ -1033,7 +1033,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         justify-self: center;
         position: absolute;
         width: 89%;
-        height: inherit;
+        height: 100%;
         z-index: 0;
         pointer-events: none;
       }
