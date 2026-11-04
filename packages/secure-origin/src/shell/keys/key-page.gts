@@ -62,7 +62,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
-import { pageTitle } from './trail.ts';
+import { pageTitle, withWayBack } from './trail.ts';
 
 import AnonymousUseFields, {
   anonymousCapOf,
@@ -643,7 +643,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // it in its fragment.
   private reconnect = (key: UserKey) =>
     navigation.assign(
-      `${pageURL('connect')}#${new URLSearchParams({ reconnect: key.id })}`,
+      withWayBack(
+        `${pageURL('connect')}#${new URLSearchParams({ reconnect: key.id })}`,
+      ),
     );
 
   // Sharing a key into a realm is a change of its own, made on the share
@@ -677,10 +679,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     share: { id: string },
   ) =>
     navigation.assign(
-      `${pageURL(keyUsePath(key.id))}#${new URLSearchParams({
-        realm: workspace.url,
-        share: share.id,
-      })}`,
+      withWayBack(
+        `${pageURL(keyUsePath(key.id))}#${new URLSearchParams({
+          realm: workspace.url,
+          share: share.id,
+        })}`,
+      ),
     );
 
   // Removing a grant revokes the approvals that send under it, so both lists
@@ -792,11 +796,13 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       return;
     }
     navigation.assign(
-      `${pageURL('share-limits')}#${new URLSearchParams({
-        realm: notice.realm,
-        share: notice.share,
-        then: 'keys',
-      })}`,
+      withWayBack(
+        `${pageURL('share-limits')}#${new URLSearchParams({
+          realm: notice.realm,
+          share: notice.share,
+          then: 'keys',
+        })}`,
+      ),
     );
   };
 

@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
 import { forgetSession, storeSession } from '../../src/security/session.js';
-import { navigation } from '../../src/shell/navigation.js';
+import { navigation, noteDocumentAddress } from '../../src/shell/navigation.js';
 import EnterKeyPage from '../../src/shell/keys/enter-key-page.gts';
 import KeyPage from '../../src/shell/keys/key-page.gts';
 import { openedFor } from '../../src/shell/keys/opened-for.ts';
@@ -1508,6 +1508,7 @@ module('Integration | key pages', function (hooks) {
           url: `/secure/keys/key-1/use#${new URLSearchParams({
             realm: REALM,
             share: 'share-team-1',
+            back: 'keys',
           })}`,
         },
       ]);
@@ -3926,6 +3927,7 @@ module('Integration | key pages', function (hooks) {
 
     test('Add key reached from Approve leads back to the batch as it was opened', async function (assert) {
       serveForecast();
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
       let approve = `approve#${OPENED_FOR_CARD}`;
       visitShell(
         `enter-key#${OPENED_FOR_CARD}&then=approve&${new URLSearchParams({ back: approve })}`,
@@ -4001,6 +4003,34 @@ module('Integration | key pages', function (hooks) {
       assert.deepEqual(crumbs(), ['Your keys', 'Add key']);
       await click('[data-test-breadcrumb="0"]');
       assert.deepEqual(navigations, [{ how: 'replace', url: '/secure/keys' }]);
+    });
+
+    test('a page beneath the key page, reached by a route transition from a key page with a trail, keeps that trail and goes back through the history', async function (assert) {
+      let share = `share-key#realm=${encodeURIComponent(REALM)}`;
+      let keys = `keys#${new URLSearchParams({ back: share })}`;
+      navigation.back = (url: string) => navigations.push({ how: 'back', url });
+      visitShell('keys/add');
+      noteDocumentAddress(keys);
+      try {
+        await render(EnterKeyPage);
+        await waitFor('[data-test-enter-key-form]');
+        assert.deepEqual(crumbs(), ['Share key', 'Your keys', 'Add key']);
+        await click('[data-test-breadcrumb="1"]');
+        await click('[data-test-breadcrumb="0"]');
+        assert.deepEqual(navigations, [
+          { how: 'back', url: `/secure/${keys}` },
+          { how: 'replace', url: `/secure/${share}` },
+        ]);
+      } finally {
+        noteDocumentAddress(undefined);
+      }
+    });
+
+    test('a way back that names a page that isn’t a key page ends the trail', async function (assert) {
+      visitShell(`keys#${new URLSearchParams({ back: 'sign-out' })}`);
+      await render(KeyPage);
+      await waitFor('[data-test-key-list]');
+      assert.dom('[data-test-breadcrumbs]').doesNotExist();
     });
 
     test('a way back that names no page of the shell ends the trail', async function (assert) {

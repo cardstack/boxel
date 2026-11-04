@@ -87,7 +87,15 @@ export const navigation = {
 export function useRouter(routerService) {
   router = routerService;
   rootURL = routerService.rootURL;
-  loadedAt = `${splitPagePath(window.location.pathname).page}${window.location.hash}`;
+  noteDocumentAddress(
+    `${splitPagePath(window.location.pathname).page}${window.location.hash}`,
+  );
+}
+
+// Records where the document was loaded, which the router does as the app
+// boots; a component test of a page beneath the key page says it here.
+export function noteDocumentAddress(address) {
+  loadedAt = address;
 }
 
 // Where the document was loaded, or undefined before the router runs.

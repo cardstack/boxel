@@ -820,7 +820,7 @@ module('Integration | key usage and limits', function (hooks) {
       assert.true(target.pathname.endsWith('/share-limits'));
       assert.deepEqual(
         Object.fromEntries(new URLSearchParams(target.hash.slice(1))),
-        { realm: REALM, share: 'share-1', then: 'keys' },
+        { realm: REALM, share: 'share-1', then: 'keys', back: 'keys' },
       );
     });
 
@@ -1136,6 +1136,7 @@ module('Integration | key usage and limits', function (hooks) {
           url: `/secure/keys/key-1/use#${new URLSearchParams({
             realm: REALM,
             share: 'share-1',
+            back: `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
           })}`,
         },
       ]);

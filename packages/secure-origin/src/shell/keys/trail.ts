@@ -19,15 +19,18 @@
 //
 // Going back to a page loads its address again, so the page starts afresh
 // for what it was opened for, and nothing is saved or changed on the way.
-// `back` names only one of the shell's pages; anything else ends the trail.
+// `back` names only a key page; anything else, a sign-in or sign-out page
+// among them, ends the trail.
 
 import { documentAddress, navigation } from '../navigation.js';
-import { isPagePath, keyOfSharePath, keyOfUsePath } from '../pages.js';
+import { keyOfSharePath, keyOfUsePath } from '../pages.js';
 import { currentPage, shellPath } from '../urls.js';
 
 export interface Crumb {
   label: string;
-  // The address to load, beneath the shell's address.
+  // The page's path beneath the shell's address, and its fragment.
+  address: string;
+  // The address to load.
   url: string;
 }
 
@@ -55,15 +58,14 @@ function parentOf(address: string): string | undefined {
   let { page, fragment } = split(address);
   let back = fragment.get(BACK);
   if (back !== null) {
-    let parent = split(back).page;
-    return !parent.includes('?') && isPagePath(parent) ? back : undefined;
+    return keyPageTitle(split(back).page) !== undefined ? back : undefined;
   }
   return page.startsWith('keys/') ? 'keys' : undefined;
 }
 
 // This page's address. A page beneath the key page's path reached by a route
 // transition has no fragment of its own, so the key page above it is the one
-// the document was loaded at, with that page's own trail.
+// the document was loaded at, as it was, with its own trail.
 export function currentAddress(): string {
   let page = currentPage();
   let hash = window.location.hash.replace(/^#/, '');
@@ -74,8 +76,7 @@ export function currentAddress(): string {
   if (
     page.startsWith('keys/') &&
     loaded !== undefined &&
-    isKeyPage(split(loaded).page) &&
-    split(loaded).fragment.has(BACK)
+    isKeyPage(split(loaded).page)
   ) {
     return `${page}#${new URLSearchParams({ [BACK]: loaded })}`;
   }
@@ -98,10 +99,16 @@ export function addressAbove(): string | undefined {
   return parentOf(currentAddress());
 }
 
-// A page's title: a short name a glance takes in, which the page shows as
+// A key page's title: a short name a glance takes in, which the page shows as
 // its heading and its crumb shows in the trail, so the two always match.
 // `reconnecting` is the connect page's for signing a connection in again.
+// Each key page asks for its own title.
 export function pageTitle(page: string, reconnecting = false): string {
+  return keyPageTitle(page, reconnecting) ?? '';
+}
+
+// The title of `page`, or undefined when it isn't a key page.
+function keyPageTitle(page: string, reconnecting = false): string | undefined {
   if (isKeyPage(page)) {
     return 'Your keys';
   }
@@ -132,7 +139,7 @@ export function pageTitle(page: string, reconnecting = false): string {
     case 'connected':
       return 'Connected';
     default:
-      return page;
+      return undefined;
   }
 }
 
@@ -149,6 +156,7 @@ export function trail(): Crumb[] {
   while (address !== undefined && crumbs.length < MAX_CRUMBS) {
     crumbs.unshift({
       label: labelOf(address),
+      address,
       url: `${shellPath()}${address}`,
     });
     address = parentOf(address);
@@ -156,11 +164,19 @@ export function trail(): Crumb[] {
   return crumbs;
 }
 
-// Goes back to one of the pages above this one. The page just above, when
-// this page was reached from it by a route transition, is where the browser's
-// back button goes, so it goes there the same way.
+// Goes back to one of the pages above this one, by loading its address. The
+// one exception is the page the document was loaded at, just above a page
+// beneath the key page's path that a route transition reached from it: the
+// browser's back button goes there, so it goes there the same way. Any other
+// page is loaded afresh, since the browser's own back and forward buttons
+// leave what the history holds unknown here.
 export function goBackTo(crumb: Crumb, crumbs: Crumb[]) {
-  if (crumbs.indexOf(crumb) === crumbs.length - 2) {
+  let loaded = documentAddress();
+  if (
+    crumbs.indexOf(crumb) === crumbs.length - 2 &&
+    crumb.address === loaded &&
+    split(loaded).page !== currentPage()
+  ) {
     navigation.back(crumb.url);
   } else {
     navigation.replace(crumb.url);

@@ -28,7 +28,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
-import { pageTitle } from './trail.ts';
+import { pageTitle, withWayBack } from './trail.ts';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
@@ -218,10 +218,12 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       return;
     }
     navigation.assign(
-      `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
-        realm: share.realm,
-        share: share.id,
-      })}`,
+      withWayBack(
+        `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
+          realm: share.realm,
+          share: share.id,
+        })}`,
+      ),
     );
   };
 

@@ -821,7 +821,7 @@ module('Integration | connecting an account', function (hooks) {
         .doesNotExist('a connection is signed in again, not replaced');
       await click(`${row} [data-test-key-reconnect]`);
       assert.deepEqual(navigations, [
-        { how: 'assign', url: '/secure/connect#reconnect=conn-1' },
+        { how: 'assign', url: '/secure/connect#reconnect=conn-1&back=keys' },
       ]);
     });
 
