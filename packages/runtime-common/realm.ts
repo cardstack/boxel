@@ -17779,8 +17779,9 @@ export class Realm {
     }
     let chain: string[];
     try {
-      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-        .types;
+      chain = (
+        await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+      ).types;
     } catch {
       return [];
     }
@@ -17853,8 +17854,9 @@ export class Realm {
       let chain = chains.get(key);
       if (!chain) {
         try {
-          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-            .types;
+          chain = (
+            await this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef)
+          ).types;
         } catch {
           chain = [];
         }
