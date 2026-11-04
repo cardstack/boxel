@@ -6,7 +6,7 @@
 // not kept.
 
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { SYSTEM_AUTHOR, TRAILERS } from '@cardstack/runtime-common';
@@ -45,11 +45,20 @@ function ignoreExisting(error: any): void {
 }
 
 // The commit `refs/heads/main` names, or undefined in a repo with no commit.
+// Read through git, so a ref that `git pack-refs` has moved out of its loose
+// file is still found.
 export async function readMain(gitDir: string): Promise<string | undefined> {
   try {
-    return (await readFile(join(gitDir, MAIN_REF), 'utf8')).trim();
+    let { stdout } = await execFileAsync('git', [
+      `--git-dir=${gitDir}`,
+      'rev-parse',
+      '--verify',
+      '--quiet',
+      MAIN_REF,
+    ]);
+    return stdout.trim();
   } catch (error: any) {
-    if (error?.code === 'ENOENT') {
+    if (error?.code === 1 && !error.stdout) {
       return undefined;
     }
     throw error;
