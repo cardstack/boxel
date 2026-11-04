@@ -209,7 +209,10 @@ function concat(parts: Uint8Array[]): Uint8Array {
 
 // A flat map of paths to entries, written as nested trees. A path's entry is
 // a blob id, or a tree id for a subtree written separately, such as a
-// size-only entry.
+// size-only entry. `write` encodes every directory each time, so the
+// builder suits a snapshot or a test; a commit that changes a few paths of
+// a large tree rewrites only the changed paths' ancestors, from the tree
+// of HEAD, and that incremental writer is the recorder's.
 export class TreeBuilder {
   #entries = new Map<string, { mode: TreeEntry['mode']; id: string }>();
 
