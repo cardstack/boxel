@@ -78,7 +78,7 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xs);
       cursor: pointer;
     }
-    /* Centred on the label's first line. */
+    /* Centered on the label's first line. */
     .radio {
       margin-top: calc(
         (

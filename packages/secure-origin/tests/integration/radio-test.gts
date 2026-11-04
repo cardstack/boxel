@@ -14,8 +14,6 @@ const PANEL = {
   '--background': 'rgb(255, 255, 255)',
   '--muted-foreground': 'rgb(95, 95, 107)',
   '--primary-ink': 'rgb(0, 112, 84)',
-  '--boxel-radio-border-color': 'var(--muted-foreground)',
-  '--boxel-radio-checked-color': 'var(--primary-ink)',
   '--boxel-body-font-size': '0.875rem',
 };
 
@@ -88,21 +86,20 @@ module('Integration | Radio', function (hooks) {
   });
 
   test('the buttons of one name are one native radio group', async function (assert) {
-    const choice = trackedObject({ selected: 'schedule' });
-    const select = (value: string) => (choice.selected = value);
+    // `@checked` is fixed, so only the browser's group can uncheck a button.
+    let chosen: string[] = [];
+    const record = (value: string) => chosen.push(value);
     await render(
       <template>
-        <div data-test-panel>
-          {{#each (array 'schedule' 'opened') as |value|}}
-            <Radio
-              data-test-radio={{value}}
-              @name='when'
-              @value={{value}}
-              @checked={{eq choice.selected value}}
-              @onChange={{fn select value}}
-            />
-          {{/each}}
-        </div>
+        {{#each (array 'schedule' 'opened') as |value|}}
+          <Radio
+            data-test-radio={{value}}
+            @name='when'
+            @value={{value}}
+            @checked={{eq value 'schedule'}}
+            @onChange={{fn record value}}
+          />
+        {{/each}}
       </template>,
     );
 
@@ -114,10 +111,27 @@ module('Integration | Radio', function (hooks) {
     assert.dom(radio('opened')).isNotChecked();
 
     await click(radio('opened'));
-    assert.strictEqual(choice.selected, 'opened', 'choosing one reports it');
+    assert.deepEqual(chosen, ['opened'], 'choosing one reports it');
     assert.dom(radio('opened')).isChecked();
     assert
       .dom(radio('schedule'))
       .isNotChecked('and the browser unchooses the other in its group');
+  });
+
+  test('a caller’s attributes never make it anything but a radio', async function (assert) {
+    const noop = () => {};
+    await render(
+      <template>
+        <Radio
+          data-test-radio='only'
+          type='checkbox'
+          @name='when'
+          @value='only'
+          @checked={{false}}
+          @onChange={{noop}}
+        />
+      </template>,
+    );
+    assert.strictEqual(radio('only').type, 'radio');
   });
 });

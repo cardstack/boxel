@@ -2,10 +2,13 @@
 // unchosen, and a ring with a dot inside it chosen. The shell declares a dark
 // color scheme, under which the browser's own radio paints an unchosen button
 // as a dark disc even on a light panel, so this draws every state itself, as
-// the package's Checkbox does. It stays a native radio input, so a group
-// sharing a name is one tab stop, the arrow keys move the choice within it,
-// and screen readers announce it as any radio. Attributes go on the input, so
-// a label wrapping it names it.
+// the package's Checkbox does. Its edge is the muted foreground, which holds
+// WCAG's 3:1 for a control's boundary where the theme's border color is too
+// faint, and a chosen button's ring and dot are the primary ink, for the same
+// reason. It stays a native radio input, so a group sharing a name is one
+// tab stop, the arrow keys move the choice within it, and screen readers
+// announce it as any radio. Attributes go on the input, so a label wrapping
+// it names it.
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
@@ -22,28 +25,32 @@ interface Signature {
 }
 
 const Radio: TemplateOnlyComponent<Signature> = <template>
+  {{! `type` follows the caller's attributes, so it is always a radio. }}
   <input
     class='radio'
-    type='radio'
     name={{@name}}
     value={{@value}}
     checked={{@checked}}
     disabled={{@disabled}}
     {{on 'change' @onChange}}
     ...attributes
+    type='radio'
   />
 
   <style scoped>
     .radio {
       --radio-size: var(--boxel-radio-size, var(--boxel-body-font-size));
-      --radio-border-color: var(--boxel-radio-border-color, var(--border));
+      --radio-border-color: var(
+        --boxel-radio-border-color,
+        var(--muted-foreground)
+      );
       --radio-background: var(
         --boxel-radio-background-color,
         var(--background)
       );
       --radio-checked-color: var(
         --boxel-radio-checked-color,
-        var(--primary-ink, var(--primary))
+        var(--primary-ink)
       );
 
       appearance: none;
