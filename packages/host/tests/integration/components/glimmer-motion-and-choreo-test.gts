@@ -46,7 +46,10 @@ module('Integration | glimmer-motion and choreo', function (hooks) {
       <template>
         <Choreo as |c|>
           {{#if this.show}}
-            <div id='leaver' {{motion id='leaver' role='card'}}>Leaver</div>
+            <div
+              data-test-id='leaver'
+              {{motion id='leaver' role='card'}}
+            >Leaver</div>
           {{/if}}
           <c.Tween @of={{c.removed 'card'}} @opacity={{0}} @duration={{0.05}} />
         </Choreo>
@@ -59,10 +62,12 @@ module('Integration | glimmer-motion and choreo', function (hooks) {
     stage!.show = false;
     await settled();
     assert
-      .dom('[data-choreo-orphans] #leaver')
+      .dom('[data-choreo-orphans] [data-test-id-memory="leaver"]')
       .exists('the removed element moves to the orphan layer for its exit');
 
     await animationsSettled();
-    assert.dom('#leaver').doesNotExist('it unmounts when its exit ends');
+    assert
+      .dom('[data-test-id-memory="leaver"]')
+      .doesNotExist('it unmounts when its exit ends');
   });
 });

@@ -20,6 +20,8 @@ export interface LLMOption {
 
 interface Signature {
   Args: {
+    /** see PillMenu's `anchorY` */
+    anchorY?: 'top' | 'bottom';
     selected: string;
     options: LLMOption[];
     onChange: (selectedLLM: string) => void;
@@ -37,6 +39,7 @@ export default class LLMSelect extends Component<Signature> {
   <template>
     <PillMenu
       class='llm-select'
+      @anchorY={{@anchorY}}
       @onExpand={{@onExpand}}
       @onCollapse={{@onCollapse}}
       ...attributes

@@ -32,6 +32,8 @@ const markdownDefRef = {
 interface Signature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
+    /** see PillMenu's `anchorY` */
+    anchorY?: 'top' | 'bottom';
     skills: RoomSkill[];
     onExpand?: () => void;
     onCollapse?: () => void;
@@ -46,6 +48,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   <template>
     <PillMenu
       class='skill-menu'
+      @anchorY={{@anchorY}}
       @onExpand={{fn this.setExpanded true}}
       @onCollapse={{fn this.setExpanded false}}
       title={{if this.isExpanded undefined this.headerText}}
