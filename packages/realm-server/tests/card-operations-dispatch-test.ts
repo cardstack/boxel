@@ -2157,10 +2157,9 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(failure.code, 'operation-not-permitted');
     });
 
-    // The gate's own read of the chain raises the lookup's refusal rather than
-    // reading it as a type no rule matches. A caller the ACL declined is told
-    // every refusal past the target as not permitted, so the 503 reaches only
-    // a caller the realm admitted.
+    // Resolution's refusal is answered as the gate's for a caller the ACL
+    // declined: as not permitted, so the 503 reaches only a caller the realm
+    // admitted.
     test('a type whose definition is not ready yet is refused as not permitted to a declined caller', async function (assert) {
       let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
       let { core } = stub({ ...reExported, policy: access });
