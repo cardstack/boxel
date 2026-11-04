@@ -483,6 +483,18 @@ module(basename(import.meta.filename), function (hooks) {
       rateRefillPerMinute: LIMITS.rateRefillPerMinute,
       dailyBudget: 4,
       monthlyBudget: 120,
+      set: {
+        rateBurst: 100,
+        rateRefillPerMinute: null,
+        dailyBudget: 4,
+        monthlyBudget: null,
+      },
+      defaults: {
+        rateBurst: LIMITS.rateBurst,
+        rateRefillPerMinute: LIMITS.rateRefillPerMinute,
+        dailyBudget: LIMITS.dailyBudget,
+        monthlyBudgetDays: 30,
+      },
     });
 
     for (let user of [OWNER, OWNER, WRITER, WRITER]) {
@@ -1151,8 +1163,20 @@ module(basename(import.meta.filename), function (hooks) {
         rateRefillPerMinute: 0.5,
         dailyBudget: LIMITS.dailyBudget,
         monthlyBudget: 9000,
+        set: {
+          rateBurst: null,
+          rateRefillPerMinute: 0.5,
+          dailyBudget: null,
+          monthlyBudget: 9000,
+        },
+        defaults: {
+          rateBurst: LIMITS.rateBurst,
+          rateRefillPerMinute: LIMITS.rateRefillPerMinute,
+          dailyBudget: LIMITS.dailyBudget,
+          monthlyBudgetDays: 30,
+        },
       },
-      "the realm's direct writers see the share's limits",
+      "the realm's direct writers see the share's limits, and which its owner set",
     );
 
     let reset = await setLimits(path, OWNER, { monthlyBudget: null });
@@ -1174,6 +1198,18 @@ module(basename(import.meta.filename), function (hooks) {
       rateRefillPerMinute: 15,
       dailyBudget: 2400,
       monthlyBudget: 72000,
+      set: {
+        rateBurst: null,
+        rateRefillPerMinute: null,
+        dailyBudget: null,
+        monthlyBudget: null,
+      },
+      defaults: {
+        rateBurst: 25,
+        rateRefillPerMinute: 15,
+        dailyBudget: 2400,
+        monthlyBudgetDays: 30,
+      },
     });
     let byOther = await setLimits(`/_user-keys/${key.id}/limits`, WRITER, {
       dailyBudget: 1,
@@ -1184,6 +1220,42 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.strictEqual(byOwner.status, 200, JSON.stringify(byOwner.body));
     assert.strictEqual(byOwner.body.data.attributes.monthlyBudget, 3000);
+  });
+
+  test('a monthly budget its owner set stays put when the daily budget changes; one left unset follows it', async function (assert) {
+    let key = await addKey();
+    let shared = await share(key.id);
+    let path = `/_key-shares/${shared.id}/limits`;
+
+    let following = await setLimits(path, OWNER, { dailyBudget: 500 });
+    assert.strictEqual(following.status, 200, JSON.stringify(following.body));
+    assert.strictEqual(
+      following.body.data.attributes.monthlyBudget,
+      15000,
+      'an unset monthly budget is 30 daily budgets',
+    );
+    assert.strictEqual(following.body.data.attributes.set.monthlyBudget, null);
+    let followed = await setLimits(path, OWNER, { dailyBudget: 76 });
+    assert.strictEqual(
+      followed.body.data.attributes.monthlyBudget,
+      2280,
+      'and follows the daily budget',
+    );
+
+    await setLimits(path, OWNER, { monthlyBudget: 15000 });
+    let kept = await setLimits(path, OWNER, { dailyBudget: 100 });
+    assert.strictEqual(kept.status, 200, JSON.stringify(kept.body));
+    assert.strictEqual(
+      kept.body.data.attributes.monthlyBudget,
+      15000,
+      'a monthly budget the owner set is kept',
+    );
+    assert.deepEqual(kept.body.data.attributes.set, {
+      rateBurst: null,
+      rateRefillPerMinute: null,
+      dailyBudget: 100,
+      monthlyBudget: 15000,
+    });
   });
   test('a call refused at one share or key is counted against none of them', async function (assert) {
     let personal = await addKey(OWNER, 'personal');
@@ -1296,6 +1368,18 @@ module(basename(import.meta.filename), function (hooks) {
         rateRefillPerMinute: LIMITS.rateRefillPerMinute,
         dailyBudget: LIMITS.dailyBudget,
         monthlyBudget: LIMITS.dailyBudget * 30,
+        set: {
+          rateBurst: null,
+          rateRefillPerMinute: null,
+          dailyBudget: null,
+          monthlyBudget: null,
+        },
+        defaults: {
+          rateBurst: LIMITS.rateBurst,
+          rateRefillPerMinute: LIMITS.rateRefillPerMinute,
+          dailyBudget: LIMITS.dailyBudget,
+          monthlyBudgetDays: 30,
+        },
       },
       "the previous owner's limits don't carry over to the new owner's key",
     );

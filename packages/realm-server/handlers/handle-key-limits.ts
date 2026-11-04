@@ -12,7 +12,7 @@ import {
   setUserKeyLimits,
   validateLimitChanges,
 } from '../lib/key-limits.ts';
-import type { KeyLimits } from '../lib/key-limit-settings.ts';
+import type { KeyLimitsView } from '../lib/key-limit-settings.ts';
 import { setUserKeyAnonymousUse, UserKeyError } from '../lib/user-keys.ts';
 import { secureClientOf } from './handle-user-key-grants.ts';
 import {
@@ -32,7 +32,8 @@ import {
 // The body is `{ data: { type: 'key-limits', attributes } }` with any of
 // `rateBurst`, `rateRefillPerMinute`, `dailyBudget` and `monthlyBudget`, each a
 // number or null for the platform's default; a limit left out keeps what it
-// was. The answer is the limits in force afterwards, defaults filled in.
+// was. The answer is the limits in force afterwards, defaults filled in, with
+// which of them the owner set and the defaults (see `KeyLimitsView`).
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
@@ -57,7 +58,7 @@ async function readLimitChanges(ctxt: Koa.Context) {
   return validateLimitChanges(attributes);
 }
 
-function serialize(id: string, limits: KeyLimits) {
+function serialize(id: string, limits: KeyLimitsView) {
   return { type: 'key-limits', id, attributes: limits };
 }
 
