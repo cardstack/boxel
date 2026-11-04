@@ -229,7 +229,9 @@ export function buildMessage(subject: string, trailers: Trailers): string {
   return block ? `${subject}\n\n${block}\n` : `${subject}\n`;
 }
 
-const TRAILER_LINE = /^([A-Za-z][A-Za-z0-9-]*): (.*)$/;
+// The value runs to the end of the line, whatever it holds: `.` would stop at
+// a carriage return or a Unicode line separator, which a realm path can carry.
+const TRAILER_LINE = /^([A-Za-z][A-Za-z0-9-]*): ([^\n]*)$/;
 const KEY_BY_NAME = new Map(
   (Object.entries(TRAILERS) as [TrailerKey, string][]).map(([key, name]) => [
     name,
