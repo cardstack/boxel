@@ -249,6 +249,13 @@ module('repo format', (hooks) => {
       );
     });
 
+    test('a subject needs a change', (assert) => {
+      assert.throws(
+        () => revisionMessage({ subject: changes() }),
+        /at least one change/,
+      );
+    });
+
     test('the common directory', (assert) => {
       assert.strictEqual(commonDirectory(['a/b/c.json', 'a/b/d.json']), 'a/b/');
       assert.strictEqual(commonDirectory(['a/b/c.json', 'a/d.json']), 'a/');
