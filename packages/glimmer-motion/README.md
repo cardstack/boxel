@@ -194,22 +194,22 @@ one.
 
 ### React → Glimmer
 
-| React                            | here                                                      |
-| -------------------------------- | --------------------------------------------------------- |
-| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
-| `ref`                            | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                           |
-| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
-| `useIsPresent()`                 | `h.isPresent`                                             |
-| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
-| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element      |
-| `useDragControls()`              | `createDragControls()`                                    |
-| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                        |
+| React                            | here                                                                                                                                     |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG                                                                                            |
+| `ref`                            | the element, or a `{current}` object filled by a modifier                                                                                |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                                                                                                          |
+| `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                                                                                               |
+| `useIsPresent()`                 | `h.isPresent`                                                                                                                            |
+| re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, `<ReorderGroup>` or `<Choreo>`, a `<Presence>` pass that changes its `@items`, or `layoutChange()` |
+| `<MotionConfig>`                 | pass `transition` / `transformPagePoint` per element                                                                                     |
+| `useDragControls()`              | `createDragControls()`                                                                                                                   |
+| `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                                                                                                       |
 
-### Three rules React does not need
+### Four rules React does not need
 
-React's model hides three things that Glimmer's doesn't, and each surfaced while porting a real app
-onto this binding. They are the only places where the port isn't a mechanical translation.
+React's model hides four things that Glimmer's doesn't. They are the only places where the port
+isn't a mechanical translation.
 
 **1. Motion owns a motion element's inline style, so pass CSS through the modifier, not a `style`
 attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
@@ -245,6 +245,52 @@ Motion and every frame is corrected.
 {{! ✓ corrected per frame, against whatever scale the layout animation is applying }}
 <article class='card' {{motion layout=true style=(styles borderRadius='14px')}}></article>
 ```
+
+**4. A layout animation needs a render detector above it, so wrap a list that moves in
+`<LayoutGroup>`.** React snapshots each motion component as it re-renders, in
+`getSnapshotBeforeUpdate`. Glimmer has no such hook, so the box a layout animation starts from is
+measured by a render detector at the start of the render pass, and only `<LayoutGroup>`, `<Presence>`,
+`<ReorderGroup>` and `<Choreo>` carry one. A keyed `{{#each}}` of `layout=true` rows with none of
+them above it moves its DOM nodes with nothing measured first, and the rows jump to their new
+places. A `layoutId` hand-off needs one too: the outgoing element's box is only known if something
+measured it before it left. `<Presence>` measures only on a pass where its `@items` change, so it
+covers a list that reorders, adds or removes, but a row inside one that grows for any other reason
+still needs a `<LayoutGroup>`. The group goes around the `{{#each}}`, not inside each row: Glimmer moves a
+keyed row's DOM before it re-renders anything inside the row, so a group inside the row measures too
+late.
+Key the rows by a stable id as well. With `key='@index'` Glimmer keeps every element where it is and
+swaps its content, so nothing moves at all. A key built from a position, such as `${index}-${id}`,
+changes when the rows before it shift, and Glimmer replaces a row whose key changed with a new
+element, which has no earlier box to animate from.
+
+```gts
+{{! ✗ a sort lands in one frame: nothing measured the rows before they moved }}
+<ul>
+  {{#each this.sorted key='id' as |row|}}
+    <li {{motion layout=true}}>{{row.name}}</li>
+  {{/each}}
+</ul>
+
+{{! ✓ the group snapshots every row before each render pass patches the DOM }}
+<LayoutGroup>
+  <ul>
+    {{#each this.sorted key='id' as |row|}}
+      <li {{motion layout=true}}>{{row.name}}</li>
+    {{/each}}
+  </ul>
+</LayoutGroup>
+```
+
+In development, the first `layout` or `layoutId` element to mount with no render detector above it
+logs a console warning with the element attached. The check reads the element's DOM ancestors, so
+it also warns about three kinds of element that are measured:
+
+- one rendered through a plain `{{#in-element}}` inside a group, which lands outside the group's DOM;
+- one inside a shadow tree, which the lookup doesn't climb out of;
+- one under a `<Presence>` whose yielded handle neither it nor a motion element above it carries.
+
+A `<LayoutGroup>` inside the `{{#in-element}}` block or the shadow tree, or `{{motion presence=p}}`
+on the row, quiets it.
 
 ## Testing
 

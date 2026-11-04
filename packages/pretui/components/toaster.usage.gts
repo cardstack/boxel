@@ -124,7 +124,7 @@ class ToasterUsage extends ToasterState {
   <template>
     <FreestyleUsage
       @name='Toaster'
-      @description='The host Toast never had: a positioned region that stacks, ages and dismisses toasts. The auto-dismiss clock is a CSS animation rather than a timer, so pause-on-hover and pause-on-focus are animation-play-state and no elapsed time is ever measured or re-armed — which is what makes it legal in a realm and what stops it hanging a test suite. Severity picks the live-region politeness (role=alert for warning and danger, role=status otherwise), the cap is a real queue whose clocks have not started, F6 moves focus into the region and back out, and dismissing a focused toast hands focus to its neighbour rather than dropping it on the body.'
+      @description='The host Toast never had: a positioned region that stacks, ages and dismisses toasts. The auto-dismiss clock is a countdown in state, advanced by an owned timer and drawn by the life bar, so a toast leaves on time whether or not anything animates; pause-on-hover and pause-on-focus simply hold the countdown, and no elapsed time is ever measured against a wall clock or re-armed. Severity picks the live-region politeness (role=alert for warning and danger, role=status otherwise), the cap is a real queue whose clocks have not started, F6 moves focus into the region and back out, and dismissing a focused toast hands focus to its neighbour rather than dropping it on the body.'
     >
       <:example>
         <div class='tst-row'>

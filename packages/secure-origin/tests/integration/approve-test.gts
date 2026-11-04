@@ -877,7 +877,7 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(fragment.get('then'), 'approve');
   });
 
-  test("the key page lists each key's grants with the approvals that use them, and removing one lists those first", async function (assert) {
+  test("the key page lists each key's grants with the approvals that use them, collapsed to a count, and removing one lists those first", async function (assert) {
     let removed: string[] = [];
     let listed = 0;
     serve({
@@ -901,6 +901,12 @@ module('Integration | approve pages', function (hooks) {
                         {
                           id: 'grant-1',
                           destination: GRAPHQL,
+                          state: 'active',
+                          approvedAt: '2026-10-01T12:00:00.000Z',
+                        },
+                        {
+                          id: 'grant-2',
+                          destination: UPLOADS,
                           state: 'active',
                           approvedAt: '2026-10-01T12:00:00.000Z',
                         },
@@ -950,20 +956,56 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><KeyPage /></template>);
     await waitFor('[data-test-key-grants]');
 
+    let graphql = '[data-test-key-grant="api.github.com/graphql/"]';
+    let count = `${graphql} [data-test-key-grant-count]`;
+    let list = `${graphql} [data-test-key-grant-bindings]`;
+    assert.dom(count).hasText('2 approvals');
     assert
-      .dom(
-        '[data-test-key-grant="api.github.com/graphql/"] [data-test-key-grant-count]',
-      )
-      .hasText('2 approvals');
+      .dom(count)
+      .hasAttribute('aria-expanded', 'false', 'the approvals start collapsed');
+    let describedBy = document
+      .querySelector(count)
+      ?.getAttribute('aria-describedby');
+    assert
+      .dom(`#${describedBy}`)
+      .hasText('api.github.com/graphql/', 'the count names its grant');
+    assert.dom(list).isNotVisible();
+
+    let uploadsCount =
+      '[data-test-key-grant="uploads.github.com/"] [data-test-key-grant-count]';
+    assert.dom(uploadsCount).hasText('0 approvals');
+    assert
+      .dom(uploadsCount)
+      .doesNotHaveAttribute('aria-expanded', 'a grant with none has no toggle');
+
+    await click(count);
+    assert.dom(count).hasAttribute('aria-expanded', 'true');
+    assert.dom(list).isVisible();
     assert
       .dom('[data-test-key-grant-binding="listPRs"]')
       .hasText(
         'List your open pull requests on Pull request inbox in realm-server.test/someone/workspace/',
       );
-    await click('[data-test-key-grant-remove]');
+
+    await click(count);
+    assert.dom(list).isNotVisible();
+
+    await click(`${graphql} [data-test-key-grant-remove]`);
     assert
       .dom('[data-test-key-grant-remove-panel]')
       .includesText('revokes the approvals above');
+    assert.dom(list).isVisible('the approvals the removal revokes are listed');
+    assert
+      .dom(count)
+      .isDisabled('the list stays open while the removal is confirmed');
+
+    await click('[data-test-key-grant-remove-cancel]');
+    assert
+      .dom(list)
+      .isNotVisible('cancelling leaves the list as the user left it');
+    assert.dom(count).isNotDisabled();
+
+    await click(`${graphql} [data-test-key-grant-remove]`);
     assert.deepEqual(removed, [], 'nothing is removed before it is confirmed');
     await click('[data-test-key-grant-remove-confirm]');
     await settled();

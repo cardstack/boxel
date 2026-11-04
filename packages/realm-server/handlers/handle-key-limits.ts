@@ -1,5 +1,12 @@
 import type Koa from 'koa';
+import { logger } from '@cardstack/runtime-common';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { CreateRoutesArgs } from '../routes.ts';
+import {
+  countUnreadLimitNotices,
+  listLimitNotices,
+  markLimitNoticesRead,
+} from '../lib/key-limit-notices.ts';
 import {
   setShareLimits,
   setUserKeyLimits,
@@ -28,6 +35,8 @@ import {
 // was. The answer is the limits in force afterwards, defaults filled in.
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
+
+const log = logger('realm-server:key-limits');
 
 async function readLimitChanges(ctxt: Koa.Context) {
   let body = await readJSON(ctxt);
@@ -119,5 +128,76 @@ export function handleSetUserKeyLimits(args: CreateRoutesArgs): Handler {
       changes,
     });
     await sendJSON(ctxt, 200, { data: serialize(keyId, limits) });
+  });
+}
+
+// `GET /_key-limit-notices`: the user's limit notices whose period hasn't
+// ended, newest first, as a key's owner or a realm's direct writer (see
+// `lib/key-limit-notices.ts`), with `meta.unread`, the app's badge count for
+// them. The app's own session may read them.
+export function handleListKeyLimitNotices({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let recipient = ownerOf(ctxt);
+    let notices = await listLimitNotices(dbAdapter, recipient);
+    await sendJSON(ctxt, 200, {
+      data: notices.map(({ id, ...attributes }) => ({
+        type: 'key-limit-notice',
+        id,
+        attributes,
+      })),
+      meta: { unread: notices.filter((notice) => !notice.readAt).length },
+    });
+  });
+}
+
+// `POST /_key-limit-notices/read` marks the notices it names read, as the key
+// page does once it has shown them: `{ "data": [{ "type": "key-limit-notice",
+// "id": "<id>" }, ...] }`. Only a secure-origin session may, so the app page,
+// where card code runs, can't clear the badge that tells a key's owner its use
+// reached a limit.
+export function handleMarkKeyLimitNoticesRead(args: CreateRoutesArgs): Handler {
+  return keysHandler(async (ctxt) => {
+    let recipient = ownerOf(ctxt);
+    await secureClientOf(ctxt, args, 'notices are marked read');
+    let body = await readJSON(ctxt);
+    let data = body.data;
+    if (
+      !Array.isArray(data) ||
+      !data.every(
+        (entry) =>
+          entry &&
+          typeof entry === 'object' &&
+          (entry as { type?: unknown }).type === 'key-limit-notice',
+      )
+    ) {
+      throw new UserKeyError(
+        400,
+        `data must be a list of 'key-limit-notice' resources`,
+      );
+    }
+    let marked = await markLimitNoticesRead(
+      args.dbAdapter,
+      recipient,
+      data.map((entry) => (entry as { id?: unknown }).id),
+    );
+    if (marked > 0) {
+      // The recipient's other sessions show the badge too; tell them it
+      // changed.
+      try {
+        await args.sendEvent(recipient, KEY_NOTICES_UPDATED_EVENT_TYPE);
+      } catch (err: unknown) {
+        log.warn(
+          `could not tell ${recipient} their key limit notices were read: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    await sendJSON(ctxt, 200, {
+      meta: {
+        marked,
+        unread: await countUnreadLimitNotices(args.dbAdapter, recipient),
+      },
+    });
   });
 }

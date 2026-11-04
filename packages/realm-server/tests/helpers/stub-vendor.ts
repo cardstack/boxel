@@ -31,8 +31,10 @@ import zlib from 'node:zlib';
 //                           `releaseHeld()`. With `truncate`, the connection
 //                           is dropped where the usage would start
 //   /not-json               502 with an HTML body
-//   /graphql                a GitHub-shaped GraphQL answer: one open pull
-//                           request, `STUB_PULL_REQUEST`, under both
+//   /graphql                the next of `graphqlAnswers` (each used once),
+//                           or, with none queued, a GitHub-shaped GraphQL
+//                           answer: one open pull request,
+//                           `STUB_PULL_REQUEST`, under both
 //                           `user.pullRequests.nodes` and `search.nodes`
 //   /google-token           a stand-in for Google's OAuth token endpoint: a
 //                           JWT-bearer exchange answers the next of
@@ -61,6 +63,9 @@ export interface StubVendor {
   // What `/google-token` answers next, in order, before it goes back to
   // minting tokens.
   googleTokenAnswers: { status: number; body: Record<string, unknown> }[];
+  // What `/graphql` answers next, in order, before it goes back to its
+  // one-pull-request answer.
+  graphqlAnswers: { status: number; body: Record<string, unknown> }[];
   // The `expires_in` of each token `/google-token` mints.
   googleTokenLifetime: number;
   // The access tokens `/google-token` has minted, in order.
@@ -146,6 +151,7 @@ export async function startStubVendor({
   // token endpoint's settings from it.
   let vendor = {
     googleTokenAnswers: [],
+    graphqlAnswers: [],
     googleTokenLifetime: 3600,
     googleTokensMinted: [],
   } as unknown as StubVendor;
@@ -280,15 +286,17 @@ export async function startStubVendor({
         res.writeHead(answer.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(answer.body));
       } else if (url.pathname === '/graphql') {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(
-          JSON.stringify({
+        let answer = vendor.graphqlAnswers.shift() ?? {
+          status: 200,
+          body: {
             data: {
               user: { pullRequests: { nodes: [STUB_PULL_REQUEST] } },
               search: { nodes: [STUB_PULL_REQUEST] },
             },
-          }),
-        );
+          },
+        };
+        res.writeHead(answer.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(answer.body));
       } else if (url.pathname === '/not-json') {
         res.writeHead(502, { 'content-type': 'text/html' });
         res.end('<html><body>Bad gateway</body></html>');

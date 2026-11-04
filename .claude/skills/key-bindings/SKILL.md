@@ -397,6 +397,25 @@ to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or
 readiness will say `ready` for a call that is refused.
 
+## Published realms
+
+A published realm has no bindings of its own. Its calls are filled from the
+bindings of the realm it was published from: `key_bindings.realm_url`,
+`definition_url` and `instance_url` hold the source's URLs, and the published
+realm's sender rebases its lookup onto them (`publishedFrom` in
+`lib/outbound/call-api-sender.ts`; see the `key-shares` skill). Its fill passes
+`publishedRealmURL`, which changes three things:
+
+- A fingerprint that doesn't match refuses the call `binding-needs-reapproval`
+  without moving the binding: the published copy runs the source's code as of
+  its last publish, and an older copy mustn't undo an approval the source still
+  uses. Republishing fixes it; nothing on the published realm can.
+- A refusal names the published realm, never the source.
+- A refused fill is recorded under the published realm.
+
+To diagnose a refusal on a published site, query the bindings by the
+source's URL (`realm_registry.source_url` of the published row).
+
 ## What else changes bindings
 
 - **Removing a grant** (`DELETE /_user-key-grants/:id`) revokes every binding

@@ -12,18 +12,17 @@
 //     dismiss path, and — the one that matters most — that dismissing a
 //     focused toast hands focus on rather than dropping it on the body.
 //
-// **What is deliberately NOT tested: auto-dismiss.** The clock is a CSS
-// animation, and `boxel test` stamps the scoped-CSS attribute while delivering
-// no stylesheet, so no animation runs and `animationend` never fires. Asserting
-// on it here would be asserting on the harness. The mechanism is instead proved
-// structurally (the life element exists, carries its duration, and is absent on
-// a sticky toast) and by `boxel read-transpiled`, which shows the keyframes and
-// `animation-play-state` surviving the transpile.
+// **Auto-dismiss is tested with the stylesheet absent.** `boxel test` stamps
+// the scoped-CSS attribute while delivering no stylesheet, so nothing here
+// animates — which is exactly the condition the clock has to survive (ADR 007
+// §1.1): a timed toast leaves when its countdown runs out, and a paused region
+// holds it, with no animation involved. Durations in these tests are a few
+// tenths of a second, so each one costs a handful of ticks.
 //
 // Run with `boxel test` from this directory; deployment leaves `*.test.gts`
 // off the realm.
 import { module, test } from 'qunit';
-import { render, click, focus, settled, triggerKeyEvent } from '@ember/test-helpers';
+import { render, click, focus, settled, triggerEvent, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DEMOS_TOASTER } from './components/toaster.usage';
 import { tracked } from '@glimmer/tracking';
@@ -245,19 +244,32 @@ module('Pretui | toaster | render', function (hooks) {
   test('replacing a toast by id restarts its clock', async function (assert) {
     let store = new ToastStore();
     await render(<template><Toaster @store={{store}} /></template>);
-    store.show({ id: 'save', title: 'Saving…', duration: 30 });
+    let remaining = () =>
+      Number(
+        (
+          document.querySelector(
+            '[data-test-pretui-toast-item="save"] [data-test-pretui-toast-life]',
+          ) as HTMLElement | null
+        )?.style.getPropertyValue('--pretui-toast-remaining'),
+      );
+    store.show({ id: 'save', title: 'Saving…', duration: 3 });
+    await waitUntil(() => remaining() < 0.9, {
+      timeout: 3000,
+      timeoutMessage: 'the first clock never ran',
+    });
+    // The longest allowed clock, so the ticks before the read cannot move
+    // its three-decimal fraction off full.
+    store.show({ id: 'save', title: 'Saved', duration: 600 });
     await settled();
-    let before = document.querySelector('[data-test-pretui-toast-item="save"] [data-test-pretui-toast-life]');
-    store.show({ id: 'save', title: 'Saved', duration: 30 });
-    await settled();
-    let after = document.querySelector('[data-test-pretui-toast-item="save"] [data-test-pretui-toast-life]');
-    assert.ok(before && after);
-    assert.notStrictEqual(after, before, 'a fresh life bar, so the clock starts again');
+    assert.dom('[data-test-pretui-toast-item="save"]').includesText('Saved');
+    assert.strictEqual(remaining(), 1, 'the replacement counts down from full, not from the old remainder');
   });
 
-  test('the life bar carries its own duration and a sticky toast has none', async function (assert) {
+  test('the life bar starts full and a sticky toast has none', async function (assert) {
     let store = new ToastStore();
-    store.show({ id: 'timed', title: 'Timed', duration: 9 });
+    // The longest allowed clock: a few ticks before the assertion cannot
+    // move the three-decimal fraction, so it reads as full on a slow runner.
+    store.show({ id: 'timed', title: 'Timed', duration: 600 });
     store.show({ id: 'sticky', title: 'Sticky', duration: 0 });
 
     await render(<template><Toaster @store={{store}} /></template>);
@@ -270,19 +282,147 @@ module('Pretui | toaster | render', function (hooks) {
       '[data-test-pretui-toast-item="sticky"]',
     ) as HTMLElement | null;
 
+    let bar = timed?.querySelector('[data-test-pretui-toast-life]') as HTMLElement | null;
+    assert.ok(bar, 'a timed toast has a clock element to age out on');
     assert.strictEqual(
-      timed?.style.getPropertyValue('--pretui-toast-life'),
-      '9s',
-      'the duration reaches CSS as seconds',
-    );
-    assert.ok(
-      timed?.querySelector('[data-test-pretui-toast-life]'),
-      'a timed toast has a clock element to age out on',
+      bar?.style.getPropertyValue('--pretui-toast-remaining').trim(),
+      '1.000',
+      'the bar is drawn from the countdown, which starts full',
     );
     assert.notOk(
       sticky?.querySelector('[data-test-pretui-toast-life]'),
       'a sticky toast has none, so nothing can ever remove it but a dismissal',
     );
+  });
+
+  test('a timed toast leaves when its clock runs out, with no animation to wait for', async function (assert) {
+    let store = new ToastStore();
+    let gone = 0;
+    store.show({ id: 'brief', title: 'Brief', duration: 0.2, onDismiss: () => gone++ });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    assert.ok(
+      document.querySelector('[data-test-pretui-toast-item="brief"]'),
+      'the toast renders',
+    );
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-pretui-toast-item="brief"]'),
+      { timeout: 3000, timeoutMessage: 'the toast never aged out' },
+    );
+    assert.strictEqual(gone, 1, 'onDismiss fired once, from the clock');
+    assert.strictEqual(store.items.length, 0, 'and the store is empty');
+  });
+
+  test('the pointer over the region holds every clock; leaving lets them run', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'held', title: 'Held', duration: 0.3 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    let region = document.querySelector('[data-test-pretui-toaster]') as HTMLElement;
+    let bar = () =>
+      document.querySelector(
+        '[data-test-pretui-toast-item="held"] [data-test-pretui-toast-life]',
+      ) as HTMLElement | null;
+
+    await triggerEvent('[data-test-pretui-toast-item="held"]', 'pointerover');
+    assert.strictEqual(region.getAttribute('data-paused'), 'true', 'the region reports the pause');
+    let remaining = bar()?.style.getPropertyValue('--pretui-toast-remaining');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.ok(bar(), 'well past its duration, the toast is still there');
+    assert.strictEqual(
+      bar()?.style.getPropertyValue('--pretui-toast-remaining'),
+      remaining,
+      'and its countdown has not moved',
+    );
+
+    await triggerEvent(region, 'pointerleave');
+    assert.notOk(region.hasAttribute('data-paused'), 'the pause lifts');
+    await waitUntil(() => !bar(), { timeout: 3000, timeoutMessage: 'the toast never resumed' });
+    assert.ok(true, 'the clock ran out once the pointer left');
+  });
+
+  test('a hover pause whose element left the DOM does not hold the clocks', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'under', title: 'Under the pointer', duration: 30 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    let region = document.querySelector('[data-test-pretui-toaster]') as HTMLElement;
+
+    await triggerEvent('[data-test-pretui-toast-item="under"] [data-test-pretui-toast-dismiss]', 'pointerover');
+    assert.strictEqual(region.getAttribute('data-paused'), 'true', 'the pointer pauses');
+
+    // The toast under a resting pointer goes, and the browser sends no
+    // pointerleave until the pointer moves again.
+    store.dismiss('under');
+    store.show({ id: 'next', title: 'Next', duration: 0.2 });
+    await waitUntil(
+      () => !document.querySelector('[data-test-pretui-toast-item="next"]'),
+      { timeout: 3000, timeoutMessage: 'the stale hover pause held the clock' },
+    );
+    assert.notOk(region.hasAttribute('data-paused'), 'the pause lifted once its element had gone');
+  });
+
+  test('the life bar lands on empty as the toast leaves', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'brief', title: 'Brief', duration: 0.3 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    let bar = () =>
+      document.querySelector(
+        '[data-test-pretui-toast-item="brief"] [data-test-pretui-toast-life]',
+      ) as HTMLElement | null;
+
+    await waitUntil(
+      () => bar()?.style.getPropertyValue('--pretui-toast-remaining') === '0.000',
+      { timeout: 3000, timeoutMessage: 'the bar never headed for empty' },
+    );
+    assert.ok(bar(), 'the bar heads for empty while the toast is still up');
+    await waitUntil(() => !bar(), { timeout: 3000, timeoutMessage: 'the toast never aged out' });
+    assert.ok(true, 'and the toast leaves on the next tick, as the bar lands');
+  });
+
+  test('focus inside the region pauses the clocks until it leaves', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'f', title: 'Focused', duration: 30 });
+
+    await render(<template>
+      <button type='button' data-test-outside>outside</button>
+      <Toaster @store={{store}} />
+    </template>);
+
+    let region = document.querySelector('[data-test-pretui-toaster]') as HTMLElement;
+    let dismiss = region.querySelector('[data-test-pretui-toast-dismiss]') as HTMLElement;
+    let outside = document.querySelector('[data-test-outside]') as HTMLElement;
+
+    await focus(dismiss);
+    assert.strictEqual(region.getAttribute('data-paused'), 'true', 'focus within pauses');
+    await focus(outside);
+    assert.notOk(region.hasAttribute('data-paused'), 'focus leaving resumes');
+  });
+
+  test('a focus pause that no focusout cleared does not hold the clocks', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'first', title: 'First', duration: 30 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+    let region = document.querySelector('[data-test-pretui-toaster]') as HTMLElement;
+    let dismiss = region.querySelector('[data-test-pretui-toast-dismiss]') as HTMLElement;
+
+    await focus(dismiss);
+    assert.strictEqual(region.getAttribute('data-paused'), 'true', 'focus within pauses');
+
+    // Stands in for a browser that takes focus off a control without
+    // delivering a focusout to the region.
+    dismiss.addEventListener('focusout', (event) => event.stopPropagation());
+    dismiss.blur();
+
+    store.show({ id: 'next', title: 'Next', duration: 0.2 });
+    await waitUntil(
+      () => !document.querySelector('[data-test-pretui-toast-item="next"]'),
+      { timeout: 3000, timeoutMessage: 'the stale focus pause held the clock' },
+    );
+    assert.notOk(region.hasAttribute('data-paused'), 'the pause lifted once focus had left');
   });
 
   test('dismissing removes the toast and fires its callback', async function (assert) {

@@ -865,6 +865,45 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
   });
 
+  test('DELETE /_delete-realm rejects a user of another homeserver whose localpart matches the realm namespace', async function (assert) {
+    let localpart = `mango-${uuidv4()}`;
+    let ownerUserId = `@${localpart}:localhost`;
+    let otherServerUserId = `@${localpart}:other.example`;
+    let realmURL = await createRealmFor(ownerUserId);
+    await insertPermissions(context.dbAdapter, new URL(realmURL), {
+      [ownerUserId]: ['read', 'write', 'realm-owner'],
+      [otherServerUserId]: ['read', 'write', 'realm-owner'],
+    });
+
+    let response = await context.request
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: otherServerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'realm',
+            id: realmURL,
+          },
+        }),
+      );
+
+    assert.strictEqual(response.status, 403, 'deletion is forbidden');
+    assert.ok(
+      response.body.errors?.[0]?.includes(
+        'You can only delete realms that you created',
+      ),
+      'returns a namespace ownership error',
+    );
+  });
+
   test('DELETE /_delete-realm rejects an invalid realm URL', async function (assert) {
     let ownerUserId = `@mango-${uuidv4()}:localhost`;
 

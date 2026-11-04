@@ -22,7 +22,7 @@ Identical to Toaster. `duration` is in seconds, and `0` makes a toast sticky.
 
 ## Accessibility
 
-A named landmark (`<section role='region' aria-label='Notifications' tabindex='-1'>`). Each toast carries `role='alert'` with `aria-live='assertive'` for `warning` and `danger`, `role='status'` with `aria-live='polite'` otherwise, `aria-atomic='true'` on both. F6 moves focus to the newest toast and back; dismissal hands focus to a neighbour or to where it came from, never the body; the clock pauses on hover and on focus. The life bar is `aria-hidden` and is exempt from reduced motion because stopping it would stop the dismissal. WCAG 2.2.1 is the caller's: give anything with an action a longer `duration`, or `0`.
+A named landmark (`<section role='region' aria-label='Notifications' tabindex='-1'>`). Each toast carries `role='alert'` with `aria-live='assertive'` for `warning` and `danger`, `role='status'` with `aria-live='polite'` otherwise, `aria-atomic='true'` on both. F6 moves focus to the newest toast and back; dismissal hands focus to a neighbour or to where it came from, never the body; the clock pauses on hover and on focus. The life bar is `aria-hidden` and is exempt from reduced motion, which WCAG 2.3.3 allows for motion essential to the information conveyed. WCAG 2.2.1 is the caller's: give anything with an action a longer `duration`, or `0`.
 
 ## Theming
 
@@ -30,13 +30,13 @@ A named landmark (`<section role='region' aria-label='Notifications' tabindex='-
 
 ## React ecosystem
 
-| Sonner | Pretui Sonner |
-| --- | --- |
+| Sonner                                | Pretui Sonner                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
 | `<Toaster position='bottom-right' />` | `<Sonner @store={{this.toasts}} @position='bottom-right' />` — mapped to `bottom-end` |
-| `toast('Saved')` | `this.toasts.show({ title: 'Saved' })` |
-| `toast.success(…)` / `.error(…)` | `show({ …, tone: 'success' })` / `tone: 'danger'` |
-| `toast.promise(p, {…})` | `show` returns an id; `show({ id, … })` again replaces in place |
-| `duration: 4000` | `duration: 4` — seconds |
-| `visibleToasts` | `@limit` — the rest queue unstarted |
-| `closeButton` | on by default; `dismissible: false` per toast |
-| `pauseWhenPageIsHidden` | `@pauseWhenHidden` |
+| `toast('Saved')`                      | `this.toasts.show({ title: 'Saved' })`                                                |
+| `toast.success(…)` / `.error(…)`      | `show({ …, tone: 'success' })` / `tone: 'danger'`                                     |
+| `toast.promise(p, {…})`               | `show` returns an id; `show({ id, … })` again replaces in place                       |
+| `duration: 4000`                      | `duration: 4` — seconds                                                               |
+| `visibleToasts`                       | `@limit` — the rest queue unstarted                                                   |
+| `closeButton`                         | on by default; `dismissible: false` per toast                                         |
+| `pauseWhenPageIsHidden`               | `@pauseWhenHidden`                                                                    |

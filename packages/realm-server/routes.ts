@@ -109,6 +109,7 @@ import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
   KEY_BINDINGS_PATH,
+  KEY_LIMIT_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
@@ -164,6 +165,7 @@ import {
   handleListKeyPolicyNotices,
   handleListKeyShareNotices,
   handleListKeyShares,
+  handleMarkKeyPolicyNoticesRead,
   handleResumeKeyShare,
   handleShareKey,
   handleSuspendKeyShare,
@@ -171,6 +173,8 @@ import {
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
 import {
+  handleListKeyLimitNotices,
+  handleMarkKeyLimitNoticesRead,
   handleSetKeyShareLimits,
   handleSetUserKeyLimits,
   handleSetUserKeyAnonymousUse,
@@ -529,9 +533,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleListKeyPolicyNotices(args),
   );
   router.post(
+    `${KEY_POLICY_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyPolicyNoticesRead(args),
+  );
+  router.post(
     `${KEY_POLICY_NOTICES_PATH}/:id/decline`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeclineKeyPolicyNotice(args),
+  );
+  router.get(
+    KEY_LIMIT_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyLimitNotices(args),
+  );
+  router.post(
+    `${KEY_LIMIT_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyLimitNoticesRead(args),
   );
   router.get(
     `${OAUTH_PATH}/clients`,

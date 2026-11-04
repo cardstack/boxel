@@ -149,6 +149,44 @@ static key, a Google service account, or an OAuth client whose grant type is
 app (an `authorization_code` client) never serves visitors, so sharing or
 swapping one has no anonymous check.
 
+## Published realms
+
+A published realm holds no share or binding of its own, and nobody can share
+into it, since it has no direct writers. Its cards use the shares of the realm
+it was published from:
+
+- **Policy.** Publishing points the copy's `realm.json` at its own copy of the
+  source's policy card, when the source's pointer names a card in the source
+  (`rebaseRealmPolicyPointer` in `handlers/handle-publish-realm.ts`). A pointer
+  to a card in another realm is dropped. A realm mounted as published
+  (`publishedMountOf` in `lib/published-realm.ts`, which the server and the
+  test reconciler both mount from) compiles only the grants on a `callApi`
+  whose every slot is `{{apiKey}}` (`sharedKeyCallsOnly`), so it admits no
+  write. A keyless `callApi` is left out too: every request a published site
+  sends is one a key's owner approved and budgeted. A rule naming a type by
+  the source's URL names the copy's type (`Realm#ownCopyOf`).
+- **Bindings.** The published realm's sender (`publishedFrom` in
+  `lib/outbound/call-api-sender.ts`) looks a call's binding up in the source:
+  the realm, the type's module and the card are each read at the same path in
+  the source (`sameResourceIn`), and a module in any other realm as it is.
+  Limits and caps are the share's and the key's, so the site's calls spend the
+  same budgets as the workspace's.
+- **What the site's callers see.** A refusal names the published realm, never
+  the source, whose URL a published site may exist to hide. Readiness that
+  only the source's writers can act on (`needs-connect`, `needs-approval`,
+  `needs-reapproval`) reads as `needs-admin` on the published realm.
+- **Usage.** The site's uses and refusals are recorded under the published
+  realm's URL (`key_uses.realm_url`). A share's usage lists them by realm
+  (`realms`, with `published` on each site), and the secure origin's usage
+  panel draws "Where it was used" once a site has used the share.
+- **Staleness.** The policy is the snapshot's, so a change to the source's
+  policy reaches the published realm on republish. The share, its key and its
+  bindings are live: unsharing, suspending or turning off anonymous use on the
+  key applies at once. A binding approved again for a request the snapshot's
+  older code doesn't send refuses the published realm's call
+  `binding-needs-reapproval` and is left active for the source; republishing
+  serves it again.
+
 ## Visibility
 
 - A share's owner sees every share they own, in every realm, with its key
@@ -221,9 +259,21 @@ which sets `declined_at` and changes nothing about the key. A notice that
 can't be recorded is logged on `realm:policy-share-audit` and costs the write
 nothing.
 
+Recording a notice sends `key-notices-updated` to the owner's session room,
+and the app shows the count on the user's avatar and on the profile
+menu's API Keys item. The count is `meta.unread` on `GET /_key-policy-notices`:
+the notices among the newest 100 whose `read_at` is null. The key page marks
+the ones it lists read with `POST /_key-policy-notices/read`
+(`data: [{ type: 'key-policy-notice', id }]`). Only a secure session may call
+it, so card code in the app page can read the count but not clear it. Marking
+read sends `key-notices-updated` again, so the owner's other sessions clear
+the badge too. A badge that won't clear is the owner's key page failing to
+mark read; it logs `Could not mark the key notices read` in the browser
+console.
+
 ```sql
--- What a realm's policy opened, and to whom it was told.
-SELECT created_at, owner, label, reason, operations, saved_by
+-- What a realm's policy opened, to whom it was told, and whether they saw it.
+SELECT created_at, owner, label, reason, operations, saved_by, read_at
 FROM key_policy_notices WHERE realm_url = 'https://app.boxel.ai/someone/realm/'
 ORDER BY created_at DESC;
 ```
@@ -272,6 +322,8 @@ method and path of these routes.
 | `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
 | `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
 | `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
+| `GET /_key-policy-notices`            | The user's policy notices as a key's owner; `meta.unread` is the badge's count |
+| `POST /_key-policy-notices/read`      | Mark listed notices read: `data: [{type, id}]`, from a secure session          |
 | `PUT /_key-shares/:id/limits`         | Set the share's limits, as its owner (see the `key-limits` skill)              |
 
 | Status | Means                                                                                                                                                                                                                                                                                                                                       |
