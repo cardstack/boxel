@@ -49,7 +49,7 @@ Read the label from the yielded `message`, as this example does. A leaving Glimm
 
 ## Choosing an Order
 
-The default `sync` mode lets arrivals and departures animate together. `wait` holds the arriving item until the departure finishes. `popLayout` removes the leaving item from layout immediately so its siblings can close the gap.
+The default `sync` mode lets arrivals and departures animate together. `wait` holds the arriving item until the departure finishes. `popLayout` removes the leaving item from layout immediately so its siblings can close the gap. `snapshot` tears the leaving block down with the render that removes it, and plays its exit on a static, inert copy of its last frame, pinned where that frame showed it. Use it when the leaver's content comes from state that has already moved on, such as a component's caller blocks, which a live leaver would re-render from.
 
 Compare these behaviors in the [presence modes demo](../../demos/presence). If you need to order exits, layout movement, and entrances across a whole region, use [a Choreo timeline](interactive-timelines).
 

@@ -28,6 +28,20 @@ versions may change behavior until `1.0.0`.
   A component that calls `snapshotOnRender()` from a render detector of its own renders it too, so
   the warning above knows the elements inside it are measured.
 
+- **`<Presence @mode="snapshot">`** plays a leaver's exit on a static copy of it. The leaver's block
+  is torn down in the render that removes it, so nothing re-renders from state that has moved on.
+  A copy of its last frame, pinned out of flow at the seat that frame showed it in, plays the
+  element's `exit` and is then removed. For leavers whose content comes from state the yielded item
+  can't carry, such as a component's caller blocks.
+- **Memories: `keepAsMemory`, `readAnimations`, `trackScrolls`, `MEMORY_ATTRIBUTE` and
+  `MEMORY_HOOK_SUFFIX`.** One treatment for a leaver kept on screen while its exit plays, shared by
+  snapshot copies and `@cardstack/choreo`'s orphan layer. A memory holds the frame its element last
+  showed, and nothing in it acts. Its stylesheet animations hold, its scroll offsets are restored,
+  its backdrop filters are off, and it is inert and `aria-hidden`. Its HTML elements lose their ids,
+  `autofocus` and form-control names, and its `data-test-*` hooks are renamed with a `-memory`
+  suffix.
+- **`live()` and `liveAll()` in `glimmer-motion/test-support`**: queries that skip memories, for
+  selectors other than test hooks.
 - **`retime(root)`** restarts the motion already running at and under an element on its current
   transition. Motion reads a transition when an animation starts, so an edited `transition` with an
   unchanged target leaves a running spring or loop on its old timing; `retime` restarts the values

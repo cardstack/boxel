@@ -436,7 +436,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
     assert.strictEqual(attributes.grants.length, 1);
     let [grant] = attributes.grants;
-    assert.strictEqual(grant.host, `127.0.0.1:${VENDOR_PORT}`);
+    assert.strictEqual(grant.destination, `${VENDOR}/status/`);
     assert.strictEqual(grant.state, 'active');
     assert.ok(grant.lastForbiddenAt, 'the 403 is recorded on the grant');
 

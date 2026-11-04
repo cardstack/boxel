@@ -223,7 +223,6 @@ export interface KeyUsage {
   vendorOutcomes: { status: number; count: number; outcome?: string }[];
   grants: {
     id: string;
-    host: string;
     destination: string;
     state: 'active' | 'rejected';
     rejectedAt: string | null;

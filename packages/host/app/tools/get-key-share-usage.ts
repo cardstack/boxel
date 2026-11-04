@@ -78,7 +78,6 @@ export default class GetKeyShareUsageTool extends HostBaseTool<
       grants: usage.grants.map(
         (grant) =>
           new KeyUsageGrantField({
-            host: grant.host,
             destination: grant.destination,
             state: grant.state,
             rejectedAt: grant.rejectedAt ?? undefined,

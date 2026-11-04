@@ -5,11 +5,14 @@ A small pill for a categorical value: a status, a tag, a label. It is display on
 ## The contract
 
 ```
-@label?, @tone? (default neutral), @hue?, @dot? (default true)
+@label?, @tone? (default neutral), @hue?, @dot? (default true),
+@appearance? ('outlined' default | 'soft' | 'plain')
 <:default>   — used when @label is absent
 ```
 
 **Tone outlines, hue colors the dot.** A neutral chip (the default) is the theme's `--muted` surface with `--foreground` text. Any other `@tone` outlines it on `--card` instead: the tone's `-ink` (`--success-ink`, `--destructive-ink` for `danger`…) for the text and the ring, and the tone itself for the dot, the same tone names and inks Button and Alert use. `@hue` recolors only the dot (any CSS color, or a `var(--chart-3)`).
+
+**`@appearance` picks the frame.** `soft` tints instead of outlining: the fill becomes the tone mixed 12% into `--card` (the hue on a neutral chip, which has no tone) and the ring drops, so `@hue` on a toned chip still recolors only the dot. `plain` drops the frame entirely, with no fill, ring, radius or side padding, leaving dot + text as one compound unit. Use it in table cells and dense lists, where a frame inside an already-rounded card is noise. The dot is always shown on a plain chip, even with `@dot={{false}}`, so the category never rests on colour alone. In every appearance the text stays the tone's `-ink` (`--foreground` when neutral). `outlined` is the default and is unchanged.
 
 **The dot is on by default.** That is the decision most kits get backwards: without it, a row of chips is distinguished only by fill colour, and colour alone is a WCAG 1.4.1 problem _and_ hard to scan. The dot gives the hue a saturated anchor next to muted ink, so the category reads at a glance even when the fills are close. Turn it off (`@dot={{false}}`) only when the chip's own text already names the category unambiguously.
 
@@ -36,7 +39,7 @@ That is the right answer for a static chip, and it means the accessibility quest
 
 ## Theming
 
-`--muted` / `--foreground` (a neutral pill and its text), `--card` with each tone's `--x-ink` (text and ring) and `--x` (dot) for a toned chip, `--pretui-chip-hue` (the dot, defaulting to `--muted-foreground`, or the tone on a toned chip), `--boxel-border-radius-xs`, `--boxel-font-size-2xs`, `--boxel-lsp-xs`, and the `--boxel-sp-*` spacing scale. `--pretui-chip-height`, `--pretui-chip-dot-size` and `--pretui-chip-font-size` set the pill height, dot size and text size.
+`--muted` / `--foreground` (a neutral pill and its text), `--card` with each tone's `--x-ink` (text and ring) and `--x` (dot) for a toned chip, `--pretui-chip-hue` (the dot, defaulting to `--muted-foreground`, or the tone on a toned chip), `--boxel-border-radius-xs`, `--boxel-font-size-2xs`, `--boxel-lsp-xs`, and the `--boxel-sp-*` spacing scale. `--pretui-chip-height`, `--pretui-chip-dot-size` and `--pretui-chip-font-size` set the pill height, dot size and text size. `--pretui-chip-soft-mix` (default `12%`) sets how strongly a soft chip's fill is tinted.
 
 A theme restyles every chip through `--muted` and `--foreground`, and the dot colors through the `--chart-*` tokens. Dark mode needs nothing extra: the theme's dark `--muted` / `--foreground` pair applies.
 

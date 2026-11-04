@@ -138,7 +138,6 @@ function usage(overrides: Record<string, unknown> = {}) {
     grants: [
       {
         id: 'grant-1',
-        host: 'api.openweathermap.org',
         destination: 'https://api.openweathermap.org/data/',
         state: 'rejected',
         rejectedAt: '2026-11-01T08:00:00.000Z',
@@ -338,7 +337,7 @@ module('Integration | key usage and limits', function (hooks) {
         .hasText('403 Forbidden 8');
       assert
         .dom(
-          '[data-test-key-usage-grant="api.openweathermap.org"][data-test-key-usage-grant-state="rejected"]',
+          '[data-test-key-usage-grant="api.openweathermap.org/data/"][data-test-key-usage-grant-state="rejected"]',
         )
         .includesText('Rejected');
       assert
@@ -355,6 +354,56 @@ module('Integration | key usage and limits', function (hooks) {
         ['How fast', 'How many'],
         'a personal key’s limits don’t speak of other people',
       );
+    });
+
+    test('names each destination a key may be sent to by host and path, each with its own flag', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource(
+            'key-1',
+            usage({
+              grants: [
+                {
+                  id: 'grant-1',
+                  destination: 'https://api.openweathermap.org/data/2.5/',
+                  state: 'active',
+                  rejectedAt: null,
+                  lastForbiddenAt: '2026-11-02T09:00:00.000Z',
+                },
+                {
+                  id: 'grant-2',
+                  destination: 'https://api.openweathermap.org/geo/1.0/',
+                  state: 'rejected',
+                  rejectedAt: '2026-11-01T08:00:00.000Z',
+                  lastForbiddenAt: null,
+                },
+              ],
+            }),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-usage]');
+
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-key-usage-grant] .name')].map(
+          (el) => el.textContent!.trim(),
+        ),
+        ['api.openweathermap.org/data/2.5/', 'api.openweathermap.org/geo/1.0/'],
+        'two destinations on one host read differently',
+      );
+      assert
+        .dom('[data-test-key-usage-grant="api.openweathermap.org/data/2.5/"]')
+        .hasAttribute('data-test-key-usage-grant-state', 'active')
+        .includesText('Last refused Nov 2')
+        .doesNotIncludeText('Rejected');
+      assert
+        .dom('[data-test-key-usage-grant="api.openweathermap.org/geo/1.0/"]')
+        .hasAttribute('data-test-key-usage-grant-state', 'rejected')
+        .includesText('Rejected')
+        .doesNotIncludeText('Last refused');
     });
 
     test('changes a key’s limits in place, sending only what changed', async function (assert) {

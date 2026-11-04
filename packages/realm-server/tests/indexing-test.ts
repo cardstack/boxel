@@ -39,6 +39,7 @@ import {
   waitUntil,
   cardInfo,
   getTestPrerenderer,
+  logUnreadableFileRows,
   setupPermissionedRealmCached,
   setupPermissionedRealmsCached,
   searchCardsForTest,
@@ -502,6 +503,22 @@ module(basename(import.meta.filename), function () {
         testDbAdapter = dbAdapter;
         realm = testRealm;
       },
+    });
+
+    // The tests below share one realm, and several read the same file rows.
+    // When one fails, name the file rows a file read cannot see, so the log
+    // says whether a row was tombstoned or errored, and in which channel.
+    hooks.afterEach(async function () {
+      let current = QUnit.config.current as
+        | { assertions?: { result: boolean }[]; testName?: string }
+        | undefined;
+      if (current?.assertions?.some((a) => !a.result)) {
+        await logUnreadableFileRows(
+          testDbAdapter,
+          testRealm.href,
+          `read-only failure: ${current.testName}`,
+        );
+      }
     });
 
     // Guards the contract that a brand-new realm (empty boxel_index state)
@@ -1187,14 +1204,21 @@ module(basename(import.meta.filename), function () {
     });
 
     test('will not invalidate non-json/non-executable files', async function (assert) {
-      let deletedEntries = (await testDbAdapter.execute(
-        `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
-      )) as { url: string }[];
-
-      let deletedEntryUrls = deletedEntries.map((row) => row.url);
+      // A live row rules out both ways a file can drop out of the index: a
+      // tombstone, and a row that was never written.
+      let liveUrls = (
+        (await testDbAdapter.execute(
+          `SELECT url FROM boxel_index
+           WHERE realm_url = $1 AND type = 'file' AND is_deleted IS NOT TRUE`,
+          { bind: [testRealm.href] },
+        )) as { url: string }[]
+      ).map((row) => row.url);
 
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
-        assert.notOk(deletedEntryUrls.includes(file));
+        assert.ok(
+          liveUrls.includes(`${testRealm}${file}`),
+          `${file} has a live file row`,
+        );
       });
     });
 
