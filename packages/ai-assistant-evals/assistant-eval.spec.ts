@@ -639,6 +639,31 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   });
 }
 
+// The screenshot is judged as what the reader sees at the end of the run, so
+// it should show the transcript's last answer. The transcript can be left
+// scrolled above its end with the "new messages" chip up, even in a finished
+// room. Scroll its scroll area, not the last message: a scroll that lands at
+// the very end is what makes the transcript follow its end again, and a
+// message's own scrollIntoView can stop short of it. Best effort: a page
+// without a transcript is captured as it is.
+async function showTranscriptEnd(page: Page) {
+  try {
+    await page.evaluate(() => {
+      let viewport = document.querySelector<HTMLElement>(
+        '[data-test-ai-assistant-conversation] [data-test-pretui-stick-to-bottom-viewport]',
+      );
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    });
+    await expect(
+      page.locator('[data-test-unread-messages-button]'),
+    ).toHaveCount(0, { timeout: 2_000 });
+  } catch {
+    // the chip stayed or the page is gone: capture what is there
+  }
+}
+
 async function stopGeneration(page: Page) {
   let stop = page.locator('[data-test-stop-generating]');
   if (await stop.isVisible()) {
@@ -1435,6 +1460,7 @@ async function runModel(
     result.cardRendered = rendered.cardId;
     result.renderedIn = rendered.where;
     result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+    await showTranscriptEnd(page);
     await page.screenshot({ path: result.screenshot, fullPage: false });
 
     let events = await allRoomEvents(result.roomId, credentials.accessToken);
@@ -1475,6 +1501,7 @@ async function runModel(
     );
     try {
       result.screenshot = join(RESULTS_DIR, `${slug}.png`);
+      await showTranscriptEnd(page);
       await page.screenshot({ path: result.screenshot });
     } catch {
       // the page may be gone
