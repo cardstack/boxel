@@ -293,6 +293,109 @@ Only these refuse the operation:
 | `internal-error`      | 502                              | the connection broke before any response arrived                                                                                                                                                                                                                                                         |
 | `credential-rejected` | 424                              | the vendor answered 401 to a request carrying a credential; its grants are now rejected                                                                                                                                                                                                                  |
 
+## A card that uses the realm's key or the user's own
+
+A slot is either `{{apiKey}}` or `{{userKey}}`, and each is approved on its
+own terms: an `apiKey` slot has one binding per realm, pointing at a share
+and serving every caller there, and a `userKey` slot has one per user,
+serving only them (see the `key-bindings` skill). So a card that should work
+with whichever key is available declares **one operation per slot**: each
+request twice, identical but for the slot.
+
+```ts
+@operation static forecastShared = {
+  base: 'callApi',
+  label: 'Get the 5-day forecast for a place, with the workspace’s key',
+  params: { lat: NumberField, lon: NumberField },
+  url: 'https://api.openweathermap.org/data/2.5/forecast',
+  query: { lat: params('lat'), lon: params('lon'), appid: '{{apiKey}}' },
+} satisfies OperationDeclaration;
+
+@operation static forecastOwn = {
+  // the same request, with appid: '{{userKey}}'
+} satisfies OperationDeclaration;
+```
+
+The card asks `@context.keyReadiness` about both and calls the shared one
+when it answers `ready`, otherwise the caller's own when that one does:
+
+```ts
+let shared = this.args.context?.keyReadiness?.('forecastShared', model);
+let own = this.args.context?.keyReadiness?.('forecastOwn', model);
+let name =
+  shared === 'ready'
+    ? 'forecastShared'
+    : own === 'ready'
+      ? 'forecastOwn'
+      : undefined;
+let answer = name && (await operations(model)[name]({ lat, lon }));
+```
+
+A card that calls several operations with each key asks about all of them
+and treats a key as ready only when every one is: each operation has its own
+binding, so one can need re-approval, or be left unticked on the approve page,
+while the rest are ready. Ask `@context.canInvoke` about the same pairs too.
+Readiness is never answered for an operation the realm's policy doesn't let
+the caller invoke, so `undefined` alone can't tell "still asking" from
+"refused"; `canInvoke` answering `false` can.
+
+When neither is ready, the card opens the secure window itself for the one
+request that fixes it, once per request (a closed window leaves a prompt
+with the same button, and a browser that blocks the popup gets the host's
+button that opens it). The weather showing is the signal that a key works,
+so the card needn't say whose key it is using. The requests:
+
+- `approve` on the caller's own operation at `needs-connect` or
+  `needs-approval`; `review-changes` at `needs-reapproval`.
+- `approve` on the `apiKey` operation for the writer whose share isn't
+  approved for it yet, asked even while the card runs on their own key,
+  since nobody else in the realm can use the share until then.
+- `replace-key` after `credential-rejected`, from the card's error, not
+  opened by itself.
+
+At `needs-connect`, open `approve` rather than `enter-key`: the approve page
+lets the user pick one of their keys or add one, and approving grants the key
+the operation's destination. A key saved through `enter-key` alone has no
+grant, so readiness stays `needs-connect`. The approve page starts on
+scheduled pipelines only; the user has to choose to let the operations run
+when a card is opened, which is what a card calling from its template needs.
+A call that a fix makes ready needs no reload: readiness is asked again when
+the user comes back from the window. Swapping a key into a stopped share is
+the keys page's job, not the card's.
+
+Don't write one operation whose slot falls back from the realm's key to the
+user's. Who pays would be implicit: every share that was suspended or over
+budget would quietly move calls onto readers' own keys. With two operations
+every approval stays simple, and the `boxel:key-use` line names the
+operation, so it shows whose key paid.
+
+What a card can and can't learn:
+
+- `keyReadiness` answers `needs-admin` for every share problem: no share, a
+  suspended share, a share not approved for the operation. A reader is never
+  told about a realm's shares. A direct writer can tell those apart with
+  `ListRealmKeySharesTool` (`@cardstack/boxel-host/tools/list-realm-key-shares`).
+  It answers `visible: false` to anyone else, and for a writer it gives each
+  share's `state`, `suspensionReason` and `shareId`, which `swap-key` takes.
+  Readiness answers `needs-admin` even to the writer who shared a key the
+  operation isn't approved for yet, since there is no binding to tell them
+  about; a share of theirs listed with no `operations` is the one to offer
+  them to approve (`approve` on the `apiKey` operation).
+- `needs-sign-in` on the `userKey` operation means the caller isn't signed
+  in. Showing the shared answer is the most such a visitor can be offered.
+- A refusal reaches card code as an `OperationsError` carrying `code`,
+  `title`, `detail`, `retryAfterSeconds` and the card-actionable part of its
+  `meta` (`OperationsErrorMeta`); a share's suspension reason is not part of
+  it. Treat
+  `rate-limited` and `over-budget` as a state ("try again shortly") rather
+  than an error. `credential-rejected` stops the card until the key is
+  replaced (`replace-key`).
+- Calls are refused during a render (`not-during-render`), so the card calls
+  from an action or a modifier when someone opens it or presses refresh,
+  never from a getter or on a timer.
+
+`packages/experiments-realm/weather-app.gts` is a complete example.
+
 ## The key-use channel
 
 `boxel:key-use`, one JSON line per invocation:
