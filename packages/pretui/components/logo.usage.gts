@@ -134,6 +134,7 @@ export class LogoUsage extends GlimmerComponent {
         />
         <Args.String
           @name='name'
+          @required={{true}}
           @value={{this.name}}
           @description='The wordmark when there is no image or it fails to load, the initials in a mark, and the accessible name (the image alt).'
           @onInput={{this.setName}}

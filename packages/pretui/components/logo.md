@@ -6,7 +6,7 @@ The kit's brand mark: an app or company logo. Give it `@src` and the image is dr
 
 ```
 @src?        image URL (svg, png, jpg, webp)
-@name?       wordmark when there is no image, initials in a mark, and the accessible name
+@name        wordmark when there is no image, initials in a mark, and the accessible name
 @variant?    'auto' | 'mark' | 'wordmark'   (default 'auto')
 @size?       'xs' | 's' | 'm' | 'l' | 'xl'   (default 'm')
 @decorative? hide it from assistive tech
@@ -14,7 +14,7 @@ The kit's brand mark: an app or company logo. Give it `@src` and the image is dr
 
 **`@variant` is the shape.** `mark` is a square (the height is also the width) and `wordmark` is as wide as its content. `auto` reads the image's aspect ratio once it has loaded: wider than 5:4 is a wordmark, anything else a mark. Until it loads, and with no image, `auto` is a wordmark. A sidebar header passes `mark` while collapsed and `wordmark` while expanded.
 
-**`@size` sets the height, not the width.** It sets the host `font-size` from the same `--pretui-size-*` ladder as Button, and the height is `2em` of it, so one number scales the logo, its initials and its radius. The width follows the image. `--pretui-logo-h` sets any height for one instance.
+**`@size` sets the height, not the width.** It sets the host `font-size` from the same `--pretui-size-*` ladder as Token and Autocomplete, and the height is `2em` of it, so one number scales the logo, its initials and its radius. The width follows the image. `--pretui-logo-h` sets any height for one instance.
 
 **State is in `data-*`.** `data-variant` is the resolved shape (`mark` or `wordmark`), `data-size`, `data-has-image`, and `data-state='fallback'` after an image failed.
 
@@ -33,7 +33,7 @@ Where Pretui differs: the fallback is part of the component (name or initials, a
 
 ## Theming
 
-Text: `--foreground`. Initials tile: `--muted` fill, `--border` hairline, `--radius` halved (`--pretui-logo-radius` overrides it). Type steps: `--pretui-size-*` over `--text-ui-*`. The styles sit in `@layer PretComponent`, so a caller's unlayered CSS wins without a more specific selector. Knobs: `--pretui-logo-h` (height, default `2em`), `--pretui-logo-radius`.
+Text: `--foreground`. Initials tile: `--muted` fill, `--border` hairline, `--radius` halved (`--pretui-logo-radius` overrides it). Type steps: `--pretui-size-*` over `--boxel-font-size-*`. The styles sit in `@layer PretComponent`, so a caller's unlayered CSS wins without a more specific selector. Knobs: `--pretui-logo-h` (height, default `2em`), `--pretui-logo-radius`.
 
 ## React ecosystem
 

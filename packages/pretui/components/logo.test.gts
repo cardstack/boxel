@@ -1,6 +1,7 @@
 // Logo unit tests. No assertion touches a computed style: the host test
 // harness stamps the scoped-css attribute and delivers no stylesheet.
 import { module, test } from 'qunit';
+import { tracked } from '@glimmer/tracking';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Logo } from './logo';
@@ -83,6 +84,22 @@ module('Pretui | components/logo', function (hooks) {
     assert.dom('img').doesNotExist();
     assert.dom('[data-test-pretui-logo]').hasText('Acme');
     assert.strictEqual(logo().dataset['hasImage'], undefined);
+  });
+
+  test('the fallback state follows the current @src', async function (assert) {
+    class State {
+      @tracked src = BROKEN;
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Logo @src={{state.src}} @name='Acme' />
+      </template>,
+    );
+    await waitUntil(() => logo().dataset['state'] === 'fallback');
+    state.src = SQUARE;
+    await waitUntil(() => logo().dataset['state'] === undefined);
+    assert.dom('img').exists('the new source is drawn');
   });
 
   test('@decorative hides it from assistive tech', async function (assert) {

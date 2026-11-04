@@ -21,7 +21,7 @@ export interface LogoSignature {
     src?: string;
     /** The wordmark when there is no image or it fails to load, the initials
      * in a mark, and the accessible name. */
-    name?: string;
+    name: string;
     /** `mark` is a square, `wordmark` is as wide as its content, `auto` (the
      * default) picks from the loaded image's aspect ratio; with no image it is
      * `wordmark`. */
@@ -39,8 +39,11 @@ export class Logo extends Component<LogoSignature> {
   @tracked failedSrc: string | undefined;
   @tracked measured: { src: string; ratio: number } | undefined;
 
+  get failed(): boolean {
+    return Boolean(this.args.src) && this.args.src === this.failedSrc;
+  }
   get showImage(): boolean {
-    return Boolean(this.args.src) && this.args.src !== this.failedSrc;
+    return Boolean(this.args.src) && !this.failed;
   }
   get size() {
     return resolveSize(this.args.size, 'm');
@@ -48,12 +51,12 @@ export class Logo extends Component<LogoSignature> {
   get variant(): 'mark' | 'wordmark' {
     let { variant } = this.args;
     if (variant === 'mark' || variant === 'wordmark') return variant;
-    // auto: the image's own ratio once it has loaded; the text is a wordmark
+    // auto: the image's own ratio once it has loaded; a wordmark until then, and for text
     let { measured } = this;
     if (measured && this.showImage && measured.src === this.args.src) {
       return measured.ratio > WORDMARK_RATIO ? 'wordmark' : 'mark';
     }
-    return this.showImage ? 'mark' : 'wordmark';
+    return 'wordmark';
   }
   get initials(): string {
     return (this.args.name ?? '')
@@ -70,7 +73,7 @@ export class Logo extends Component<LogoSignature> {
   // An image carries its name as alt text. Text is its own name as a
   // wordmark; initials need a role and label to say the whole name.
   get alt(): string {
-    return this.args.decorative ? '' : (this.args.name ?? '');
+    return this.args.decorative ? '' : this.args.name;
   }
   get initialsRole(): string | undefined {
     return this.args.decorative ? undefined : 'img';
@@ -97,7 +100,7 @@ export class Logo extends Component<LogoSignature> {
       data-size={{this.size}}
       data-variant={{this.variant}}
       data-has-image={{if this.showImage 'true'}}
-      data-state={{if this.failedSrc 'fallback'}}
+      data-state={{if this.failed 'fallback'}}
       aria-hidden={{if @decorative 'true'}}
       data-test-pretui-logo
       ...attributes
@@ -134,20 +137,20 @@ export class Logo extends Component<LogoSignature> {
           max-inline-size: 100%;
           min-inline-size: 0;
           flex: none;
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
           color: var(--foreground);
         }
         .pretui-logo[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-logo[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-logo[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-logo[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         /* a mark is square: the height is also the width */
         .pretui-logo[data-variant='mark'] {
