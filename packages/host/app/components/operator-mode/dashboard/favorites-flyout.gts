@@ -31,7 +31,6 @@ export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
       @titleId={{@titleId}}
       @close={{@close}}
       @realmURLs={{this.favoriteURLs}}
-      @emptyMessage='Favorite a workspace to keep it here and at the top of the dashboard.'
     />
   </template>
 }

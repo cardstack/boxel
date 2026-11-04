@@ -596,7 +596,7 @@ export default class Dashboard extends Component<Signature> {
                 @title='Favorites'
                 @titleId={{this.headingId 'favorites'}}
                 @count={{this.favoritesCount}}
-              >The workspaces you starred, kept at the top.</SectionHead>
+              >Workspaces you favorited, kept at the top.</SectionHead>
               {{#if this.favoritesCount}}
                 <div
                   class='desk-list'

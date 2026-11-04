@@ -25,7 +25,8 @@ interface Signature {
   Args: Omit<SectionFlyoutSignature['Args'], 'showSection'> & {
     title: string;
     realmURLs: string[];
-    emptyMessage: string;
+    // Omitted when the list is never empty while its rail entry exists.
+    emptyMessage?: string;
   };
 }
 
@@ -80,7 +81,7 @@ export default class RealmListFlyout extends Component<Signature> {
           {{/if}}
         </span>
       </Button>
-    {{else}}
+    {{else if @emptyMessage}}
       <p class='flyout-empty' data-test-section-rail-flyout-empty>
         {{@emptyMessage}}
       </p>
