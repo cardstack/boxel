@@ -1183,16 +1183,13 @@ export default class Dashboard extends Component<Signature> {
         .dashboard-scroller {
           --dashboard-gutter: 1.5rem;
         }
-        /* The greeting takes its own line, with the filter, then Get
-           started, under it. */
+        /* The greeting takes its own line, with Get started, then the
+           filter, under it. */
         .greeting-line {
           display: contents;
         }
         .greeting {
           flex-basis: 100%;
-        }
-        .get-started-button {
-          order: 1;
         }
       }
       @container dashboard (max-width: 40rem) {

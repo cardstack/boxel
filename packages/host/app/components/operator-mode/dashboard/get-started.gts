@@ -340,7 +340,8 @@ export default class GetStarted extends Component<Signature> {
             >
               Dismiss
             </Button>
-            {{! Kept apart from the minimize button, at the far end. }}
+            {{! The minimize button sits at the far end. Its tooltip wraps it,
+                so this wrapper is what the layout places. }}
             <div class='get-started-actions'>
               <IconButton
                 @icon={{if this.isExpanded ChevronUp ChevronDown}}
@@ -534,21 +535,21 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         font-style: italic;
       }
-      /* Narrow, the box stacks: the title with the minimize button, the
-         progress bar across the box, the count, the steps, then Dismiss
-         at the bottom right. The header's items join the body's grid for
-         that. */
+      /* Narrow, the box stacks: the title row with Dismiss and the
+         minimize button, the progress bar across the box, the count, then
+         the steps. The header's items join the body's grid for that, in
+         their DOM order so Tab follows what's on screen. */
       @container get-started (max-width: 30rem) {
         .get-started-body {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: minmax(0, 1fr) auto auto;
           grid-template-areas:
-            'title actions'
-            'progress progress'
-            'count count'
-            'steps steps'
-            'dismiss dismiss';
-          gap: var(--boxel-sp-xs) var(--boxel-sp);
+            'title dismiss actions'
+            'progress progress progress'
+            'count count count'
+            'steps steps steps';
+          align-items: center;
+          gap: var(--boxel-sp-xs);
         }
         .get-started-head {
           display: contents;
@@ -571,7 +572,6 @@ export default class GetStarted extends Component<Signature> {
         }
         .get-started-dismiss {
           grid-area: dismiss;
-          justify-self: end;
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);
