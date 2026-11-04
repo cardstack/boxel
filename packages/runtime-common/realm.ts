@@ -17944,7 +17944,7 @@ export class Realm {
           : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
-        this.#definitionLookup.lookupDefinitionEntry(codeRef),
+        this.#requestDefinitionLookup.lookupDefinitionEntry(codeRef),
       toURL: (identifier) => this.#virtualNetwork.toURL(identifier),
       isPolicyCard: (types) => this.#isPolicyCard(types),
       // The index and the definition cache record an adoption chain in this
