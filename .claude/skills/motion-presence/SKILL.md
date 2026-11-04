@@ -39,7 +39,10 @@ const keyOf = (todo) => todo.id;
   `packages/choreo-gallery/realm/shell/gallery-grid.gts`).
 - `@mode`: `"sync"` (default — leavers and newcomers together), `"wait"`
   (newcomer holds until the leaver finishes), `"popLayout"` (leaver out of
-  flow immediately so siblings close up; `@anchorX`/`@anchorY` available).
+  flow immediately so siblings close up; `@anchorX`/`@anchorY` available),
+  `"snapshot"` (glimmer-motion's own: the leaver's block goes with the
+  render, and a static, inert copy of its last frame plays its exit out of
+  flow — see below).
 - `@initial={{false}}` skips the first-render entrance. **Caution:** the
   presence context is inherited — blocking the first entrance blocks it for
   every motion node inside the block too. If children animate on mount,
@@ -56,6 +59,29 @@ anything the exit needs — the label the panel showed, the row the modal flew
 from — must ride on the item `<Presence>` yields, not be read back out of
 state that has already moved on. The modifier freezes an exiting element's
 _props_, but your template's own bindings are yours to keep stable.
+
+When the leaver renders content you can't put on the item — a component's
+caller blocks, `...attributes` — use `@mode="snapshot"`: nothing live stays
+behind, so nothing re-renders. The copy is a memory (the same treatment
+`<Choreo>` gives its parked leavers): inert, held at its last frame, with no
+ids or form-control names, so a rule keyed on an id doesn't reach it: style a
+leaver by class. Its test hooks are suffixed (`data-test-title` becomes
+`data-test-title-memory`), so a test's selectors find only the live element.
+It is a picture, so motion elements nested in it don't play their own exits.
+
+The copy is pinned out of flow at the seat its element last recorded: after
+each render, and when it or its offset parent resizes. A move that is neither
+(a transition on a sibling's width) is not seen. `@anchorX` / `@anchorY` pick
+the edges of its containing block it is pinned to: pick the ones that hold
+still as the render lands, so `@anchorY='bottom'` in a container that grows
+upward from its bottom edge. The copy keeps its classes and goes back into its
+parent, so structural selectors that read the live scene (`:has()`, `+`, `~`,
+`:nth-child()`, `:empty`) still match it while it fades. A rule that should
+see only live content excludes it:
+`:has(.menu:not([data-motion-memory], [data-motion-memory] *))`.
+`packages/host/app/components/pill-menu/index.gts` is the worked example, and
+the composer in `packages/host/app/components/matrix/room.gts` shows both
+fixes.
 
 ## When NOT
 

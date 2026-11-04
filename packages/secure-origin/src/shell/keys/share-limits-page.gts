@@ -2,9 +2,15 @@
 // key it holds to change the limits. Realm config's API Keys entry opens it,
 // since changing a limit is a key-owner action that only this window's
 // session may take: the app's session, which card code holds, can't raise a
-// limit. A direct writer of the realm who doesn't own the share sees its
-// numbers in realm config and is told here that only its owner changes them;
-// anyone else, who can't see the share, is told the link names none.
+// limit. The key page opens it too, from a notice that the share's use
+// reached a limit (`#…&then=keys`), and then offers a way back to it. A direct
+// writer of the realm who doesn't own the share sees its usage here and is
+// told that only its owner changes the limits; anyone else, who can't see the
+// share, is told the link names none.
+// A share that no operation in the workspace is approved to send says so to
+// its owner, with Approve for a card, which opens the key's use page for the
+// share: until an operation is approved, no card there calls with it.
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -20,6 +26,10 @@ import {
   type KeyUsage,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
+import Button from '../../components/button.gts';
+import { navigation } from '../navigation.js';
+import { keyUsePath } from '../pages.js';
+import { pageURL } from '../urls.js';
 
 import {
   failureMessage,
@@ -42,7 +52,12 @@ type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
   | { name: 'needs-admin'; context: WindowContext }
-  | { name: 'not-owner'; context: WindowContext; share: KeyShare }
+  | {
+      name: 'not-owner';
+      context: WindowContext;
+      share: KeyShare;
+      usage: KeyUsage;
+    }
   | {
       name: 'editing';
       context: WindowContext;
@@ -72,6 +87,18 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
           <strong>{{this.notOwner.context.realm.name}}</strong>
           holds someone else’s key. Only they change its limits. If you think
           it’s being overused, suspend it from the workspace’s settings.</:intro>
+        <:default>
+          <UsageSummary @usage={{this.notOwner.usage}} />
+        </:default>
+        <:actions>
+          {{#if this.returnsToKeys}}
+            <Button
+              @kind='secondary'
+              data-test-share-limits-back
+              {{on 'click' this.backToKeys}}
+            >Back to your keys</Button>
+          {{/if}}
+        </:actions>
       </EditPage>
     {{else if this.editing}}
       <EditPage
@@ -87,6 +114,21 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
             @context={{this.editing.context}}
             @reason={{this.opened.reason}}
           />
+          {{#if this.unapproved}}
+            <div class='unapproved' data-test-share-limits-unapproved>
+              <p class='unapproved-text'>Not approved for any calls yet. No card
+                in
+                <strong>{{this.editing.context.realm.name}}</strong>
+                calls with this key until you approve it for one.</p>
+              <Button
+                type='button'
+                @kind='secondary'
+                @size='extra-small'
+                data-test-share-limits-approve
+                {{on 'click' this.approveForCard}}
+              >Approve for a card…</Button>
+            </div>
+          {{/if}}
           <UsageSummary @usage={{this.editing.usage}} />
           <LimitsForm
             @shared={{true}}
@@ -94,16 +136,94 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
             @onSave={{this.saveLimits}}
           />
         </:default>
+        <:actions>
+          {{#if this.returnsToKeys}}
+            <Button
+              @kind='secondary'
+              data-test-share-limits-back
+              {{on 'click' this.backToKeys}}
+            >Back to your keys</Button>
+          {{/if}}
+        </:actions>
       </EditPage>
+    {{/if}}
+    {{! The pages above that have no buttons of their own still go back. }}
+    {{#if this.backBelow}}
+      <footer class='back'>
+        <Button
+          @kind='secondary'
+          data-test-share-limits-back
+          {{on 'click' this.backToKeys}}
+        >Back to your keys</Button>
+      </footer>
     {{/if}}
     <style scoped>
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
+      .unapproved {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        align-items: center;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .unapproved-text {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .back {
+        display: flex;
+        justify-content: flex-end;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+      }
     </style>
   </template>
 
   private opened = openedFor();
+
+  // Opened from the key page, which it goes back to.
+  private returnsToKeys =
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('then') ===
+    'keys';
+
+  private backToKeys = () => navigation.back(pageURL('keys'));
+
+  // A failed load and the needs-admin page draw no buttons of their own.
+  private get backBelow() {
+    return this.returnsToKeys && (!!this.loadFailed || !!this.needsAdmin);
+  }
+  // The owner's active share, when no operation in the workspace is approved
+  // to send it.
+  private get unapproved() {
+    let share = this.editing?.share;
+    return (
+      share?.state === 'active' &&
+      Boolean(share.keyId) &&
+      share.operations?.length === 0
+    );
+  }
+
+  // The share is set up for one of the workspace's cards on its key's use
+  // page, which goes on to the key page when done.
+  private approveForCard = () => {
+    let share = this.editing?.share;
+    if (!share?.keyId) {
+      return;
+    }
+    navigation.assign(
+      `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
+        realm: share.realm,
+        share: share.id,
+      })}`,
+    );
+  };
+
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -158,7 +278,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       let usage = await shareUsage(config, share.id);
       this.page.state = usage.canEditLimits
         ? { name: 'editing', context, share, usage }
-        : { name: 'not-owner', context, share };
+        : { name: 'not-owner', context, share, usage };
       this.args.api.visit.loaded();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -170,6 +290,10 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
   };
 
+  // Saves the limits, then reads the usage again for the budgets they set.
+  // The limits are saved once the change is, whether or not that read
+  // succeeds; a usage that can't be read again keeps what it showed, with
+  // the new limits.
   private saveLimits = async (
     changes: KeyLimitChanges,
   ): Promise<KeyLimits | string> => {
@@ -177,23 +301,33 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     if (!editing) {
       return 'This shared key isn’t open for changes.';
     }
+    let limits: KeyLimits;
     try {
-      let limits = await setShareLimits(
+      limits = await setShareLimits(
         this.args.api.config,
         editing.share.id,
         changes,
       );
-      this.page.state = {
-        ...editing,
-        usage: { ...editing.usage, limits },
-      };
-      return limits;
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       }
       return failureMessage(e);
     }
+    let usage: KeyUsage = { ...editing.usage, limits };
+    try {
+      usage = {
+        ...(await shareUsage(this.args.api.config, editing.share.id)),
+        limits,
+      };
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+        return limits;
+      }
+    }
+    this.page.state = { ...editing, usage };
+    return limits;
   };
 }
 

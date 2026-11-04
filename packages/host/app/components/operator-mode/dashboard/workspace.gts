@@ -8,10 +8,9 @@ import { tracked } from '@glimmer/tracking';
 
 import DotsHorizontal from '@cardstack/boxel-icons/dots';
 import Globe from '@cardstack/boxel-icons/globe';
-import Lock from '@cardstack/boxel-icons/lock';
-import Group from '@cardstack/boxel-icons/users';
 import IconX from '@cardstack/boxel-icons/x';
 import { Button } from '@cardstack/pretui/components/button';
+import { Chip } from '@cardstack/pretui/components/chip';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu as PretMenu } from '@cardstack/pretui/components/menu';
 import { Spinner } from '@cardstack/pretui/components/spinner';
@@ -219,15 +218,12 @@ export default class Workspace extends Component<Signature> {
                 fill reserved space instead of growing the caption. }}
             <div class='desk-caption-line'>
               {{! Hidden, as the button reads it in its description. }}
-              <span
-                class={{cn
-                  'visibility-chip'
-                  (concat 'is-' this.workspace.visibility)
-                }}
+              <Chip
+                @hue={{this.visibilityHue}}
+                class='visibility-chip'
                 aria-hidden='true'
                 data-test-workspace-visibility
               >
-                <this.visibilityIcon width='12' height='12' />
                 <span
                   data-test-workspace-visibility-word
                 >{{this.workspace.visibility}}</span>
@@ -235,7 +231,7 @@ export default class Workspace extends Component<Signature> {
                   id={{this.visibilityDescriptionId}}
                   class='boxel-sr-only'
                 >{{this.workspace.visibilityLabel}}</span>
-              </span>
+              </Chip>
               <span
                 class='desk-stats'
                 data-test-workspace-stats={{@realmIdentifier}}
@@ -472,15 +468,12 @@ export default class Workspace extends Component<Signature> {
             {{/if}}
             {{! Hidden, as the button reads the chip and the time in its
                 description. }}
-            <span
-              class={{cn
-                'visibility-chip'
-                (concat 'is-' this.workspace.visibility)
-              }}
+            <Chip
+              @hue={{this.visibilityHue}}
+              class='visibility-chip'
               aria-hidden='true'
               data-test-workspace-visibility
             >
-              <this.visibilityIcon width='12' height='12' />
               <span
                 data-test-workspace-visibility-word
               >{{this.workspace.visibility}}</span>
@@ -488,7 +481,7 @@ export default class Workspace extends Component<Signature> {
                 id={{this.visibilityDescriptionId}}
                 class='boxel-sr-only'
               >{{this.workspace.visibilityLabel}}</span>
-            </span>
+            </Chip>
             {{#if this.showsUpdatedTime}}
               <span
                 class='updated'
@@ -696,34 +689,11 @@ export default class Workspace extends Component<Signature> {
         color: var(--primary);
       }
 
-      /* Who can see the workspace, as a tinted chip so Private, Shared and
-         Public read apart at a glance. */
+      /* Who can see the workspace: a neutral chip, so it never outweighs the
+         name; the dot's hue tells the visibilities apart. */
       .visibility-chip {
-        --_workspace-chip-color: var(--boxel-light-60);
-        display: inline-flex;
         flex: none;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        height: var(--_workspace-chip-height);
-        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
-        border: 1px solid
-          color-mix(in oklch, var(--_workspace-chip-color) 30%, transparent);
-        border-radius: var(--boxel-border-radius);
-        background-color: color-mix(
-          in oklch,
-          var(--_workspace-chip-color) 12%,
-          transparent
-        );
-        color: var(--_workspace-chip-color);
-        font: 600 var(--boxel-font-xs);
         text-transform: capitalize;
-        white-space: nowrap;
-      }
-      .visibility-chip.is-shared {
-        --_workspace-chip-color: var(--boxel-cyan);
-      }
-      .visibility-chip.is-public {
-        --_workspace-chip-color: var(--boxel-highlight);
       }
 
       /* Desk. */
@@ -1067,14 +1037,19 @@ export default class Workspace extends Component<Signature> {
           var(--boxel-sp-xs) var(--boxel-sp-xs);
         border-radius: var(--dashboard-tile-radius);
         background-color: var(--dashboard-row-tint);
-        box-shadow: inset 0 0 0 1px var(--boxel-light-10);
-        transition: background-color var(--boxel-transition);
+        box-shadow: inset 0 0 0 1px var(--boxel-light-25);
+        transition:
+          background-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
       }
       .workspace.is-row:has(.host-menu) {
         --_workspace-controls: 3;
       }
-      .workspace.is-row:hover {
-        background-color: var(--_workspace-row-tint-hover);
+      @media (hover: hover) {
+        .workspace.is-row:hover {
+          background-color: var(--_workspace-row-tint-hover);
+          box-shadow: inset 0 0 0 1px var(--boxel-light-50);
+        }
       }
       /* Over the list's scrim, so a row the cursor rests on is never hidden
          under it; the Show more toggle, later in the page at the same level,
@@ -1338,14 +1313,15 @@ export default class Workspace extends Component<Signature> {
     this.isHostDropdownOpen = open;
   }
 
-  private get visibilityIcon() {
+  // Private keeps the chip's default gray dot.
+  private get visibilityHue() {
     switch (this.workspace.visibility) {
       case 'public':
-        return Globe;
+        return 'var(--chart-6)';
       case 'shared':
-        return Group;
+        return 'var(--chart-7)';
       default:
-        return Lock;
+        return undefined;
     }
   }
 

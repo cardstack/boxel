@@ -157,19 +157,33 @@ export interface KeyShare {
 
 // How much of a key interactive calls may spend: a token bucket per caller
 // (`rateBurst` calls at once, refilled at `rateRefillPerMinute`) and the calls
-// the share or key serves in a UTC day and month, across every caller.
+// the share or key serves in a UTC day and month, across every caller. `set`
+// holds each as its owner set it, null where the platform's default is in
+// force, and `defaults` what an unset one takes: an unset monthly budget is
+// `monthlyBudgetDays` daily budgets, so it follows the daily budget.
 export interface KeyLimits {
   rateBurst: number;
   rateRefillPerMinute: number;
   dailyBudget: number;
   monthlyBudget: number;
+  set?: Record<KeyLimitName, number | null>;
+  defaults?: {
+    rateBurst: number;
+    rateRefillPerMinute: number;
+    dailyBudget: number;
+    monthlyBudgetDays: number;
+  };
 }
+
+export type KeyLimitName =
+  | 'rateBurst'
+  | 'rateRefillPerMinute'
+  | 'dailyBudget'
+  | 'monthlyBudget';
 
 // A change to some of a key's limits: a limit left out keeps what it was, and
 // null puts it back to the platform's default.
-export type KeyLimitChanges = Partial<{
-  [limit in keyof KeyLimits]: number | null;
-}>;
+export type KeyLimitChanges = Partial<Record<KeyLimitName, number | null>>;
 
 export interface KeyShareOperation {
   bindingId: string;
@@ -209,7 +223,6 @@ export interface KeyUsage {
   vendorOutcomes: { status: number; count: number; outcome?: string }[];
   grants: {
     id: string;
-    host: string;
     destination: string;
     state: 'active' | 'rejected';
     rejectedAt: string | null;

@@ -1,4 +1,11 @@
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  isAbsoluteIdentifier,
+  logger,
+  pathSegmentsOfIdentifier,
+  rri,
+  SupportedMimeType,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   ensureTrailingSlash,
   isMarkdownFile,
@@ -55,13 +62,12 @@ export const readRealmFileTool: Tool = {
           uniqueItems: true,
           items: { type: 'string' },
           description:
-            'Full URLs of the files to read, each exactly as it appears in ' +
-            "the skill (a link there is already absolute — don't shorten " +
-            'or rewrite it). An identifier in a realm-prefix form ' +
-            '(`@cardstack/base/card-api.gts`) is read from the realm the ' +
-            'prefix stands for. List each URL once, at most ' +
-            `${READ_REALM_FILE_MAX_URLS} per call. The realm each file ` +
-            'lives in is worked out for you.',
+            'Identifiers of the files to read, each exactly as it appears ' +
+            'in the skill: a full URL, or a realm-prefix form such as ' +
+            '`@cardstack/base/card-api.gts`. A link in a skill is already ' +
+            "absolute — don't shorten or rewrite it. List each file once, " +
+            `at most ${READ_REALM_FILE_MAX_URLS} per call. The realm each ` +
+            'file lives in is worked out for you.',
         },
       },
       required: ['urls'],
@@ -70,9 +76,11 @@ export const readRealmFileTool: Tool = {
 };
 
 export interface ReadRealmFileArgs {
-  // Full URLs of the files to read. The realm each belongs to is discovered
-  // from the realm server's response, so the caller supplies only URLs.
-  urls: string[];
+  // Identifiers of the files to read, in URL or prefix form. The realm each
+  // belongs to is discovered from the realm server's response, so the caller
+  // supplies only identifiers. The argument keeps the name `urls` because
+  // room history and the model's past calls already use it.
+  urls: RealmResourceIdentifier[];
 }
 
 // The urls a readRealmFile call names, deduplicated, in order, and capped at
@@ -87,9 +95,11 @@ export interface ReadRealmFileArgs {
 // for get read instead of the call failing and the model re-requesting them
 // on the next turn.
 export interface ReadRealmFileUrlSelection {
-  urls: string[];
-  dropped: string[];
+  urls: RealmResourceIdentifier[];
+  dropped: RealmResourceIdentifier[];
 }
+
+const JSON_STRING_TOKEN = /"(?:[^"\\]|\\.)*"/g;
 
 export function selectReadRealmFileUrls(
   argumentsJson: string,
@@ -101,10 +111,23 @@ export function selectReadRealmFileUrls(
   } catch {
     let listStart = argumentsJson.indexOf('"urls"');
     if (listStart !== -1) {
+      // Every complete JSON string after the key, kept when it is an
+      // identifier in either form. Matching whole string tokens from the key
+      // onward keeps each opening quote paired with its own closing quote, an
+      // entry cut off before its closing quote is never matched, and the
+      // `"urls"` key itself is not an identifier.
       for (let match of argumentsJson
         .slice(listStart)
-        .matchAll(/"(https?:\/\/[^"\s]+)"/g)) {
-        urls.push(match[1]);
+        .matchAll(JSON_STRING_TOKEN)) {
+        let value: unknown;
+        try {
+          value = JSON.parse(match[0]);
+        } catch {
+          continue;
+        }
+        if (typeof value === 'string' && isAbsoluteIdentifier(value)) {
+          urls.push(value);
+        }
       }
     }
   }
@@ -114,7 +137,7 @@ export function selectReadRealmFileUrls(
         (url): url is string => typeof url === 'string' && url.length > 0,
       ),
     ),
-  ];
+  ].map(rri);
   return {
     urls: unique.slice(0, READ_REALM_FILE_MAX_URLS),
     dropped: unique.slice(READ_REALM_FILE_MAX_URLS),
@@ -125,7 +148,7 @@ export function selectReadRealmFileUrls(
 // the dropped list, for callers that only label the call.
 export function urlsFromReadRealmFileArguments(
   argumentsJson: string,
-): string[] {
+): RealmResourceIdentifier[] {
   return selectReadRealmFileUrls(argumentsJson).urls;
 }
 
@@ -407,23 +430,23 @@ async function fetchRealmFile(
   return { ok: true, body: await authed.text() };
 }
 
-// A short human label for a file being read, derived from its URL:
-// `…/skills/<name>/SKILL.md` → `<name>/SKILL.md`, otherwise the file name.
-// Shown in the command-result indicator so the user sees which file was read.
-export function fileLabelFromUrl(url: string | undefined): string | undefined {
-  if (!url) {
+// A short human label for a file being read, derived from its identifier in
+// either form: `…/skills/<name>/SKILL.md` → `<name>/SKILL.md`, otherwise the
+// file name. An identifier with no path segments (a realm root) is its own
+// label. Shown in the command-result indicator so the user sees which file
+// was read.
+export function fileLabelFromIdentifier(
+  identifier: string | undefined,
+): string | undefined {
+  if (!identifier) {
     return undefined;
   }
-  try {
-    let segments = new URL(url).pathname.split('/').filter(Boolean);
-    let last = segments[segments.length - 1];
-    if (last === 'SKILL.md' && segments.length >= 2) {
-      return `${segments[segments.length - 2]}/SKILL.md`;
-    }
-    return last ?? url;
-  } catch {
-    return url;
+  let segments = pathSegmentsOfIdentifier(identifier);
+  let last = segments[segments.length - 1];
+  if (last === 'SKILL.md' && segments.length >= 2) {
+    return `${segments[segments.length - 2]}/SKILL.md`;
   }
+  return last ?? identifier;
 }
 
 // A readRealmFile call can batch many urls; cap how many we name in the
@@ -437,7 +460,7 @@ const READ_FILES_LABEL_MAX = 5;
 export function readFilesLabel(urls: unknown): string {
   let labels = (Array.isArray(urls) ? urls : [])
     .filter((url): url is string => typeof url === 'string')
-    .map((url) => fileLabelFromUrl(url))
+    .map((url) => fileLabelFromIdentifier(url))
     .filter((label): label is string => Boolean(label));
   if (labels.length === 0) {
     return 'Read files';

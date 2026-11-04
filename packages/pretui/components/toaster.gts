@@ -6,37 +6,51 @@
 // agent trained on Sonner or Mantine Notifications reaches for a `<Toaster />`
 // and finds nothing to mount.
 //
-// ── The realm timer law, and why this component owns no timer ────────────
+// ── The clock ────────────────────────────────────────────────────────────
 //
-// The hard part of a toaster is auto-dismiss. The obvious implementation is a
-// `setTimeout` per toast, cancelled on hover and **re-armed** with the
-// remaining time on unhover. That is illegal here twice over: computing
-// "remaining time" needs `Date.now()` (forbidden — the indexer requires
-// determinism), and a re-arming timer blocks `await settled()` and hangs the
-// `boxel test` suite for every agent on the realm.
+// The hard part of a toaster is auto-dismiss. Each toast with a duration has
+// a `ToastClock`: a countdown held in state and advanced by an owned timer
+// that ticks while the toast is on screen and the region is not paused. The
+// toast is removed when the countdown reaches zero, whether or not anything
+// animates (ADR 007 §1.1). The life bar is a view of the countdown, not the
+// mechanism, so a toast ages out the same way in a harness that delivers no
+// stylesheet and under reduced motion.
 //
-// So the clock is not a timer at all. **It is a CSS animation.** Each toast
-// renders a life bar running `pretui-toast-age` for its own duration, and the
-// toast is removed on that element's `animationend` — an event listener owned
-// by an `ember-modifier` and removed in its destructor. Everything that
-// follows falls out of that one decision:
+// One timer serves the whole region: each tick steps every running clock
+// and checks the pause once, in one callback, so the toasts on screen
+// re-render together. The timer follows the realm's ownership ruling
+// (focus.gts): its `OwnedTimers` set is adopted by the region's modifier and
+// released in that modifier's destructor, and the timer runs only while a life
+// bar has enrolled its clock. Each bar's modifier enrolls the clock and
+// withdraws it in its destructor, so nothing outlives the elements. It is a
+// plain `setTimeout` chain, not a runloop timer, so `await settled()` never
+// waits on a toast's clock. No wall clock is read — a pause is simply a tick
+// that leaves the countdown alone — so the remaining time is never measured
+// against `Date.now()` (forbidden — the indexer requires determinism) or
+// re-armed. Sonner and Mantine both keep a wall clock and subtract; this never
+// needs one.
 //
-//  * **Pause on hover / pause on focus is `animation-play-state: paused`.**
-//    Zero JS, and it is *genuinely* a pause — the animation resumes from where
-//    it stopped, so no elapsed time has to be measured or re-armed. Sonner and
-//    Mantine both keep a wall-clock and subtract; we never need one.
-//  * **Pause while the tab is hidden** is the same property, toggled by a
-//    `visibilitychange` listener that owns nothing but a boolean.
-//  * **Degradation is safe.** Where the animation never runs (the `boxel test`
-//    harness delivers no scoped stylesheet at all), `animationend` never fires
-//    and a toast simply waits to be dismissed. A toast that overstays is a
-//    nuisance; a toast that vanishes early, or a timer that hangs a suite, is
-//    a defect.
+//  * **A tick is a tenth of a second of the page running, not of wall time.**
+//    A browser only ever delivers a timer late, so the countdown errs long,
+//    never short: a long task on the main thread holds it, and a hidden tab's
+//    throttled timers (one a second, or one a minute under Chrome's intensive
+//    throttling) slow it to match. With `@pauseWhenHidden={{false}}` a toast
+//    in a hidden tab therefore outlasts its duration.
+//  * **Pause on hover, pause on focus and pause while hidden** are three
+//    tracked flags the region sets from `pointerover`/`pointerleave`,
+//    `focusin`/`focusout` and `visibilitychange`. While any applies, a tick
+//    leaves the countdown where it is, and the life bar, which renders the
+//    countdown, stands still with it. A browser need not send the boundary
+//    event that clears a hover or focus flag when the element under the
+//    pointer or the focused control is removed, so each tick also checks both
+//    flags against the DOM.
+//  * **Degradation is safe.** With no stylesheet the bar is invisible and the
+//    toast still leaves on time. A toast that vanishes early, or a clock that
+//    hangs a suite, is a defect; neither can happen here.
 //
-// The one thing this costs: there is **no exit animation**, because holding a
-// dismissed toast in the DOM long enough to animate it out would need exactly
-// the timer we refused. Removal is immediate; the survivors reflow with a
-// transition, which is the part a reader actually notices.
+// The one thing this costs: there is **no exit animation**. Removal is
+// immediate; the survivors reflow with a transition, which is the part a
+// reader actually notices.
 //
 // ── What this fixes relative to Sonner / Mantine / Base UI ───────────────
 //
@@ -65,7 +79,7 @@ import { htmlSafe } from '@ember/template';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
 // it here (accepted parse baseline, same as menu.gts / focus.gts)
 import { modifier } from 'ember-modifier';
-import { listenDocument, listenDocumentCapture } from '../focus';
+import { OwnedTimers, listenDocument, listenDocumentCapture } from '../focus';
 
 // ── The toast model ──────────────────────────────────────────────────────
 
@@ -124,6 +138,46 @@ export interface ToastItem {
 
 /** What `ToastStore.show` takes: everything but the id, which it assigns. */
 export type ToastInput = Omit<ToastItem, 'id'> & { id?: string };
+
+/**
+ * Milliseconds between clock ticks: coarse enough to be cheap, fine enough
+ * that the life bar's tick-long glides read as one motion. Every toast in a
+ * region ticks on the region's one timer, so a new toast's first tick comes
+ * up to one tick early.
+ */
+export const TOAST_TICK_MS = 100;
+
+/**
+ * A toast's remaining time, as state. The life bar renders `nextFraction`,
+ * and the toast is removed when `remainingMs` reaches zero. The clock does
+ * not know about time; the toaster's ticker advances it.
+ */
+export class ToastClock {
+  @tracked remainingMs: number;
+
+  constructor(readonly totalMs: number) {
+    this.remainingMs = totalMs;
+  }
+
+  /** 1 when fresh, 0 when spent. */
+  get fraction(): number {
+    return this.totalMs > 0 ? this.remainingMs / this.totalMs : 0;
+  }
+
+  /** The fraction left after the coming tick. The life bar glides here over
+   * that tick, so it lands on empty in the tick that removes the toast. */
+  get nextFraction(): number {
+    return this.totalMs > 0
+      ? Math.max(0, this.remainingMs - TOAST_TICK_MS) / this.totalMs
+      : 0;
+  }
+
+  /** Advances the clock; true once it has run out. */
+  tick(ms: number): boolean {
+    this.remainingMs = Math.max(0, this.remainingMs - ms);
+    return this.remainingMs === 0;
+  }
+}
 
 /**
  * The imperative half of the API, as an **instantiable store rather than a
@@ -269,7 +323,9 @@ export interface ToasterSignature {
     pauseOnHover?: boolean;
     /** pause every clock while focus is inside the region (default true) */
     pauseOnFocus?: boolean;
-    /** pause every clock while the tab is hidden (default true) */
+    /** pause every clock while the tab is hidden (default true). With false,
+     * a toast in a hidden tab outlasts its duration, because the browser
+     * throttles the timer that counts it down. */
     pauseWhenHidden?: boolean;
     /** the region's accessible name (default 'Notifications') */
     label?: string;
@@ -296,8 +352,21 @@ export class Toaster extends Component<ToasterSignature> {
    * toast can put it back rather than dropping it on the body. */
   private priorFocus: HTMLElement | undefined;
   private regionEl: HTMLElement | undefined;
+  /** The innermost element the pointer was last over, from `pointerover`.
+   * Checked by `isConnected` alone: `instanceof Node` is not a reliable test
+   * in every host (it is false for these elements in the realm test
+   * harness). */
+  private hoverTarget: Node | null = null;
+
+  /** The clocks of the life bars on screen, each with its toast's id. */
+  private running = new Map<ToastClock, string>();
+  /** Owned by the region's modifier; holds at most the next tick. */
+  private timers = new OwnedTimers();
+  private ticker: ReturnType<typeof setTimeout> | undefined;
 
   @tracked private hidden = false;
+  @tracked private hovered = false;
+  @tracked private focused = false;
 
   get items(): readonly ToastItem[] {
     return this.args.toasts ?? this.args.store?.items ?? [];
@@ -320,16 +389,16 @@ export class Toaster extends Component<ToasterSignature> {
   get dismissLabel(): string {
     return this.args.dismissLabel ?? 'Dismiss';
   }
+  /** Every clock in the region stands still while this is true. */
+  get paused(): boolean {
+    return (
+      ((this.args.pauseWhenHidden ?? true) && this.hidden) ||
+      ((this.args.pauseOnHover ?? true) && this.hovered) ||
+      ((this.args.pauseOnFocus ?? true) && this.focused)
+    );
+  }
   get pausedAttr(): string | undefined {
-    return (this.args.pauseWhenHidden ?? true) && this.hidden
-      ? 'true'
-      : undefined;
-  }
-  get pauseHoverAttr(): string | undefined {
-    return (this.args.pauseOnHover ?? true) ? 'true' : undefined;
-  }
-  get pauseFocusAttr(): string | undefined {
-    return (this.args.pauseOnFocus ?? true) ? 'true' : undefined;
+    return this.paused ? 'true' : undefined;
   }
 
   // ── Per-toast reads, invoked from the template ────────────────────────
@@ -345,14 +414,33 @@ export class Toaster extends Component<ToasterSignature> {
 
   hasClock = (item: ToastItem): boolean => this.secondsOf(item) > 0;
 
-  /** The only inline style here, and it carries one clamped number — the
-   * animation's own duration. The rest of the toast is tokens. */
-  one = (item: ToastItem): ToastItem[] => [item];
+  /** One clock per toast object, so a same-id replacement (a new object)
+   * starts a fresh one. This map is the only place that rule lives: the bar's
+   * style and its modifier both look the clock up here. Not tracked: a clock
+   * is created on first read and never replaced. */
+  private clocks = new WeakMap<ToastItem, ToastClock>();
 
-  lifeStyle = (item: ToastItem) => {
-    let seconds = Math.max(0, Math.min(600, this.secondsOf(item)));
-    return htmlSafe('--pretui-toast-life: ' + seconds + 's');
-  };
+  private clockOf(item: ToastItem): ToastClock {
+    let clock = this.clocks.get(item);
+    if (!clock) {
+      let seconds = Math.max(0, Math.min(600, this.secondsOf(item)));
+      clock = new ToastClock(seconds * 1000);
+      this.clocks.set(item, clock);
+    }
+    return clock;
+  }
+
+  /** The only inline style here: where the countdown will be after the
+   * coming tick, and the tick length the bar glides there over. The rest of
+   * the toast is tokens. */
+  lifeStyle = (item: ToastItem) =>
+    htmlSafe(
+      '--pretui-toast-remaining: ' +
+        this.clockOf(item).nextFraction.toFixed(3) +
+        '; --pretui-toast-tick: ' +
+        TOAST_TICK_MS +
+        'ms',
+    );
 
   // ── Removal ──────────────────────────────────────────────────────────
 
@@ -414,29 +502,139 @@ export class Toaster extends Component<ToasterSignature> {
   // ── The clock ────────────────────────────────────────────────────────
 
   /**
-   * The whole auto-dismiss mechanism: one listener on the life bar, removed
-   * in the destructor. No handle is ever held, so nothing can re-arm and
-   * nothing can outlive the element.
+   * Enrolls a life bar's clock with the region's ticker for as long as the
+   * bar is rendered. A same-id replacement hands the modifier a new item, so
+   * it withdraws the old clock and enrolls the new one.
    */
-  agesOut = modifier((el: HTMLElement, [id]: [string]) => {
-    let onEnd = () => this.dismissAndKeepFocus(id);
-    el.addEventListener('animationend', onEnd);
-    return () => el.removeEventListener('animationend', onEnd);
+  agesOut = modifier((_el: HTMLElement, [item]: [ToastItem]) => {
+    let clock = this.clockOf(item);
+    this.running.set(clock, item.id);
+    this.startTicking();
+    return () => {
+      this.running.delete(clock);
+      if (this.running.size === 0) {
+        this.timers.cancel(this.ticker);
+        this.ticker = undefined;
+      }
+    };
   });
+
+  /** Schedules the next tick, when a clock is running and none is pending.
+   * Inert until the region's modifier has adopted the timers. */
+  private startTicking() {
+    if (this.ticker === undefined && this.running.size > 0) {
+      this.ticker = this.timers.after(TOAST_TICK_MS, this.tick);
+    }
+  }
+
+  /**
+   * The whole auto-dismiss mechanism. Each tick advances every running clock
+   * unless the region is paused, and a toast is removed when its clock runs
+   * out. The clock, not the bar, decides: nothing here waits on an animation.
+   */
+  private tick = () => {
+    this.ticker = undefined;
+    this.dropStaleFocus();
+    this.dropStaleHover();
+    if (!this.paused) {
+      let spent: string[] = [];
+      for (let [clock, id] of this.running) {
+        if (clock.tick(TOAST_TICK_MS)) {
+          // Withdrawn here rather than when its bar is torn down, so a
+          // controlled host that keeps the toast is asked once, not every tick.
+          this.running.delete(clock);
+          spent.push(id);
+        }
+      }
+      for (let id of spent) {
+        this.dismissAndKeepFocus(id);
+      }
+    }
+    this.startTicking();
+  };
+
+  /**
+   * `focused` is cleared by a focusout, and a browser need not fire one when
+   * it removes a focused element from the DOM, as when a dismissed toast's
+   * focused control goes with no neighbour or prior element to take focus.
+   * A flag left set would pause every later clock, so each tick checks it
+   * against where focus actually is.
+   */
+  private dropStaleFocus() {
+    if (this.focused && !this.regionEl?.contains(document.activeElement)) {
+      this.focused = false;
+    }
+  }
+
+  /**
+   * `hovered` is cleared by a pointerleave, and a browser need not fire one
+   * when the element under a resting pointer is removed, as when a toast is
+   * dismissed or ages out beneath it; it may wait for the pointer's next move.
+   * A flag left set would pause every later clock, so each tick drops it once
+   * the element the pointer was over has left the DOM. The next `pointerover`
+   * sets it again.
+   */
+  private dropStaleHover() {
+    if (this.hovered && this.hoverTarget?.isConnected === false) {
+      this.hovered = false;
+      this.hoverTarget = null;
+    }
+  }
 
   // ── Element wiring and focus ─────────────────────────────────────────
 
   captureRegion = modifier((el: HTMLElement) => {
     this.regionEl = el;
+    // Modifiers install children first, so on the first render the life bars
+    // have already enrolled their clocks; the ticker starts once it is owned.
+    this.timers.adopt();
+    this.startTicking();
+    // A browser may fire a focusout while Glimmer removes a focused dismiss
+    // control from the DOM (Chromium does), which is mid-render, and
+    // `focused` is state that render reads. The flag is therefore written
+    // once the render has finished; the microtask keeps the events' order.
+    let setFocused = (value: boolean) => {
+      queueMicrotask(() => {
+        if (this.regionEl === el && this.focused !== value) {
+          this.focused = value;
+        }
+      });
+    };
     let onFocusIn = (event: Event) => {
       let from = (event as FocusEvent).relatedTarget;
       if (from instanceof HTMLElement && !el.contains(from)) {
         this.priorFocus = from;
       }
+      setFocused(true);
+    };
+    let onFocusOut = (event: Event) => {
+      let to = (event as FocusEvent).relatedTarget;
+      setFocused(to instanceof Node && el.contains(to));
+    };
+    // `pointerover` rather than `pointerenter`: it bubbles from the element
+    // actually under the pointer, which is what `dropStaleHover` watches.
+    let onOver = (event: Event) => {
+      // A pointer event's target is always the element under the pointer.
+      this.hoverTarget = event.target as Node | null;
+      if (!this.hovered) {
+        this.hovered = true;
+      }
+    };
+    let onLeave = () => {
+      this.hoverTarget = null;
+      this.hovered = false;
     };
     el.addEventListener('focusin', onFocusIn);
+    el.addEventListener('focusout', onFocusOut);
+    el.addEventListener('pointerover', onOver);
+    el.addEventListener('pointerleave', onLeave);
     return () => {
       el.removeEventListener('focusin', onFocusIn);
+      el.removeEventListener('focusout', onFocusOut);
+      el.removeEventListener('pointerover', onOver);
+      el.removeEventListener('pointerleave', onLeave);
+      this.timers.release();
+      this.ticker = undefined;
       this.regionEl = undefined;
     };
   });
@@ -497,8 +695,6 @@ export class Toaster extends Component<ToasterSignature> {
       tabindex='-1'
       data-placement={{this.placement}}
       data-paused={{this.pausedAttr}}
-      data-pause-hover={{this.pauseHoverAttr}}
-      data-pause-focus={{this.pauseFocusAttr}}
       data-test-pretui-toaster
       {{this.captureRegion}}
       {{listenDocumentCapture 'keydown' this.onDocumentKey}}
@@ -513,7 +709,6 @@ export class Toaster extends Component<ToasterSignature> {
           aria-atomic='true'
           data-tone={{this.toneOf item}}
           data-test-pretui-toast-item={{item.id}}
-          style={{this.lifeStyle item}}
         >
           <div class='pretui-toast-face'>
             {{#if (has-block 'toast')}}
@@ -557,19 +752,18 @@ export class Toaster extends Component<ToasterSignature> {
           </div>
 
           {{#if (this.hasClock item)}}
-            {{!-- The clock. An animationend on THIS element is the
-                  dismissal, so no timer handle exists to leak or re-arm.
-                  Keyed on the item object, so a same-id replacement (a
-                  Saving… that becomes Saved) gets a fresh bar and a fresh
-                  clock rather than the old one's remainder. --}}
-            {{#each (this.one item) key='@identity' as |current|}}
-              <span
-                class='pretui-toast-life'
-                aria-hidden='true'
-                data-test-pretui-toast-life
-                {{this.agesOut current.id}}
-              ></span>
-            {{/each}}
+            {{!-- The clock runs exactly as long as this bar is rendered: its
+                  modifier enrolls the clock with the region's ticker. A
+                  same-id replacement (a Saving… that becomes Saved) is a new
+                  item object, so it gets a fresh clock, and the bar refills
+                  rather than carrying on from the old one's remainder. --}}
+            <span
+              class='pretui-toast-life'
+              aria-hidden='true'
+              data-test-pretui-toast-life
+              style={{this.lifeStyle item}}
+              {{this.agesOut item}}
+            ></span>
           {{/if}}
         </div>
       {{/each}}
@@ -584,15 +778,6 @@ export class Toaster extends Component<ToasterSignature> {
 
     <style scoped>
       @layer PretComponent {
-        @keyframes pretui-toast-age {
-          from {
-            transform: scaleX(1);
-          }
-          to {
-            transform: scaleX(0);
-          }
-        }
-
         .pretui-toaster {
           /* A toast region must escape every scroll container and every
              overflow-hidden ancestor between it and the viewport, which is the
@@ -763,18 +948,24 @@ export class Toaster extends Component<ToasterSignature> {
           background: var(--pretui-toast-tone, var(--muted-foreground));
         }
 
+        /* The countdown, drawn as the bar's width. Each tick sets the
+           fraction the clock will hold after the next tick, and a tick-long
+           transition carries the bar there, so the bar starts full, stands
+           still when the clock does, and lands on empty in the tick that
+           removes the toast. */
         .pretui-toast-life {
           display: block;
           height: 2px;
           transform-origin: left center;
           background: var(--pretui-toast-tone, var(--muted-foreground));
           opacity: 0.55;
-          animation: pretui-toast-age var(--pretui-toast-life, 5s) linear forwards;
+          transform: scaleX(var(--pretui-toast-remaining, 1));
+          transition: transform var(--pretui-toast-tick, 100ms) linear;
         }
-        .pretui-toaster[data-paused] .pretui-toast-life,
-        .pretui-toaster[data-pause-hover]:hover .pretui-toast-life,
-        .pretui-toaster[data-pause-focus]:focus-within .pretui-toast-life {
-          animation-play-state: paused;
+        @starting-style {
+          .pretui-toast-life {
+            transform: scaleX(1);
+          }
         }
 
         .pretui-toaster-more {
@@ -793,10 +984,9 @@ export class Toaster extends Component<ToasterSignature> {
           color: var(--foreground);
         }
 
-        /* Reduced motion takes the ENTRANCE, never the clock. The life bar is
+        /* Reduced motion takes the ENTRANCE, not the life bar. The bar is
            not decoration — it is the toast's remaining time, and WCAG 2.3.3
-           exempts motion essential to the information conveyed. Stopping it
-           would stop the dismissal itself. */
+           exempts motion essential to the information conveyed. */
         @media (prefers-reduced-motion: reduce) {
           .pretui-toast-item {
             transition: none;

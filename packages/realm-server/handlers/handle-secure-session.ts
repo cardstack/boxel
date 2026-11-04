@@ -284,10 +284,11 @@ export function resumePasswordChangeDeviceSweeps(args: CreateRoutesArgs): void {
 }
 
 // GET /_secure-session/google: where the secure window sends the user to sign
-// in with Google, and as which client. 503 when this server has no Google
-// client.
+// in with Google, and as which client. Answered only for the secure origin
+// (403 otherwise); 503 when this server has no Google client.
 export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
     await sendJSON(ctxt, 200, {
       data: {
         type: 'google-sign-in',

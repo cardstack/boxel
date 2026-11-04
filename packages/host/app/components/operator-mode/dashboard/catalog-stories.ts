@@ -128,7 +128,7 @@ const CODE_DESCRIPTION = /^the\s+\S+\s+(?:component|card|field)\b/i;
 const KIND_COPY: Record<string, string> = {
   App: 'A whole app made of cards. Remix it into a workspace and change anything.',
   Theme: 'A look for your cards. Use it on any workspace.',
-  Skill: 'Teach Boxel AI something new, then use it in any chat.',
+  Skill: 'Teach Boxel AI Assistant something new, then use it in any chat.',
   Field: 'A field to build your own cards with.',
 };
 

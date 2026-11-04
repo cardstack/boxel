@@ -203,7 +203,6 @@ function fixtureUsage(owner: string | null) {
     grants: [
       {
         id: 'grant-1',
-        host: 'api.openai.com',
         destination: 'https://api.openai.com/v1/',
         state: 'active',
         rejectedAt: null,
@@ -211,8 +210,7 @@ function fixtureUsage(owner: string | null) {
       },
       {
         id: 'grant-2',
-        host: 'eu.api.openai.com',
-        destination: 'https://eu.api.openai.com/v1/',
+        destination: 'https://api.openai.com/v1beta/',
         state: 'rejected',
         rejectedAt: '2026-11-01T08:00:00.000Z',
         lastForbiddenAt: null,
@@ -586,7 +584,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       let fragment = new URLSearchParams(opened.hash.slice(1));
       assert.deepEqual([...fragment.keys()], ['realm', 'reason']);
       assert.strictEqual(fragment.get('realm'), testRealmURL);
-      assert.strictEqual(calls[0].features, 'popup,width=640,height=720');
+      assert.strictEqual(calls[0].features, 'popup,width=800,height=1000');
       assert.deepEqual(
         api!.changes(),
         [],
@@ -657,11 +655,11 @@ module('Acceptance | realm config | API Keys', function (hooks) {
         .hasText('200 OK 4,150');
       assert
         .dom(
-          `${usage} [data-test-realm-key-share-grant="eu.api.openai.com"][data-test-realm-key-share-grant-state="rejected"]`,
+          `${usage} [data-test-realm-key-share-grant="api.openai.com/v1beta/"][data-test-realm-key-share-grant-state="rejected"]`,
         )
         .includesText('Rejected');
       assert
-        .dom(`${usage} [data-test-realm-key-share-grant="api.openai.com"]`)
+        .dom(`${usage} [data-test-realm-key-share-grant="api.openai.com/v1/"]`)
         .includesText('Last refused');
       assert
         .dom(`${usage} [data-test-realm-key-share-limit="rate"]`)

@@ -281,17 +281,14 @@ export class WorkspaceActions {
           icon: ArchiveIcon,
           action: this.openArchiveModal,
         }),
+        new MenuItem({
+          label: 'Delete Workspace',
+          icon: IconTrash,
+          action: this.openDeleteModal,
+          dangerous: true,
+        }),
       );
     }
-    items.push(
-      new MenuItem({
-        label: 'Delete Workspace',
-        icon: IconTrash,
-        action: this.openDeleteModal,
-        dangerous: true,
-        disabled: !this.isRealmOwner,
-      }),
-    );
     return items;
   }
 
@@ -482,7 +479,7 @@ export class WorkspaceActions {
     );
     let { codePath, stacks } = this.operatorModeStateService.state;
     return (
-      this.operatorModeStateService.realmURL ===
+      this.operatorModeStateService.openRealmURL ===
         this.network.virtualNetwork.toURL(realmIdentifier).href ||
       stacks.some((stack) =>
         [stack[0], stack[stack.length - 1]].some((item) =>

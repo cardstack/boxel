@@ -421,10 +421,22 @@ module(basename(import.meta.filename), function (hooks) {
       rateRefillPerMinute: LIMITS.rateRefillPerMinute,
       dailyBudget: LIMITS.dailyBudget,
       monthlyBudget: LIMITS.dailyBudget * 30,
+      set: {
+        rateBurst: null,
+        rateRefillPerMinute: null,
+        dailyBudget: null,
+        monthlyBudget: null,
+      },
+      defaults: {
+        rateBurst: LIMITS.rateBurst,
+        rateRefillPerMinute: LIMITS.rateRefillPerMinute,
+        dailyBudget: LIMITS.dailyBudget,
+        monthlyBudgetDays: 30,
+      },
     });
     assert.strictEqual(attributes.grants.length, 1);
     let [grant] = attributes.grants;
-    assert.strictEqual(grant.host, `127.0.0.1:${VENDOR_PORT}`);
+    assert.strictEqual(grant.destination, `${VENDOR}/status/`);
     assert.strictEqual(grant.state, 'active');
     assert.ok(grant.lastForbiddenAt, 'the 403 is recorded on the grant');
 

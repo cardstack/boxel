@@ -15,8 +15,8 @@ import type { CardDef } from '@cardstack/base/card-api';
 
 // `@context.keyReadiness` rides on the capability check's request, so what a
 // test pins is what it adds there: the pair it sends, the answer a template
-// reads, and that coming back from the secure window asks again without the
-// page reloading.
+// reads, and that coming back from the secure window, or to the page from
+// anywhere once an answer is stale, asks again without the page reloading.
 
 const REALM = 'http://test-realm/test/';
 
@@ -165,7 +165,7 @@ module('Integration | keyReadiness', function (hooks) {
     assert.strictEqual(
       realmUnderTest.sent.length,
       1,
-      'focus alone asks nothing while no secure window has opened',
+      'a focus while the answer is fresh asks nothing, when no secure window has opened',
     );
 
     assert.strictEqual(
@@ -186,27 +186,69 @@ module('Integration | keyReadiness', function (hooks) {
       .hasText('ready', 'and the template re-reads the new answer');
   });
 
-  test('a focus long after the secure window opened is not a return from it', async function (assert) {
+  test('coming back to the page asks again about readiness answers gone stale, with no secure window opened', async function (assert) {
     realmUnderTest.readiness.set('listPRs', 'needs-approval');
-    let secureWindow = this.owner.lookup(
-      'service:secure-window',
-    ) as unknown as SecureWindowService;
-    window.open = (() => ({})) as unknown as typeof window.open;
-    service.keyReadiness('listPRs', cardAt(`${REALM}inbox`));
-    await settled();
+    let { keyReadiness } = service;
+    let inbox = cardAt(`${REALM}inbox`);
     let realNow = Date.now;
     let now = realNow();
     Date.now = () => now;
     try {
-      secureWindow.open('https://secure.example.test/secure');
-      now += 11 * 60_000;
+      await render(
+        <template>
+          <span data-test-readiness>{{keyReadiness 'listPRs' inbox}}</span>
+        </template>,
+      );
+      assert.dom('[data-test-readiness]').hasText('needs-approval');
+
+      // A share made from the key page in another tab, say.
+      realmUnderTest.readiness.set('listPRs', 'ready');
+      now += 4_000;
       window.dispatchEvent(new Event('focus'));
       await settled();
       assert.strictEqual(
         realmUnderTest.sent.length,
         1,
-        'switching back to the app later asks nothing',
+        'an answer still fresh is not asked again',
       );
+
+      now += 60_000;
+      window.dispatchEvent(new Event('focus'));
+      await settled();
+      assert.strictEqual(realmUnderTest.sent.length, 2, 'it was asked again');
+      assert.deepEqual(
+        realmUnderTest.sent[1].checks,
+        [{ target: `${REALM}inbox`, operation: 'listPRs', readiness: true }],
+        'only the readiness pairs',
+      );
+      assert
+        .dom('[data-test-readiness]')
+        .hasText('ready', 'and the template re-reads the new answer');
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test('a focus asks nothing again about pairs that ask only canInvoke', async function (assert) {
+    let { canInvoke } = service;
+    let inbox = cardAt(`${REALM}inbox`);
+    let realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+      await render(
+        <template>
+          <span data-test-allowed>{{if
+              (canInvoke 'listPRs' inbox)
+              'yes'
+            }}</span>
+        </template>,
+      );
+      assert.dom('[data-test-allowed]').hasText('yes');
+      now += 60_000;
+      window.dispatchEvent(new Event('focus'));
+      await settled();
+      assert.strictEqual(realmUnderTest.sent.length, 1);
     } finally {
       Date.now = realNow;
     }

@@ -167,6 +167,7 @@ import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
   RealmPaths,
+  sameResourceIn,
   ensureTrailingSlash,
   isCaptureServingPath,
   withoutCaptureServingPrefix,
@@ -205,6 +206,11 @@ import {
   getContentMeta,
   getFileMetaForPaths,
 } from './file-meta.ts';
+import type {
+  ChangeEventChange,
+  ChangeEventInput,
+  RealmHistory,
+} from './realm-history.ts';
 import {
   systemError,
   notFound,
@@ -322,6 +328,7 @@ import {
 } from './card-operations/capabilities.ts';
 import {
   emitCapabilityCheck,
+  emitChangeJournal,
   type CapabilityCheckEvent,
   type PolicyRoute,
 } from './card-operations/telemetry.ts';
@@ -2598,8 +2605,13 @@ interface Options {
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
   // identify carries no server stack (see `withholdsStacksFrom`), and, at a
   // host's root, a crawler's `/robots.txt` gets a default answer when the
-  // realm holds none.
+  // realm holds none. Its policy keeps only the grants that send a key shared
+  // with its source (see `sharedKeyCallsOnly`).
   published?: true;
+  // For a published realm, the realm it was published from. Its policy card is
+  // the source's, copied, so a rule naming a type by the source's own URL names
+  // the copy of that type here.
+  sourceRealmURL?: string;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2876,6 +2888,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #published = false;
+  #sourceRealmURL: string | undefined;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   // The root ignore files' mtimes when their rules were last read.
@@ -2884,11 +2897,16 @@ export class Realm {
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
-    for await (let _entry of this.#adapter.readdir(directory)) {
-      // draining the listing is the whole effect; the entries are not used
-    }
-  });
+  #directoryViewRefresher = new DirectoryViewRefresher(
+    async (directory) => {
+      let names: string[] = [];
+      for await (let entry of this.#adapter.readdir(directory)) {
+        names.push(entry.name);
+      }
+      return names;
+    },
+    { exists: (path) => this.#adapter.exists(path) },
+  );
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -2978,6 +2996,10 @@ export class Realm {
   // time and so never in here.
   #pipelineRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
+  // The change journal every write appends to, and the reader the history
+  // operations read from. Absent in a realm that records no history, such as
+  // the in-browser realm.
+  #history: RealmHistory | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
   // Absent in deployments that don't configure one (the in-browser realm),
@@ -3157,6 +3179,7 @@ export class Realm {
       anonymousRateLimiter,
       callApi,
       policyWriteAuditor,
+      history,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -3204,6 +3227,10 @@ export class Realm {
       // in the realms that policy governs (see `policy-share-audit.ts`).
       // Without it, a write is never audited.
       policyWriteAuditor?: PolicyWriteAuditor;
+      // The change journal every write appends to, in the transaction that
+      // updates its file meta, and the reader the history operations use.
+      // Without it, the realm records no history.
+      history?: RealmHistory;
     },
     opts?: Options,
   ) {
@@ -3216,6 +3243,7 @@ export class Realm {
     this.#realmFor = realmFor;
     this.#callApi = callApi;
     this.#policyWriteAuditor = policyWriteAuditor;
+    this.#history = history;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -3237,6 +3265,7 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#published = Boolean(opts?.published);
+    this.#sourceRealmURL = opts?.published ? opts.sourceRealmURL : undefined;
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -5548,392 +5577,422 @@ export class Realm {
       return aIsModule ? -1 : 1;
     });
 
-    for (let [path, content] of orderedFiles) {
-      let url = this.paths.fileURL(path);
-      if (isSplicedSource(content)) {
-        // A splice edits a stored card, so it neither needs a module flushed
-        // to the index ahead of it — nothing about it is serialized — nor
-        // stands in for the instance that does. `lastWriteType` is therefore
-        // left as the last write that did serialize.
-        announceIndexing(url);
-        let written = await this.#writeSplicedUnlocked(path, content);
-        results.push(written.result);
-        fileMetaRows.push(written.row);
-        updatedFiles.push(path);
-        urls.push(url);
-        continue;
-      }
-      let currentWriteType: 'module' | 'instance' | undefined =
-        hasExecutableExtension(path)
-          ? 'module'
-          : typeof content === 'string' &&
-              path.endsWith('.json') &&
-              isCardDocumentString(content)
-            ? 'instance'
-            : undefined;
+    let deleteURLs: URL[] = [];
+    // The paths the append leg changed, whose recorded size is the file's
+    // length after the append rather than the length of the bytes added.
+    let appendedPaths = new Set<LocalPath>();
+    // The three legs below run inside this `try`. Whatever they leave on disk
+    // when one of them throws is still described in `fileMetaRows` and
+    // `removedFiles`, and the `catch` records it before the error reaches the
+    // caller: the rows and the change event for a batch that failed partway,
+    // which is what history and reconciliation see of it.
+    try {
+      for (let [path, content] of orderedFiles) {
+        let url = this.paths.fileURL(path);
+        if (isSplicedSource(content)) {
+          // A splice edits a stored card, so it neither needs a module flushed
+          // to the index ahead of it — nothing about it is serialized — nor
+          // stands in for the instance that does. `lastWriteType` is therefore
+          // left as the last write that did serialize.
+          announceIndexing(url);
+          let written = await this.#writeSplicedUnlocked(path, content);
+          results.push(written.result);
+          fileMetaRows.push(written.row);
+          updatedFiles.push(path);
+          urls.push(url);
+          continue;
+        }
+        let currentWriteType: 'module' | 'instance' | undefined =
+          hasExecutableExtension(path)
+            ? 'module'
+            : typeof content === 'string' &&
+                path.endsWith('.json') &&
+                isCardDocumentString(content)
+              ? 'instance'
+              : undefined;
 
-      // Flush any modules written so far in this batch to the index
-      // BEFORE we serialize the next instance. fileSerialization calls
-      // lookupDefinition, which needs dependent modules to be indexed;
-      // without this, the first instance after a module in the batch
-      // throws FilterRefersToNonexistentTypeError and the whole atomic
-      // batch rolls back.
-      // TODO: we could be more precise here and keep track of what
-      // modules the instances depend on and only flush when an instance
-      // depends on a module that is part of this operation.
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // The bytes written so far belong to this batch's durable write, not
-        // to the index pass about to run. Closed here so each pass's files
-        // are reported ahead of the queue insert that follows them, the same
-        // order the single-pass case reports them in.
-        stageCursor?.mark('persist');
-        await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
-        urls = [];
-      }
+        // Flush any modules written so far in this batch to the index
+        // BEFORE we serialize the next instance. fileSerialization calls
+        // lookupDefinition, which needs dependent modules to be indexed;
+        // without this, the first instance after a module in the batch
+        // throws FilterRefersToNonexistentTypeError and the whole atomic
+        // batch rolls back.
+        // TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush when an instance
+        // depends on a module that is part of this operation.
+        if (lastWriteType === 'module' && currentWriteType === 'instance') {
+          // The bytes written so far belong to this batch's durable write, not
+          // to the index pass about to run. Closed here so each pass's files
+          // are reported ahead of the queue insert that follows them, the same
+          // order the single-pass case reports them in.
+          stageCursor?.mark('persist');
+          await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
+          urls = [];
+        }
 
-      // The document this write stores, when the write re-serializes a card.
-      // The unchanged-file check below compares a stored card with it by
-      // JSON value rather than by bytes.
-      let serializedCard: LooseSingleCardDocument | undefined;
-      if (typeof content === 'string') {
-        try {
-          let doc = JSON.parse(content);
-          if (isCardResource(doc.data) && options?.serializeFile) {
-            serializedCard = await this.fileSerialization(
-              { data: merge(doc.data, { meta: { realmURL: this.url } }) },
-              url,
-            );
-            content = JSON.stringify(serializedCard, null, 2);
-          }
-        } catch (e: any) {
-          if (
-            e.message?.includes?.('not found') ||
-            isFilterRefersToNonexistentTypeError(e)
-          ) {
-            throw e;
+        // The document this write stores, when the write re-serializes a card.
+        // The unchanged-file check below compares a stored card with it by
+        // JSON value rather than by bytes.
+        let serializedCard: LooseSingleCardDocument | undefined;
+        if (typeof content === 'string') {
+          try {
+            let doc = JSON.parse(content);
+            if (isCardResource(doc.data) && options?.serializeFile) {
+              serializedCard = await this.fileSerialization(
+                { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+                url,
+              );
+              content = JSON.stringify(serializedCard, null, 2);
+            }
+          } catch (e: any) {
+            if (
+              e.message?.includes?.('not found') ||
+              isFilterRefersToNonexistentTypeError(e)
+            ) {
+              throw e;
+            }
           }
         }
-      }
-      let sizeType: 'card' | 'file' =
-        typeof content === 'string' &&
-        path.endsWith('.json') &&
-        isCardDocumentString(content)
-          ? 'card'
-          : 'file';
-      this.assertWriteSize(content, sizeType, path);
-      // The stored file is opened before it is read, so its length can rule
-      // the comparison out without any of it being held. Only a file of
-      // exactly the staged content's length can be the staged content, and
-      // a replacement almost never is — so this is what keeps replacing a
-      // file that is large from costing its size. `openFile` reports the
-      // length from a stat it already performs, and reading the body stays
-      // a separate step because the body is a lazy, single-use stream on
-      // every streaming adapter.
-      let stored = await this.#adapter.openFile(path);
-      let couldMatch =
-        stored !== undefined &&
-        (stored.size === undefined ||
-          stored.size ===
-            (isStagedFile(content)
-              ? content.size
-              : computeContentSize(content)));
-      let unchanged: { lastModified: number } | undefined;
-      if (
-        stored &&
-        typeof content === 'string' &&
-        (couldMatch || serializedCard)
-      ) {
-        let existingFile = await readFileAsText(path, (p) =>
-          this.#adapter.openFile(p),
-        );
-        if (existingFile?.content === content) {
-          unchanged = existingFile;
-        } else if (
-          existingFile &&
-          serializedCard &&
-          sameJSON(existingFile.content, content)
+        let sizeType: 'card' | 'file' =
+          typeof content === 'string' &&
+          path.endsWith('.json') &&
+          isCardDocumentString(content)
+            ? 'card'
+            : 'file';
+        this.assertWriteSize(content, sizeType, path);
+        // The stored file is opened before it is read, so its length can rule
+        // the comparison out without any of it being held. Only a file of
+        // exactly the staged content's length can be the staged content, and
+        // a replacement almost never is — so this is what keeps replacing a
+        // file that is large from costing its size. `openFile` reports the
+        // length from a stat it already performs, and reading the body stays
+        // a separate step because the body is a lazy, single-use stream on
+        // every streaming adapter.
+        let stored = await this.#adapter.openFile(path);
+        let couldMatch =
+          stored !== undefined &&
+          (stored.size === undefined ||
+            stored.size ===
+              (isStagedFile(content)
+                ? content.size
+                : computeContentSize(content)));
+        let unchanged: { lastModified: number } | undefined;
+        if (
+          stored &&
+          typeof content === 'string' &&
+          (couldMatch || serializedCard)
         ) {
-          // A stored card can hold exactly the JSON this write stores and
-          // still differ in bytes: a trailing newline, indentation, or keys
-          // in another order, as a source checkout lays them out. None of
-          // that is content, so the stored card is kept byte for byte, and
-          // the result below reports its own bytes rather than the ones this
-          // write would have stored. Any difference in the JSON itself — a
-          // reference spelled another way, a field the definition no longer
-          // declares — is content, and the write goes ahead.
-          unchanged = existingFile;
-          content = existingFile.content;
+          let existingFile = await readFileAsText(path, (p) =>
+            this.#adapter.openFile(p),
+          );
+          if (existingFile?.content === content) {
+            unchanged = existingFile;
+          } else if (
+            existingFile &&
+            serializedCard &&
+            sameJSON(existingFile.content, content)
+          ) {
+            // A stored card can hold exactly the JSON this write stores and
+            // still differ in bytes: a trailing newline, indentation, or keys
+            // in another order, as a source checkout lays them out. None of
+            // that is content, so the stored card is kept byte for byte, and
+            // the result below reports its own bytes rather than the ones this
+            // write would have stored. Any difference in the JSON itself — a
+            // reference spelled another way, a field the definition no longer
+            // declares — is content, and the write goes ahead.
+            unchanged = existingFile;
+            content = existingFile.content;
+          }
+        } else if (
+          couldMatch &&
+          stored &&
+          (content instanceof Uint8Array || isStagedFile(content)) &&
+          (await this.#indexDescribesFile(
+            url,
+            isStagedFile(content)
+              ? content.contentHash
+              : computeContentHash(content),
+          )) &&
+          (await (isStagedFile(content)
+            ? this.#adapter.stagedContentEquals(path, content)
+            : fileContentEquals(stored, content)))
+        ) {
+          // Matching bytes are not enough on their own here. Re-sending an
+          // upload is how a caller recovers from one whose bytes landed but
+          // whose metadata row or queue insert then failed, and how a file
+          // whose last index pass errored gets another one — and both look
+          // exactly like a repeat of an upload that fully landed. So the file
+          // is left alone only when the index already holds a live row built
+          // from these bytes; otherwise the upload proceeds as a write, which
+          // queues the pass the earlier attempt never got.
+          //
+          // Staged uploads compare a full SHA-256 of the current stored bytes;
+          // in-memory writes compare their bytes directly. Neither comparison
+          // trusts the persisted metadata or a sampled hash: a same-length edit
+          // made outside the realm must still be replaced by this upload.
+          unchanged = stored;
         }
-      } else if (
-        couldMatch &&
-        stored &&
-        (content instanceof Uint8Array || isStagedFile(content)) &&
-        (await this.#indexDescribesFile(
-          url,
-          isStagedFile(content)
+        if (unchanged) {
+          // Identical bytes: the file is left alone, so its modification time
+          // stands and nothing is queued for indexing. The content hash is
+          // still the file's own — the bytes in hand are the bytes on disk —
+          // so a caller reading a version off this result gets the one the
+          // file already holds rather than nothing.
+          //
+          // Recorded on the row as well as returned. A file written before
+          // the realm began recording hashes carries none, and the row is
+          // what the file's metadata resource reports as its content hash —
+          // so a file the realm has never rewritten would answer without one
+          // until something changed its bytes. Writing the hash it already
+          // has is a no-op for every file that has one. This is not what
+          // makes `baseVersion` work: that is computed from the bytes read
+          // inside the write lock and never consults the row.
+          let unchangedHash = isStagedFile(content)
             ? content.contentHash
-            : computeContentHash(content),
-        )) &&
-        (await (isStagedFile(content)
-          ? this.#adapter.stagedContentEquals(path, content)
-          : fileContentEquals(stored, content)))
-      ) {
-        // Matching bytes are not enough on their own here. Re-sending an
-        // upload is how a caller recovers from one whose bytes landed but
-        // whose metadata row or queue insert then failed, and how a file
-        // whose last index pass errored gets another one — and both look
-        // exactly like a repeat of an upload that fully landed. So the file
-        // is left alone only when the index already holds a live row built
-        // from these bytes; otherwise the upload proceeds as a write, which
-        // queues the pass the earlier attempt never got.
-        //
-        // Staged uploads compare a full SHA-256 of the current stored bytes;
-        // in-memory writes compare their bytes directly. Neither comparison
-        // trusts the persisted metadata or a sampled hash: a same-length edit
-        // made outside the realm must still be replaced by this upload.
-        unchanged = stored;
-      }
-      if (unchanged) {
-        // Identical bytes: the file is left alone, so its modification time
-        // stands and nothing is queued for indexing. The content hash is
-        // still the file's own — the bytes in hand are the bytes on disk —
-        // so a caller reading a version off this result gets the one the
-        // file already holds rather than nothing.
-        //
-        // Recorded on the row as well as returned. A file written before
-        // the realm began recording hashes carries none, and the row is
-        // what the file's metadata resource reports as its content hash —
-        // so a file the realm has never rewritten would answer without one
-        // until something changed its bytes. Writing the hash it already
-        // has is a no-op for every file that has one. This is not what
-        // makes `baseVersion` work: that is computed from the bytes read
-        // inside the write lock and never consults the row.
-        let unchangedHash = isStagedFile(content)
+            : computeContentHash(content);
+          results.push({
+            path,
+            lastModified: unchanged.lastModified,
+            contentHash: unchangedHash,
+          });
+          fileMetaRows.push({
+            path,
+            contentHash: unchangedHash,
+            contentSize: isStagedFile(content)
+              ? content.size
+              : computeContentSize(content),
+          });
+          // The module flush above has already run for this file if it was
+          // owed. Recording the file's kind keeps the next instance from
+          // running it again over no URLs, which would replace the flush's
+          // parked prerender set with an empty one and leave the changed
+          // module's dependents unrendered.
+          lastWriteType = currentWriteType ?? lastWriteType;
+          continue;
+        }
+        // From the open above rather than from a read, which a file whose
+        // length already settled the comparison never had.
+        let isNewFile = stored === undefined;
+        let contentHash = isStagedFile(content)
           ? content.contentHash
           : computeContentHash(content);
-        results.push({
-          path,
-          lastModified: unchanged.lastModified,
-          contentHash: unchangedHash,
-        });
-        fileMetaRows.push({
-          path,
-          contentHash: unchangedHash,
-          contentSize: isStagedFile(content)
-            ? content.size
-            : computeContentSize(content),
-        });
-        // The module flush above has already run for this file if it was
-        // owed. Recording the file's kind keeps the next instance from
-        // running it again over no URLs, which would replace the flush's
-        // parked prerender set with an empty one and leave the changed
-        // module's dependents unrendered.
-        lastWriteType = currentWriteType ?? lastWriteType;
-        continue;
-      }
-      // From the open above rather than from a read, which a file whose
-      // length already settled the comparison never had.
-      let isNewFile = stored === undefined;
-      let contentHash = isStagedFile(content)
-        ? content.contentHash
-        : computeContentHash(content);
-      let contentSize = isStagedFile(content)
-        ? content.size
-        : computeContentSize(content);
-      // Read before the write replaces the bytes it compares against.
-      if (
-        currentWriteType === 'module' &&
-        !isStagedFile(content) &&
-        (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
-      ) {
-        modulesWithoutSchemaChange.add(url.href);
-      }
-      announceIndexing(url);
-      await this.trackOwnWrite(path);
-      let { lastModified } = isStagedFile(content)
-        ? await this.#adapter.commitStaged(path, content)
-        : await this.#adapter.write(path, content);
-      (isNewFile ? addedFiles : updatedFiles).push(path);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      if (currentWriteType === 'module') {
-        // The definition cache is keyed by module URL with no freshness
-        // check on the row — `readFromDatabaseCache` never compares content
-        // hashes or mtimes, and only error rows carry a TTL — so a cached
-        // definition for this module stays authoritative until something
-        // deletes it. Dropping it here, where the bytes change, keeps a
-        // written module's cached definition in step with the file rather
-        // than with the index: the next `lookupDefinition` misses and reads
-        // the rewritten module through `prerenderModule`, off disk.
-        //
-        // Leaving this to the index job's `onInvalidation` instead would
-        // leave a window — the whole of it on the deferred-indexing paths —
-        // in which `fileSerialization` resolves an instance against the
-        // module's previous schema. `serializeCardResource` skips every
-        // attribute whose field that schema doesn't declare, so the
-        // instance lands on disk missing the new field and the write still
-        // reports success; a dropped attribute is indistinguishable from an
-        // unset one, so nothing downstream can tell it happened.
-        //
-        // Ordered after `#notifyFileChange` deliberately. This replica dropped
-        // its own byte caches synchronously in `invalidateCache(path)` above,
-        // but peer replicas only drop theirs when they receive that
-        // notification. Deleting the definition row is what makes the next
-        // `lookupDefinition` — on any replica — prerender the module; a peer
-        // that prerenders while still holding pre-write bytes derives the old
-        // schema and caches THAT, reinstating the staleness this call removes
-        // and making it durable until indexing lands. Publishing the byte
-        // invalidation first narrows that to peers which have not yet
-        // processed the notification; it does not close it, since the notify
-        // is best-effort and applied asynchronously. The index job's own
-        // invalidation stays the backstop.
-        //
-        // Best-effort, like `#notifyFileChange` above. The bytes are already
-        // durable at this point but `urls` has not been appended to yet, so
-        // letting either step throw would abandon the batch before ANY index
-        // job is enqueued — for this file and for every file written ahead of
-        // it — and the caller's natural remedy makes it worse: a retry with
-        // the same bytes takes the unchanged-content short-circuit above, so
-        // it enqueues nothing either and the file stays on disk and out of
-        // the index until an unrelated edit or a full reindex. Swallowing
-        // leaves only the staleness these steps exist to remove, which the
-        // index job's own invalidation still clears. They are caught
-        // separately so a failure in one still leaves the other's benefit:
-        // the delete alone still drops the row a stale definition sits in,
-        // and the epoch alone still stops a later invalidation from
-        // re-deriving that definition off a warm tab.
-        //
-        // Deleting the cached definition only guarantees the next lookup
-        // re-derives one; it says nothing about what that lookup derives it
-        // FROM. `lookupDefinition` repopulates by prerendering the module,
-        // and a prerender tab that already evaluated this module keeps
-        // serving the evaluated copy — the route re-reads the file's metadata
-        // (so the response even carries the post-write mtime) but imports out
-        // of the loader it is holding. The result is the pre-write schema,
-        // cached under the post-write module's URL and durable until
-        // something else invalidates it: the staleness the delete removes,
-        // reinstated one layer down.
-        //
-        // Minting a loader epoch is how this codebase already says "warm tabs
-        // are stale for this realm" — an index pass whose invalidation set
-        // contains an executable mints one, and the render routes reset a
-        // tab's loader once per epoch it has not cleared for. The write path
-        // has to mint too, because every definition resolved between the
-        // write and that index pass — the whole of the window on the
-        // deferred-indexing paths — is resolved before the pass's epoch
-        // exists. Ordered before the delete so the epoch is already current
-        // for any lookup that observes the missing row.
-        if (!mintedLoaderEpoch) {
+        let contentSize = isStagedFile(content)
+          ? content.size
+          : computeContentSize(content);
+        // Read before the write replaces the bytes it compares against.
+        if (
+          currentWriteType === 'module' &&
+          !isStagedFile(content) &&
+          (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
+        ) {
+          modulesWithoutSchemaChange.add(url.href);
+        }
+        announceIndexing(url);
+        await this.trackOwnWrite(path);
+        let { lastModified } = isStagedFile(content)
+          ? await this.#adapter.commitStaged(path, content)
+          : await this.#adapter.write(path, content);
+        (isNewFile ? addedFiles : updatedFiles).push(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        if (currentWriteType === 'module') {
+          // The definition cache is keyed by module URL with no freshness
+          // check on the row — `readFromDatabaseCache` never compares content
+          // hashes or mtimes, and only error rows carry a TTL — so a cached
+          // definition for this module stays authoritative until something
+          // deletes it. Dropping it here, where the bytes change, keeps a
+          // written module's cached definition in step with the file rather
+          // than with the index: the next `lookupDefinition` misses and reads
+          // the rewritten module through `prerenderModule`, off disk.
+          //
+          // Leaving this to the index job's `onInvalidation` instead would
+          // leave a window — the whole of it on the deferred-indexing paths —
+          // in which `fileSerialization` resolves an instance against the
+          // module's previous schema. `serializeCardResource` skips every
+          // attribute whose field that schema doesn't declare, so the
+          // instance lands on disk missing the new field and the write still
+          // reports success; a dropped attribute is indistinguishable from an
+          // unset one, so nothing downstream can tell it happened.
+          //
+          // Ordered after `#notifyFileChange` deliberately. This replica dropped
+          // its own byte caches synchronously in `invalidateCache(path)` above,
+          // but peer replicas only drop theirs when they receive that
+          // notification. Deleting the definition row is what makes the next
+          // `lookupDefinition` — on any replica — prerender the module; a peer
+          // that prerenders while still holding pre-write bytes derives the old
+          // schema and caches THAT, reinstating the staleness this call removes
+          // and making it durable until indexing lands. Publishing the byte
+          // invalidation first narrows that to peers which have not yet
+          // processed the notification; it does not close it, since the notify
+          // is best-effort and applied asynchronously. The index job's own
+          // invalidation stays the backstop.
+          //
+          // Best-effort, like `#notifyFileChange` above. The bytes are already
+          // durable at this point but `urls` has not been appended to yet, so
+          // letting either step throw would abandon the batch before ANY index
+          // job is enqueued — for this file and for every file written ahead of
+          // it — and the caller's natural remedy makes it worse: a retry with
+          // the same bytes takes the unchanged-content short-circuit above, so
+          // it enqueues nothing either and the file stays on disk and out of
+          // the index until an unrelated edit or a full reindex. Swallowing
+          // leaves only the staleness these steps exist to remove, which the
+          // index job's own invalidation still clears. They are caught
+          // separately so a failure in one still leaves the other's benefit:
+          // the delete alone still drops the row a stale definition sits in,
+          // and the epoch alone still stops a later invalidation from
+          // re-deriving that definition off a warm tab.
+          //
+          // Deleting the cached definition only guarantees the next lookup
+          // re-derives one; it says nothing about what that lookup derives it
+          // FROM. `lookupDefinition` repopulates by prerendering the module,
+          // and a prerender tab that already evaluated this module keeps
+          // serving the evaluated copy — the route re-reads the file's metadata
+          // (so the response even carries the post-write mtime) but imports out
+          // of the loader it is holding. The result is the pre-write schema,
+          // cached under the post-write module's URL and durable until
+          // something else invalidates it: the staleness the delete removes,
+          // reinstated one layer down.
+          //
+          // Minting a loader epoch is how this codebase already says "warm tabs
+          // are stale for this realm" — an index pass whose invalidation set
+          // contains an executable mints one, and the render routes reset a
+          // tab's loader once per epoch it has not cleared for. The write path
+          // has to mint too, because every definition resolved between the
+          // write and that index pass — the whole of the window on the
+          // deferred-indexing paths — is resolved before the pass's epoch
+          // exists. Ordered before the delete so the epoch is already current
+          // for any lookup that observes the missing row.
+          if (!mintedLoaderEpoch) {
+            try {
+              await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+              // Only on success: a transient failure here gets another attempt
+              // from the next module in the batch rather than leaving every
+              // module in it renderable off a warm tab.
+              mintedLoaderEpoch = true;
+            } catch (err: unknown) {
+              this.#log.error(
+                `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+              );
+            }
+          }
           try {
-            await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
-            // Only on success: a transient failure here gets another attempt
-            // from the next module in the batch rather than leaving every
-            // module in it renderable off a warm tab.
-            mintedLoaderEpoch = true;
+            await this.#definitionLookup.invalidate(url.href);
           } catch (err: unknown) {
             this.#log.error(
-              `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+              `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
             );
           }
         }
+        results.push({ path, lastModified, contentHash });
+        fileMetaRows.push({ path, contentHash, contentSize });
+        urls.push(url);
+        lastWriteType = currentWriteType ?? lastWriteType;
+      }
+
+      // The append leg. Each path gets the same per-file treatment a write does
+      // — the ceiling, the commit's initiation if none has gone out yet, the
+      // own-write tracking, the byte-cache drop, the peer notification, and a
+      // `realm_file_meta` row — with two differences, both of which follow from
+      // never holding the file.
+      //
+      // The ceiling is applied to what is being added rather than to what the
+      // file will hold, and it is the file ceiling whatever the path's
+      // extension: the limit is over the bytes a caller hands the realm, and a
+      // file that grew past it one line at a time is what an append-only file
+      // is. Nothing here classifies the content as a card, because appending to
+      // a card's stored JSON is not something the operation core permits —
+      // bytes added after a document's closing brace are no longer a document.
+      //
+      // And the fingerprint is assembled from bounded reads of the file once the
+      // append has landed, rather than computed from bytes in hand. That is the
+      // same value hashing the whole content would produce, and its cost has a
+      // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
+      // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
+      // adding a line to a file of any size costs the line plus a bounded read.
+      for (let [path, content] of appends) {
+        let url = this.paths.fileURL(path);
+        this.assertWriteSize(content, 'file', path);
+        let existed = await this.#adapter.exists(path);
+        announceIndexing(url);
+        await this.trackOwnWrite(path);
+        let { lastModified, size } = await this.#adapter.append(path, content);
+        appendedPaths.add(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        let contentHash = await computeContentHashFromRanges(
+          size,
+          async (start, length) =>
+            await readRangeBytes(this.#adapter, path, start, length),
+        );
+        // The write leg may have reached this file already, which is one file
+        // changing twice rather than two files changing — a caller that replaces
+        // a log and then adds a line to it. Everything the write recorded
+        // describes bytes the file no longer holds, so the readings here replace
+        // them rather than joining them: one result, one `realm_file_meta` row
+        // (two rows for one path in the same statement is an error Postgres
+        // raises outright), one entry in the announcement, and one index change.
+        let written = results.findIndex((result) => result.path === path);
+        if (written === -1) {
+          results.push({ path, lastModified, contentHash });
+          fileMetaRows.push({ path, contentHash, contentSize: size });
+        } else {
+          results[written] = { path, lastModified, contentHash };
+          let row = fileMetaRows.findIndex((meta) => meta.path === path);
+          fileMetaRows[row] = { path, contentHash, contentSize: size };
+        }
+        // Asked separately from the readings above, because recording a result
+        // and announcing a change are not the same question. A write that found
+        // the file already holding the bytes it staged records a result and
+        // announces nothing — it left the file alone. This leg did not: the
+        // append changed the file whatever the write before it did, so the
+        // announcement is made here unless one of the earlier legs already made
+        // it. Without this, a batch that replaces a file with its own content
+        // and then appends to it broadcasts no file change at all.
+        if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
+          (existed ? updatedFiles : addedFiles).push(path);
+        }
+        // Pushed unless it is already pending, which is a different question
+        // from whether the write leg handled it: a mid-loop flush empties this,
+        // and a file indexed from its pre-append state needs indexing again.
+        if (!urls.some((pending) => pending.href === url.href)) {
+          urls.push(url);
+        }
+      }
+
+      // The removal leg. Each path gets the same per-file treatment a write
+      // does — the commit's initiation if none has gone out yet, the own-write
+      // tracking that stops the file watcher from re-reporting this replica's
+      // own change, the byte-cache drop, and the peer notification — and then
+      // the whole batch's file changes are announced together below.
+      for (let path of deletes) {
+        let url = this.paths.fileURL(path);
+        announceIndexing(url);
+        await this.trackOwnWrite(path, { isDelete: true });
+        await this.#adapter.remove(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        removedFiles.push(path);
+        deleteURLs.push(url);
+      }
+    } catch (err: unknown) {
+      if (fileMetaRows.length > 0 || removedFiles.length > 0) {
         try {
-          await this.#definitionLookup.invalidate(url.href);
-        } catch (err: unknown) {
+          await this.#persistWriteOutcome({
+            fileMetaRows,
+            removedFiles,
+            addedFiles,
+            updatedFiles,
+            appendedPaths,
+            initiatingUser,
+            partial: true,
+          });
+        } catch (persistErr: unknown) {
           this.#log.error(
-            `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
+            `could not record the file meta of a write to ${this.url} that failed partway: ${stringifyErrorForLog(persistErr)}`,
           );
         }
       }
-      results.push({ path, lastModified, contentHash });
-      fileMetaRows.push({ path, contentHash, contentSize });
-      urls.push(url);
-      lastWriteType = currentWriteType ?? lastWriteType;
-    }
-
-    // The append leg. Each path gets the same per-file treatment a write does
-    // — the ceiling, the commit's initiation if none has gone out yet, the
-    // own-write tracking, the byte-cache drop, the peer notification, and a
-    // `realm_file_meta` row — with two differences, both of which follow from
-    // never holding the file.
-    //
-    // The ceiling is applied to what is being added rather than to what the
-    // file will hold, and it is the file ceiling whatever the path's
-    // extension: the limit is over the bytes a caller hands the realm, and a
-    // file that grew past it one line at a time is what an append-only file
-    // is. Nothing here classifies the content as a card, because appending to
-    // a card's stored JSON is not something the operation core permits —
-    // bytes added after a document's closing brace are no longer a document.
-    //
-    // And the fingerprint is assembled from bounded reads of the file once the
-    // append has landed, rather than computed from bytes in hand. That is the
-    // same value hashing the whole content would produce, and its cost has a
-    // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
-    // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
-    // adding a line to a file of any size costs the line plus a bounded read.
-    for (let [path, content] of appends) {
-      let url = this.paths.fileURL(path);
-      this.assertWriteSize(content, 'file', path);
-      let existed = await this.#adapter.exists(path);
-      announceIndexing(url);
-      await this.trackOwnWrite(path);
-      let { lastModified, size } = await this.#adapter.append(path, content);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      let contentHash = await computeContentHashFromRanges(
-        size,
-        async (start, length) =>
-          await readRangeBytes(this.#adapter, path, start, length),
-      );
-      // The write leg may have reached this file already, which is one file
-      // changing twice rather than two files changing — a caller that replaces
-      // a log and then adds a line to it. Everything the write recorded
-      // describes bytes the file no longer holds, so the readings here replace
-      // them rather than joining them: one result, one `realm_file_meta` row
-      // (two rows for one path in the same statement is an error Postgres
-      // raises outright), one entry in the announcement, and one index change.
-      let written = results.findIndex((result) => result.path === path);
-      if (written === -1) {
-        results.push({ path, lastModified, contentHash });
-        fileMetaRows.push({ path, contentHash, contentSize: size });
-      } else {
-        results[written] = { path, lastModified, contentHash };
-        let row = fileMetaRows.findIndex((meta) => meta.path === path);
-        fileMetaRows[row] = { path, contentHash, contentSize: size };
-      }
-      // Asked separately from the readings above, because recording a result
-      // and announcing a change are not the same question. A write that found
-      // the file already holding the bytes it staged records a result and
-      // announces nothing — it left the file alone. This leg did not: the
-      // append changed the file whatever the write before it did, so the
-      // announcement is made here unless one of the earlier legs already made
-      // it. Without this, a batch that replaces a file with its own content
-      // and then appends to it broadcasts no file change at all.
-      if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
-        (existed ? updatedFiles : addedFiles).push(path);
-      }
-      // Pushed unless it is already pending, which is a different question
-      // from whether the write leg handled it: a mid-loop flush empties this,
-      // and a file indexed from its pre-append state needs indexing again.
-      if (!urls.some((pending) => pending.href === url.href)) {
-        urls.push(url);
-      }
-    }
-
-    // The removal leg. Each path gets the same per-file treatment a write
-    // does — the commit's initiation if none has gone out yet, the own-write
-    // tracking that stops the file watcher from re-reporting this replica's
-    // own change, the byte-cache drop, and the peer notification — and then
-    // the whole batch's file changes are announced together below.
-    let deleteURLs: URL[] = [];
-    for (let path of deletes) {
-      let url = this.paths.fileURL(path);
-      announceIndexing(url);
-      await this.trackOwnWrite(path, { isDelete: true });
-      await this.#adapter.remove(path);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      removedFiles.push(path);
-      deleteURLs.push(url);
+      throw err;
     }
 
     if (
@@ -5964,9 +6023,17 @@ export class Realm {
       } as UpdateRealmEventContent);
     }
 
-    // persist file meta (created_at) to DB independent of index and retrieve created
-    let createdMap = await this.persistFileMeta(fileMetaRows);
-    await this.removeFileMeta(removedFiles);
+    // The rows describing what landed and the change event that records it,
+    // committed together, independent of the index.
+    let createdMap = await this.#persistWriteOutcome({
+      fileMetaRows,
+      removedFiles,
+      addedFiles,
+      updatedFiles,
+      appendedPaths,
+      initiatingUser,
+      partial: false,
+    });
     // Everything the caller asked for is durable at this point: the bytes, the
     // removals, and the rows describing them. What follows is indexing, which
     // the caller may or may not be waiting for — so this is the boundary that
@@ -6284,6 +6351,7 @@ export class Realm {
   // persist created_at into realm_file_meta table using db adapter
   private async persistFileMeta(
     rows: { path: LocalPath; contentHash?: string; contentSize?: number }[],
+    querier?: Querier,
   ): Promise<
     Map<
       LocalPath,
@@ -6299,6 +6367,7 @@ export class Realm {
         contentHash: r.contentHash,
         contentSize: r.contentSize,
       })),
+      querier,
     );
     // maintain LocalPath typing on keys
     return new Map(
@@ -6307,9 +6376,129 @@ export class Realm {
   }
 
   // remove file meta rows for deleted paths
-  private async removeFileMeta(paths: LocalPath[]): Promise<void> {
+  private async removeFileMeta(
+    paths: LocalPath[],
+    querier?: Querier,
+  ): Promise<void> {
     if (!this.#dbAdapter || paths.length === 0) return;
-    await removeFileMeta(this.#dbAdapter, this.url, paths);
+    await removeFileMeta(this.#dbAdapter, this.url, paths, querier);
+  }
+
+  // The rows that describe what a write left on disk, and the change event
+  // that records it, committed together. `realm_file_meta` is written and
+  // trimmed on one transaction, and the event is appended on the same one
+  // under a savepoint: if the journal insert fails, only the insert rolls
+  // back, the file meta still commits, and the write still succeeds, with the
+  // failure recorded so reconciliation can attribute the change to no one.
+  // Reconciliation therefore never sees a file-meta change whose event is
+  // still on its way.
+  //
+  // Called for a commit that completed and for one that failed partway, with
+  // whatever paths had landed by then; the `partial` event records them,
+  // attributed, as soon as it would have for a complete write. A commit that
+  // changed nothing appends no event. Returns the `created_at` map the
+  // results are built from.
+  async #persistWriteOutcome({
+    fileMetaRows,
+    removedFiles,
+    addedFiles,
+    updatedFiles,
+    appendedPaths,
+    initiatingUser,
+    partial,
+  }: {
+    fileMetaRows: {
+      path: LocalPath;
+      contentHash?: string;
+      contentSize?: number;
+    }[];
+    removedFiles: LocalPath[];
+    addedFiles: LocalPath[];
+    updatedFiles: LocalPath[];
+    appendedPaths: Set<LocalPath>;
+    initiatingUser: string | null;
+    partial: boolean;
+  }): Promise<
+    Map<
+      LocalPath,
+      { createdAt: number; contentHash?: string; contentSize?: number }
+    >
+  > {
+    let metaByPath = new Map(fileMetaRows.map((row) => [row.path, row]));
+    let describe = (path: LocalPath, status: 'A' | 'M'): ChangeEventChange => {
+      let row = metaByPath.get(path);
+      return {
+        path,
+        status,
+        ...(row?.contentHash !== undefined
+          ? { contentHash: row.contentHash }
+          : {}),
+        ...(row?.contentSize !== undefined ? { size: row.contentSize } : {}),
+        ...(appendedPaths.has(path) ? { appended: true } : {}),
+      };
+    };
+    let changes: ChangeEventChange[] = [
+      ...addedFiles.map((path) => describe(path, 'A')),
+      ...updatedFiles.map((path) => describe(path, 'M')),
+      ...removedFiles.map((path) => ({ path, status: 'D' as const })),
+    ];
+    let journal = this.#history?.journal;
+    if (!journal) {
+      // No history, so nothing to commit together: the rows are written as
+      // the adapter's own statements. The in-browser realm's SQLite adapter
+      // runs one connection with no transaction nesting, so a realm that
+      // records nothing never opens a transaction here.
+      let createdMap = await this.persistFileMeta(fileMetaRows);
+      await this.removeFileMeta(removedFiles);
+      return createdMap;
+    }
+    let event: ChangeEventInput | undefined =
+      changes.length > 0
+        ? {
+            realmURL: this.url,
+            // The effective authenticated user, never a client-supplied
+            // header. A write with no user is the realm's own Matrix user's.
+            author: initiatingUser ?? this.#matrixClientUserId,
+            channel: 'api',
+            ...(partial ? { partial: true } : {}),
+            changes,
+          }
+        : undefined;
+    return await this.#dbAdapter.withTransaction(
+      async (querier) => {
+        let createdMap = await this.persistFileMeta(fileMetaRows, querier);
+        await this.removeFileMeta(removedFiles, querier);
+        if (event) {
+          let started = performance.now();
+          await querier(['SAVEPOINT change_journal']);
+          try {
+            let written = await journal.append(querier, event);
+            emitChangeJournal({
+              realm: this.url,
+              outcome: written ? 'written' : 'skipped',
+              durationMs: Math.round(performance.now() - started),
+              paths: changes.length,
+              partial,
+            });
+          } catch (err: unknown) {
+            await querier(['ROLLBACK TO SAVEPOINT change_journal']);
+            this.#log.error(
+              `could not append the change event for ${changes.length} path(s) in ${this.url} to the change journal; reconciliation will record the change unattributed: ${stringifyErrorForLog(err)}`,
+            );
+            emitChangeJournal({
+              realm: this.url,
+              outcome: 'failed',
+              durationMs: Math.round(performance.now() - started),
+              paths: changes.length,
+              partial,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        return createdMap;
+      },
+      { label: 'realm write outcome' },
+    );
   }
 
   private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
@@ -7825,8 +8014,15 @@ export class Realm {
     }
     this.invalidateCache(path);
     await this.#notifyFileChange(path);
-    // Remove file meta for this path
-    await this.removeFileMeta([path]);
+    await this.#persistWriteOutcome({
+      fileMetaRows: [],
+      removedFiles: [path],
+      addedFiles: [],
+      updatedFiles: [],
+      appendedPaths: new Set(),
+      initiatingUser: options?.initiatingUser ?? null,
+      partial: false,
+    });
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
       let { invalidations, generation, invalidatedTypes, sharedPass } =
@@ -7880,13 +8076,23 @@ export class Realm {
     }
   }
 
-  async deleteAll(paths: LocalPath[]): Promise<void> {
+  async deleteAll(
+    paths: LocalPath[],
+    options?: {
+      // The user whose request removes the files, recorded as the author of
+      // the change. Absent for a system-originated removal.
+      initiatingUser?: string | null;
+    },
+  ): Promise<void> {
     await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
-      this._deleteAllUnlocked(paths),
+      this._deleteAllUnlocked(paths, options),
     );
   }
 
-  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
+  private async _deleteAllUnlocked(
+    paths: LocalPath[],
+    options?: { initiatingUser?: string | null },
+  ): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -7911,8 +8117,15 @@ export class Realm {
       removed: paths,
       realmURL: this.url,
     });
-    // Remove file meta for all deleted paths
-    await this.removeFileMeta(paths);
+    await this.#persistWriteOutcome({
+      fileMetaRows: [],
+      removedFiles: paths,
+      addedFiles: [],
+      updatedFiles: [],
+      appendedPaths: new Set(),
+      initiatingUser: options?.initiatingUser ?? null,
+      partial: false,
+    });
     let { invalidations, generation, invalidatedTypes, sharedPass } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'delete' as const })),
@@ -15447,6 +15660,10 @@ export class Realm {
           cardTitle: error.cardTitle,
           scopedCssUrls: error.scopedCssUrls,
           stack: error.stack,
+          // The card's index row records this error, whatever its status, so
+          // a client can tell a card to fix from a read that failed for
+          // another reason.
+          ...(error.fromIndexRow ? { indexError: true } : {}),
         },
       },
     });
@@ -17777,7 +17994,9 @@ export class Realm {
           undefined,
           this.#virtualNetwork,
         );
-        return isResolvedCodeRef(absolute) ? absolute : undefined;
+        return isResolvedCodeRef(absolute)
+          ? this.#ownCopyOf(absolute)
+          : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
         this.#definitionLookup.lookupDefinitionEntry(codeRef),
@@ -17794,7 +18013,26 @@ export class Realm {
         (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
           .map((summary) => summary.code_ref)
           .sort(),
+      ...(this.#published ? { sharedKeyCallsOnly: true } : {}),
     };
+  }
+
+  // A type in a published realm's source, as the published realm names its
+  // copy: the module at the same path in this realm. A policy card copied from
+  // the source may name the source's types by their absolute URLs, while the
+  // published realm's cards adopt from its own copies of those modules. Any
+  // other type is named as it is.
+  #ownCopyOf(codeRef: ResolvedCodeRef): ResolvedCodeRef {
+    let source = this.#sourceRealmURL;
+    if (!source) {
+      return codeRef;
+    }
+    let copy = sameResourceIn(
+      new RealmPaths(new URL(source)),
+      new RealmPaths(new URL(this.url)),
+      this.#virtualNetwork.toURL(codeRef.module),
+    );
+    return copy ? { ...codeRef, module: copy } : codeRef;
   }
 
   // Indexes the policy card stored at `file` again, in the realm at `realmURL`
@@ -18577,6 +18815,7 @@ function cardJsonAssemblyFromFailure(
     return {
       kind: 'error',
       error: {
+        fromIndexRow: false,
         status: error.status,
         title: error.title,
         message: error.detail,
@@ -18593,6 +18832,7 @@ function cardJsonAssemblyFromFailure(
   return {
     kind: 'error',
     error: {
+      fromIndexRow: true,
       status: row.status,
       title: row.title,
       message: row.message,

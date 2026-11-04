@@ -40,10 +40,13 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import Agents from './agents';
+import AgentsFlyout from './agents-flyout';
 import ArchivedWorkspace from './archived-workspace';
 import CatalogSection from './catalog-section';
 import CatalogsFlyout from './catalogs-flyout';
 import FavoritesFlyout from './favorites-flyout';
+import GetStarted from './get-started';
 import { greetingFor } from './greeting';
 import KeyboardCursor from './keyboard-cursor';
 import SectionHead from './section-head';
@@ -89,12 +92,14 @@ export default class Dashboard extends Component<Signature> {
   @service declare private realm: RealmService;
 
   // The workspace the dashboard opened over, read once: the cursor starts on
-  // it, so Enter goes straight back to where the user was.
+  // it, so Enter goes straight back to where the user was. With nothing open
+  // there is none, rather than a default workspace the user may never have
+  // opened.
   private returnRealmURL = this.readReturnRealmURL();
 
   private readReturnRealmURL(): string | undefined {
     try {
-      return this.operatorModeStateService.realmURL || undefined;
+      return this.operatorModeStateService.openRealmURL || undefined;
     } catch {
       return undefined;
     }
@@ -489,8 +494,8 @@ export default class Dashboard extends Component<Signature> {
 
   // The workspace the dashboard opened over, otherwise the first favorite or
   // workspace, even when the catalogs lead the page. The cursor takes focus on
-  // open, so it never starts on New Workspace while anything else is shown:
-  // the first Enter would create a workspace.
+  // open when it is in view, so it never starts on New Workspace while
+  // anything else is shown: the first Enter would create a workspace.
   private get defaultSelectedIndex() {
     let returnIndex = this.returnNavIndex;
     if (returnIndex !== undefined) {
@@ -517,6 +522,17 @@ export default class Dashboard extends Component<Signature> {
     flyout: FavoritesFlyout,
   };
 
+  private agentsSection: DashboardSection = {
+    id: 'agents',
+    label: 'Agents',
+    icon: Bot,
+    flyout: AgentsFlyout,
+  };
+
+  @action private showAgents() {
+    this.args.sections.scrollTo(this.agentsSection.id);
+  }
+
   private catalogsSection: DashboardSection = {
     id: 'catalogs',
     label: 'Catalogs',
@@ -536,6 +552,7 @@ export default class Dashboard extends Component<Signature> {
       class={{cn 'dashboard' is-compact=@sections.isCompact}}
       aria-label='Dashboard'
       data-theme='dark'
+      data-keyboard-cursor
       {{on 'keydown' this.cursor.onKeydown}}
       {{on 'focusin' this.cursor.onFocusIn}}
       {{on 'pointerup' this.cursor.onPointerUp}}
@@ -590,6 +607,8 @@ export default class Dashboard extends Component<Signature> {
               data-test-dashboard-filter
             />
           </header>
+
+          <GetStarted @showAgents={{this.showAgents}} />
 
           {{#if this.catalogLeads}}
             <CatalogSection
@@ -839,13 +858,15 @@ export default class Dashboard extends Component<Signature> {
           <section
             class='dashboard-section'
             aria-labelledby={{this.headingId 'agents'}}
+            {{@sections.register this.agentsSection}}
             data-test-dashboard-section='agents'
           >
             <SectionHead
               @icon={{Bot}}
               @title='Agents'
               @titleId={{this.headingId 'agents'}}
-            >Boxel AI works here; your own agent works through the Boxel plugin.</SectionHead>
+            >Build with Boxel AI Assistant, or connect your own agent.</SectionHead>
+            <Agents />
           </section>
         </div>
       </div>
@@ -859,6 +880,11 @@ export default class Dashboard extends Component<Signature> {
         to {
           opacity: 1;
         }
+      }
+      /* Only takes focus in place of an item out of view; the cursor's ring
+         marks where the keyboard is. */
+      .dashboard:focus {
+        outline: none;
       }
       .dashboard {
         /* Pret UI selection reads this undefined token and falls back to a

@@ -19,8 +19,8 @@ import { isUUID, namedToViewer } from './named-users.ts';
 export { isUUID };
 import {
   KEY_LIMIT_COLUMNS,
-  limitsOf,
-  type KeyLimits,
+  limitsViewOf,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
@@ -88,9 +88,10 @@ export interface KeyShare {
   createdAt: string;
   updatedAt: string;
   // How much of the key anyone may spend through the share, its owner's
-  // settings with the platform's defaults filled in. Seen only by the share's
-  // owner and the realm's direct writers, as every share is.
-  limits: KeyLimits;
+  // settings with the platform's defaults filled in, and which of them the
+  // owner set (see `KeyLimitsView`). Seen only by the share's owner and the
+  // realm's direct writers, as every share is.
+  limits: KeyLimitsView;
   // In a realm's listing: the operations the share is approved for there,
   // one per binding, so the realm's writers see what each share is used by.
   operations?: KeyShareOperation[];
@@ -147,7 +148,7 @@ function toShare(
     suspendedAt: iso(row.suspended_at),
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
-    limits: limitsOf(row),
+    limits: limitsViewOf(row),
   };
 }
 
@@ -657,7 +658,15 @@ export async function listOwnShares(
 export interface SharedRealm {
   url: string;
   name: string | null;
-  shares: { id: string; label: string; state: KeyShareState }[];
+  // `approvedCalls`: how many bindings send the share (one per slot an
+  // approval fills, and per card for an operation approved per card),
+  // whatever state each is in. None means no card there calls with it yet.
+  shares: {
+    id: string;
+    label: string;
+    state: KeyShareState;
+    approvedCalls: number;
+  }[];
 }
 
 // The realms each of the user's keys is shared into, by key id, each realm
@@ -693,7 +702,9 @@ export async function listOwnSharedRealms(
                  WHERE rup.realm_url = ks.realm_url
                    AND rup.read = true
                    AND rup.username IN (${readingRows}))
-             LIMIT 1) AS name
+             LIMIT 1) AS name,
+            (SELECT COUNT(*) FROM key_bindings kb WHERE kb.share_id = ks.id)
+              AS approved_calls
      FROM key_shares ks
      WHERE ks.key_id IS NOT NULL AND ks.owner = `,
     param(owner),
@@ -706,15 +717,29 @@ export async function listOwnSharedRealms(
     key_id: string;
     realm_url: string;
     name: string | null;
+    approved_calls: number | string;
   }[];
-  for (let { id, label, state, key_id, realm_url, name } of rows) {
+  for (let {
+    id,
+    label,
+    state,
+    key_id,
+    realm_url,
+    name,
+    approved_calls,
+  } of rows) {
     let realms = byKey.get(key_id) ?? [];
     let realm = realms.find((r) => r.url === realm_url);
     if (!realm) {
       realm = { url: realm_url, name, shares: [] };
       realms.push(realm);
     }
-    realm.shares.push({ id, label, state });
+    realm.shares.push({
+      id,
+      label,
+      state,
+      approvedCalls: Number(approved_calls),
+    });
     byKey.set(key_id, realms);
   }
   for (let realms of byKey.values()) {

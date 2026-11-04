@@ -1,6 +1,9 @@
 import { cached, tracked } from '@glimmer/tracking';
 
-import { nearestNavIndexInRow } from '@cardstack/host/lib/workspace-list';
+import {
+  isOffScreen,
+  nearestNavIndexInRow,
+} from '@cardstack/host/lib/workspace-list';
 
 interface Walk {
   // One key per `[data-nav-index]` element, in page order, so the index of a
@@ -12,9 +15,10 @@ interface Walk {
 }
 
 // The dashboard's keyboard cursor: one item in the walk of workspaces and
-// catalogs. It rests on an item, focused, from the moment the dashboard opens,
-// so Enter works at once. Its ring is the keyboard's: Tab or the first
-// arrow key shows it without moving it, and a pointer press hides it again.
+// catalogs. It rests on an item from the moment the dashboard opens, focused
+// when in view, so Enter works at once. Its ring is the keyboard's: Tab or
+// the first arrow key shows it without moving it, and a pointer press hides
+// it again.
 // Left and Right step through the walk; Up and Down move to the nearest item
 // in the row above or below, whatever the layout.
 export default class KeyboardCursor {
@@ -97,16 +101,29 @@ export default class KeyboardCursor {
     if (event.key === 'Tab') {
       this.keyboardEngaged = true;
     }
+    // The container holds focus while the cursor's item is out of view. An
+    // arrow key brings the item into view and hands it focus; so does Enter
+    // once the user has scrolled to it, rather than opening an item nothing
+    // marks yet.
+    if (event.target === container) {
+      let item = this.itemAt(container, this.currentIndex);
+      if (
+        event.key.startsWith('Arrow') ||
+        (event.key === 'Enter' && item && !isOffScreen(item))
+      ) {
+        event.preventDefault();
+        this.showCursor(item);
+        item?.focus({ preventScroll: true });
+      }
+      return;
+    }
     // An item's own controls (star, menu, site link) handle their own keys.
     if (!(event.target as HTMLElement).closest('[data-nav-index]')) {
       return;
     }
     if (!this.keyboardEngaged && event.key.startsWith('Arrow')) {
       event.preventDefault();
-      this.keyboardEngaged = true;
-      this.itemAt(container, this.currentIndex)?.scrollIntoView({
-        block: 'nearest',
-      });
+      this.showCursor(this.itemAt(container, this.currentIndex));
       return;
     }
     switch (event.key) {
@@ -140,6 +157,13 @@ export default class KeyboardCursor {
         break;
     }
   };
+
+  // The first arrow key shows the ring on the cursor's item, and brings the
+  // item into view, without moving the cursor.
+  private showCursor(item: HTMLElement | null) {
+    this.keyboardEngaged = true;
+    item?.scrollIntoView({ block: 'nearest' });
+  }
 
   private itemAt(container: HTMLElement, index: number) {
     return container.querySelector<HTMLElement>(`[data-nav-index='${index}']`);

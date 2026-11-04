@@ -15,8 +15,8 @@ import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anony
 import { budgetUse, type BudgetUse } from './key-limits.ts';
 import {
   KEY_LIMIT_COLUMNS,
-  limitsOf,
-  type KeyLimits,
+  limitsViewOf,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
 import { subjectOfRefusal } from './key-use-subject.ts';
@@ -194,7 +194,6 @@ export async function recordFillRefusal(
 // refused a request with a 403 (`lastForbiddenAt`).
 export interface UsageGrant {
   id: string;
-  host: string;
   destination: string;
   state: 'active' | 'rejected';
   rejectedAt: string | null;
@@ -202,7 +201,7 @@ export interface UsageGrant {
 }
 
 export interface KeyUsage {
-  limits: KeyLimits;
+  limits: KeyLimitsView;
   budgets: BudgetUse;
   // The start of the current UTC month: the counts below are since then.
   since: string;
@@ -225,6 +224,11 @@ export interface KeyUsage {
     count: number;
     outcome?: 'vendor-forbidden';
   }[];
+  // Where the calls this month were made, most first: each realm, and each
+  // published site (`published`), whose cards used it. A published site's
+  // calls are recorded under its own URL and spend the same budgets as the
+  // calls in the realm it was published from.
+  realms: { realm: string; calls: number; published?: true }[];
   grants: UsageGrant[];
   canEditLimits: boolean;
 }
@@ -272,7 +276,7 @@ async function usageOf(
     viewer: string;
     // The share's realm; absent for a personal key.
     realmURL?: string;
-    limits: KeyLimits;
+    limits: KeyLimitsView;
     grants: UsageGrant[];
     canEditLimits: boolean;
   },
@@ -323,6 +327,20 @@ async function usageOf(
     ...where(),
     ` AND status IS NOT NULL GROUP BY status ORDER BY status`,
   ]);
+  // A share is used in its own realm and on the sites published from it,
+  // which its writers publish and anyone can open. A key is used by its owner,
+  // in realms they use it in or shared it into, and on those realms' sites.
+  // Naming them tells the viewer nothing about anyone else.
+  let realms = await query(dbAdapter, [
+    `SELECT u.realm_url, SUM(u.count) AS calls,
+            BOOL_OR(r.kind = 'published') AS published
+       FROM key_uses u LEFT JOIN realm_registry r ON r.url = u.realm_url
+      WHERE u.${subjectColumn(subject)} = `,
+    param(subject.id),
+    ` AND u.created_at >= `,
+    param(since),
+    ` GROUP BY u.realm_url ORDER BY calls DESC, u.realm_url`,
+  ]);
   return {
     limits,
     budgets: await budgetUse(dbAdapter, subject, limits),
@@ -342,6 +360,11 @@ async function usageOf(
         ...(status === 403 ? { outcome: 'vendor-forbidden' as const } : {}),
       };
     }),
+    realms: realms.map((row) => ({
+      realm: row.realm_url as string,
+      calls: Number(row.calls),
+      ...(row.published ? { published: true as const } : {}),
+    })),
     grants,
     canEditLimits,
   };
@@ -394,11 +417,9 @@ function topCallersOf(
 }
 
 function grantOf(row: Record<string, unknown>): UsageGrant {
-  let destination = row.destination as string;
   return {
     id: row.id as string,
-    host: hostOf(destination) ?? destination,
-    destination,
+    destination: row.destination as string,
     state: row.state === 'rejected' ? 'rejected' : 'active',
     rejectedAt: iso(row.rejected_at),
     lastForbiddenAt: iso(row.last_forbidden_at),
@@ -444,7 +465,7 @@ export async function shareUsage(
     {
       viewer: user,
       realmURL: share.realm_url as string,
-      limits: limitsOf(share),
+      limits: limitsViewOf(share),
       grants: grants.map(grantOf),
       canEditLimits: share.owner === user,
     },
@@ -480,7 +501,7 @@ export async function userKeyUsage(
     { kind: 'key', id: keyId },
     {
       viewer: owner,
-      limits: limitsOf(key),
+      limits: limitsViewOf(key),
       grants: grants.map(grantOf),
       canEditLimits: true,
     },

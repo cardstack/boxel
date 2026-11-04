@@ -72,25 +72,54 @@ const KEYS = [
       {
         url: 'https://realm-server.test/someone/dashboard/',
         name: 'Dashboard',
-        shares: [{ id: 'share-dash', label: 'Weather', state: 'active' }],
+        shares: [
+          {
+            id: 'share-dash',
+            label: 'Weather',
+            state: 'active',
+            approvedCalls: 4,
+          },
+        ],
       },
       {
         url: 'https://realm-server.test/someone/workspace/',
         name: 'Team',
         shares: [
-          { id: 'share-team-1', label: 'Weather', state: 'active' },
-          { id: 'share-team-2', label: 'Team weather', state: 'suspended' },
+          {
+            id: 'share-team-1',
+            label: 'Weather',
+            state: 'active',
+            approvedCalls: 0,
+          },
+          {
+            id: 'share-team-2',
+            label: 'Team weather',
+            state: 'suspended',
+            approvedCalls: 0,
+          },
         ],
       },
       {
         url: 'https://realm-server.test/someone/old-team/',
         name: null,
-        shares: [{ id: 'share-old', label: 'Weather', state: 'suspended' }],
+        shares: [
+          {
+            id: 'share-old',
+            label: 'Weather',
+            state: 'suspended',
+            approvedCalls: 1,
+          },
+        ],
       },
     ] as {
       url: string;
       name: string | null;
-      shares: { id: string; label: string; state: string }[];
+      shares: {
+        id: string;
+        label: string;
+        state: string;
+        approvedCalls: number;
+      }[];
     }[],
   },
   {
@@ -107,7 +136,12 @@ const KEYS = [
     sharedInto: [] as {
       url: string;
       name: string | null;
-      shares: { id: string; label: string; state: string }[];
+      shares: {
+        id: string;
+        label: string;
+        state: string;
+        approvedCalls: number;
+      }[];
     }[],
   },
 ];
@@ -672,6 +706,94 @@ module('Integration | key pages', function (hooks) {
         .isChecked('already set to allow it, so one Save finishes it');
     });
 
+    test('the notices the page lists are marked read, so the app’s badge for them clears', async function (assert) {
+      let notice = (id: string, readAt: string | null) => ({
+        type: 'key-policy-notice',
+        id,
+        attributes: {
+          realm: REALM,
+          share: `share-${id}`,
+          label: `Shared ${id}`,
+          key: 'key-1',
+          policy: `${REALM}policies/team`,
+          savedBy: null,
+          reason: 'visitors-use',
+          operations: [`${REALM}weather#Weather.forecast`],
+          declinedAt: null,
+          readAt,
+          createdAt: '2026-11-01T12:00:00.000Z',
+        },
+      });
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              notice('9', null),
+              notice('8', null),
+              notice('4', '2026-10-30T09:00:00.000Z'),
+            ],
+            meta: { unread: 2 },
+          }),
+        'POST _key-policy-notices/read': () =>
+          json(200, { meta: { marked: 2, unread: 0 } }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      let marked = requests.filter(
+        (r) => r.method === 'POST' && r.path === '_key-policy-notices/read',
+      );
+      assert.deepEqual(
+        marked.map((r) => r.body),
+        [
+          {
+            data: [
+              { type: 'key-policy-notice', id: '9' },
+              { type: 'key-policy-notice', id: '8' },
+            ],
+          },
+        ],
+        'the unread notices it lists, and only those, are marked once',
+      );
+    });
+
+    test('a page whose notices are all read marks nothing', async function (assert) {
+      serve({
+        'GET _key-policy-notices': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-policy-notice',
+                id: '4',
+                attributes: {
+                  realm: REALM,
+                  share: 'share-4',
+                  label: 'Shared 4',
+                  key: 'key-1',
+                  policy: `${REALM}policies/team`,
+                  savedBy: null,
+                  reason: 'visitors-use',
+                  operations: [`${REALM}weather#Weather.forecast`],
+                  declinedAt: null,
+                  readAt: '2026-10-30T09:00:00.000Z',
+                  createdAt: '2026-10-30T08:00:00.000Z',
+                },
+              },
+            ],
+            meta: { unread: 0 },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-policy-notices]');
+      await settled();
+      assert.false(
+        requests.some((r) => r.path === '_key-policy-notices/read'),
+        'nothing is sent',
+      );
+    });
+
     test('a workspace’s request can be declined, which leaves the key as it is', async function (assert) {
       let declined = false;
       let request = {
@@ -687,6 +809,7 @@ module('Integration | key pages', function (hooks) {
           reason: 'visitors-wanted',
           operations: [`${REALM}weather#Weather.alerts`],
           declinedAt: null as string | null,
+          readAt: '2026-11-01T12:05:00.000Z',
           createdAt: '2026-11-01T12:00:00.000Z',
         },
       };
@@ -876,7 +999,12 @@ module('Integration | key pages', function (hooks) {
         requests
           .filter((r) => r.path !== '_secure-session')
           .map((r) => `${r.method} ${r.path}`),
-        ['GET _user-keys', 'GET _key-bindings', 'GET _key-policy-notices'],
+        [
+          'GET _user-keys',
+          'GET _key-bindings',
+          'GET _key-policy-notices',
+          'GET _key-limit-notices',
+        ],
         'the page asks nothing per key',
       );
     });
@@ -1315,6 +1443,74 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-keys-error]');
       assert.dom('[data-test-key-delete-confirm]').doesNotExist();
       assert.false(requests.some((r) => r.method === 'DELETE'));
+    });
+
+    test('a share no call is approved for says so, and Approve for a card sets it up for one of the workspace’s cards', async function (assert) {
+      serve({
+        'GET _user-keys': () =>
+          json(
+            200,
+            keyResources([
+              KEYS[0]!,
+              {
+                ...KEYS[1]!,
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team',
+                    shares: [
+                      {
+                        id: 'share-maps',
+                        label: 'Maps',
+                        state: 'active',
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ]),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await waitFor('[data-test-key-row="Weather service"]');
+      let weather = '[data-test-key-row="Weather service"]';
+      let team = `${weather} [data-test-key-shared-into-workspace="${REALM}"]`;
+      assert
+        .dom(`${team} [data-test-key-share-unapproved="share-team-1"]`)
+        .hasText(
+          '“Weather” isn’t approved for any calls yet Approve for a card…',
+          'one of a workspace’s several shares is named by its label',
+        );
+      assert
+        .dom(`${team} [data-test-key-share-unapproved="share-team-2"]`)
+        .doesNotExist('a suspended share is said to be suspended instead');
+      assert
+        .dom(`${weather} [data-test-key-share-unapproved="share-dash"]`)
+        .doesNotExist('a share approved for calls says nothing more');
+      assert
+        .dom(`${team} [data-test-key-share-approve="share-team-1"]`)
+        .hasAria('label', 'Approve for a card: “Weather” in Team');
+      assert
+        .dom(
+          '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"]',
+        )
+        .hasText(
+          'Not approved for any calls yet Approve for a card…',
+          'a workspace’s only share needs no label',
+        );
+
+      await click(`${team} [data-test-key-share-approve="share-team-1"]`);
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/keys/key-1/use#${new URLSearchParams({
+            realm: REALM,
+            share: 'share-team-1',
+          })}`,
+        },
+      ]);
     });
 
     test('Share on a key goes to the share page for that key', async function (assert) {

@@ -10,7 +10,7 @@ pnpm --dir="${SCRIPT_DIR}/../../../secure-origin" build
 "${SCRIPT_DIR}/prepare-test-pg.sh"
 trap '"${SCRIPT_DIR}/stop-test-pg.sh" >/dev/null 2>&1 || true' EXIT INT TERM
 
-BASE_LOG_LEVELS="*=error,prerenderer-chrome=none,pg-adapter=warn,realm:requests=warn"
+BASE_LOG_LEVELS="*=error,prerenderer-chrome=none,pg-adapter=warn,realm:requests=warn,prerender-html-runner=warn"
 EXTRA_LOG_LEVELS="${LOG_LEVELS-}"
 if [ -n "$EXTRA_LOG_LEVELS" ]; then
   EFFECTIVE_LOG_LEVELS="${BASE_LOG_LEVELS},${EXTRA_LOG_LEVELS}"

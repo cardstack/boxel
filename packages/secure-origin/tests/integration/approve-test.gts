@@ -451,6 +451,9 @@ module('Integration | approve pages', function (hooks) {
       assert
         .dom('[data-test-approve-key="Another token"] input')
         .isChecked('the key the CLI named starts chosen');
+      assert
+        .dom('[data-test-radio-choice="pipelines"] input')
+        .isChecked('without --interactive the CLI approves for pipelines only');
       assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
 
@@ -487,6 +490,21 @@ module('Integration | approve pages', function (hooks) {
     } finally {
       HTMLFormElement.prototype.submit = submit;
     }
+  });
+
+  test('opened by the CLI with --interactive, the choice starts on interactive use', async function (assert) {
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        operation: 'listPRs',
+        interactive: '1',
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
   });
 
   module('opened by the CLI, ended before approving', function (hooks) {
@@ -877,7 +895,7 @@ module('Integration | approve pages', function (hooks) {
     assert.strictEqual(fragment.get('then'), 'approve');
   });
 
-  test("the key page lists each key's grants with the approvals that use them, and removing one lists those first", async function (assert) {
+  test("the key page lists each key's grants with the approvals that use them, collapsed to a count, and removing one lists those first", async function (assert) {
     let removed: string[] = [];
     let listed = 0;
     serve({
@@ -901,6 +919,12 @@ module('Integration | approve pages', function (hooks) {
                         {
                           id: 'grant-1',
                           destination: GRAPHQL,
+                          state: 'active',
+                          approvedAt: '2026-10-01T12:00:00.000Z',
+                        },
+                        {
+                          id: 'grant-2',
+                          destination: UPLOADS,
                           state: 'active',
                           approvedAt: '2026-10-01T12:00:00.000Z',
                         },
@@ -950,20 +974,56 @@ module('Integration | approve pages', function (hooks) {
     await render(<template><KeyPage /></template>);
     await waitFor('[data-test-key-grants]');
 
+    let graphql = '[data-test-key-grant="api.github.com/graphql/"]';
+    let count = `${graphql} [data-test-key-grant-count]`;
+    let list = `${graphql} [data-test-key-grant-bindings]`;
+    assert.dom(count).hasText('2 approvals');
     assert
-      .dom(
-        '[data-test-key-grant="api.github.com/graphql/"] [data-test-key-grant-count]',
-      )
-      .hasText('2 approvals');
+      .dom(count)
+      .hasAttribute('aria-expanded', 'false', 'the approvals start collapsed');
+    let describedBy = document
+      .querySelector(count)
+      ?.getAttribute('aria-describedby');
+    assert
+      .dom(`#${describedBy}`)
+      .hasText('api.github.com/graphql/', 'the count names its grant');
+    assert.dom(list).isNotVisible();
+
+    let uploadsCount =
+      '[data-test-key-grant="uploads.github.com/"] [data-test-key-grant-count]';
+    assert.dom(uploadsCount).hasText('0 approvals');
+    assert
+      .dom(uploadsCount)
+      .doesNotHaveAttribute('aria-expanded', 'a grant with none has no toggle');
+
+    await click(count);
+    assert.dom(count).hasAttribute('aria-expanded', 'true');
+    assert.dom(list).isVisible();
     assert
       .dom('[data-test-key-grant-binding="listPRs"]')
       .hasText(
         'List your open pull requests on Pull request inbox in realm-server.test/someone/workspace/',
       );
-    await click('[data-test-key-grant-remove]');
+
+    await click(count);
+    assert.dom(list).isNotVisible();
+
+    await click(`${graphql} [data-test-key-grant-remove]`);
     assert
       .dom('[data-test-key-grant-remove-panel]')
       .includesText('revokes the approvals above');
+    assert.dom(list).isVisible('the approvals the removal revokes are listed');
+    assert
+      .dom(count)
+      .isDisabled('the list stays open while the removal is confirmed');
+
+    await click('[data-test-key-grant-remove-cancel]');
+    assert
+      .dom(list)
+      .isNotVisible('cancelling leaves the list as the user left it');
+    assert.dom(count).isNotDisabled();
+
+    await click(`${graphql} [data-test-key-grant-remove]`);
     assert.deepEqual(removed, [], 'nothing is removed before it is confirmed');
     await click('[data-test-key-grant-remove-confirm]');
     await settled();
@@ -1088,7 +1148,7 @@ module('Integration | approve pages', function (hooks) {
     };
   }
 
-  test('requests start approved for pipelines only; choosing interactive use shows what it allows, once, and approves it', async function (assert) {
+  test('requests start on interactive use, offered first, which shows what it allows, once, and approves it', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
@@ -1121,9 +1181,19 @@ module('Integration | approve pages', function (hooks) {
         .attributes.interactive,
       'the batch also answers what is approved for pipelines only',
     );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-radio-choice]')].map((choice) =>
+        choice.getAttribute('data-test-radio-choice'),
+      ),
+      ['interactive', 'pipelines'],
+      'interactive use is the first choice',
+    );
     assert
-      .dom('[data-test-radio-choice="pipelines"] input')
-      .isChecked('pipelines only is where the choice starts');
+      .dom('[data-test-radio-choice="interactive"] input')
+      .isChecked('interactive use is where the choice starts');
+    assert.dom('[data-test-approve-operation="listReviews"]').exists();
+
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listReviews"]')
       .doesNotExist('one approved for pipelines already needs nothing more');
@@ -1155,6 +1225,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="pipelines"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -1198,6 +1269,18 @@ module('Integration | approve pages', function (hooks) {
       })),
     };
   }
+  // An operation whose request changed since it was last approved, and that
+  // approval allowed pipelines only.
+  function changedPipelinesOnly(name: string, label: string) {
+    let base = changedInteractive(name, label);
+    return {
+      ...base,
+      slots: base.slots.map((s) => ({
+        ...s,
+        approved: { ...s.approved, interactive: false },
+      })),
+    };
+  }
 
   async function openWith(operations: unknown[]) {
     serve({
@@ -1229,15 +1312,30 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
   });
 
-  test('one request approved for interactive use among new ones starts on pipelines only', async function (assert) {
+  test('a batch whose every request was last approved for pipelines only starts on it, so approving again keeps it', async function (assert) {
+    await openWith([
+      changedPipelinesOnly('listPRs', 'List PRs'),
+      changedPipelinesOnly('listReviews', 'List reviews'),
+    ]);
+    assert.dom('[data-test-radio-choice="pipelines"] input').isChecked();
+  });
+
+  test('new requests among ones last approved for pipelines only start on interactive use', async function (assert) {
+    await openWith([
+      changedPipelinesOnly('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+  });
+
+  test('one request approved for interactive use among new ones starts on interactive use', async function (assert) {
     await openWith([
       changedInteractive('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
       pipelinesOnly('listComments', 'List comments'),
     ]);
-    assert
-      .dom('[data-test-radio-choice="pipelines"] input')
-      .isChecked('the new request is not widened by default');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listComments"]')
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
@@ -1258,6 +1356,7 @@ module('Integration | approve pages', function (hooks) {
         '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
       )
       .doesNotExist();
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-demoted]')
       .includesText('stops the calls marked “Approved for open cards”');
@@ -1267,6 +1366,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-demoted]')
       .doesNotExist('an unticked call is not approved, so keeps its use');
     await click('[data-test-approve-tick="listPRs"]');
+    assert.dom('[data-test-approve-demoted]').exists();
     await click('[data-test-radio-choice="interactive"] input');
     assert
       .dom('[data-test-approve-demoted]')
@@ -1617,6 +1717,198 @@ module('Integration | approve pages', function (hooks) {
     });
   }
 
+  test('opened for one of the user’s shares, the approve page starts on that share', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: {} });
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        let answer = await served(request);
+        let attributes = (answer.body as any).data.attributes;
+        attributes.shares = [
+          ...attributes.shares,
+          {
+            ...attributes.shares[0],
+            id: 'share-other',
+            label: 'Other GitHub',
+          },
+        ];
+        // The card's own-key call beside its shared ones.
+        attributes.groups[0].operations.push(
+          operation('listPRs', 'List your open pull requests'),
+        );
+        attributes.keys = [
+          {
+            id: 'key-gh',
+            name: 'GitHub token',
+            kind: 'static',
+            state: 'active',
+            covers: [GRAPHQL],
+          },
+        ];
+        return answer;
+      },
+    });
+    visitShell(
+      `approve#${new URLSearchParams({ module: MODULE, name: 'Inbox', realm: REALM, share: 'share-other', then: 'keys' })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-key="Other GitHub"] input')
+      .isChecked('the share the page was opened for');
+    assert.dom('[data-test-approve-key="Team GitHub"] input').isNotChecked();
+    assert
+      .dom('[data-test-approve-tick="listTeamIssues"]')
+      .isChecked('the calls that send the workspace’s key start ticked');
+    assert.dom('[data-test-approve-tick="listTeamPRs"]').isChecked();
+    assert
+      .dom('[data-test-approve-tick="listPRs"]')
+      .isNotChecked('the call that sends the user’s own key does not');
+  });
+
+  test('a key’s share is set up for a card from the key’s use page, opened for that share', async function (assert) {
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-gh',
+              attributes: {
+                name: 'GitHub token',
+                kind: 'static',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team Workspace',
+                    shares: [
+                      {
+                        id: 'share-team',
+                        label: 'Team GitHub',
+                        state: 'active',
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () => json(200, { data: [] }),
+      'POST _secure-window/cards': () =>
+        json(200, {
+          data: [
+            {
+              type: 'secure-window-card',
+              id: `${MODULE}#Inbox`,
+              attributes: {
+                module: MODULE,
+                name: 'Inbox',
+                displayName: 'PR Inbox',
+              },
+            },
+          ],
+        }),
+    });
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-team' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-use-key-card]');
+
+    assert
+      .dom('[data-test-use-key]')
+      .includesText('the key you shared as “Team GitHub”');
+    assert
+      .dom('[data-test-use-key-share-realm]')
+      .includesText('Team Workspace', 'the workspace is the share’s');
+    assert.dom('[data-test-use-key-realm]').doesNotExist('nothing to choose');
+    assert.deepEqual(
+      requests.find((r) => r.path === '_secure-window/cards')?.body.data
+        .attributes,
+      { realm: REALM, slot: 'apiKey' },
+      'the cards that send the workspace’s key',
+    );
+    await click('[data-test-use-key-next]');
+    let url = new URL(navigations[0]!.url!, window.location.href);
+    assert.true(url.pathname.endsWith('/approve'));
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(url.hash.slice(1))),
+      {
+        module: MODULE,
+        name: 'Inbox',
+        realm: REALM,
+        share: 'share-team',
+        then: 'keys',
+      },
+      'the approve page is opened for the card type, with the share',
+    );
+  });
+
+  test('the key’s use page opened for a share the key doesn’t have, or a suspended one, says so', async function (assert) {
+    let state = 'active';
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-gh',
+              attributes: {
+                name: 'GitHub token',
+                kind: 'static',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team Workspace',
+                    shares: [
+                      {
+                        id: 'share-team',
+                        label: 'Team GitHub',
+                        state,
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () => json(200, { data: [] }),
+    });
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-gone' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-keys-load-failed]');
+    assert
+      .dom('[data-test-error-message]')
+      .hasText('This key isn’t shared there. The share may have been removed.');
+    assert.dom('[data-test-keys-retry]').doesNotExist();
+
+    state = 'suspended';
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-team' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-keys-load-failed]');
+    assert
+      .dom('[data-test-error-message]')
+      .hasText('This shared key is suspended, so no card can use it.');
+  });
+
   test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows them says so, with the key’s anonymous cap', async function (assert) {
     serveShareBatch({
       opensToAnonymous: true,
@@ -1629,6 +1921,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .doesNotExist('a pipeline serves nobody who opens the card');

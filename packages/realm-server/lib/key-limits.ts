@@ -22,8 +22,12 @@ import {
   keyLimitDefaults,
   limitsOf,
   MAX_KEY_LIMIT,
+  limitsViewOf,
   type KeyLimits,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
+import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type { SendEvent } from '@cardstack/runtime-common/send-event';
 import { refusedFrom } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
@@ -51,6 +55,9 @@ import { UserKeyError } from './user-keys.ts';
 // - **Notices.** When a period's use reaches the high-water mark, and when it
 //   reaches the budget, the key's owner and, for a share, the realm's direct
 //   writers each get one notice for that period (`key_limit_notices`).
+//   Each recipient a notice was recorded for is sent
+//   `KEY_NOTICES_UPDATED_EVENT_TYPE`, so a session they have open shows that
+//   one is waiting. The call doesn't wait for those sends.
 // - **Every refusal is logged** on the `boxel:key-limits` channel with the
 //   share or key, the caller and the limit that refused it.
 // - **Callers who aren't signed in**, served by a share whose key allows
@@ -130,6 +137,24 @@ export function setKeyLimitSink(
   next: ((event: KeyLimitEvent) => void) | undefined,
 ): void {
   sink = next;
+}
+
+// Tells a recipient a limit notice was recorded for them. The realm server
+// installs one at startup; without one, a notice is recorded and its recipient
+// sees it the next time their session asks.
+let noticeSender: SendEvent | undefined;
+
+export function setKeyLimitNoticeSender(next: SendEvent | undefined): void {
+  noticeSender = next;
+}
+
+// The sends under way. A call that crosses a threshold doesn't wait for them,
+// so a slow homeserver never holds up its vendor request.
+let pendingSends = new Set<Promise<void>>();
+
+// Waits for every send started so far to settle. For tests.
+export async function settleKeyLimitNoticeSends(): Promise<void> {
+  await Promise.allSettled([...pendingSends]);
 }
 
 let channelLog: ReturnType<typeof logger> | undefined;
@@ -647,6 +672,9 @@ async function noticeThresholds(
     return;
   }
   let { subject } = limited;
+  // Filled as each notice is recorded, so a recipient whose notice was
+  // recorded before a later one failed is still told.
+  let told = new Set<string>();
   try {
     let recipients = new Set([limited.owner]);
     if (limited.realmURL) {
@@ -668,7 +696,7 @@ async function noticeThresholds(
         used,
       });
       for (let recipient of recipients) {
-        await query(dbAdapter, [
+        let recorded = await query(dbAdapter, [
           `INSERT INTO key_limit_notices (share_id, key_id, realm_url, label, recipient, owner, period, period_ends_at, threshold, budget) VALUES (`,
           param(subject.kind === 'share' ? subject.id : null),
           `, `,
@@ -689,14 +717,36 @@ async function noticeThresholds(
           param(threshold),
           `, `,
           param(limit),
-          `) ON CONFLICT DO NOTHING`,
+          `) ON CONFLICT DO NOTHING RETURNING id`,
         ]);
+        if (recorded.length > 0) {
+          told.add(recipient);
+        }
       }
     }
   } catch (error) {
     log.warn(
       `could not record the ${thresholds.join(' and ')} notice for ${subject.kind} ${subject.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+  let send = noticeSender;
+  if (!send) {
+    return;
+  }
+  for (let recipient of told) {
+    let sending = (async () => {
+      try {
+        await send(recipient, KEY_NOTICES_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        // The notice is recorded either way; the recipient sees it the next
+        // time their session asks.
+        log.warn(
+          `could not tell ${recipient} a key limit notice is waiting: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    })();
+    pendingSends.add(sending);
+    void sending.finally(() => pendingSends.delete(sending));
   }
 }
 
@@ -777,7 +827,7 @@ export async function setShareLimits(
     shareId: string;
     changes: KeyLimitChanges;
   },
-): Promise<KeyLimits> {
+): Promise<KeyLimitsView> {
   let noSuchShare = () => new UserKeyError(404, 'no such share');
   if (!UUID.test(shareId)) {
     throw noSuchShare();
@@ -792,7 +842,7 @@ export async function setShareLimits(
     ` RETURNING ${KEY_LIMIT_COLUMNS}`,
   ] as Parameters<typeof query>[1]);
   if (row) {
-    return limitsOf(row);
+    return limitsViewOf(row);
   }
   let [share] = await query(dbAdapter, [
     `SELECT realm_url FROM key_shares WHERE id = `,
@@ -823,7 +873,7 @@ export async function setUserKeyLimits(
     keyId: string;
     changes: KeyLimitChanges;
   },
-): Promise<KeyLimits> {
+): Promise<KeyLimitsView> {
   if (!UUID.test(keyId)) {
     throw new UserKeyError(404, 'no such key');
   }
@@ -839,5 +889,5 @@ export async function setUserKeyLimits(
   if (!row) {
     throw new UserKeyError(404, 'no such key');
   }
-  return limitsOf(row);
+  return limitsViewOf(row);
 }

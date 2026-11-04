@@ -43,7 +43,7 @@ module('Integration | choreo', function (hooks) {
           <div style='padding:20px'>
             {{#if this.show}}
               <div
-                id='leaver'
+                data-test-id='leaver'
                 style='width:100px;height:40px;background:#0af'
                 {{motion id='leaver' role='card'}}
               ></div>
@@ -56,10 +56,10 @@ module('Integration | choreo', function (hooks) {
     let app: App | undefined;
     await render(<template><App /></template>);
     await nextFrame();
-    const before = find('#leaver')!.getBoundingClientRect();
+    const before = find('[data-test-id="leaver"]')!.getBoundingClientRect();
     app!.show = false;
     await settled();
-    const el = find('#leaver') as HTMLElement | null;
+    const el = find('[data-test-id-memory="leaver"]') as HTMLElement | null;
     assert.ok(el, 'the removed element is still in the document');
     assert.ok(
       el!.closest('[data-choreo-orphans]'),
@@ -71,11 +71,14 @@ module('Integration | choreo', function (hooks) {
     assert.strictEqual(Math.round(after.top), Math.round(before.top));
     assert.strictEqual(Math.round(after.width), Math.round(before.width));
     await sleep(60);
-    assert.ok(find('#leaver'), 'still there mid-row');
-    assert.ok(opacityOf('#leaver') < 1, 'and fading');
+    assert.ok(find('[data-test-id-memory="leaver"]'), 'still there mid-row');
+    assert.ok(opacityOf('[data-test-id-memory="leaver"]') < 1, 'and fading');
     await sleep(160);
     await nextFrame();
-    assert.notOk(find('#leaver'), 'gone when its row ends');
+    assert.notOk(
+      find('[data-test-id-memory="leaver"]'),
+      'gone when its row ends',
+    );
   });
 
   test('a removed participant no step names goes at once', async function (assert) {
@@ -391,7 +394,7 @@ module('Integration | choreo', function (hooks) {
         <Choreo as |c|>
           {{#each (array this.gen) key='@identity' as |g|}}
             <div
-              id='card-{{g}}'
+              data-test-id='card-{{g}}'
               style='width:60px;height:30px'
               {{motion id='card' role='card'}}
             ></div>
@@ -408,14 +411,20 @@ module('Integration | choreo', function (hooks) {
     assert.ok(seen, 'the new element is a kept sprite');
     assert.strictEqual(seen!.type, 'kept');
     assert.ok(seen!.counterpart, 'with a counterpart');
-    assert.strictEqual(seen!.counterpart!.element.id, 'card-0');
+    assert.strictEqual(
+      seen!.counterpart!.element.getAttribute('data-test-id-memory'),
+      'card-0',
+    );
     assert.ok(
       seen!.counterpart!.element.closest('[data-choreo-orphans]'),
       'the old element is orphaned for the row',
     );
     await sleep(140);
     await nextFrame();
-    assert.notOk(find('#card-0'), 'and dropped after it');
+    assert.notOk(
+      find('[data-test-id-memory="card-0"]'),
+      'and dropped after it',
+    );
   });
 
   test('received / counterpart select only the two halves of a match, never an ordinary pass', async function (assert) {
@@ -448,7 +457,7 @@ module('Integration | choreo', function (hooks) {
         <Choreo as |c|>
           {{#each (array this.gen) key='@identity' as |g|}}
             <div
-              id='card-{{g}}'
+              data-test-id='card-{{g}}'
               style='{{this.width}};height:30px'
               {{motion id='card' role='card'}}
             ></div>
@@ -480,10 +489,16 @@ module('Integration | choreo', function (hooks) {
     app!.gen = 1;
     await settled();
     assert.strictEqual(seenReceived.length, 1, 'the arriving element');
-    assert.strictEqual(seenReceived[0]!.element.id, 'card-1');
+    assert.strictEqual(
+      seenReceived[0]!.element.getAttribute('data-test-id'),
+      'card-1',
+    );
     assert.strictEqual(seenReceived[0]!.type, 'kept', 'is a kept sprite');
     assert.strictEqual(seenCounterpart.length, 1, 'the claimed leaver');
-    assert.strictEqual(seenCounterpart[0]!.element.id, 'card-0');
+    assert.strictEqual(
+      seenCounterpart[0]!.element.getAttribute('data-test-id-memory'),
+      'card-0',
+    );
     assert.strictEqual(
       seenCounterpart[0],
       seenReceived[0]!.counterpart,
@@ -491,7 +506,10 @@ module('Integration | choreo', function (hooks) {
     );
     await sleep(140);
     await nextFrame();
-    assert.notOk(find('#card-0'), 'the counterpart is released with its row');
+    assert.notOk(
+      find('[data-test-id-memory="card-0"]'),
+      'the counterpart is released with its row',
+    );
   });
 
   test('an interrupted Move hands its borrowed size back, so the next pass measures a true layout', async function (assert) {
@@ -634,9 +652,12 @@ module('Integration | choreo', function (hooks) {
         <Choreo as |c|>
           <div style={{this.pad}}>
             {{#if this.show}}
-              <div id='leaver' {{motion id='leaver' role='card'}}></div>
+              <div
+                data-test-id='leaver'
+                {{motion id='leaver' role='card'}}
+              ></div>
             {{/if}}
-            <div id='stay' {{motion id='stay' role='stay'}}></div>
+            <div data-test-id='stay' {{motion id='stay' role='stay'}}></div>
           </div>
           <c.Parallel>
             <c.Tween
@@ -655,17 +676,29 @@ module('Integration | choreo', function (hooks) {
     app!.show = false;
     await settled();
     await sleep(50);
-    assert.ok(find('#leaver'), 'orphan in flight');
-    assert.strictEqual((find('#stay') as HTMLElement).style.zIndex, '4');
+    assert.ok(find('[data-test-id-memory="leaver"]'), 'orphan in flight');
+    assert.strictEqual(
+      (find('[data-test-id="stay"]') as HTMLElement).style.zIndex,
+      '4',
+    );
     // a second pass: the orphan is still a removed sprite and is named again, so it keeps going
     app!.n = 1;
     await settled();
     await sleep(20);
-    assert.ok(find('#leaver'), 'renamed by the new run, so it stays');
+    assert.ok(
+      find('[data-test-id-memory="leaver"]'),
+      'renamed by the new run, so it stays',
+    );
     await sleep(500);
     await nextFrame();
-    assert.notOk(find('#leaver'), 'released by the new run');
-    assert.strictEqual((find('#stay') as HTMLElement).style.zIndex, '');
+    assert.notOk(
+      find('[data-test-id-memory="leaver"]'),
+      'released by the new run',
+    );
+    assert.strictEqual(
+      (find('[data-test-id="stay"]') as HTMLElement).style.zIndex,
+      '',
+    );
   });
 
   /**
@@ -762,7 +795,7 @@ module('Integration | choreo', function (hooks) {
       <template>
         {{! the bin lives OUTSIDE the region, as the chrome would }}
         <div
-          id='bin'
+          data-test-id='bin'
           style='position:absolute;left:300px;top:220px;width:40px;height:40px'
           {{beacon 'trash'}}
         ></div>
@@ -770,7 +803,7 @@ module('Integration | choreo', function (hooks) {
           <div style='padding:20px'>
             {{#if this.show}}
               <div
-                id='row'
+                data-test-id='row'
                 style='width:100px;height:30px;background:#0af'
                 {{motion id='row' role='row'}}
               ></div>
@@ -788,17 +821,23 @@ module('Integration | choreo', function (hooks) {
     let app: App | undefined;
     await render(<template><App /></template>);
     await nextFrame();
-    const binBox = (find('#bin') as HTMLElement).getBoundingClientRect();
-    const startBox = (find('#row') as HTMLElement).getBoundingClientRect();
+    const binBox = (
+      find('[data-test-id="bin"]') as HTMLElement
+    ).getBoundingClientRect();
+    const startBox = (
+      find('[data-test-id="row"]') as HTMLElement
+    ).getBoundingClientRect();
 
     app!.show = false;
     await settled();
     await sleep(60);
-    const row = find('#row') as HTMLElement | null;
+    const row = find('[data-test-id-memory="row"]') as HTMLElement | null;
     assert.ok(row, 'the leaver is orphaned so it can finish the flight');
 
     await sleep(200);
-    const mid = (find('#row') as HTMLElement).getBoundingClientRect();
+    const mid = (
+      find('[data-test-id-memory="row"]') as HTMLElement
+    ).getBoundingClientRect();
     assert.ok(
       mid.left > startBox.left + 20,
       `travelling toward the bin (${Math.round(startBox.left)} -> ${Math.round(mid.left)}, bin at ${Math.round(binBox.left)})`,
@@ -806,14 +845,18 @@ module('Integration | choreo', function (hooks) {
     assert.ok(
       Math.abs(
         binBox.width -
-          (find('#bin') as HTMLElement).getBoundingClientRect().width,
+          (find('[data-test-id="bin"]') as HTMLElement).getBoundingClientRect()
+            .width,
       ) < 0.5,
       'the beacon itself never moved or stretched',
     );
 
     await sleep(500);
     await nextFrame();
-    assert.notOk(find('#row'), 'and it is released when the row ends');
+    assert.notOk(
+      find('[data-test-id-memory="row"]'),
+      'and it is released when the row ends',
+    );
   });
 
   test('a beacon nothing claimed leaves the move alone', async function (assert) {

@@ -1,4 +1,4 @@
-import { logger } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common/log';
 import * as Sentry from '@sentry/node';
 import { MatrixError } from 'matrix-js-sdk';
 import type { MatrixClient, MatrixEvent, RoomMember } from 'matrix-js-sdk';

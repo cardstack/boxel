@@ -384,7 +384,9 @@ order, and maps each way a slot falls short to an answer: no binding →
 `needs-connect`, or `needs-approval` where one of the caller's grants already
 covers the destination; a changed fingerprint → `needs-reapproval`; not
 `interactive` → `needs-approval`; a share slot short in any way → `needs-admin`
-to anyone but the share key's owner; a grant the vendor rejected, with no
+to anyone but the share key's owner, except that a share slot with no binding
+is `needs-approval` to a caller with an active share of their own in the realm
+(the shares the approve page offers them for it); a grant the vendor rejected, with no
 probe due → `credential-rejected` (to everyone, since the call says the
 same); nobody signed in → `needs-sign-in`, unless every slot is a share's
 and the realm admitted them from an address, when a share whose key doesn't allow
@@ -394,6 +396,25 @@ opens no key and writes nothing: a changed fingerprint is reported, not moved
 to `needs-reapproval`, and no notice is recorded. **A check added to
 `checkedBindings` or `fillSlots` belongs in `key-readiness.ts` too**, or
 readiness will say `ready` for a call that is refused.
+
+## Published realms
+
+A published realm has no bindings of its own. Its calls are filled from the
+bindings of the realm it was published from: `key_bindings.realm_url`,
+`definition_url` and `instance_url` hold the source's URLs, and the published
+realm's sender rebases its lookup onto them (`publishedFrom` in
+`lib/outbound/call-api-sender.ts`; see the `key-shares` skill). Its fill passes
+`publishedRealmURL`, which changes three things:
+
+- A fingerprint that doesn't match refuses the call `binding-needs-reapproval`
+  without moving the binding: the published copy runs the source's code as of
+  its last publish, and an older copy mustn't undo an approval the source still
+  uses. Republishing fixes it; nothing on the published realm can.
+- A refusal names the published realm, never the source.
+- A refused fill is recorded under the published realm.
+
+To diagnose a refusal on a published site, query the bindings by the
+source's URL (`realm_registry.source_url` of the published row).
 
 ## What else changes bindings
 
@@ -462,9 +483,12 @@ SELECT created_at, owner FROM key_binding_notices WHERE binding_id = '<id>';
   interactive use; readiness answers `needs-approval`, whose button opens the
   approve page.
 
-The binding tables hold no secret, but like the keys tables they are withheld
-from `readonly_role` and excluded from the SQLite schema dump; query them as
-the application role.
+The binding tables hold no secret, and all three are excluded from the SQLite
+schema dump. `readonly_role` (dashboards and read-only database access, such
+as `claude_readonly_user` in staging and production) can read `key_bindings`,
+so which operations a realm has bound, to which key or share, can be checked
+while triaging. `key_binding_approvals` and `key_binding_notices` are withheld
+from it, like the keys tables; query those as the application role.
 
 ## Tests
 

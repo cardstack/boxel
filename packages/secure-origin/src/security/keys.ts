@@ -166,10 +166,18 @@ export interface UserKey {
 // A realm that one of the user's keys is shared with, along with the key's
 // shares there. `name` is null when the user can no longer read the realm, or
 // before its name is indexed: the address is then all there is to show.
+// `approvedCalls` counts the bindings that send a share (one per slot an
+// approval fills, and per card for an operation approved per card); none
+// means no card there calls with it yet.
 export interface SharedWorkspace {
   url: string;
   name: string | null;
-  shares: { id: string; label: string; state: 'active' | 'suspended' }[];
+  shares: {
+    id: string;
+    label: string;
+    state: 'active' | 'suspended';
+    approvedCalls: number;
+  }[];
 }
 
 // A key as the key listing gives it, with where it is used: the services its
@@ -199,6 +207,9 @@ export interface KeyShare {
   keyId?: string | null;
   state: 'active' | 'suspended';
   suspensionReason: string | null;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per approval.
+  operations?: { operation: string }[];
 }
 
 type Config = ReturnType<typeof import('./session.js').readConfig>;
@@ -434,6 +445,9 @@ export interface KeyPolicyNotice {
   operations: string[];
   // When the owner declined a `visitors-wanted` request; null otherwise.
   declinedAt: string | null;
+  // When this page first listed it; null while it is unread, which the app
+  // shows as a badge on the user's avatar.
+  readAt: string | null;
   createdAt: string;
 }
 
@@ -457,6 +471,64 @@ export async function declinePolicyNotice(
     `_key-policy-notices/${encodeURIComponent(noticeId)}/decline`,
     { method: 'POST' },
   );
+}
+
+// Marks the notices this page has shown read, which clears the app's badge
+// for them. Only the secure origin's own session may.
+export async function markPolicyNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-policy-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-policy-notice', id })),
+    },
+  });
+}
+
+// A notice the user is owed because a share's or personal key's use reached
+// a threshold this UTC day or month: `high-water` at the share of the budget
+// the platform warns at, `budget` once the budget is used up and calls are
+// refused until `periodEndsAt`. It goes to the key's owner (`yours`) and, for
+// a share, to each direct writer of its realm. A share's notice names its
+// realm; a key's names neither share nor realm. Listed until its period ends.
+export interface KeyLimitNotice {
+  id: string;
+  share: string | null;
+  key: string | null;
+  realm: string | null;
+  label: string;
+  yours: boolean;
+  period: 'day' | 'month';
+  periodEndsAt: string;
+  threshold: 'high-water' | 'budget';
+  budget: number;
+  // When this page first listed it; null while it is unread, which the app
+  // counts in the badge on the user's avatar.
+  readAt: string | null;
+  createdAt: string;
+}
+
+// The user's limit notices whose period hasn't ended, newest first.
+export async function limitNotices(config: Config): Promise<KeyLimitNotice[]> {
+  return resources<KeyLimitNotice>(
+    await authorizedRequest(config, '_key-limit-notices', { method: 'GET' }),
+  );
+}
+
+// Marks the limit notices this page has shown read, which takes them out of
+// the app's badge. Only the secure origin's own session may.
+export async function markLimitNoticesRead(
+  config: Config,
+  noticeIds: string[],
+): Promise<void> {
+  await authorizedRequest(config, '_key-limit-notices/read', {
+    method: 'POST',
+    body: {
+      data: noticeIds.map((id) => ({ type: 'key-limit-notice', id })),
+    },
+  });
 }
 
 // The shares holding one of the user's keys: those deleting it suspends.
@@ -889,13 +961,21 @@ export async function readableRealms(
   );
 }
 
-// The card definitions used in a realm that send a key in a request, by name.
+// The card definitions used in a realm that send the user's own key in a
+// request, by name, or with `slot: 'apiKey'` those that send the realm's key,
+// which a share there is approved for.
 export async function realmCardsWithRequests(
   config: Config,
   realm: string,
+  slot: 'userKey' | 'apiKey' = 'userKey',
 ): Promise<{ module: string; name: string; displayName: string }[]> {
   let json = await authorizedRequest(config, '_secure-window/cards', {
-    body: { data: { type: 'secure-window-cards', attributes: { realm } } },
+    body: {
+      data: {
+        type: 'secure-window-cards',
+        attributes: slot === 'userKey' ? { realm } : { realm, slot },
+      },
+    },
   });
   return (json.data ?? []).map(
     ({
@@ -906,25 +986,36 @@ export async function realmCardsWithRequests(
   );
 }
 
+export type KeyLimitName =
+  | 'rateBurst'
+  | 'rateRefillPerMinute'
+  | 'dailyBudget'
+  | 'monthlyBudget';
+
 // How much of a key anyone may spend: a burst of calls per caller, refilled
 // at a steady rate, and the calls the key or share serves in one UTC day and
 // month across every caller. The realm server fills in the platform's default
-// for any its owner left unset.
-export interface KeyLimits {
-  rateBurst: number;
-  rateRefillPerMinute: number;
-  dailyBudget: number;
-  monthlyBudget: number;
-}
+// for any its owner left unset; `set` holds each as the owner set it, null
+// where they didn't, and `defaults` what an unset one takes. An unset monthly
+// budget is `monthlyBudgetDays` of the daily budget in force, so it follows
+// the daily budget; one the owner set stays put when the daily budget changes.
+export type KeyLimits = Record<KeyLimitName, number> & {
+  set: Record<KeyLimitName, number | null>;
+  defaults: {
+    rateBurst: number;
+    rateRefillPerMinute: number;
+    dailyBudget: number;
+    monthlyBudgetDays: number;
+  };
+};
 
 // A limit to change, or null to go back to the platform's default.
-export type KeyLimitChanges = Partial<Record<keyof KeyLimits, number | null>>;
+export type KeyLimitChanges = Partial<Record<KeyLimitName, number | null>>;
 
 // Where a key may be sent, as its usage lists it, and whether the service
 // there rejected it (`rejected`) or last refused a request (`lastForbiddenAt`).
 export interface UsageGrant {
   id: string;
-  host: string;
   destination: string;
   state: 'active' | 'rejected';
   rejectedAt: string | null;
@@ -958,6 +1049,9 @@ export interface KeyUsage {
     count: number;
     outcome?: 'vendor-forbidden';
   }[];
+  // For a share, where its calls this month were made: its own realm, and each
+  // site published from it (`published`). Empty for a personal key.
+  realms: { realm: string; calls: number; published?: true }[];
   grants: UsageGrant[];
   canEditLimits: boolean;
 }

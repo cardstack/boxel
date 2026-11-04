@@ -9,6 +9,7 @@ import {
   ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
+  isFileDefInstance,
   isPrefixForm,
   isRelativePath,
   isResolvedCodeRef,
@@ -30,12 +31,22 @@ import {
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
+  type BaseOperation,
+  type OperationWriteResult,
 } from '@cardstack/runtime-common';
 import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
+import { isWrite } from '@cardstack/runtime-common/card-operations';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  BATCH_MEMBER,
+  assertInstanceOperation,
+  assertPayloadSuppliesParams,
+  type OperationsBucket,
+} from '../lib/card-operation-invocation';
 import {
   recordCatalogSearch,
   type CatalogSearch,
@@ -140,7 +151,9 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
+import type * as OperationsModule from '@cardstack/base/operations';
 
 const log = logger('tools:run-realm-code');
 
@@ -150,6 +163,9 @@ const MAX_FILES = 20;
 // search found must not stop at MAX_FILES. The updates are saved in one
 // request when the script finishes, not one save each.
 const MAX_CARD_UPDATES = 200;
+// realm.operations calls in one run, each entry of a batch counted on its
+// own, so a bulk change can reach as many cards as cards.update can.
+const MAX_OPERATIONS = 200;
 const MAX_FILE_SIZE = 500_000;
 // A UTF-8 character is at most 4 bytes, so a larger body is always too large.
 const MAX_READ_BYTES = MAX_FILE_SIZE * 4;
@@ -343,8 +359,41 @@ type UiAction =
   | { action: 'openWorkspace' };
 
 // Reads one card instance as JSON data, computed fields included, with every
-// URL in it absolute.
-type ReadCard = (id: string) => Promise<LooseSingleCardDocument>;
+// URL in it absolute, or says why there is none to read.
+type ReadCard = (id: string) => Promise<CardRead>;
+
+// What reading a card found. A card whose file the realm holds without an
+// index row is `indexing` while the realm is indexing, since the pass that is
+// running may add the row, and `unindexed` while it is not, since no pass is
+// coming to add it. `error` is a card whose index row records an error;
+// `unreadable` is a read that failed for any other reason. `not-a-card` is a
+// path that names a file, such as an image, rather than a card instance.
+type CardRead =
+  | { doc: LooseSingleCardDocument }
+  | { unread: 'indexing' | 'unindexed' | 'not-found' | 'not-a-card' }
+  | { unread: 'error' | 'unreadable'; message: string };
+
+// One operation a card's type declares, named by the card it acts on.
+interface OperationEntry {
+  cardId: string;
+  operation: string;
+  payload: Record<string, unknown> | undefined;
+}
+
+// What the realm answered for one operation: a write names the card it wrote
+// and the version that card now holds, a read answers the document, and a
+// delete answers nothing.
+interface OperationAnswer {
+  id?: string;
+  version?: string;
+  indexPending?: boolean;
+  document?: Record<string, unknown>;
+}
+
+// Sends operations on cards of a realm in one `_operations` request, which
+// the realm carries out whole or not at all, and answers each in the order it
+// was given.
+type RunOperations = (entries: OperationEntry[]) => Promise<OperationAnswer[]>;
 
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
@@ -423,6 +472,11 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'cards.search': false,
   'cards.get': false,
   'cards.update': true,
+  // An operation is authorized by the realm's policy for the operation, not
+  // by write access to the workspace, so it can run where the user can only
+  // read. The realm refuses one the policy does not allow.
+  'operations.invoke': false,
+  'operations.invokeBatchOperation': false,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -532,6 +586,11 @@ class RealmFsSession {
   // `realm.index` calls this run made, in order. The realm server has started
   // each one, so a retry must not start it again.
   readonly indexActions: string[] = [];
+  // Operations the realm carried out for this run, in order, as
+  // "<operation> on <path>". They cannot be undone, so a failed run names them
+  // and a retry does not run them again.
+  readonly operationsRun: string[] = [];
+  private operationCount = 0;
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -607,6 +666,7 @@ class RealmFsSession {
     private search: SearchCards,
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
+    private runOperations: RunOperations,
     private searchEntries: SearchEntriesFn,
     // The realms a search of `realms` is sent to, none when the room's feature
     // gate keeps out every realm it would reach. Refuses a realm identifier
@@ -1141,7 +1201,11 @@ class RealmFsSession {
       // model, and not an instance.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
-        let { data } = await this.readCard(id);
+        let read = await this.readCard(id);
+        if (!('doc' in read)) {
+          throw new Error(this.cardReadError(id, read));
+        }
+        let { data } = read.doc;
         // The same shape as a card `realm.cards.search` finds: the type, and
         // each link keyed by its field path (`field.0`, `field.1`, … for a
         // `linksToMany` field). Every URL is already absolute.
@@ -1163,6 +1227,33 @@ class RealmFsSession {
       }
       case 'cards.update':
         return await this.updateCard(args[0], args[1]);
+      case 'operations.invoke': {
+        let entry = this.operationEntry(method, args[0], args[1], args[2]);
+        let [answer] = await this.runOperationEntries([entry]);
+        return answer;
+      }
+      case 'operations.invokeBatchOperation': {
+        let list = args[0];
+        if (!Array.isArray(list) || list.length === 0) {
+          throw new TypeError(
+            'realm.operations.invokeBatchOperation expects a non-empty array of { path, operation, payload } entries',
+          );
+        }
+        let entries = list.map((item: unknown) => {
+          if (
+            item === null ||
+            typeof item !== 'object' ||
+            Array.isArray(item)
+          ) {
+            throw new TypeError(
+              'each realm.operations.invokeBatchOperation entry is { path, operation, payload }',
+            );
+          }
+          let { path, operation, payload } = item as Record<string, unknown>;
+          return this.operationEntry(method, path, operation, payload);
+        });
+        return await this.runOperationEntries(entries);
+      }
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
       // Deletes a file, one this run created or one that was there before
@@ -1417,8 +1508,9 @@ class RealmFsSession {
       }
       case 'ui.openWorkspace':
         return this.queueUiAction({ action: 'openWorkspace' });
-      // Indexing runs on the realm server after the call returns: each call
-      // starts the work, and the script does not wait for it to finish.
+      // realm.index.invalidate returns once the realm has indexed the paths,
+      // so a read later in the same script sees the result. The other calls
+      // start their work on the realm server and return without waiting.
       case 'index.invalidate': {
         let paths = typeof args[0] === 'string' ? [args[0]] : args[0];
         if (
@@ -1626,6 +1718,80 @@ class RealmFsSession {
       this.noteEdit(url, expected, content);
       this.saved.add(url);
     }
+  }
+
+  // An operation names the card it acts on by its path, as cards.update does.
+  private operationEntry(
+    method: RealmRunnerCallMethod,
+    path: unknown,
+    operation: unknown,
+    payload: unknown,
+  ): OperationEntry {
+    if (typeof operation !== 'string' || operation.length === 0) {
+      throw new TypeError(
+        `realm.${method} expects a card path and an operation name`,
+      );
+    }
+    if (
+      payload !== undefined &&
+      payload !== null &&
+      (typeof payload !== 'object' || Array.isArray(payload))
+    ) {
+      throw new TypeError(
+        `realm.${method}: the payload of "${operation}" must be an object`,
+      );
+    }
+    let url = this.resolve(method, path);
+    let cardId = url.replace(/\.json$/, '');
+    // A cards.update of the same card is saved after the script, and would
+    // overwrite what the operation did, or be refused for it.
+    this.assertNoCardUpdate(`${cardId}.json`);
+    return {
+      cardId,
+      operation,
+      payload: (payload ?? undefined) as Record<string, unknown> | undefined,
+    };
+  }
+
+  // Sends the operations at once, not when the script finishes: the realm
+  // can refuse one, and the script reads the answer.
+  //
+  // invoke and invokeBatchOperation both reach the realm's `_operations`
+  // endpoint, not `_atomic`: the realm applies each declaration and its policy
+  // authorizes each entry. They differ in what one failure leaves behind. A
+  // loop of invoke is one request per card, each committed on its own, so
+  // when card 40 of 100 is refused, cards 1 to 39 stay changed. A batch is one
+  // request, one commit under one write lock and one indexing pass, and the
+  // realm carries out every entry or none.
+  private async runOperationEntries(entries: OperationEntry[]) {
+    if (this.closed) {
+      this.refused += 1;
+      throw new Error('The run has ended; the operations were not run');
+    }
+    // Held while the request is out, so calls the script makes at once cannot
+    // pass the limit together, and given back when the operations did not
+    // run, so a refused batch, which changed nothing, can be fixed and sent
+    // again.
+    if (this.operationCount + entries.length > MAX_OPERATIONS) {
+      throw new Error(
+        `Realm code may run at most ${MAX_OPERATIONS} operations per run`,
+      );
+    }
+    this.operationCount += entries.length;
+    let answers: OperationAnswer[];
+    try {
+      answers = await this.runOperations(entries);
+    } catch (error) {
+      this.operationCount -= entries.length;
+      throw error;
+    }
+    return entries.map((entry, index) => {
+      let path = `${this.relative(entry.cardId)}.json`;
+      // The card's text changed on the realm, so this run reads it again.
+      this.known.delete(`${entry.cardId}.json`);
+      this.operationsRun.push(`${entry.operation} on ${path}`);
+      return { path, operation: entry.operation, ...answers[index] };
+    });
   }
 
   // realm.fs does not see a card update until it is saved, so it may not
@@ -2005,6 +2171,58 @@ class RealmFsSession {
 
   private relative(url: string): string {
     return url.slice(this.realmURL.length);
+  }
+
+  // Why realm.cards.get found no card, with the next step that helps: a read
+  // again only for a card a running index pass may still add, and otherwise
+  // the call that indexes the file or the fix its error needs. A model that
+  // is told to wait for a card no pass will add polls, or edits the card to
+  // make the realm index it.
+  private cardReadError(id: string, read: Exclude<CardRead, { doc: unknown }>) {
+    let path = `${this.relative(id)}.json`;
+    switch (read.unread) {
+      // The realm-level flag can stay set after a pass whose end event was
+      // lost, so the read-again advice carries the same way out as an idle
+      // workspace's: an extra invalidate costs one more pass.
+      case 'indexing':
+        return (
+          `Card is not indexed yet: ${id}; read it again in a moment. If it ` +
+          `is still not indexed after a few reads, ` +
+          (this.mayWrite
+            ? `index the file with realm.index.invalidate('${path}')`
+            : `tell the user that ${path} needs indexing again by someone ` +
+              `who can write to it`)
+        );
+      case 'unindexed':
+        return (
+          `Card is not indexed: ${id}. Its file ${path} is in the workspace, ` +
+          `and the workspace is not indexing, so reading the card again ` +
+          `will not find it. ` +
+          (this.mayWrite
+            ? `Index the file with realm.index.invalidate('${path}'), then ` +
+              `read the card again. Do not edit the card to make the ` +
+              `workspace index it`
+            : `You can only read this workspace, so tell the user that ` +
+              `${path} needs indexing again by someone who can write to it`)
+        );
+      case 'not-found':
+        return `Card not found: ${id}`;
+      case 'not-a-card':
+        return (
+          `Not a card: ${this.relative(id)} is a file, so realm.cards.get ` +
+          `cannot read it; read it with realm.fs.readText if it is text, or ` +
+          `look at it with realm.capture`
+        );
+      case 'error':
+        return (
+          `Card failed to index: ${id}: ${read.message.replace(/[.\s]+$/, '')}. ` +
+          `Reading it again gives the same error until its cause is fixed, ` +
+          `in ${path}, in the definition it adopts from, or in a card it ` +
+          `links to`
+        );
+      case 'unreadable':
+        return `Unable to read card ${id}: ${read.message}`;
+    }
   }
 
   private async searchCards(raw: unknown): Promise<{
@@ -2409,6 +2627,11 @@ function failureReport(session: RealmFsSession, error: unknown): string {
   if (session.indexActions.length > 0) {
     report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
   }
+  // An operation the realm carried out stays done, so name it, so a retry
+  // does not run it again.
+  if (session.operationsRun.length > 0) {
+    report += ` Operations already run by this run: ${session.operationsRun.join('; ')}`;
+  }
   // Room changes are made only after a run that finished, so a failed
   // run made none.
   if (session.room.requested) {
@@ -2511,6 +2734,27 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+// One entry's result as the script reads it. A write names the card it wrote
+// and the version that card now holds; a read answers the document, which is
+// the one result that carries attributes; a delete answers nothing.
+function operationAnswer(
+  result: unknown,
+  base: BaseOperation,
+): OperationAnswer {
+  if (!result || typeof result !== 'object') {
+    return {};
+  }
+  if (!isWrite(base)) {
+    return { document: result as Record<string, unknown> };
+  }
+  let { id, version, indexPending } = result as OperationWriteResult;
+  return {
+    id,
+    ...(version ? { version } : {}),
+    indexPending: indexPending === true,
+  };
+}
+
 // What a search answers when every realm it would reach is gated.
 function noSearchResults() {
   return { data: [], meta: { page: { total: 0 } } };
@@ -2535,11 +2779,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
-    'realm.cards.get, changes card fields with realm.cards.update, finds ' +
+    'realm.cards.get, changes card fields with realm.cards.update, runs ' +
+    'the operations a card type declares (its @operation statics) with ' +
+    'realm.operations.invoke(path, operation, payload), or several in one ' +
+    'request with realm.operations.invokeBatchOperation([{ path, operation, ' +
+    'payload }]) (prefer them over realm.cards.update when the type ' +
+    'declares one for the change; each runs at once and answers { path, ' +
+    'operation, id, version } for a write). invoke in a loop sends one ' +
+    'request per card, and when one fails the cards before it stay ' +
+    'changed; invokeBatchOperation sends all of them in one request that ' +
+    'the realm carries out whole or not at all, so use it when the changes ' +
+    'must go together or there are many cards. finds ' +
     'cards, specs and files across realms with ' +
     'realm.entries.search, can look at cards and files with realm.capture ' +
     '(a path in the realm, or the URL of a card or file in any workspace ' +
-    'the user can read), can generate images into the realm with ' +
+    `the user can read; a ${LOCAL_SOURCE_URL_PREFIX} URL names a file the ` +
+    'user attached from their computer or an image a capture took; neither ' +
+    'is in a workspace, so realm.capture refuses it), can generate images ' +
+    'into the realm with ' +
     'realm.images.generate, can save a file from a URL with ' +
     'realm.fs.download, can search the web with realm.web.search (Exa; ' +
     'returns [{ url, title, snippet }]), can read a web page as markdown ' +
@@ -2556,8 +2813,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
     'can change the skills and model of this room with room.*, and can ' +
-    'refresh the index of the workspace with realm.index.*. In a workspace ' +
-    'the user can only read, reads work and each write is refused. realm ' +
+    'refresh the index of the workspace with realm.index.*. A card that ' +
+    'realm.cards.get reports as not indexed while the workspace is not ' +
+    'indexing will not index by waiting: run ' +
+    "realm.index.invalidate('<card path>.json') and read it again, and " +
+    "never edit a card's data to make the workspace index it. In a workspace " +
+    'the user can only read, reads work and each write is refused, except ' +
+    'realm.operations, which the realm allows when its policy grants the ' +
+    'operation. realm ' +
     'is the root of the workspace, and paths are relative to it, so a file ' +
     'in a folder is named with its folder (folder/file.json). Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends. ' +
@@ -2741,7 +3004,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
               }),
         (reference, base) =>
           this.network.virtualNetwork.resolveURL(reference, base).href,
-        (id) => this.readCard(id),
+        (id) => this.readCard(id, realmURL),
+        (entries) => this.runOperations(entries),
         (query, realms) => this.store.searchEntries(query, realms),
         // Resolved before the search, so the search and its telemetry
         // record name the same realms.
@@ -3401,30 +3665,121 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
   }
 
-  private async readCard(id: string): Promise<LooseSingleCardDocument> {
+  // Runs operations a card's type declares, on cards in the run's realm, as
+  // one `_operations` request.
+  //
+  // Each card is loaded first, all at once, because only its type says what an
+  // entry is: whether a name is declared or is a behavior every card carries,
+  // whether it is a query, which params it needs, and which base it runs. The
+  // request is then built by the operations client, as invoke-card-operation
+  // builds it, so the method (QUERY for reads, POST for writes), each entry's
+  // data and the decoded answer are the client's and not a copy of them.
+  private async runOperations(
+    entries: OperationEntry[],
+  ): Promise<OperationAnswer[]> {
+    let operationsModule = await this.loaderService.loader.import<
+      typeof OperationsModule
+    >('@cardstack/base/operations');
+    let cardIds = [...new Set(entries.map((entry) => entry.cardId))];
+    let loaded = await Promise.all(
+      cardIds.map((id) => this.store.getWithoutCache(id)),
+    );
+    let cards = new Map<string, CardDef>();
+    for (let [index, card] of loaded.entries()) {
+      let cardId = cardIds[index]!;
+      if (!isCardInstance(card)) {
+        let entry = entries.find((one) => one.cardId === cardId)!;
+        throw new Error(
+          `cannot run "${entry.operation}": ${cardId} did not load: ${card.message}`,
+        );
+      }
+      cards.set(cardId, card);
+    }
+    let bases = entries.map((entry) => {
+      let card = cards.get(entry.cardId)!;
+      let base = assertInstanceOperation(
+        operationsModule,
+        card,
+        entry.operation,
+      );
+      assertPayloadSuppliesParams(
+        entry.operation,
+        operationsModule.getDeclaredOperations(card)[entry.operation],
+        entry.payload,
+      );
+      return base;
+    });
+    let bucketFor = operationsModule.operations as (
+      target: unknown,
+    ) => OperationsBucket;
+    let results: unknown[];
+    if (entries.length === 1) {
+      let [entry] = entries;
+      let member = bucketFor(cards.get(entry!.cardId)!)[entry!.operation] as (
+        payload?: unknown,
+      ) => Promise<unknown>;
+      results = [await member(entry!.payload)];
+    } else {
+      let atomic = bucketFor(cards.get(entries[0]!.cardId)!)[BATCH_MEMBER] as (
+        build: (builder: { on(card: CardDef): OperationsBucket }) => void,
+      ) => Promise<unknown[]>;
+      results = await atomic((builder) => {
+        for (let entry of entries) {
+          let member = builder.on(cards.get(entry.cardId)!)[
+            entry.operation
+          ] as (payload?: unknown) => unknown;
+          member(entry.payload);
+        }
+      });
+    }
+    return results.map((result, index) =>
+      operationAnswer(result, bases[index]!),
+    );
+  }
+
+  private async readCard(id: string, realmURL: string): Promise<CardRead> {
     // The store's cached instance can lag a write this run just made, or hold
     // edits not saved yet, so the card is read from the realm.
     let card = await this.store.getWithoutCache(id);
+    // A path that holds a file rather than a card instance reads as the
+    // file's FileDef.
+    if (isFileDefInstance(card)) {
+      return { unread: 'not-a-card' };
+    }
     if (!isCardInstance(card)) {
       if (card.awaitingIndex) {
-        throw new Error(
-          `Card is not indexed yet: ${id}; read it again in a moment`,
-        );
+        // The realm holds the card's file and has no index row for it, which
+        // is the same answer for a file a queued pass is about to index and
+        // for one no pass will index. The realm's index events are what tell
+        // them apart: between a pass's start and its end, the row may still
+        // come.
+        return {
+          unread: this.realm.info(realmURL).isIndexing
+            ? 'indexing'
+            : 'unindexed',
+        };
       }
-      throw new Error(
-        card.status === 404
-          ? `Card not found: ${id}`
-          : `Unable to read card ${id}: ${card.message}`,
-      );
+      if (card.status === 404) {
+        return { unread: 'not-found' };
+      }
+      // The realm marks the error its index row records, whatever status the
+      // row carries. Any other failure (permissions, the network, the realm
+      // itself) says nothing about the card's source.
+      return {
+        unread: card.meta?.indexError ? 'error' : 'unreadable',
+        message: card.message,
+      };
     }
     let { default: Base64ImageField } = await this.loaderService.loader.import<{
       default: typeof Base64ImageFieldType;
     }>('@cardstack/base/base64-image');
-    return await this.cardService.serializeCard(card, {
-      omitFields: [Base64ImageField],
-      useAbsoluteURL: true,
-      includeComputeds: true,
-    });
+    return {
+      doc: await this.cardService.serializeCard(card, {
+        omitFields: [Base64ImageField],
+        useAbsoluteURL: true,
+        includeComputeds: true,
+      }),
+    };
   }
 
   // Checks the realm still holds what the run saved, and deletes the file.

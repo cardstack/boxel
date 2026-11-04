@@ -315,6 +315,37 @@ interface ScriptAnswer {
 // A call the reader denied at its gate, as its result says it.
 export const DENIED_BY_USER = 'Denied by you';
 
+// What the index pass of a tracked write reported: every file it reindexed,
+// dependents included, spelled as an index event spells them, and the realm
+// generation it committed when the event says.
+export interface IndexedWrite {
+  invalidations: string[];
+  generation?: number;
+}
+
+// How long a tracked write waits for its index event.
+const TRACKED_WRITE_MS = 5 * 60 * 1000;
+
+// How many `prerender_html` events a realm's watch keeps.
+const RENDERED_HTML_LOG_SIZE = 100;
+
+// How long a render wait gives a realm's render job by default. The job for
+// a module with a handful of dependents finishes within a few seconds of its
+// index pass; one with hundreds can take minutes.
+const RENDER_JOB_WAIT_MS = 5_000;
+
+// A realm's `prerender_html` events since a module write there was first
+// tracked: which files each render job rendered, as file URLs, and the
+// generation it rendered at. `expired` says the time the realm's last
+// tracked module write gave the watch is up; it then ends with its last wait.
+interface RenderedHTMLWatch {
+  log: { generation: number; files: Set<string> }[];
+  listeners: Set<() => void>;
+  unsubscribe: () => void;
+  expired: boolean;
+  endTimer?: ReturnType<typeof setTimeout>;
+}
+
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -328,6 +359,8 @@ export default class ToolService extends Service {
   // reader. Only __setWaitsForTesting changes them.
   #toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
   #scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
+  #renderedHTMLWatchMs = TRACKED_WRITE_MS;
+  #renderJobWaitMs = RENDER_JOB_WAIT_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   // The room each running call runs for, by tool call id.
   private executingToolRooms = new TrackedMap<string, string>();
@@ -366,11 +399,14 @@ export default class ToolService extends Service {
     }
   >();
 
-  // Shortens the tool deadline and the wait for a script's question, so a
-  // test can reach them. Refused outside tests.
+  // Shortens the tool deadline, the wait for a script's question, how long a
+  // realm's render watch outlives a module write and how long a render wait
+  // gives the render job, so a test can reach them. Refused outside tests.
   __setWaitsForTesting(waits: {
     toolExecuteTimeoutMs?: number;
     scriptAskMaxMs?: number;
+    renderedHTMLWatchMs?: number;
+    renderJobWaitMs?: number;
   }) {
     if (!isTesting()) {
       throw new Error('__setWaitsForTesting is only for tests');
@@ -378,6 +414,9 @@ export default class ToolService extends Service {
     this.#toolExecuteTimeoutMs =
       waits.toolExecuteTimeoutMs ?? this.#toolExecuteTimeoutMs;
     this.#scriptAskMaxMs = waits.scriptAskMaxMs ?? this.#scriptAskMaxMs;
+    this.#renderedHTMLWatchMs =
+      waits.renderedHTMLWatchMs ?? this.#renderedHTMLWatchMs;
+    this.#renderJobWaitMs = waits.renderJobWaitMs ?? this.#renderJobWaitMs;
   }
 
   private askFromScript(
@@ -479,9 +518,12 @@ export default class ToolService extends Service {
       clientRequestId: string;
       roomId: string;
       targetHref: string;
-      deferred: Deferred<void>;
+      // Settles with what the index event reported, or with undefined when
+      // the wait ends without one (replaced by a newer write, reset, timed out).
+      deferred: Deferred<IndexedWrite | undefined>;
     }
   >();
+  private renderedHTMLWatches = new Map<string, RenderedHTMLWatch>();
   private aiAssistantInvalidationWaiters = new Map<
     string,
     { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
@@ -505,11 +547,14 @@ export default class ToolService extends Service {
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
-      invalidation.deferred.fulfill();
+      invalidation.deferred.fulfill(undefined);
     }
     this.aiAssistantInvalidations.clear();
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
       this.cleanupInvalidationWaiter(key);
+    }
+    for (let [realmURL, watch] of [...this.renderedHTMLWatches]) {
+      this.endRenderedHTMLWatch(realmURL, watch);
     }
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
@@ -568,8 +613,14 @@ export default class ToolService extends Service {
       return clientRequestId;
     }
 
-    let deferred = new Deferred<void>();
-    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    // A module write's check waits for its instances to be rendered again, and
+    // the render job can announce that before the check starts waiting.
+    if (fileUrl.endsWith('.gts')) {
+      this.watchRenderedHTML(realmURL);
+    }
+
+    let deferred = new Deferred<IndexedWrite | undefined>();
+    this.aiAssistantInvalidations.get(key)?.deferred.fulfill(undefined);
     this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
@@ -596,17 +647,19 @@ export default class ToolService extends Service {
       }
       this.cleanupInvalidationWaiter(key);
       let current = this.aiAssistantInvalidations.get(key);
-      current?.deferred.fulfill();
+      current?.deferred.fulfill({
+        invalidations: event.invalidations,
+        ...(event.generation !== undefined
+          ? { generation: event.generation }
+          : {}),
+      });
     });
-    let timeoutId = setTimeout(
-      () => {
-        this.cleanupInvalidationWaiter(key);
-        let current = this.aiAssistantInvalidations.get(key);
-        current?.deferred.fulfill();
-        this.aiAssistantInvalidations.delete(key);
-      },
-      5 * 60 * 1000,
-    );
+    let timeoutId = setTimeout(() => {
+      this.cleanupInvalidationWaiter(key);
+      let current = this.aiAssistantInvalidations.get(key);
+      current?.deferred.fulfill(undefined);
+      this.aiAssistantInvalidations.delete(key);
+    }, TRACKED_WRITE_MS);
     this.aiAssistantInvalidationWaiters.set(key, {
       unsubscribe,
       timeoutId,
@@ -631,29 +684,156 @@ export default class ToolService extends Service {
     this.aiAssistantInvalidationWaiters.delete(key);
   }
 
+  // Waits for the index event of the room's last tracked write to the target,
+  // and returns what it reported. Returns undefined when there is no tracked
+  // write to wait for, or when the wait ends without the event.
   async waitForInvalidationAfterAIAssistantRequest(
     roomId: string,
     targetHref: string,
     timeoutMs?: number,
-  ): Promise<void> {
+  ): Promise<IndexedWrite | undefined> {
     if (!roomId || !targetHref) {
-      return;
+      return undefined;
     }
     let key = this.invalidationKey(roomId, targetHref);
     let existing = this.aiAssistantInvalidations.get(key);
     if (!existing) {
-      return;
+      return undefined;
     }
 
-    let invalidated = existing.deferred.promise.then(() => true);
+    let invalidated = existing.deferred.promise.then((indexed) => ({
+      indexed,
+    }));
     let settled = timeoutMs
-      ? await Promise.race([invalidated, delay(timeoutMs).then(() => false)])
+      ? await Promise.race([
+          invalidated,
+          delay(timeoutMs).then(() => undefined),
+        ])
       : await invalidated;
-    // Only a real invalidation consumes the entry. On timeout the deferred is
-    // still live, and a later caller must still be able to wait on it.
-    if (settled) {
+    // Only a settled wait consumes the entry, and only the entry it waited
+    // on: a newer write to the target settles this wait empty and puts its
+    // own entry under the same key. On timeout the deferred is still live,
+    // and a later caller must still be able to wait on it.
+    if (settled && this.aiAssistantInvalidations.get(key) === existing) {
       this.aiAssistantInvalidations.delete(key);
     }
+    return settled?.indexed;
+  }
+
+  // A realm server's index pass leaves rendering its cards' formats to a
+  // render job of its own, which announces the files it rendered in a
+  // `prerender_html` event. The watch records those events for the realm from
+  // the time it starts, for as long as a tracked write waits for its index
+  // event after the realm's last tracked module write. That covers a check
+  // that starts from the write's index event and then waits for its renders.
+  private watchRenderedHTML(realmURL: string) {
+    let existing = this.renderedHTMLWatches.get(realmURL);
+    if (existing) {
+      this.renewRenderedHTMLWatch(realmURL, existing);
+      return;
+    }
+    let watch: RenderedHTMLWatch = {
+      log: [],
+      listeners: new Set(),
+      unsubscribe: () => undefined,
+      expired: false,
+    };
+    watch.unsubscribe = this.messageService.subscribe(realmURL, (event) => {
+      if (event?.eventName !== 'prerender_html') {
+        return;
+      }
+      watch.log.push({
+        generation: event.generation,
+        files: new Set(event.invalidations),
+      });
+      if (watch.log.length > RENDERED_HTML_LOG_SIZE) {
+        watch.log.shift();
+      }
+      for (let listener of [...watch.listeners]) {
+        listener();
+      }
+    });
+    this.renderedHTMLWatches.set(realmURL, watch);
+    this.renewRenderedHTMLWatch(realmURL, watch);
+  }
+
+  // Gives the watch the full time again, from now.
+  private renewRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    watch.expired = false;
+    watch.endTimer = setTimeout(() => {
+      watch.expired = true;
+      if (watch.listeners.size === 0) {
+        this.endRenderedHTMLWatch(realmURL, watch);
+      }
+    }, this.#renderedHTMLWatchMs);
+  }
+
+  // Stops recording the realm's renders, and ends any wait on the watch with
+  // what it recorded.
+  private endRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    if (this.renderedHTMLWatches.get(realmURL) === watch) {
+      this.renderedHTMLWatches.delete(realmURL);
+    }
+    watch.unsubscribe();
+    for (let listener of [...watch.listeners]) {
+      listener();
+    }
+  }
+
+  // Waits until every file in `files` has been rendered by a render job at
+  // the generation it maps to or later, or until `timeoutMs` passes (the
+  // render job's default wait unless given), and returns the files that have. The realm's watch lasts at least as long as
+  // the wait. A realm with no recent tracked module write has no watch, so
+  // nothing is known to be rendered there.
+  async waitForRenderedHTML(
+    realmURL: string,
+    files: Map<string, number>,
+    timeoutMs = this.#renderJobWaitMs,
+  ): Promise<Set<string>> {
+    let watch = this.renderedHTMLWatches.get(realmURL);
+    if (!watch) {
+      return new Set();
+    }
+    let rendered = () => {
+      let found = new Set<string>();
+      for (let entry of watch.log) {
+        for (let [href, generation] of files) {
+          if (entry.generation >= generation && entry.files.has(href)) {
+            found.add(href);
+          }
+        }
+      }
+      return found;
+    };
+    if (rendered().size < files.size) {
+      await new Promise<void>((resolve) => {
+        let finish = () => {
+          clearTimeout(timeoutId);
+          watch.listeners.delete(listener);
+          if (
+            watch.expired &&
+            watch.listeners.size === 0 &&
+            this.renderedHTMLWatches.get(realmURL) === watch
+          ) {
+            this.endRenderedHTMLWatch(realmURL, watch);
+          }
+          resolve();
+        };
+        let listener = () => {
+          if (
+            this.renderedHTMLWatches.get(realmURL) !== watch ||
+            rendered().size === files.size
+          ) {
+            finish();
+          }
+        };
+        let timeoutId = setTimeout(finish, timeoutMs);
+        watch.listeners.add(listener);
+      });
+    }
+    return rendered();
   }
 
   public queueEventForToolProcessing(event: Partial<IEvent>) {
@@ -1500,13 +1680,14 @@ export default class ToolService extends Service {
           }
         };
 
-        // checkCorrectness legitimately waits out one index-invalidation
-        // window and then does prerender/refresh work that can take
-        // comparably long, so it gets that much headroom on top of the
-        // standard bound.
+        // checkCorrectness legitimately runs three steps in a row that are
+        // each bounded by the card render timeout: it waits out the write's
+        // index event, prerenders the module, and waits for or renders the
+        // module's instances. So it gets that much headroom on top of the
+        // standard bound, which covers its reads.
         let executeTimeoutMs =
           command.name === CHECK_CORRECTNESS_COMMAND_NAME
-            ? this.#toolExecuteTimeoutMs + 2 * ENV.cardRenderTimeout
+            ? this.#toolExecuteTimeoutMs + 3 * ENV.cardRenderTimeout
             : this.#toolExecuteTimeoutMs;
 
         [resultCard] = await all([

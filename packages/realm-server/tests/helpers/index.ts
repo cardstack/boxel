@@ -17,6 +17,7 @@ import type {
   Subscription,
   Plan,
   RealmAdapter,
+  RealmHistory,
   DefinitionLookup,
   Query,
   CardResource,
@@ -24,6 +25,7 @@ import type {
   QueryResultsMeta,
   LinkShapePolicy,
   ServedRealm,
+  DBAdapter,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -366,6 +368,7 @@ import {
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
 import { createCallApiSender } from '../../lib/outbound/call-api-sender.ts';
+import { publishedMountOf } from '../../lib/published-realm.ts';
 import {
   createPolicyWriteAuditor,
   type PolicyPointerReader,
@@ -576,18 +579,27 @@ export function makeTestReconciler(
         diskPath,
         dynamicMountDeps.enableFileWatcher,
       );
-      let reconciledRealm = new Realm({
-        url: row.url,
-        adapter,
-        secretSeed: realmSecretSeed,
-        virtualNetwork: dynamicMountDeps.virtualNetwork,
-        dbAdapter,
-        queue: dynamicMountDeps.queue,
-        matrixClient: dynamicMountDeps.matrixClient,
-        realmServerURL: dynamicMountDeps.serverURL.href,
-        definitionLookup: dynamicMountDeps.definitionLookup,
-        callApi: createCallApiSender(dbAdapter),
-      });
+      let publishedMount = publishedMountOf(row);
+      let reconciledRealm = new Realm(
+        {
+          url: row.url,
+          adapter,
+          secretSeed: realmSecretSeed,
+          virtualNetwork: dynamicMountDeps.virtualNetwork,
+          dbAdapter,
+          queue: dynamicMountDeps.queue,
+          matrixClient: dynamicMountDeps.matrixClient,
+          realmServerURL: dynamicMountDeps.serverURL.href,
+          definitionLookup: dynamicMountDeps.definitionLookup,
+          callApi: createCallApiSender(dbAdapter, {
+            ...(publishedMount.publishedFrom
+              ? { publishedFrom: publishedMount.publishedFrom }
+              : {}),
+          }),
+        },
+        // Mounted as the server mounts a realm from its registry row.
+        publishedMount.realm,
+      );
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
       return reconciledRealm;
@@ -1063,8 +1075,10 @@ async function waitForQueueIdle(
 //      e.g. a from-scratch reset left only orphan rows), so the JOIN is empty
 //      even though instances exist (matched = NONE while instances > 0).
 // Logged unconditionally as a one-liner; degraded/error instance rows are
-// dumped only when something looks off. Wrapped so a diagnostics failure can
-// never affect a test result.
+// dumped only when something looks off. Every file row a file read cannot see
+// (tombstoned, or errored in either channel) is listed on every call,
+// including rows a fixture errors on purpose (see `logUnreadableFileRows`).
+// Wrapped so a diagnostics failure can never affect a test result.
 export async function logRealmIndexDiagnostics(
   dbAdapter: PgAdapter,
   realmURL: string,
@@ -1134,9 +1148,79 @@ export async function logRealmIndexDiagnostics(
         );
       }
     }
+
+    await logUnreadableFileRows(dbAdapter, realmURL, label);
   } catch (e) {
     console.log(
       `[realm-index-diag ${label}] failed to gather diagnostics for ${realmURL}: ` +
+        `${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+// A file row that a file read (`getFile`, file search, a file-meta GET) cannot
+// see, while a raw `SELECT ... FROM boxel_index` still finds it. Those reads
+// skip a row that is tombstoned, that carries an index error, or whose
+// `prerendered_html` row holds a render error at or above the index row's
+// generation. A raw-SQL assertion passing beside a failing file read points
+// at one of these three, and this dump names which. For a render error it
+// also says whether the render request itself failed (`visitRequestFailure`,
+// a row the reconcile sweep retries) or the render returned an error verdict
+// (which stands), and when the row was rendered. Pure diagnostics: wrapped so
+// it can never affect a test result.
+export async function logUnreadableFileRows(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  label: string,
+): Promise<void> {
+  try {
+    let rows = await dbAdapter.execute(
+      `SELECT i.url, i.generation, i.is_deleted, i.has_error,
+              i.error_doc->>'message' AS index_error,
+              ph.generation AS render_generation,
+              ph.error_doc->>'message' AS render_error,
+              ph.error_doc->>'status' AS render_status,
+              ph.error_doc->>'visitRequestFailure' AS visit_request_failure,
+              ph.rendered_at,
+              left(ph.error_doc->>'stack', 800) AS render_stack,
+              left(ph.diagnostics::text, 1000) AS render_diagnostics
+       FROM boxel_index i
+       LEFT JOIN prerendered_html ph
+         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+       WHERE i.realm_url = $1 AND i.type = 'file'
+         AND (i.is_deleted = true
+              OR i.has_error = true
+              OR (ph.error_doc IS NOT NULL AND ph.generation >= i.generation))
+       ORDER BY i.url
+       LIMIT 25`,
+      { bind: [realmURL] },
+    );
+    // Each row stays on one prefixed line, so a grep on the prefix keeps every
+    // field: free text that can span lines (error messages, the stack) is
+    // JSON-encoded, and the stack, the only truncated field, goes last.
+    let text = (value: unknown) =>
+      value == null ? 'none' : JSON.stringify(String(value));
+    for (let r of rows) {
+      console.log(
+        `[realm-index-diag ${label}]   file ${r.url} generation=${r.generation} ` +
+          `is_deleted=${r.is_deleted} has_error=${r.has_error} ` +
+          `index_error=${text(r.index_error)} ` +
+          `render_generation=${r.render_generation ?? 'none'} ` +
+          `render_error=${text(r.render_error)} ` +
+          `render_status=${r.render_status ?? 'none'} ` +
+          `visit_request_failure=${r.visit_request_failure ?? 'false'} ` +
+          `rendered_at=${
+            r.rendered_at != null
+              ? new Date(Number(r.rendered_at)).toISOString()
+              : 'none'
+          } ` +
+          `render_diagnostics=${r.render_diagnostics ?? 'none'} ` +
+          `render_stack=${text(r.render_stack)}`,
+      );
+    }
+  } catch (e) {
+    console.log(
+      `[realm-index-diag ${label}] failed to gather file-row diagnostics for ${realmURL}: ` +
         `${e instanceof Error ? e.message : String(e)}`,
     );
   }
@@ -1505,6 +1589,7 @@ export async function createRealm({
   realmFor,
   policyPointerOf,
   published,
+  history,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1543,6 +1628,9 @@ export async function createRealm({
   // Forwarded to the Realm constructor's `published` option. Production sets
   // it from the realm's registry row; a test realm has none to read it from.
   published?: true;
+  // Forwarded to the Realm constructor's `history` option: the change journal
+  // the realm's writes append to. Absent, the realm records no history.
+  history?: RealmHistory;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1652,6 +1740,7 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(history ? { history } : {}),
       ...(realmFor
         ? {
             realmFor,
@@ -1729,6 +1818,7 @@ export async function runTestRealmServer({
   googleSignIn,
   cardDocumentCache,
   published,
+  history,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1764,6 +1854,8 @@ export async function runTestRealmServer({
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
   published?: true;
+  // The change journal the realm's writes append to; absent, no history.
+  history?: RealmHistory;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1810,6 +1902,7 @@ export async function runTestRealmServer({
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2562,6 +2655,7 @@ type InternalPermissionedRealmSetupOptions = {
   subscribeToRealmEvents?: boolean;
   prerenderer?: Prerenderer;
   published?: boolean;
+  history?: RealmHistory;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -2585,6 +2679,7 @@ async function startPermissionedRealmFixture(
     subscribeToRealmEvents = false,
     prerenderer,
     published = false,
+    history,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -2669,6 +2764,7 @@ async function startPermissionedRealmFixture(
     secureOriginURL,
     cardDocumentCache,
     ...(published ? { published: true as const } : {}),
+    ...(history ? { history } : {}),
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2733,6 +2829,7 @@ export function setupPermissionedRealm(
     prerenderer,
     dbTemplateDatabase,
     published = false,
+    history,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -2781,6 +2878,9 @@ export function setupPermissionedRealm(
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
     cardDocumentCache?: CardDocumentCache;
+    // The change journal the realm's writes append to. Omit for a realm that
+    // records no history.
+    history?: RealmHistory;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2815,6 +2915,7 @@ export function setupPermissionedRealm(
         linkShapePolicy,
         secureOriginURL,
         cardDocumentCache,
+        history,
       });
       testRealmServer = server;
 
@@ -2917,6 +3018,7 @@ async function buildPermissionedRealmTemplate(
         subscribeToRealmEvents: options.subscribeToRealmEvents,
         prerenderer: options.prerenderer,
         published: options.published,
+        history: options.history,
         cardSizeLimitBytes: options.cardSizeLimitBytes,
         fileSizeLimitBytes: options.fileSizeLimitBytes,
       },

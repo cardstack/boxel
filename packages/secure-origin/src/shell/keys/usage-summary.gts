@@ -1,13 +1,15 @@
 // A key's or a share's use, as its owner reads it: what it spent today and
 // this month against each budget, when it was last used and by whom, the
-// callers who used it most this month, the calls refused and why, how the
+// callers who used it most this month, for a share whose workspace is
+// published where its calls came from, the calls refused and why, how the
 // service answered, and where the key may be sent, with any destination whose
 // service rejected it. Nothing here is a value or a request: only counts,
-// codes, statuses, hosts and who called.
+// codes, statuses, destinations, sites and who called.
 import Component from '@glimmer/component';
 
 import { eq } from '../../helpers/truth-helpers.ts';
 import type { KeyUsage } from '../../security/keys.ts';
+import { hostAndPath } from './key-grants.gts';
 
 interface Signature {
   Args: { usage: KeyUsage };
@@ -91,6 +93,22 @@ function callerText(caller: string | null, withheld?: boolean): string {
   return caller ?? 'Someone not signed in';
 }
 
+// Where a share's calls came from: its workspace, or a site published from
+// it, named by its address as a visitor types it.
+function realmText(entry: { realm: string; published?: true }): string {
+  if (!entry.published) {
+    return 'The workspace';
+  }
+  let url = new URL(entry.realm);
+  return `Published site ${url.host}${url.pathname.replace(/\/$/, '')}`;
+}
+
+// The breakdown is drawn only once a published site has used the share: until
+// then every call is the workspace's, which the totals above already say.
+function fromPublishedSite(realms: KeyUsage['realms'] | undefined): boolean {
+  return Boolean(realms?.some((entry) => entry.published));
+}
+
 function lastCallerText(caller: string | null, withheld?: boolean): string {
   if (withheld) {
     return 'someone else';
@@ -167,6 +185,26 @@ export default class UsageSummary extends Component<Signature> {
               </ul>
             </div>
           {{/if}}
+          {{#if (fromPublishedSite @usage.realms)}}
+            <div class='group' data-test-key-usage-realms>
+              <h4 class='group-title'>Where it was used</h4>
+              <ul class='counts'>
+                {{#each @usage.realms as |entry|}}
+                  <li
+                    data-test-key-usage-realm={{entry.realm}}
+                    data-test-key-usage-realm-published={{if
+                      entry.published
+                      'true'
+                      'false'
+                    }}
+                  >
+                    <span class='name'>{{realmText entry}}</span>
+                    <span class='n'>{{count entry.calls}}</span>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
           {{#if @usage.refusals.length}}
             <div class='group' data-test-key-usage-refusals>
               <h4 class='group-title'>Refused</h4>
@@ -197,15 +235,17 @@ export default class UsageSummary extends Component<Signature> {
             </div>
           {{/if}}
           {{#if @usage.grants.length}}
-            <div class='group' data-test-key-usage-grants>
+            <div class='group destinations' data-test-key-usage-grants>
               <h4 class='group-title'>Sent to</h4>
               <ul class='counts'>
                 {{#each @usage.grants as |grant|}}
+                  {{! A key has a grant per destination, and several can share
+                      a host, so each is named by its host and path. }}
                   <li
-                    data-test-key-usage-grant={{grant.host}}
+                    data-test-key-usage-grant={{hostAndPath grant.destination}}
                     data-test-key-usage-grant-state={{grant.state}}
                   >
-                    <span class='name'>{{grant.host}}</span>
+                    <span class='name'>{{hostAndPath grant.destination}}</span>
                     {{#if (eq grant.state 'rejected')}}
                       <span class='flag rejected'>Rejected</span>
                     {{else if grant.lastForbiddenAt}}
@@ -304,6 +344,16 @@ export default class UsageSummary extends Component<Signature> {
       .n {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
+      }
+      /* A destination's host and path is longer than a count's name, so its
+         list takes the whole width, and each flag follows its destination
+         rather than sitting at the far edge. */
+      .destinations {
+        grid-column: 1 / -1;
+      }
+      .destinations li {
+        justify-content: flex-start;
+        flex-wrap: wrap;
       }
       .flag {
         flex-shrink: 0;

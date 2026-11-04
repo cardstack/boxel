@@ -53,6 +53,8 @@ interface Signature {
     card?: CardDef;
     // The "Create New <Type>" affordance for a realm the user can write to.
     newCard?: NewCardArgs;
+    // The workspace a new card goes into, named on the "Create New" tile.
+    newCardRealmName?: string;
     isSelected: boolean;
     multiSelect?: boolean;
     // `kind` carries the selected result's card/file classification (absent for
@@ -115,6 +117,13 @@ export default class SearchResultTile extends Component<Signature> {
     Args: { Positional: [cardEl: HTMLElement | undefined] };
   }> {
     return this.args.adornPositionLabel ?? noopPositionLabel;
+  }
+
+  private get createNewLabel(): string {
+    let realmName = this.args.newCardRealmName;
+    return realmName
+      ? `Create New ${this.cardRefName} in ${realmName}`
+      : `Create New ${this.cardRefName}`;
   }
 
   private get isNewCard(): boolean {
@@ -288,8 +297,18 @@ export default class SearchResultTile extends Component<Signature> {
           height='16'
           role='presentation'
         />
-        Create New
-        {{this.cardRefName}}
+        <span
+          class='create-new-label'
+          title={{this.createNewLabel}}
+          data-test-create-new-label
+        >
+          Create New
+          {{this.cardRefName}}
+          {{#if @newCardRealmName}}
+            in
+            <strong>{{@newCardRealmName}}</strong>
+          {{/if}}
+        </span>
       {{else if @entry}}
         <@entry.component
           class='hide-boundaries'
@@ -348,8 +367,21 @@ export default class SearchResultTile extends Component<Signature> {
         justify-content: flex-start;
         letter-spacing: var(--boxel-lsp-xs);
       }
+      .plus-icon {
+        flex-shrink: 0;
+      }
       .plus-icon > :deep(path) {
         stroke: none;
+      }
+      .create-new-label {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        min-width: 0;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        text-align: start;
       }
 
       .selection-indicator {

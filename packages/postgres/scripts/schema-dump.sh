@@ -18,6 +18,11 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=migrations_removal \
   --exclude-table-and-children=job_statuses \
   --exclude-table-and-children=jobs \
+  --exclude-table-and-children=realm_change_events \
+  --exclude-table-and-children=realm_change_event_paths \
+  --exclude-table-and-children=realm_history_state \
+  --exclude-table-and-children=realm_history_path_state \
+  --exclude-table-and-children=realm_historian_leases \
   --exclude-table-and-children=queues \
   --exclude-table-and-children=job_reservations \
   --exclude-table-and-children=job_progress \

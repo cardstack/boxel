@@ -79,9 +79,11 @@ export type SecureWindowRequest =
       reason?: string;
     };
 
-// The popup's size. The share page lays a key's name and its fields out on one
-// line at this width.
-export const SECURE_WINDOW_FEATURES = 'popup,width=640,height=720';
+// The popup's size: the page area below the address bar. The key pages are
+// laid out for at least 640 wide; the share page puts a key's name and its
+// fields on one line from that width. On a screen too short for the height, the
+// browser fits the window to the screen and the page scrolls.
+export const SECURE_WINDOW_FEATURES = 'popup,width=800,height=1000';
 
 // Whether `value` can name a realm, card or module to the window: an http(s)
 // URL, or a prefix-form id (`@cardstack/…`). The window reads nothing else.

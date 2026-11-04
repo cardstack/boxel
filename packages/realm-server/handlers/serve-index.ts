@@ -281,8 +281,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             hostsOwnAssets: false,
             assetsURL: assetsURL.href,
             matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
-            matrixServerName:
-              process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
+            // The configured name of this realm server's Matrix server, which
+            // can differ from the homeserver's hostname (ADR 004 §1.2).
+            matrixServerName: matrixClient.serverName,
             realmServerURL: serverURL.href,
             // Stamp the deployed environment the host is running in so client
             // telemetry (and anything else) can report it, rather than the

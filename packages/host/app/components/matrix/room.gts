@@ -397,9 +397,12 @@ export default class Room extends Component<Signature> {
                 {{/if}}
 
                 <div class='chat-input-area__bottom-actions'>
+                  {{! the composer holds its bottom edge and grows upward, so
+                      a collapsing menu's fading copy is pinned to the bottom }}
                   {{#if this.displayLLMSelect}}
                     <LLMSelect
                       class='llm-select'
+                      @anchorY='bottom'
                       @selected={{@roomResource.activeLLM}}
                       @onChange={{perform @roomResource.activateLLMTask}}
                       @options={{this.llmsForSelectMenu}}
@@ -441,6 +444,7 @@ export default class Room extends Component<Signature> {
                   {{#if this.displaySkillMenu}}
                     <AiAssistantSkillMenu
                       class='skill-menu'
+                      @anchorY='bottom'
                       @skills={{this.sortedSkills}}
                       @onChooseCard={{perform this.attachSkillTask}}
                       @onChooseSkillMarkdown={{perform this.attachSkillTask}}
@@ -625,11 +629,17 @@ export default class Room extends Component<Signature> {
         flex-shrink: 1;
       }
 
-      .chat-input-area__bottom-actions:not(:has(.menu-content)) {
+      /* an open menu, not the fading copy of one that has closed: the row
+         takes its closed layout in the render that closes the menu */
+      .chat-input-area__bottom-actions:not(
+        :has(.menu-content:not([data-motion-memory] *))
+      ) {
         height: 40px;
       }
 
-      .chat-input-area__bottom-actions:has(.menu-content) {
+      .chat-input-area__bottom-actions:has(
+        .menu-content:not([data-motion-memory] *)
+      ) {
         padding: 0;
       }
 
@@ -674,7 +684,9 @@ export default class Room extends Component<Signature> {
 
       /* the bottom row answers its own width, so the context ring can step
          aside before it squeezes the model's name out */
-      .chat-input-area__bottom-actions:not(:has(.menu-content)) {
+      .chat-input-area__bottom-actions:not(
+        :has(.menu-content:not([data-motion-memory] *))
+      ) {
         container: composer / inline-size;
       }
       /* how full the model's context window is, beside the model it
@@ -699,7 +711,6 @@ export default class Room extends Component<Signature> {
         /* The LLM menu opens noticeably taller than the skill menu; a longer
            duration keeps the expanding edge moving at about the same speed. */
         --pill-menu-expand-duration: 0.25s;
-        --pill-menu-collapse-duration: 0.19s;
       }
 
       .llm-select :deep(.menu-content) {

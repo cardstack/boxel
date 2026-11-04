@@ -315,7 +315,7 @@ export default class CatalogShelf extends Component<Signature> {
           @appearance='link'
           {{on 'click' this.openCatalog}}
           data-test-catalog-see-all
-        >See the whole catalog <span aria-hidden='true'>→</span></Button>
+        >See the full catalog <span aria-hidden='true'>→</span></Button>
       </div>
     {{else if this.isPending}}
       {{! The stories' metrics with nothing in them. }}
@@ -343,7 +343,7 @@ export default class CatalogShelf extends Component<Signature> {
           class='see-all is-pending'
           @tone='neutral'
           @appearance='link'
-        >See the whole catalog</Button>
+        >See the full catalog</Button>
       </div>
     {{/if}}
 
@@ -383,15 +383,32 @@ export default class CatalogShelf extends Component<Signature> {
         border-radius: var(--boxel-border-radius-2xl);
         background-color: var(--_story-paper);
         color: var(--foreground);
+        /* Edged like the workspace tiles, just outside the card so the edge
+           reads the same against the dashboard on every paper. */
         box-shadow:
-          0 0 0 1px var(--_story-edge),
+          0 0 0 1px var(--boxel-light-25),
           var(--shadow-md);
-        transition: transform var(--boxel-transition);
       }
-      @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-        .story:hover {
-          transform: translateY(-0.125rem);
+      /* The hover ring stands 1px off the resting edge. */
+      .story::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        outline: 1px solid var(--boxel-light-50);
+        outline-offset: 1px;
+        opacity: 0;
+        transition: opacity var(--boxel-transition);
+        pointer-events: none;
+      }
+      @media (hover: hover) {
+        .story:not(.is-pending):hover::after {
+          opacity: 1;
         }
+      }
+      /* Keeps the hover ring off the keyboard ring. */
+      .story:has(.story-open:focus-visible)::after {
+        opacity: 0;
       }
       /* The story draws the keyboard ring around the whole card. */
       .story:has(.story-open:focus-visible) {
