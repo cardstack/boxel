@@ -675,12 +675,13 @@ export class Sidebar extends Component<SidebarSignature> {
           --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
         }
         /* The icon rail's look reaches SidebarGroup and SidebarItem through
-           inherited custom properties: their scoped rules cannot match this
+           custom properties inherited from the rail element, so page content
+           beside it is untouched. Their scoped rules cannot match this
            component's ancestors, and a consumer that forgets @collapsed or
-           @hideLabel still gets icons only. */
-        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail']:not(
-            [data-mobile='true']
-          ) {
+           @hideLabel still gets icons only. The drawer's rail has no
+           data-state, so it never matches. */
+        .pretui-sidebar-shell[data-collapsible='rail']
+          > .pretui-sidebar-rail[data-state='collapsed'] {
           --pretui-sbrail-text: none;
           --pretui-sbrail-head-pad: 0;
           --pretui-sbrail-divider: 1px solid var(--border);
@@ -690,9 +691,8 @@ export class Sidebar extends Component<SidebarSignature> {
           --pretui-sbrail-item-margin: auto;
         }
         @media (any-pointer: coarse) {
-          .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail']:not(
-              [data-mobile='true']
-            ) {
+          .pretui-sidebar-shell[data-collapsible='rail']
+            > .pretui-sidebar-rail[data-state='collapsed'] {
             --pretui-sbrail-item-size: 2.75rem;
           }
         }
@@ -973,6 +973,7 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           <span
             id={{this.labelId}}
             class='pretui-sbgroup-label'
+            data-test-pretui-sidebar-group-label
             data-hidden={{if @hideLabel 'true' 'false'}}
           >{{@label}}</span>
           {{#if (has-block 'action')}}
@@ -1146,9 +1147,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         ...attributes
       >
         <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
-        <span class='pretui-sbitem-label'>{{@label}}</span>
+        <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge'>{{@badge}}</span>
+          <span class='pretui-sbitem-badge' data-test-pretui-sidebar-item-badge>{{@badge}}</span>
         {{/if}}
       </a>
     {{else}}
@@ -1165,9 +1166,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         ...attributes
       >
         <span class='pretui-sbitem-icon'>{{yield to='icon'}}</span>
-        <span class='pretui-sbitem-label'>{{@label}}</span>
+        <span class='pretui-sbitem-label' data-test-pretui-sidebar-item-label>{{@label}}</span>
         {{#if @badge}}
-          <span class='pretui-sbitem-badge'>{{@badge}}</span>
+          <span class='pretui-sbitem-badge' data-test-pretui-sidebar-item-badge>{{@badge}}</span>
         {{/if}}
       </button>
     {{/if}}

@@ -159,8 +159,30 @@ module('Pretui | components/sidebar', function (hooks) {
     assert.strictEqual(mobile(), 'false');
   });
 
-  // The consumer here forgets @collapsed and @hideLabel: the rail still shows icons only.
-  test('the collapsed icon rail hides group labels, item labels and badges but keeps each item named', async function (assert) {
+  // The harness leaves a component's own `<style scoped>` inert (see
+  // stacking-cards.test.gts), so these pin the markup contract the collapsed-rail
+  // CSS and the accessible names rest on; the look itself is checked by eye.
+  const names = () => [...document.querySelectorAll('[data-test-pretui-sidebar-item]')].map((el) => el.getAttribute('aria-label'));
+  const railState = () => document.querySelector('[data-test-pretui-sidebar-rail]')?.getAttribute('data-state');
+
+  test('the collapsed icon rail renders no item label or badge when the caller passes @collapsed, and keeps each item named', async function (assert) {
+    await render(<template>
+      <Sidebar @label='Library' @open={{false}} @mobile={{false}}>
+        <:nav as |bar|>
+          <SidebarGroup @label='Pages'>
+            <SidebarItem @label='Home' @badge='6' @href='#home' @collapsed={{bar.collapsed}}><:icon>H</:icon></SidebarItem>
+            <SidebarItem @label='About' @collapsed={{bar.collapsed}} @onClick={{noop}}><:icon>A</:icon></SidebarItem>
+          </SidebarGroup>
+        </:nav>
+      </Sidebar>
+    </template>);
+    assert.strictEqual(railState(), 'collapsed', 'the rail is the icon rail');
+    assert.dom('[data-test-pretui-sidebar-item-label]').doesNotExist('no item label');
+    assert.dom('[data-test-pretui-sidebar-item-badge]').doesNotExist('no badge');
+    assert.deepEqual(names(), ['Home', 'About'], 'each item keeps its accessible name');
+  });
+
+  test('without @collapsed the items still carry their accessible name and the group stays named, so the CSS can hide the text', async function (assert) {
     await render(<template>
       <Sidebar @label='Library' @open={{false}} @mobile={{false}}>
         <:nav>
@@ -171,34 +193,25 @@ module('Pretui | components/sidebar', function (hooks) {
         </:nav>
       </Sidebar>
     </template>);
-    let shown = (selector: string) => getComputedStyle(document.querySelector(selector) as Element).display !== 'none';
-    assert.notOk(shown('.pretui-sbgroup-label'), 'the group label is not shown');
-    assert.notOk(shown('.pretui-sbitem-label'), 'the item label is not shown');
-    assert.notOk(shown('.pretui-sbitem-badge'), 'the badge is not shown');
-    assert.deepEqual(
-      [...document.querySelectorAll('[data-test-pretui-sidebar-item]')].map((el) => el.getAttribute('aria-label')),
-      ['Home', 'About'],
-      'each item keeps its accessible name',
-    );
+    assert.strictEqual(railState(), 'collapsed');
+    assert.deepEqual(names(), ['Home', 'About'], 'the name no longer depends on the visible label');
+    assert.dom('[data-test-pretui-sidebar-item-label]').exists({ count: 2 }, 'the text is rendered, for the rail CSS to hide');
+    assert.dom('[data-test-pretui-sidebar-item-badge]').exists({ count: 1 });
     assert.strictEqual(
       document.querySelector('[data-test-pretui-sidebar-group]')?.getAttribute('aria-labelledby'),
-      document.querySelector('.pretui-sbgroup-label')?.id,
-      'the group stays named',
+      document.querySelector('[data-test-pretui-sidebar-group-label]')?.id,
+      'the group is named by its label',
     );
   });
 
-  test('the expanded rail still shows labels and badges', async function (assert) {
+  test('the drawer rail carries no data-state, so the collapsed-rail properties never reach it', async function (assert) {
     await render(<template>
-      <Sidebar @label='Library' @mobile={{false}}>
+      <Sidebar @label='Library' @mobile={{true}} @open={{true}}>
         <:nav>
-          <SidebarGroup @label='Pages'>
-            <SidebarItem @label='Home' @badge='6' @href='#home'><:icon>H</:icon></SidebarItem>
-          </SidebarGroup>
+          <SidebarGroup @label='Pages'><SidebarItem @label='Home' @href='#home'><:icon>H</:icon></SidebarItem></SidebarGroup>
         </:nav>
       </Sidebar>
     </template>);
-    for (let selector of ['.pretui-sbgroup-label', '.pretui-sbitem-label', '.pretui-sbitem-badge']) {
-      assert.notStrictEqual(getComputedStyle(document.querySelector(selector) as Element).display, 'none', selector);
-    }
+    assert.dom('[data-test-pretui-sidebar-rail]').doesNotHaveAttribute('data-state');
   });
 });
