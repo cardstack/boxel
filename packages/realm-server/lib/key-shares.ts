@@ -658,7 +658,15 @@ export async function listOwnShares(
 export interface SharedRealm {
   url: string;
   name: string | null;
-  shares: { id: string; label: string; state: KeyShareState }[];
+  // `approvedCalls`: how many bindings send the share (one per slot an
+  // approval fills, and per card for an operation approved per card),
+  // whatever state each is in. None means no card there calls with it yet.
+  shares: {
+    id: string;
+    label: string;
+    state: KeyShareState;
+    approvedCalls: number;
+  }[];
 }
 
 // The realms each of the user's keys is shared into, by key id, each realm
@@ -694,7 +702,9 @@ export async function listOwnSharedRealms(
                  WHERE rup.realm_url = ks.realm_url
                    AND rup.read = true
                    AND rup.username IN (${readingRows}))
-             LIMIT 1) AS name
+             LIMIT 1) AS name,
+            (SELECT COUNT(*) FROM key_bindings kb WHERE kb.share_id = ks.id)
+              AS approved_calls
      FROM key_shares ks
      WHERE ks.key_id IS NOT NULL AND ks.owner = `,
     param(owner),
@@ -707,15 +717,29 @@ export async function listOwnSharedRealms(
     key_id: string;
     realm_url: string;
     name: string | null;
+    approved_calls: number | string;
   }[];
-  for (let { id, label, state, key_id, realm_url, name } of rows) {
+  for (let {
+    id,
+    label,
+    state,
+    key_id,
+    realm_url,
+    name,
+    approved_calls,
+  } of rows) {
     let realms = byKey.get(key_id) ?? [];
     let realm = realms.find((r) => r.url === realm_url);
     if (!realm) {
       realm = { url: realm_url, name, shares: [] };
       realms.push(realm);
     }
-    realm.shares.push({ id, label, state });
+    realm.shares.push({
+      id,
+      label,
+      state,
+      approvedCalls: Number(approved_calls),
+    });
     byKey.set(key_id, realms);
   }
   for (let realms of byKey.values()) {

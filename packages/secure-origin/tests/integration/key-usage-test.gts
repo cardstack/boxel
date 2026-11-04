@@ -1089,6 +1089,62 @@ module('Integration | key usage and limits', function (hooks) {
       assert.dom('[data-test-key-usage-budget="day"]').exists();
     });
 
+    test('a share no call is approved for says so to its owner, and Approve for a card sets it up for one', async function (assert) {
+      let navigations: { how: string; url?: string }[] = [];
+      navigation.assign = (url: string) =>
+        navigations.push({ how: 'assign', url });
+      let operations: { operation: string }[] = [];
+      serve({
+        'GET _key-shares': () =>
+          json(200, {
+            data: [
+              {
+                type: 'key-share',
+                id: 'share-1',
+                attributes: {
+                  realm: REALM,
+                  label: 'Team weather',
+                  owner: SESSION.user,
+                  keyId: 'key-1',
+                  state: 'active',
+                  suspensionReason: null,
+                  operations,
+                },
+              },
+            ],
+          }),
+        'GET _key-shares/share-1/usage': () =>
+          usageResource('share-1', usage()),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      assert
+        .dom('[data-test-share-limits-unapproved]')
+        .includesText(
+          'Not approved for any calls yet. No card in Team Workspace calls with this key until you approve it for one.',
+        );
+      await click('[data-test-share-limits-approve]');
+      assert.deepEqual(navigations, [
+        {
+          how: 'assign',
+          url: `/secure/keys/key-1/use#${new URLSearchParams({
+            realm: REALM,
+            share: 'share-1',
+          })}`,
+        },
+      ]);
+
+      operations = [{ operation: 'currentShared' }];
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      assert
+        .dom('[data-test-share-limits-unapproved]')
+        .doesNotExist('a share approved for a call says nothing more');
+    });
+
     test('says where a share was used once a site published from its workspace uses it', async function (assert) {
       serve({
         'GET _key-shares/share-1/usage': () =>

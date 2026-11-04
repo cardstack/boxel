@@ -366,6 +366,12 @@ A call that a fix makes ready needs no reload: readiness is asked again when
 the user comes back from the window. Swapping a key into a stopped share is
 the keys page's job, not the card's.
 
+Readiness is also asked again whenever the page takes focus and an answer is
+more than a few seconds old, so a key shared from the key page in another tab
+reaches the card too: the writer who shared it gets `needs-approval` for the
+`apiKey` operation, and the card's approval request opens. A card needs no
+focus handling of its own for readiness.
+
 Don't write one operation whose slot falls back from the realm's key to the
 user's. Who pays would be implicit: every share that was suspended or over
 budget would quietly move calls onto readers' own keys. With two operations

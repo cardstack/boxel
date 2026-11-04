@@ -7,6 +7,9 @@
 // writer of the realm who doesn't own the share sees its usage here and is
 // told that only its owner changes the limits; anyone else, who can't see the
 // share, is told the link names none.
+// A share that no operation in the workspace is approved to send says so to
+// its owner, with Approve for a card, which opens the key's use page for the
+// share: until an operation is approved, no card there calls with it.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -25,6 +28,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
+import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
 import {
@@ -110,6 +114,21 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
             @context={{this.editing.context}}
             @reason={{this.opened.reason}}
           />
+          {{#if this.unapproved}}
+            <div class='unapproved' data-test-share-limits-unapproved>
+              <p class='unapproved-text'>Not approved for any calls yet. No card
+                in
+                <strong>{{this.editing.context.realm.name}}</strong>
+                calls with this key until you approve it for one.</p>
+              <Button
+                type='button'
+                @kind='secondary'
+                @size='extra-small'
+                data-test-share-limits-approve
+                {{on 'click' this.approveForCard}}
+              >Approve for a card…</Button>
+            </div>
+          {{/if}}
           <UsageSummary @usage={{this.editing.usage}} />
           <LimitsForm
             @shared={{true}}
@@ -142,6 +161,22 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       .busy {
         margin-top: var(--boxel-sp-xl);
       }
+      .unapproved {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        align-items: center;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .unapproved-text {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
       .back {
         display: flex;
         justify-content: flex-end;
@@ -163,6 +198,32 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
   private get backBelow() {
     return this.returnsToKeys && (!!this.loadFailed || !!this.needsAdmin);
   }
+  // The owner's active share, when no operation in the workspace is approved
+  // to send it.
+  private get unapproved() {
+    let share = this.editing?.share;
+    return (
+      share?.state === 'active' &&
+      Boolean(share.keyId) &&
+      share.operations?.length === 0
+    );
+  }
+
+  // The share is set up for one of the workspace's cards on its key's use
+  // page, which goes on to the key page when done.
+  private approveForCard = () => {
+    let share = this.editing?.share;
+    if (!share?.keyId) {
+      return;
+    }
+    navigation.assign(
+      `${pageURL(keyUsePath(share.keyId))}#${new URLSearchParams({
+        realm: share.realm,
+        share: share.id,
+      })}`,
+    );
+  };
+
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
