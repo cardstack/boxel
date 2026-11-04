@@ -166,3 +166,19 @@ export function nearestNavIndexInRow(
     distance(tile) < distance(closest) ? tile : closest,
   ).index;
 }
+
+// Less than half of it shows within the window and every scroller around it,
+// so a sliver at an edge still counts as off screen.
+export function isOffScreen(element: HTMLElement): boolean {
+  let { top, bottom, height } = element.getBoundingClientRect();
+  let shownTop = Math.max(top, 0);
+  let shownBottom = Math.min(bottom, window.innerHeight);
+  for (let el = element.parentElement; el; el = el.parentElement) {
+    if (getComputedStyle(el).overflowY !== 'visible') {
+      let clip = el.getBoundingClientRect();
+      shownTop = Math.max(shownTop, clip.top);
+      shownBottom = Math.min(shownBottom, clip.bottom);
+    }
+  }
+  return shownBottom - shownTop < height / 2;
+}
