@@ -133,4 +133,38 @@ module('Pretui | components/key-value', function (hooks) {
     assert.dom('[data-test-kv="default"]').doesNotHaveAttribute('data-label-style');
     assert.dom('[data-test-kv="eyebrow"]').hasAttribute('data-label-style', 'eyebrow');
   });
+
+  test('KeyValue divides and end-aligns only on the horizontal layout', async function (assert) {
+    const ITEMS: KeyValueItem[] = [{ key: 'Origin', value: 'Wuyi' }];
+    await render(
+      <template>
+        <KeyValue @items={{ITEMS}} data-test-kv='none' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' data-test-kv='horizontal' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='stacked' data-test-kv='stacked' />
+        <KeyValue @items={{ITEMS}} @divided={{true}} @valueAlign='end' @layout='inline' data-test-kv='inline' />
+      </template>,
+    );
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-divided');
+    assert.dom('[data-test-kv="none"]').doesNotHaveAttribute('data-value-align');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-divided', 'true');
+    assert.dom('[data-test-kv="horizontal"]').hasAttribute('data-value-align', 'end');
+    for (let layout of ['stacked', 'inline']) {
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-divided');
+      assert.dom(`[data-test-kv="${layout}"]`).doesNotHaveAttribute('data-value-align');
+    }
+  });
+
+  // The row selectors key off the list's children being only dt/dd, in
+  // alternating order with a dt first.
+  test('KeyValue horizontal renders alternating dt/dd children', async function (assert) {
+    const ITEMS: KeyValueItem[] = [
+      { key: 'Origin', value: 'Wuyi' },
+      { key: 'Harvest', value: 'Spring 2026' },
+    ];
+    await render(<template><KeyValue @items={{ITEMS}} @divided={{true}} /></template>);
+    assert.deepEqual(
+      Array.from(q('[data-test-pretui-kv]').children).map((c) => c.tagName),
+      ['DT', 'DD', 'DT', 'DD'],
+    );
+  });
 });

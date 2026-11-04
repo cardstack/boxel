@@ -290,14 +290,12 @@ SELECT created_at, reason, owner, suspended_by
 FROM key_share_notices WHERE share_id = '<id>' ORDER BY created_at DESC;
 ```
 
-Both tables hold no secret, but they are withheld from `readonly_role`, like
-`user_keys`, and from every role that reads with its privileges (granted it
-with INHERIT or SET, directly or through other roles). The migration revokes
-each SELECT grant those roles hold, acting as the role that made it and with
-CASCADE, never touching a table's owner or a member that only administers the
-role. It then stops, naming the role and the column, if any of them can still
-read a column (through a PUBLIC grant, say). Where the migrating role can't act
-as a grant's grantor, it stops and names the grant. They are also excluded from
+Neither table holds a secret. `readonly_role` (dashboards and read-only
+database access, such as `claude_readonly_user` in staging and production) can
+read `key_shares`, so a realm's shares can be inspected while triaging without
+the application role. `key_share_notices` is withheld from it, as `user_keys`
+is, and from every role that reads with its privileges (granted it with
+INHERIT or SET, directly or through other roles). Both tables are excluded from
 the SQLite schema dump.
 `realm_url` is the realm's canonical URL, with a trailing slash, as
 `realm_user_permissions` stores it.
