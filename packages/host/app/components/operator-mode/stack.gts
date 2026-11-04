@@ -94,6 +94,7 @@ export default class OperatorModeStack extends Component<Signature> {
             stack-medium-padding-top=(eq @stackItems.length 2)
             stack-small-padding-top=(gte @stackItems.length 3)
           }}
+          data-test-stack-cards
         >
           {{#each @stackItems as |item i|}}
             <OperatorModeStackItem
