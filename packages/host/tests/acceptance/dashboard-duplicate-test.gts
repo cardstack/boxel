@@ -17,7 +17,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -61,7 +60,6 @@ module('Acceptance | dashboard duplicate', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupRealmCacheTeardown(hooks);
-  setupFeatureFlag(hooks, 'DASHBOARD_V2');
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

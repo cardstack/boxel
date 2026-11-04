@@ -51,9 +51,9 @@ export type TileStat = { label: string; count: number };
 
 export const WORKSPACE_TILE_TARGET = '[data-workspace-tile] [data-nav-index]';
 
-// The state and actions of one workspace as the dashboard and the workspace
-// chooser show it: its options menu, the delete, archive, duplicate and
-// re-index flows with their modals, and where focus goes once a modal closes.
+// The state and actions of one workspace as the dashboard shows it: its
+// options menu, the delete, archive, duplicate and re-index flows with their
+// modals, and where focus goes once a modal closes.
 // Each workspace component makes its own, since the modals and the focus
 // they return belong to that one item, and keeps only its markup.
 //

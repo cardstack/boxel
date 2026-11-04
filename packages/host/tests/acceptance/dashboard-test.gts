@@ -35,7 +35,6 @@ import {
   realmConfigCardJSON,
   withholdRealmSession,
 } from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   getRealmServerRoute,
@@ -218,9 +217,7 @@ module('Acceptance | dashboard', function (hooks) {
     });
   });
 
-  module('state', function (hooks) {
-    setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
+  module('state', function () {
     test('loads the stored state at login', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -428,29 +425,10 @@ module('Acceptance | dashboard', function (hooks) {
     });
   });
 
-  module('feature flag off', function () {
-    test('the workspace chooser opens', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-
-      assert.dom('[data-test-workspace-chooser]').exists();
-      assert.dom('[data-test-dashboard]').doesNotExist();
-    });
-
-    test('the stored state is not read at login', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-
-      let matrixService = getService('matrix-service') as MatrixService;
-      assert.deepEqual(matrixService.dashboardState, {});
-    });
-  });
-
-  module('feature flag on', function (hooks) {
-    setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
-    test('the dashboard opens in place of the workspace chooser', async function (assert) {
+  module('page', function () {
+    test('the dashboard opens', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       assert.dom('[data-test-dashboard]').exists();
-      assert.dom('[data-test-workspace-chooser]').doesNotExist();
     });
 
     test('greets the user by first name', async function (assert) {
