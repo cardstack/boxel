@@ -36,6 +36,7 @@ import { RegisterPage, VerifyEmailPage } from './register/pages.gts';
 import CliAuthPage from './sign-in/cli-auth-page.gts';
 import CliSignInPage from './sign-in/cli-sign-in-page.gts';
 import GoogleCallback from './sign-in/google-callback.gts';
+import NativeSignIn from './sign-in/native-sign-in.gts';
 import SignInPage from './sign-in/sign-in-page.gts';
 import SignOutPage from './sign-in/sign-out-page.gts';
 import { pageOpened, pageRendered } from './telemetry.ts';
@@ -60,6 +61,7 @@ Router.map(function () {
   this.route('forgot-password');
   this.route('reset-password');
   this.route('google-callback');
+  this.route('native-sign-in');
   this.route('keys', function () {
     this.route('add');
     this.route('share', { path: '/:key_id/share' });
@@ -129,6 +131,7 @@ const registry: Record<string, unknown> = {
   'template:forgot-password': ForgotPasswordPage,
   'template:reset-password': ResetPasswordPage,
   'template:google-callback': GoogleCallback,
+  'template:native-sign-in': NativeSignIn,
   'template:keys/index': KeyPage,
   'template:keys/add': KeyAddTemplate,
   'template:keys/share': KeyShareTemplate,

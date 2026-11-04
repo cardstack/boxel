@@ -135,6 +135,7 @@ import {
   handleEndWindowSessions,
   handleGoogleSignIn,
   handleGoogleSignInStart,
+  handleLoginTokenSignIn,
   handleMintLoginToken,
   handleRenewSecureSession,
   handlePasswordChange,
@@ -374,6 +375,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     SECURE_SESSION_PATH,
     handlePasswordSignIn(args, createRealmDeps, new SignInLimiter()),
   );
+  router.post(`${SECURE_SESSION_PATH}/native`, handleLoginTokenSignIn(args));
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(
     `${SECURE_SESSION_PATH}/google`,

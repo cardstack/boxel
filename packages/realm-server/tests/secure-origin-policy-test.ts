@@ -80,6 +80,11 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     marker: WINDOW_SIGN_IN,
   },
   {
+    page: 'native-sign-in',
+    address: 'native-sign-in',
+    marker: '[data-test-secure-native-sign-in-error]',
+  },
+  {
     page: 'google-callback',
     address: 'google-callback',
     marker: '[data-test-secure-start-again]',

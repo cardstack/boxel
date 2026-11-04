@@ -189,6 +189,24 @@ export async function signInWithPassword(
   return json.data.attributes;
 }
 
+// Signs in on a native runtime with a Matrix login token for one of its own
+// local users, which have no password. The runtime's control service mints the
+// token for a session of that user.
+export async function signInWithLoginToken(config, { loginToken }) {
+  let json = await request(
+    new URL('_secure-session/native', config.realmServerURL),
+    {
+      body: {
+        data: {
+          type: 'native-sign-in',
+          attributes: { loginToken, client: 'window' },
+        },
+      },
+    },
+  );
+  return json.data.attributes;
+}
+
 // Sets an account's password, through the realm server, which then ends every
 // secure session of the account, the CLI's included: a session signed in with
 // the old password must not outlive it. The realm server makes the Matrix

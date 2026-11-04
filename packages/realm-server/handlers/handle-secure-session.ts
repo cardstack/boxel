@@ -20,6 +20,7 @@ import {
   SecureSessionError,
   secureSignInConfigured,
   signInWithGoogle,
+  signInWithLoginToken,
   signInWithPassword,
   type PasswordChange,
   type SecureSessionClient,
@@ -296,6 +297,25 @@ export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
         attributes: await googleSignInStart(deps(args)),
       },
     });
+  });
+}
+
+// POST /_secure-session/native: a native runtime signs one of the env's own
+// local users in without a password, with a Matrix login token for the user
+// (`signInWithLoginToken`), sent by the secure origin's `native-sign-in` page
+// from its fragment.
+export function handleLoginTokenSignIn(args: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
+    let attributes = await readAttributes(ctxt, 'native-sign-in');
+    let { loginToken } = attributes;
+    await sendSession(
+      ctxt,
+      await signInWithLoginToken(deps(args), {
+        loginToken: typeof loginToken === 'string' ? loginToken : '',
+        client: clientOf(attributes),
+      }),
+    );
   });
 }
 

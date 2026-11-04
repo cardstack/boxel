@@ -483,6 +483,75 @@ async function signInThroughLocalIdentity(
   }
 }
 
+// A native (Studio) runtime signs one of its own local users in on the secure
+// origin without a password: the env provisions that user (for example
+// @developer), and the person running the env has no password for it. The
+// proof is a Matrix login token (`m.login.token`) for the user, which only a
+// live session of that user can have minted: on a native runtime, the
+// runtime's control service mints one for a session that asks
+// (`v1/browser-login-token`). The Matrix server spends the token, says whose
+// it was, and signs the device it made out again.
+//
+// - Only on a native runtime, where the local identity broker is configured
+//   (`localHostedLogin`). A hosted server never answers it.
+// - Only for an account that has already signed in to Boxel here (it has a
+//   session room), so it reaches users the env set up and never makes one.
+export async function signInWithLoginToken(
+  deps: SecureSessionDeps,
+  attempt: { loginToken: string; client: SecureSessionClient },
+): Promise<SignedInSession> {
+  if (!deps.localHostedLogin) {
+    throw new SecureSessionError(
+      403,
+      'not-native',
+      'Signing in with a link is only for a local Boxel runtime',
+    );
+  }
+  let token = attempt.loginToken.trim();
+  if (!token || token.length > 4096) {
+    throw new SecureSessionError(400, 'bad-request', 'loginToken is required');
+  }
+  let matrixURL = deps.matrixClient.matrixURL;
+  let login = await matrixClientRequest(matrixURL, 'login', {
+    body: {
+      type: 'm.login.token',
+      token,
+      initial_device_display_name: 'Boxel secure origin sign-in',
+    },
+  });
+  if (login.status !== 200) {
+    throw new SecureSessionError(
+      401,
+      'invalid-link',
+      'This sign-in link isn’t valid any more. Ask for a new one.',
+    );
+  }
+  let user = login.body.user_id;
+  let accessToken = login.body.access_token;
+  if (typeof user !== 'string' || typeof accessToken !== 'string') {
+    throw new SecureSessionError(
+      503,
+      'unavailable',
+      'signing in is unavailable right now; try again later',
+    );
+  }
+  await logoutMatrixAccessToken({ matrixURL, accessToken }).catch((e: any) =>
+    log.warn(`could not log out a link sign-in token: ${e?.message ?? e}`),
+  );
+  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+    throw new SecureSessionError(
+      403,
+      'unknown-account',
+      'That account hasn’t signed in to Boxel on this runtime',
+    );
+  }
+  return await createSecureSession(deps, {
+    user,
+    client: attempt.client,
+    proof: `login-token:${createHash('sha256').update(token).digest('hex')}`,
+  });
+}
+
 // A password change the secure origin's pages ask the realm server to make:
 // the new password, and the proof the Matrix server asks for to set it.
 //

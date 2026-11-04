@@ -19,6 +19,7 @@ export const PAGE_PATHS = Object.freeze([
   'forgot-password',
   'reset-password',
   'google-callback',
+  'native-sign-in',
   'keys',
   'keys/add',
   'enter-key',
