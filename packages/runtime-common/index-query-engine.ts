@@ -417,6 +417,19 @@ export interface QueryResultsMeta {
 // GIN index is built on `to_tsvector('english', markdown_search_text(markdown))`,
 // so the query predicate below must call the same function or the planner
 // won't use it.
+// What a filter compiles inside: whether it sits under an `any` (where a
+// condition that leans on the prerendered_html join is planned per row), and
+// which prerendered_html table a subquery reads (the staged one for a staged
+// read).
+interface FilterContext {
+  inAny: boolean;
+  prerenderedTable: string;
+}
+const DEFAULT_FILTER_CONTEXT: FilterContext = {
+  inAny: false,
+  prerenderedTable: 'prerendered_html',
+};
+
 export const generalSortFields: Record<string, string> = {
   lastModified: 'i.last_modified',
   createdAt: 'i.resource_created_at',
@@ -1240,7 +1253,12 @@ export class IndexQueryEngine {
 
       if (filter) {
         await this.#assertNearFilters(filter, baseCardRef);
-        conditions.push(this.filterCondition(filter, baseCardRef, 'positive'));
+        conditions.push(
+          this.filterCondition(filter, baseCardRef, 'positive', {
+            inAny: false,
+            prerenderedTable: prerenderedTableFromOpts(opts),
+          }),
+        );
       }
 
       let everyCondition = every(conditions);
@@ -1659,6 +1677,7 @@ export class IndexQueryEngine {
     filter: Filter,
     onRef: CodeRef,
     polarity: FilterPolarity,
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = (filter as { type?: CodeRef }).type;
     let onProp = 'on' in filter ? filter.on : undefined;
@@ -1693,22 +1712,28 @@ export class IndexQueryEngine {
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
-      return this.notCondition(filter, on, typeConditionRef, polarity);
+      return this.notCondition(filter, on, typeConditionRef, polarity, context);
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('matches' in filter) {
-      return this.matchesCondition(filter, on, typeConditionRef);
+      return this.matchesCondition(filter, on, typeConditionRef, context);
     } else if (isNearFilter(filter)) {
       return this.nearCondition(filter, typeConditionRef);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        ...filter.every.map((i) => this.filterCondition(i, on, polarity)),
+        ...filter.every.map((i) =>
+          this.filterCondition(i, on, polarity, context),
+        ),
       ]);
     } else if ('any' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        any([...filter.any.map((i) => this.filterCondition(i, on, polarity))]),
+        any([
+          ...filter.any.map((i) =>
+            this.filterCondition(i, on, polarity, { ...context, inAny: true }),
+          ),
+        ]),
       ]);
     } else {
       if (isCardTypeFilter(filter)) {
@@ -1897,6 +1922,7 @@ export class IndexQueryEngine {
     on: CodeRef,
     typeConditionRef?: CodeRef,
     polarity: FilterPolarity = 'positive',
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
@@ -1904,7 +1930,7 @@ export class IndexQueryEngine {
       [
         'NOT',
         ...addExplicitParens(
-          this.filterCondition(filter.not, on, flipPolarity(polarity)),
+          this.filterCondition(filter.not, on, flipPolarity(polarity), context),
         ),
       ],
     ]);
@@ -1986,8 +2012,11 @@ export class IndexQueryEngine {
     let dims = vectorDimensions(to);
     let condition: CardExpression;
     if (this.#dbAdapter.kind === 'pg') {
+      // An uncorrelated IN rather than a correlated EXISTS: under AND the
+      // planner makes it a semi-join, and under OR (`any`) a hashed SubPlan
+      // that scans the vectors once instead of once per candidate row.
       condition = [
-        'EXISTS (SELECT 1 FROM boxel_index_vectors AS nvf WHERE nvf.realm_url = i.realm_url AND nvf.url = i.url AND nvf.type = i.type AND nvf.field_path =',
+        '(i.realm_url, i.url, i.type) IN (SELECT nvf.realm_url, nvf.url, nvf.type FROM boxel_index_vectors AS nvf WHERE nvf.field_path =',
         param(fieldPath),
         'AND nvf.dims =',
         param(dims),
@@ -2267,6 +2296,7 @@ export class IndexQueryEngine {
     filter: MatchesFilter,
     _on: CodeRef,
     typeConditionRef?: CodeRef,
+    context: FilterContext = DEFAULT_FILTER_CONTEXT,
   ): CardExpression {
     let typeRef = typeConditionRef;
     let predicate: CardExpression =
@@ -2274,22 +2304,36 @@ export class IndexQueryEngine {
         ? ['FALSE']
         : [
             dbExpression({
-              pg: [
-                // The leading `ph.markdown IS NOT NULL` is a null-rejecting
-                // guard, not a behavior change: `markdown_search_text` coalesces
-                // null markdown to '' and a non-empty query never matches an
-                // empty tsvector, so absent-markdown rows are already excluded.
-                // But because that coalesce hides the null-rejection from the
-                // planner, without this guard it cannot reduce the LEFT JOIN to
-                // prerendered_html, drives the query from boxel_index, and
-                // recomputes every row's tsvector at query time instead of using
-                // the markdown GIN index. The explicit guard restores the
-                // reduction so the index is used, and stays correct under `not`
-                // and `any` (an absent row still can't match a positive term).
-                `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
-                param(filter.matches),
-                `)`,
-              ],
+              pg: context.inAny
+                ? [
+                    // Under an `any`, the LEFT JOIN to prerendered_html can't
+                    // be reduced (a row may qualify through another branch),
+                    // so the inline form below recomputes every row's
+                    // tsvector. An uncorrelated IN instead becomes a hashed
+                    // SubPlan: the markdown GIN index answers it once, and
+                    // each row is a hash probe. Keyed on the join's own
+                    // primary key, so it selects exactly the rows the inline
+                    // form would.
+                    `(i.url, i.realm_url, i.type) IN (SELECT phm.url, phm.realm_url, phm.type FROM ${context.prerenderedTable} AS phm WHERE phm.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(phm.markdown)) @@ websearch_to_tsquery('english',`,
+                    param(filter.matches),
+                    `))`,
+                  ]
+                : [
+                    // The leading `ph.markdown IS NOT NULL` is a null-rejecting
+                    // guard, not a behavior change: `markdown_search_text` coalesces
+                    // null markdown to '' and a non-empty query never matches an
+                    // empty tsvector, so absent-markdown rows are already excluded.
+                    // But because that coalesce hides the null-rejection from the
+                    // planner, without this guard it cannot reduce the LEFT JOIN to
+                    // prerendered_html, drives the query from boxel_index, and
+                    // recomputes every row's tsvector at query time instead of using
+                    // the markdown GIN index. The explicit guard restores the
+                    // reduction so the index is used, and stays correct under `not`
+                    // and `any` (an absent row still can't match a positive term).
+                    `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
+                    param(filter.matches),
+                    `)`,
+                  ],
               sqlite: [
                 `LOWER(coalesce(ph.markdown, '')) LIKE LOWER(`,
                 param(`%${escapeSqliteLikePattern(filter.matches)}%`),
