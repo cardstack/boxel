@@ -182,13 +182,20 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               />
             {{/if}}
             {{#if this.onlyKind}}
-              <p class='kind-hint' data-test-only-kind={{this.onlyKind.value}}>
-                {{this.cardName}}
-                needs
-                {{this.onlyKind.article}}
-                <strong>{{this.onlyKind.label}}</strong>.
-                {{this.onlyKind.hint}}
-              </p>
+              <FieldContainer
+                @tag='div'
+                @label='Kind'
+                @icon={{Tag}}
+                data-test-only-kind={{this.onlyKind.value}}
+              >
+                <div class='only-kind'>
+                  <p class='only-kind-label'>{{this.cardName}}
+                    needs
+                    {{this.onlyKind.article}}
+                    <strong>{{this.onlyKind.label}}</strong>.</p>
+                  <p class='only-kind-hint'>{{this.onlyKind.hint}}</p>
+                </div>
+              </FieldContainer>
               {{#if this.isOAuthClient}}
                 <div class='kind-hint' data-test-connect-instead>
                   <p>If a sign-in app for this site is set up already, connect
@@ -213,12 +220,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
               />
             {{/if}}
             {{#if this.suggestsServiceAccount}}
-              <p class='kind-hint' data-test-google-destination-hint>
-                This request goes to a Google API. If you were given a JSON key
-                file for a Google Cloud service account, choose
-                <strong>Google service account</strong>; if you have an API key,
-                paste it as a key.
-              </p>
+              <div class='kind-hint' data-test-google-destination-hint>
+                <p>This request goes to a Google API. If you were given a JSON
+                  key file for a Google Cloud service account, choose
+                  <strong>Google service account</strong>; if you have an API
+                  key, paste it as a key.</p>
+              </div>
             {{/if}}
             {{#if this.isOAuthClient}}
               <OAuthProviderChoice
@@ -359,6 +366,23 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       }
       .kind-hint p {
         margin: 0;
+      }
+      .only-kind {
+        display: grid;
+        gap: var(--boxel-sp-5xs);
+      }
+      .only-kind p {
+        margin: 0;
+      }
+      .only-kind-label {
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+      }
+      .only-kind-hint {
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--muted-foreground);
+        overflow-wrap: anywhere;
       }
       .keys-error {
         color: var(--destructive-ink, var(--boxel-danger));
