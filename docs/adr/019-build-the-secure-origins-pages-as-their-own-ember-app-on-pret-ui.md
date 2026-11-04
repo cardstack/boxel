@@ -62,21 +62,22 @@ Ember's runtime template compiler.
 
 ### 1.3. What the package may import
 
-The package MAY import Pret UI's components, helpers and modifiers
-(`@cardstack/pretui`), each by its own module path. It MUST NOT import from
-`packages/host`, `@cardstack/runtime-common`, the base realm, any realm or
-card module, or any script from `@cardstack/boxel-ui`, directly or through a
-Pret UI module. Every module in the build's output MUST come from the package
-itself or from a package named in its allowlist. A plugin in the package's
-build MUST fail the build when the output holds any other module, or any
-module of Ember's runtime template compiler (§1.2). Adding a package to the
-allowlist is a change to the secure origin's trusted code, and MUST be
-reviewed as one. That holds for a package that a Pret UI module imports as
-much as for one the package imports by name. This ADR is that review for
-`@cardstack/pretui`, `@cardstack/boxel-icons` (whose icons are template-only
-SVG components) and `ember-modifier` (which Pret UI's components use for
-their modifiers): the allowlist MAY name them. Any other package MUST be
-added in a change reviewed for it.
+The package MAY import anything Pret UI (`@cardstack/pretui`) exports. It MUST
+NOT import from `packages/host`, `@cardstack/runtime-common`, the base realm,
+any realm or card module, or any script from `@cardstack/boxel-ui`, directly
+or through a Pret UI module. Every module in the build's output MUST come from
+the package itself or from a package named in its allowlist. A plugin in the
+package's build MUST fail the build when the output holds any other module,
+or any module of Ember's runtime template compiler (§1.2). Adding a package to
+the allowlist is a change to the secure origin's trusted code, and MUST be
+reviewed as one. That holds for a package that Pret UI imports as much as for
+one the package imports by name.
+
+This ADR is that review for Pret UI as a whole and for the packages Pret UI
+imports: `@cardstack/boxel-icons` (template-only SVG components),
+`ember-modifier`, `ember-provide-consume-context` and `glimmer-motion`. The
+allowlist MAY name all five. Any other package MUST be added in a change
+reviewed for it.
 
 ### 1.4. Styles
 
@@ -205,8 +206,8 @@ UI, or are met by the rules above:
 
 - **Size.** boxel-ui's components shipped 1,265 KB through its index modules,
   since boxel-ui declares no `sideEffects`. Pret UI exports each component
-  from its own module, with no index to pull in, so a page ships what it
-  imports (§1.3), and the build record shows its size (§1.8).
+  from its own module, with no index to pull in, so the bundle holds only
+  what a page imports, and the build record shows its size (§1.8).
 - **Style attributes.** boxel-ui's LoadingIndicator and BoxelIcon set
   `style` attributes the policy refuses. So do about 130 of the
   modules in Pret UI's `components/`, so §1.5 applies to every Pret UI module the build ships. One
