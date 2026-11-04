@@ -28,6 +28,7 @@ import {
   bindingType,
   canonicalInstance,
   slotBindings,
+  slotToken,
   type SlotBinding,
 } from './key-bindings.ts';
 
@@ -577,10 +578,12 @@ const MAX_LISTED_TYPES = 200;
 // The card definitions the realm's cards adopt from that declare a `callApi`
 // operation sending the caller's own key (`{{userKey}}`), by display name:
 // the cards whose requests one of the user's keys can be approved for there.
-// With `slot: 'apiKey'`, those sending the realm's key (`{{apiKey}}`)
-// instead: the cards one of the realm's shares can be approved for. Each
-// definition is read from the definition cache, and only from a realm the
-// user may read.
+// With `slot: 'apiKey'`, those with an operation sending the realm's key
+// (`{{apiKey}}`) from a slot no share fills yet: the cards a new share in the
+// realm can be approved for. A slot already filled by a share stays with that
+// share, which its own owner keeps up, so a card whose every such slot is
+// filled has nothing for another share. Each definition is read from the
+// definition cache, and only from a realm the user may read.
 export async function realmCardsWithRequests(
   deps: Deps,
   user: string,
@@ -618,6 +621,28 @@ export async function realmCardsWithRequests(
       types.set(`${absolute.module}#${absolute.name}`, absolute);
     }
   }
+  // The realm's slots a share fills, by type, operation and slot, for the
+  // `apiKey` listing. Per-instance operations aren't listed, so only bindings
+  // for a whole type count.
+  let filled = new Set<string>();
+  if (slot === 'apiKey') {
+    let bound = (await query(dbAdapter, [
+      `SELECT definition_url, export_name, operation_name, slot
+         FROM key_bindings
+        WHERE share_id IS NOT NULL AND instance_url IS NULL AND realm_url = `,
+      param(realm.url),
+    ])) as {
+      definition_url: string;
+      export_name: string;
+      operation_name: string;
+      slot: string;
+    }[];
+    for (let b of bound) {
+      filled.add(
+        `${b.definition_url}#${b.export_name}|${b.operation_name}|${b.slot}`,
+      );
+    }
+  }
   let readable = new Map<string, boolean>();
   let found: CardWithRequests[] = [];
   for (let codeRef of types.values()) {
@@ -649,12 +674,21 @@ export async function realmCardsWithRequests(
     }
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
-    let sendsKey = Object.values(definition.operations ?? {}).some(
-      (operation) =>
+    let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
+    let sendsKey = Object.entries(definition.operations ?? {}).some(
+      ([name, operation]) =>
         operation.base === 'callApi' &&
         !operation.invalid &&
         !operation.callApi?.perInstance &&
-        operation.callApi?.slots.some(({ key }) => key === slot),
+        operation.callApi?.slots.some(
+          (s) =>
+            s.key === slot &&
+            (slot === 'userKey' ||
+              (type !== undefined &&
+                !filled.has(
+                  `${type.module}#${type.name}|${name}|${slotToken(s)}`,
+                ))),
+        ),
     );
     if (sendsKey) {
       found.push({

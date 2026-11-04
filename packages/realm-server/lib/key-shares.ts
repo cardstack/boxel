@@ -657,9 +657,9 @@ export async function listOwnShares(
 export interface SharedRealm {
   url: string;
   name: string | null;
-  // `approvedCalls`: how many of the realm's operations are approved to send
-  // the share's key, whatever state each approval is in. None means no card
-  // there calls with it yet.
+  // `approvedCalls`: how many bindings send the share (one per slot an
+  // approval fills, and per card for an operation approved per card),
+  // whatever state each is in. None means no card there calls with it yet.
   shares: {
     id: string;
     label: string;

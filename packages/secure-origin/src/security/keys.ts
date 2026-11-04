@@ -166,9 +166,9 @@ export interface UserKey {
 // A realm that one of the user's keys is shared with, along with the key's
 // shares there. `name` is null when the user can no longer read the realm, or
 // before its name is indexed: the address is then all there is to show.
-// A realm one of the user's keys is shared into, with the key's shares there.
-// `approvedCalls` counts the realm's operations approved to send a share's
-// key; none means no card there calls with it yet.
+// `approvedCalls` counts the bindings that send a share (one per slot an
+// approval fills, and per card for an operation approved per card); none
+// means no card there calls with it yet.
 export interface SharedWorkspace {
   url: string;
   name: string | null;

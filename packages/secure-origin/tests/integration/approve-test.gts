@@ -1674,6 +1674,19 @@ module('Integration | approve pages', function (hooks) {
             label: 'Other GitHub',
           },
         ];
+        // The card's own-key call beside its shared ones.
+        attributes.groups[0].operations.push(
+          operation('listPRs', 'List your open pull requests'),
+        );
+        attributes.keys = [
+          {
+            id: 'key-gh',
+            name: 'GitHub token',
+            kind: 'static',
+            state: 'active',
+            covers: [GRAPHQL],
+          },
+        ];
         return answer;
       },
     });
@@ -1686,6 +1699,13 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-key="Other GitHub"] input')
       .isChecked('the share the page was opened for');
     assert.dom('[data-test-approve-key="Team GitHub"] input').isNotChecked();
+    assert
+      .dom('[data-test-approve-tick="listTeamIssues"]')
+      .isChecked('the calls that send the workspace’s key start ticked');
+    assert.dom('[data-test-approve-tick="listTeamPRs"]').isChecked();
+    assert
+      .dom('[data-test-approve-tick="listPRs"]')
+      .isNotChecked('the call that sends the user’s own key does not');
   });
 
   test('a key’s share is set up for a card from the key’s use page, opened for that share', async function (assert) {

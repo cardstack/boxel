@@ -1491,7 +1491,7 @@ module('Integration | key pages', function (hooks) {
         .doesNotExist('a share approved for calls says nothing more');
       assert
         .dom(`${team} [data-test-key-share-approve="share-team-1"]`)
-        .hasAria('label', 'Approve “Weather” in Team for a card');
+        .hasAria('label', 'Approve for a card: “Weather” in Team');
       assert
         .dom(
           '[data-test-key-row="Maps"] [data-test-key-share-unapproved="share-maps"]',

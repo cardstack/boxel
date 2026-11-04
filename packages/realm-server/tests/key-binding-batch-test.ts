@@ -644,10 +644,32 @@ module(basename(import.meta.filename), function (hooks) {
       )
         .get(key.id)
         ?.flatMap((realm) => realm.shares.map((s) => s.approvedCalls));
+    let cardsForAShare = async () => {
+      let response = await request
+        .post('/_secure-window/cards')
+        .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: { realm: realmURL.href, slot: 'apiKey' },
+          },
+        });
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data.map(
+        (c: { attributes: { name: string } }) => c.attributes.name,
+      );
+    };
     assert.deepEqual(
       await approvedCalls(),
       [0],
       'a share no operation is approved for yet says so',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      ['Inbox'],
+      "a card whose realm's-key slot no share fills is offered to a share",
     );
     let approved = await approveFrom(WRITER, found, ['shared'], () => ({
       shareId: found.shares[0]!.id,
@@ -656,7 +678,12 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       await approvedCalls(),
       [1],
-      'the key listing counts the operations approved to send the share',
+      'the key listing counts the bindings that send the share',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      [],
+      'once a share fills the slot, the card has nothing for another share',
     );
     assert.notOk(
       operationsIn(await batchOf(OWNER, onType(INBOX))).find(

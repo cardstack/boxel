@@ -194,9 +194,9 @@ export default class KeyUse extends Component<Signature> {
                           type='button'
                           @kind='secondary'
                           @size='extra-small'
-                          aria-label='Approve “{{share.label}}” in {{workspaceTitle
+                          aria-label='Approve for a card: “{{share.label}}” in {{workspaceTitle
                             workspace
-                          }} for a card'
+                          }}'
                           data-test-key-share-approve={{share.id}}
                           {{on
                             'click'
