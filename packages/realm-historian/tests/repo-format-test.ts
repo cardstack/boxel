@@ -79,11 +79,17 @@ module('repo format', (hooks) => {
     assert.strictEqual(await readMain(gitDir), first);
     await assert.rejects(
       updateMain(gitDir, second, undefined),
-      /update-ref|unable|cannot/i,
-      'a stale expectation is refused',
+      /is at [0-9a-f]{40} but expected 0{40}/,
+      'an expectation of no commit is refused once there is one',
     );
     assert.strictEqual(await readMain(gitDir), first);
     await updateMain(gitDir, second, first);
+    assert.strictEqual(await readMain(gitDir), second);
+    await assert.rejects(
+      updateMain(gitDir, first, first),
+      /is at [0-9a-f]{40} but expected [0-9a-f]{40}/,
+      'an expectation of a commit main has moved past is refused',
+    );
     assert.strictEqual(await readMain(gitDir), second);
     assert.strictEqual(
       await git(gitDir, 'log', '--format=%s', 'refs/heads/main'),
