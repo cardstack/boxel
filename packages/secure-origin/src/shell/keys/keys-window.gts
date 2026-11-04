@@ -182,8 +182,9 @@ export default class KeysWindow extends Component<Signature> {
          indicator, so focus rings, whether drawn in --ring or as the global
          --boxel-outline, take the primary ink (4.95:1) there. A checkbox's
          edge is the muted foreground unticked, which marks the box clearly,
-         and the primary ink ticked, around the teal fill. The bar keeps the
-         teal, which reads on the purple. */
+         and the primary ink ticked, around the teal fill. A radio button's
+         edge is the muted foreground too, and its ring and dot the primary
+         ink once chosen. The bar keeps the teal, which reads on the purple. */
       .body {
         --ring: var(--primary-ink);
         --boxel-outline-color: var(--ring);
@@ -191,6 +192,8 @@ export default class KeysWindow extends Component<Signature> {
           var(--boxel-outline-color);
         --boxel-checkbox-border-color: var(--muted-foreground);
         --boxel-checkbox-checked-border-color: var(--primary-ink);
+        --boxel-radio-border-color: var(--muted-foreground);
+        --boxel-radio-checked-color: var(--primary-ink);
         flex: 1;
         display: flex;
         flex-direction: column;
