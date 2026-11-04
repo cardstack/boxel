@@ -56,6 +56,7 @@ function deps(
     secureOriginURL: args.secureOriginURL,
     googleSignIn: args.googleSignIn,
     createRealm,
+    localHostedLogin: args.localHostedLogin ?? undefined,
   };
 }
 

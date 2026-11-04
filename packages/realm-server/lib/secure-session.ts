@@ -130,6 +130,15 @@ export interface SecureSessionDeps {
   // What making a personal realm needs, for a user's first sign-in to Boxel
   // through Google.
   createRealm?: CreateRealmDeps;
+  // A native (Studio) runtime's sign-in: the person's hosted Boxel account,
+  // checked by the local identity broker, which answers with this server's
+  // Matrix login for the local account it is linked to. Absent on hosted.
+  localHostedLogin?: (credentials: {
+    username: string;
+    password: string;
+  }) => Promise<{
+    auth: { user_id: string; access_token: string; device_id: string };
+  }>;
 }
 
 export interface SignedInSession {
@@ -392,6 +401,12 @@ export async function signInWithPassword(
     registrationToken?: string;
   },
 ): Promise<SignedInSession> {
+  if (deps.localHostedLogin) {
+    let local = await signInThroughLocalIdentity(deps, limiter, attempt);
+    if (local) {
+      return local;
+    }
+  }
   return await withPasswordLimit(deps, limiter, attempt, async (user) => {
     let uiaSession = await confirmPassword(deps, user, attempt.password);
     if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
@@ -403,6 +418,69 @@ export async function signInWithPassword(
       proof: `uia:${uiaSession}`,
     });
   });
+}
+
+// A native runtime signs a person in with their hosted Boxel account: the
+// local identity broker checks it and answers with a Matrix login for the
+// local account it is linked to, whose user the secure session is then made
+// for. The login itself is only the proof, so its device is signed out again.
+// Resolves to undefined when the broker doesn't know the credentials, so a
+// local account's own password is still checked by the Matrix server after.
+async function signInThroughLocalIdentity(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: {
+    username: string;
+    password: string;
+    client: SecureSessionClient;
+    registrationToken?: string;
+  },
+): Promise<SignedInSession | undefined> {
+  if (!deps.localHostedLogin || !attempt.username.trim() || !attempt.password) {
+    return undefined;
+  }
+  let account = `local-hosted:${attempt.username.trim().toLowerCase()}`;
+  let check = limiter.start(account);
+  if (!check.allowed) {
+    throw rateLimited(check.retryAfterMs);
+  }
+  let failed = false;
+  try {
+    let result: Awaited<
+      ReturnType<NonNullable<SecureSessionDeps['localHostedLogin']>>
+    >;
+    try {
+      result = await deps.localHostedLogin({
+        username: attempt.username,
+        password: attempt.password,
+      });
+    } catch (e: any) {
+      if (e?.status === 429) {
+        throw rateLimited(e.retryAfterMs ?? undefined);
+      }
+      // 401: not a hosted account the broker links here; 400/503: the broker
+      // can't answer. Either way the Matrix server's own check runs next.
+      failed = e?.status === 401;
+      return undefined;
+    }
+    let user = result.auth.user_id;
+    await logoutMatrixAccessToken({
+      matrixURL: deps.matrixClient.matrixURL,
+      accessToken: result.auth.access_token,
+    }).catch((e: any) =>
+      log.warn(`could not log out a local sign-in token: ${e?.message ?? e}`),
+    );
+    if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+      await setUpFirstSignIn(deps, user, attempt.registrationToken);
+    }
+    return await createSecureSession(deps, {
+      user,
+      client: attempt.client,
+      proof: `local-hosted:${createHash('sha256').update(result.auth.device_id).digest('hex')}`,
+    });
+  } finally {
+    limiter.finish(account, { failed });
+  }
 }
 
 // A password change the secure origin's pages ask the realm server to make:
