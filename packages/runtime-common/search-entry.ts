@@ -501,6 +501,8 @@ function translateSort(value: unknown, rootAnchor: unknown): unknown[] {
         out.on = v;
       } else if (key === 'direction') {
         out.direction = v;
+      } else if (key === 'near') {
+        out.near = v;
       } else if (key === 'on') {
         throw invalidQuery(
           `${pointer}: the sort type anchor is addressed as item.on`,
@@ -1454,8 +1456,20 @@ export function buildEntryResource(args: {
   // Full-text relevance for the query's `matches` terms — present only on a
   // relevance-sorted query; rides in `meta._matchRelevance`. Omitted otherwise.
   matchRelevance?: number;
+  // Cosine distance to the target of the query's first `near` sort (0 = same
+  // direction, 2 = opposite) — present only on a near-sorted query; rides in
+  // `meta._nearDistance`. Omitted otherwise, and for a card with no vector.
+  nearDistance?: number;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId, generation, matchRelevance } = args;
+  let {
+    url,
+    htmlIds,
+    itemType,
+    iconId,
+    generation,
+    matchRelevance,
+    nearDistance,
+  } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -1474,12 +1488,17 @@ export function buildEntryResource(args: {
       data: { type: IconResourceType, id: iconId },
     };
   }
-  if (generation !== undefined || matchRelevance !== undefined) {
+  if (
+    generation !== undefined ||
+    matchRelevance !== undefined ||
+    nearDistance !== undefined
+  ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
       ...(matchRelevance !== undefined
         ? { _matchRelevance: matchRelevance }
         : {}),
+      ...(nearDistance !== undefined ? { _nearDistance: nearDistance } : {}),
     };
   }
   return resource;

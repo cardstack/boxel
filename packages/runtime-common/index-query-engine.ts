@@ -41,7 +41,16 @@ import {
   isDbExpression,
   sortDirection,
 } from './expression.ts';
-import type { RangeOperator, RangeFilterValue } from './query.ts';
+import type {
+  RangeOperator,
+  RangeFilterValue,
+  NearSortTarget,
+} from './query.ts';
+import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
+import {
+  hasVectorIndex,
+  VECTOR_INDEX_UNAVAILABLE_MESSAGE,
+} from './vector-index.ts';
 import {
   type Query,
   type Filter,
@@ -425,6 +434,33 @@ export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
 // would resolve as a nonexistent field.
 export function isMatchRelevanceSort(sort: { by: string }): boolean {
   return sort.by === MATCH_RELEVANCE_SORT_KEY;
+}
+
+// A `near` sort ranks by cosine distance between a VectorField and a target
+// vector (see `NearSortTarget` in query.ts). Like `_matchRelevance`, the
+// score belongs to the query: `_search` projects it as an aggregated, aliased
+// column (`nearDistanceAlias`) and the order builders reference the alias,
+// defaulting to `asc` (nearest first). The first near sort's distance (0 =
+// same direction, 2 = opposite) rides each result's `meta._nearDistance`.
+export const NEAR_DISTANCE_KEY = '_nearDistance';
+
+export function isNearSort(sort: object): sort is {
+  by: string;
+  on: CodeRef;
+  near: NearSortTarget;
+  direction?: 'asc' | 'desc';
+} {
+  return 'near' in sort && (sort as { near?: unknown }).near != null;
+}
+
+// The alias of the sort at `index`'s distance column: the first near sort
+// gets `_nearDistance` (which `meta._nearDistance` reads), any later one a
+// suffixed alias.
+function nearDistanceAlias(sort: Sort, index: number): string {
+  let firstNear = sort.findIndex((s) => isNearSort(s));
+  return index === firstNear
+    ? NEAR_DISTANCE_KEY
+    : `${NEAR_DISTANCE_KEY}_${index}`;
 }
 
 export { isValidPrerenderedHtmlFormat };
@@ -1207,6 +1243,8 @@ export class IndexQueryEngine {
         }
         relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
       }
+      let { nearColumns, nearJoins } = await this.#nearSortExpressions(sort);
+      relevanceColumn = [...relevanceColumn, ...nearColumns];
 
       let query: CardExpression;
       if (conditionalLiveDoc) {
@@ -1224,9 +1262,9 @@ export class IndexQueryEngine {
           ...selectClauseExpression,
           ...relevanceColumn,
           ...innerSortColumns,
-          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
-            opts,
-          )} ${tableValuedFunctionsPlaceholder}`,
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+          ...nearJoins,
+          tableValuedFunctionsPlaceholder,
           'WHERE',
           ...everyCondition,
           'GROUP BY i.url, i.type',
@@ -1238,9 +1276,9 @@ export class IndexQueryEngine {
         query = [
           ...selectClauseExpression,
           ...relevanceColumn,
-          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
-            opts,
-          )} ${tableValuedFunctionsPlaceholder}`,
+          `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+          ...nearJoins,
+          tableValuedFunctionsPlaceholder,
           'WHERE',
           ...everyCondition,
           'GROUP BY i.url, i.type',
@@ -1445,27 +1483,35 @@ export class IndexQueryEngine {
     return [
       'ORDER BY',
       ...separatedByCommas([
-        ...sort.map((s) =>
+        ...sort.map((s, index) =>
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
-          // to `desc` (best match first). Everything else sorts on a column.
-          isMatchRelevanceSort(s)
+          // to `desc` (best match first). A near sort's distance column works
+          // the same way, defaulting to `asc` (nearest first). Everything else
+          // sorts on a column.
+          isNearSort(s)
             ? [
-                `"${MATCH_RELEVANCE_SORT_KEY}"`,
-                sortDirection(s.direction ?? 'desc'),
+                `"${nearDistanceAlias(sort, index)}"`,
+                sortDirection(s.direction ?? 'asc'),
                 'NULLS LAST',
               ]
-            : [
-                // intentionally not using field arity here--not sure what it
-                // means to sort via a plural field
-                'ANY_VALUE(',
-                'on' in s
-                  ? fieldQuery(s.by, s.on, false, 'sort')
-                  : this.generalFieldSortColumn(s.by),
-                ')',
-                sortDirection(s.direction),
-                'NULLS LAST',
-              ],
+            : isMatchRelevanceSort(s)
+              ? [
+                  `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                  sortDirection(s.direction ?? 'desc'),
+                  'NULLS LAST',
+                ]
+              : [
+                  // intentionally not using field arity here--not sure what it
+                  // means to sort via a plural field
+                  'ANY_VALUE(',
+                  'on' in s
+                    ? fieldQuery(s.by, s.on, false, 'sort')
+                    : this.generalFieldSortColumn(s.by),
+                  ')',
+                  sortDirection(s.direction),
+                  'NULLS LAST',
+                ],
         ),
         // `url` then `type` are the final sort keys for deterministic results
         // (the two rows of a dual-indexed card `.json` share a url).
@@ -1496,6 +1542,15 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
+      // A near sort's distance column is projected by the inner SELECT too.
+      if (isNearSort(s)) {
+        outerKeys.push([
+          `"${nearDistanceAlias(sort, i)}"`,
+          sortDirection(s.direction ?? 'asc'),
+          'NULLS LAST',
+        ]);
+        return;
+      }
       // `_matchRelevance` is already projected by the inner SELECT (see
       // `_search`), so it rides through `sub.*` — reference it in the outer
       // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
@@ -1836,6 +1891,73 @@ export class IndexQueryEngine {
   //
   // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
   // table-valued fan-out, where every fanned row shares the same markdown).
+  // The projection columns and joins for the query's near sorts.
+  //
+  // Postgres reads the vectors the index writer copied into
+  // `boxel_index_vectors` (one LEFT JOIN per near sort, on the card's row and
+  // the field path) and takes pgvector's cosine distance `<=>`. MIN folds a
+  // plural field's vectors into the card's nearest one, and leaves NULL (sorted
+  // last) for a card with no vector at the path. The search is exact: every
+  // row the filter admits is scored, so a near sort combines with any filter
+  // and never drops a match. While an index pass is staged (WIP reads), the
+  // table still holds the last committed vectors.
+  //
+  // SQLite (the browser index the host tests run on) has no vector type, so
+  // it scores the search doc's own "vec:[…]" string with json_each. That is a
+  // fallback for small test indexes, not for real data.
+  async #nearSortExpressions(sort: Sort | undefined): Promise<{
+    nearColumns: CardExpression;
+    nearJoins: CardExpression;
+  }> {
+    let nearColumns: CardExpression = [];
+    let nearJoins: CardExpression = [];
+    if (!sort) {
+      return { nearColumns, nearJoins };
+    }
+    for (let [index, s] of sort.entries()) {
+      if (!isNearSort(s)) {
+        continue;
+      }
+      let definition = await this.getDefinition(s.on);
+      let field = await getField(definition, s.by, this.#definitionLookup);
+      if (field.serializerName !== 'vector') {
+        throw new InvalidQueryError(
+          `sort by "${s.by}" near a vector requires "${s.by}" to be a VectorField`,
+        );
+      }
+      let alias = nearDistanceAlias(sort, index);
+      let target = vectorToSqlLiteral(s.near);
+      let dims = vectorDimensions(s.near);
+      if (this.#dbAdapter.kind === 'pg') {
+        if (!(await hasVectorIndex(this.#dbAdapter))) {
+          throw new InvalidQueryError(VECTOR_INDEX_UNAVAILABLE_MESSAGE);
+        }
+        let v = `nv${index}`;
+        nearJoins.push(
+          `LEFT JOIN boxel_index_vectors AS ${v} ON ${v}.realm_url = i.realm_url AND ${v}.url = i.url AND ${v}.type = i.type AND ${v}.field_path =`,
+          param(removeBrackets(s.by)),
+          `AND ${v}.dims =`,
+          param(dims),
+        );
+        nearColumns.push(
+          `, MIN(${v}.embedding <=> CAST(`,
+          param(target),
+          `AS vector)) AS "${alias}"`,
+        );
+      } else {
+        let jsonPath = `$.${removeBrackets(s.by)}`;
+        nearColumns.push(
+          ', MIN((SELECT 1 - SUM(a.value * b.value) / (sqrt(SUM(a.value * a.value)) * sqrt(SUM(b.value * b.value))) FROM json_each(substr(json_extract(i.search_doc,',
+          param(jsonPath),
+          '), 5)) AS a JOIN json_each(',
+          param(target),
+          `) AS b ON a.key = b.key)) AS "${alias}"`,
+        );
+      }
+    }
+    return { nearColumns, nearJoins };
+  }
+
   private matchRelevanceExpression(matches: string[]): CardExpression {
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {

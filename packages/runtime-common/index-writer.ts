@@ -40,6 +40,7 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
+import { hasVectorIndex, collectSearchDocVectors } from './vector-index.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
@@ -3754,6 +3755,7 @@ export class Batch {
         tombstoneColumns: INDEX_TOMBSTONE_COLUMNS,
         restamp: true,
       });
+      await this.#syncVectorIndex();
 
       // Publish this pass's `prerendered_html_pending` rows, UNLESS this is a
       // split-mode index pass — in which case HTML flows only through the
@@ -3771,6 +3773,74 @@ export class Batch {
     }
 
     await this.stampRenderOnlyEntries();
+  }
+
+  // Re-derives `boxel_index_vectors` for every URL this pass invalidated,
+  // from the search docs it just promoted: the URL's old vector rows go, and
+  // each vector its new search doc carries (see `collectSearchDocVectors`) is
+  // written back. A tombstoned URL keeps none. Runs inside the swap
+  // transaction, so a `near` sort never sees a card's new row with its old
+  // vectors. A no-op where the database has no vector table (SQLite, or a
+  // Postgres without pgvector).
+  async #syncVectorIndex() {
+    if (!(await hasVectorIndex(this.#dbAdapter))) {
+      return;
+    }
+    let urls = [...this.#invalidations];
+    const CHUNK = 500;
+    for (let start = 0; start < urls.length; start += CHUNK) {
+      let chunk = urls.slice(start, start + CHUNK);
+      let urlList = addExplicitParens(
+        separatedByCommas(chunk.map((url) => [param(url)])),
+      );
+      await this.#query([
+        'DELETE FROM boxel_index_vectors WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          ['url IN', ...urlList],
+        ]),
+      ] as Expression);
+      let rows = (await this.#query([
+        'SELECT url, type, search_doc FROM boxel_index WHERE',
+        ...every([
+          ['realm_url =', param(this.realmURL.href)],
+          ['url IN', ...urlList],
+          any([['is_deleted = false'], ['is_deleted IS NULL']]),
+          [`search_doc::text LIKE '%"vec:[%'`],
+        ]),
+      ] as Expression)) as Pick<
+        BoxelIndexTable,
+        'url' | 'type' | 'search_doc'
+      >[];
+      let values: Expression[] = [];
+      for (let row of rows) {
+        for (let vector of collectSearchDocVectors(row.search_doc)) {
+          values.push([
+            '(',
+            param(this.realmURL.href),
+            ',',
+            param(row.url),
+            ',',
+            param(row.type),
+            ',',
+            param(vector.fieldPath),
+            ',',
+            param(vector.ordinal),
+            ',',
+            param(vector.components.length),
+            ', CAST(',
+            param(`[${vector.components.join(',')}]`),
+            'AS vector))',
+          ]);
+        }
+      }
+      for (let i = 0; i < values.length; i += CHUNK) {
+        await this.#query([
+          'INSERT INTO boxel_index_vectors (realm_url, url, type, field_path, ordinal, dims, embedding) VALUES',
+          ...separatedByCommas(values.slice(i, i + CHUNK)),
+        ] as Expression);
+      }
+    }
   }
 
   // The swap's SELECT list: every column as staged, except `generation`,

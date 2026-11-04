@@ -12,8 +12,14 @@ import {
   isCodeRef,
   generalSortFields,
   isMatchRelevanceSort,
+  isNearSort,
   MATCH_RELEVANCE_SORT_KEY,
 } from './index.ts';
+import {
+  isVector,
+  MAX_VECTOR_DIMENSIONS,
+  type Vector,
+} from './serializers/vector.ts';
 
 // `query.ts` is where callers reach for the grammar's error, so it stays
 // exported from here even though the class itself lives one module down.
@@ -99,7 +105,15 @@ type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
+  // Ranks by cosine distance between the VectorField at `by` and this
+  // target, nearest first (`direction` defaults to `asc`). Cards with no
+  // vector at `by` sort last. See `NearSortTarget`.
+  near?: NearSortTarget;
 };
+
+// A `near` sort's target: plain numbers, or a vector in its stored form (as
+// a VectorField serializes it). Its dimension must match the field's.
+export type NearSortTarget = number[] | Vector;
 
 type SortExpressionWithoutCodeRefWithInterpolations = {
   by: GeneralSortField;
@@ -110,6 +124,7 @@ type SortExpressionWithCodeRefWithInterpolations = {
   by: string;
   on?: CodeRef;
   direction?: string;
+  near?: NearSortTarget | string;
 };
 
 type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
@@ -426,6 +441,17 @@ function assertSortExpression(
     }
   }
 
+  if (isNearSort(sort)) {
+    if (!('on' in sort)) {
+      throw new InvalidQueryError(
+        `${pointer.concat('on').join('/') || '/'}: a near sort needs an on object naming the card type whose field it ranks by`,
+      );
+    }
+    assertCardType(sort.on, pointer.concat('on'));
+    assertNearTarget(sort.near, pointer.concat('near'));
+    return;
+  }
+
   // A relevance sort needs no `on` and ignores one, though a present `on`
   // must still be a well-formed ref.
   if (isMatchRelevanceSort(sort)) {
@@ -443,6 +469,28 @@ function assertSortExpression(
     );
   }
   assertCardType(sort.on, pointer.concat('on'));
+}
+
+function assertNearTarget(near: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if (Array.isArray(near)) {
+    if (near.length < 1 || near.length > MAX_VECTOR_DIMENSIONS) {
+      throw new InvalidQueryError(
+        `${where}: near must have from 1 to ${MAX_VECTOR_DIMENSIONS} components`,
+      );
+    }
+    if (!near.every((c) => typeof c === 'number' && Number.isFinite(c))) {
+      throw new InvalidQueryError(
+        `${where}: near must be an array of finite numbers`,
+      );
+    }
+    return;
+  }
+  if (!isVector(near)) {
+    throw new InvalidQueryError(
+      `${where}: near must be an array of numbers or a vector ({ dims, encoding, scale?, data })`,
+    );
+  }
 }
 
 function assertPage(

@@ -1,5 +1,6 @@
 import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
+  hasVectorIndex,
   addExplicitParens,
   cancelRunningJobsInLaneFamily,
   dbAdapterQuerier,
@@ -116,6 +117,12 @@ export async function removeRealmDatabaseArtifacts(args: {
     param(realmURL),
   ]);
   await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);
+  if (await hasVectorIndex(dbAdapter)) {
+    await q([
+      `DELETE FROM boxel_index_vectors WHERE realm_url =`,
+      param(realmURL),
+    ]);
+  }
   await q([
     `DELETE FROM prerendered_html_pending WHERE realm_url =`,
     param(realmURL),

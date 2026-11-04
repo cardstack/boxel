@@ -286,9 +286,15 @@ function primaryKeyColumnForSQLite(
 // This strips out all the things that our SQL AST chokes on (it's still in an
 // experimental phase for postgresql)
 function prepareDump(sql: string): string {
+  // Extensions (pgvector's `vector`) and newer pg_dump's `\restrict`
+  // meta-commands mean nothing to SQLite and trip the parser, so they go
+  // before parsing; only CREATE TABLEs are converted anyway.
   let result = sql
     .replace(/\s*SET\s[^;].*;/gm, '')
-    .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '');
+    .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '')
+    .replace(/\s*CREATE\sEXTENSION\s[^;]*;/gm, '')
+    .replace(/\s*COMMENT\sON\sEXTENSION\s[^;]*;/gm, '')
+    .replace(/^\\(un)?restrict\s.*$/gm, '');
   return result;
 }
 
