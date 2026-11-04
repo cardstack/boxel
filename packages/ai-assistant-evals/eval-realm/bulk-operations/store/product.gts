@@ -1,3 +1,4 @@
+import { markDefinition } from '@cardstack/base/mark-definition';
 import {
   CardDef,
   FieldDef,
@@ -9,13 +10,15 @@ import enumField from '@cardstack/base/enum';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 
-export const ProductCategoryField = enumField(StringField, {
-  options: [
-    { value: 'coffee', label: 'Coffee' },
-    { value: 'tea', label: 'Tea' },
-    { value: 'equipment', label: 'Equipment' },
-  ],
-});
+export const ProductCategoryField = markDefinition(
+  enumField(StringField, {
+    options: [
+      { value: 'coffee', label: 'Coffee' },
+      { value: 'tea', label: 'Tea' },
+      { value: 'equipment', label: 'Equipment' },
+    ],
+  }),
+);
 
 export class ProductVariant extends FieldDef {
   static displayName = 'Product Variant';

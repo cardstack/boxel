@@ -14,7 +14,6 @@ import type {
   RuntimeDependencyTrackingContext,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
-import { loaderForModule, type Loader } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
 import type { ResourceID } from '@cardstack/runtime-common';
@@ -126,11 +125,21 @@ export const deserialize = Symbol.for('cardstack-deserialize');
 
 // --- Serialization Functions ---
 
-function myLoader(): Loader {
-  // tsc checks this file as CommonJS output when it checks realm-server, and
-  // so rejects the `import.meta` read; the read is all that is suppressed.
-  // @ts-ignore
-  return loaderForModule(import.meta);
+// The error for a definition that serialization has to name and can't, because
+// it has no identity. Only the module that exports a definition can give it
+// one, so the message says how to make that happen.
+export function unidentifiedDefinitionError(
+  definition: { name: string },
+  context: string,
+): Error {
+  return new Error(
+    `${context}: ${definition.name || 'an anonymous class'} has no identity. ` +
+      `A card or field definition gets its identity from the module that exports it. ` +
+      `A module that exports one made by a call, such as enumField(...), must wrap the call in ` +
+      `markDefinition from '@cardstack/base/mark-definition'. ` +
+      `A definition declared inside a test gets one from shimTestModule or tagTestModuleExports ` +
+      `(host tests/helpers/identity-tags.ts).`,
+  );
 }
 
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
@@ -140,15 +149,14 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
 ): Promise<CardT> {
   let cardIdentity = identifyCard(fallback);
   if (!cardIdentity) {
-    throw new Error(
-      `bug: could not determine identity for card '${fallback.name}'`,
-    );
+    throw unidentifiedDefinitionError(fallback, 'cannot deserialize a card');
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
     let card: typeof BaseDef | undefined = await loadCardDef(
       resource.meta.adoptsFrom,
       {
-        loader: myLoader(),
+        // @ts-expect-error TS1470: tsc checks base as CommonJS, which has no `import.meta`
+        loader: import.meta.loader,
         // Every reference in a resource — its `adoptsFrom.module` and its
         // relationship links alike — is transmitted relative to the resource's
         // OWN id, independent of the document that delivered it. So a resource
@@ -203,7 +211,10 @@ export function makeMetaForField(
 ): Meta {
   let adoptsFrom = meta?.adoptsFrom ?? identifyCard(fallback);
   if (!adoptsFrom) {
-    throw new Error(`bug: cannot determine identity for field '${fieldName}'`);
+    throw unidentifiedDefinitionError(
+      fallback,
+      `cannot serialize field '${fieldName}'`,
+    );
   }
   let fields: NonNullable<LooseCardResource['meta']['fields']> = {
     ...(meta?.fields ?? {}),
@@ -330,7 +341,10 @@ export function serializeCardResource(
     opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
   );
   if (!adoptsFrom) {
-    throw new Error(`bug: could not identify card: ${model.constructor.name}`);
+    throw unidentifiedDefinitionError(
+      model.constructor,
+      'cannot serialize a card instance',
+    );
   }
   let { includeUnrenderedFields: _includeUnrenderedFields, ...fieldOpts } =
     opts ?? {};
