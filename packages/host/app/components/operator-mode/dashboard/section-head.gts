@@ -2,6 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
+import SectionCount from './section-count';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -27,7 +29,7 @@ const SectionHead: TemplateOnlyComponent<Signature> = <template>
       <@icon class='section-icon' width='20' height='20' aria-hidden='true' />
       <span id={{@titleId}}>{{@title}}</span>
       {{#if @count}}
-        <span class='section-count'>{{@count}}</span>
+        <SectionCount @count={{@count}} />
       {{/if}}
     </h2>
     {{yield to='actions'}}
@@ -57,17 +59,6 @@ const SectionHead: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--muted-foreground);
       color: var(--muted-foreground);
       flex-shrink: 0;
-    }
-    .section-count {
-      font-family: var(--boxel-monospace-font-family);
-      font-size: var(--boxel-font-size-xs);
-      font-weight: 600;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--subtle-foreground);
-    }
-    .section-count::before {
-      content: '· ' / '';
     }
     .section-hint {
       flex-basis: 100%;
