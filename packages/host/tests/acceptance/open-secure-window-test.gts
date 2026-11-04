@@ -159,7 +159,7 @@ module('Acceptance | open the secure window', function (hooks) {
       'the address carries no ticket, session or token',
     );
     assert.strictEqual(target, '_blank');
-    assert.strictEqual(features, 'popup,width=940,height=1100');
+    assert.strictEqual(features, 'popup,width=800,height=1000');
     assert.strictEqual(popups[0].opener, null, 'the opener is cut');
 
     assert.dom('[data-test-status]').hasText('opened');
@@ -240,7 +240,7 @@ module('Acceptance | open the secure window', function (hooks) {
       stub.calls[0].url,
       'at the address the card asked for',
     );
-    assert.strictEqual(stub.calls[1].features, 'popup,width=940,height=1100');
+    assert.strictEqual(stub.calls[1].features, 'popup,width=800,height=1000');
     assert.strictEqual(stub.popups[0].opener, null, 'the opener is cut');
     assert.dom('[data-test-secure-window-fallback]').doesNotExist();
   });
