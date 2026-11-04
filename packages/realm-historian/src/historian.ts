@@ -176,7 +176,7 @@ export class Historian {
       let cursors = cursorsOf(this.#realms.values());
       let position =
         cursors.length > 0
-          ? await positionOfCursors(db, cursors)
+          ? positionOfCursors(cursors)
           : { xid: await currentHorizon(db), seq: 0 };
       this.#consumer = new Consumer(
         { db, recorderFor: (realmId) => this.#recorderFor(realmId) },
@@ -190,7 +190,7 @@ export class Historian {
         (realm) => !this.#loadedShards.has(realm.shard),
       );
       if (gained.length > 0) {
-        this.#consumer.rewindTo(await positionOfCursors(db, cursorsOf(gained)));
+        this.#consumer.rewindTo(positionOfCursors(cursorsOf(gained)));
       }
       log.info(`recording ${this.#realms.size} realm(s)`);
     }

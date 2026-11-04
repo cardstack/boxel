@@ -14,8 +14,10 @@
 // assigned at its first write, before its journal row's `seq`, so two
 // overlapping writes can commit with their `xid` and `seq` in opposite orders;
 // a position kept by `seq` alone would pass over the one whose older
-// transaction committed later. Within one realm, writes don't overlap, so a
-// realm's events still arrive in `seq` order and its cursor stays a `seq`.
+// transaction committed later. Writes to different files of one realm overlap
+// too (the realm's advisory lock is shared between them), so a realm's events
+// arrive in `(xid, seq)` order, not `seq` order, and its cursor is the same
+// pair: the last event its recorder recorded.
 
 import {
   logger,
@@ -25,13 +27,17 @@ import {
 
 const log = logger('realm-historian:consumer');
 
-// Records one realm's events, strictly in order.
+// Records one realm's events, strictly in the order they are handed over,
+// which is `(xid, seq)` order. A recorder keeps the pair of the last event it
+// recorded as the realm's cursor, and ignores an event at or below it: the
+// consumer reads from the lowest cursor among its realms, and moves back to
+// a gained realm's cursor, so an event can be handed over twice.
 export interface RealmRecorder {
   record(event: ChangeEvent): Promise<void>;
 }
 
-// Where the consumer reads from: the last event read, as its transaction id
-// (a `xid8`, carried as text) and its `seq`.
+// Where the consumer reads from, and what a realm's cursor is: an event's
+// transaction id (a `xid8`, carried as text) and its `seq`.
 export interface ReadPosition {
   xid: string;
   seq: number;
@@ -144,28 +150,17 @@ export async function currentHorizon(db: DBAdapter): Promise<string> {
   return horizon as string;
 }
 
-// The position below which every event is recorded, given the realms'
-// cursors: the lowest `(xid, seq)` among the cursor events. A cursor of 0, or
-// a cursor whose event is gone, starts from the journal's beginning.
-export async function positionOfCursors(
-  db: DBAdapter,
-  cursors: number[],
-): Promise<ReadPosition> {
-  let wanted = [...new Set(cursors)];
-  if (wanted.length === 0 || wanted.includes(0)) {
-    return JOURNAL_START;
+// The position below which every one of the realms' events is recorded: the
+// lowest of their cursors. A realm that has recorded nothing has the cursor
+// `JOURNAL_START`, so one such realm starts the read from the beginning.
+export function positionOfCursors(cursors: ReadPosition[]): ReadPosition {
+  let lowest = JOURNAL_START;
+  for (let [index, cursor] of cursors.entries()) {
+    if (index === 0 || comparePositions(cursor, lowest) < 0) {
+      lowest = cursor;
+    }
   }
-  let rows = await db.execute(
-    `SELECT xid::text AS xid, seq::text AS seq
-     FROM realm_change_events
-     WHERE seq = ANY($1::bigint[])
-     ORDER BY xid, seq`,
-    { bind: [wanted] },
-  );
-  if (rows.length < wanted.length) {
-    return JOURNAL_START;
-  }
-  return { xid: rows[0].xid as string, seq: Number(rows[0].seq) };
+  return lowest;
 }
 
 function changeEventFromRow(row: Record<string, unknown>): ChangeEvent {

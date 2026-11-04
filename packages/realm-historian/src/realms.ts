@@ -5,6 +5,7 @@
 import { join } from 'node:path';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { shardOf } from './lease.ts';
+import type { ReadPosition } from './consumer.ts';
 
 export interface RecordedRealm {
   // The `realm_registry.id`, permanent for the realm's life.
@@ -15,8 +16,9 @@ export interface RecordedRealm {
   // The realm's files on disk: a source realm's `disk_id` under the realms
   // root, or a bootstrap realm's absolute path.
   directory: string;
-  // The last journal `seq` recorded for the realm.
-  cursorSeq: number;
+  // The last journal event recorded for the realm, as the `(xid, seq)` the
+  // consumer orders by.
+  cursor: ReadPosition;
   head: string | undefined;
 }
 
@@ -35,6 +37,7 @@ export async function loadRecordedRealms({
 }: LoadRealmsOptions): Promise<Map<string, RecordedRealm>> {
   let rows = await db.execute(
     `SELECT registry.id, registry.url, registry.kind, registry.disk_id,
+            state.cursor_xid::text AS cursor_xid,
             state.cursor_seq::text AS cursor_seq, state.head
      FROM realm_history_state state
      JOIN realm_registry registry ON registry.id = state.realm_id
@@ -56,7 +59,10 @@ export async function loadRecordedRealms({
       kind,
       shard,
       directory: kind === 'bootstrap' ? diskId : join(realmsRoot, diskId),
-      cursorSeq: Number(row.cursor_seq),
+      cursor: {
+        xid: row.cursor_xid as string,
+        seq: Number(row.cursor_seq),
+      },
       head: (row.head as string | null) ?? undefined,
     });
   }
@@ -64,6 +70,6 @@ export async function loadRecordedRealms({
 }
 
 // The cursors of the realms, for the consumer's starting position.
-export function cursorsOf(realms: Iterable<RecordedRealm>): number[] {
-  return [...realms].map((realm) => realm.cursorSeq);
+export function cursorsOf(realms: Iterable<RecordedRealm>): ReadPosition[] {
+  return [...realms].map((realm) => realm.cursor);
 }

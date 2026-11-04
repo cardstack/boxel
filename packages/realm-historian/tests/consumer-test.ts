@@ -8,6 +8,7 @@ import {
 import {
   Consumer,
   JOURNAL_START,
+  type ReadPosition,
   comparePositions,
   currentHorizon,
   positionOfCursors,
@@ -15,7 +16,9 @@ import {
 import { cursorsOf, loadRecordedRealms } from '../src/realms.ts';
 import {
   insertEvent,
+  insertEventAt,
   insertRealm,
+  setCursor,
   setupTestDatabase,
   sleep,
   type TestRealm,
@@ -154,6 +157,68 @@ module('consumer', (hooks) => {
     );
   });
 
+  test("one realm's overlapping writes arrive in (xid, seq) order, and a restart resumes from the pair", async (assert) => {
+    // Two writes to different files of one realm overlap; the older
+    // transaction takes its xid first and its seq last.
+    let olderAt!: ReadPosition;
+    let newerAt!: ReadPosition;
+    let newer!: ReturnType<typeof openTransaction>;
+    let older = openTransaction(async (tx) => {
+      await tx([`SELECT pg_current_xact_id()`]);
+      await sleep(50);
+      newer = openTransaction(async (newerTx) => {
+        newerAt = await insertEventAt(newerTx, realm, 'b.json');
+      });
+      await sleep(50);
+      olderAt = await insertEventAt(tx, realm, 'a.json');
+    });
+    await older.commit();
+    assert.true(olderAt.seq > newerAt.seq, 'the older xid got the later seq');
+    assert.true(
+      comparePositions(olderAt, newerAt) < 0,
+      'and the lower position',
+    );
+
+    assert.strictEqual(await consumer.poll(), 1, 'the older write is read');
+    assert.deepEqual(
+      recorded.map((event) => event.changes[0].path),
+      ['a.json'],
+    );
+    assert.deepEqual(consumer.position, olderAt);
+
+    // The recorder sets the cursor to the pair it recorded, and the task
+    // restarts from it after the newer write commits.
+    await setCursor(database.db, realm, olderAt);
+    await newer.commit();
+    let realms = await loadRecordedRealms({
+      db: database.db,
+      realmsRoot: '/realms',
+      shardCount: 1,
+      holds: () => true,
+    });
+    assert.deepEqual(realms.get(realm.id)!.cursor, olderAt);
+    let restarted = new Consumer(
+      {
+        db: database.db,
+        recorderFor: () => ({
+          record: async (event) => void recorded.push(event),
+        }),
+      },
+      positionOfCursors(cursorsOf(realms.values())),
+    );
+    assert.strictEqual(
+      await restarted.poll(),
+      1,
+      'the newer write, with the lower seq, is read after the restart',
+    );
+    assert.deepEqual(
+      recorded.map((event) => event.changes[0].path),
+      ['a.json', 'b.json'],
+      'the realm gets its events in (xid, seq) order',
+    );
+    assert.deepEqual(restarted.position, newerAt);
+  });
+
   test("events for a realm the task doesn't record are passed over", async (assert) => {
     let otherRealm = await insertRealm(database.db, {
       url: 'http://localhost:4201/other-user/other-realm/',
@@ -199,7 +264,7 @@ module('consumer', (hooks) => {
     assert.strictEqual(await consumer.poll(), 3, 'the rest follows');
   });
 
-  test('the position starts at the lowest cursor event, or the beginning', async (assert) => {
+  test('the position starts at the lowest cursor, or the beginning', async (assert) => {
     let other = await insertRealm(database.db, {
       url: 'http://localhost:4201/other-user/other-realm/',
       diskId: 'other-user/other-realm',
@@ -208,24 +273,16 @@ module('consumer', (hooks) => {
       url: 'http://localhost:4201/other-user/off-realm/',
       diskId: 'other-user/off-realm',
       enabled: false,
-      cursorSeq: 1,
     });
     await insertRealm(database.db, {
       url: 'http://localhost:4201/other-user/published-realm/',
       kind: 'published',
       diskId: 'published-id',
-      cursorSeq: 2,
     });
-    let mineSeq = await insertEvent(querier(), realm);
-    let otherSeq = await insertEvent(querier(), other);
-    await database.db.execute(
-      `UPDATE realm_history_state SET cursor_seq = $2 WHERE realm_id = $1`,
-      { bind: [realm.id, mineSeq] },
-    );
-    await database.db.execute(
-      `UPDATE realm_history_state SET cursor_seq = $2 WHERE realm_id = $1`,
-      { bind: [other.id, otherSeq] },
-    );
+    let mineAt = await insertEventAt(querier(), realm);
+    let otherAt = await insertEventAt(querier(), other);
+    await setCursor(database.db, realm, mineAt);
+    await setCursor(database.db, other, otherAt);
     let realms = await loadRecordedRealms({
       db: database.db,
       realmsRoot: '/realms',
@@ -244,21 +301,15 @@ module('consumer', (hooks) => {
       realms.get(realm.id)!.directory,
       '/realms/test-user/test-realm',
     );
-    let position = await positionOfCursors(
-      database.db,
-      cursorsOf(realms.values()),
-    );
-    assert.strictEqual(position.seq, mineSeq, 'the lowest cursor event');
+    assert.deepEqual(realms.get(realm.id)!.cursor, mineAt);
+    let position = positionOfCursors(cursorsOf(realms.values()));
+    assert.deepEqual(position, mineAt, 'the lowest cursor');
     assert.deepEqual(
-      await positionOfCursors(database.db, [mineSeq, 0]),
+      positionOfCursors([mineAt, JOURNAL_START]),
       JOURNAL_START,
-      'a cursor of 0 starts from the beginning',
+      'a realm that has recorded nothing starts from the beginning',
     );
-    assert.deepEqual(
-      await positionOfCursors(database.db, [mineSeq, 999]),
-      JOURNAL_START,
-      'a cursor whose event is gone starts from the beginning',
-    );
+    assert.deepEqual(positionOfCursors([]), JOURNAL_START);
     assert.true(
       comparePositions(position, {
         xid: await currentHorizon(database.db),

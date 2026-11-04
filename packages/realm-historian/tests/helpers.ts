@@ -3,6 +3,7 @@
 
 import { PgAdapter } from '@cardstack/postgres';
 import { param, type DBAdapter, type Querier } from '@cardstack/runtime-common';
+import { JOURNAL_START, type ReadPosition } from '../src/consumer.ts';
 
 let databaseCounter = 0;
 
@@ -77,13 +78,13 @@ export async function insertRealm(
     kind = 'source',
     diskId = 'test-user/test-realm',
     enabled = true,
-    cursorSeq = 0,
+    cursor = JOURNAL_START,
   }: {
     url: string;
     kind?: 'source' | 'published' | 'bootstrap';
     diskId?: string;
     enabled?: boolean;
-    cursorSeq?: number;
+    cursor?: ReadPosition;
   },
 ): Promise<TestRealm> {
   let [{ id }] = await db.execute(
@@ -99,21 +100,43 @@ export async function insertRealm(
     },
   );
   await db.execute(
-    `INSERT INTO realm_history_state (realm_id, enabled, cursor_seq)
-     VALUES ($1, $2, $3)`,
-    { bind: [id, enabled, cursorSeq] },
+    `INSERT INTO realm_history_state (realm_id, enabled, cursor_xid, cursor_seq)
+     VALUES ($1, $2, $3::xid8, $4)`,
+    { bind: [id, enabled, cursor.xid, cursor.seq] },
   );
   return { id: id as string, url };
 }
 
+// Sets a realm's cursor, as its recorder does after recording `position`.
+export async function setCursor(
+  db: DBAdapter,
+  realm: TestRealm,
+  position: ReadPosition,
+): Promise<void> {
+  await db.execute(
+    `UPDATE realm_history_state SET cursor_xid = $2::xid8, cursor_seq = $3
+     WHERE realm_id = $1`,
+    { bind: [realm.id, position.xid, position.seq] },
+  );
+}
+
 // A journal row for one modified path, written through `querier` so a test
-// can insert it on a transaction it holds open.
+// can insert it on a transaction it holds open. Returns its `seq`;
+// `insertEventAt` returns its position.
 export async function insertEvent(
   querier: Querier,
   realm: TestRealm,
   path = 'card.json',
 ): Promise<number> {
-  let [{ seq }] = await querier([
+  return (await insertEventAt(querier, realm, path)).seq;
+}
+
+export async function insertEventAt(
+  querier: Querier,
+  realm: TestRealm,
+  path = 'card.json',
+): Promise<ReadPosition> {
+  let [{ seq, xid }] = await querier([
     `INSERT INTO realm_change_events
        (realm_id, realm_url, author, channel, changes)
      VALUES (`,
@@ -122,9 +145,9 @@ export async function insertEvent(
     param(realm.url),
     `, '@test-user:localhost', 'api', `,
     param(JSON.stringify([{ path, status: 'M' }])),
-    `::jsonb) RETURNING seq::text`,
+    `::jsonb) RETURNING seq::text, xid::text`,
   ]);
-  return Number(seq);
+  return { xid: xid as string, seq: Number(seq) };
 }
 
 export async function waitUntil(
