@@ -175,6 +175,7 @@ jobs:
               - *shared
               - *test-web-assets
               - 'packages/base/**'
+              - 'packages/bot-runner/lib/membership-handler.ts'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'

@@ -451,6 +451,9 @@ module('Integration | approve pages', function (hooks) {
       assert
         .dom('[data-test-approve-key="Another token"] input')
         .isChecked('the key the CLI named starts chosen');
+      assert
+        .dom('[data-test-radio-choice="pipelines"] input')
+        .isChecked('without --interactive the CLI approves for pipelines only');
       assert.dom('[data-test-approve-save]').hasText('Approve 2 calls');
       assert.deepEqual(submitted, [], 'nothing leaves before the user says');
 
@@ -487,6 +490,21 @@ module('Integration | approve pages', function (hooks) {
     } finally {
       HTMLFormElement.prototype.submit = submit;
     }
+  });
+
+  test('opened by the CLI with --interactive, the choice starts on interactive use', async function (assert) {
+    visitShell(
+      `approve#${new URLSearchParams({
+        card: CARD,
+        operation: 'listPRs',
+        interactive: '1',
+        cli_port: '51234',
+        cli_state: 'c'.repeat(32),
+      })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
   });
 
   module('opened by the CLI, ended before approving', function (hooks) {
@@ -1130,7 +1148,7 @@ module('Integration | approve pages', function (hooks) {
     };
   }
 
-  test('requests start approved for pipelines only; choosing interactive use shows what it allows, once, and approves it', async function (assert) {
+  test('requests start on interactive use, offered first, which shows what it allows, once, and approves it', async function (assert) {
     serve({
       'POST _key-bindings/batch': () =>
         json(200, {
@@ -1163,9 +1181,19 @@ module('Integration | approve pages', function (hooks) {
         .attributes.interactive,
       'the batch also answers what is approved for pipelines only',
     );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-radio-choice]')].map((choice) =>
+        choice.getAttribute('data-test-radio-choice'),
+      ),
+      ['interactive', 'pipelines'],
+      'interactive use is the first choice',
+    );
     assert
-      .dom('[data-test-radio-choice="pipelines"] input')
-      .isChecked('pipelines only is where the choice starts');
+      .dom('[data-test-radio-choice="interactive"] input')
+      .isChecked('interactive use is where the choice starts');
+    assert.dom('[data-test-approve-operation="listReviews"]').exists();
+
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listReviews"]')
       .doesNotExist('one approved for pipelines already needs nothing more');
@@ -1197,6 +1225,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="pipelines"] input');
     await click('[data-test-approve-save]');
     await settled();
     let [approval] = approvals();
@@ -1240,6 +1269,18 @@ module('Integration | approve pages', function (hooks) {
       })),
     };
   }
+  // An operation whose request changed since it was last approved, and that
+  // approval allowed pipelines only.
+  function changedPipelinesOnly(name: string, label: string) {
+    let base = changedInteractive(name, label);
+    return {
+      ...base,
+      slots: base.slots.map((s) => ({
+        ...s,
+        approved: { ...s.approved, interactive: false },
+      })),
+    };
+  }
 
   async function openWith(operations: unknown[]) {
     serve({
@@ -1271,15 +1312,30 @@ module('Integration | approve pages', function (hooks) {
     assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
   });
 
-  test('one request approved for interactive use among new ones starts on pipelines only', async function (assert) {
+  test('a batch whose every request was last approved for pipelines only starts on it, so approving again keeps it', async function (assert) {
+    await openWith([
+      changedPipelinesOnly('listPRs', 'List PRs'),
+      changedPipelinesOnly('listReviews', 'List reviews'),
+    ]);
+    assert.dom('[data-test-radio-choice="pipelines"] input').isChecked();
+  });
+
+  test('new requests among ones last approved for pipelines only start on interactive use', async function (assert) {
+    await openWith([
+      changedPipelinesOnly('listPRs', 'List PRs'),
+      operation('listReviews', 'List reviews'),
+    ]);
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+  });
+
+  test('one request approved for interactive use among new ones starts on interactive use', async function (assert) {
     await openWith([
       changedInteractive('listPRs', 'List PRs'),
       operation('listReviews', 'List reviews'),
       pipelinesOnly('listComments', 'List comments'),
     ]);
-    assert
-      .dom('[data-test-radio-choice="pipelines"] input')
-      .isChecked('the new request is not widened by default');
+    assert.dom('[data-test-radio-choice="interactive"] input').isChecked();
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-operation="listComments"]')
       .doesNotExist('one approved for pipelines needs nothing for pipelines');
@@ -1300,6 +1356,7 @@ module('Integration | approve pages', function (hooks) {
         '[data-test-approve-operation="listReviews"] [data-test-approve-open-cards]',
       )
       .doesNotExist();
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-demoted]')
       .includesText('stops the calls marked “Approved for open cards”');
@@ -1309,6 +1366,7 @@ module('Integration | approve pages', function (hooks) {
       .dom('[data-test-approve-demoted]')
       .doesNotExist('an unticked call is not approved, so keeps its use');
     await click('[data-test-approve-tick="listPRs"]');
+    assert.dom('[data-test-approve-demoted]').exists();
     await click('[data-test-radio-choice="interactive"] input');
     assert
       .dom('[data-test-approve-demoted]')
@@ -1863,6 +1921,7 @@ module('Integration | approve pages', function (hooks) {
     visitShell(opened);
     await render(<template><ApprovePage /></template>);
     await waitFor('[data-test-approve-form]');
+    await click('[data-test-radio-choice="pipelines"] input');
     assert
       .dom('[data-test-approve-anonymous-note]')
       .doesNotExist('a pipeline serves nobody who opens the card');

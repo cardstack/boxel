@@ -654,7 +654,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 79258,
+      "bytes": 80607,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
@@ -663,6 +663,10 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/2b5d9db39c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/30af999b0b.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -790,10 +794,6 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/shell/keys/3653f035ec.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/3e1e4d0e02.css"
         },
         {
@@ -878,6 +878,10 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/shell/keys/d88c53b8d4.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/de85b19ebc.css"
         },
         {
@@ -939,7 +943,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 365679,
+      "bytes": 366189,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -1093,6 +1097,11 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/components/radio.gts",
+          "size": 566
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/components/validation-hint.gts",
           "size": 549
         },
@@ -1164,12 +1173,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approval-batch.ts",
-          "size": 8251
+          "size": 8460
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/approve-page.gts",
-          "size": 34810
+          "size": 34857
         },
         {
           "package": "@cardstack/secure-origin",
@@ -1299,7 +1308,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/radio-choices.gts",
-          "size": 1885
+          "size": 1875
         },
         {
           "package": "@cardstack/secure-origin",

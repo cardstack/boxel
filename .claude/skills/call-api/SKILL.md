@@ -356,9 +356,12 @@ so the card needn't say whose key it is using. The requests:
 At `needs-connect`, open `approve` rather than `enter-key`: the approve page
 lets the user pick one of their keys or add one, and approving grants the key
 the operation's destination. A key saved through `enter-key` alone has no
-grant, so readiness stays `needs-connect`. The approve page starts on
-scheduled pipelines only; the user has to choose to let the operations run
-when a card is opened, which is what a card calling from its template needs.
+grant, so readiness stays `needs-connect`. The approve page offers first,
+and starts on, letting the operations run on the schedule and when a card is
+opened, which is what a card calling from its template needs; the user can
+narrow it to scheduled pipelines only. It starts on pipelines only when every
+request it asks about was last approved for pipelines only, and when
+`boxel keys approve` opened it without `--interactive`.
 A call that a fix makes ready needs no reload: readiness is asked again when
 the user comes back from the window. Swapping a key into a stopped share is
 the keys page's job, not the card's.
