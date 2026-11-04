@@ -237,9 +237,10 @@ above, for Pret UI and for the boxel-ui it brings:
   package itself does.
 
 Pret UI and boxel-ui are source in this repository, so what ships is what a
-reviewer reads here. Pret UI is compiled by the package's own build;
-boxel-ui and boxel-icons are read from their own builds, so the record hashes
-those (§1.8). The package doesn't import boxel-ui directly (§1.3), so as ADR
+reviewer reads here. The package's own build compiles Pret UI and boxel-ui
+from their source, through their packages' exports, as the host's build
+does. boxel-icons exports only its own build, which is built first (§1.1) as
+it is for the host, and the record hashes that build (§1.8). The package doesn't import boxel-ui directly (§1.3), so as ADR
 009 §1.6 moves Pret UI off boxel-ui, what reaches the origin through it goes
 with it. Pret UI's modules that reach the base realm, its Spec-card support,
 still can't ship.
