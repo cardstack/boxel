@@ -981,8 +981,11 @@ module('Integration | key usage and limits', function (hooks) {
       await render(ShareLimitsPage);
       await waitFor('[data-test-share-limits]');
       assert
+        .dom('[data-test-keys-heading]')
+        .hasText('Limits', 'the page is titled as its crumb is');
+      assert
         .dom('[data-test-share-limits]')
-        .includesText('Limits for Team weather');
+        .includesText('Team weather, your key shared with');
       assert.deepEqual(
         [
           ...document.querySelectorAll('[data-test-key-limit-group] legend'),

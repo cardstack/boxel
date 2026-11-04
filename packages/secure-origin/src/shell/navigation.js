@@ -1,5 +1,5 @@
 /* eslint-env browser */
-import { isPagePath } from './pages.js';
+import { isPagePath, splitPagePath } from './pages.js';
 import { flushTelemetry } from './telemetry.ts';
 
 // Where the shell's pages send the window: another of the shell's pages,
@@ -16,6 +16,11 @@ import { flushTelemetry } from './telemetry.ts';
 
 let router;
 let rootURL;
+// The address the document was loaded at, as its page beneath the shell's
+// address and its fragment. A page reached by a route transition has neither
+// the document's path nor its fragment, and the trail of pages above it
+// (`trail.ts`) reads it from here.
+let loadedAt;
 // How many in-app moves `assign` has made that `back` hasn't undone.
 let depth = 0;
 
@@ -82,4 +87,10 @@ export const navigation = {
 export function useRouter(routerService) {
   router = routerService;
   rootURL = routerService.rootURL;
+  loadedAt = `${splitPagePath(window.location.pathname).page}${window.location.hash}`;
+}
+
+// Where the document was loaded, or undefined before the router runs.
+export function documentAddress() {
+  return loadedAt;
 }

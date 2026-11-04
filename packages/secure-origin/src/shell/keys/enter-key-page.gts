@@ -51,7 +51,7 @@ import Tag from '../../components/icons/tag.gts';
 import BoxelInput from '../../components/input.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
-import { pageURL } from '../urls.js';
+import { pageURL, shellPath } from '../urls.js';
 
 import AnonymousUseFields, { anonymousCapOf } from './anonymous-use-fields.gts';
 import {
@@ -73,6 +73,7 @@ import OAuthClientFields, {
   type OAuthClientForm,
 } from './oauth-client-fields.gts';
 import OpenedForSummary from './opened-for-summary.gts';
+import { addressAbove, pageTitle } from './trail.ts';
 import {
   cliOpenedFor,
   contextRequest,
@@ -126,7 +127,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Enter a key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -152,7 +153,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
       </DonePage>
     {{else if this.entering}}
       <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
-        <EditPage @heading='Enter a key' data-test-enter-key>
+        <EditPage @heading={{this.title}} data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
             read it back. Cards can send it only to the places you approve for
             it.</:intro>
@@ -325,6 +326,8 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
 
   private opened = openedFor();
   private returnsToKeyPage = this.args.fromKeyPage ?? returnsToKeyPage();
+
+  private title = pageTitle('enter-key');
   private page = trackedObject<{ state: State }>({
     state: { name: 'loading' },
   });
@@ -628,11 +631,19 @@ function approvalPageThen(): 'approve' | 'review-changes' | undefined {
 }
 
 // The approve page this one was opened from, to go back to once `keyId` is
-// added, with what it was opened for and the new key chosen.
+// added, with what it was opened for and the new key chosen: the page above
+// this one in its trail, as it was, or else rebuilt from this page's own
+// fragment.
 function approvalPageAfter(keyId: string): string | undefined {
   let then = approvalPageThen();
   if (!then) {
     return undefined;
+  }
+  let above = addressAbove();
+  if (above !== undefined && above.split('#')[0] === then) {
+    let aboveFragment = new URLSearchParams(above.split('#')[1] ?? '');
+    aboveFragment.set('key', keyId);
+    return `${shellPath()}${then}#${aboveFragment}`;
   }
   let fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   fragment.delete('then');

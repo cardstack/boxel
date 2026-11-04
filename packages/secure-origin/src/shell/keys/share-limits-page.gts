@@ -28,6 +28,7 @@ import {
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import { navigation } from '../navigation.js';
+import { pageTitle } from './trail.ts';
 import { keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
 
@@ -71,7 +72,7 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       <BusyMessage class='busy' @title='Loading…' />
     {{else if this.loadFailed}}
       <LoadFailed
-        @heading='Limits for a shared key'
+        @heading={{this.title}}
         @failure={{this.loadFailed.failure}}
         @onRetry={{this.load}}
       />
@@ -101,11 +102,9 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
         </:actions>
       </EditPage>
     {{else if this.editing}}
-      <EditPage
-        @heading='Limits for {{this.editing.share.label}}'
-        data-test-share-limits
-      >
-        <:intro>Your key, shared with
+      <EditPage @heading={{this.title}} data-test-share-limits>
+        <:intro><strong>{{this.editing.share.label}}</strong>, your key shared
+          with
           <strong>{{this.editing.context.realm.name}}</strong>. These limits
           count the calls made with it by every card there, the AI assistant and
           the CLI. What each call costs depends on your plan with the service.</:intro>
@@ -184,6 +183,8 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
     </style>
   </template>
+
+  private title = pageTitle('share-limits');
 
   private opened = openedFor();
 

@@ -62,6 +62,7 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { keySharePath, keyUsePath } from '../pages.js';
 import { pageURL } from '../urls.js';
+import { pageTitle } from './trail.ts';
 
 import AnonymousUseFields, {
   anonymousCapOf,
@@ -109,12 +110,12 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   <template>
     {{#if this.state.loadFailed}}
       <LoadFailed
-        @heading='Your keys'
+        @heading={{this.title}}
         @failure={{this.state.loadFailed}}
         @onRetry={{this.retry}}
       />
     {{else}}
-      <EditPage @heading='Your keys' data-test-key-page>
+      <EditPage @heading={{this.title}} data-test-key-page>
         <:intro>Keys you add here are encrypted, and nothing can read them back.
           Cards can send a key only to the places you approve for it.</:intro>
         <:default>
@@ -504,6 +505,8 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       }
     </style>
   </template>
+
+  private title = pageTitle('keys');
 
   private state = trackedObject({
     loading: true,
