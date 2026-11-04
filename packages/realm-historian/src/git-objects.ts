@@ -9,9 +9,14 @@
 // again: its name is its content, so the file is already right.
 
 import { createHash } from 'node:crypto';
-import { deflateSync } from 'node:zlib';
+import { deflate } from 'node:zlib';
+import { promisify } from 'node:util';
 import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+
+// Deflating runs on the thread pool, so a large blob doesn't hold the event
+// loop that every recorder, the lease renewal and the health endpoint share.
+const deflateAsync = promisify(deflate);
 
 export type ObjectType = 'blob' | 'tree' | 'commit';
 
@@ -160,7 +165,7 @@ export class ObjectStore {
     );
     let handle = await open(temp, 'wx', 0o444);
     try {
-      await handle.writeFile(deflateSync(framed(type, body)));
+      await handle.writeFile(await deflateAsync(framed(type, body)));
       await handle.sync();
     } finally {
       await handle.close();
