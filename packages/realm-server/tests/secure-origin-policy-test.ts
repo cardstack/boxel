@@ -702,8 +702,9 @@ module(basename(import.meta.filename), function (hooks) {
   test('focus rings and the checkbox and radio indicators on the key panel meet 3:1', async function (assert) {
     // Every stylesheet the shell ships is on the signed-out key page, so this
     // reads every outline a `:focus` or `:focus-visible` rule draws, each
-    // checkbox edge and each accent colour, and resolves each under the panel
-    // the key pages draw their controls on.
+    // checkbox and radio edge, a chosen radio's colour and each accent
+    // colour, and resolves each under the panel the key pages draw their
+    // controls on.
     await page.goto(`${secureOrigin}/secure/keys`, {
       waitUntil: 'networkidle0',
     });
@@ -768,10 +769,13 @@ module(basename(import.meta.filename), function (hooks) {
             }
           }
           // An unticked checkbox is drawn by its edge alone, and a ticked one
-          // keeps an edge around its fill.
+          // keeps an edge around its fill. An unchosen radio is drawn by its
+          // edge alone too, and a chosen one by an edge and dot of one colour.
           for (let property of [
             '--checkbox-border-color',
             '--checkbox-checked-border-color',
+            '--radio-border-color',
+            '--radio-checked-color',
           ]) {
             let edge = style.getPropertyValue(property);
             if (edge) {
@@ -815,8 +819,12 @@ module(basename(import.meta.filename), function (hooks) {
       'the global link focus outline is among them',
     );
     assert.ok(
-      indicators.some(({ label }) => label.includes('accent-color')),
-      "the radio choices' accent is among them",
+      indicators.some(({ label }) => label.includes('--radio-border-color')),
+      "the radio's edge is among them",
+    );
+    assert.ok(
+      indicators.some(({ label }) => label.includes('--radio-checked-color')),
+      "a chosen radio's edge and dot are among them",
     );
     for (let { label, rgb } of indicators) {
       if (!rgb) {
