@@ -1340,9 +1340,14 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * A run that is nothing but ambient loops counts as in flight after its
    * clock ends, for as long as the loops go round. A loop lends its run no
    * length, so a loop-only run ends as soon as it starts, and without this
-   * every later app render would replace the run and restart every loop. A score with
-   * anything besides loops in it has a timeline to re-fire (§3.1), so once
-   * it ends, a pass takes the full pipeline.
+   * every later app render would replace the run, cancelling each loop's
+   * animation for a new one. The layout check still applies to such a run.
+   * A loop on a layout property (width, height) changes the boxes
+   * `layoutOf` reads on every frame, so no pass matches the layout the run
+   * compiled in, and each one replaces the run, as it does a Move that
+   * animates size. A score with anything besides loops in it has a
+   * timeline to re-fire (§3.1), so once it ends, a pass takes the full
+   * pipeline.
    */
   private fastKeep(root: HTMLElement): boolean {
     if (
