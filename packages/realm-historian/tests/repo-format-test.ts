@@ -79,7 +79,7 @@ module('repo format', (hooks) => {
     assert.strictEqual(await readMain(gitDir), first);
     await assert.rejects(
       updateMain(gitDir, second, undefined),
-      /is at [0-9a-f]{40} but expected 0{40}/,
+      /reference already exists/,
       'an expectation of no commit is refused once there is one',
     );
     assert.strictEqual(await readMain(gitDir), first);
@@ -340,7 +340,7 @@ module('repo format', (hooks) => {
     let trailers = {
       channel: ['api'],
       superseded: ['Author/odd\u2028name.json', 'Author/odd\u2029name.json'],
-      journalSeq: ['7\r'],
+      journalSeq: ['7\r8'],
     };
     assert.deepEqual(
       parseTrailers(buildMessage('Update 2 files in Author/', trailers)),

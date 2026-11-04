@@ -1,6 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +12,7 @@ import {
   TreeBuilder,
   hashObject,
   blobBody,
+  type TreeEntry,
 } from '../src/git-objects.ts';
 import { initRepo } from '../src/repo-format.ts';
 import { sleep } from './helpers.ts';
@@ -88,7 +89,7 @@ module('git objects', (hooks) => {
     // The last two names sort by their UTF-8 bytes: `（` (U+FF08, three
     // bytes starting 0xEF) comes before `😀` (U+1F600, four bytes starting
     // 0xF0), though as UTF-16 the emoji's surrogate pair sorts first.
-    let entries = [
+    let entries: TreeEntry[] = [
       { mode: BLOB_MODE, name: 'b.json', id: blob },
       { mode: TREE_MODE, name: 'a', id: sub },
       { mode: BLOB_MODE, name: 'a.json', id: blob },
@@ -98,7 +99,7 @@ module('git objects', (hooks) => {
     ];
     let { id: tree } = await store.writeTree(entries);
     assert.strictEqual(
-      await git(gitDir, 'ls-tree', tree),
+      await git(gitDir, '-c', 'core.quotePath=false', 'ls-tree', tree),
       [
         `100644 blob ${blob}\ta-1`,
         `100644 blob ${blob}\ta.json`,
@@ -110,18 +111,15 @@ module('git objects', (hooks) => {
       ].join('\n'),
     );
     assert.strictEqual(await fsck(gitDir), '');
-    let { stdout: fromGit } = await execFileAsync(
-      'git',
-      [`--git-dir=${gitDir}`, 'mktree'],
-      {
-        input: entries
-          .map(
-            (entry) =>
-              `${entry.mode.padStart(6, '0')} ${entry.mode === TREE_MODE ? 'tree' : 'blob'} ${entry.id}\t${entry.name}\n`,
-          )
-          .join(''),
-      } as any,
-    );
+    let fromGit = execFileSync('git', [`--git-dir=${gitDir}`, 'mktree'], {
+      encoding: 'utf8',
+      input: entries
+        .map(
+          (entry) =>
+            `${entry.mode.padStart(6, '0')} ${entry.mode === TREE_MODE ? 'tree' : 'blob'} ${entry.id}\t${entry.name}\n`,
+        )
+        .join(''),
+    });
     assert.strictEqual(fromGit.trim(), tree, "the id is git's own");
   });
 
