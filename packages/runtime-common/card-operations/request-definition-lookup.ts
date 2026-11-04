@@ -86,9 +86,8 @@ async function withinDeadline<T>(
       deadlineMs,
     );
   });
-  // The abandoned lookup still settles, and a rejection nobody awaits any more
-  // must not surface as an unhandled one.
-  pending.catch(() => {});
+  // The race holds a handler on the lookup, so one abandoned at the deadline
+  // settles later without surfacing as an unhandled rejection.
   try {
     return await Promise.race([pending, expired]);
   } finally {
