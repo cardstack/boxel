@@ -183,6 +183,35 @@ In a query-backed field, `near` interpolates like any value, so "related moments
 });
 ```
 
+### Blended ranking (`_blend`)
+
+A `_blend` sort fuses several ranking signals into one order with reciprocal rank fusion. Each card scores `sum(weight / (k + rank))` over the signals it has a value for, with each signal ranked over every card the filter admits. `of` takes any other sort entries: text relevance (`_matchRelevance`), a `near` sort, a general field such as `createdAt` (recency), or a card field such as a view count (engagement). Each signal ranks best first, meaning highest value first unless the entry says `direction: 'asc'`. A card with no value for a signal (no vector, no text match, an empty field) gets nothing from that signal, rather than a last place. `weight` (default 1) scales a signal; `k` (default 60) controls how sharply a top rank beats the next one. Results carry `meta._blendScore`.
+
+```js
+let { data: ranked } = await indexer.search({
+  filter: {
+    any: [
+      { on: momentRef, matches: 'pasta recipe' },
+      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+    ],
+  },
+  sort: [
+    {
+      by: '_blend',
+      of: [
+        { by: '_matchRelevance' },
+        { on: momentRef, by: 'embedding', near: target, weight: 2 },
+        { by: 'createdAt', weight: 0.5 },
+        { on: momentRef, by: 'views', weight: 0.5 },
+      ],
+    },
+  ],
+  page: { size: 10 },
+});
+```
+
+Ranks are positions, not raw scores, so signals on different scales (text relevance, cosine similarity, timestamps, counts) combine without normalization. A `_matchRelevance` signal needs a positive `matches` term in the filter, as it does on its own. A blend takes up to 8 signals and cannot nest. Live queries leave a blend to the server, because it ranks over the whole match set. Across realms, ranks are per realm, so a federated blend orders only approximately.
+
 ### Pagination
 
 The Query object may have a `page` property, which controls pagination of search results. This allows you to retrieve results in smaller chunks for better performance and user experience.

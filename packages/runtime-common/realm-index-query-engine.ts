@@ -10,6 +10,7 @@ import {
   IndexQueryEngine,
   MATCH_RELEVANCE_SORT_KEY,
   NEAR_SIMILARITY_KEY,
+  BLEND_SCORE_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -504,6 +505,10 @@ export class RealmIndexQueryEngine {
       ];
       let nearSimilarity =
         rawNearSimilarity == null ? undefined : Number(rawNearSimilarity);
+      // And the first `_blend` sort's fused score.
+      let rawBlendScore = (row as Record<string, unknown>)[BLEND_SCORE_KEY];
+      let blendScore =
+        rawBlendScore == null ? undefined : Number(rawBlendScore);
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -587,6 +592,7 @@ export class RealmIndexQueryEngine {
             generation: file.generation,
             matchRelevance,
             nearSimilarity,
+            blendScore,
           }),
         );
         continue;
@@ -737,6 +743,7 @@ export class RealmIndexQueryEngine {
           generation,
           matchRelevance,
           nearSimilarity,
+          blendScore,
         }),
       );
     }

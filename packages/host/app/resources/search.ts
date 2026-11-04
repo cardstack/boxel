@@ -28,6 +28,7 @@ import {
   isFileDefInstance,
   isFileDefCodeRef,
   isClientEvaluable,
+  isClientSortable,
   canonicalizeFilterRefs,
   identifyCard,
   isResolvedCodeRef,
@@ -47,7 +48,7 @@ import {
   type MatchResult,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import type { Filter, Query } from '@cardstack/runtime-common/query';
+import type { Filter, Query, Sort } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
@@ -1036,6 +1037,11 @@ export class SearchResource<
     // eligible.
     let filter = this.activeQuery?.filter as Filter | undefined;
     if (filter && !isClientEvaluable(filter)) {
+      return false;
+    }
+    // A `_blend` sort ranks over the server's whole match set; the client
+    // can't reproduce it from the instances it holds.
+    if (!isClientSortable(this.activeQuery?.sort as Sort | undefined)) {
       return false;
     }
     // The matcher needs the filter's refs in canonical form (the engine

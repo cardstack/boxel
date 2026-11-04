@@ -45,7 +45,10 @@ import type {
   RangeOperator,
   RangeFilterValue,
   NearSortTarget,
+  BlendSortExpression,
+  BlendComponent,
 } from './query.ts';
+import { DEFAULT_RRF_K } from './query.ts';
 import { vectorDimensions, vectorToSqlLiteral } from './serializers/vector.ts';
 import {
   hasVectorIndex,
@@ -446,6 +449,22 @@ export function isMatchRelevanceSort(sort: { by: string }): boolean {
 // near sort's similarity (1 = same direction, -1 = opposite) rides each
 // result's `meta._nearSimilarity`.
 export const NEAR_SIMILARITY_KEY = '_nearSimilarity';
+
+// A `_blend` sort fuses several ranking signals with reciprocal rank fusion
+// (see `BlendSortExpression` in query.ts). Like the other synthetic keys it is
+// projected as a column (`blendScoreAlias`) and ordered by alias, defaulting
+// to `desc`. The first blend's score rides `meta._blendScore`.
+export const BLEND_SORT_KEY = '_blend';
+export const BLEND_SCORE_KEY = '_blendScore';
+
+export function isBlendSort(sort: object): sort is BlendSortExpression {
+  return (sort as { by?: unknown }).by === BLEND_SORT_KEY;
+}
+
+function blendScoreAlias(sort: Sort, index: number): string {
+  let firstBlend = sort.findIndex((s) => isBlendSort(s));
+  return index === firstBlend ? BLEND_SCORE_KEY : `${BLEND_SCORE_KEY}_${index}`;
+}
 
 export function isNearSort(sort: object): sort is {
   by: string;
@@ -1233,7 +1252,11 @@ export class IndexQueryEngine {
       // `_matchRelevance`, so every existing `matches` caller pays nothing. When
       // present it rides the projection as an aggregated, aliased column that the
       // ORDER BY (below) references — see `matchRelevanceExpression`.
-      let sortsByMatchRelevance = (sort ?? []).some(isMatchRelevanceSort);
+      let sortsByMatchRelevance = (sort ?? []).some(
+        (s) =>
+          isMatchRelevanceSort(s) ||
+          (isBlendSort(s) && s.of.some(isMatchRelevanceSort)),
+      );
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
         // `assertQuery` already rejects this on the wire surfaces (as an
@@ -1245,10 +1268,17 @@ export class IndexQueryEngine {
             `sort by "${MATCH_RELEVANCE_SORT_KEY}" requires at least one positive \`matches\` filter`,
           );
         }
-        relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
+        if ((sort ?? []).some(isMatchRelevanceSort)) {
+          relevanceColumn = [',', ...this.matchRelevanceExpression(matches)];
+        }
       }
       let { nearColumns, nearJoins } = await this.#nearSortExpressions(sort);
-      relevanceColumn = [...relevanceColumn, ...nearColumns];
+      let { blendColumns, blendJoins } = await this.#blendSortExpressions(
+        sort,
+        sortsByMatchRelevance ? collectPositiveMatchTerms(filter) : [],
+      );
+      relevanceColumn = [...relevanceColumn, ...nearColumns, ...blendColumns];
+      nearJoins = [...nearJoins, ...blendJoins];
 
       let query: CardExpression;
       if (conditionalLiveDoc) {
@@ -1492,29 +1522,35 @@ export class IndexQueryEngine {
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). A near sort's similarity column works
           // the same way. Everything else sorts on a column.
-          isNearSort(s)
+          isBlendSort(s)
             ? [
-                `"${nearSimilarityAlias(sort, index)}"`,
+                `"${blendScoreAlias(sort, index)}"`,
                 sortDirection(s.direction ?? 'desc'),
                 'NULLS LAST',
               ]
-            : isMatchRelevanceSort(s)
+            : isNearSort(s)
               ? [
-                  `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                  `"${nearSimilarityAlias(sort, index)}"`,
                   sortDirection(s.direction ?? 'desc'),
                   'NULLS LAST',
                 ]
-              : [
-                  // intentionally not using field arity here--not sure what it
-                  // means to sort via a plural field
-                  'ANY_VALUE(',
-                  'on' in s
-                    ? fieldQuery(s.by, s.on, false, 'sort')
-                    : this.generalFieldSortColumn(s.by),
-                  ')',
-                  sortDirection(s.direction),
-                  'NULLS LAST',
-                ],
+              : isMatchRelevanceSort(s)
+                ? [
+                    `"${MATCH_RELEVANCE_SORT_KEY}"`,
+                    sortDirection(s.direction ?? 'desc'),
+                    'NULLS LAST',
+                  ]
+                : [
+                    // intentionally not using field arity here--not sure what it
+                    // means to sort via a plural field
+                    'ANY_VALUE(',
+                    'on' in s
+                      ? fieldQuery(s.by, s.on, false, 'sort')
+                      : this.generalFieldSortColumn(s.by),
+                    ')',
+                    sortDirection(s.direction),
+                    'NULLS LAST',
+                  ],
         ),
         // `url` then `type` are the final sort keys for deterministic results
         // (the two rows of a dual-indexed card `.json` share a url).
@@ -1545,7 +1581,15 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
-      // A near sort's similarity column is projected by the inner SELECT too.
+      // Blend and near columns are projected by the inner SELECT too.
+      if (isBlendSort(s)) {
+        outerKeys.push([
+          `"${blendScoreAlias(sort, i)}"`,
+          sortDirection(s.direction ?? 'desc'),
+          'NULLS LAST',
+        ]);
+        return;
+      }
       if (isNearSort(s)) {
         outerKeys.push([
           `"${nearSimilarityAlias(sort, i)}"`,
@@ -1980,6 +2024,112 @@ export class IndexQueryEngine {
     ]);
   }
 
+  // The projection column (and any vector joins) for each `_blend` sort:
+  // reciprocal rank fusion, sum(weight / (k + rank)) over the signals a card
+  // has a value for. Each signal's rank is a window over every grouped row
+  // the filter admits (evaluated before ORDER BY / LIMIT), so a page holds
+  // the top of the whole match set. A card without a value for a signal (no
+  // vector, no text match, an empty field) gets nothing from it, rather than
+  // a last place. Ties share a rank (RANK()).
+  async #blendSortExpressions(
+    sort: Sort | undefined,
+    matches: string[],
+  ): Promise<{ blendColumns: CardExpression; blendJoins: CardExpression }> {
+    let blendColumns: CardExpression = [];
+    let blendJoins: CardExpression = [];
+    if (!sort) {
+      return { blendColumns, blendJoins };
+    }
+    for (let [index, s] of sort.entries()) {
+      if (!isBlendSort(s)) {
+        continue;
+      }
+      let k = s.k ?? DEFAULT_RRF_K;
+      let terms: CardExpression[] = [];
+      for (let [j, component] of s.of.entries()) {
+        let score = await this.#blendSignalScore(
+          component,
+          matches,
+          `nb${index}_${j}`,
+          blendJoins,
+        );
+        let direction = component.direction ?? 'desc';
+        terms.push([
+          'CASE WHEN',
+          ...score,
+          'IS NULL THEN 0 ELSE CAST(',
+          param(component.weight ?? 1),
+          dbExpression({ pg: 'AS DOUBLE PRECISION)', sqlite: 'AS REAL)' }),
+          '/ (',
+          param(k),
+          '+ RANK() OVER (ORDER BY',
+          ...score,
+          sortDirection(direction),
+          'NULLS LAST)) END',
+        ]);
+      }
+      let sum: CardExpression = [];
+      terms.forEach((t, i) => {
+        if (i > 0) {
+          sum.push('+');
+        }
+        sum.push(...t);
+      });
+      blendColumns.push(
+        ', (',
+        ...sum,
+        `) AS "${blendScoreAlias(sort, index)}"`,
+      );
+    }
+    return { blendColumns, blendJoins };
+  }
+
+  // One blend signal's aggregated value for a card, NULL when it has none.
+  async #blendSignalScore(
+    component: BlendComponent,
+    matches: string[],
+    joinAlias: string,
+    joins: CardExpression,
+  ): Promise<CardExpression> {
+    if (isMatchRelevanceSort(component)) {
+      // ts_rank_cd is 0 for a card the terms don't match: no signal.
+      return ['NULLIF(', ...this.matchRelevanceScore(matches), ', 0)'];
+    }
+    if (isNearSort(component)) {
+      await this.#assertNearField(
+        component.on,
+        component.by,
+        `blend signal "${component.by}" near a vector`,
+      );
+      let target = vectorToSqlLiteral(component.near);
+      if (this.#dbAdapter.kind === 'pg') {
+        joins.push(
+          `LEFT JOIN boxel_index_vectors AS ${joinAlias} ON ${joinAlias}.realm_url = i.realm_url AND ${joinAlias}.url = i.url AND ${joinAlias}.type = i.type AND ${joinAlias}.field_path =`,
+          param(removeBrackets(component.by)),
+          `AND ${joinAlias}.dims =`,
+          param(vectorDimensions(component.near)),
+        );
+        return [
+          `MAX(1 - (${joinAlias}.embedding <=> CAST(`,
+          param(target),
+          'AS vector)))',
+        ];
+      }
+      return [
+        'MAX(',
+        ...sqliteCosineSimilarity(`$.${removeBrackets(component.by)}`, target),
+        ')',
+      ];
+    }
+    return [
+      'ANY_VALUE(',
+      'on' in component && component.on
+        ? fieldQuery(component.by, component.on, false, 'sort')
+        : this.generalFieldSortColumn(component.by),
+      ')',
+    ];
+  }
+
   // The projection columns and joins for the query's near sorts.
   //
   // Postgres reads the vectors the index writer copied into
@@ -2056,6 +2206,15 @@ export class IndexQueryEngine {
   // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
   // table-valued fan-out, where every fanned row shares the same markdown).
   private matchRelevanceExpression(matches: string[]): CardExpression {
+    return [
+      ...this.matchRelevanceScore(matches),
+      `AS "${MATCH_RELEVANCE_SORT_KEY}"`,
+    ];
+  }
+
+  // The aggregated relevance value alone (no alias), shared by the
+  // `_matchRelevance` column and a `_blend` signal.
+  private matchRelevanceScore(matches: string[]): CardExpression {
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {
       if (i > 0) {
@@ -2084,7 +2243,7 @@ export class IndexQueryEngine {
         ],
         sqlite: [`CASE WHEN (`, ...sqliteLike, `) THEN 1 ELSE 0 END`],
       }),
-      `) AS "${MATCH_RELEVANCE_SORT_KEY}"`,
+      `)`,
     ];
   }
 

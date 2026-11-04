@@ -17,7 +17,11 @@ import {
   type RangeOperator,
   type Sort,
 } from './query.ts';
-import { isMatchRelevanceSort, isNearSort } from './index-query-engine.ts';
+import {
+  isBlendSort,
+  isMatchRelevanceSort,
+  isNearSort,
+} from './index-query-engine.ts';
 import { cosineSimilarity, isVector } from './serializers/vector.ts';
 
 import {
@@ -83,6 +87,13 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // Operators the matcher can replicate in JS. `matches` (full-text) and any
 // operator not in this set force the caller to fall back to server-only
 // evaluation.
+// Whether a live query's sort can be re-applied to the instances the client
+// holds. A `_blend` sort ranks each signal over the server's whole match set,
+// which a client holding a subset cannot reproduce, so it defers to the server.
+export function isClientSortable(sort: Sort | undefined): boolean {
+  return !(sort ?? []).some((s) => isBlendSort(s));
+}
+
 export function isClientEvaluable(filter: Filter): boolean {
   // A node carrying more than one operator is invalid (`assertFilter` rejects
   // it), but live local queries don't pass through `assertQuery`. Declining
@@ -723,7 +734,7 @@ function sortValue(
   // queries never reach this comparator (server results pass through
   // unsorted). If `matches` ever becomes client-evaluable, this needs a
   // relevance shim.
-  if (isMatchRelevanceSort(expression)) {
+  if (isMatchRelevanceSort(expression) || isBlendSort(expression)) {
     return null;
   }
   // A near sort mirrors the server's cosine similarity, so a live query

@@ -354,6 +354,10 @@ export interface EntryResource {
     // near-sorted query, for an entry that has a vector at the sorted path.
     // Comparable across realms, so the federated merge orders by it.
     _nearSimilarity?: number;
+    // The fused score of the query's first `_blend` sort (reciprocal rank
+    // fusion; higher ranks first). Present only on a blend-sorted query.
+    // Ranks are per realm, so across realms it orders only approximately.
+    _blendScore?: number;
   };
 }
 

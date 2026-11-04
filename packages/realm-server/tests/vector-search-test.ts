@@ -12,6 +12,7 @@ import {
   assertQuery,
   combineSearchEntryResults,
   isClientEvaluable,
+  isClientSortable,
   parseSearchEntryQueryFromPayload,
   searchEntryWireQueryFromQuery,
   collectSearchDocVectors,
@@ -44,6 +45,7 @@ function ref(module: string, name: string): ResolvedCodeRef {
 
 const stringRef = ref('@cardstack/base/string', 'default');
 const vectorRef = ref('@cardstack/base/vector', 'default');
+const numberRef = ref('@cardstack/base/number', 'default');
 const momentRef = ref(`${testRealm}moment`, 'Moment');
 const segmentRef = ref(`${testRealm}moment`, 'Segment');
 
@@ -67,7 +69,13 @@ const momentDef: Definition = {
   type: 'card-def',
   codeRef: momentRef,
   displayName: 'Moment',
-  fields: { title: 'f0', topic: 'f0', embedding: 'f1', segments: 'f2' },
+  fields: {
+    title: 'f0',
+    topic: 'f0',
+    embedding: 'f1',
+    segments: 'f2',
+    views: 'f3',
+  },
   fieldDefs: {
     f0: {
       type: 'contains',
@@ -87,6 +95,13 @@ const momentDef: Definition = {
       isPrimitive: false,
       isComputed: false,
       fieldOrCard: segmentRef,
+    },
+    f3: {
+      type: 'contains',
+      isPrimitive: true,
+      isComputed: false,
+      fieldOrCard: numberRef,
+      serializerName: 'number',
     },
   },
 };
@@ -256,6 +271,80 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a blend sort round-trips through the wire grammar', function (assert) {
+      let query: Query = {
+        filter: { on: momentRef, matches: 'pasta' },
+        sort: [
+          {
+            by: '_blend',
+            k: 30,
+            of: [
+              { by: '_matchRelevance' },
+              { on: momentRef, by: 'embedding', near: [1, 0, 0], weight: 2 },
+              { by: 'createdAt', direction: 'desc' },
+            ],
+          },
+        ],
+      };
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire.sort, [
+        {
+          by: 'item._blend',
+          k: 30,
+          of: [
+            { by: 'item._matchRelevance' },
+            {
+              by: 'item.embedding',
+              'item.on': momentRef,
+              near: [1, 0, 0],
+              weight: 2,
+            },
+            { by: 'item.createdAt', direction: 'desc' },
+          ],
+        },
+      ]);
+      let parsed = parseSearchEntryQueryFromPayload(wire);
+      assert.deepEqual(parsed.itemQuery.sort, query.sort);
+    });
+
+    test('blend sorts defer to the server in live queries', function (assert) {
+      assert.false(
+        isClientSortable([{ by: '_blend', of: [{ by: 'createdAt' }] }] as any),
+      );
+      assert.true(
+        isClientSortable([
+          { on: momentRef, by: 'embedding', near: [1] },
+        ] as any),
+      );
+    });
+
+    test('the federated merge orders a blend-sorted search by _blendScore', function (assert) {
+      let entry = (id: string, score?: number) => ({
+        type: 'entry' as const,
+        id,
+        relationships: {},
+        ...(score == null ? {} : { meta: { _blendScore: score } }),
+      });
+      let docs = [
+        {
+          data: [entry('a1', 0.03), entry('a2', 0.01)],
+          meta: { page: { total: 2 } },
+        },
+        {
+          data: [entry('b1', 0.032), entry('b2')],
+          meta: { page: { total: 2 } },
+        },
+      ] as any;
+      let merged = combineSearchEntryResults(docs, 2, {
+        key: '_blendScore',
+        direction: 'desc',
+      });
+      assert.deepEqual(
+        merged.data.map((e) => e.id),
+        ['b1', 'a1', 'a2', 'b2'],
+      );
+    });
+
     test('a near filter is left to the server by live queries', function (assert) {
       assert.false(
         isClientEvaluable({
@@ -285,7 +374,8 @@ module(basename(import.meta.filename), function () {
         },
       ] as any;
       let ranked = combineSearchEntryResults(docs, 2, {
-        nearSimilarity: 'desc',
+        key: '_nearSimilarity',
+        direction: 'desc',
       });
       assert.deepEqual(
         ranked.data.map((e) => e.id),
@@ -367,6 +457,56 @@ module(basename(import.meta.filename), function () {
           } as any),
         /exactly one field path/,
       );
+      assertQuery({
+        sort: [
+          {
+            by: '_blend',
+            of: [
+              { by: 'createdAt' },
+              { on: momentRef, by: 'views', weight: 0.5 },
+            ],
+          },
+        ],
+      } as any);
+      assert.throws(
+        () => assertQuery({ sort: [{ by: '_blend', of: [] }] } as any),
+        /needs an "of" array/,
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            sort: [
+              {
+                by: '_blend',
+                of: [{ by: '_blend', of: [{ by: 'createdAt' }] }],
+              },
+            ],
+          } as any),
+        /cannot contain another/,
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            sort: [
+              { by: '_blend', method: 'weighted', of: [{ by: 'createdAt' }] },
+            ],
+          } as any),
+        /supports method "rrf"/,
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            sort: [{ by: '_blend', of: [{ by: 'createdAt', weight: 0 }] }],
+          } as any),
+        /weight must be a positive number/,
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            sort: [{ by: '_blend', of: [{ by: '_matchRelevance' }] }],
+          } as any),
+        /requires at least one positive `matches` filter/,
+      );
     });
   });
 
@@ -419,7 +559,13 @@ module(basename(import.meta.filename), function () {
         undefined,
         { splitPrerenderHtml: false },
       );
-      for (let [name, searchData] of Object.entries(cards)) {
+      for (let [name, card] of Object.entries(cards)) {
+        // `__createdAt` and `__markdown` set the row's creation time and its
+        // rendered text (what `matches` searches); the rest is the search doc.
+        let { __createdAt, __markdown, ...searchData } = card as {
+          __createdAt?: number;
+          __markdown?: string;
+        } & Record<string, unknown>;
         let cardURL = new URL(url(name));
         await batch.updateEntry(cardURL, {
           type: 'instance',
@@ -432,8 +578,9 @@ module(basename(import.meta.filename), function () {
             },
           },
           lastModified: Date.now(),
-          resourceCreatedAt: Date.now(),
+          resourceCreatedAt: __createdAt ?? Date.now(),
           searchData,
+          ...(__markdown ? { markdown: __markdown } : {}),
           deps: new Set(),
           displayNames: ['Moment'],
           types: [momentKey],
@@ -782,6 +929,169 @@ module(basename(import.meta.filename), function () {
             },
           }),
           ['mixed.json'],
+        );
+      },
+    );
+
+    // Blend fixtures (target [1, 0, 0]):
+    //   near:   a 1.0, b 0.707, c 0.0, d no vector
+    //   views:  b 1000, c 500, d 50, a 10
+    //   age:    b oldest, then a, d, c newest
+    //   text:   only c mentions "recipe"
+    const t = Date.UTC(2026, 0, 1);
+    const blendSeed = {
+      a: {
+        title: 'a',
+        views: 10,
+        embedding: vec([1, 0, 0]),
+        __createdAt: t + 1000,
+        __markdown: 'cooking pasta',
+      },
+      b: {
+        title: 'b',
+        views: 1000,
+        embedding: vec([1, 1, 0]),
+        __createdAt: t,
+        __markdown: 'pasta',
+      },
+      c: {
+        title: 'c',
+        views: 500,
+        embedding: vec([0, 1, 0]),
+        __createdAt: t + 3000,
+        __markdown: 'a pasta recipe',
+      },
+      d: {
+        title: 'd',
+        views: 50,
+        __createdAt: t + 2000,
+        __markdown: 'nothing here',
+      },
+    };
+    const near = { on: momentRef, by: 'embedding', near: [1, 0, 0] };
+    const views = { on: momentRef, by: 'views' };
+
+    async function blendRows(query: Query) {
+      let { results } = await engine.search(
+        new URL(testRealm),
+        query,
+        {},
+        { kind: 'renderSet' },
+      );
+      return results.map((r) => [
+        r.url!.replace(`${testRealm}Moment/`, '').replace('.json', ''),
+        Number(Number((r as any)._blendScore).toFixed(6)),
+      ]);
+    }
+
+    pgvectorTest(
+      'a blend fuses similarity and engagement by reciprocal rank',
+      async (assert) => {
+        await index(blendSeed);
+        // near ranks a1 b2 c3 (d none); views rank b1 c2 d3 a4; k = 60
+        assert.deepEqual(
+          await nearIds({ sort: [{ by: '_blend', of: [near, views] }] }),
+          ['b.json', 'a.json', 'c.json', 'd.json'],
+          'b 1/62+1/61 > a 1/61+1/64 > c 1/63+1/62 > d 1/63',
+        );
+        assert.deepEqual(
+          await blendRows({
+            sort: [{ by: '_blend', of: [near, views] }],
+            page: { size: 2 },
+          }),
+          [
+            ['b', Number((1 / 62 + 1 / 61).toFixed(6))],
+            ['a', Number((1 / 61 + 1 / 64).toFixed(6))],
+          ],
+          'meta._blendScore carries the fused score; paging keeps global ranks',
+        );
+        assert.deepEqual(
+          await nearIds({
+            sort: [{ by: '_blend', of: [{ ...near, weight: 3 }, views] }],
+          }),
+          ['a.json', 'b.json', 'c.json', 'd.json'],
+          'tripling the similarity weight puts a first',
+        );
+      },
+    );
+
+    pgvectorTest(
+      'a blend ranks recency, with weights, and a signal a card lacks adds nothing',
+      async (assert) => {
+        await index(blendSeed);
+        // createdAt desc ranks c1 d2 a3 b4; recency at half weight
+        assert.deepEqual(
+          await nearIds({
+            sort: [
+              { by: '_blend', of: [near, { by: 'createdAt', weight: 0.5 }] },
+            ],
+          }),
+          ['a.json', 'c.json', 'b.json', 'd.json'],
+          'a 1/61+.5/63, c 1/63+.5/61, b 1/62+.5/64, d .5/62',
+        );
+        assert.deepEqual(
+          await nearIds({
+            sort: [
+              {
+                by: '_blend',
+                of: [near, { by: 'createdAt', direction: 'asc', weight: 0.5 }],
+              },
+            ],
+          }),
+          ['a.json', 'b.json', 'c.json', 'd.json'],
+          'direction asc ranks the oldest first',
+        );
+      },
+    );
+
+    pgvectorTest(
+      'a blend fuses full-text relevance with similarity over an any() filter',
+      async (assert) => {
+        await index(blendSeed);
+        let filter = {
+          any: [
+            { on: momentRef, matches: 'recipe' },
+            {
+              on: momentRef,
+              near: { embedding: { to: [1, 0, 0], minSimilarity: -1 } },
+            },
+          ],
+        } as any;
+        // a, b, c match (d has no vector and no "recipe"); only c has text
+        // relevance, so a and b get similarity alone
+        assert.deepEqual(
+          await nearIds({
+            filter,
+            sort: [{ by: '_blend', of: [{ by: '_matchRelevance' }, near] }],
+          }),
+          ['c.json', 'a.json', 'b.json'],
+          'c 1/61+1/63 > a 1/61 > b 1/62',
+        );
+        try {
+          await nearIds({
+            filter: { on: momentRef, eq: { title: 'a' } },
+            sort: [{ by: '_blend', of: [{ by: '_matchRelevance' }, near] }],
+          });
+          assert.ok(false, 'expected an error');
+        } catch (e) {
+          assert.ok(
+            /requires at least one positive `matches` filter/.test(String(e)),
+          );
+        }
+      },
+    );
+
+    pgvectorTest(
+      'a blend composes with filters, a tiebreak sort and the data projection',
+      async (assert) => {
+        await index(blendSeed);
+        assert.deepEqual(
+          await nearIds({
+            filter: { on: momentRef, not: { eq: { title: 'b' } } },
+            sort: [{ by: '_blend', of: [near, views] }, { by: 'cardURL' }],
+          }),
+          ['c.json', 'a.json', 'd.json'],
+          'ranks are over the filtered set: c 1/62+1/61 > a 1/61+1/63 > d 1/62',
         );
       },
     );
