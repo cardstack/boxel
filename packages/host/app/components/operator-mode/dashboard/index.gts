@@ -988,6 +988,8 @@ export default class Dashboard extends Component<Signature> {
       /* Type scale: greeting, then section title, then everything inside a
          section. Nothing inside a section outranks its heading. */
       .page-head {
+        /* Get started and the filter share one height. */
+        --dashboard-head-control-height: 1.75rem;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -1004,6 +1006,9 @@ export default class Dashboard extends Component<Signature> {
         gap: var(--boxel-sp-xl);
         min-width: 0;
       }
+      .get-started-button {
+        --pretui-button-h: var(--dashboard-head-control-height);
+      }
       .get-started-button.is-open {
         --pretui-button-fg: var(--boxel-highlight);
       }
@@ -1018,6 +1023,7 @@ export default class Dashboard extends Component<Signature> {
       /* The rail matches the page, and the selected pill is white on black.
          SegmentedControl has no tone arg, so this sets the tokens it reads. */
       .scope-filter {
+        --pretui-seg-h: var(--dashboard-head-control-height);
         --inset: var(--boxel-800);
         --border: var(--boxel-light-10);
         --border-strong: var(--boxel-light-25);
@@ -1184,7 +1190,12 @@ export default class Dashboard extends Component<Signature> {
           --dashboard-gutter: 1.5rem;
         }
         /* The greeting takes its own line, with Get started, then the
-           filter, under it. */
+           filter, under it, at opposite ends. Once the filter wraps it
+           stays at the start. */
+        .page-head {
+          justify-content: space-between;
+          column-gap: var(--boxel-sp-xl);
+        }
         .greeting-line {
           display: contents;
         }

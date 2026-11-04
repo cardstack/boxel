@@ -71,8 +71,7 @@ interface Signature {
 // The dashboard's onboarding checklist. Every tick comes from something the
 // user has actually done, read from state the host already keeps, so the list
 // can't drift from what happened. A button in the page's header opens and
-// closes it; it opens by itself for someone who has done no step. Dismissing
-// it hides both for good.
+// closes it; it starts closed. Dismissing it hides both for good.
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -110,14 +109,8 @@ export default class GetStarted extends Component<Signature> {
   // login reads the dashboard state, the realm list and its info before it
   // starts the sync, and the AI sessions are listed once the sync's first
   // pass is processed.
-  // Whether it opens by itself is decided here, once, so doing a first step
-  // while it is open doesn't close it.
   private loadTask = task(async () => {
-    try {
-      await this.aiAssistantPanelService.waitForSessionRooms();
-    } finally {
-      this.isOpen = this.doneCount === 0 && !this.isDismissed;
-    }
+    await this.aiAssistantPanelService.waitForSessionRooms();
   });
 
   // A failed wait still shows the list, with whatever ticks can be read,
@@ -209,6 +202,12 @@ export default class GetStarted extends Component<Signature> {
   // (recent cards are kept per browser) doesn't bring it back.
   private get isFinished() {
     return this.isLoaded && !this.isDismissed && this.nextStep === undefined;
+  }
+
+  // Only while the dismissal stands, so an undo from another tab or device
+  // doesn't leave the note beside the restored button.
+  private get showsDismissedNote() {
+    return this.isJustDismissed && this.isDismissed;
   }
 
   private get toggleState(): GetStartedToggle {
@@ -418,7 +417,7 @@ export default class GetStarted extends Component<Signature> {
           {{/if}}
         </div>
       </section>
-    {{else if this.isJustDismissed}}
+    {{else if this.showsDismissedNote}}
       <div class='get-started-dismissed' data-test-get-started-dismissed>
         <p class='dismissed-note' id={{this.dismissedNoteId}}>Get started won’t
           show again.</p>
@@ -472,10 +471,13 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         color: var(--muted-foreground);
       }
+      /* Dismiss and the minimize button sit together at the far end. */
+      .get-started-dismiss {
+        margin-inline-start: auto;
+      }
       .get-started-actions {
         display: flex;
         gap: var(--boxel-sp-xs);
-        margin-inline-start: auto;
       }
       .get-started-steps {
         margin: var(--boxel-sp-sm) 0 0;

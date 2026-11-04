@@ -237,13 +237,6 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           visibility: hidden;
           font-weight: var(--pretui-seg-active-weight);
         }
-        /* coarse pointers get a real hit target without moving the fine one */
-        @media (any-pointer: coarse) {
-          .pretui-seg-item {
-            min-height: 2.125rem;
-            padding: 0 var(--boxel-sp);
-          }
-        }
         @media (prefers-reduced-motion: reduce) {
           .pretui-seg-item {
             transition: none;

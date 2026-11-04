@@ -3020,8 +3020,8 @@ module('Acceptance | dashboard', function (hooks) {
         );
       }
 
-      // Closes the dashboard and opens it again, where Get started decides
-      // whether it opens by itself.
+      // Closes the dashboard and opens it again, where Get started starts
+      // closed.
       // The chooser's toggle is disabled with no stack open, so this sets
       // the state it toggles.
       async function reopenDashboard() {
@@ -3038,6 +3038,10 @@ module('Acceptance | dashboard', function (hooks) {
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({});
         await settled();
         await reopenDashboard();
+      }
+
+      async function openSteps() {
+        await click(BUTTON);
       }
 
       // Opens the AI panel from the ask step, which makes an empty session.
@@ -3057,10 +3061,14 @@ module('Acceptance | dashboard', function (hooks) {
         });
       }
 
-      test('a new account finds the steps open, right after the header and above Favorites', async function (assert) {
+      test('a new account finds the steps closed, and the button opens them right after the header', async function (assert) {
         await visitAsNewUser();
 
         assert.dom(BUTTON).hasText('Get started');
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+        assert.dom(GET_STARTED).doesNotExist();
+
+        await openSteps();
         assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
         assert.dom(GET_STARTED).exists();
         assert.dom('[data-test-get-started-count]').hasText('0 of 3 done');
@@ -3079,21 +3087,19 @@ module('Acceptance | dashboard', function (hooks) {
         );
       });
 
-      test('the button closes and reopens the steps', async function (assert) {
+      test('the button closes the steps it opened', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await click(BUTTON);
         assert.dom(GET_STARTED).doesNotExist();
         assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
-
-        await click(BUTTON);
-        assert.dom(GET_STARTED).exists();
-        assert.dom(BUTTON).hasAttribute('aria-expanded', 'true');
       });
 
       test('the minimize button folds the list to its progress and next step, and expands it again', async function (assert) {
         const TOGGLE = '[data-test-get-started-toggle]';
         await visitAsNewUser();
+        await openSteps();
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         await settled();
 
@@ -3118,6 +3124,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('reopened from the button, a folded list shows its steps again', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
         await click('[data-test-get-started-toggle]');
 
         await click(BUTTON);
@@ -3128,6 +3135,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('a step done while the steps are open keeps them open', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agentSetup: { claude: 1 },
@@ -3139,8 +3147,9 @@ module('Acceptance | dashboard', function (hooks) {
         assert.strictEqual(stepDone('open-card'), 'false');
       });
 
-      test('once a step is done, the steps stay closed until the button opens them', async function (assert) {
+      test('opened steps are closed again when the dashboard reopens', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         await settled();
 
@@ -3149,12 +3158,13 @@ module('Acceptance | dashboard', function (hooks) {
         assert.dom(GET_STARTED).doesNotExist();
         assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
 
-        await click(BUTTON);
+        await openSteps();
         assert.strictEqual(stepDone('open-card'), 'true');
       });
 
       test('opening a card and publishing a workspace tick their steps', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         (getService('recent-cards-service') as any).add(`${realmURL}index`);
         markHosted(realmURL);
@@ -3167,6 +3177,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('asking Boxel AI Assistant something ticks the ask step, and opening a session does not', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         let roomId = await openBoxelAiSession();
         assert.strictEqual(
@@ -3183,6 +3194,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('a session the bot has renamed ticks the ask step, before any message loads', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         let roomId = await openBoxelAiSession();
         mockMatrixUtils.setRoomState(roomId, 'm.room.name', {
@@ -3195,6 +3207,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('with every step done, neither the button nor the steps show', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
         assert.dom(GET_STARTED).exists();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
@@ -3232,6 +3245,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('picking a coding agent puts the agent step in place of the ask step', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agent: 'codex',
@@ -3250,6 +3264,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test("the agent step's action shows the Agents section", async function (assert) {
         await visitAsNewUser();
+        await openSteps();
         await mockMatrixUtils.setDashboardStateFromAnotherDevice({
           agent: 'codex',
         });
@@ -3264,6 +3279,7 @@ module('Acceptance | dashboard', function (hooks) {
 
       test('Dismiss saves that and leaves a note whose Undo brings the list back', async function (assert) {
         await visitAsNewUser();
+        await openSteps();
 
         await click('[data-test-get-started-dismiss]');
 
@@ -3285,6 +3301,21 @@ module('Acceptance | dashboard', function (hooks) {
         assert.false(matrixService.dashboardState.onboardingDismissed);
         assert.dom(BUTTON).exists('Undo brings the button back');
         assert.dom('[data-test-get-started-dismiss]').isFocused();
+      });
+
+      test('an undo from another device clears the dismissed note', async function (assert) {
+        await visitAsNewUser();
+        await openSteps();
+        await click('[data-test-get-started-dismiss]');
+        assert.dom('[data-test-get-started-dismissed]').exists();
+
+        await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+          onboardingDismissed: false,
+        });
+        await settled();
+
+        assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+        assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
       });
 
       test('once dismissed, neither the steps nor the button show on open', async function (assert) {
