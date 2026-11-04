@@ -586,7 +586,7 @@ module('Acceptance | realm config | API Keys', function (hooks) {
       let fragment = new URLSearchParams(opened.hash.slice(1));
       assert.deepEqual([...fragment.keys()], ['realm', 'reason']);
       assert.strictEqual(fragment.get('realm'), testRealmURL);
-      assert.strictEqual(calls[0].features, 'popup,width=640,height=720');
+      assert.strictEqual(calls[0].features, 'popup,width=940,height=1100');
       assert.deepEqual(
         api!.changes(),
         [],
