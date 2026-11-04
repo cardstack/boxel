@@ -162,7 +162,7 @@ module('Pretui | components/sidebar', function (hooks) {
   // The consumer here forgets @collapsed and @hideLabel: the rail still shows icons only.
   test('the collapsed icon rail hides group labels, item labels and badges but keeps each item named', async function (assert) {
     await render(<template>
-      <Sidebar @label='Library' @open={{false}}>
+      <Sidebar @label='Library' @open={{false}} @mobile={{false}}>
         <:nav>
           <SidebarGroup @label='Pages'>
             <SidebarItem @label='Home' @badge='6' @href='#home'><:icon>H</:icon></SidebarItem>
@@ -189,7 +189,7 @@ module('Pretui | components/sidebar', function (hooks) {
 
   test('the expanded rail still shows labels and badges', async function (assert) {
     await render(<template>
-      <Sidebar @label='Library'>
+      <Sidebar @label='Library' @mobile={{false}}>
         <:nav>
           <SidebarGroup @label='Pages'>
             <SidebarItem @label='Home' @badge='6' @href='#home'><:icon>H</:icon></SidebarItem>

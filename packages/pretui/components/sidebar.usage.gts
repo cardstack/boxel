@@ -179,8 +179,6 @@ export class SidebarUsage extends Component {
             </:default>
           </Sidebar>
         </div>
-      </:example>
-      <:example>
         <p class='shell-note'>The icon rail, pinned collapsed: icons only. Item
           names live on the tooltip and the accessible name, group labels
           become hairlines and badges are dropped.</p>
@@ -353,8 +351,8 @@ export class SidebarUsage extends Component {
         inline-size: 14rem;
       }
       .shell-note {
-        margin: 0 0 var(--space-3, 8px);
-        font-size: var(--text-ui-sm, 11.5px);
+        margin: 0 0 var(--space-3, 0.5rem);
+        font-size: var(--text-ui-sm, 0.72rem);
         color: var(--muted-foreground);
       }
       .shell-brand {

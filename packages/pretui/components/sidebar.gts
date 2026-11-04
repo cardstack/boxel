@@ -686,14 +686,14 @@ export class Sidebar extends Component<SidebarSignature> {
           --pretui-sbrail-divider: 1px solid var(--border);
           --pretui-sbrail-item-justify: center;
           --pretui-sbrail-item-pad: 0;
-          --pretui-sbrail-item-size: var(--control-h, 28px);
+          --pretui-sbrail-item-size: var(--control-h, 1.75rem);
           --pretui-sbrail-item-margin: auto;
         }
         @media (any-pointer: coarse) {
           .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail']:not(
               [data-mobile='true']
             ) {
-            --pretui-sbrail-item-size: 44px;
+            --pretui-sbrail-item-size: 2.75rem;
           }
         }
         .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
@@ -994,7 +994,10 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           align-items: center;
           justify-content: space-between;
           gap: var(--space-2, 6px);
-          padding: var(--pretui-sbrail-head-pad, var(--space-2, 6px) var(--space-2, 6px) 2px);
+          padding: var(
+            --pretui-sbrail-head-pad,
+            var(--space-2, 0.375rem) var(--space-2, 0.375rem) 0.125rem
+          );
           min-inline-size: 0;
           /* the icon rail swaps the label for a hairline between groups */
           border-block-start: var(--pretui-sbrail-divider, 0 solid transparent);
@@ -1207,7 +1210,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         .pretui-sbitem[data-collapsed='true'] {
           justify-content: center;
           padding: 0;
-          inline-size: var(--control-h, 28px);
+          inline-size: var(--control-h, 1.75rem);
           margin-inline: auto;
         }
         .pretui-sbitem:hover {
@@ -1262,7 +1265,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
             min-block-size: 44px;
           }
           .pretui-sbitem[data-collapsed='true'] {
-            inline-size: 44px;
+            inline-size: 2.75rem;
           }
         }
         @media (prefers-reduced-motion: reduce) {
