@@ -2,11 +2,20 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Chip } from './chip';
+import {
+  Chip,
+  PRETUI_CHIP_APPEARANCES,
+  type PretuiChipAppearance,
+} from './chip';
 import { HUE_OPTIONS } from '../demo-ink-feedback';
-import { PRETUI_TONES, type PretuiTone } from '../pretui-primitives';
+import {
+  PRETUI_TONES,
+  resolveTone,
+  type PretuiTone,
+} from '../pretui-primitives';
 
 const TONE_OPTIONS = [...PRETUI_TONES];
+const APPEARANCE_OPTIONS = [...PRETUI_CHIP_APPEARANCES];
 
 // ── Chip ← pill/usage.gts + tag/usage.gts ────────────────────────────────
 // Dropped knobs: kind (Chip is never a button), variant + size (no
@@ -18,6 +27,9 @@ class ChipUsage extends GlimmerComponent {
   @tracked hue = '';
   @tracked tone: PretuiTone = 'neutral';
   @tracked dot = true;
+  @tracked appearance: PretuiChipAppearance = 'outlined';
+  setAppearance = (v: string) =>
+    (this.appearance = resolveTone(v, PRETUI_CHIP_APPEARANCES, 'outlined'));
   setLabel = (v: string) => (this.label = v);
   setHue = (v: string) => (this.hue = v);
   setTone = (v: string) => (this.tone = v as PretuiTone);
@@ -32,6 +44,9 @@ class ChipUsage extends GlimmerComponent {
     }
     if (this.hue) {
       bits.push(`@hue='${this.hue}'`);
+    }
+    if (this.appearance !== 'outlined') {
+      bits.push(`@appearance='${this.appearance}'`);
     }
     if (!this.dot) {
       bits.push('@dot={{false}}');
@@ -50,6 +65,7 @@ class ChipUsage extends GlimmerComponent {
           @tone={{this.tone}}
           @hue={{this.hueVal}}
           @dot={{this.dot}}
+          @appearance={{this.appearance}}
         />
         <Chip @label='Gelato' @hue='var(--chart-3)' />
         <Chip @label='Catering' @hue='var(--chart-4)' />
@@ -57,6 +73,17 @@ class ChipUsage extends GlimmerComponent {
         <Chip @label='draft' />
         <Chip @label='live' @tone='success' />
         <Chip @label='blocked' @tone='danger' />
+        <Chip @label='hired' @tone='success' @appearance='soft' />
+        <Chip @label='on hold' @tone='warning' @appearance='soft' />
+        <Chip @label='rejected' @tone='danger' @appearance='soft' />
+        <Chip @label='screening' @tone='info' @appearance='plain' />
+        <Chip
+          @label='flagged'
+          @tone='danger'
+          @hue='var(--chart-2)'
+          @appearance='soft'
+        />
+        <Chip @label='archived' @appearance='plain' />
       </:example>
       <:api as |Args|>
         <Args.String
@@ -79,6 +106,14 @@ class ChipUsage extends GlimmerComponent {
           @defaultValue='neutral'
           @value={{this.tone}}
           @onInput={{this.setTone}}
+        />
+        <Args.String
+          @name='appearance'
+          @description='outlined (default) keeps the tone treatment; soft tints the fill with the tone and drops the ring; plain is dot + text with no frame, for dense tables.'
+          @options={{APPEARANCE_OPTIONS}}
+          @defaultValue='outlined'
+          @value={{this.appearance}}
+          @onInput={{this.setAppearance}}
         />
         <Args.Bool
           @name='dot'
