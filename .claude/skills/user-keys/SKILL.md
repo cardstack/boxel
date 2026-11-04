@@ -128,8 +128,10 @@ grant's destination host reduced to its registrable domain (`registrableDomain`
 in `lib/secure-window.ts`, the one the key pages show for a destination), each
 once, sorted. `sharedInto` is the realms the key's shares put it in
 (`listOwnSharedRealms` in `lib/key-shares.ts`), each once as
-`{url, name, shares: [{id, label, state}]}`, sorted by name and then address,
-so a page can unshare it from one realm without asking more. A suspended share
+`{url, name, shares: [{id, label, state, approvedCalls}]}`, sorted by name
+and then address, so a page can unshare it from one realm without asking
+more. `approvedCalls` counts the bindings that send the share (any state); at
+0 no card in the realm calls with it yet, and the key page says so. A suspended share
 still counts: the key is still what it holds. `name` is the realm's indexed
 `realm.json` name, given only while the owner can read the realm by a
 permission row of their own or a public one (`*`, `users`). A share outlives

@@ -9,7 +9,8 @@
 // Each key also lists where it may be sent, its grants, with the approvals
 // that send it there; removing a grant lists those first, then revokes them.
 // Use with a card sets a key up for a card's requests ahead of the card
-// asking, on the approve page. Usage and limits opens what the key spent
+// asking, on the approve page. A share that no operation is approved to send
+// says so, with Approve for a card, which does the same for that share. Usage and limits opens what the key spent
 // against its budgets, who used it and how, and its limits, which the owner
 // changes there.
 // Above the keys, where a share's or key's use reached its high-water mark or
@@ -147,6 +148,7 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
                         <KeyUse
                           @key={{key}}
                           @onUnshare={{this.unshare}}
+                          @onApproveShare={{this.approveShare}}
                           @onChangeAnonymousUse={{if
                             (this.servesVisitors key)
                             this.startAnonymousUse
@@ -664,6 +666,19 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
   // asks which workspace and card, then approves them.
   private useWithCard = (key: UserKey) =>
     navigation.assign(pageURL(keyUsePath(key.id)));
+
+  // A share is set up for a card on the same page, opened for the share.
+  private approveShare = (
+    key: ListedKey,
+    workspace: SharedWorkspace,
+    share: { id: string },
+  ) =>
+    navigation.assign(
+      `${pageURL(keyUsePath(key.id))}#${new URLSearchParams({
+        realm: workspace.url,
+        share: share.id,
+      })}`,
+    );
 
   // Removing a grant revokes the approvals that send under it, so both lists
   // are read again.

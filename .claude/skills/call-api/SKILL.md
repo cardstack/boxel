@@ -363,6 +363,28 @@ A call that a fix makes ready needs no reload: readiness is asked again when
 the user comes back from the window. Swapping a key into a stopped share is
 the keys page's job, not the card's.
 
+The host asks readiness again only when the user comes back from a secure
+window the app opened. A key shared from the key page in another tab, or long
+after, changes readiness too: the writer who shared it now gets
+`needs-approval` for the `apiKey` operation. So a card that offers both keys
+reads readiness again whenever its page takes focus. A tracked timestamp the
+readiness getters read is enough: the host serves a held answer until it is a
+few seconds old, then asks the realm again on the next read.
+
+```ts
+@tracked returnedAt = 0;
+
+need(name: string) {
+  void this.returnedAt; // read again whenever the page takes focus
+  return this.args.context?.keyReadiness?.(name, this.args.model);
+}
+
+// in a modifier on the card's root element
+let back = () => (this.returnedAt = Date.now());
+window.addEventListener('focus', back);
+return () => window.removeEventListener('focus', back);
+```
+
 Don't write one operation whose slot falls back from the realm's key to the
 user's. Who pays would be implicit: every share that was suspended or over
 budget would quietly move calls onto readers' own keys. With two operations

@@ -43,7 +43,9 @@
 // budget bounds their calls here too.
 //
 // Opened from a key's "Use with a card" (`#key=<id>&then=keys`), that key
-// starts chosen, and the page goes back to the key page when done.
+// starts chosen, and the page goes back to the key page when done. Opened for
+// one of the user's shares (`#share=<id>&then=keys`), that share starts
+// chosen for each slot the realm's key fills.
 //
 // Opened by `boxel keys approve` (`#cli_port=…&cli_state=…`), for an approval
 // that grants a key a destination it has none for, the operations the CLI
@@ -1124,7 +1126,11 @@ class Approve extends Component<{ Args: ApproveArgs }> {
             c.slot,
             kept && c.options.some((o) => o.id === kept)
               ? kept
-              : initialChoice(batch, c, this.opened.key),
+              : initialChoice(
+                  batch,
+                  c,
+                  c.kind === 'userKey' ? this.opened.key : this.opened.share,
+                ),
           ];
         }),
       );

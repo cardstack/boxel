@@ -166,10 +166,18 @@ export interface UserKey {
 // A realm that one of the user's keys is shared with, along with the key's
 // shares there. `name` is null when the user can no longer read the realm, or
 // before its name is indexed: the address is then all there is to show.
+// A realm one of the user's keys is shared into, with the key's shares there.
+// `approvedCalls` counts the realm's operations approved to send a share's
+// key; none means no card there calls with it yet.
 export interface SharedWorkspace {
   url: string;
   name: string | null;
-  shares: { id: string; label: string; state: 'active' | 'suspended' }[];
+  shares: {
+    id: string;
+    label: string;
+    state: 'active' | 'suspended';
+    approvedCalls: number;
+  }[];
 }
 
 // A key as the key listing gives it, with where it is used: the services its
@@ -199,6 +207,9 @@ export interface KeyShare {
   keyId?: string | null;
   state: 'active' | 'suspended';
   suspensionReason: string | null;
+  // In a realm's listing: the operations the share is approved for there,
+  // one per approval.
+  operations?: { operation: string }[];
 }
 
 type Config = ReturnType<typeof import('./session.js').readConfig>;
@@ -950,13 +961,21 @@ export async function readableRealms(
   );
 }
 
-// The card definitions used in a realm that send a key in a request, by name.
+// The card definitions used in a realm that send the user's own key in a
+// request, by name, or with `slot: 'apiKey'` those that send the realm's key,
+// which a share there is approved for.
 export async function realmCardsWithRequests(
   config: Config,
   realm: string,
+  slot: 'userKey' | 'apiKey' = 'userKey',
 ): Promise<{ module: string; name: string; displayName: string }[]> {
   let json = await authorizedRequest(config, '_secure-window/cards', {
-    body: { data: { type: 'secure-window-cards', attributes: { realm } } },
+    body: {
+      data: {
+        type: 'secure-window-cards',
+        attributes: slot === 'userKey' ? { realm } : { realm, slot },
+      },
+    },
   });
   return (json.data ?? []).map(
     ({

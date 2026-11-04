@@ -577,12 +577,15 @@ const MAX_LISTED_TYPES = 200;
 // The card definitions the realm's cards adopt from that declare a `callApi`
 // operation sending the caller's own key (`{{userKey}}`), by display name:
 // the cards whose requests one of the user's keys can be approved for there.
-// Each definition is read from the definition cache, and only from a realm
-// the user may read.
+// With `slot: 'apiKey'`, those sending the realm's key (`{{apiKey}}`)
+// instead: the cards one of the realm's shares can be approved for. Each
+// definition is read from the definition cache, and only from a realm the
+// user may read.
 export async function realmCardsWithRequests(
   deps: Deps,
   user: string,
   realmId: RealmResourceIdentifier,
+  slot: 'userKey' | 'apiKey' = 'userKey',
 ): Promise<CardWithRequests[]> {
   let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let { realm } = await resolveWindowRequest(deps, user, { realm: realmId });
@@ -646,14 +649,14 @@ export async function realmCardsWithRequests(
     }
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
-    let sendsUserKey = Object.values(definition.operations ?? {}).some(
+    let sendsKey = Object.values(definition.operations ?? {}).some(
       (operation) =>
         operation.base === 'callApi' &&
         !operation.invalid &&
         !operation.callApi?.perInstance &&
-        operation.callApi?.slots.some((slot) => slot.key === 'userKey'),
+        operation.callApi?.slots.some(({ key }) => key === slot),
     );
-    if (sendsUserKey) {
+    if (sendsKey) {
       found.push({
         module: virtualNetwork.unresolveURL(String(codeRef.module)),
         name: codeRef.name,

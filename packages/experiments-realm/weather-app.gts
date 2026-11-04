@@ -498,6 +498,11 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   @tracked matches: CityMatch[] = [];
   @tracked searchMessage: string | undefined;
   places = new TrackedMap<number, PlaceWeather>();
+  // When the reader last came back to this page. Every readiness read
+  // depends on it, so coming back reads readiness again, and the host asks
+  // the realm again about any answer that has gone stale: a key added or a
+  // share made in another window, which nothing here would otherwise hear of.
+  @tracked returnedAt = 0;
   #openedWindow = false;
   // The key the app last started loading with, kept out of tracking: the
   // modifier that starts a load must not re-run because the load changed
@@ -532,6 +537,8 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
   }
 
   need(name: string): Need | undefined {
+    // Read for the dependency alone; see `returnedAt`.
+    void this.returnedAt;
     let context = this.args.context;
     if (context?.canInvoke?.(name, this.args.model) === false) {
       return 'not-allowed';
@@ -671,8 +678,13 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
     },
   );
 
-  // Who the reader is to this realm. Asked when the app opens and when the
-  // reader comes back from the secure window.
+  // Who the reader is to this realm, and the realm's shares. Asked when the
+  // app opens and whenever the reader comes back to the page, from the secure
+  // window or from anywhere else: a writer who shares a key from the key page
+  // comes back to a card whose shared calls aren't approved yet, and readiness
+  // asked again says so (`needs-approval`), which opens the approval. Coming
+  // back from a window the app opened also clears the problem that opened it,
+  // so the app tries again.
   watchShares = modifier(() => {
     if (!this.isLive) {
       return;
@@ -683,8 +695,9 @@ class WeatherAppView extends GlimmerComponent<ViewSignature> {
         this.#openedWindow = false;
         this.#requestedFrom = undefined;
         this.problem = undefined;
-        this.loadShares.perform();
       }
+      this.returnedAt = Date.now();
+      this.loadShares.perform();
     };
     window.addEventListener('focus', back);
     return () => window.removeEventListener('focus', back);

@@ -1659,6 +1659,178 @@ module('Integration | approve pages', function (hooks) {
     });
   }
 
+  test('opened for one of the user’s shares, the approve page starts on that share', async function (assert) {
+    serveShareBatch({ opensToAnonymous: false, share: {} });
+    let served = routes['POST _key-bindings/batch']!;
+    serve({
+      'POST _key-bindings/batch': async (request) => {
+        let answer = await served(request);
+        let attributes = (answer.body as any).data.attributes;
+        attributes.shares = [
+          ...attributes.shares,
+          {
+            ...attributes.shares[0],
+            id: 'share-other',
+            label: 'Other GitHub',
+          },
+        ];
+        return answer;
+      },
+    });
+    visitShell(
+      `approve#${new URLSearchParams({ module: MODULE, name: 'Inbox', realm: REALM, share: 'share-other', then: 'keys' })}`,
+    );
+    await render(<template><ApprovePage /></template>);
+    await waitFor('[data-test-approve-form]');
+    assert
+      .dom('[data-test-approve-key="Other GitHub"] input')
+      .isChecked('the share the page was opened for');
+    assert.dom('[data-test-approve-key="Team GitHub"] input').isNotChecked();
+  });
+
+  test('a key’s share is set up for a card from the key’s use page, opened for that share', async function (assert) {
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-gh',
+              attributes: {
+                name: 'GitHub token',
+                kind: 'static',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team Workspace',
+                    shares: [
+                      {
+                        id: 'share-team',
+                        label: 'Team GitHub',
+                        state: 'active',
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () => json(200, { data: [] }),
+      'POST _secure-window/cards': () =>
+        json(200, {
+          data: [
+            {
+              type: 'secure-window-card',
+              id: `${MODULE}#Inbox`,
+              attributes: {
+                module: MODULE,
+                name: 'Inbox',
+                displayName: 'PR Inbox',
+              },
+            },
+          ],
+        }),
+    });
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-team' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-use-key-card]');
+
+    assert
+      .dom('[data-test-use-key]')
+      .includesText('the key you shared as “Team GitHub”');
+    assert
+      .dom('[data-test-use-key-share-realm]')
+      .includesText('Team Workspace', 'the workspace is the share’s');
+    assert.dom('[data-test-use-key-realm]').doesNotExist('nothing to choose');
+    assert.deepEqual(
+      requests.find((r) => r.path === '_secure-window/cards')?.body.data
+        .attributes,
+      { realm: REALM, slot: 'apiKey' },
+      'the cards that send the workspace’s key',
+    );
+    await click('[data-test-use-key-next]');
+    let url = new URL(navigations[0]!.url!, window.location.href);
+    assert.true(url.pathname.endsWith('/approve'));
+    assert.deepEqual(
+      Object.fromEntries(new URLSearchParams(url.hash.slice(1))),
+      {
+        module: MODULE,
+        name: 'Inbox',
+        realm: REALM,
+        share: 'share-team',
+        then: 'keys',
+      },
+      'the approve page is opened for the card type, with the share',
+    );
+  });
+
+  test('the key’s use page opened for a share the key doesn’t have, or a suspended one, says so', async function (assert) {
+    let state = 'active';
+    serve({
+      'GET _user-keys': () =>
+        json(200, {
+          data: [
+            {
+              type: 'user-key',
+              id: 'key-gh',
+              attributes: {
+                name: 'GitHub token',
+                kind: 'static',
+                state: 'active',
+                createdAt: '2026-10-01T12:00:00.000Z',
+                updatedAt: '2026-10-01T12:00:00.000Z',
+                grants: [],
+                usedWith: [],
+                sharedInto: [
+                  {
+                    url: REALM,
+                    name: 'Team Workspace',
+                    shares: [
+                      {
+                        id: 'share-team',
+                        label: 'Team GitHub',
+                        state,
+                        approvedCalls: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      'GET _secure-window/realms': () => json(200, { data: [] }),
+    });
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-gone' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-keys-load-failed]');
+    assert
+      .dom('[data-test-error-message]')
+      .hasText('This key isn’t shared there. The share may have been removed.');
+    assert.dom('[data-test-keys-retry]').doesNotExist();
+
+    state = 'suspended';
+    visitShell(
+      `keys/key-gh/use#${new URLSearchParams({ realm: REALM, share: 'share-team' })}`,
+    );
+    await render(<template><UseKeyPage @keyId='key-gh' /></template>);
+    await waitFor('[data-test-keys-load-failed]');
+    assert
+      .dom('[data-test-error-message]')
+      .hasText('This shared key is suspended, so no card can use it.');
+  });
+
   test('where the workspace lets people who aren’t signed in use a shared key, a share whose key allows them says so, with the key’s anonymous cap', async function (assert) {
     serveShareBatch({
       opensToAnonymous: true,
