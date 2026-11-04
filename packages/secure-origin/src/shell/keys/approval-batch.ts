@@ -334,22 +334,32 @@ export function batchFor(
   };
 }
 
-// Where the choice starts: on pipelines only, unless the CLI asked for
-// interactive use, or the batch holds nothing to approve for pipelines (only
-// operations approved for pipelines already), or every slot that needs
-// approving was last approved for interactive use, so approving it again
-// keeps that. One interactive slot among new ones doesn't count: starting on
-// interactive use would widen the new ones with a single click.
+// Where the choice starts. Opened in the browser, it starts on interactive
+// use, unless every slot that needs approving was last approved for
+// pipelines only, so approving it again keeps that. Opened by `boxel keys
+// approve`, it follows the CLI's own default: pipelines only, unless the CLI
+// asked for interactive use, or the batch holds nothing to approve for
+// pipelines (only operations approved for pipelines already), or every slot
+// that needs approving was last approved for interactive use. Either way it
+// is only where the choice starts: the confirmation says what interactive use
+// allows before anything is approved.
 export function initialUse(
   batch: ApprovalBatch,
-  { cliInteractive = false }: { cliInteractive?: boolean } = {},
+  {
+    cli = false,
+    cliInteractive = false,
+  }: { cli?: boolean; cliInteractive?: boolean } = {},
 ): ApprovalUse {
   let needed = allSlots(batchFor(batch, 'pipelines'));
-  if (
-    cliInteractive ||
-    needed.length === 0 ||
-    needed.every((s) => s.approved?.interactive)
-  ) {
+  let lastApprovedFor = (interactive: boolean) =>
+    needed.length > 0 &&
+    needed.every(
+      (s) => s.approved !== undefined && s.approved.interactive === interactive,
+    );
+  if (!cli) {
+    return lastApprovedFor(false) ? 'pipelines' : 'interactive';
+  }
+  if (cliInteractive || needed.length === 0 || lastApprovedFor(true)) {
     return 'interactive';
   }
   return 'pipelines';

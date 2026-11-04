@@ -18,18 +18,19 @@
 // in for a host. Unticking an operation leaves it unapproved.
 //
 // The user chooses, once for the batch, where the approved requests may run:
-// only in the card's scheduled pipelines (where the choice starts), or also
-// when a card is opened, in the browser, the AI assistant or the CLI.
-// Choosing the second shows what it allows, once, for the user's own keys and
-// for a workspace's share, and asks for the daily budget of a share approved
+// in the card's scheduled pipelines and also when a card is opened, in the
+// browser, the AI assistant or the CLI (offered first), or only in the
+// pipelines. Interactive use shows what it allows, once, for the user's own
+// keys and for a workspace's share, and asks for the daily budget of a share approved
 // for interactive use for the first time, linking to the share's
 // `share-limits` page, in a new tab, for its other limits: each person's rate
 // and the share's monthly budget. That page changes the daily budget too, so
 // coming back to this window re-reads the budget in force for a field the
 // user hasn't typed in. An operation approved for pipelines
-// only is in the batch only for that second choice. The choice starts on
-// interactive use when the batch is already approved for it, or holds nothing
-// else. An operation last approved for interactive use is marked, and
+// only is in the batch only for interactive use. Where the choice starts is
+// `initialUse`'s: on interactive use, unless the batch was last approved for
+// pipelines only, or the CLI opened the page without `--interactive`. An
+// operation last approved for interactive use is marked, and
 // approving it for pipelines only says that it then stops running when a card
 // is opened.
 //
@@ -790,7 +791,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
   private form = trackedObject({
     chosen: {} as Record<string, string | undefined>,
     ticked: new Set<string>(),
-    use: 'pipelines' as ApprovalUse,
+    use: 'interactive' as ApprovalUse,
     // A share's daily budget as typed, by share id.
     budgets: {} as Record<string, string>,
     saving: false,
@@ -799,14 +800,14 @@ class Approve extends Component<{ Args: ApproveArgs }> {
 
   private useChoices: RadioChoice[] = [
     {
-      value: 'pipelines',
-      label: 'On a schedule only',
-      hint: 'The card’s scheduled pipelines make these calls and save the results to the card. Opening the card makes no calls.',
-    },
-    {
       value: 'interactive',
       label: 'On a schedule and when the card is opened',
       hint: 'The card’s pipelines make these calls, and so does the card itself whenever it’s opened: in your browser, from the AI assistant, or from the CLI.',
+    },
+    {
+      value: 'pipelines',
+      label: 'On a schedule only',
+      hint: 'The card’s scheduled pipelines make these calls and save the results to the card. Opening the card makes no calls.',
     },
   ];
 
@@ -1130,6 +1131,7 @@ class Approve extends Component<{ Args: ApproveArgs }> {
       );
       if (!keep) {
         this.form.use = initialUse(batch, {
+          cli: this.fromCli.cli !== undefined,
           cliInteractive: this.fromCli.interactive,
         });
       }
