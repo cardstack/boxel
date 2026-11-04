@@ -1833,7 +1833,12 @@ async function readNonGrantableInChain(
   let answers = await Promise.all(
     types.slice(from).map(async (_key, offset) => {
       let type = await chainType(types, from + offset, read).catch(
-        () => undefined,
+        (e: unknown) => {
+          if (isOperationFailure(e)) {
+            throw e;
+          }
+          return undefined;
+        },
       );
       if (!type) {
         return 'unreadable' as const;
