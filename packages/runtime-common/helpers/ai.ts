@@ -189,7 +189,7 @@ export async function basicMappings(loader: Loader) {
       filter: {
         type: 'object',
         description:
-          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. Omit every operator you are not using: an empty operator ({}, [] or a CodeRef with empty strings) is not ignored — it changes what the query matches, or is rejected, and a filter carrying more than one operator is rejected. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Example: { on: <CodeRef>, matches: 'recipe cookbook' }.",
+          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'near', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. Omit every operator you are not using: an empty operator ({}, [] or a CodeRef with empty strings) is not ignored — it changes what the query matches, or is rejected, and a filter carrying more than one operator is rejected. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Example: { on: <CodeRef>, matches: 'recipe cookbook' }.",
         properties: {
           type: {
             type: 'object',
@@ -268,6 +268,12 @@ export async function basicMappings(loader: Loader) {
             description:
               "Full-text search over each result's rendered content. Bare words are ANDed; put OR between alternatives (e.g., 'blog OR article'). Pair it with 'type' to search within one card type, and sort by '_matchRelevance' to put the best matches first.",
           },
+          near: {
+            type: 'object',
+            properties: {},
+            description:
+              "Vector similarity on one VectorField (an embedding), keyed by its field path with 'on' naming the card type. The value is { to: [ …numbers… ], minSimilarity?: number }: 'to' has as many numbers as the field has dimensions, and the optional minSimilarity is a cosine threshold from -1 to 1 (1 = same direction). Example: { embedding: { to: [ … ], minSimilarity: 0.6 } }. To get the k most similar cards, sort by the field with 'near' instead and set page.size to k.",
+          },
         },
       },
       sort: {
@@ -296,6 +302,12 @@ export async function basicMappings(loader: Loader) {
               enum: ['asc', 'desc'],
               description:
                 "Sort direction: 'asc' for ascending, 'desc' for descending.",
+            },
+            near: {
+              type: 'array',
+              items: { type: 'number' },
+              description:
+                "Rank by cosine similarity between the VectorField named by 'by' (with 'on') and this target vector, most similar first (direction defaults to 'desc'). Each result carries meta._nearSimilarity. Cards without a vector sort last.",
             },
           },
           required: ['by'],

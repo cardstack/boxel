@@ -62,6 +62,9 @@ export interface EntrySummary {
   name?: string;
   readMe?: string;
   matchRelevance?: number;
+  // Cosine similarity to a `near` sort's target (higher is nearer); only on a
+  // near-sorted query.
+  nearSimilarity?: number;
 }
 
 export function resolveSearchEntryScope(
@@ -148,6 +151,7 @@ export function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
       name: attributes.name as string | undefined,
       readMe: attributes.readMe as string | undefined,
       matchRelevance: entry.meta?._matchRelevance,
+      nearSimilarity: entry.meta?._nearSimilarity,
     });
   }
   return summaries;
@@ -240,8 +244,10 @@ export default class SearchEntriesTool extends HostBaseTool<
     'Search across realms for existing cards, specs, listings, themes, and files — ' +
     'the primary tool for discovery: always check what already exists before creating ' +
     'anything new. Takes a card query (`filter` supporting `type`/`on`/`eq`/`contains`/' +
-    '`range`/`any`/`every`/`not` and full-text `matches` — whose bare words are ' +
-    'ANDed, with `OR` supported between alternatives — plus optional `sort`). ' +
+    '`range`/`any`/`every`/`not`, full-text `matches` — whose bare words are ' +
+    'ANDed, with `OR` supported between alternatives — and vector `near` on an ' +
+    'embedding field, plus optional `sort`, where `near: [ …vector… ]` on a ' +
+    'field sort ranks by similarity). ' +
     'Also optional ' +
     '`realms` (realm URLs or identifiers such as `@cardstack/catalog/`; defaults to ' +
     'every realm you can read), optional `scope` ' +
@@ -252,7 +258,7 @@ export default class SearchEntriesTool extends HostBaseTool<
     'rows within each realm and then merges them. ' +
     `Returns lightweight entry summaries — url, ` +
     'ref, specType, title, description, file name, full readMe, and full-text match ' +
-    'relevance — not live card instances. A result with `incomplete: true` is ' +
+    'relevance or vector similarity — not live card instances. A result with `incomplete: true` is ' +
     'partial: at least one searched realm failed to answer, so matches may be ' +
     'missing and `total` undercounts. When you need instances to attach, open, or ' +
     'patch, use the card-instance search tools instead.';

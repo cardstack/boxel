@@ -10,6 +10,10 @@ import {
   VectorSerializer,
   VirtualNetwork,
   assertQuery,
+  combineSearchEntryResults,
+  isClientEvaluable,
+  parseSearchEntryQueryFromPayload,
+  searchEntryWireQueryFromQuery,
   collectSearchDocVectors,
   hasVectorIndex,
   internalKeyFor,
@@ -221,6 +225,82 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('near through the search wire grammar and federation', function () {
+    test('the wire translation keeps a near filter and a near sort', function (assert) {
+      let query: Query = {
+        filter: {
+          on: momentRef,
+          near: { embedding: { to: [1, 0, 0], minSimilarity: 0.5 } },
+        },
+        sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
+        page: { size: 3 },
+      };
+      let wire = searchEntryWireQueryFromQuery(query);
+      assert.deepEqual(wire.filter, {
+        'item.on': momentRef,
+        near: { 'item.embedding': { to: [1, 0, 0], minSimilarity: 0.5 } },
+      });
+      assert.deepEqual(wire.sort, [
+        { by: 'item.embedding', 'item.on': momentRef, near: [1, 0, 0] },
+      ]);
+      let parsed = parseSearchEntryQueryFromPayload(wire);
+      assert.deepEqual(
+        parsed.itemQuery.filter,
+        query.filter,
+        'the filter round-trips',
+      );
+      assert.deepEqual(
+        parsed.itemQuery.sort,
+        query.sort,
+        'the sort round-trips',
+      );
+    });
+
+    test('a near filter is left to the server by live queries', function (assert) {
+      assert.false(
+        isClientEvaluable({
+          on: momentRef,
+          near: { embedding: { to: [1, 0, 0] } },
+        }),
+      );
+    });
+
+    test('the federated merge orders near-ranked pages by similarity', function (assert) {
+      let entry = (id: string, similarity?: number) => ({
+        type: 'entry' as const,
+        id,
+        relationships: {},
+        ...(similarity == null
+          ? {}
+          : { meta: { _nearSimilarity: similarity } }),
+      });
+      let docs = [
+        {
+          data: [entry('a1', 0.9), entry('a2', 0.2), entry('a3')],
+          meta: { page: { total: 3 } },
+        },
+        {
+          data: [entry('b1', 0.95), entry('b2', 0.5)],
+          meta: { page: { total: 2 } },
+        },
+      ] as any;
+      let ranked = combineSearchEntryResults(docs, 2, {
+        nearSimilarity: 'desc',
+      });
+      assert.deepEqual(
+        ranked.data.map((e) => e.id),
+        ['b1', 'a1', 'b2', 'a2', 'a3'],
+      );
+      assert.strictEqual(ranked.meta.page.total, 5);
+      let unranked = combineSearchEntryResults(docs, 2);
+      assert.deepEqual(
+        unranked.data.map((e) => e.id),
+        ['a1', 'a2', 'a3', 'b1', 'b2'],
+        'other queries keep realm order',
+      );
+    });
+  });
+
   module('near query validation', function () {
     test('assertQuery accepts a near sort and rejects malformed ones', function (assert) {
       let ok: Query = {
@@ -249,6 +329,43 @@ module(basename(import.meta.filename), function () {
             sort: [{ on: momentRef, by: 'embedding', near: { dims: 2 } }],
           } as any),
         /array of numbers or a vector/,
+      );
+      assertQuery({
+        filter: {
+          on: momentRef,
+          near: { embedding: { to: [1, 0], minSimilarity: 0.5 } },
+        },
+      });
+      assert.throws(
+        () =>
+          assertQuery({
+            filter: {
+              on: momentRef,
+              near: { embedding: { to: [1, 0], k: 10 } },
+            },
+          } as any),
+        /unknown member "k".*set page.size/,
+        'k is refused with a pointer to page.size',
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            filter: {
+              on: momentRef,
+              near: { embedding: { to: [1, 0], minSimilarity: 2 } },
+            },
+          } as any),
+        /minSimilarity must be a number from -1 to 1/,
+      );
+      assert.throws(
+        () =>
+          assertQuery({
+            filter: {
+              on: momentRef,
+              near: { a: { to: [1] }, b: { to: [1] } },
+            },
+          } as any),
+        /exactly one field path/,
       );
     });
   });
@@ -422,7 +539,7 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
-      'a near sort orders by cosine distance, nearest first, cards without a vector last',
+      'a near sort orders by cosine similarity, most similar first, cards without a vector last',
       async (assert) => {
         await index(seed);
         assert.deepEqual(
@@ -444,7 +561,7 @@ module(basename(import.meta.filename), function () {
                 on: momentRef,
                 by: 'embedding',
                 near: [1, 0, 0],
-                direction: 'desc',
+                direction: 'asc',
               },
             ],
           }),
@@ -455,7 +572,7 @@ module(basename(import.meta.filename), function () {
             'same.json',
             'none.json',
           ],
-          'desc puts the farthest first; no vector stays last',
+          'asc puts the least similar first; no vector stays last',
         );
         assert.deepEqual(
           (
@@ -579,16 +696,97 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           results.map((r) => [
             r.url!.replace(`${testRealm}Moment/`, ''),
-            Number((r as any)._nearDistance).toFixed(3),
+            Number((r as any)._nearSimilarity).toFixed(3),
           ]),
           [
-            ['same.json', '0.000'],
-            ['close.json', '0.293'],
+            ['same.json', '1.000'],
+            ['close.json', '0.707'],
           ],
         );
       },
     );
+
+    pgvectorTest(
+      'a near filter keeps cards at least minSimilarity similar, and composes',
+      async (assert) => {
+        await index(seed);
+        let near = (minSimilarity?: number) => ({
+          on: momentRef,
+          near: {
+            embedding: {
+              to: [1, 0, 0],
+              ...(minSimilarity == null ? {} : { minSimilarity }),
+            },
+          },
+        });
+        assert.deepEqual(
+          (await nearIds({ filter: near(0.5) })).sort(),
+          ['close.json', 'same.json'],
+          'cosine 1 and 0.707 pass 0.5; 0 and -1 do not',
+        );
+        assert.deepEqual(
+          (await nearIds({ filter: near() })).sort(),
+          ['close.json', 'opposite.json', 'orthogonal.json', 'same.json'],
+          'without a threshold it keeps every card with a vector',
+        );
+        assert.deepEqual(
+          await nearIds({
+            filter: {
+              on: momentRef,
+              every: [{ eq: { topic: 'a' } }, near(-0.5)],
+            },
+            sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
+          }),
+          ['same.json', 'orthogonal.json'],
+          'with eq under every, ranked by the near sort',
+        );
+        assert.deepEqual(
+          (await nearIds({ filter: { not: near(0.5) } })).sort(),
+          ['none.json', 'opposite.json', 'orthogonal.json'],
+          'negated',
+        );
+        try {
+          await nearIds({
+            filter: {
+              on: momentRef,
+              near: { title: { to: [1, 0, 0] } },
+            },
+          });
+          assert.ok(false, 'expected an error');
+        } catch (e) {
+          assert.ok(/requires "title" to be a VectorField/.test(String(e)));
+        }
+      },
+    );
+
+    pgvectorTest(
+      'a near filter on a plural field matches when any vector qualifies',
+      async (assert) => {
+        await index({
+          far: { title: 'far', segments: [{ embedding: vec([-1, 0, 0]) }] },
+          mixed: {
+            title: 'mixed',
+            segments: [
+              { embedding: vec([0, -1, 0]) },
+              { embedding: vec([1, 0.1, 0]) },
+            ],
+          },
+        });
+        assert.deepEqual(
+          await nearIds({
+            filter: {
+              on: momentRef,
+              near: {
+                'segments.embedding': { to: [1, 0, 0], minSimilarity: 0.9 },
+              },
+            },
+          }),
+          ['mixed.json'],
+        );
+      },
+    );
   });
+
   module('without pgvector', function (hooks) {
     let adapter: PgAdapter;
 

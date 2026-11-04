@@ -8,6 +8,7 @@ import {
   isEveryFilter,
   isInFilter,
   isMatchesFilter,
+  isNearFilter,
   isNotFilter,
   isRangeFilter,
   isReferenceFilterField,
@@ -91,6 +92,10 @@ export function isClientEvaluable(filter: Filter): boolean {
     return false;
   }
   if (isMatchesFilter(filter)) {
+    return false;
+  }
+  // Near filters read the server's vector index; the client defers to it.
+  if (isNearFilter(filter)) {
     return false;
   }
   if (isAnyFilter(filter)) {
@@ -674,7 +679,13 @@ export function makeInstanceComparator(
 ): (a: CardDef, b: CardDef) => number {
   return (a: CardDef, b: CardDef) => {
     for (let expression of sort ?? []) {
-      let direction = expression.direction === 'desc' ? -1 : 1;
+      // A near sort ranks by similarity, most similar first unless asked
+      // otherwise — the server's default for it.
+      let direction =
+        (expression.direction ?? (isNearSort(expression) ? 'desc' : 'asc')) ===
+        'desc'
+          ? -1
+          : 1;
       let valueA = sortValue(a, expression, api);
       let valueB = sortValue(b, expression, api);
       let nullA = valueA == null;
@@ -715,17 +726,17 @@ function sortValue(
   if (isMatchRelevanceSort(expression)) {
     return null;
   }
-  // A near sort mirrors the server's cosine distance (1 - similarity), so a
-  // live query re-sorts its instances the way the index would. Plural fields
-  // take their nearest vector, as the server's MIN does; a card with no
-  // vector, or one of another dimension, sorts last.
+  // A near sort mirrors the server's cosine similarity, so a live query
+  // re-sorts its instances the way the index would. Plural fields take their
+  // nearest vector, as the server's MAX does; a card with no vector, or one of
+  // another dimension, sorts last.
   if (isNearSort(expression)) {
     let { values } = resolvePath(instance, expression.by, api);
-    let distances = values
+    let similarities = values
       .filter((v): v is NonNullable<typeof v> => isVector(v))
       .filter((v) => v.dims === nearLength(expression.near))
-      .map((v) => 1 - cosineSimilarity(v, expression.near));
-    return distances.length ? Math.min(...distances) : null;
+      .map((v) => cosineSimilarity(v, expression.near));
+    return similarities.length ? Math.max(...similarities) : null;
   }
   if ('on' in expression && expression.on) {
     let { values } = resolvePath(instance, expression.by, api);
