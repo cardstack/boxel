@@ -19,6 +19,7 @@ The Query object may have a `filter` property, which controls which cards are in
 - `every`: allows an "AND" union of other filters
 - `not`: allow negating another filter
 - `contains`: allows you to specify a card that has a field value containing a specific value.
+- `near`: keeps cards whose `VectorField` is at least `minSimilarity` similar to a target vector (see [Vector search](#vector-search-near)).
 
 - `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
 
@@ -145,6 +146,40 @@ let { data: matching } = await indexer.search({
     },
   ],
   filter: { type: { module: `https://my.realm/book`, name: 'Book' } },
+});
+```
+
+### Vector search (`near`)
+
+A card can carry an embedding in a `VectorField` (`@cardstack/base/vector`; 256 dimensions by default, up to 2,000). Queries reach it two ways:
+
+- **Ranking**: a sort entry with a `near` target ranks by cosine similarity to it, most similar first (`direction` defaults to `desc`). Cards with no vector at the path sort last. Each result carries `meta._nearSimilarity` (1 = same direction, -1 = opposite), the way a `_matchRelevance` sort carries `meta._matchRelevance`. The k most similar cards are a near sort plus `page: { size: k }`.
+- **Threshold**: a `near` filter, keyed by the field path like `range`, keeps cards whose vector has at least `minSimilarity` to `to`. Without `minSimilarity` it keeps every card that has a vector of `to`'s dimension there. It nests under `every`/`any`/`not`, so it combines with other filters and with realm policy.
+
+`near` targets are a number array or a vector in its stored form (`{ dims, encoding, scale?, data }`). A plural path (`segments.embedding`) scores a card by its nearest vector. Search is exact. On Postgres it needs the pgvector extension; without it a `near` query is refused with an error that says so. The SQLite index (host tests) scores singular paths only.
+
+```js
+let { data: nearest } = await indexer.search({
+  filter: {
+    every: [
+      { on: momentRef, eq: { topic: 'ml' } },
+      { on: momentRef, near: { embedding: { to: target, minSimilarity: 0.5 } } },
+    ],
+  },
+  sort: [{ on: momentRef, by: 'embedding', near: target }],
+  page: { size: 10 },
+});
+```
+
+In a query-backed field, `near` interpolates like any value, so "related moments" is a declared query. A source card with no embedding resolves to no cards:
+
+```js
+@field related = linksToMany(() => Moment, {
+  query: {
+    filter: { not: { eq: { id: '$this.id' } } },
+    sort: [{ by: 'embedding', near: '$this.embedding' }],
+    page: { size: 10 },
+  },
 });
 ```
 

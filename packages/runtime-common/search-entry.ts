@@ -44,6 +44,7 @@ import { isCodeRef, isResolvedCodeRef } from './card-document-shape.ts';
 import {
   generalSortFields,
   MATCH_RELEVANCE_SORT_KEY,
+  isNearSort,
 } from './index-query-engine.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import { parseUsedRenderType } from './search-resource-helpers.ts';
@@ -121,7 +122,7 @@ export type SearchEntryScope = 'cards' | 'files' | 'all';
 const SEARCH_ENTRY_SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
 
 // The operator members whose value is an object keyed by field paths.
-const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range'];
+const FIELD_KEYED_OPERATORS = ['eq', 'contains', 'in', 'range', 'near'];
 
 // Which form of the `item` serialization the fieldset selects.
 export type SearchEntryItemSelection =
@@ -1136,6 +1137,7 @@ const SHAPE_MEMBERS = [
   'contains',
   'range',
   'matches',
+  'near',
 ] as const;
 
 // The single member that decides what an unanchored node matches, or
@@ -1182,6 +1184,8 @@ export interface SearchEntryWireSortExpression {
   by: string;
   'item.on'?: CodeRef;
   direction?: 'asc' | 'desc';
+  // a near sort's target vector (see `NearSortTarget`)
+  near?: unknown;
 }
 
 export type SearchEntryWireFilter = {
@@ -1196,6 +1200,7 @@ export type SearchEntryWireFilter = {
   in?: Record<string, unknown>;
   range?: Record<string, unknown>;
   matches?: string;
+  near?: Record<string, unknown>;
 };
 
 export interface SearchEntryWireQuery {
@@ -1222,14 +1227,15 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
     } else if (key === 'not') {
       out.not = wireFilterFromFilter(value as Filter);
     } else if (FIELD_KEYED_OPERATORS.includes(key)) {
-      out[key as 'eq' | 'contains' | 'in' | 'range'] = Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).map(
-          ([fieldPath, fieldValue]) => [
-            `${ITEM_PREFIX}${fieldPath}`,
-            fieldValue,
-          ],
-        ),
-      );
+      out[key as 'eq' | 'contains' | 'in' | 'range' | 'near'] =
+        Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).map(
+            ([fieldPath, fieldValue]) => [
+              `${ITEM_PREFIX}${fieldPath}`,
+              fieldValue,
+            ],
+          ),
+        );
     } else if (key === 'matches') {
       out.matches = value as string;
     } else {
@@ -1258,6 +1264,7 @@ export function searchEntryWireQueryFromQuery(
       by: `${ITEM_PREFIX}${entry.by}`,
       ...('on' in entry && entry.on ? { [ITEM_ANCHOR]: entry.on } : {}),
       ...(entry.direction ? { direction: entry.direction } : {}),
+      ...('near' in entry && entry.near != null ? { near: entry.near } : {}),
     }));
   }
   if (query.page) {
@@ -1291,6 +1298,12 @@ export function combineSearchEntryResults(
   // the summed total then counts only the realms that answered. Count the
   // asked-for realms, not the resolved ones, so the first way is caught too.
   attemptedRealmCount?: number,
+  // When the query's primary sort is a `near` sort, each realm's page is
+  // ranked by cosine similarity to the same target — a score comparable
+  // across realms — so the merge orders the concatenated entries by
+  // `meta._nearSimilarity` (in the sort's direction, entries without a score
+  // last) instead of leaving them in realm order.
+  rankBy?: { nearSimilarity: 'asc' | 'desc' },
 ): EntryCollectionDocument {
   let combined: EntryCollectionDocument = {
     data: [],
@@ -1341,6 +1354,20 @@ export function combineSearchEntryResults(
       }
       included.push(resource);
     }
+  }
+
+  if (rankBy && docs.length > 1) {
+    let sign = rankBy.nearSimilarity === 'asc' ? 1 : -1;
+    let score = (entry: EntryResource) => entry.meta?._nearSimilarity;
+    // Array#sort is stable, so equal scores keep realm order.
+    combined.data.sort((a, b) => {
+      let sa = score(a);
+      let sb = score(b);
+      if (sa == null || sb == null) {
+        return sa == null ? (sb == null ? 0 : 1) : -1;
+      }
+      return (sa - sb) * sign;
+    });
   }
 
   if (attemptedRealmCount != null && docs.length < attemptedRealmCount) {
@@ -1412,7 +1439,14 @@ export async function searchEntryRealms(
   // full length therefore asks the merge to account for those too, rather than
   // letting a realm that never got as far as a search drop out of the tally
   // that decides whether the total is short.
-  let combined = combineSearchEntryResults(docs, realms.length);
+  let primarySort = searchEntryQuery.itemQuery.sort?.[0];
+  let combined = combineSearchEntryResults(
+    docs,
+    realms.length,
+    primarySort && isNearSort(primarySort)
+      ? { nearSimilarity: primarySort.direction ?? 'desc' }
+      : undefined,
+  );
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
@@ -1456,10 +1490,10 @@ export function buildEntryResource(args: {
   // Full-text relevance for the query's `matches` terms — present only on a
   // relevance-sorted query; rides in `meta._matchRelevance`. Omitted otherwise.
   matchRelevance?: number;
-  // Cosine distance to the target of the query's first `near` sort (0 = same
-  // direction, 2 = opposite) — present only on a near-sorted query; rides in
-  // `meta._nearDistance`. Omitted otherwise, and for a card with no vector.
-  nearDistance?: number;
+  // Cosine similarity to the target of the query's first `near` sort (1 =
+  // same direction, -1 = opposite) — present only on a near-sorted query; rides in
+  // `meta._nearSimilarity`. Omitted otherwise, and for a card with no vector.
+  nearSimilarity?: number;
 }): EntryResource {
   let {
     url,
@@ -1468,7 +1502,7 @@ export function buildEntryResource(args: {
     iconId,
     generation,
     matchRelevance,
-    nearDistance,
+    nearSimilarity,
   } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
@@ -1491,14 +1525,16 @@ export function buildEntryResource(args: {
   if (
     generation !== undefined ||
     matchRelevance !== undefined ||
-    nearDistance !== undefined
+    nearSimilarity !== undefined
   ) {
     resource.meta = {
       ...(generation !== undefined ? { generation } : {}),
       ...(matchRelevance !== undefined
         ? { _matchRelevance: matchRelevance }
         : {}),
-      ...(nearDistance !== undefined ? { _nearDistance: nearDistance } : {}),
+      ...(nearSimilarity !== undefined
+        ? { _nearSimilarity: nearSimilarity }
+        : {}),
     };
   }
   return resource;

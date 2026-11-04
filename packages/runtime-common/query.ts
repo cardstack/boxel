@@ -84,6 +84,7 @@ export type Filter =
   | ContainsFilter
   | RangeFilter
   | MatchesFilter
+  | NearFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
@@ -194,6 +195,24 @@ export interface ContainsFilter extends TypedFilter {
  */
 export interface MatchesFilter extends TypedFilter {
   matches: string;
+}
+
+// Vector similarity, field-keyed like `range`: a card matches when its
+// VectorField at the path has cosine similarity of at least `minSimilarity`
+// to `to` (any of its vectors, for a plural path). Without `minSimilarity` it
+// matches every card with a vector of `to`'s dimension at the path. Ranking
+// is the near sort's job, and top-k is `page.size` on a near-sorted query.
+export interface NearFilter extends TypedFilter {
+  near: Record<string, NearFilterValue>;
+}
+
+export interface NearFilterValue {
+  to: NearSortTarget;
+  minSimilarity?: number;
+}
+
+export function isNearFilter(filter: Filter): filter is NearFilter {
+  return 'near' in filter;
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -536,6 +555,7 @@ const FILTER_OPERATOR_ASSERTS: Record<
   contains: assertContainsFilter,
   range: assertRangeFilter,
   matches: assertMatchesFilter,
+  near: assertNearFilter,
 };
 
 const FILTER_OPERATORS = Object.keys(FILTER_OPERATOR_ASSERTS);
@@ -835,6 +855,53 @@ function assertMatchesFilter(
   if (typeof filter.matches !== 'string') {
     throw new InvalidQueryError(
       `${matchesPointer.join('/') || '/'}: matches must be a string`,
+    );
+  }
+}
+
+function assertNearFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is NearFilter {
+  let nearPointer = pointer.concat('near');
+  let where = nearPointer.join('/') || '/';
+  let near = filter?.near;
+  if (typeof near !== 'object' || near == null || Array.isArray(near)) {
+    throw new InvalidQueryError(
+      `${where}: near must be an object keyed by the VectorField's path`,
+    );
+  }
+  let entries = Object.entries(near);
+  if (entries.length !== 1) {
+    throw new InvalidQueryError(
+      `${where}: near takes exactly one field path; combine several under "every" or "any"`,
+    );
+  }
+  let [path, value] = entries[0] as [string, any];
+  assertKey(path, nearPointer);
+  if (typeof value !== 'object' || value == null || !('to' in value)) {
+    throw new InvalidQueryError(
+      `${where}/${path}: expected { to: <vector>, minSimilarity?: <number> }`,
+    );
+  }
+  for (let key of Object.keys(value)) {
+    if (key !== 'to' && key !== 'minSimilarity') {
+      throw new InvalidQueryError(
+        `${where}/${path}: unknown member "${key}" (near takes "to" and "minSimilarity"; for the k nearest, sort by near and set page.size)`,
+      );
+    }
+  }
+  assertNearTarget(value.to, nearPointer.concat(path, 'to'));
+  if (
+    'minSimilarity' in value &&
+    !(
+      typeof value.minSimilarity === 'number' &&
+      value.minSimilarity >= -1 &&
+      value.minSimilarity <= 1
+    )
+  ) {
+    throw new InvalidQueryError(
+      `${where}/${path}/minSimilarity: minSimilarity must be a number from -1 to 1`,
     );
   }
 }

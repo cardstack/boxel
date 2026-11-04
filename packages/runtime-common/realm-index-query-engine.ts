@@ -9,7 +9,7 @@ import {
   maybeURL,
   IndexQueryEngine,
   MATCH_RELEVANCE_SORT_KEY,
-  NEAR_DISTANCE_KEY,
+  NEAR_SIMILARITY_KEY,
   fileEntryFromResult,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -499,9 +499,11 @@ export class RealmIndexQueryEngine {
       let matchRelevance =
         rawRelevance == null ? undefined : Number(rawRelevance);
       // Likewise the first `near` sort's cosine distance (see `isNearSort`).
-      let rawNearDistance = (row as Record<string, unknown>)[NEAR_DISTANCE_KEY];
-      let nearDistance =
-        rawNearDistance == null ? undefined : Number(rawNearDistance);
+      let rawNearSimilarity = (row as Record<string, unknown>)[
+        NEAR_SIMILARITY_KEY
+      ];
+      let nearSimilarity =
+        rawNearSimilarity == null ? undefined : Number(rawNearSimilarity);
       // A `file` row (mixed 'all' scope) renders natively and carries no
       // ancestor coercion — its renderings hang off its own type's entry with
       // no renderTypeKey, and its resource is the synthesized `file-meta`. This
@@ -584,7 +586,7 @@ export class RealmIndexQueryEngine {
             iconId: fileIconId,
             generation: file.generation,
             matchRelevance,
-            nearDistance,
+            nearSimilarity,
           }),
         );
         continue;
@@ -734,7 +736,7 @@ export class RealmIndexQueryEngine {
           iconId,
           generation,
           matchRelevance,
-          nearDistance,
+          nearSimilarity,
         }),
       );
     }

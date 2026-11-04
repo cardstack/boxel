@@ -59,6 +59,7 @@ import {
   type NotFilter,
   type ContainsFilter,
   type MatchesFilter,
+  type NearFilter,
   type Sort,
   type RangeFilter,
   RANGE_OPERATORS,
@@ -66,6 +67,7 @@ import {
   collectPositiveMatchTerms,
   filterOperators,
   isCardTypeFilter,
+  isNearFilter,
   isReferenceFilterField,
 } from './query.ts';
 import {
@@ -436,13 +438,14 @@ export function isMatchRelevanceSort(sort: { by: string }): boolean {
   return sort.by === MATCH_RELEVANCE_SORT_KEY;
 }
 
-// A `near` sort ranks by cosine distance between a VectorField and a target
-// vector (see `NearSortTarget` in query.ts). Like `_matchRelevance`, the
-// score belongs to the query: `_search` projects it as an aggregated, aliased
-// column (`nearDistanceAlias`) and the order builders reference the alias,
-// defaulting to `asc` (nearest first). The first near sort's distance (0 =
-// same direction, 2 = opposite) rides each result's `meta._nearDistance`.
-export const NEAR_DISTANCE_KEY = '_nearDistance';
+// A `near` sort ranks by cosine similarity between a VectorField and a target
+// vector (see `NearSortTarget` in query.ts). Like `_matchRelevance`, the score
+// belongs to the query and reads "higher is better": `_search` projects it as
+// an aggregated, aliased column (`nearSimilarityAlias`) and the order builders
+// reference the alias, defaulting to `desc` (most similar first). The first
+// near sort's similarity (1 = same direction, -1 = opposite) rides each
+// result's `meta._nearSimilarity`.
+export const NEAR_SIMILARITY_KEY = '_nearSimilarity';
 
 export function isNearSort(sort: object): sort is {
   by: string;
@@ -453,14 +456,14 @@ export function isNearSort(sort: object): sort is {
   return 'near' in sort && (sort as { near?: unknown }).near != null;
 }
 
-// The alias of the sort at `index`'s distance column: the first near sort
-// gets `_nearDistance` (which `meta._nearDistance` reads), any later one a
+// The alias of the sort at `index`'s similarity column: the first near sort
+// gets `_nearSimilarity` (which `meta._nearSimilarity` reads), any later one a
 // suffixed alias.
-function nearDistanceAlias(sort: Sort, index: number): string {
+function nearSimilarityAlias(sort: Sort, index: number): string {
   let firstNear = sort.findIndex((s) => isNearSort(s));
   return index === firstNear
-    ? NEAR_DISTANCE_KEY
-    : `${NEAR_DISTANCE_KEY}_${index}`;
+    ? NEAR_SIMILARITY_KEY
+    : `${NEAR_SIMILARITY_KEY}_${index}`;
 }
 
 export { isValidPrerenderedHtmlFormat };
@@ -1217,6 +1220,7 @@ export class IndexQueryEngine {
       }
 
       if (filter) {
+        await this.#assertNearFilters(filter, baseCardRef);
         conditions.push(this.filterCondition(filter, baseCardRef, 'positive'));
       }
 
@@ -1486,13 +1490,12 @@ export class IndexQueryEngine {
         ...sort.map((s, index) =>
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
-          // to `desc` (best match first). A near sort's distance column works
-          // the same way, defaulting to `asc` (nearest first). Everything else
-          // sorts on a column.
+          // to `desc` (best match first). A near sort's similarity column works
+          // the same way. Everything else sorts on a column.
           isNearSort(s)
             ? [
-                `"${nearDistanceAlias(sort, index)}"`,
-                sortDirection(s.direction ?? 'asc'),
+                `"${nearSimilarityAlias(sort, index)}"`,
+                sortDirection(s.direction ?? 'desc'),
                 'NULLS LAST',
               ]
             : isMatchRelevanceSort(s)
@@ -1542,11 +1545,11 @@ export class IndexQueryEngine {
     let innerSortColumns: CardExpression = [];
     let outerKeys: CardExpression[] = [];
     sort.forEach((s, i) => {
-      // A near sort's distance column is projected by the inner SELECT too.
+      // A near sort's similarity column is projected by the inner SELECT too.
       if (isNearSort(s)) {
         outerKeys.push([
-          `"${nearDistanceAlias(sort, i)}"`,
-          sortDirection(s.direction ?? 'asc'),
+          `"${nearSimilarityAlias(sort, i)}"`,
+          sortDirection(s.direction ?? 'desc'),
           'NULLS LAST',
         ]);
         return;
@@ -1651,6 +1654,8 @@ export class IndexQueryEngine {
       return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('matches' in filter) {
       return this.matchesCondition(filter, on, typeConditionRef);
+    } else if (isNearFilter(filter)) {
+      return this.nearCondition(filter, typeConditionRef);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
@@ -1875,32 +1880,116 @@ export class IndexQueryEngine {
     ]);
   }
 
-  // The relevance value for a `matches` query, aggregated per (url, type) group.
-  //
-  // Postgres scores the row's markdown tsvector against the OR-union of the
-  // positive match terms with `ts_rank_cd` — cover-density (proximity/position
-  // aware), normalized to a bounded 0–1 range via flag 32 so it reads as a clean
-  // gauge. The tsvector is recomputed here (the markdown GIN index is a lossy
-  // expression index and can't hand a rankable vector back), through the SAME
-  // `markdown_search_text` wrapper as the match predicate and its index, so the
-  // ranked text is exactly the filtered text.
-  //
-  // SQLite has no full-text ranking, so it falls back to boolean 1/0 (did the
-  // LIKE predicate match at all) — enough for a deterministic sort in host
-  // in-browser tests; meaningful ranking is Postgres-only.
-  //
-  // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
-  // table-valued fan-out, where every fanned row shares the same markdown).
+  // Resolves the VectorField a near sort or filter addresses and refuses
+  // anything else: a path that is not a VectorField, or a Postgres without
+  // the pgvector table.
+  async #assertNearField(on: CodeRef, path: string, what: string) {
+    let definition = await this.getDefinition(on);
+    let field = await getField(definition, path, this.#definitionLookup);
+    if (field.serializerName !== 'vector') {
+      throw new InvalidQueryError(
+        `${what} requires "${path}" to be a VectorField`,
+      );
+    }
+    if (
+      this.#dbAdapter.kind === 'pg' &&
+      !(await hasVectorIndex(this.#dbAdapter))
+    ) {
+      throw new InvalidQueryError(VECTOR_INDEX_UNAVAILABLE_MESSAGE);
+    }
+  }
+
+  // Validates every near filter in the tree up front (field lookups are
+  // async, the filter compiler is not), resolving each node's `on` the way
+  // `filterCondition` does.
+  async #assertNearFilters(filter: Filter | undefined, onRef: CodeRef) {
+    if (!filter) {
+      return;
+    }
+    let on =
+      ('on' in filter ? filter.on : undefined) ??
+      (filter as { type?: CodeRef }).type ??
+      onRef;
+    if (isNearFilter(filter)) {
+      for (let path of Object.keys(filter.near)) {
+        await this.#assertNearField(on, path, `near filter on "${path}"`);
+      }
+    } else if ('every' in filter) {
+      for (let child of filter.every) {
+        await this.#assertNearFilters(child, on);
+      }
+    } else if ('any' in filter) {
+      for (let child of filter.any) {
+        await this.#assertNearFilters(child, on);
+      }
+    } else if ('not' in filter) {
+      await this.#assertNearFilters(filter.not, on);
+    }
+  }
+
+  // A near filter: the card has a vector at the path of the target's
+  // dimension and, given `minSimilarity`, at least that cosine similarity to
+  // the target. Postgres asks `boxel_index_vectors` with EXISTS (so it negates
+  // and nests like any predicate); SQLite scores the search doc's own vector,
+  // singular paths only.
+  private nearCondition(
+    filter: NearFilter,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let [path, { to, minSimilarity }] = Object.entries(filter.near)[0];
+    let fieldPath = removeBrackets(path);
+    let target = vectorToSqlLiteral(to);
+    let dims = vectorDimensions(to);
+    let condition: CardExpression;
+    if (this.#dbAdapter.kind === 'pg') {
+      condition = [
+        'EXISTS (SELECT 1 FROM boxel_index_vectors AS nvf WHERE nvf.realm_url = i.realm_url AND nvf.url = i.url AND nvf.type = i.type AND nvf.field_path =',
+        param(fieldPath),
+        'AND nvf.dims =',
+        param(dims),
+        ...(minSimilarity == null
+          ? []
+          : [
+              'AND (nvf.embedding <=> CAST(',
+              param(target),
+              'AS vector)) <=',
+              param(1 - minSimilarity),
+            ]),
+        ')',
+      ];
+    } else {
+      let jsonPath = `$.${fieldPath}`;
+      condition = [
+        'json_array_length(substr(json_extract(i.search_doc,',
+        param(jsonPath),
+        '), 5)) =',
+        param(dims),
+        ...(minSimilarity == null
+          ? []
+          : [
+              'AND',
+              ...sqliteCosineSimilarity(jsonPath, target),
+              '>=',
+              param(minSimilarity),
+            ]),
+      ];
+    }
+    return every([
+      ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+      condition,
+    ]);
+  }
+
   // The projection columns and joins for the query's near sorts.
   //
   // Postgres reads the vectors the index writer copied into
   // `boxel_index_vectors` (one LEFT JOIN per near sort, on the card's row and
-  // the field path) and takes pgvector's cosine distance `<=>`. MIN folds a
-  // plural field's vectors into the card's nearest one, and leaves NULL (sorted
-  // last) for a card with no vector at the path. The search is exact: every
-  // row the filter admits is scored, so a near sort combines with any filter
-  // and never drops a match. While an index pass is staged (WIP reads), the
-  // table still holds the last committed vectors.
+  // the field path) and scores cosine similarity, `1 - <=>`. MAX folds a
+  // plural field's vectors into the card's nearest one, and leaves NULL
+  // (sorted last) for a card with no vector at the path. The search is exact:
+  // every row the filter admits is scored, so a near sort combines with any
+  // filter and never drops a match. While an index pass is staged (WIP
+  // reads), the table still holds the last committed vectors.
   //
   // SQLite (the browser index the host tests run on) has no vector type, so
   // it scores the search doc's own "vec:[…]" string with json_each. That is a
@@ -1918,20 +2007,15 @@ export class IndexQueryEngine {
       if (!isNearSort(s)) {
         continue;
       }
-      let definition = await this.getDefinition(s.on);
-      let field = await getField(definition, s.by, this.#definitionLookup);
-      if (field.serializerName !== 'vector') {
-        throw new InvalidQueryError(
-          `sort by "${s.by}" near a vector requires "${s.by}" to be a VectorField`,
-        );
-      }
-      let alias = nearDistanceAlias(sort, index);
+      await this.#assertNearField(
+        s.on,
+        s.by,
+        `sort by "${s.by}" near a vector`,
+      );
+      let alias = nearSimilarityAlias(sort, index);
       let target = vectorToSqlLiteral(s.near);
       let dims = vectorDimensions(s.near);
       if (this.#dbAdapter.kind === 'pg') {
-        if (!(await hasVectorIndex(this.#dbAdapter))) {
-          throw new InvalidQueryError(VECTOR_INDEX_UNAVAILABLE_MESSAGE);
-        }
         let v = `nv${index}`;
         nearJoins.push(
           `LEFT JOIN boxel_index_vectors AS ${v} ON ${v}.realm_url = i.realm_url AND ${v}.url = i.url AND ${v}.type = i.type AND ${v}.field_path =`,
@@ -1940,24 +2024,37 @@ export class IndexQueryEngine {
           param(dims),
         );
         nearColumns.push(
-          `, MIN(${v}.embedding <=> CAST(`,
+          `, MAX(1 - (${v}.embedding <=> CAST(`,
           param(target),
-          `AS vector)) AS "${alias}"`,
+          `AS vector))) AS "${alias}"`,
         );
       } else {
-        let jsonPath = `$.${removeBrackets(s.by)}`;
         nearColumns.push(
-          ', MIN((SELECT 1 - SUM(a.value * b.value) / (sqrt(SUM(a.value * a.value)) * sqrt(SUM(b.value * b.value))) FROM json_each(substr(json_extract(i.search_doc,',
-          param(jsonPath),
-          '), 5)) AS a JOIN json_each(',
-          param(target),
-          `) AS b ON a.key = b.key)) AS "${alias}"`,
+          ', MAX(',
+          ...sqliteCosineSimilarity(`$.${removeBrackets(s.by)}`, target),
+          `) AS "${alias}"`,
         );
       }
     }
     return { nearColumns, nearJoins };
   }
 
+  // The relevance value for a `matches` query, aggregated per (url, type) group.
+  //
+  // Postgres scores the row's markdown tsvector against the OR-union of the
+  // positive match terms with `ts_rank_cd` — cover-density (proximity/position
+  // aware), normalized to a bounded 0–1 range via flag 32 so it reads as a clean
+  // gauge. The tsvector is recomputed here (the markdown GIN index is a lossy
+  // expression index and can't hand a rankable vector back), through the SAME
+  // `markdown_search_text` wrapper as the match predicate and its index, so the
+  // ranked text is exactly the filtered text.
+  //
+  // SQLite has no full-text ranking, so it falls back to boolean 1/0 (did the
+  // LIKE predicate match at all) — enough for a deterministic sort in host
+  // in-browser tests; meaningful ranking is Postgres-only.
+  //
+  // `MAX(...)` lets the value survive `GROUP BY i.url, i.type` (and any
+  // table-valued fan-out, where every fanned row shares the same markdown).
   private matchRelevanceExpression(matches: string[]): CardExpression {
     let pgTsQuery: Expression = [];
     matches.forEach((m, i) => {
@@ -2651,6 +2748,22 @@ function trimPathAtFirstPluralField(pathTraveled: string) {
 
 function convertBracketsToWildCards(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '[%]');
+}
+
+// SQLite's stand-in for pgvector: the cosine similarity between the
+// search doc's "vec:[…]" string at `jsonPath` and `target` (a '[…]' literal),
+// as a scalar subquery. NULL when the doc has no vector there.
+function sqliteCosineSimilarity(
+  jsonPath: string,
+  target: string,
+): CardExpression {
+  return [
+    '(SELECT SUM(a.value * b.value) / (sqrt(SUM(a.value * a.value)) * sqrt(SUM(b.value * b.value))) FROM json_each(substr(json_extract(i.search_doc,',
+    param(jsonPath),
+    '), 5)) AS a JOIN json_each(',
+    param(target),
+    ') AS b ON a.key = b.key)',
+  ];
 }
 
 function removeBrackets(pathTraveled: string) {
