@@ -29,7 +29,9 @@ interface Signature {
   };
 }
 
-function hostAndPath(destination: string): string {
+// A destination as both key pages name it: its host and path, the prefix a
+// request must start with to be sent the key.
+export function hostAndPath(destination: string): string {
   let url = new URL(destination);
   return `${url.host}${url.pathname}`;
 }
