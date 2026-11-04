@@ -66,10 +66,11 @@ export function blobBody(content: string | Uint8Array): Uint8Array {
 }
 
 // A tree body: each entry as `<mode> <name>\0<20 raw id bytes>`, in git's
-// order, which sorts names as if every subtree's name ended in `/`.
+// order: by the UTF-8 bytes of the name, with every subtree's name read as if
+// it ended in `/`.
 export function treeBody(entries: TreeEntry[]): Uint8Array {
   let sorted = [...entries].sort((a, b) =>
-    sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0,
+    Buffer.compare(Buffer.from(sortKey(a)), Buffer.from(sortKey(b))),
   );
   let parts: Uint8Array[] = [];
   for (let entry of sorted) {
