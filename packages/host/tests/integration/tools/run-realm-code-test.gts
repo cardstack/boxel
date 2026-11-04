@@ -371,19 +371,52 @@ boxel:
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
     let asked = false;
+    let startedAt = 0;
+    let askedAfterMs: number | undefined;
     // The reader never answers.
     command.onAsk = () => {
       asked = true;
+      askedAfterMs = Date.now() - startedAt;
       return new Promise(() => undefined);
     };
 
+    startedAt = Date.now();
     let run = command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
       code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
 return 'answered';`,
     });
-    await waitUntil(() => asked);
+    // How the run ended if it ended before the script asked, for the
+    // failure message.
+    let endedBeforeAsk: string | undefined;
+    run.then(
+      () => {
+        if (!asked) {
+          endedBeforeAsk = 'it returned';
+        }
+      },
+      (error: unknown) => {
+        if (!asked) {
+          endedBeforeAsk = `it failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+        }
+      },
+    );
+    // the sandbox starts before the script asks, slowly on a busy machine
+    await waitUntil(() => asked || endedBeforeAsk !== undefined, {
+      timeout: 10000,
+      timeoutMessage: 'the script did not ask within 10000ms',
+    });
+    assert.true(
+      asked,
+      asked
+        ? `the script asked ${askedAfterMs}ms after the run started`
+        : `the run ended ${
+            Date.now() - startedAt
+          }ms after it started, before the script asked: ${endedBeforeAsk}`,
+    );
     command.stop();
 
     await assert.rejects(run, /stopped/i, 'the run ends without an answer');
