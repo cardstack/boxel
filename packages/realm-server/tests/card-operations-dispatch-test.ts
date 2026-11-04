@@ -2179,6 +2179,42 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(failure.code, 'operation-not-permitted');
     });
 
+    // A refusal the gate's own reads raise is told the same way. Here the
+    // target's entry reads, and the chain of the type a named create mints,
+    // read to settle whether it mints a policy card, refuses.
+    test('a refusal the gate itself raises is told as not permitted to a declined caller, and as not ready to an admitted one', async function (assert) {
+      const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+      let { access } = policyStub([{ targetType: PERSON, grants: ['draft'] }]);
+      let { core } = stub({
+        ...reExported,
+        policy: access,
+        operations: { draft: { base: 'create', of: PET, deterministic: true } },
+      });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (codeRef) => {
+        if (typeKey(codeRef) === typeKey(PET)) {
+          throw definitionNotReady(undefined, codeRef);
+        }
+        return await entry(codeRef);
+      };
+      let toDeclined = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', declined(core)),
+      );
+      assert.strictEqual(toDeclined.status, 403, 'a caller declined reads');
+      assert.strictEqual(toDeclined.code, 'operation-not-permitted');
+      let reader = newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+      let toReader = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'draft', reader),
+      );
+      assert.strictEqual(toReader.status, 503, 'a reader declined only writes');
+      assert.strictEqual(toReader.code, 'target-not-indexed');
+    });
+
     test('a rule on an ancestor in the recorded chain applies', async function (assert) {
       let { access } = policyStub([
         { targetType: CARD_DEF, grants: ['create'] },

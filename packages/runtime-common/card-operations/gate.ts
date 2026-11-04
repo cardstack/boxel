@@ -1307,7 +1307,12 @@ export async function dischargePendingDecision(
     if (notes) {
       recordLockDecision(core, pending, notes, started, { failed: e });
     }
-    throw e;
+    // A refusal the lock's reads raise names the type the stored bytes adopt,
+    // which a caller the ACL declined may not learn, so such a caller is told
+    // it as not permitted.
+    throw scope.coarseDeclined === 'all' && isOperationFailure(e)
+      ? notPermitted(pending.target, pending.name)
+      : e;
   }
   if (notes) {
     recordLockDecision(core, pending, notes, started, { decision: admission });
