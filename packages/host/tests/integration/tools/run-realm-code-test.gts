@@ -502,20 +502,19 @@ return 'answered';`,
     let originalUpdate = matrixService.updateSkillsAndToolsIfNeeded;
     // The deadline starts when the run claims the call, and only the ask
     // extends it. Building the tool's input loads the tool module from the
-    // base realm, which can take longer than the deadline on a busy machine.
-    // So the ask starts from `getInputType`: the tool service wires `onAsk`
-    // before it builds the input, and with no input type there is no module
-    // to load. Only in-memory steps then run before the ask.
+    // base realm, which can take longer than the deadline on a busy machine,
+    // so the tool here has no input type. Only in-memory steps then run
+    // before the script asks, at once, from `execute`.
     let startedAt = 0;
     let askedAfterMs: number | undefined;
-    let pick: Promise<unknown> | undefined;
     let originalGetInputType = RunRealmCodeTool.prototype.getInputType;
     let originalExecute = RunRealmCodeTool.prototype.execute;
-    RunRealmCodeTool.prototype.getInputType = async function (
+    RunRealmCodeTool.prototype.getInputType = async () => undefined as never;
+    RunRealmCodeTool.prototype.execute = async function (
       this: RunRealmCodeTool,
     ) {
       askedAfterMs = Date.now() - startedAt;
-      pick = this.onAsk!({
+      await this.onAsk!({
         question: 'Which one?',
         kind: 'options',
         allowOther: false,
@@ -524,10 +523,6 @@ return 'answered';`,
           { label: 'B', value: 'b' },
         ],
       });
-      return undefined as never;
-    };
-    RunRealmCodeTool.prototype.execute = async function () {
-      await pick;
       return undefined as never;
     };
     matrixService.sendToolResultEvent = (async (args: {
