@@ -48,6 +48,7 @@ import {
   unshareUserKey,
   type ConnectableClient,
   type KeyLimitChanges,
+  type KeyLimitName,
   type KeyLimits,
   type KeyShare,
   type KeyUsage,
@@ -1100,13 +1101,28 @@ function limitChanges(options: LimitsOptions): KeyLimitChanges {
   return changes;
 }
 
+// Each limit in force, one line each, marked where it is the platform's
+// default rather than one its owner set. The rate's two halves are marked
+// apart, since either may be set without the other.
+export function limitLines(what: string, limits: KeyLimits): string[] {
+  let mark = (name: KeyLimitName) =>
+    limits.set?.[name] === null ? ' (default)' : '';
+  let monthlyDefault =
+    limits.set?.monthlyBudget === null
+      ? ` (default: ${limits.defaults?.monthlyBudgetDays ?? 30} × the daily budget)`
+      : '';
+  return [
+    `Limits on ${what}:`,
+    `  rate: ${limits.rateBurst} calls at once per caller${mark('rateBurst')}, refilled at ${limits.rateRefillPerMinute} a minute${mark('rateRefillPerMinute')}`,
+    `  daily budget: ${limits.dailyBudget} calls${mark('dailyBudget')}`,
+    `  monthly budget: ${limits.monthlyBudget} calls${monthlyDefault}`,
+  ];
+}
+
 function printLimits(what: string, limits: KeyLimits): void {
-  console.log(`Limits on ${what}:`);
-  console.log(
-    `  rate: ${limits.rateBurst} calls at once per caller, refilled at ${limits.rateRefillPerMinute} a minute`,
-  );
-  console.log(`  daily budget: ${limits.dailyBudget} calls`);
-  console.log(`  monthly budget: ${limits.monthlyBudget} calls`);
+  for (let line of limitLines(what, limits)) {
+    console.log(line);
+  }
 }
 
 // A share named by its label with `--realm`, or else one of the user's own

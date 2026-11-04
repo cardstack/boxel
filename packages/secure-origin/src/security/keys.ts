@@ -986,19 +986,31 @@ export async function realmCardsWithRequests(
   );
 }
 
+export type KeyLimitName =
+  | 'rateBurst'
+  | 'rateRefillPerMinute'
+  | 'dailyBudget'
+  | 'monthlyBudget';
+
 // How much of a key anyone may spend: a burst of calls per caller, refilled
 // at a steady rate, and the calls the key or share serves in one UTC day and
 // month across every caller. The realm server fills in the platform's default
-// for any its owner left unset.
-export interface KeyLimits {
-  rateBurst: number;
-  rateRefillPerMinute: number;
-  dailyBudget: number;
-  monthlyBudget: number;
-}
+// for any its owner left unset; `set` holds each as the owner set it, null
+// where they didn't, and `defaults` what an unset one takes. An unset monthly
+// budget is `monthlyBudgetDays` of the daily budget in force, so it follows
+// the daily budget; one the owner set stays put when the daily budget changes.
+export type KeyLimits = Record<KeyLimitName, number> & {
+  set: Record<KeyLimitName, number | null>;
+  defaults: {
+    rateBurst: number;
+    rateRefillPerMinute: number;
+    dailyBudget: number;
+    monthlyBudgetDays: number;
+  };
+};
 
 // A limit to change, or null to go back to the platform's default.
-export type KeyLimitChanges = Partial<Record<keyof KeyLimits, number | null>>;
+export type KeyLimitChanges = Partial<Record<KeyLimitName, number | null>>;
 
 // Where a key may be sent, as its usage lists it, and whether the service
 // there rejected it (`rejected`) or last refused a request (`lastForbiddenAt`).

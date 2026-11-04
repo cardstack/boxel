@@ -281,6 +281,18 @@ module(basename(import.meta.filename), function () {
               rateRefillPerMinute: 15,
               dailyBudget: 2400,
               monthlyBudget: 72000,
+              set: {
+                rateBurst: null,
+                rateRefillPerMinute: null,
+                dailyBudget: null,
+                monthlyBudget: null,
+              },
+              defaults: {
+                rateBurst: 25,
+                rateRefillPerMinute: 15,
+                dailyBudget: 2400,
+                monthlyBudgetDays: 30,
+              },
             },
             operations: [],
           },

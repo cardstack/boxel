@@ -290,6 +290,10 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
   };
 
+  // Saves the limits, then reads the usage again for the budgets they set.
+  // The limits are saved once the change is, whether or not that read
+  // succeeds; a usage that can't be read again keeps what it showed, with
+  // the new limits.
   private saveLimits = async (
     changes: KeyLimitChanges,
   ): Promise<KeyLimits | string> => {
@@ -297,23 +301,33 @@ class ShareLimits extends Component<{ Args: { api: KeysWindowAPI } }> {
     if (!editing) {
       return 'This shared key isn’t open for changes.';
     }
+    let limits: KeyLimits;
     try {
-      let limits = await setShareLimits(
+      limits = await setShareLimits(
         this.args.api.config,
         editing.share.id,
         changes,
       );
-      this.page.state = {
-        ...editing,
-        usage: { ...editing.usage, limits },
-      };
-      return limits;
     } catch (e) {
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       }
       return failureMessage(e);
     }
+    let usage: KeyUsage = { ...editing.usage, limits };
+    try {
+      usage = {
+        ...(await shareUsage(this.args.api.config, editing.share.id)),
+        limits,
+      };
+    } catch (e) {
+      if (isSignedOut(e)) {
+        this.args.api.signedOut();
+        return limits;
+      }
+    }
+    this.page.state = { ...editing, usage };
+    return limits;
   };
 }
 

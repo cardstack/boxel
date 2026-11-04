@@ -80,7 +80,7 @@ on is still limited.
 | `KEY_DAILY_BUDGET`                 | 2400                           | That inbox open through an 8-hour working day                                                                     |
 | `KEY_BUDGET_HIGH_WATER_PERCENT`    | 80                             | The share of a budget at which owners are told use is high                                                        |
 | `KEY_ANONYMOUS_SHARE_PERCENT`      | 50                             | The most of a share's daily budget people who aren't signed in spend together, so signed-in readers keep the rest |
-| monthly budget                     | 30 × the daily budget in force | Not a setting; an owner who sets the daily budget moves it too                                                    |
+| monthly budget                     | 30 × the daily budget in force | Unset, it follows the daily budget; once its owner sets it, changing the daily budget leaves it alone             |
 
 A value that isn't a limit stops the realm server at startup rather than
 leaving keys unlimited.
@@ -183,14 +183,26 @@ share, or another user's key, gets 404.
 `attributes` holds any of `rateBurst`, `rateRefillPerMinute`, `dailyBudget`,
 `monthlyBudget`: a whole number of at least one (a positive number for the
 refill), or null to go back to the default. One left out keeps what it was.
-The answer is the limits in force, defaults filled in. A share's listing
-(`GET /_key-shares`, for its owner and the realm's direct writers) and a key's
-(`GET /_user-keys`, for its owner) carry `limits` the same way.
+The answer is the limits in force, defaults filled in, plus `set` (each limit
+as its owner set it, null where the default is in force, read straight from
+the columns) and `defaults` (the platform's `rateBurst`, `rateRefillPerMinute`
+and `dailyBudget`, and `monthlyBudgetDays`), built by `limitsViewOf`. A share's
+listing (`GET /_key-shares`, for its owner and the realm's direct writers), a
+key's (`GET /_user-keys`, for its owner) and both usage routes carry `limits`
+the same way.
+
+The secure origin's limits form fills a field only with what its owner set,
+showing the default as the placeholder and saying it under the field, and an
+unset monthly budget's default moves as the daily field is edited. A field
+left empty sends nothing, so saving the daily budget never sets the monthly
+one; emptying a field the owner set sends null. When an owner reports a
+monthly budget that moved, `set.monthlyBudget` (the `monthly_budget` column)
+tells which case it was: null, it followed the daily budget as documented.
 
 From the terminal, `boxel keys limits <name>` (a personal key) or
 `boxel keys limits <label> --realm <url>` (a share) shows the limits in force,
 and with `--rate <burst>/<refill>`, `--daily <n>` or `--monthly <n>` sets
-them; `default` for any of them is null, the platform's default. Setting
+them, marking each one at the platform's default; `default` for any of them is null, the platform's default. Setting
 them uses the profile's secure session (`boxel keys sign-in`), reading them
 the ordinary one. A share is looked up among the user's own shares, then in
 the realm's listing, so a writer who doesn't own it gets the realm server's

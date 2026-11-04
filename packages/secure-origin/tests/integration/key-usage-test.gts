@@ -56,12 +56,55 @@ const KEY = {
   grants: [],
 };
 
-const LIMITS = {
+const DEFAULTS = {
   rateBurst: 25,
   rateRefillPerMinute: 15,
   dailyBudget: 2400,
-  monthlyBudget: 72000,
+  monthlyBudgetDays: 30,
 };
+
+type LimitName =
+  | 'rateBurst'
+  | 'rateRefillPerMinute'
+  | 'dailyBudget'
+  | 'monthlyBudget';
+type LimitSet = Record<LimitName, number | null>;
+
+const UNSET: LimitSet = {
+  rateBurst: null,
+  rateRefillPerMinute: null,
+  dailyBudget: null,
+  monthlyBudget: null,
+};
+
+// The limits as the realm server serves them for what the owner set: each
+// one left unset is the default, and an unset monthly budget is
+// `monthlyBudgetDays` of the daily budget in force.
+function limitsOf(set: Partial<LimitSet> = {}) {
+  let owned = { ...UNSET, ...set };
+  let dailyBudget = owned.dailyBudget ?? DEFAULTS.dailyBudget;
+  return {
+    rateBurst: owned.rateBurst ?? DEFAULTS.rateBurst,
+    rateRefillPerMinute:
+      owned.rateRefillPerMinute ?? DEFAULTS.rateRefillPerMinute,
+    dailyBudget,
+    monthlyBudget:
+      owned.monthlyBudget ?? dailyBudget * DEFAULTS.monthlyBudgetDays,
+    set: owned,
+    defaults: DEFAULTS,
+  };
+}
+
+// The limits a PUT leaves: its changes over what the owner set, a null going
+// back to the default.
+function limitsAfter(
+  limits: ReturnType<typeof limitsOf>,
+  changes: Partial<LimitSet>,
+) {
+  return limitsOf({ ...limits.set, ...changes });
+}
+
+const LIMITS = limitsOf();
 
 function usage(overrides: Record<string, unknown> = {}) {
   return {
@@ -299,7 +342,11 @@ module('Integration | key usage and limits', function (hooks) {
         .includesText('Rejected');
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
-        .hasValue('2400', 'the limits in force fill the form');
+        .hasValue('', 'a limit the owner left unset is empty')
+        .hasAttribute('placeholder', '2,400', 'showing the default it takes');
+      assert
+        .dom('[data-test-key-limit-default="dailyBudget"]')
+        .hasText('Using the default, 2,400.');
       assert.deepEqual(
         [
           ...document.querySelectorAll('[data-test-key-limit-group] legend'),
@@ -360,19 +407,14 @@ module('Integration | key usage and limits', function (hooks) {
     });
 
     test('changes a key’s limits in place, sending only what changed', async function (assert) {
-      let current = usage();
+      let current = usage({ limits: limitsOf({ rateBurst: 10 }) });
       serve({
         'GET _user-keys/key-1/usage': () => usageResource('key-1', current),
         'PUT _user-keys/key-1/limits': ({ body }) => {
-          let set = { ...current.limits, ...body.data.attributes };
-          // A limit set to null goes back to the platform's default.
-          for (let [name, value] of Object.entries(set)) {
-            if (value === null) {
-              set[name as keyof typeof set] =
-                LIMITS[name as keyof typeof LIMITS];
-            }
-          }
-          current = { ...current, limits: set };
+          current = {
+            ...current,
+            limits: limitsAfter(current.limits, body.data.attributes),
+          };
           return json(200, {
             data: {
               type: 'key-limits',
@@ -387,6 +429,12 @@ module('Integration | key usage and limits', function (hooks) {
       await click('[data-test-key-usage-toggle]');
       await waitFor('[data-test-key-limits-form]');
 
+      assert
+        .dom('[data-test-key-limit-input="rateBurst"]')
+        .hasValue('10', 'a limit the owner set fills its field');
+      assert
+        .dom('[data-test-key-limit-default="rateBurst"]')
+        .hasText('Leave empty for the default, 25.');
       await fillIn('[data-test-key-limit-input="dailyBudget"]', '500');
       await fillIn('[data-test-key-limit-input="rateBurst"]', '');
       await click('[data-test-key-limits-save]');
@@ -402,7 +450,15 @@ module('Integration | key usage and limits', function (hooks) {
       });
       assert
         .dom('[data-test-key-limit-input="rateBurst"]')
-        .hasValue('25', 'an emptied field shows the default it went back to');
+        .hasValue('', 'an emptied field stays empty')
+        .hasAttribute(
+          'placeholder',
+          '25',
+          'showing the default it went back to',
+        );
+      assert
+        .dom('[data-test-key-limit-default="rateBurst"]')
+        .hasText('Using the default, 25.');
       assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
       assert
         .dom('[data-test-key-usage-budget="day"]')
@@ -428,7 +484,7 @@ module('Integration | key usage and limits', function (hooks) {
             data: {
               type: 'key-limits',
               id: 'key-1',
-              attributes: { ...LIMITS, ...body.data.attributes },
+              attributes: limitsAfter(LIMITS, body.data.attributes),
             },
           }),
       });
@@ -457,6 +513,189 @@ module('Integration | key usage and limits', function (hooks) {
         .dom('[data-test-key-limits-error]')
         .hasText('Calls a month must be a whole number of at least 1.');
       assert.false(requests.some((r) => r.method === 'PUT'));
+    });
+
+    test('a monthly budget left unset follows the daily one, and says so', async function (assert) {
+      let current = usage();
+      serve({
+        'GET _user-keys/key-1/usage': () => usageResource('key-1', current),
+        'PUT _user-keys/key-1/limits': ({ body }) => {
+          current = {
+            ...current,
+            limits: limitsAfter(current.limits, body.data.attributes),
+          };
+          return json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: current.limits,
+            },
+          });
+        },
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('')
+        .hasAttribute('placeholder', '72,000');
+      assert
+        .dom('[data-test-key-limit-default="monthlyBudget"]')
+        .hasText('Follows calls a day: 30 × 2,400 = 72,000.');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasAttribute(
+          'placeholder',
+          '2,280',
+          'the default follows the daily budget as it is edited',
+        );
+      assert
+        .dom('[data-test-key-limit-default="monthlyBudget"]')
+        .hasText('Follows calls a day: 30 × 76 = 2,280.');
+
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(
+        put.body.data.attributes,
+        { dailyBudget: 76 },
+        'the monthly budget is left unset',
+      );
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('')
+        .hasAttribute('placeholder', '2,280');
+    });
+
+    test('a limit may be typed with commas, as the defaults show, and each field is described by its default', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource('key-1', usage({ limits: limitsOf() })),
+        'PUT _user-keys/key-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: limitsAfter(LIMITS, body.data.attributes),
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+
+      let input = document.querySelector(
+        '[data-test-key-limit-input="monthlyBudget"]',
+      )!;
+      let note = document.querySelector(
+        '[data-test-key-limit-default="monthlyBudget"]',
+      )!;
+      assert.true(
+        input.getAttribute('aria-describedby')!.split(' ').includes(note.id),
+        'the note under the field describes it',
+      );
+      assert.notOk(
+        note.closest('label'),
+        'and is not part of its label, which names the field alone',
+      );
+
+      await fillIn('[data-test-key-limit-input="monthlyBudget"]', '15,000');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(put.body.data.attributes, { monthlyBudget: 15000 });
+    });
+
+    test('defaults show as the realm server enforces them: a monthly budget no larger than a limit holds, a refill with its decimals', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource(
+            'key-1',
+            usage({
+              limits: {
+                ...limitsOf(),
+                rateRefillPerMinute: 0.0625,
+                defaults: { ...DEFAULTS, rateRefillPerMinute: 0.0625 },
+              },
+            }),
+          ),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      assert
+        .dom('[data-test-key-limit-input="rateRefillPerMinute"]')
+        .hasAttribute('placeholder', '0.0625');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '100000000');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasAttribute('placeholder', '2,147,483,647');
+    });
+
+    test('a comma out of place is not a number', async function (assert) {
+      serve({
+        'GET _user-keys/key-1/usage': () => usageResource('key-1', usage()),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      for (let typed of ['1,2,3', ',,5', '15,00']) {
+        await fillIn('[data-test-key-limit-input="monthlyBudget"]', typed);
+        await click('[data-test-key-limits-save]');
+        assert
+          .dom('[data-test-key-limits-error]')
+          .hasText(
+            'Calls a month must be a whole number of at least 1.',
+            `${typed} is refused`,
+          );
+      }
+      assert.false(requests.some((r) => r.method === 'PUT'));
+    });
+
+    test('limits from a realm server that doesn’t say which were set fill every field and claim no defaults', async function (assert) {
+      let {
+        set: _set,
+        defaults: _defaults,
+        ...inForce
+      } = limitsOf({
+        dailyBudget: 500,
+      });
+      serve({
+        'GET _user-keys/key-1/usage': () =>
+          usageResource('key-1', usage({ limits: inForce })),
+        'PUT _user-keys/key-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'key-1',
+              attributes: { ...inForce, ...body.data.attributes },
+            },
+          }),
+      });
+      visitShell('keys');
+      await render(KeyPage);
+      await click('[data-test-key-usage-toggle]');
+      await waitFor('[data-test-key-limits-form]');
+      assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('500');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('15000')
+        .doesNotHaveAttribute('placeholder');
+      assert.dom('[data-test-key-limit-default="monthlyBudget"]').hasText('');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(put.body.data.attributes, { dailyBudget: 76 });
     });
 
     test('a usage that fails to load says so and offers to try again', async function (assert) {
@@ -529,7 +768,11 @@ module('Integration | key usage and limits', function (hooks) {
         .hasAttribute('aria-expanded', 'true');
       assert
         .dom('[data-test-key-limit-input="dailyBudget"]')
-        .hasValue('2400', 'the key’s limits are there to change');
+        .hasAttribute(
+          'placeholder',
+          '2,400',
+          'the key’s limits are there to change',
+        );
       assert
         .dom('[data-test-key-usage-toggle]')
         .isFocused('focus moves to the panel it opened');
@@ -728,7 +971,7 @@ module('Integration | key usage and limits', function (hooks) {
             data: {
               type: 'key-limits',
               id: 'share-1',
-              attributes: { ...LIMITS, ...body.data.attributes },
+              attributes: limitsAfter(LIMITS, body.data.attributes),
             },
           }),
       });
@@ -757,6 +1000,93 @@ module('Integration | key usage and limits', function (hooks) {
       let put = requests.find((r) => r.method === 'PUT')!;
       assert.strictEqual(put.path, '_key-shares/share-1/limits');
       assert.deepEqual(put.body.data.attributes, { rateRefillPerMinute: 7.5 });
+    });
+
+    test('a monthly budget its owner set stays put when only the daily budget changes', async function (assert) {
+      let limits = limitsOf({ monthlyBudget: 15000 });
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          usageResource(
+            'share-1',
+            usage({
+              limits,
+              budgets: {
+                day: {
+                  used: 12,
+                  budget: limits.dailyBudget,
+                  resetsAt: '2026-11-03T00:00:00.000Z',
+                },
+                month: {
+                  used: 340,
+                  budget: limits.monthlyBudget,
+                  resetsAt: '2026-12-01T00:00:00.000Z',
+                },
+              },
+            }),
+          ),
+        'PUT _key-shares/share-1/limits': ({ body }) => {
+          limits = limitsAfter(limits, body.data.attributes);
+          return json(200, {
+            data: { type: 'key-limits', id: 'share-1', attributes: limits },
+          });
+        },
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-share-limits]');
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('15000');
+      assert
+        .dom('[data-test-key-limit-default="monthlyBudget"]')
+        .hasText('Leave empty to follow calls a day: 30 × 2,400 = 72,000.');
+
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '76');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      let put = requests.find((r) => r.method === 'PUT')!;
+      assert.deepEqual(put.body.data.attributes, { dailyBudget: 76 });
+      assert
+        .dom('[data-test-key-limit-input="monthlyBudget"]')
+        .hasValue('15000', 'the monthly budget the owner set is kept');
+      assert
+        .dom('[data-test-key-limit-default="monthlyBudget"]')
+        .hasText('Leave empty to follow calls a day: 30 × 76 = 2,280.');
+      assert
+        .dom('[data-test-key-usage-budget="day"]')
+        .includesText('12 of 76 calls', 'the budgets are read again');
+    });
+
+    test('a share’s limits that saved stay saved when its usage can’t be read again', async function (assert) {
+      let reads = 0;
+      serve({
+        'GET _key-shares/share-1/usage': () =>
+          ++reads === 1
+            ? usageResource('share-1', usage())
+            : refusal(500, 'Internal server error'),
+        'PUT _key-shares/share-1/limits': ({ body }) =>
+          json(200, {
+            data: {
+              type: 'key-limits',
+              id: 'share-1',
+              attributes: limitsAfter(LIMITS, body.data.attributes),
+            },
+          }),
+      });
+      visitShell(
+        `share-limits#realm=${encodeURIComponent(REALM)}&share=share-1`,
+      );
+      await render(ShareLimitsPage);
+      await waitFor('[data-test-key-limits-form]');
+      await fillIn('[data-test-key-limit-input="dailyBudget"]', '900');
+      await click('[data-test-key-limits-save]');
+      await waitFor('[data-test-key-limits-saved]');
+      assert.strictEqual(reads, 2, 'the usage is read again');
+      assert.dom('[data-test-key-limits-error]').doesNotExist();
+      assert.dom('[data-test-key-limit-input="dailyBudget"]').hasValue('900');
+      assert.dom('[data-test-key-usage-budget="day"]').exists();
     });
 
     test('a share no call is approved for says so to its owner, and Approve for a card sets it up for one', async function (assert) {
