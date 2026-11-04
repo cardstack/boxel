@@ -55,6 +55,7 @@ import {
   type OperationRequest,
   type OperationSourceBody,
   type OperationTarget,
+  unresolvableAsUndefined,
 } from './types.ts';
 import {
   PRERENDERED_HTML_FORMATS,
@@ -1317,11 +1318,9 @@ export async function htmlDeclarationOf(
   let resolved = codeRef ? core.resolveCodeRef(codeRef, url) : undefined;
   let typeDefinition: Definition | undefined;
   if (resolved) {
-    try {
-      typeDefinition = await core.definitionLookup.lookupDefinition(resolved);
-    } catch {
-      typeDefinition = undefined;
-    }
+    typeDefinition = await unresolvableAsUndefined(() =>
+      core.definitionLookup.lookupDefinition(resolved),
+    );
   }
   if (!typeDefinition) {
     return {
@@ -1904,15 +1903,13 @@ async function definitionFor(
   if (!resolved) {
     return undefined;
   }
-  try {
+  return await unresolvableAsUndefined(async () => {
     if (target.kind === 'type') {
       return await core.definitionLookup.lookupDefinitionEntry(resolved);
     }
     let definition = await core.definitionLookup.lookupDefinition(resolved);
     return definition ? { definition } : undefined;
-  } catch {
-    return undefined;
-  }
+  });
 }
 
 // The type an operation on `target` resolves through, as the module and export

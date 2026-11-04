@@ -3,6 +3,8 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  DEFINITION_RETRY_AFTER_SECONDS,
+  definitionNotReady,
   dischargePendingDecision,
   erroredTargetRow,
   isDocumentResult,
@@ -1212,6 +1214,39 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error.code, 'target-not-found');
     });
+    test('a type whose definition is not ready yet is refused as not ready, not as unknown', async function (assert) {
+      let { core } = stub();
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let notReady = (error: OperationError, target: string) => {
+        assert.strictEqual(error.status, 503, `${target} answers 503`);
+        assert.strictEqual(error.code, 'target-not-indexed');
+        assert.deepEqual(error.meta, {
+          awaitingIndex: true,
+          retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+        });
+      };
+      notReady(
+        await refusalFrom(() =>
+          resolveOperation(
+            core,
+            { kind: 'type', codeRef: PERSON, realm: REALM },
+            'create',
+          ),
+        ),
+        'a type target',
+      );
+      notReady(
+        await refusalFrom(() => runOperation(core, invoke(CARD, 'read'))),
+        'a card target',
+      );
+    });
     test('a card whose type entry is unreadable still reads', async function (assert) {
       // The built-in `read` consults no definition, so refusing here would make
       // every card of a broken module unreadable.
@@ -2119,6 +2154,28 @@ module(basename(import.meta.filename), function () {
       let failure = await refusalFrom(() =>
         resolveGatedOperation(core, target, 'create', declined(core)),
       );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    // The gate's own read of the chain raises the lookup's refusal rather than
+    // reading it as a type no rule matches. A caller the ACL declined is told
+    // every refusal past the target as not permitted, so the 503 reaches only
+    // a caller the realm admitted.
+    test('a type whose definition is not ready yet is refused as not permitted to a declined caller', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
+      core.definitionLookup = {
+        async lookupDefinition(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+        async lookupDefinitionEntry(codeRef) {
+          throw definitionNotReady(undefined, codeRef);
+        },
+      };
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'create', declined(core)),
+      );
+      assert.strictEqual(failure.status, 403);
       assert.strictEqual(failure.code, 'operation-not-permitted');
     });
 

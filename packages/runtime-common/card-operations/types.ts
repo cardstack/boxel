@@ -1802,6 +1802,25 @@ export function isOperationFailure(err: unknown): err is OperationFailure {
   return err instanceof OperationFailure;
 }
 
+// The answer of a definition read, or undefined when the type cannot be
+// resolved: its module is missing or fails to build, or names no such export.
+// A refusal the read itself raised passes through instead. Such a refusal
+// names its own answer — a definition the realm has not produced yet, to be
+// retried — and an `undefined` in its place would be reported as a type that
+// does not exist.
+export async function unresolvableAsUndefined<T>(
+  read: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch (err: unknown) {
+    if (isOperationFailure(err)) {
+      throw err;
+    }
+    return undefined;
+  }
+}
+
 // How long a caller turned away over a definition that is still being built is
 // told to wait before it tries again. A definition render that misses the
 // cache takes a few seconds; longer than that and the caller is only waiting
