@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import {
   describeInputs,
+  describeOutputs,
   INPUTS_FILE,
   staleInput,
 } from '../build/build-inputs.ts';
@@ -33,10 +34,11 @@ function write(file: string, content: string) {
 function build() {
   mkdirSync(dist, { recursive: true });
   writeFileSync(join(dist, 'manifest.json'), '{}');
+  writeFileSync(join(dist, 'shell.js'), 'export {};');
   writeFileSync(
     join(dist, INPUTS_FILE),
-    JSON.stringify(
-      describeInputs(
+    JSON.stringify({
+      ...describeInputs(
         [
           ownModule,
           `${otherPackageModule}?query`,
@@ -45,7 +47,8 @@ function build() {
         ],
         root,
       ),
-    ),
+      outputs: describeOutputs(dist, ['manifest.json', 'shell.js']),
+    }),
   );
 }
 
@@ -56,11 +59,15 @@ beforeEach(() => {
   ownModule = join(root, 'src', 'page.gts');
   otherPackageModule = join(repo, 'packages', 'pretui', 'button.gts');
   write(join(repo, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
-  write(join(root, 'package.json'), '{}');
+  write(join(root, 'package.json'), '{"name":"@cardstack/secure-origin"}');
   write(join(root, 'vite.config.ts'), 'export default {};');
   write(join(root, 'build', 'plugin.ts'), 'export {};');
   write(ownModule, '<template>page</template>');
   write(otherPackageModule, '<template>button</template>');
+  write(
+    join(repo, 'packages', 'pretui', 'package.json'),
+    '{"name":"@cardstack/pretui","exports":{"./*":"./*.gts"}}',
+  );
 });
 
 afterEach(() => {
@@ -122,4 +129,26 @@ test('an input that is gone, or a build plugin added since, is stale', () => {
     staleInput(dist, root),
     "build/another-plugin.ts is not among the build's inputs",
   );
+});
+
+test('a change to the manifest of another package the bundle read is stale', () => {
+  build();
+  write(
+    join(repo, 'packages', 'pretui', 'package.json'),
+    '{"name":"@cardstack/pretui","exports":{"./*":"./*.js"}}',
+  );
+  assert.equal(staleInput(dist, root), '../pretui/package.json has changed');
+});
+
+test('an output that is gone or has changed, or no record of outputs, is stale', () => {
+  build();
+  writeFileSync(join(dist, 'shell.js'), 'export const x = 1;');
+  assert.equal(staleInput(dist, root), "the build's shell.js has changed");
+  unlinkSync(join(dist, 'shell.js'));
+  assert.equal(staleInput(dist, root), "the build's shell.js is gone");
+  writeFileSync(
+    join(dist, INPUTS_FILE),
+    JSON.stringify(describeInputs([ownModule], root)),
+  );
+  assert.match(staleInput(dist, root)!, /records no outputs/);
 });

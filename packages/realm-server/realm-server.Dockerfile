@@ -18,16 +18,17 @@ COPY patches/ ./patches
 RUN CI=1 pnpm fetch
 
 # boxel-icons' build, in a stage of its own, so its layers are cached until
-# its sources or the lockfile change rather than rebuilt with every source
-# edit. Packages compiled from source into the secure origin's build import
-# icons from its `dist/`. The stage copies only boxel-icons and the workspace
-# packages it depends on, and builds only its JS: the type declarations are
-# for type-checking, which the image never does.
+# boxel-icons or what the dependency fetch above reads changes, rather than
+# rebuilt with every source edit. Packages compiled from source into the
+# secure origin's build import icons from its `dist/`. The stage copies
+# boxel-icons and only the manifests of the workspace packages it depends on,
+# which its install links but its JS build never reads, and builds only its
+# JS: the type declarations are for type-checking, which the image never does.
 FROM base AS boxel-icons
 COPY package.json ./
 COPY packages/boxel-icons ./packages/boxel-icons
-COPY packages/eslint-plugin-boxel ./packages/eslint-plugin-boxel
-COPY packages/local-types ./packages/local-types
+COPY packages/eslint-plugin-boxel/package.json ./packages/eslint-plugin-boxel/
+COPY packages/local-types/package.json ./packages/local-types/
 RUN CI=1 pnpm install --offline --filter @cardstack/boxel-icons...
 RUN pnpm --dir=packages/boxel-icons build:js
 
