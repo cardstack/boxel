@@ -561,23 +561,47 @@ export default class Dashboard extends Component<Signature> {
             {{/if}}
           </div>
 
-          <header class='page-head'>
-            <h1
-              class='greeting'
-              {{this.trackHour}}
-              data-test-dashboard-greeting
-            >{{this.greeting}}</h1>
-            <SegmentedControl
-              class='scope-filter'
-              @options={{this.scopeOptions}}
-              @value={{this.scope}}
-              @onValueChange={{this.setScope}}
-              @label='Filter workspaces'
-              data-test-dashboard-filter
-            />
-          </header>
-
-          <GetStarted @showAgents={{this.showAgents}} />
+          {{! Get started's steps open right below the header. }}
+          <GetStarted @showAgents={{this.showAgents}}>
+            <:head as |getStarted|>
+              <header class='page-head'>
+                <div class='greeting-line'>
+                  <h1
+                    class='greeting'
+                    {{this.trackHour}}
+                    data-test-dashboard-greeting
+                  >{{this.greeting}}</h1>
+                  {{#if getStarted.isReady}}
+                    {{! Light mode on the dark dashboard, so the neutral open state
+                        is a dark fill rather than a light one. }}
+                    <Button
+                      class={{cn
+                        'get-started-button'
+                        is-open=getStarted.isOpen
+                      }}
+                      @tone={{if getStarted.isOpen 'neutral' 'primary'}}
+                      @appearance='accent'
+                      @size='m'
+                      @shape='pill'
+                      aria-expanded={{if getStarted.isOpen 'true' 'false'}}
+                      aria-controls={{if getStarted.isOpen getStarted.panelId}}
+                      data-theme='light'
+                      {{on 'click' getStarted.toggle}}
+                      data-test-get-started-button
+                    >Get started</Button>
+                  {{/if}}
+                </div>
+                <SegmentedControl
+                  class='scope-filter'
+                  @options={{this.scopeOptions}}
+                  @value={{this.scope}}
+                  @onValueChange={{this.setScope}}
+                  @label='Filter workspaces'
+                  data-test-dashboard-filter
+                />
+              </header>
+            </:head>
+          </GetStarted>
 
           {{#if this.isFavoritesShown}}
             <section
@@ -969,10 +993,21 @@ export default class Dashboard extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp);
       }
-      /* The greeting grows to fill its line, which pushes the filter to the
-         right beside it, and leaves the filter at the start once it wraps. */
-      .greeting {
+      /* The greeting and its Get started button grow to fill their line,
+         which pushes the filter to the right beside them, and leaves the
+         filter at the start once it wraps. */
+      .greeting-line {
+        display: flex;
         flex: 1 1 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xl);
+        min-width: 0;
+      }
+      .get-started-button.is-open {
+        --pretui-button-fg: var(--boxel-highlight);
+      }
+      .greeting {
         min-width: 0;
         margin: 0;
         overflow-wrap: break-word;
@@ -1139,10 +1174,25 @@ export default class Dashboard extends Component<Signature> {
         .dashboard-scroller {
           --dashboard-gutter: 2.5rem;
         }
+        /* Tablet and phone: less room between the page's parts. */
+        .dashboard-page {
+          gap: var(--boxel-sp-2xl);
+        }
       }
       @container dashboard (max-width: 48rem) {
         .dashboard-scroller {
           --dashboard-gutter: 1.5rem;
+        }
+        /* The greeting takes its own line, with the filter, then Get
+           started, under it. */
+        .greeting-line {
+          display: contents;
+        }
+        .greeting {
+          flex-basis: 100%;
+        }
+        .get-started-button {
+          order: 1;
         }
       }
       @container dashboard (max-width: 40rem) {
@@ -1151,8 +1201,7 @@ export default class Dashboard extends Component<Signature> {
         }
       }
       /* Compact, where the section rail stays as icons, the page tightens
-         too: less room above and between its parts, and a smaller, lighter
-         greeting. */
+         too: less room above it, and a smaller, lighter greeting. */
       /* The frosted band shrinks with the page's top, so it never covers the
          greeting. */
       .dashboard.is-compact {
@@ -1160,9 +1209,6 @@ export default class Dashboard extends Component<Signature> {
           var(--dashboard-top-bar-clearance) + var(--boxel-sp-xs)
         );
         --dashboard-band-height: var(--dashboard-page-padding-top);
-      }
-      .is-compact .dashboard-page {
-        gap: var(--boxel-sp-2xl);
       }
       .is-compact .page-head {
         gap: var(--boxel-sp-xs);
