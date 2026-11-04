@@ -211,6 +211,16 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(response.body, { allowed: true });
     });
 
+    test("does not take the realm server's name on another homeserver for its account", async function (assert) {
+      let response = await check(
+        '@custom-named-server:other.example',
+        stranger,
+      );
+      assert.deepEqual(response.body, { allowed: false });
+      response = await check(stranger, '@custom-named-server:other.example');
+      assert.deepEqual(response.body, { allowed: false });
+    });
+
     test('rejects a missing or malformed user id', async function (assert) {
       let response = await supertest(buildApp(secret).callback())
         .get(`/_invite-check?inviter=${encodeURIComponent(owner)}`)
