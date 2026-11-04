@@ -1,4 +1,7 @@
+import { service } from '@ember/service';
+
 import {
+  baseRealmRRI,
   isScopedCSSRequest,
   rri,
   trimExecutableExtension,
@@ -9,6 +12,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import CanReadRealmTool from './can-read-realm';
 import GetRealmOfResourceIdentifierTool from './get-realm-of-resource-identifier';
 
+import type NetworkService from '../services/network';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const GLOBAL_URL_STEMS = [
@@ -21,6 +25,8 @@ export default class SanitizeModuleListTool extends HostBaseTool<
   typeof BaseToolModule.SanitizeModuleListInput,
   typeof BaseToolModule.SanitizeModuleListResult
 > {
+  @service declare private network: NetworkService;
+
   description =
     'Filter and deduplicate a list of module URLs, removing globals and unreadable realms';
 
@@ -54,6 +60,13 @@ export default class SanitizeModuleListTool extends HostBaseTool<
         }
         // Exclude known global/package/icon sources
         if (GLOBAL_URL_STEMS.some((urlStem) => dep.startsWith(urlStem))) {
+          return null;
+        }
+        // The base realm is readable but is not a listing's own code, in any
+        // of its spellings: its prefix, its alias URL, or the URL it's served at.
+        if (
+          this.network.virtualNetwork.unresolveURL(dep).startsWith(baseRealmRRI)
+        ) {
           return null;
         }
 

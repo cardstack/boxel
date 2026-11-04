@@ -85,6 +85,25 @@ module('Integration | tools | sanitize-module-list', function (hooks) {
     ]);
   });
 
+  test('excludes base realm modules in every spelling, though the base realm is readable', async function (assert) {
+    let network = getService('network');
+    let baseServedAt = network.virtualNetwork.toURLHref('@cardstack/base/');
+    readableRealms = new Set([testRealmURL, '@cardstack/base/', baseServedAt]);
+    let toolService = getService('tool-service');
+    let command = new SanitizeModuleListTool(toolService.toolContext);
+    let result = await command.execute({
+      moduleIdentifiers: [
+        `${testRealmURL}my-module.gts`,
+        '@cardstack/base/card-api',
+        '@cardstack/base/string',
+        `${baseServedAt}field-component`,
+      ],
+    });
+    assert.deepEqual(result.moduleIdentifiers, [
+      `${testRealmURL}my-module.gts`,
+    ]);
+  });
+
   test('deduplicates modules by normalized URL', async function (assert) {
     let toolService = getService('tool-service');
     let command = new SanitizeModuleListTool(toolService.toolContext);
