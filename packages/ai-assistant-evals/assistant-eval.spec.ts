@@ -521,16 +521,11 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    // The bar's "new messages" button stays while the panel is not scrolled
-    // to the end, and it takes the place of the bar's other states, the Stop
-    // button among them. Scroll to the last message so the next read sees the
-    // bar's real state; until then the bar counts as busy.
+    // The composer's action bar (its Stop button) shows while the bot works.
+    // The "new messages" chip is not read here: it floats above the bar
+    // without hiding it, and says only where the transcript is scrolled,
+    // which can leave it up in a room that has finished.
     let actionBar = q('[data-test-ai-assistant-action-bar]');
-    let unread = q('[data-test-unread-messages-button]') > 0;
-    if (unread) {
-      let messages = document.querySelectorAll('[data-test-message-idx]');
-      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
-    }
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
@@ -611,8 +606,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     let busy = [
       settled ? '' : 'room not settled',
-      unread ? 'new messages button' : '',
-      actionBar && !unread ? `${actionBar} action bar` : '',
+      actionBar ? `${actionBar} action bar` : '',
       applying ? `${applying} applying` : '',
       preparing ? `${preparing} preparing` : '',
       loading ? 'session preparation' : '',
