@@ -140,6 +140,18 @@ function selectedName() {
   );
 }
 
+// Wholly inside the dashboard's scroller and the window.
+function isInView(el: Element) {
+  let { top, bottom } = el.getBoundingClientRect();
+  let scroller = find(
+    '[data-test-dashboard-scroller]',
+  )!.getBoundingClientRect();
+  return (
+    top >= Math.max(scroller.top, 0) &&
+    bottom <= Math.min(scroller.bottom, window.innerHeight)
+  );
+}
+
 function ringName() {
   return find('[data-test-workspace-ring]')?.getAttribute(
     'data-test-workspace-ring',
@@ -1708,7 +1720,7 @@ module('Acceptance | dashboard', function (hooks) {
           assert.dom(TOGGLE).hasText('Show 3 more');
         });
 
-        test('reopened over a workspace in the hidden rows, every row is shown and the cursor rests on it', async function (assert) {
+        test('reopened over a workspace in the hidden rows, every row is shown and the cursor rests on it without focus', async function (assert) {
           await visitDashboard(assert, 1);
           await click(TOGGLE);
           let hiddenName = workspaceNames(ROWS).at(-1)!;
@@ -1722,7 +1734,7 @@ module('Acceptance | dashboard', function (hooks) {
           assert.strictEqual(selectedName(), hiddenName);
           assert
             .dom(`[data-test-workspace-button="${hiddenName}"]`)
-            .isFocused();
+            .isNotFocused('focus out of view would hand Enter to a hidden row');
           let scroller = find('[data-test-dashboard-scroller]') as HTMLElement;
           let row = find(
             `[data-test-workspace-button="${hiddenName}"]`,
@@ -1737,6 +1749,14 @@ module('Acceptance | dashboard', function (hooks) {
             0,
             'the page opens at its top, not scrolled to the cursor',
           );
+          assert
+            .dom('[data-test-dashboard]')
+            .isFocused('the dashboard holds focus for the arrow keys');
+
+          await pressKey('Enter');
+          assert
+            .dom('[data-test-dashboard]')
+            .exists('Enter does not open a row nobody can see');
 
           await pressKey('ArrowRight');
 
@@ -1744,6 +1764,37 @@ module('Acceptance | dashboard', function (hooks) {
             scroller.scrollTop > 0,
             'the first arrow key brings the cursor into view',
           );
+          assert
+            .dom(`[data-test-workspace-button="${hiddenName}"]`)
+            .isFocused();
+          assert.strictEqual(selectedName(), hiddenName);
+          assert
+            .dom('[data-test-dashboard]')
+            .doesNotHaveAttribute(
+              'tabindex',
+              'once focus leaves it, a click on the page cannot focus it',
+            );
+        });
+
+        test('reopened over a hidden row, Enter after scrolling to it shows and focuses it rather than opening it', async function (assert) {
+          await visitDashboard(assert, 1);
+          await click(TOGGLE);
+          let hiddenName = workspaceNames(ROWS).at(-1)!;
+          await click(`[data-test-workspace-button="${hiddenName}"]`);
+          await click('[data-test-workspace-chooser-toggle]');
+          assert.dom('[data-test-dashboard]').isFocused();
+
+          let row = find(
+            `[data-test-workspace-button="${hiddenName}"]`,
+          ) as HTMLElement;
+          row.scrollIntoView({ block: 'nearest' });
+          assert.true(isInView(row), 'the row is scrolled into view');
+
+          await pressKey('Enter');
+
+          assert.dom('[data-test-dashboard]').exists('nothing opens');
+          assert.dom(row).isFocused();
+          assert.strictEqual(ringName(), hiddenName, 'the ring marks it');
         });
 
         test('Right from the last row shown moves past the hidden rows', async function (assert) {
@@ -1968,17 +2019,56 @@ module('Acceptance | dashboard', function (hooks) {
         module('keyboard cursor', function () {
           test('reopened, the cursor rests on the workspace just left, with no ring', async function (assert) {
             await visitDashboard(assert, 2);
-            let rowName = workspaceNames(ROWS)[2]!;
-            await click(`[data-test-workspace-button="${rowName}"]`);
+            // A workspace below the fold reopens without focus, so this one
+            // must be in view.
+            let workspace = findAll(`${RECENT_TILES}, ${ROWS}`).find(isInView);
+            assert.ok(workspace, 'a workspace is in view');
+            let name = workspace!.getAttribute('data-test-workspace')!;
+            await click(`[data-test-workspace-button="${name}"]`);
             assert.dom('[data-test-dashboard]').doesNotExist();
 
             await click('[data-test-workspace-chooser-toggle]');
 
-            assert.strictEqual(selectedName(), rowName);
+            assert.strictEqual(selectedName(), name);
             assert
-              .dom(`[data-test-workspace-button="${rowName}"]`)
+              .dom(`[data-test-workspace-button="${name}"]`)
               .isFocused('the workspace holds focus, so Enter works at once');
             assert.strictEqual(ringName(), undefined, 'no ring shows');
+          });
+
+          test('opened with nothing open, the cursor rests on the first favorite, not the default workspace', async function (assert) {
+            let favoriteName = 'Workspace 03';
+            mockMatrixUtils.setWorkspaceFavorites([urlFor(favoriteName)]);
+            await visitDashboard(assert, 2);
+            assert.notStrictEqual(
+              (getService('realm') as RealmService).defaultReadableRealm.info
+                .name,
+              favoriteName,
+            );
+
+            assert.strictEqual(selectedName(), favoriteName);
+            let favorite = `[data-test-favorites-list] [data-test-workspace-button="${favoriteName}"]`;
+            assert.true(isInView(find(favorite)!), 'the favorite is in view');
+            assert.dom(favorite).isFocused('Enter works at once');
+          });
+
+          test('a favorite added while the dashboard is open takes the cursor', async function (assert) {
+            await visitDashboard(assert, 2);
+            let defaultName = (getService('realm') as RealmService)
+              .defaultReadableRealm.info.name;
+            let favoriteName = workspaceNames(ROWS).find(
+              (name) => name !== defaultName,
+            )!;
+            let matrixService = getService('matrix-service') as MatrixService;
+            matrixService.workspaceFavorites = [urlFor(favoriteName)];
+            await settled();
+
+            assert.strictEqual(selectedName(), favoriteName);
+            assert
+              .dom(
+                `[data-test-favorites-list] [data-test-workspace-button="${favoriteName}"]`,
+              )
+              .isFocused();
           });
 
           test('the first arrow key shows the ring without moving the cursor, and a pointer press hides it', async function (assert) {

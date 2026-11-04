@@ -278,18 +278,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 41797059067,
+      "at": "2026-11-04T08:07:12Z",
+      "minutes": 236,
+      "slowestShard": 16.6,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 41084516115,
-      "at": "2026-10-30T15:51:13Z",
-      "minutes": 193.8,
-      "slowestShard": 15.6,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
     {
       "run": 41087488643,
       "at": "2026-10-30T16:10:43Z",
@@ -2953,6 +2953,15 @@
       "shards": 16,
       "runsOn": false,
       "indexCache": true
+    },
+    {
+      "run": 41797216135,
+      "at": "2026-11-04T08:08:26Z",
+      "minutes": 214.9,
+      "slowestShard": 16.6,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
     }
   ]
 }

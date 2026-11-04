@@ -41,7 +41,10 @@ class LayoutControlUsage extends Component {
   @tracked sort = 'Newest';
   @tracked label = 'Candidates';
   @tracked overflowLabel = 'More options';
+  // held here, not in SearchInput, so the text survives a form change
+  @tracked query = '';
 
+  setQuery = (v: string) => (this.query = v);
   setStage = (v: string) => (this.stage = v);
   setView = (v: string) => (this.view = v);
   setSort = (v: string) => (this.sort = v);
@@ -109,14 +112,20 @@ class LayoutControlUsage extends Component {
               as |form|
             >
               {{#if (eq form 'icon')}}
-                <IconButton
-                  @label='Search candidates'
-                  @icon={{this.icon 'search'}}
+                <SearchInput
+                  @display='collapsed'
+                  @placeholder='Search candidates'
+                  @value={{this.query}}
+                  @onInput={{this.setQuery}}
                 />
               {{else}}
                 <label class='lc-usage-search' data-form={{form}}>
                   <VisuallyHidden>Search candidates</VisuallyHidden>
-                  <SearchInput @placeholder='Search candidates…' />
+                  <SearchInput
+                    @placeholder='Search candidates…'
+                    @value={{this.query}}
+                    @onInput={{this.setQuery}}
+                  />
                 </label>
               {{/if}}
             </lc.Slot>

@@ -479,7 +479,7 @@ export class WorkspaceActions {
     );
     let { codePath, stacks } = this.operatorModeStateService.state;
     return (
-      this.operatorModeStateService.realmURL ===
+      this.operatorModeStateService.openRealmURL ===
         this.network.virtualNetwork.toURL(realmIdentifier).href ||
       stacks.some((stack) =>
         [stack[0], stack[stack.length - 1]].some((item) =>
