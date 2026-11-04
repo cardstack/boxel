@@ -1,6 +1,6 @@
 // An error as the app's operator mode shows one (the host's ErrorDisplay): a
 // warning header, a general message, and Show Details revealing the full
-// error. boxel-ui and the host can't ship on the secure origin (ADR 019 §1.3),
+// error. The package imports neither boxel-ui nor the host (ADR 019 §1.3),
 // so its look is brought here. It leaves out what needs the app: copying to
 // the clipboard, sending the error to the AI assistant, and code mode.
 import { on } from '@ember/modifier';
