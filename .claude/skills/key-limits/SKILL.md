@@ -204,8 +204,8 @@ the high-water mark and when it reaches the budget: the key's owner and, for a
 share, each direct writer of the share's realm. A unique index on (share or
 key, recipient, period, period end, threshold, budget) keeps it to one each per
 period and budget, however many calls cross together. The label is copied, so it reads
-after a rename. Withheld from `readonly_role` and the SQLite dump, like the
-other key tables.
+after a rename. Withheld from `readonly_role` and the SQLite dump, like
+`user_keys` and the notice tables.
 
 ```sql
 SELECT created_at, threshold, period, period_ends_at, budget, recipient, label, realm_url
@@ -253,8 +253,9 @@ filled is recorded against the one share or key that refused it; one raised
 before any binding was found (`binding-not-approved`) names no key and is only
 on the `boxel:key-use` line. A `credential-rejected` recorded with a host is
 the vendor's 401. Rows are kept 62 days (`KEY_USE_RETENTION_DAYS`); each
-realm-server process removes every older row, at most hourly, on a write. The code is `lib/key-uses.ts`. Like the other
-key tables, it's withheld from `readonly_role` and from the SQLite dump.
+realm-server process removes every older row, at most hourly, on a write. The code is `lib/key-uses.ts`. Like `user_keys`
+and the notice tables, it's withheld from `readonly_role` and from the SQLite
+dump.
 
 `GET /_key-shares/:id/usage` (the share's realm's direct writers) and
 `GET /_user-keys/:id/usage` (the key's owner) answer, for the current UTC

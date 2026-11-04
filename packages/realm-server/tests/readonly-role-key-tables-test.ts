@@ -88,9 +88,35 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('the other key tables stay withheld', async function (assert) {
+    async function readableTables(role: string): Promise<string[]> {
+      let rows = await dbAdapter.execute(
+        `SELECT tbl.relname AS name
+         FROM pg_class tbl
+         JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+         WHERE ns.nspname = 'public'
+           AND tbl.relkind IN ('r', 'p')
+           AND has_table_privilege('${role}', tbl.oid, 'SELECT')
+         ORDER BY tbl.relname`,
+      );
+      return rows.map((row: { name: string }) => row.name);
+    }
+
+    test('makes only key_shares and key_bindings readable, and leaves the other key tables withheld', async function (assert) {
+      let before = await readableTables('readonly_role');
+
       await run('up');
 
+      let after = await readableTables('readonly_role');
+      assert.deepEqual(
+        after.filter((table) => !before.includes(table)),
+        [...READABLE].sort(),
+        'the only tables the role gains are key_shares and key_bindings',
+      );
+      assert.deepEqual(
+        before.filter((table) => !after.includes(table)),
+        [],
+        'the role loses nothing',
+      );
       for (let table of STILL_WITHHELD) {
         assert.false(
           await canSelect('readonly_role', table),
