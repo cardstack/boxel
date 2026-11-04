@@ -448,7 +448,6 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--boxel-sp-4xs);
-        margin-top: var(--boxel-sp-xs);
       }
       .entry {
         display: grid;
