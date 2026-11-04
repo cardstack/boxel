@@ -89,6 +89,14 @@ module('repo format', (hooks) => {
       await git(gitDir, 'log', '--format=%s', 'refs/heads/main'),
       'second\nfirst\n',
     );
+    await git(gitDir, 'pack-refs', '--all');
+    assert.strictEqual(
+      await readMain(gitDir),
+      second,
+      'a packed ref is read too',
+    );
+    await updateMain(gitDir, first, second);
+    assert.strictEqual(await readMain(gitDir), first);
     assert.strictEqual(await fsck(gitDir), '');
   });
 
