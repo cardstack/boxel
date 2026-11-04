@@ -4439,6 +4439,61 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a read that reports the index state is not handed a card still being built from its source', async function (assert) {
+    let url = `${testRealmURL}Person/half-built`;
+    await testRealmAdapter.write(
+      'Person/half-built.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Half Built' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    // Hold the build of the card from its source once deserialization has
+    // put the instance in the identity map, before the read that is building
+    // it gets to finish.
+    let reachedBuilt = new Deferred<void>();
+    let releaseBuilt = new Deferred<void>();
+    let service = storeService as any;
+    let createFromSerialized = service.createFromSerialized.bind(service);
+    service.createFromSerialized = async (resource: any, ...rest: any[]) => {
+      let instance = await createFromSerialized(resource, ...rest);
+      if (String(resource?.id ?? '').includes('Person/half-built')) {
+        reachedBuilt.fulfill();
+        await releaseBuilt.promise;
+      }
+      return instance;
+    };
+
+    let reported: CardDef | CardErrorJSONAPI | undefined;
+    let opening: Promise<CardDef | CardErrorJSONAPI> | undefined;
+    try {
+      opening = storeService.get(url);
+      await reachedBuilt.promise;
+      assert.true(
+        isCardInstance(storeService.peek(url)),
+        'the card being built is already in the identity map',
+      );
+      reported = await storeService.getWithoutCache(url);
+    } finally {
+      releaseBuilt.fulfill();
+      delete service.createFromSerialized;
+    }
+
+    assert.true(
+      (reported as CardErrorJSONAPI)?.awaitingIndex,
+      'the index-state read gets the awaiting-index answer, not the card being built',
+    );
+    assert.true(
+      isCardInstance(await opening),
+      'and the read that was building the card still gets it',
+    );
+  });
+
   test('an index event that lands while a card is being built from its source re-reads it once it is built', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();

@@ -416,6 +416,11 @@ export default class StoreService extends Service implements StoreInterface {
   // cards when a from-scratch index pass lands — it announces itself with a
   // bare `full` event — so this is how that event finds them to re-read.
   #builtFromSource = new Set<string>();
+  // The ids of the cards being built from their source right now, as
+  // `getCardInstance` normalizes them. The instance is in the identity map
+  // from the start of its deserialization, before it is known by a local id
+  // above.
+  #buildingFromSource = new Set<string>();
   private inflightGetFileMeta: Map<
     string,
     Promise<FileDef | CardErrorJSONAPI>
@@ -3843,6 +3848,7 @@ export default class StoreService extends Service implements StoreInterface {
     };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
+    let buildingFromSource: string | undefined;
     let id = asURL(idOrDoc, this.network.virtualNetwork);
     // A read that reports the index's state answers a different question
     // from every other read of the card, so it neither shares their in-flight
@@ -3956,6 +3962,8 @@ export default class StoreService extends Service implements StoreInterface {
             }
             json = source;
             builtFromSource = true;
+            buildingFromSource = id;
+            this.#buildingFromSource.add(id);
           }
         }
         if (!isSingleCardDocument(json)) {
@@ -4050,7 +4058,8 @@ export default class StoreService extends Service implements StoreInterface {
       if (
         running &&
         opts?.reportUnindexed &&
-        this.#builtFromSource.has(running[localIdSymbol])
+        (this.#builtFromSource.has(running[localIdSymbol]) ||
+          this.#buildingFromSource.has(id!))
       ) {
         running = undefined;
       }
@@ -4085,6 +4094,9 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return cardError;
     } finally {
+      if (buildingFromSource) {
+        this.#buildingFromSource.delete(buildingFromSource);
+      }
       // Only retract this call's own entry: a scope boundary clears the map
       // mid-flight, so a newer caller's entry can be sitting under this id.
       if (
