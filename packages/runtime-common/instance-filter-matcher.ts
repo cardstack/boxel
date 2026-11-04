@@ -16,7 +16,8 @@ import {
   type RangeOperator,
   type Sort,
 } from './query.ts';
-import { isMatchRelevanceSort } from './index-query-engine.ts';
+import { isMatchRelevanceSort, isNearSort } from './index-query-engine.ts';
+import { cosineSimilarity, isVector } from './serializers/vector.ts';
 
 import {
   CARD_INSTANCE_FILE_KEY,
@@ -714,6 +715,18 @@ function sortValue(
   if (isMatchRelevanceSort(expression)) {
     return null;
   }
+  // A near sort mirrors the server's cosine distance (1 - similarity), so a
+  // live query re-sorts its instances the way the index would. Plural fields
+  // take their nearest vector, as the server's MIN does; a card with no
+  // vector, or one of another dimension, sorts last.
+  if (isNearSort(expression)) {
+    let { values } = resolvePath(instance, expression.by, api);
+    let distances = values
+      .filter((v): v is NonNullable<typeof v> => isVector(v))
+      .filter((v) => v.dims === nearLength(expression.near))
+      .map((v) => 1 - cosineSimilarity(v, expression.near));
+    return distances.length ? Math.min(...distances) : null;
+  }
   if ('on' in expression && expression.on) {
     let { values } = resolvePath(instance, expression.by, api);
     return values.find((v) => v != null) ?? null;
@@ -730,6 +743,10 @@ function sortValue(
       // fields arrive with `on` and take the branch above.
       return null;
   }
+}
+
+function nearLength(near: unknown): number {
+  return isVector(near) ? near.dims : (near as ArrayLike<number>).length;
 }
 
 function rawCompare(a: any, b: any): number {

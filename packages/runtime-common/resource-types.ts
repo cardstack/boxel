@@ -349,6 +349,11 @@ export interface EntryResource {
     // and re-rank across realms (the federated path concatenates per-realm
     // results without re-sorting).
     _matchRelevance?: number;
+    // Cosine distance (0–2, lower is nearer) between this entry's vector and
+    // the target of the query's first `near` sort. Present only on a
+    // near-sorted query, for an entry that has a vector at the sorted path.
+    // Comparable across realms, so a federated caller can merge by it.
+    _nearDistance?: number;
   };
 }
 

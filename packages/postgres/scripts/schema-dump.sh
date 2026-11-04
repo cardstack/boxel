@@ -2,6 +2,8 @@
 set -euo pipefail
 
 tmpFile='./schema_tmp.sql'
+# boxel_index_vectors is excluded: it exists only where Postgres has
+# pgvector, and the SQLite index scores `near` sorts from the search doc.
 # Directory where SQLite schema files are written (relative to this script's location)
 SCHEMA_DIR="../host/config/schema"
 
@@ -63,6 +65,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=realm_event_rooms \
   --exclude-table-and-children=retired_realm_event_rooms \
   --exclude-table-and-children=host_shell_generation \
+  --exclude-table-and-children=boxel_index_vectors \
   --no-tablespaces \
   --no-table-access-method \
   --no-owner \

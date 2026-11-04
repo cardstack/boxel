@@ -11,6 +11,7 @@ import * as ImageSizeSerializer from './image-size.ts';
 import * as PhoneSerializer from './phone.ts';
 import * as PolicyPredicateSerializer from './policy-predicate.ts';
 import * as StringToContentSerializer from './string-to-content.ts';
+import * as VectorSerializer from './vector.ts';
 
 import type { CardDocument, RealmResourceIdentifier } from '../index.ts';
 import type {
@@ -37,7 +38,10 @@ export {
   PhoneSerializer,
   PolicyPredicateSerializer,
   StringToContentSerializer,
+  VectorSerializer,
 };
+
+export type { Vector, VectorEncoding } from './vector.ts';
 
 export type {
   PolicyPredicate,
@@ -76,6 +80,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   phone: PhoneSerializer,
   'policy-predicate': PolicyPredicateSerializer,
   'string-to-content': StringToContentSerializer,
+  vector: VectorSerializer,
 };
 
 export type SerializerName =
@@ -91,7 +96,8 @@ export type SerializerName =
   | 'email'
   | 'phone'
   | 'policy-predicate'
-  | 'string-to-content';
+  | 'string-to-content'
+  | 'vector';
 
 export function getSerializer(name: SerializerName): Serializer {
   assertIsSerializerName(name);
