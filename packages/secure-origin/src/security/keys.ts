@@ -1004,7 +1004,6 @@ export type KeyLimitChanges = Partial<Record<keyof KeyLimits, number | null>>;
 // there rejected it (`rejected`) or last refused a request (`lastForbiddenAt`).
 export interface UsageGrant {
   id: string;
-  host: string;
   destination: string;
   state: 'active' | 'rejected';
   rejectedAt: string | null;
