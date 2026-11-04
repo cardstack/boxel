@@ -20,6 +20,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { motion } from 'glimmer-motion';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { time } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -65,6 +66,44 @@ class Stage extends Component<{
         {{motion id='box'}}
       ></div>
       <c.Move @of={{c.all}} @duration={{1}} @ease='linear' />
+    </Choreo>
+  </template>
+}
+
+let flight: Flight | undefined;
+const seizeFlight = (f: Flight) => {
+  flight = f;
+};
+
+class Flight extends Component<{
+  Args: { maxFrameStep?: number; seize: (self: Flight) => void };
+}> {
+  @tracked landed = false;
+  constructor(
+    owner: unknown,
+    args: { maxFrameStep?: number; seize: (self: Flight) => void },
+  ) {
+    super(owner as never, args as never);
+    args.seize(this);
+  }
+  get cometStyle() {
+    return `position:absolute;width:40px;height:40px;${
+      this.landed ? 'left:200px;top:120px' : 'left:20px;top:20px'
+    }`;
+  }
+  <template>
+    <Choreo
+      class='stage'
+      style='position:relative;width:300px;height:200px'
+      @maxFrameStep={{@maxFrameStep}}
+      as |c|
+    >
+      <div style={{this.cometStyle}} {{motion id='comet' role='comet'}}></div>
+      <c.Move
+        @of={{c.moved 'comet'}}
+        @path='M 0 0 C 40 -80, 160 -80, 200 0'
+        @duration={{0.12}}
+      />
     </Choreo>
   </template>
 }
@@ -133,6 +172,7 @@ module('Integration | choreo | run clock', function (hooks) {
   hooks.afterEach(() => {
     stage = undefined;
     ctx = undefined;
+    flight = undefined;
   });
 
   test("a run's clock advances nothing on the first frame it paints", async function (assert) {
@@ -295,6 +335,36 @@ module('Integration | choreo | run clock', function (hooks) {
     );
     await settled();
   });
+
+  for (const step of [undefined, 16]) {
+    test(`${step ? 'with' : 'without'} @maxFrameStep, a @path flight's platform animation is not taken for moved motion-dom fields`, async function (assert) {
+      const warnings: string[] = [];
+      const realWarn = console.warn;
+      console.warn = (...args: unknown[]) => {
+        warnings.push(String(args[0]));
+      };
+      try {
+        await render(
+          <template>
+            <Flight @seize={{seizeFlight}} @maxFrameStep={{step}} />
+          </template>,
+        );
+        await animationsSettled();
+        flight!.landed = true;
+        await settled();
+        await animationsSettled();
+      } finally {
+        console.warn = realWarn;
+      }
+      // a flight's position rides a platform Animation, which has none of
+      // the fields the clock reads from motion-dom's tweens
+      assert.deepEqual(
+        warnings.filter((w) => w.includes('motion-dom no longer exposes')),
+        [],
+        'no warning about motion-dom fields',
+      );
+    });
+  }
 
   test('a run that replaces one mid-flight carries its motion through its first frame', async function (assert) {
     await render(<template><Stage @seize={{seize}} /></template>);

@@ -252,11 +252,18 @@ function isSpring(transition: Record<string, unknown> | undefined): boolean {
 }
 
 /**
+ * Controls that wrap a platform Animation rather than a motion-dom one: the
+ * frame clock's hold-back has no tween to move in them, and no private
+ * fields to find.
+ */
+const platformControlled = new WeakSet<AnimationPlaybackControls>();
+
+/**
  * A platform Animation in the controls shape the transport speaks, so
  * setPaused / speed / stopTrack drive it exactly like an engine animation.
  */
 function platformControls(animation: Animation): AnimationPlaybackControls {
-  return {
+  const controls = {
     cancel: () => animation.cancel(),
     pause: () => animation.pause(),
     play: () => animation.play(),
@@ -277,6 +284,8 @@ function platformControls(animation: Animation): AnimationPlaybackControls {
       animation.currentTime = seconds * 1000;
     },
   } as unknown as AnimationPlaybackControls;
+  platformControlled.add(controls);
+  return controls;
 }
 
 function carryVelocity(
@@ -411,6 +420,12 @@ interface Track {
 }
 
 let warnedPrivateFields = false;
+
+/** let the next run that misses motion-dom's private fields say so again (a test's reset) */
+export function resetRunWarnings() {
+  warnedPrivateFields = false;
+}
+
 /** the run's frame clock reads motion-dom's private animation fields; say once when they are gone */
 function warnPrivateFieldsMoved() {
   if (warnedPrivateFields) {
@@ -968,8 +983,9 @@ export class ChoreoRun implements Run {
     this.freshClock = !this.continuing;
     this.lastStamp = undefined;
     this.startedAt = time.now();
-    // read runs before update: the animations tick after the hold-back
-    frame.read(this.holdBack, true);
+    // read runs before update: the animations tick after the hold-back.
+    // Without a cap, the fresh start is its only business: one frame.
+    frame.read(this.holdBack, !!this.options.maxFrameStep);
     frame.update(this.tick, true);
   }
 
@@ -1005,6 +1021,7 @@ export class ChoreoRun implements Run {
    *   run moves them one ordinary frame further, as its clock moves;
    * - after that, with a cap, on by the time past the cap since the last
    *   frame: it resumes from where the last frame left it, plus one step.
+   *   Without a cap this runs on the first frame only.
    *
    * Animations on the compositor (WAAPI) start on the frame that commits
    * them and kept playing through a long frame; they are left alone.
@@ -1013,13 +1030,6 @@ export class ChoreoRun implements Run {
     const step = this.options.maxFrameStep;
     const last = this.lastStamp;
     this.lastStamp = data.timestamp;
-    if (last !== undefined && !step) {
-      return;
-    }
-    if (!step) {
-      // no cap: the fresh start is this frame's only business
-      cancelFrame(this.holdBack);
-    }
     // the first frame of a run continuing one in flight is an ordinary one
     const opening =
       last === undefined && this.continuing ? this.frameStep(data) : 0;
@@ -1028,19 +1038,22 @@ export class ChoreoRun implements Run {
     }
     for (const t of this.tracks) {
       for (const c of t.controls ?? []) {
+        if (platformControlled.has(c)) {
+          continue;
+        }
         // the wrapper's resolved animation, read without the getter that
         // flushes pending keyframes. These are motion-dom's private fields
-        // (VENDORED.md lists them for a bump to check): past the first frame
-        // every control has resolved, so a control without them means the
-        // fields moved and the cap no longer reaches the tweens.
+        // (VENDORED.md lists them for a bump to check). Setting a control's
+        // speed as the run starts it resolves it, so from the first frame a
+        // control without them means the fields moved, and neither the fresh
+        // start nor the cap reaches the tweens.
         const inner = (c as unknown as { _animation?: object })._animation as
           | { holdTime?: number | null; startTime?: number | null }
           | undefined;
         if (
-          last !== undefined &&
-          (!inner ||
-            (!('animation' in inner) &&
-              !('startTime' in inner && 'holdTime' in inner)))
+          !inner ||
+          (!('animation' in inner) &&
+            !('startTime' in inner && 'holdTime' in inner))
         ) {
           warnPrivateFieldsMoved();
         }

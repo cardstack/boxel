@@ -110,8 +110,7 @@ Reviewing a bump PR:
    for the fresh start, and on every frame after it under `@maxFrameStep`. The fields are `_animation` on the
    `AsyncMotionValueAnimation` wrapper, and `startTime` and `holdTime` on `JSAnimation`. It tells a native
    (WAAPI) animation apart by its `animation` property. Check that these still exist in the new release; the
-   run-clock tests fail when they move, and a run under `@maxFrameStep` logs a warning (a run without one stops
-   reading them after its first frame, before the warning's check).
+   run-clock tests fail when they move, and every run logs a warning on the first frame it paints.
 4. **Fixes** are ordinary commits on the bump branch.
 5. **Title.** The PR opens as `fix:`, for a catch-up. Retitle it `feat:` when upstream adds a capability
    glimmer-motion exposes. The prefix covers glimmer-motion and choreo, which release together.
