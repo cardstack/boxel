@@ -21,12 +21,11 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     realmIdentifiers: RealmIdentifier[];
-    emptyMessage: string | null;
-    // The catalogs shown, as the section rail counts them.
+    // The catalogs shown, as the heading counts them.
     count: number;
+    // Shown in place of the tiles when there are none.
+    emptyMessage: string;
     showShelf: boolean;
-    // Placed ahead of Workspaces, for someone with few workspaces of their own.
-    leads?: boolean;
     // Where the catalog tiles start in the keyboard cursor's walk.
     navBase: number;
     cursor: KeyboardCursor;
@@ -34,7 +33,7 @@ interface Signature {
 }
 
 // The Catalogs section: the catalog's stories, then the catalog workspaces as
-// tiles. The dashboard places it ahead of Workspaces or after them.
+// tiles.
 export default class CatalogSection extends Component<Signature> {
   // Named by the title span in its heading, so the count stays out of the
   // name.
@@ -42,12 +41,6 @@ export default class CatalogSection extends Component<Signature> {
 
   private get shelfRealmURL() {
     return this.args.showShelf ? catalogRealmURL : null;
-  }
-
-  // Ahead of Workspaces, the shelf welcomes someone new; without it the
-  // section is only the catalog workspaces.
-  private get welcomes() {
-    return Boolean(this.args.leads && this.shelfRealmURL);
   }
 
   <template>
@@ -59,25 +52,17 @@ export default class CatalogSection extends Component<Signature> {
     >
       <SectionHead
         @icon={{Store}}
-        @title={{if this.welcomes 'Start from the catalog' 'Catalogs'}}
+        @title='Catalogs'
         @titleId={{this.headingId}}
         @count={{@count}}
       >
         <:actions><ManageCatalogs /></:actions>
-        <:default>
-          {{#if this.welcomes}}
-            New here? Pick something ready-made and make it yours.
-          {{else}}
-            Apps, fields and themes to use in your workspaces.
-          {{/if}}
-        </:default>
+        <:default>Apps, fields and themes to use in your workspaces.</:default>
       </SectionHead>
       {{#if this.shelfRealmURL}}
         <CatalogShelf @realmURL={{this.shelfRealmURL}} />
       {{/if}}
-      {{#if @emptyMessage}}
-        <p class='group-empty' data-test-catalog-empty>{{@emptyMessage}}</p>
-      {{else}}
+      {{#if @realmIdentifiers.length}}
         <div class='catalog-list' data-test-catalog-list>
           {{#each @realmIdentifiers as |realmIdentifier i|}}
             {{#let (add @navBase i) as |navIndex|}}
@@ -91,6 +76,8 @@ export default class CatalogSection extends Component<Signature> {
             {{/let}}
           {{/each}}
         </div>
+      {{else}}
+        <p class='group-empty' data-test-catalog-empty>{{@emptyMessage}}</p>
       {{/if}}
     </section>
 

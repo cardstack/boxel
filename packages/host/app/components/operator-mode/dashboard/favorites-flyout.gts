@@ -10,8 +10,8 @@ import RealmListFlyout from './realm-list-flyout';
 
 import type { SectionFlyoutSignature } from './sections';
 
-// The Workspaces entry's flyout: every favorite the page's Favorites lists,
-// catalogs included, whatever the page's filter.
+// The Favorites entry's flyout: every favorite, catalogs included, whatever
+// the page's filter.
 export default class FavoritesFlyout extends Component<SectionFlyoutSignature> {
   @service declare private matrixService: MatrixService;
   @service declare private realmServer: RealmServerService;
