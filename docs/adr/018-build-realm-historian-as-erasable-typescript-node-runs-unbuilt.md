@@ -23,16 +23,16 @@ imports and consumers by hand, because nothing derives them.
 ### 1.1. Erasable TypeScript, no build
 
 The package's modules, scripts and tests MUST be TypeScript in `.ts` files.
-The package's `tsconfig.json` MUST set `module: nodenext`,
-`allowImportingTsExtensions` and `isolatedModules`, as
-`packages/realm-server/tsconfig.json` does, so that the Node version
-`.mise.toml` pins runs every file directly: Node resolves only the `.ts`
-specifiers the first two require, and the third rejects a type-only re-export
+The package's `tsconfig.json` MUST set `module: nodenext` and
+`allowImportingTsExtensions`, as `packages/realm-server/tsconfig.json` does,
+so that the Node version `.mise.toml` pins resolves the `.ts` specifiers
+every file uses, and `isolatedModules`, which rejects a type-only re-export
 that doesn't say `export type`. The package's files MUST use only the syntax
 Node strips: no enum, namespace, parameter property, `import =` or decorator,
 and `import type` for every import that names only types. The root ESLint
 configuration enforces that on every file in the package, with the
-erasable-syntax selectors of `no-restricted-syntax` and the
+erasable-syntax selectors of `no-restricted-syntax`, the
+`@typescript-eslint/parameter-properties` rule, and the
 `consistent-type-imports` and `no-import-type-side-effects` rules, and the
 package's lint MUST run it. The package MUST NOT have a build step: its
 service starts with `node main.ts`, its scripts and tests run the same way,
@@ -140,8 +140,10 @@ whose transitive dependencies the package carries without loading them.
 ## 4. Sources
 
 - ADR 008 §1.10, the same rule for `packages/secure-origin`.
-- `packages/realm-server/tsconfig.json`, the configuration to copy, and
-  `eslint/erasable-syntax-selectors.cjs`, the syntax the lint rejects.
+- `packages/realm-server/tsconfig.json`, the module configuration to copy,
+  and `eslint/erasable-syntax-selectors.cjs` with the
+  `@typescript-eslint/parameter-properties` rule in `.eslintrc.js`, the
+  syntax the lint rejects.
 - `packages/realm-server/package.json` (`start`), the realm server's unbuilt
   `node main.ts`.
 - `.github/workflows/ci.yaml` (`change-check`), the hand-kept filters and the
