@@ -6,6 +6,12 @@ import { tracked } from '@glimmer/tracking';
 import { click, render, settled, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Sidebar, SidebarGroup, SidebarItem } from './sidebar';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+// A boxel-icon stand-in: an svg that carries its own 24px size.
+const Icon24: TemplateOnlyComponent<{ Element: SVGSVGElement }> = <template>
+  <svg width='24' height='24' viewBox='0 0 24 24' ...attributes><circle cx='12' cy='12' r='10' /></svg>
+</template>;
 
 const noop = () => {};
 
@@ -20,6 +26,20 @@ function pane(): HTMLElement {
 async function resizeTo(width: number, until: () => boolean) {
   pane().style.inlineSize = width + 'px';
   await waitUntil(until, { timeout: 2000 });
+  await settled();
+}
+const seamEl = () => document.querySelector('[data-test-pretui-sidebar-resize]') as HTMLElement;
+// The harness delivers no stylesheet and may scale its container, so a drag
+// is written in layout px and converted, as in the ResizeHandle tests.
+async function drag(from: number, to: number) {
+  let el = seamEl();
+  let scale = el.getBoundingClientRect().width / parseFloat(getComputedStyle(el).width);
+  let fire = (type: string, x: number) =>
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, pointerId: 1, clientX: x * scale }));
+  fire('pointerdown', from);
+  fire('pointermove', to);
+  fire('pointerup', to);
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
   await settled();
 }
 const state = () => shells()[0]?.dataset['state'];
@@ -218,5 +238,85 @@ module('Pretui | components/sidebar', function (hooks) {
       </Sidebar>
     </template>);
     assert.dom('[data-test-pretui-sidebar-rail]').doesNotHaveAttribute('data-state');
+  });
+
+  test("@scroll: 'content' is opt-in and reaches the shell's hook", async function (assert) {
+    await render(<template>
+      <Sidebar @label='A'><:nav>Lots</:nav></Sidebar>
+      <Sidebar @label='B' @scroll='content'><:nav>Lots</:nav></Sidebar>
+    </template>);
+    let [a, b] = shells();
+    assert.strictEqual(a?.dataset['scroll'], 'page', 'default is page, today\'s behaviour');
+    assert.strictEqual(b?.dataset['scroll'], 'content');
+  });
+
+  test('@scroll: the content element survives a collapse, so its scroll position does', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @scroll='content'><:nav>Lots</:nav><:default>Page</:default></Sidebar></template>);
+    let content = shells()[0]!.querySelector('[data-test-pretui-sidebar-content]');
+    await click('[data-test-pretui-sidebar-handle]');
+    assert.strictEqual(state(), 'collapsed');
+    assert.strictEqual(shells()[0]!.querySelector('[data-test-pretui-sidebar-content]'), content, 'same element');
+  });
+
+  test('@resizable: the seam is a named separator with its range', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @minWidth={{150}} @maxWidth={{300}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-handle]').doesNotExist('the separator replaces the toggle button');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('role', 'separator').hasAttribute('aria-label', 'Resize Library').hasAttribute('aria-valuenow', '200').hasAttribute('aria-valuemin', '0').hasAttribute('aria-valuemax', '300');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-controls', document.querySelector('[data-test-pretui-sidebar-rail]')!.id);
+  });
+
+  test('@resizable: drag sets the width, clamps at the max, and does not toggle', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @minWidth={{150}} @maxWidth={{300}}><:nav>Lots</:nav></Sidebar></template>);
+    await drag(200, 250);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '250');
+    assert.strictEqual(shells()[0]!.style.getPropertyValue('--pretui-sidebar-width'), '250px', 'the rail width follows');
+    assert.strictEqual(state(), 'expanded', 'the click that ends a drag does not toggle');
+    await drag(250, 900);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '300', 'clamped at the max');
+  });
+
+  test('@resizable: dragging below the minimum folds, a plain click toggles', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @minWidth={{150}}><:nav>Lots</:nav></Sidebar></template>);
+    await click('[data-test-pretui-sidebar-resize]');
+    assert.strictEqual(state(), 'collapsed', 'a click toggles');
+    assert.dom('[data-test-pretui-sidebar-resize]').doesNotExist('folded, the seam is the plain toggle');
+    await click('[data-test-pretui-sidebar-handle]');
+    await drag(200, 100);
+    assert.strictEqual(state(), 'collapsed', 'below the minimum folds');
+  });
+
+  test('@resizable: arrow keys resize, and a key press is not taken for a drag', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px'><:nav>Lots</:nav></Sidebar></template>);
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '216');
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowLeft');
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '200');
+    await click('[data-test-pretui-sidebar-resize]');
+    assert.strictEqual(state(), 'collapsed', 'the next click still toggles');
+  });
+
+  test('@resizable with @persistKey remembers the width', async function (assert) {
+    localStorage.removeItem('pretui-sidebar:t-width');
+    localStorage.removeItem('pretui-sidebar:t-width:width');
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @persistKey='t-width'><:nav>Lots</:nav></Sidebar></template>);
+    await triggerKeyEvent('[data-test-pretui-sidebar-resize]', 'keydown', 'ArrowRight');
+    assert.strictEqual(localStorage.getItem('pretui-sidebar:t-width:width'), '216');
+    await render(<template><span></span></template>);
+    await render(<template><Sidebar @label='Library' @mobile={{false}} @resizable={{true}} @width='200px' @persistKey='t-width'><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-resize]').hasAttribute('aria-valuenow', '216', 'restored on mount');
+    localStorage.removeItem('pretui-sidebar:t-width:width');
+  });
+
+  test('without @resizable the seam is the plain toggle', async function (assert) {
+    await render(<template><Sidebar @label='Library' @mobile={{false}}><:nav>Lots</:nav></Sidebar></template>);
+    assert.dom('[data-test-pretui-sidebar-resize]').doesNotExist();
+    assert.dom('[data-test-pretui-sidebar-handle]').exists();
+  });
+
+  test('SidebarItem @icon renders the icon into the sized slot, decorative', async function (assert) {
+    await render(<template><SidebarItem @label='Lots' @icon={{Icon24}} /></template>);
+    assert.dom('[data-test-pretui-sidebar-item-icon] > svg').exists();
+    assert.dom('[data-test-pretui-sidebar-item] svg').hasAttribute('aria-hidden', 'true');
+    assert.dom('[data-test-pretui-sidebar-item]').hasAttribute('aria-label', 'Lots');
   });
 });
