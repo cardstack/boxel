@@ -44,11 +44,12 @@ module.exports = {
                   '@glimmer/*',
                   'ember-*',
                   'ember',
-                  '@cardstack/pretui',
-                  '@cardstack/pretui/*',
+                  '@cardstack/*',
+                  'glimmer-motion',
+                  'glimmer-motion/*',
                 ],
                 message:
-                  'src/security/ imports nothing from Ember, Glimmer or Pret UI: components call these modules, not the other way round.',
+                  'src/security/ imports nothing from Ember, Glimmer, Pret UI, boxel-icons or any other component package: components call these modules, not the other way round.',
               },
               {
                 group: ['../*', '!../security/*'],

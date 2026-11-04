@@ -22,6 +22,7 @@ scope:
   - packages/boxel-ui/src/styles/variables.css
   - packages/boxel-ui/src/styles/theme.css
   - .github/workflows/ci.yaml
+  - .github/workflows/ci-lint.yaml
 ---
 
 # 019. Build the secure origin's pages as their own Ember app, on Pret UI
@@ -48,8 +49,10 @@ The secure origin's pages MUST be built from their own package,
 that package's build output, and the files allowed by §1.4. The build MUST run
 before any process that serves the secure origin starts, including the
 realm-server image, the development and test stacks, and test helpers that
-start the secure origin in-process. The realm server MUST NOT build anything
-at request time.
+start the secure origin in-process. A package whose modules the build reads
+from that package's own build output, such as boxel-icons, MUST be built before
+the package everywhere the package is built. The realm server MUST NOT build
+anything at request time.
 
 ### 1.2. Ember, with templates compiled at build time
 
@@ -69,7 +72,11 @@ build MUST fail the build when the output holds any other module, or any
 module of Ember's runtime template compiler (§1.2). Adding a package to the
 allowlist is a change to the secure origin's trusted code, and MUST be
 reviewed as one. That holds for a package that a Pret UI module imports as
-much as for one the package imports by name.
+much as for one the package imports by name. This ADR is that review for
+`@cardstack/pretui`, `@cardstack/boxel-icons` (whose icons are template-only
+SVG components) and `ember-modifier` (which Pret UI's components use for
+their modifiers): the allowlist MAY name them. Any other package MUST be
+added in a change reviewed for it.
 
 ### 1.4. Styles
 
@@ -124,9 +131,12 @@ sets them.
 
 The package MUST commit a record of its build output: each module's package
 name and version, and its size. A module from another package in this
-repository, such as Pret UI, MUST also be recorded with a hash of its source, since such a
-package's version doesn't change when its code does. CI MUST rebuild the
-package and fail when the output differs from the record. CI MUST also run
+repository, such as Pret UI or boxel-icons, MUST also be recorded with a hash
+of the file the build reads for it, since such a package's version doesn't
+change when its code does. CI MUST rebuild the package and fail when the
+output differs from the record. When such a module's hash moves, the failure
+MUST name the module and this ADR, so the pull request is read as a change to
+the origin. CI MUST also run
 the package's component tests and the policy test (§1.5) on a change to any
 package in this repository whose modules the build ships. So a change to
 Ember, to an allowed package or to a Pret UI module the origin ships shows, in
@@ -150,12 +160,14 @@ scripts and tests without a compile step. The package's build compiles its
 ### 1.11. Pret UI first
 
 The pages MUST use a Pret UI component, helper or modifier where Pret UI has
-one for the job that can ship under §1.3 and §1.5. The package MUST NOT keep
-a component, helper, modifier or icon of its own for such a job. Icons come
-from boxel-icons (`@cardstack/boxel-icons`), as ADR 009 §1.3 sets out. Where
-Pret UI's counterpart can't ship yet, because it imports boxel-ui or binds a
-`style` attribute, the package MAY keep its own, and the fix SHOULD be made in
-Pret UI so the package's copy can go.
+one for the job that can ship. A module can ship when everything it reaches
+passes §1.3 and it runs under the policy (§1.5). The package MUST NOT keep a
+component, helper, modifier or icon of its own for such a job. Icons come from
+boxel-icons (`@cardstack/boxel-icons`), as ADR 009 §1.3 sets out. Where Pret
+UI's counterpart can't ship yet, the package MAY keep its own, and the fix
+SHOULD be made in Pret UI so the package's copy can go. The usual reasons a
+Pret UI module can't ship are an import of boxel-ui, a bound `style`
+attribute, and a `<style>` element added at run time or left unscoped.
 
 ## 2. Rationale
 
@@ -182,9 +194,8 @@ Building the pages from no component library at all costs a copy of every
 component they draw. The package keeps ports of boxel-ui's Button,
 FieldContainer, Label, Input, InputGroup, Checkbox and LoadingIndicator, the
 host's ErrorDisplay and workspace dropdown, and twenty icons copied from
-boxel-ui and boxel-icons: about 3,200 lines that follow their originals by
-hand [4]. The
-key pages keep gaining screens, so the copies keep growing, and they copy
+boxel-ui and boxel-icons: about 2,600 lines that follow their originals by
+hand [4]. The key pages keep gaining screens, so the copies keep growing, and they copy
 boxel-ui, which ADR 009 deprecates. Pret UI is where the app's new UI goes,
 so the pages drawn from it look and behave like the app, and a fix made there
 reaches both.
@@ -197,20 +208,25 @@ UI, or are met by the rules above:
   from its own module, with no index to pull in, so a page ships what it
   imports (§1.3), and the build record shows its size (§1.8).
 - **Style attributes.** boxel-ui's LoadingIndicator and BoxelIcon set
-  `style` attributes the policy refuses. Some of Pret UI's components do too,
-  so §1.5 applies to every Pret UI module the build ships. One that binds
-  `style` can't ship until it sets its properties through the CSSOM, which
-  Pret UI's own `keepStyle` modifier already does for a component's custom
-  properties.
+  `style` attributes the policy refuses. So do about 130 of the
+  modules in Pret UI's `components/`, so §1.5 applies to every Pret UI module the build ships. One
+  that binds `style` can't ship until it sets its properties only through the
+  CSSOM. Pret UI's `keepStyle` modifier already writes a component's custom
+  properties that way, but beside the component's own `style` binding, not in
+  place of it.
 - **Every change ships onto the origin.** It still does, for the Pret UI
-  modules the origin ships, but no longer unseen. The source hash in the
-  build record (§1.8) fails CI on a Pret UI change that reaches the origin
-  until the same pull request updates the record, and the origin's tests and
-  policy test run on it. The change is then reviewed as a change to the
-  origin, as one to the package itself is.
+  modules the origin ships, but no longer unseen. The hash in the build
+  record (§1.8) fails CI on a Pret UI change that reaches the origin until
+  the same pull request updates the record, the failure names the modules
+  that moved and this ADR, and the origin's tests and policy test run on it.
+  The record changes often, so what this buys is a visible, named change in
+  the pull request; it still takes a reviewer who reads it as a change to the
+  origin, as a change to the package itself does.
 
 Pret UI is also source in this repository, compiled by the package's own
-build, so what ships is what a reviewer reads here. boxel-ui still can't ship
+build, so what ships is what a reviewer reads here. boxel-icons ships its
+own build of SVG-only template components, so the record hashes that build
+(§1.8). boxel-ui still can't ship
 (§1.3), and a Pret UI module that imports it can't either. Those imports are
 gaps ADR 009 §1.6 already lists.
 

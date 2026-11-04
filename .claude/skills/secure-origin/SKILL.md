@@ -22,7 +22,7 @@ Adding a screen means adding it to `packages/secure-origin`, as [ADR 019](../../
 
 The pages are deliberately not host components. ADR 019 records why: everything the origin serves is trusted code, so it is built from a package of its own, behind an import allowlist, with a reviewed record of what it ships.
 
-**Draw the pages with Pret UI.** A page uses Pret UI's component, helper or modifier wherever one does the job and can ship on the origin, and boxel-icons for icons (ADR 019 §1.11). Never add a component, helper or icon of the package's own for a job Pret UI or boxel-icons already does. A Pret UI module can ship when nothing it reaches imports `@cardstack/boxel-ui` (§1.3) and its template binds no `style` attribute (§1.5); where Pret UI's counterpart fails either, fix it in Pret UI, not with a copy here. `docs/adr/remediation/019.md` lists the package's own components still waiting to move.
+**Draw the pages with Pret UI.** A page uses Pret UI's component, helper or modifier wherever one does the job and can ship on the origin, and boxel-icons for icons (ADR 019 §1.11). Never add a component, helper, modifier or icon of the package's own for a job Pret UI or boxel-icons already does. A Pret UI module can ship when everything it reaches passes the import allowlist (§1.3) and it runs under the policy (§1.5). The usual reasons one can't are an import of `@cardstack/boxel-ui`, a bound `style` attribute, and a `<style>` element added at run time or left unscoped; fix those in Pret UI, not with a copy here. `node scripts/adr-for.mts <path>` lists the package's own components still waiting to move.
 
 ## How the pages are built
 
