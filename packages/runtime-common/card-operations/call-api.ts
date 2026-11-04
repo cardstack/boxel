@@ -479,65 +479,40 @@ function lowerKeyKind(
 }
 
 // The kinds of key that can fill a slot, in `CALL_API_KEY_KINDS` order: the
-// one its declaration names, or else every kind that can work where it
-// stands. A minted access token is a credential sent whole after an
-// Authorization scheme, and Basic encodes a user and password instead, so a
-// slot anywhere else takes only a key sent as it is. A Google service
-// account's tokens are only for Google's APIs.
+// one its declaration names, or else every kind that can work there. The
+// realm server fills a slot with a minted access token wherever it stands, so
+// only two things rule a kind out. A `|basic` slot sends the base64 of a user
+// and password, which a minted token isn't. And a Google service account's
+// tokens are only for Google's own services.
 export function slotKeyKinds(
   slot: CallApiSlot,
-  request: Pick<OperationCallApi, 'headers' | 'destination'>,
+  request: Pick<OperationCallApi, 'destination'>,
 ): CallApiKeyKind[] {
   if (slot.keyKind) {
     return [slot.keyKind];
   }
-  if (slot.transform || !sentAsAuthorizationCredential(slot, request)) {
+  if (slot.transform === 'basic') {
     return ['static'];
   }
-  return isGoogleAPIDestination(request.destination)
+  return isGoogleDestination(request.destination)
     ? [...CALL_API_KEY_KINDS]
     : ['static', 'oauth'];
 }
 
-// Whether a header slot is the whole credential of an Authorization header
-// whose scheme isn't Basic, as `Bearer {{userKey}}` is.
-function sentAsAuthorizationCredential(
-  slot: CallApiSlot,
-  request: Pick<OperationCallApi, 'headers'>,
-): boolean {
-  if (slot.placement !== 'header') {
-    return false;
-  }
-  let header = Object.entries(request.headers ?? {}).find(
-    ([name]) => `headers.${name}` === slot.at,
-  );
-  if (!header || header[0].toLowerCase() !== 'authorization') {
-    return false;
-  }
-  let value = header[1];
-  if (typeof value !== 'string') {
-    return false;
-  }
-  let match =
-    /^\s*([A-Za-z][A-Za-z0-9!#$%&'*+.^_`|~-]*)\s+(\{\{[^}]*\}\})\s*$/.exec(
-      value,
-    );
-  if (!match || match[1].toLowerCase() === 'basic') {
-    return false;
-  }
-  let [only] = slotsIn(match[2]).slots;
-  return only?.name === slot.name;
-}
+// The domains of Google's services that take a service account's access
+// tokens: its APIs, and the Firebase Realtime Database.
+const GOOGLE_TOKEN_DOMAINS = ['googleapis.com', 'firebaseio.com'];
 
-// Whether a request's destination is one of Google's APIs.
-function isGoogleAPIDestination(destination: string): boolean {
+function isGoogleDestination(destination: string): boolean {
   let host: string;
   try {
     host = new URL(destination).hostname;
   } catch {
     return false;
   }
-  return host === 'googleapis.com' || host.endsWith('.googleapis.com');
+  return GOOGLE_TOKEN_DOMAINS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
 }
 
 interface LoweredUrl {

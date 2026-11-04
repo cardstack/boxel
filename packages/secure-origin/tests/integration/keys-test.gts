@@ -7,6 +7,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -2390,7 +2391,13 @@ module('Integration | key pages', function (hooks) {
   module('entering the kind of key an operation takes', function () {
     // A window opened for an operation whose `userKey` slots take `kinds`,
     // sending to `host`.
-    function kindsContext(kinds: string[], host = 'sheets.googleapis.com') {
+    function kindsContext(
+      kinds: string[],
+      host = 'sheets.googleapis.com',
+      slots: { name: string; key: string; kinds: string[] }[] = [
+        { name: 'userKey', key: 'userKey', kinds },
+      ],
+    ) {
       return () =>
         context({
           realm: WORKSPACE,
@@ -2410,7 +2417,7 @@ module('Integration | key pages', function (hooks) {
               path: '/v4/',
               registrableDomain: host.split('.').slice(-2).join('.'),
             },
-            slots: [{ name: 'userKey', key: 'userKey', kinds }],
+            slots,
           },
         });
     }
@@ -2452,7 +2459,7 @@ module('Integration | key pages', function (hooks) {
         .includesText('Budget needs a key or token sent as it is');
     });
 
-    test('opened for an operation that takes only a connected account, offers to connect one through an app set up already', async function (assert) {
+    test('opened for an operation that takes only a connected account, goes on to connect one', async function (assert) {
       serve({
         'POST _secure-window/context': kindsContext(
           ['oauth'],
@@ -2463,17 +2470,9 @@ module('Integration | key pages', function (hooks) {
         `enter-key#card=${encodeURIComponent(CARD)}&operation=values&then=approve`,
       );
       await render(EnterKeyPage);
-      await waitFor('[data-test-opened-for]');
-      assert.dom('[data-test-radio-choices="kind"]').doesNotExist();
-      assert
-        .dom('[data-test-only-kind="oauth-client"]')
-        .includesText('Budget needs a Sign-in app (OAuth).');
-      assert
-        .dom('[data-test-oauth-client-id-input]')
-        .exists('the sign-in app’s own fields');
-      await click('[data-test-go-to-connect]');
+      await waitUntil(() => navigations.length > 0);
       let [move] = navigations;
-      assert.strictEqual(move?.how, 'assign');
+      assert.strictEqual(move?.how, 'replace');
       let url = new URL(move!.url!, window.location.href);
       assert.true(url.pathname.endsWith('/connect'));
       let fragment = new URLSearchParams(url.hash.slice(1));
@@ -2494,10 +2493,47 @@ module('Integration | key pages', function (hooks) {
       await waitFor('[data-test-opened-for]');
       assert.dom('[data-test-only-kind]').doesNotExist();
       assert.dom('[data-test-radio-choice="static"] input').isChecked();
-      assert.dom('[data-test-radio-choice="oauth-client"]').exists();
+      assert
+        .dom('[data-test-radio-choice="oauth-client"]')
+        .includesText('Connected account (OAuth)');
       assert
         .dom('[data-test-radio-choice="google-service-account"]')
         .doesNotExist();
+
+      await click('[data-test-radio-choice="oauth-client"] input');
+      assert
+        .dom('[data-test-connect-instead]')
+        .exists('a connected account is signed in to, not entered');
+      assert.dom('[data-test-oauth-client-id-input]').doesNotExist();
+      assert.dom('[data-test-enter-key-save]').doesNotExist();
+      await click('[data-test-go-to-connect]');
+      let [move] = navigations;
+      assert.strictEqual(move?.how, 'assign');
+      assert.true(
+        new URL(move!.url!, window.location.href).pathname.endsWith('/connect'),
+      );
+    });
+
+    test('opened for an operation with several slots, offers the kinds any of its own keys take', async function (assert) {
+      serve({
+        'POST _secure-window/context': kindsContext([], 'api.github.com', [
+          { name: 'token', key: 'userKey', kinds: ['static'] },
+          { name: 'signin', key: 'userKey', kinds: ['oauth'] },
+          {
+            name: 'apiKey',
+            key: 'apiKey',
+            kinds: ['google-service-account'],
+          },
+        ]),
+      });
+      visitShell(`enter-key#card=${encodeURIComponent(CARD)}&operation=values`);
+      await render(EnterKeyPage);
+      await waitFor('[data-test-opened-for]');
+      assert.dom('[data-test-radio-choice="static"]').exists();
+      assert.dom('[data-test-radio-choice="oauth-client"]').exists();
+      assert
+        .dom('[data-test-radio-choice="google-service-account"]')
+        .doesNotExist('a workspace key’s slot is not the user’s to fill here');
     });
 
     test('opened for an operation that takes a service account or a connected account, starts on the first of them', async function (assert) {

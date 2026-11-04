@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  keyFitsSlot,
   logger,
   param,
   query,
@@ -577,6 +578,7 @@ export async function approveBindings(
       for (let fill of plan.fills) {
         let keyId =
           fill.shareId !== undefined ? shareKeys.get(fill.shareId) : fill.keyId;
+        await assertKeyFitsSlot(txQuery, keyId!, fill.slot, plan.operation);
         let { grant, created } = await createOrReuseGrantIn(txQuery, keyring, {
           owner: approver,
           keyId: keyId!,
@@ -646,6 +648,43 @@ function instanceIn(
 
 // The key a share in the realm holds, for its key's owner to approve it with,
 // with the share locked so a swap or suspension waits for the approval.
+// Refuses to approve a key of another kind than the slot's declaration names
+// (`keyKind` on a `callApi`). A slot that declares no kind takes any key a
+// grant can be made for.
+async function assertKeyFitsSlot(
+  txQuery: Querier,
+  keyId: string,
+  slot: CallApiSlot,
+  operation: string,
+): Promise<void> {
+  if (!slot.keyKind || !UUID.test(keyId)) {
+    return;
+  }
+  let [key] = await txQuery([
+    `SELECT kind FROM user_keys WHERE id = `,
+    param(keyId),
+  ]);
+  if (key && !keyFitsSlot(key.kind as string, slot.keyKind)) {
+    throw new UserKeyError(
+      400,
+      `operation "${operation}" takes a ${KEY_KIND_NAMES[slot.keyKind]} in slot ${slotToken(slot)}, and this key is ${KEY_NAMES_BY_KIND[key.kind as string] ?? `a ${key.kind} key`}`,
+    );
+  }
+}
+
+const KEY_KIND_NAMES: Record<NonNullable<CallApiSlot['keyKind']>, string> = {
+  static: 'key or token sent as it is',
+  'google-service-account': 'Google service account',
+  oauth: 'connected account',
+};
+
+const KEY_NAMES_BY_KIND: Record<string, string> = {
+  static: 'a key or token sent as it is',
+  'google-service-account': 'a Google service account',
+  'oauth-connection': 'a connected account',
+  'oauth-client': 'an OAuth client',
+};
+
 async function lockApprovableShare(
   txQuery: Querier,
   realmURL: URL,
@@ -1259,9 +1298,14 @@ function checkSlot(
   ) {
     return { slot, binding, refused: 'share-suspended' };
   }
+  // A key of another kind than the slot's declaration names is approved
+  // again, as a changed request is: the declaration may be newer than the
+  // approval.
   if (
     binding.state === 'needs-reapproval' ||
-    binding.fingerprint !== fingerprintOf(bindingSnapshot(lookup.request, slot))
+    binding.fingerprint !==
+      fingerprintOf(bindingSnapshot(lookup.request, slot)) ||
+    (binding.key_kind != null && !keyFitsSlot(binding.key_kind, slot.keyKind))
   ) {
     return { slot, binding, refused: 'binding-needs-reapproval' };
   }

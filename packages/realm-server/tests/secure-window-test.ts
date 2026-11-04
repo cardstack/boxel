@@ -79,10 +79,10 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           headers: { authorization: 'Bearer {{userKey}}' },
         };
 
-        @operation static geocode = {
+        @operation static currentWeather = {
           base: 'callApi',
-          url: 'https://maps.googleapis.com/maps/api/geocode/json',
-          query: { key: '{{userKey}}' },
+          url: 'https://api.weather.co.uk/v3/current',
+          query: { appid: '{{userKey}}' },
           headers: { authorization: 'Basic {{apiKey:basic|basic}}' },
         };
 
@@ -490,7 +490,7 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('says which kinds of key fill each slot: as declared, or as fit where it stands', async function (assert) {
+    test('says which kinds of key fill each slot: as declared, or as can work where it stands', async function (assert) {
       let kindsOf = async (operation: string) => {
         let response = await ask(WRITER, {
           target: { kind: 'instance', url: `${REALM.href}today` },
@@ -509,17 +509,17 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         await kindsOf('forecast'),
         { userKey: ['static', 'oauth'] },
-        'a bearer credential takes a pasted key or a connected account',
+        'a pasted key or a connected account',
       );
       assert.deepEqual(
         await kindsOf('readSheet'),
         { userKey: ['static', 'google-service-account', 'oauth'] },
-        'one sent to a Google API may also be a service account',
+        'a request to a Google API may also take a service account',
       );
       assert.deepEqual(
-        await kindsOf('geocode'),
-        { userKey: ['static'], basic: ['static'] },
-        'a query value or a Basic credential takes only a pasted key',
+        await kindsOf('currentWeather'),
+        { userKey: ['static', 'oauth'], basic: ['static'] },
+        'a minted token fills a slot wherever it stands, but never a Basic one',
       );
       assert.deepEqual(
         await kindsOf('appendRow'),
@@ -528,7 +528,7 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual(
         await kindsOf('mixed'),
-        { token: ['oauth'], tenant: ['static'] },
+        { token: ['oauth'], tenant: ['static', 'oauth'] },
         'a kind declared for one slot leaves the others as they stand',
       );
     });

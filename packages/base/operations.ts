@@ -822,16 +822,17 @@ export { CALL_API_KEY_KINDS, type CallApiKeyKind };
 // never carried across a redirect to another destination. Nothing that
 // records the request — logs, errors, telemetry — ever sees a filled one.
 //
-// `keyKind` says what kind of key fills a slot, so the window where the user
-// enters one asks for that kind without making them choose:
+// `keyKind` says what kind of key fills a slot. Only a key of that kind is
+// approved for it, and the window where the user adds a key asks for that
+// kind without making them choose:
 //
 //   keyKind: 'google-service-account',          // every slot
 //   keyKind: { token: 'oauth', id: 'static' },  // by slot name
 //
-// Left out, the kind follows from where the slot stands: a minted access
-// token is a credential sent whole after an Authorization scheme other than
-// Basic (`Bearer {{userKey}}`), so a slot anywhere else takes a pasted key,
-// and a Google service account's tokens are only for Google's APIs.
+// An unnamed slot's name is its key's, `userKey` or `apiKey`. Left out, any
+// kind of key may fill the slot, and the window offers the kinds that can
+// work there: a `|basic` slot takes only a key sent as it is, and a Google
+// service account only a request to Google's services.
 export interface CallApiOperationDeclaration extends OperationCommon {
   readonly base: 'callApi';
   // Absent, `GET` for a request with no body and `POST` for one with a body.

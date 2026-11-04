@@ -58,20 +58,26 @@ const GRAPHQL_OPERATIONS = [
   'listMilestones',
 ];
 
-function graphqlOperation(name: string, document: string) {
+function graphqlOperation(name: string, document: string, keyKind?: string) {
   return `
       @operation static ${name} = {
         base: 'callApi',
         method: 'POST',
         url: '${VENDOR}/graphql',
         headers: { authorization: 'Bearer {{userKey}}' },
-        graphql: { document: '${document}' },
+        graphql: { document: '${document}' },${
+          keyKind
+            ? `
+        keyKind: '${keyKind}',`
+            : ''
+        }
       };`;
 }
 
 function inboxModule({
   listPRsDocument = 'query { viewer { pullRequests { totalCount } } }',
-}: { listPRsDocument?: string } = {}) {
+  listPRsKeyKind,
+}: { listPRsDocument?: string; listPRsKeyKind?: string } = {}) {
   return `
     import { contains, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
@@ -85,6 +91,7 @@ function inboxModule({
           name === 'listPRs'
             ? listPRsDocument
             : `query { viewer { ${name} { totalCount } } }`,
+          name === 'listPRs' ? listPRsKeyKind : undefined,
         ),
       ).join('\n')}
 
@@ -270,6 +277,7 @@ module(basename(import.meta.filename), function (hooks) {
   interface Slot {
     slot: string;
     key: string;
+    keyKind?: string;
     status: string;
     fingerprint: string;
     snapshot: Record<string, string | null>;
@@ -539,6 +547,66 @@ module(basename(import.meta.filename), function (hooks) {
       operationsIn(await batchOf(OWNER, onType(INBOX), { review: true })),
       [],
       'nothing is left to review',
+    );
+  });
+
+  test('a slot that declares its kind of key takes only a key of that kind, and one approved before asks to be approved again', async function (assert) {
+    let key = await addKey();
+    await approveFrom(
+      OWNER,
+      await batchOf(OWNER, onType(INBOX)),
+      GRAPHQL_OPERATIONS,
+      () => ({ keyId: key.id }),
+    );
+    assert.strictEqual(await admission('listPRs'), undefined);
+
+    await realm.write(
+      'inbox.gts',
+      inboxModule({ listPRsKeyKind: 'google-service-account' }),
+    );
+    await realm.indexing();
+    assert.strictEqual(
+      await admission('listPRs'),
+      'binding-needs-reapproval',
+      'the pasted key no longer fills a slot that takes a service account',
+    );
+    assert.strictEqual(
+      await admission('listIssues'),
+      undefined,
+      'a slot that declares no kind still takes it',
+    );
+    let review = await batchOf(OWNER, onType(INBOX), { review: true });
+    let operations = operationsIn(review);
+    assert.deepEqual(
+      operations.map((o) => [o.name, o.status, o.slots[0]!.keyKind]),
+      [['listPRs', 'changed', 'google-service-account']],
+      'the slot is reviewed, saying what kind of key it takes',
+    );
+
+    let refused = await approveFrom(OWNER, review, ['listPRs'], () => ({
+      keyId: key.id,
+    }));
+    assert.strictEqual(refused.status, 400, JSON.stringify(refused.body));
+    assert.deepEqual(refused.body.errors, [
+      'operation "listPRs" takes a Google service account in slot userKey, and this key is a key or token sent as it is',
+    ]);
+
+    await realm.write('inbox.gts', inboxModule({ listPRsKeyKind: 'static' }));
+    await realm.indexing();
+    let again = await batchOf(OWNER, onType(INBOX), { review: true });
+    assert.deepEqual(
+      operationsIn(again).map((o) => [o.name, o.slots[0]!.keyKind]),
+      [['listPRs', 'static']],
+      'a binding asked to be approved again stays so until it is',
+    );
+    let reapproved = await approveFrom(OWNER, again, ['listPRs'], () => ({
+      keyId: key.id,
+    }));
+    assert.strictEqual(reapproved.status, 201, JSON.stringify(reapproved.body));
+    assert.strictEqual(
+      await admission('listPRs'),
+      undefined,
+      'a pasted key fills a slot that declares one',
     );
   });
 

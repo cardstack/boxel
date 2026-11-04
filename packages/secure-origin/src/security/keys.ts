@@ -775,6 +775,10 @@ export type BatchSlotStatus = 'new' | 'changed' | 'pipelines-only';
 export interface BatchSlot {
   slot: string;
   key: 'userKey' | 'apiKey';
+  // The kind of key the slot's declaration says fills it (`static`,
+  // `google-service-account`, `oauth`); only a key of that kind is approved
+  // for it.
+  keyKind?: string;
   status: BatchSlotStatus;
   snapshot: RequestSnapshot;
   fingerprint: string;
@@ -816,6 +820,7 @@ export interface BatchShare {
   label: string;
   keyId: string;
   keyName: string;
+  keyKind: string;
   covers: string[];
   interactive: boolean;
   dailyBudget: number;

@@ -2439,7 +2439,7 @@ module('Unit | operation lowering', function (hooks) {
     assert.strictEqual(badSlotKind.issues[0]?.path, 'keyKind.userKey');
   });
 
-  test('the kinds of key a slot takes follow from where it stands, unless declared', async function (assert) {
+  test('the kinds of key a slot takes are its declared one, or every kind that can work where it stands', async function (assert) {
     let kindsOf = async (request: Record<string, unknown>) => {
       let result = await lowerRequest(request);
       assert.deepEqual(codes(result), []);
@@ -2452,7 +2452,7 @@ module('Unit | operation lowering', function (hooks) {
         headers: { authorization: 'Bearer {{userKey}}' },
       }),
       [['static', 'oauth']],
-      'a bearer credential is a pasted key or a connected account',
+      'a pasted key or a connected account',
     );
     assert.deepEqual(
       await kindsOf({
@@ -2460,7 +2460,7 @@ module('Unit | operation lowering', function (hooks) {
         headers: { Authorization: ' token {{ userKey }} ' },
       }),
       [['static', 'oauth']],
-      'any scheme but Basic, written in any case and spacing',
+      'whatever the scheme',
     );
     assert.deepEqual(
       await kindsOf({
@@ -2472,11 +2472,19 @@ module('Unit | operation lowering', function (hooks) {
     );
     assert.deepEqual(
       await kindsOf({
-        url: 'https://maps.googleapis.com/maps/api/geocode/json',
-        query: { key: '{{userKey}}' },
+        url: 'https://example-db.firebaseio.com/items.json',
+        query: { access_token: '{{userKey}}' },
       }),
-      [['static']],
-      'a query value takes only a pasted key',
+      [['static', 'google-service-account', 'oauth']],
+      'and so does the Firebase Realtime Database',
+    );
+    assert.deepEqual(
+      await kindsOf({
+        url: 'https://api.weather.example/v1/current',
+        query: { appid: '{{userKey}}' },
+      }),
+      [['static', 'oauth']],
+      'a minted token fills a query value too',
     );
     assert.deepEqual(
       await kindsOf({
@@ -2487,16 +2495,8 @@ module('Unit | operation lowering', function (hooks) {
         },
         json: { token: '{{apiKey:body}}' },
       }),
-      [['static'], ['static'], ['static']],
-      'a Basic credential, another header and the body take only a pasted key',
-    );
-    assert.deepEqual(
-      await kindsOf({
-        url: 'https://api.example.com/items',
-        headers: { authorization: 'Bearer {{userKey}} extra' },
-      }),
-      [['static']],
-      'a credential that is only part of the header is a pasted key',
+      [['static'], ['static', 'oauth'], ['static', 'oauth']],
+      'a Basic credential is never a minted token, but another header or the body may be',
     );
     assert.deepEqual(
       await kindsOf({
