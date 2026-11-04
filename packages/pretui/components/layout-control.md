@@ -61,6 +61,8 @@ Only the chosen form is rendered. Alternatives are never hidden with CSS, so the
 
 An `icon` form must still do the job of the richer form. For a search slot that means `<SearchInput @display='collapsed' />`: the square opens the field over the row with focus in it, and Escape or leaving collapses it and returns focus. Hold the text in your own state (`@value` + `@onInput`), since changing form remounts the control and an uncontrolled field would lose it.
 
+Limit: the opened field is 15rem wide (`--pretui-search-open-w`) and lies over the row, but the row clips its overflow. When the bar is narrower than the field, or the slot sits within 15rem of the bar's inline end, the field is partly or wholly clipped.
+
 ## Prior art
 
 | System                                                 | What it does                                                                                           | Where we differ                                                                                                     |
