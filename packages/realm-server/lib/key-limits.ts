@@ -22,7 +22,9 @@ import {
   keyLimitDefaults,
   limitsOf,
   MAX_KEY_LIMIT,
+  limitsViewOf,
   type KeyLimits,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { SendEvent } from '@cardstack/runtime-common/send-event';
@@ -825,7 +827,7 @@ export async function setShareLimits(
     shareId: string;
     changes: KeyLimitChanges;
   },
-): Promise<KeyLimits> {
+): Promise<KeyLimitsView> {
   let noSuchShare = () => new UserKeyError(404, 'no such share');
   if (!UUID.test(shareId)) {
     throw noSuchShare();
@@ -840,7 +842,7 @@ export async function setShareLimits(
     ` RETURNING ${KEY_LIMIT_COLUMNS}`,
   ] as Parameters<typeof query>[1]);
   if (row) {
-    return limitsOf(row);
+    return limitsViewOf(row);
   }
   let [share] = await query(dbAdapter, [
     `SELECT realm_url FROM key_shares WHERE id = `,
@@ -871,7 +873,7 @@ export async function setUserKeyLimits(
     keyId: string;
     changes: KeyLimitChanges;
   },
-): Promise<KeyLimits> {
+): Promise<KeyLimitsView> {
   if (!UUID.test(keyId)) {
     throw new UserKeyError(404, 'no such key');
   }
@@ -887,5 +889,5 @@ export async function setUserKeyLimits(
   if (!row) {
     throw new UserKeyError(404, 'no such key');
   }
-  return limitsOf(row);
+  return limitsViewOf(row);
 }

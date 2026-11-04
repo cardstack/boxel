@@ -19,8 +19,8 @@ import { isUUID, namedToViewer } from './named-users.ts';
 export { isUUID };
 import {
   KEY_LIMIT_COLUMNS,
-  limitsOf,
-  type KeyLimits,
+  limitsViewOf,
+  type KeyLimitsView,
 } from './key-limit-settings.ts';
 import type { SecretsKeyring } from './secrets-at-rest/index.ts';
 import type { SecureSessionClient } from './secure-session.ts';
@@ -88,9 +88,10 @@ export interface KeyShare {
   createdAt: string;
   updatedAt: string;
   // How much of the key anyone may spend through the share, its owner's
-  // settings with the platform's defaults filled in. Seen only by the share's
-  // owner and the realm's direct writers, as every share is.
-  limits: KeyLimits;
+  // settings with the platform's defaults filled in, and which of them the
+  // owner set (see `KeyLimitsView`). Seen only by the share's owner and the
+  // realm's direct writers, as every share is.
+  limits: KeyLimitsView;
   // In a realm's listing: the operations the share is approved for there,
   // one per binding, so the realm's writers see what each share is used by.
   operations?: KeyShareOperation[];
@@ -147,7 +148,7 @@ function toShare(
     suspendedAt: iso(row.suspended_at),
     createdAt: iso(row.created_at)!,
     updatedAt: iso(row.updated_at)!,
-    limits: limitsOf(row),
+    limits: limitsViewOf(row),
   };
 }
 
