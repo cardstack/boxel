@@ -1,10 +1,10 @@
 import type Koa from 'koa';
 import {
-  getMatrixUsername,
   isBotAccount,
   logger,
   shareARealmGrant,
   SupportedMimeType,
+  userIdFromUsername,
 } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
@@ -37,9 +37,14 @@ export default function handleInviteCheck({
   matrixClient,
   matrixInviteCheckSecret,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  // This server's own account is named by its full id: the same localpart on
+  // another homeserver is someone else's account.
+  let ownUserId = userIdFromUsername(
+    matrixClient.username,
+    matrixClient.serverName,
+  );
   let isServiceUser = (userId: string) =>
-    isBotAccount(userId, matrixClient.serverName) ||
-    getMatrixUsername(userId) === matrixClient.username;
+    isBotAccount(userId, matrixClient.serverName) || userId === ownUserId;
 
   async function answer(ctxt: Koa.Context) {
     let inviter = ctxt.URL.searchParams.get('inviter');
