@@ -85,12 +85,18 @@ module('git objects', (hooks) => {
     let { id: sub } = await store.writeTree([
       { mode: BLOB_MODE, name: 'inner.json', id: blob },
     ]);
-    let { id: tree } = await store.writeTree([
+    // The last two names sort by their UTF-8 bytes: `（` (U+FF08, three
+    // bytes starting 0xEF) comes before `😀` (U+1F600, four bytes starting
+    // 0xF0), though as UTF-16 the emoji's surrogate pair sorts first.
+    let entries = [
       { mode: BLOB_MODE, name: 'b.json', id: blob },
       { mode: TREE_MODE, name: 'a', id: sub },
       { mode: BLOB_MODE, name: 'a.json', id: blob },
       { mode: BLOB_MODE, name: 'a-1', id: blob },
-    ]);
+      { mode: BLOB_MODE, name: '😀.json', id: blob },
+      { mode: BLOB_MODE, name: '（memo）.json', id: blob },
+    ];
+    let { id: tree } = await store.writeTree(entries);
     assert.strictEqual(
       await git(gitDir, 'ls-tree', tree),
       [
@@ -98,10 +104,25 @@ module('git objects', (hooks) => {
         `100644 blob ${blob}\ta.json`,
         `040000 tree ${sub}\ta`,
         `100644 blob ${blob}\tb.json`,
+        `100644 blob ${blob}\t（memo）.json`,
+        `100644 blob ${blob}\t😀.json`,
         '',
       ].join('\n'),
     );
     assert.strictEqual(await fsck(gitDir), '');
+    let { stdout: fromGit } = await execFileAsync(
+      'git',
+      [`--git-dir=${gitDir}`, 'mktree'],
+      {
+        input: entries
+          .map(
+            (entry) =>
+              `${entry.mode.padStart(6, '0')} ${entry.mode === TREE_MODE ? 'tree' : 'blob'} ${entry.id}\t${entry.name}\n`,
+          )
+          .join(''),
+      } as any,
+    );
+    assert.strictEqual(fromGit.trim(), tree, "the id is git's own");
   });
 
   test('a commit is read back with its tree, parents, identities and message', async (assert) => {
