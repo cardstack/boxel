@@ -5,7 +5,9 @@ import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import { click, render, settled, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { Sidebar } from './sidebar';
+import { Sidebar, SidebarGroup, SidebarItem } from './sidebar';
+
+const noop = () => {};
 
 function shells(): HTMLElement[] {
   return [...document.querySelectorAll('[data-test-pretui-sidebar]')] as HTMLElement[];
@@ -155,5 +157,48 @@ module('Pretui | components/sidebar', function (hooks) {
     await settled();
     assert.strictEqual(state(), 'expanded');
     assert.strictEqual(mobile(), 'false');
+  });
+
+  // The consumer here forgets @collapsed and @hideLabel: the rail still shows icons only.
+  test('the collapsed icon rail hides group labels, item labels and badges but keeps each item named', async function (assert) {
+    await render(<template>
+      <Sidebar @label='Library' @open={{false}}>
+        <:nav>
+          <SidebarGroup @label='Pages'>
+            <SidebarItem @label='Home' @badge='6' @href='#home'><:icon>H</:icon></SidebarItem>
+            <SidebarItem @label='About' @onClick={{noop}}><:icon>A</:icon></SidebarItem>
+          </SidebarGroup>
+        </:nav>
+      </Sidebar>
+    </template>);
+    let shown = (selector: string) => getComputedStyle(document.querySelector(selector) as Element).display !== 'none';
+    assert.notOk(shown('.pretui-sbgroup-label'), 'the group label is not shown');
+    assert.notOk(shown('.pretui-sbitem-label'), 'the item label is not shown');
+    assert.notOk(shown('.pretui-sbitem-badge'), 'the badge is not shown');
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-pretui-sidebar-item]')].map((el) => el.getAttribute('aria-label')),
+      ['Home', 'About'],
+      'each item keeps its accessible name',
+    );
+    assert.strictEqual(
+      document.querySelector('[data-test-pretui-sidebar-group]')?.getAttribute('aria-labelledby'),
+      document.querySelector('.pretui-sbgroup-label')?.id,
+      'the group stays named',
+    );
+  });
+
+  test('the expanded rail still shows labels and badges', async function (assert) {
+    await render(<template>
+      <Sidebar @label='Library'>
+        <:nav>
+          <SidebarGroup @label='Pages'>
+            <SidebarItem @label='Home' @badge='6' @href='#home'><:icon>H</:icon></SidebarItem>
+          </SidebarGroup>
+        </:nav>
+      </Sidebar>
+    </template>);
+    for (let selector of ['.pretui-sbgroup-label', '.pretui-sbitem-label', '.pretui-sbitem-badge']) {
+      assert.notStrictEqual(getComputedStyle(document.querySelector(selector) as Element).display, 'none', selector);
+    }
   });
 });

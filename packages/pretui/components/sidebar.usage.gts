@@ -107,11 +107,11 @@ export class SidebarUsage extends Component {
             </:header>
 
             <:nav as |bar|>
-              <SidebarGroup @label='Library' @hideLabel={{bar.collapsed}}>
+              <SidebarGroup @label='Library'>
                 {{#each this.library key='id' as |row|}}
                   <SidebarItem
                     @label={{row.label}}
-                    @badge={{unless bar.collapsed row.badge}}
+                    @badge={{row.badge}}
                     @active={{this.isActive row.id}}
                     @collapsed={{bar.collapsed}}
                     @onClick={{this.selectFor row.id}}
@@ -121,7 +121,7 @@ export class SidebarUsage extends Component {
                 {{/each}}
               </SidebarGroup>
 
-              <SidebarGroup @label='Origins' @hideLabel={{bar.collapsed}}>
+              <SidebarGroup @label='Origins'>
                 {{#each this.origins key='id' as |row|}}
                   <SidebarItem
                     @label={{row.label}}
@@ -177,6 +177,41 @@ export class SidebarUsage extends Component {
                   times</p>
               </div>
             </:default>
+          </Sidebar>
+        </div>
+      </:example>
+      <:example>
+        <p class='shell-note'>The icon rail, pinned collapsed: icons only. Item
+          names live on the tooltip and the accessible name, group labels
+          become hairlines and badges are dropped.</p>
+        <div class='shell-stage shell-stage-rail' data-test-sidebar-rail-example>
+          <Sidebar @label='Collapsed workspace' @open={{false}} @bordered={{true}}>
+            <:nav as |bar|>
+              <SidebarGroup @label='Library'>
+                {{#each this.library key='id' as |row|}}
+                  <SidebarItem
+                    @label={{row.label}}
+                    @badge={{row.badge}}
+                    @active={{this.isActive row.id}}
+                    @collapsed={{bar.collapsed}}
+                    @onClick={{this.selectFor row.id}}
+                  >
+                    <:icon><row.icon aria-hidden='true' /></:icon>
+                  </SidebarItem>
+                {{/each}}
+              </SidebarGroup>
+              <SidebarGroup @label='Origins'>
+                {{#each this.origins key='id' as |row|}}
+                  <SidebarItem
+                    @label={{row.label}}
+                    @collapsed={{bar.collapsed}}
+                    @onClick={{this.selectFor row.id}}
+                  >
+                    <:icon><row.icon aria-hidden='true' /></:icon>
+                  </SidebarItem>
+                {{/each}}
+              </SidebarGroup>
+            </:nav>
           </Sidebar>
         </div>
       </:example>
@@ -312,6 +347,15 @@ export class SidebarUsage extends Component {
           --pretui-shadow-hairline,
           0 0 0 1px var(--border)
         );
+      }
+      .shell-stage-rail {
+        resize: none;
+        inline-size: 14rem;
+      }
+      .shell-note {
+        margin: 0 0 var(--space-3, 8px);
+        font-size: var(--text-ui-sm, 11.5px);
+        color: var(--muted-foreground);
       }
       .shell-brand {
         display: flex;

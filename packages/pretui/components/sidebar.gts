@@ -674,6 +674,28 @@ export class Sidebar extends Component<SidebarSignature> {
         .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail'] {
           --pretui-sidebar-track: var(--pretui-sidebar-rail-width);
         }
+        /* The icon rail's look reaches SidebarGroup and SidebarItem through
+           inherited custom properties: their scoped rules cannot match this
+           component's ancestors, and a consumer that forgets @collapsed or
+           @hideLabel still gets icons only. */
+        .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail']:not(
+            [data-mobile='true']
+          ) {
+          --pretui-sbrail-text: none;
+          --pretui-sbrail-head-pad: 0;
+          --pretui-sbrail-divider: 1px solid var(--border);
+          --pretui-sbrail-item-justify: center;
+          --pretui-sbrail-item-pad: 0;
+          --pretui-sbrail-item-size: var(--control-h, 28px);
+          --pretui-sbrail-item-margin: auto;
+        }
+        @media (any-pointer: coarse) {
+          .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='rail']:not(
+              [data-mobile='true']
+            ) {
+            --pretui-sbrail-item-size: 44px;
+          }
+        }
         .pretui-sidebar-shell[data-state='collapsed'][data-collapsible='offcanvas'] {
           --pretui-sidebar-track: 0px;
         }
@@ -972,10 +994,16 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           align-items: center;
           justify-content: space-between;
           gap: var(--space-2, 6px);
-          padding: var(--space-2, 6px) var(--space-2, 6px) 2px;
+          padding: var(--pretui-sbrail-head-pad, var(--space-2, 6px) var(--space-2, 6px) 2px);
           min-inline-size: 0;
+          /* the icon rail swaps the label for a hairline between groups */
+          border-block-start: var(--pretui-sbrail-divider, 0 solid transparent);
+        }
+        .pretui-sbgroup:first-child > .pretui-sbgroup-head {
+          border-block-start: 0;
         }
         .pretui-sbgroup-label {
+          display: var(--pretui-sbrail-text, block);
           font-family: var(--font-mono);
           font-size: var(--text-ui-xs, 11px);
           font-weight: 500;
@@ -999,6 +1027,7 @@ export class SidebarGroup extends Component<SidebarGroupSignature> {
           white-space: nowrap;
         }
         .pretui-sbgroup-action {
+          display: var(--pretui-sbrail-text, block);
           flex: none;
         }
         .pretui-sbgroup-body {
@@ -1106,6 +1135,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
       <a
         class='pretui-sbitem'
         href={{@href}}
+        aria-label={{@label}}
         aria-current={{this.current}}
         data-active={{if @active 'true' 'false'}}
         data-collapsed='false'
@@ -1122,6 +1152,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
       <button
         type='button'
         class='pretui-sbitem'
+        aria-label={{@label}}
         aria-current={{this.current}}
         aria-disabled={{if @disabled 'true'}}
         data-active={{if @active 'true' 'false'}}
@@ -1153,10 +1184,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           display: flex;
           align-items: center;
           gap: 0.6em;
-          inline-size: 100%;
+          inline-size: var(--pretui-sbrail-item-size, 100%);
+          margin-inline: var(--pretui-sbrail-item-margin, 0);
           min-inline-size: 0;
           min-block-size: var(--control-h, 28px);
-          padding: 0 0.6em;
+          justify-content: var(--pretui-sbrail-item-justify, flex-start);
+          padding: 0 var(--pretui-sbrail-item-pad, 0.6em);
           border: 0;
           border-radius: var(--radius-chip, 6px);
           background: none;
@@ -1170,9 +1203,12 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           transition: background var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
+        /* Icon rail: a square around the icon, centred in the rail. */
         .pretui-sbitem[data-collapsed='true'] {
           justify-content: center;
           padding: 0;
+          inline-size: var(--control-h, 28px);
+          margin-inline: auto;
         }
         .pretui-sbitem:hover {
           background: var(--hover, var(--boxel-100));
@@ -1205,6 +1241,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           block-size: 1.15em;
         }
         .pretui-sbitem-label {
+          display: var(--pretui-sbrail-text, inline);
           flex: 1 1 auto;
           min-inline-size: 0;
           overflow: hidden;
@@ -1212,6 +1249,7 @@ export class SidebarItem extends Component<SidebarItemSignature> {
           white-space: nowrap;
         }
         .pretui-sbitem-badge {
+          display: var(--pretui-sbrail-text, inline);
           flex: none;
           font-variant-numeric: tabular-nums;
           font-size: 0.9em;
@@ -1222,6 +1260,9 @@ export class SidebarItem extends Component<SidebarItemSignature> {
         @media (any-pointer: coarse) {
           .pretui-sbitem {
             min-block-size: 44px;
+          }
+          .pretui-sbitem[data-collapsed='true'] {
+            inline-size: 44px;
           }
         }
         @media (prefers-reduced-motion: reduce) {
