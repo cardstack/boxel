@@ -272,6 +272,13 @@
       "peakMb": 439,
       "highestShardMb": 675,
       "shards": 16
+    },
+    {
+      "run": 41811155683,
+      "at": "2026-11-04T09:59:11Z",
+      "peakMb": 414,
+      "highestShardMb": 685,
+      "shards": 16
     }
   ]
 }
