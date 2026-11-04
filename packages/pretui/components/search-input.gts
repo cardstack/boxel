@@ -11,6 +11,7 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { TYPED_BLOCK_RULES } from '../internal/extras';
 import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
+import { Popup } from '../components/popup';
 import { FieldDress } from '../internal/field-dress';
 
 // A BoxelInput in Input's field style with the kit's own magnifier, plus the
@@ -131,9 +132,7 @@ export class SearchInput extends Component<SearchInputSignature> {
     this.open = false;
     // the button renders in the same frame the field leaves
     requestAnimationFrame(() => {
-      root
-        ?.querySelector<HTMLElement>('[data-pretui-search-toggle]')
-        ?.focus();
+      root?.querySelector<HTMLElement>('[data-pretui-search-toggle]')?.focus();
     });
   };
   private closeOnLeave = (event: FocusEvent) => {
@@ -192,35 +191,48 @@ export class SearchInput extends Component<SearchInputSignature> {
         data-test-pretui-search-input
         ...attributes
       >
-        {{#if this.open}}
-          <SearchField
-            class='pretui-searchcollapse-field'
-            @value={{this.current}}
-            @placeholder={{@placeholder}}
-            @disabled={{this.disabled}}
-            @onInput={{this.handleInput}}
-            @controlId={{@controlId}}
-            @showClear={{this.showClear}}
-            @onClear={{this.clear}}
-            {{this.focusOnOpen}}
-          />
-        {{else}}
-          {{! a raw button, not Button: the square is the field's own face
-              (--field, --input), which Button's variants don't draw }}
-          <button
-            type='button'
-            class='pretui-searchtoggle'
-            id={{@controlId}}
-            aria-label={{unless @controlId this.collapsedName}}
-            title={{this.collapsedName}}
-            disabled={{this.disabled}}
-            data-pretui-search-toggle
-            {{on 'click' this.expand}}
-            data-test-pretui-search-toggle
-          >
-            <SearchIcon width='14' height='14' aria-hidden='true' />
-          </button>
-        {{/if}}
+        {{! the open field is a Popup panel (position: fixed), so the clip of
+            an enclosing LayoutControl can't cut it or its clear button; the
+            anchor keeps the square's size while the toggle is swapped out }}
+        <Popup
+          class='pretui-searchcollapse-anchor'
+          @open={{this.open}}
+          @placement='bottom-start'
+          @distance={{0}}
+        >
+          <:anchor>
+            {{#unless this.open}}
+              {{! a raw button, not Button: the square is the field's own face
+                  (--field, --input), which Button's variants don't draw }}
+              <button
+                type='button'
+                class='pretui-searchtoggle'
+                id={{@controlId}}
+                aria-label={{unless @controlId this.collapsedName}}
+                title={{this.collapsedName}}
+                disabled={{this.disabled}}
+                data-pretui-search-toggle
+                {{on 'click' this.expand}}
+                data-test-pretui-search-toggle
+              >
+                <SearchIcon width='14' height='14' aria-hidden='true' />
+              </button>
+            {{/unless}}
+          </:anchor>
+          <:default>
+            <SearchField
+              class='pretui-searchcollapse-field'
+              @value={{this.current}}
+              @placeholder={{@placeholder}}
+              @disabled={{this.disabled}}
+              @onInput={{this.handleInput}}
+              @controlId={{@controlId}}
+              @showClear={{this.showClear}}
+              @onClear={{this.clear}}
+              {{this.focusOnOpen}}
+            />
+          </:default>
+        </Popup>
       </div>
     {{else}}
       <SearchField
@@ -268,9 +280,12 @@ export class SearchInput extends Component<SearchInputSignature> {
           --host-outline-offset: -2px;
         }
         /* @display 'collapsed': a square the height of the field; the open
-           field lies over the row from the square's start */
+           field lies over the square from its start, in the top layer */
         .pretui-searchcollapse {
-          --_search-h: var(--pretui-field-h, var(--boxel-form-control-height-sm));
+          --_search-h: var(
+            --pretui-field-h,
+            var(--boxel-form-control-height-sm)
+          );
           position: relative;
           inline-size: var(--_search-h);
           block-size: var(--_search-h);
@@ -302,11 +317,15 @@ export class SearchInput extends Component<SearchInputSignature> {
           opacity: var(--boxel-disabled-opacity);
           cursor: default;
         }
+        .pretui-searchcollapse-anchor {
+          display: block;
+          inline-size: 100%;
+          block-size: 100%;
+        }
+        /* the panel is placed below the square; the negative margin lifts the
+           field back over it */
         .pretui-searchcollapse-field {
-          position: absolute;
-          inset-block-start: 0;
-          inset-inline-start: 0;
-          z-index: var(--pretui-z-raised, 1);
+          margin-block-start: calc(-1 * var(--_search-h));
           inline-size: var(--pretui-search-open-w, 15rem);
         }
         .pretui-searchclear:hover {
