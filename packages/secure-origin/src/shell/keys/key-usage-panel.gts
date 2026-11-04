@@ -11,6 +11,8 @@ import { trackedObject } from '@ember/reactive/collections';
 
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
+import DisclosureToggle from '../../components/disclosure-toggle.gts';
+import { not } from '../../helpers/truth-helpers.ts';
 import {
   keyUsage,
   setKeyLimits,
@@ -49,17 +51,14 @@ export default class KeyUsagePanel extends Component<Signature> {
       data-usage-panel={{@key.id}}
       data-test-key-usage-panel
     >
-      {{! A disclosure, drawn as the usage's own "Details this month" is: a
-          marker that turns as it opens, with the same name either way. }}
-      <button
-        type='button'
+      <DisclosureToggle
         class='toggle'
-        aria-expanded={{if this.isClosed 'false' 'true'}}
+        @expanded={{not this.isClosed}}
         aria-describedby='key-name-{{@key.id}}'
         data-usage-panel-toggle
         data-test-key-usage-toggle
         {{on 'click' this.toggle}}
-      >Usage and limits</button>
+      >Usage and limits</DisclosureToggle>
       {{#if this.loading}}
         <BusyMessage @title='Loading usage…' />
       {{else if this.failed}}
@@ -93,34 +92,8 @@ export default class KeyUsagePanel extends Component<Signature> {
       }
       .toggle {
         justify-self: start;
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        padding: 0;
-        border: none;
-        background: none;
-        color: inherit;
-        font: inherit;
         font-size: var(--boxel-font-size-xs);
         font-weight: 600;
-        cursor: pointer;
-      }
-      .toggle::before {
-        content: '';
-        width: 0;
-        height: 0;
-        border-top: 0.3em solid transparent;
-        border-bottom: 0.3em solid transparent;
-        border-left: 0.45em solid currentColor;
-        transition: transform 0.15s ease;
-      }
-      .toggle[aria-expanded='true']::before {
-        transform: rotate(90deg);
-      }
-      .toggle:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
-        border-radius: var(--boxel-border-radius-xs, 2px);
       }
       .panel-body {
         display: grid;

@@ -107,6 +107,8 @@ const KeyTile: TemplateOnlyComponent<Signature> = <template>
     }
     .key-extra {
       grid-column: 1 / -1;
+      display: grid;
+      gap: var(--boxel-sp-xs);
     }
     .key-name {
       font-size: var(--boxel-font-size-sm);
