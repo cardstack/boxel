@@ -286,7 +286,7 @@ export async function basicMappings(loader: Loader) {
             by: {
               type: 'string',
               description:
-                "Field path to sort by (e.g., 'author.name', with 'on' naming the card type it belongs to), or a general sort key that needs no 'on': 'lastModified', 'createdAt', 'cardURL', or '_matchRelevance'. '_matchRelevance' ranks by full-text relevance, defaults to 'desc' (best match first), and requires a 'matches' term in the filter.",
+                "Field path to sort by (e.g., 'author.name', with 'on' naming the card type it belongs to), or a general sort key that needs no 'on': 'lastModified', 'createdAt', 'cardURL', '_matchRelevance' or '_blend'. '_matchRelevance' ranks by full-text relevance, defaults to 'desc' (best match first), and requires a 'matches' term in the filter. '_blend' fuses several signals listed in 'of' (reciprocal rank fusion), e.g. text relevance plus vector similarity plus recency plus an engagement count; results carry meta._blendScore.",
             },
             on: {
               type: 'object',
@@ -302,6 +302,22 @@ export async function basicMappings(loader: Loader) {
               enum: ['asc', 'desc'],
               description:
                 "Sort direction: 'asc' for ascending, 'desc' for descending.",
+            },
+            of: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {},
+                description:
+                  "A sort entry (by, on, direction, near) plus an optional positive 'weight' (default 1).",
+              },
+              description:
+                "With by '_blend': the signals to fuse, up to 8. Each ranks best first (highest value first unless direction is 'asc'); a card with no value for a signal gets nothing from it. Example: [{ by: '_matchRelevance' }, { by: 'embedding', on: <CodeRef>, near: [ … ], weight: 2 }, { by: 'createdAt' }, { by: 'views', on: <CodeRef>, weight: 0.5 }].",
+            },
+            k: {
+              type: 'number',
+              description:
+                "With by '_blend': the rank-fusion constant (default 60). Smaller values favour the top ranks of each signal.",
             },
             near: {
               type: 'array',

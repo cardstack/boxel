@@ -13,7 +13,9 @@ import {
   generalSortFields,
   isMatchRelevanceSort,
   isNearSort,
+  isBlendSort,
   MATCH_RELEVANCE_SORT_KEY,
+  BLEND_SORT_KEY,
 } from './index.ts';
 import {
   isVector,
@@ -106,11 +108,38 @@ type SortExpressionWithCodeRef = {
   by: string;
   on: CodeRef;
   direction?: 'asc' | 'desc';
-  // Ranks by cosine distance between the VectorField at `by` and this
-  // target, nearest first (`direction` defaults to `asc`). Cards with no
-  // vector at `by` sort last. See `NearSortTarget`.
+  // Ranks by cosine similarity between the VectorField at `by` and this
+  // target, most similar first (`direction` defaults to `desc`). Cards with
+  // no vector at `by` sort last. See `NearSortTarget`.
   near?: NearSortTarget;
 };
+
+// One signal inside a `_blend` sort: any other sort entry (text relevance, a
+// near sort, a general field such as `createdAt`, or a card field such as an
+// engagement count) plus an optional `weight` (default 1). Inside a blend
+// each signal ranks best first: highest value first unless `direction` is
+// `asc`.
+export type BlendComponent = (
+  | SortExpressionWithoutCodeRef
+  | SortExpressionWithCodeRef
+) & { weight?: number };
+
+// Reciprocal rank fusion of several signals: each card scores
+// sum(weight / (k + rank)) over the signals it has a value for, ranked over
+// every card the filter admits. Most-fused first (`direction` defaults to
+// `desc`). Each result carries the score in `meta._blendScore`.
+export type BlendSortExpression = {
+  by: typeof BLEND_SORT_KEY;
+  of: BlendComponent[];
+  method?: 'rrf';
+  k?: number;
+  direction?: 'asc' | 'desc';
+};
+
+// The most signals one blend takes; each is a ranking pass over the
+// filtered set.
+export const MAX_BLEND_COMPONENTS = 8;
+export const DEFAULT_RRF_K = 60;
 
 // A `near` sort's target: plain numbers, or a vector in its stored form (as
 // a VectorField serializes it). Its dimension must match the field's.
@@ -126,9 +155,16 @@ type SortExpressionWithCodeRefWithInterpolations = {
   on?: CodeRef;
   direction?: string;
   near?: NearSortTarget | string;
+  weight?: number;
+  of?: SortExpressionWithCodeRefWithInterpolations[];
+  method?: string;
+  k?: number;
 };
 
-type SortExpression = SortExpressionWithoutCodeRef | SortExpressionWithCodeRef;
+type SortExpression =
+  | SortExpressionWithoutCodeRef
+  | SortExpressionWithCodeRef
+  | BlendSortExpression;
 type SortExpressionWithInterpolations =
   | SortExpressionWithoutCodeRefWithInterpolations
   | SortExpressionWithCodeRefWithInterpolations;
@@ -367,7 +403,11 @@ export function assertQuery(
   // re-checks as a backstop for callers that bypass `assertQuery`.
   if (
     Array.isArray(query.sort) &&
-    query.sort.some(isMatchRelevanceSort) &&
+    query.sort.some(
+      (s: any) =>
+        isMatchRelevanceSort(s) ||
+        (isBlendSort(s) && s.of.some(isMatchRelevanceSort)),
+    ) &&
     collectPositiveMatchTerms(query.filter).length === 0
   ) {
     throw new InvalidQueryError(
@@ -471,6 +511,11 @@ function assertSortExpression(
     return;
   }
 
+  if (isBlendSort(sort)) {
+    assertBlendSort(sort, pointer);
+    return;
+  }
+
   // A relevance sort needs no `on` and ignores one, though a present `on`
   // must still be a well-formed ref.
   if (isMatchRelevanceSort(sort)) {
@@ -488,6 +533,58 @@ function assertSortExpression(
     );
   }
   assertCardType(sort.on, pointer.concat('on'));
+}
+
+function assertBlendSort(sort: any, pointer: string[]) {
+  let where = pointer.join('/') || '/';
+  if (!Array.isArray(sort.of) || sort.of.length === 0) {
+    throw new InvalidQueryError(
+      `${where}/of: a ${BLEND_SORT_KEY} sort needs an "of" array of the sort entries to fuse`,
+    );
+  }
+  if (sort.of.length > MAX_BLEND_COMPONENTS) {
+    throw new InvalidQueryError(
+      `${where}/of: a ${BLEND_SORT_KEY} sort fuses at most ${MAX_BLEND_COMPONENTS} signals`,
+    );
+  }
+  if ('method' in sort && sort.method !== 'rrf') {
+    throw new InvalidQueryError(
+      `${where}/method: ${BLEND_SORT_KEY} supports method "rrf" (reciprocal rank fusion)`,
+    );
+  }
+  if (
+    'k' in sort &&
+    !(typeof sort.k === 'number' && Number.isFinite(sort.k) && sort.k > 0)
+  ) {
+    throw new InvalidQueryError(`${where}/k: k must be a positive number`);
+  }
+  if ('on' in sort) {
+    throw new InvalidQueryError(
+      `${where}: a ${BLEND_SORT_KEY} sort takes no "on"; put "on" on its signals`,
+    );
+  }
+  sort.of.forEach((component: any, i: number) => {
+    let at = pointer.concat('of', String(i));
+    if (component && isBlendSort(component)) {
+      throw new InvalidQueryError(
+        `${at.join('/')}: a ${BLEND_SORT_KEY} sort cannot contain another`,
+      );
+    }
+    if (
+      component &&
+      'weight' in component &&
+      !(
+        typeof component.weight === 'number' &&
+        Number.isFinite(component.weight) &&
+        component.weight > 0
+      )
+    ) {
+      throw new InvalidQueryError(
+        `${at.join('/')}/weight: weight must be a positive number`,
+      );
+    }
+    assertSortExpression(component, at);
+  });
 }
 
 function assertNearTarget(near: any, pointer: string[]) {
