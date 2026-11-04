@@ -1,10 +1,17 @@
 import { param, query, type DBAdapter } from '@cardstack/runtime-common';
+import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import {
   destinationCovers,
   type CallApiReadinessLookup,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
-import { bindingInstance, checkSlots, type SlotCheck } from './key-bindings.ts';
+import {
+  bindingInstance,
+  checkSlots,
+  limitSubjectOf,
+  type SlotCheck,
+} from './key-bindings.ts';
+import { limitReadiness } from './key-limits.ts';
 import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 
 // Readiness: what a card can learn before it invokes a `callApi`, so it can
@@ -25,10 +32,25 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // service-account key Google refused, reads as `credential-rejected` whether
 // or not its probe is due: what brings it back is its owner replacing it.
 //
+// Slots that would be filled are then asked about the limits of the share or
+// key filling them, without counting anything: `over-budget` when a budget is
+// used up, `rate-limited` when the caller's bucket is empty.
+//
+// A caller who isn't signed in is asked about only where every slot takes a
+// shared key and the realm admitted them from an address: a share whose key
+// doesn't allow anonymous use answers `needs-sign-in`, and so does anything
+// with a `{{userKey}}` slot. Their limits are their address's bucket and the
+// key's anonymous cap.
+//
 // A reader is told only an answer from the `KeyReadiness` list. A share's
 // owner, its name and its limits never appear in one, and every way a share
 // slot falls short reads the same, `needs-admin`, to anyone but the owner of
-// the share's key, who is told what they could fix themselves. The one
+// the share's key, who is told what they could fix themselves. A caller with
+// an active share of their own in the realm is told `needs-approval` for a
+// share slot with no binding at all: the approve page offers them their
+// shares for it, and approving one fills it. A slot whose binding names
+// someone else's share, or a suspended one, is never offered there, so it
+// stays `needs-admin` to them. The one
 // exception is a key the vendor rejected, at a grant or as a whole, which the
 // call itself refuses `credential-rejected` to everyone.
 //
@@ -64,16 +86,22 @@ export async function keyReadiness(
     probeIntervalMs = DEFAULT_PROBE_INTERVAL_MS,
   }: { probeIntervalMs?: number } = {},
 ): Promise<KeyReadiness | undefined> {
-  let { request, caller } = lookup;
+  let { request } = lookup;
   if (request.slots.length === 0) {
     return 'ready';
   }
-  // A call that sends a credential and authenticated nobody is refused before
-  // any binding is looked at, so signing in is what fixes it whatever the
-  // slot is.
-  if (!caller) {
+  // A caller who isn't signed in is served only by shares whose keys allow
+  // anonymous use, and only where the realm admitted them from an address it
+  // can count. Otherwise the call is refused before any binding is looked at,
+  // so signing in is what fixes it, whatever the slot is.
+  let anonymous = lookup.caller ? undefined : lookup.anonymous;
+  if (
+    !lookup.caller &&
+    (!anonymous || request.slots.some(({ key }) => key === 'userKey'))
+  ) {
     return 'needs-sign-in';
   }
+  let caller = lookup.caller ?? ANONYMOUS_ACTOR;
   let instance = bindingInstance(request, lookup.instance);
   if (instance === undefined) {
     return undefined;
@@ -87,12 +115,30 @@ export async function keyReadiness(
   let covering: Promise<boolean> | undefined;
   let callerCovers = () =>
     (covering ??= callerHasCoveringGrant(dbAdapter, lookup, caller));
+  // Read once, and only where an `{{apiKey}}` slot has no binding.
+  let sharing: Promise<boolean> | undefined;
+  let callerShares = () =>
+    (sharing ??= lookup.caller
+      ? callerHasActiveShare(dbAdapter, lookup.realmURL, lookup.caller)
+      : Promise.resolve(false));
   let answers: KeyReadiness[] = [];
   for (let check of checks) {
     answers.push(
       check.slot.key === 'userKey'
         ? await userKeyReadiness(check, callerCovers)
-        : shareReadiness(check, caller),
+        : await shareReadiness(check, caller, callerShares),
+    );
+  }
+  let filled = checks.filter(
+    (check) => check.refused === undefined && !keyRejected(check),
+  );
+  if (filled.length > 0) {
+    answers.push(
+      await limitReadiness(dbAdapter, {
+        caller,
+        ...(anonymous ? { anonymous } : {}),
+        subjects: filled.map((check) => limitSubjectOf(check.binding!)),
+      }),
     );
   }
   return answers.reduce<KeyReadiness>(
@@ -123,6 +169,8 @@ async function userKeyReadiness(
       return 'needs-reapproval';
     case 'interactive-use-not-approved':
       return 'needs-approval';
+    case 'anonymous-use-not-approved':
+      return 'needs-sign-in';
     case 'credential-rejected':
     case 'key-rejected':
       return 'credential-rejected';
@@ -150,10 +198,35 @@ async function callerHasCoveringGrant(
   );
 }
 
+// Whether the caller has an active share in the realm: the shares the approve
+// page offers for an `{{apiKey}}` slot, whatever their keys' grants cover,
+// since approving one writes the grant it lacks.
+async function callerHasActiveShare(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  caller: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM key_shares WHERE realm_url = `,
+    param(realmURL),
+    ` AND owner = `,
+    param(caller),
+    ` AND state = 'active' LIMIT 1`,
+  ]);
+  return rows.length > 0;
+}
+
 // An `{{apiKey}}` slot is filled from the realm's share, for every caller. Only
-// the owner of the share's key can approve it, so anyone else is told an
-// administrator needs to set it up, however it falls short.
-function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
+// the owner of the share's key can approve it, and only someone with a share
+// of their own in the realm can approve one for a slot with no binding, so
+// anyone else is told an administrator needs to set it up, however it falls
+// short. A suspended share is resumed or swapped, not approved again, so it
+// needs an administrator whoever asks.
+async function shareReadiness(
+  check: SlotCheck,
+  caller: string,
+  callerShares: () => Promise<boolean>,
+): Promise<KeyReadiness> {
   if (check.refused === undefined) {
     return keyRejected(check) ? 'credential-rejected' : 'ready';
   }
@@ -163,13 +236,24 @@ function shareReadiness(check: SlotCheck, caller: string): KeyReadiness {
       return theirs ? 'needs-reapproval' : 'needs-admin';
     case 'interactive-use-not-approved':
       return theirs ? 'needs-approval' : 'needs-admin';
+    // Only people who aren't signed in reach this, and signing in is what
+    // serves them.
+    case 'anonymous-use-not-approved':
+      return 'needs-sign-in';
     case 'credential-rejected':
     case 'key-rejected':
       // Every caller is refused `credential-rejected` at the call, so telling
       // them here gives away nothing more about the share.
       return 'credential-rejected';
     case 'share-suspended':
-    case 'binding-not-approved':
       return 'needs-admin';
+    case 'binding-not-approved':
+      // A binding whose grant is gone is its share owner's to approve again.
+      // With no binding, the approve page offers the caller their own shares
+      // in the realm, if they have any.
+      if (check.binding) {
+        return theirs ? 'needs-approval' : 'needs-admin';
+      }
+      return (await callerShares()) ? 'needs-approval' : 'needs-admin';
   }
 }

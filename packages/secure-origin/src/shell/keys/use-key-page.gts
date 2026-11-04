@@ -5,6 +5,11 @@
 // then goes on to the approve page for that card and workspace with this key
 // chosen. That page approves exactly as one opened by the card would, and
 // comes back to the key page when done.
+//
+// Opened for one of the key's shares (`#realm=<realm>&share=<share id>`), it
+// sets that share up instead: the workspace is the share's, the cards are
+// those that send the workspace's key, and the approve page starts with the
+// share chosen.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -14,6 +19,7 @@ import {
   listKeys,
   readableRealms,
   realmCardsWithRequests,
+  type SharedWorkspace,
 } from '../../security/keys.ts';
 import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
@@ -21,6 +27,7 @@ import FieldContainer from '../../components/field-container.gts';
 import KeyRound from '../../components/icons/key-round.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
 import RectangleEllipsis from '../../components/icons/rectangle-ellipsis.gts';
+import RadioTile from '../../components/radio-tile.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -37,7 +44,8 @@ import EditPage from './edit-page.gts';
 import KeyTile from './key-tile.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
-import WorkspaceDropdown from './workspace-dropdown.gts';
+import { openedFor } from './opened-for.ts';
+import WorkspaceDropdown, { addressOf } from './workspace-dropdown.gts';
 
 interface Card {
   module: string;
@@ -45,10 +53,18 @@ interface Card {
   displayName: string;
 }
 
+// The share the page sets up, when it is opened for one, with the workspace
+// it is in.
+interface ForShare {
+  id: string;
+  label: string;
+  workspace: SharedWorkspace;
+}
+
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; failure: LoadFailure }
-  | { name: 'choosing'; key: UserKey };
+  | { name: 'choosing'; key: UserKey; share: ForShare | undefined };
 
 class UseKey extends Component<{
   Args: { api: KeysWindowAPI; keyId: string };
@@ -64,27 +80,63 @@ class UseKey extends Component<{
       />
     {{else if this.choosing}}
       <form novalidate {{on 'submit' this.next}} data-test-use-key-form>
-        <EditPage @heading='Use a key with a card' data-test-use-key>
-          <:intro>Choose a workspace and a card there. Next you’ll see every
-            request the card makes with your key, and approve them once.</:intro>
+        <EditPage
+          @heading={{if
+            this.choosing.share
+            'Use a shared key with a card'
+            'Use a key with a card'
+          }}
+          data-test-use-key
+        >
+          <:intro>
+            {{#if this.choosing.share}}
+              Choose a card in this workspace. Next you’ll see every call the
+              card makes with the key you shared as
+              <strong>“{{this.choosing.share.label}}”</strong>, and approve them
+              once.
+            {{else}}
+              Choose a workspace and a card there. Next you’ll see every call
+              the card makes with your key, and approve them once.
+            {{/if}}
+          </:intro>
           <:default>
             <FieldContainer @tag='div' @label='Key' @icon={{KeyRound}}>
               <KeyTile @key={{this.choosing.key}} />
             </FieldContainer>
-            <FieldContainer
-              @tag='div'
-              @label='Workspace'
-              @icon={{LayoutGrid}}
-              data-test-use-key-realm
-              as |labelId|
-            >
-              <WorkspaceDropdown
-                @workspaces={{this.form.realms}}
-                @selected={{this.form.realm}}
-                @onSelect={{this.selectRealm}}
-                @labelId={{labelId}}
-              />
-            </FieldContainer>
+            {{#if this.choosing.share}}
+              <FieldContainer
+                @tag='div'
+                @label='Workspace'
+                @icon={{LayoutGrid}}
+                data-test-use-key-share-realm
+              >
+                <p class='workspace'>
+                  {{#if this.choosing.share.workspace.name}}
+                    <span
+                      class='workspace-name'
+                    >{{this.choosing.share.workspace.name}}</span>
+                  {{/if}}
+                  <span class='address'>{{addressOf
+                      this.choosing.share.workspace.url
+                    }}</span>
+                </p>
+              </FieldContainer>
+            {{else}}
+              <FieldContainer
+                @tag='div'
+                @label='Workspace'
+                @icon={{LayoutGrid}}
+                data-test-use-key-realm
+                as |labelId|
+              >
+                <WorkspaceDropdown
+                  @workspaces={{this.form.realms}}
+                  @selected={{this.form.realm}}
+                  @onSelect={{this.selectRealm}}
+                  @labelId={{labelId}}
+                />
+              </FieldContainer>
+            {{/if}}
             {{#if this.form.realm}}
               <FieldContainer
                 @tag='div'
@@ -98,18 +150,24 @@ class UseKey extends Component<{
                   <fieldset class='cards'>
                     <legend class='visually-hidden'>Card</legend>
                     {{#each this.form.cards as |card|}}
-                      <label class='card' data-test-use-key-card={{card.name}}>
-                        <input
-                          type='radio'
-                          name='card'
-                          checked={{eq this.form.card card}}
-                          {{on 'change' (this.selectCard card)}}
-                        />
+                      <RadioTile
+                        @name='card'
+                        @checked={{eq this.form.card card}}
+                        @onChange={{this.selectCard card}}
+                        data-test-use-key-card={{card.name}}
+                      >
                         <span class='card-name'>{{card.displayName}}</span>
-                      </label>
+                      </RadioTile>
                     {{else}}
-                      <p class='empty' data-test-use-key-no-cards>No card in
-                        this workspace sends a key of yours in a request.</p>
+                      <p class='empty' data-test-use-key-no-cards>
+                        {{#if this.choosing.share}}
+                          No card in this workspace sends the workspace’s key in
+                          a request.
+                        {{else}}
+                          No card in this workspace sends a key of yours in a
+                          request.
+                        {{/if}}
+                      </p>
                     {{/each}}
                   </fieldset>
                 {{/if}}
@@ -164,31 +222,21 @@ class UseKey extends Component<{
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .card {
-        position: relative;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        align-items: baseline;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 0 0 1px var(--border);
-        cursor: pointer;
-      }
-      .card input {
-        position: absolute;
-        opacity: 0;
-        width: 1px;
-        height: 1px;
+      .workspace {
+        display: grid;
         margin: 0;
+        overflow-wrap: anywhere;
       }
-      .card:has(input:focus-visible) {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-        outline-offset: 2px;
+      .workspace-name {
+        font-weight: 600;
       }
-      .card:has(input:checked) {
-        box-shadow: 0 0 0 2px var(--primary, var(--boxel-highlight));
+      .address {
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-sm);
       }
       .card-name {
+        display: block;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         font-weight: 600;
         overflow-wrap: anywhere;
       }
@@ -237,6 +285,8 @@ class UseKey extends Component<{
     return !this.form.realm || !this.form.card;
   }
 
+  private opened = openedFor();
+
   private load = async () => {
     this.page.state = { name: 'loading' };
     let { config } = this.args.api;
@@ -252,10 +302,13 @@ class UseKey extends Component<{
           'This key isn’t one of yours. It may have been deleted.',
         );
       }
+      let share = this.shareOf(key.sharedInto);
       this.form.realms = realms;
-      this.page.state = { name: 'choosing', key };
+      this.page.state = { name: 'choosing', key, share };
       this.args.api.visit.loaded();
-      if (realms.length === 1) {
+      if (share) {
+        this.selectRealm(share.workspace.url);
+      } else if (realms.length === 1) {
         this.selectRealm(realms[0]!.url);
       }
     } catch (e) {
@@ -268,6 +321,31 @@ class UseKey extends Component<{
     }
   };
 
+  // The share the page was opened for, among the key's own. A link naming
+  // one the key doesn't have, or one that's suspended, says so rather than
+  // setting up the key itself.
+  private shareOf(sharedInto: SharedWorkspace[]): ForShare | undefined {
+    let { realm, share: shareId } = this.opened;
+    if (!shareId) {
+      return undefined;
+    }
+    let workspace = sharedInto.find((w) => w.url === realm);
+    let share = workspace?.shares.find((s) => s.id === shareId);
+    if (!workspace || !share) {
+      throw new LinkError(
+        'the shared key this page names isn’t one of this key’s shares',
+        'This key isn’t shared there. The share may have been removed.',
+      );
+    }
+    if (share.state !== 'active') {
+      throw new LinkError(
+        'the shared key this page names is suspended',
+        'This shared key is suspended, so no card can use it.',
+      );
+    }
+    return { id: share.id, label: share.label, workspace };
+  }
+
   private selectRealm = async (url: string) => {
     this.form.realm = url;
     this.form.card = undefined;
@@ -275,7 +353,11 @@ class UseKey extends Component<{
     this.form.error = undefined;
     this.form.loadingCards = true;
     try {
-      let cards = await realmCardsWithRequests(this.args.api.config, url);
+      let cards = await realmCardsWithRequests(
+        this.args.api.config,
+        url,
+        this.choosing?.share ? 'apiKey' : 'userKey',
+      );
       if (this.form.realm === url) {
         this.form.cards = cards;
         if (cards.length === 1) {
@@ -312,11 +394,12 @@ class UseKey extends Component<{
     if (!realm || !card) {
       return;
     }
+    let share = this.choosing?.share;
     let fragment = new URLSearchParams({
       module: card.module,
       name: card.name,
       realm,
-      key: this.args.keyId,
+      ...(share ? { share: share.id } : { key: this.args.keyId }),
       then: 'keys',
     });
     navigation.assign(`${pageURL('approve')}#${fragment}`);

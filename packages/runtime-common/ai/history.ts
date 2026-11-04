@@ -113,6 +113,12 @@ export async function constructHistory(
               [],
           );
           delete content[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY];
+          // Every part but the last is published finished and not canceled;
+          // the last part records how the answer ended, so the merged answer
+          // reads as still streaming, or as canceled, exactly when an answer
+          // that fit in one event would.
+          content.isStreamingFinished = continuationContent.isStreamingFinished;
+          content.isCanceled = continuationContent.isCanceled;
           event.origin_server_ts = continuationEvent.origin_server_ts;
           delete content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
         }

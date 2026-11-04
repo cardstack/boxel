@@ -39,6 +39,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import AnswerCard from '../answer-card';
+import ReplyCard from '../reply-card';
 
 import Message from './text-content';
 
@@ -348,6 +349,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
             @content={{@body}}
             @lookKeyPrefix={{this.lookKeyPrefix}}
             @blockCard={{AnswerCard}}
+            @slotCard={{ReplyCard}}
             @loadingLabels={{true}}
           />
         </MarkdownSurface>
@@ -705,31 +707,6 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         --ring: var(--boxel-dark);
         color: var(--boxel-dark);
       }
-      /* a fitted card the reply gives no height is a size container, so
-         its content cannot grow it: give it a tile's height rather than the
-         40px strip that cuts it to one line */
-      .bfm-reply
-        :deep(
-          .markdown-bfm-card-slot--fitted:not([style*='height'])
-            > .field-component-card
-        ),
-      .bfm-reply
-        :deep(
-          .markdown-bfm-card-slot--fitted:not([style*='height'])
-            .pretui-embed-card
-            > .field-component-card
-        ) {
-        height: 5.5rem;
-      }
-      /* the slot is the one rounded box; the card inside meets its edge
-         square */
-      .bfm-reply :deep(.markdown-bfm-card-slot > .field-component-card),
-      .bfm-reply
-        :deep(
-          .markdown-bfm-card-slot .pretui-embed-card > .field-component-card
-        ) {
-        border-radius: 0;
-      }
       /* a card named in a sentence is one pill: UI type, semibold, 18px
          tall inside the reading line's 22, so the leading never jumps; 8px
          each side, the slot the only rounded box. The card inside takes the
@@ -769,7 +746,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
       .bfm-reply :deep(.markdown-bfm-card-slot--inline *) {
         cursor: pointer;
       }
-      .bfm-reply :deep(.markdown-bfm-card-slot--inline > .field-component-card),
+      /* the card's own atom template; its chrome is ReplyCard's */
       .bfm-reply :deep(.markdown-bfm-card-slot--inline .atom-default-template) {
         min-width: 0;
         background: none;

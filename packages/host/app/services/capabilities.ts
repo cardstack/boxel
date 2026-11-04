@@ -4,6 +4,8 @@ import Service, { service } from '@ember/service';
 
 import { buildWaiter } from '@ember/test-waiters';
 
+import window from 'ember-window-mock';
+
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -74,7 +76,11 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 // coalesced, held and asked again exactly as `canInvoke` is. What changes it
 // most often happens in the secure window — a key added, an operation
 // approved — which the app learns about only by asking, so every readiness
-// answer is asked again when the user comes back from that window.
+// answer is asked again when the user comes back from that window. A change
+// made in a secure window the app didn't open — a key shared from the key
+// page in another tab — gives no such return, so any time the page takes
+// focus, every readiness answer that has gone stale is asked again too. A
+// card needs no focus handling of its own for either.
 // ============================================================================
 
 const waiter = buildWaiter('capabilities:check');
@@ -89,8 +95,9 @@ const ANSWER_MAX_AGE_MS = 5_000;
 
 // An answer as a template reads it. `undefined` is "not known": the value a
 // pair has while the realm is being asked, after a request that could not be
-// answered, and forever where there is nothing to ask (an unsaved card, a
-// realm this session does not know, a render).
+// answered, while the realm a card is in is being looked up, and forever where
+// there is nothing to ask (an unsaved card, a URL that names no realm, a
+// render).
 type Held = boolean | undefined;
 
 // What a pair names: a stored card, by the card or its URL, or a type a card
@@ -145,9 +152,12 @@ export default class CapabilitiesService
     let stopWatching = this.secureWindow.onReturn(() =>
       this.#askReadinessAgain(),
     );
+    let focused = () => this.#askStaleReadinessAgain();
+    window.addEventListener('focus', focused);
     registerDestructor(this, () => {
       this.#unsubscribe();
       stopWatching();
+      window.removeEventListener('focus', focused);
     });
   }
 
@@ -252,9 +262,19 @@ export default class CapabilitiesService
       return undefined;
     }
     let realmURL = this.realm.realmOf(rri(id));
-    return realmURL
-      ? { realmURL, check: { target: id, operation } }
-      : undefined;
+    if (!realmURL) {
+      // A realm this session has not learned about yet. A signed-out visitor's
+      // page registers no realm of its own accord — a published site knows
+      // only the base realm — so the card it shows is in a realm the realm
+      // service has never been told of. `info()` looks that realm up in the
+      // background, and reading it here subscribes the caller to the lookup,
+      // so the read that follows finds the realm known and enrols the pair.
+      // The check then needs no session: the realm answers an anonymous
+      // caller for itself.
+      this.realm.info(id);
+      return undefined;
+    }
+    return { realmURL, check: { target: id, operation } };
   }
 
   #isStale(key: string): boolean {
@@ -404,6 +424,18 @@ export default class CapabilitiesService
   #askReadinessAgain(): void {
     for (let [key, asked] of this.#asked) {
       if (asked.check.readiness) {
+        this.#ask(key, asked);
+      }
+    }
+  }
+
+  // Ask again about every readiness pair whose answer has gone stale, when
+  // the page takes focus. Coming back from anywhere may follow a change made
+  // elsewhere, and a template reads a pair again only when something else
+  // re-renders it. A fresh answer is the one the realm would give anyway.
+  #askStaleReadinessAgain(): void {
+    for (let [key, asked] of this.#asked) {
+      if (asked.check.readiness && this.#isStale(key)) {
         this.#ask(key, asked);
       }
     }

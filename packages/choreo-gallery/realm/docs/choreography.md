@@ -151,7 +151,9 @@ never animates (legacy `isInitialRenderCompleted`).
 
 **Removed participants.** A registered element that is no longer connected
 after the pass is _removed_. The topmost such elements are moved into the
-region's orphan layer, locked where they were on the page (`position: absolute` against the region's current box, explicit width/height), and keep their
+region's orphan layer, locked where they were on the page (`position: absolute` against the region's current box, explicit width/height), kept as memories
+(glimmer-motion's `keepAsMemory`: inert, held at the frame they showed, with no ids or form names, and with test hooks
+suffixed `-memory`), and keep their
 `VisualElement` mounted; `{{motion}}`'s destructor defers the unmount to the
 region. A removed sprite lives until the last cue that names it ends (a
 `Wait` counts), then its element is dropped and the node unmounted. A removed

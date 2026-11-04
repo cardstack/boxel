@@ -232,6 +232,11 @@
             "description": "The server to connect to, leave blank to connect to your boxel.ai workspaces.",
             "default": "https://matrix.boxel.ai/"
           },
+          "boxel-tools.realmServer": {
+            "type": "string",
+            "description": "The realm server whose base, catalog and skills realms the Skills view lists. Leave blank to list none.",
+            "default": "https://app.boxel.ai/"
+          },
           "boxel-tools.localStoragePath": {
             "type": "string",
             "description": "The local directory where boxel workspace data will be stored. Each workspace will have its own subdirectory. You can use '~/' for your home directory. Leave empty to use the VS Code extension storage path.",

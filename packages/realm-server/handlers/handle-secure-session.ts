@@ -14,7 +14,6 @@ import {
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
-  matrixServerName,
   mintLoginToken,
   renewSecureSession,
   resumeDeviceSweeps,
@@ -285,10 +284,11 @@ export function resumePasswordChangeDeviceSweeps(args: CreateRoutesArgs): void {
 }
 
 // GET /_secure-session/google: where the secure window sends the user to sign
-// in with Google, and as which client. 503 when this server has no Google
-// client.
+// in with Google, and as which client. Answered only for the secure origin
+// (403 otherwise); 503 when this server has no Google client.
 export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
     await sendJSON(ctxt, 200, {
       data: {
         type: 'google-sign-in',
@@ -449,7 +449,7 @@ export function handleSecureOriginInfo({
         type: 'secure-origin',
         attributes: {
           url: secureOriginURL.href,
-          matrixServerName: await matrixServerName({ matrixClient }),
+          matrixServerName: matrixClient.serverName,
           // Its `cli-auth` page signs a CLI profile in, handing the CLI a
           // Matrix login token, whenever this server can sign anyone in
           // there. A CLI that finds this false or missing signs in on the

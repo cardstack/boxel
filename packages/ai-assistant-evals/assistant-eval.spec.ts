@@ -17,10 +17,13 @@ import {
 } from './realm-api.ts';
 import {
   expectedChangedSeeds,
+  pipelineApprovalTargets,
   promptCardIds,
+  seededCardSeeds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
+import { seedPipelineApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -304,18 +307,36 @@ async function selectModel(page: Page, requested: string) {
       }. Available: ${names.join(' | ')}`,
     );
   }
-  await items.nth(matches[0].index).locator('button').click();
-  await expect(page.locator('[data-test-llm-select-selected]')).toContainText(
-    matches[0].name,
-  );
-  // The picker stays expanded after a choice and hides the mode toggle while
-  // it is open. Escape does not close it; a second click on the pill does.
-  if ((await page.locator('[data-test-llm-select-item]').count()) > 0) {
-    await page.locator('[data-test-llm-select-selected]').click();
+  // The trigger shows a short name without the provider, so the pick is
+  // confirmed by option id rather than by text.
+  let optionId = await items
+    .nth(matches[0].index)
+    .getAttribute('data-test-llm-select-item');
+  if (optionId === null) {
+    throw new Error(
+      `picker option "${matches[0].name}" has no data-test-llm-select-item id`,
+    );
   }
-  await expect(page.locator('[data-test-llm-select-item]')).toHaveCount(0, {
-    timeout: 15_000,
-  });
+  await items.nth(matches[0].index).locator('button').click();
+  await expect(page.locator('[data-test-llm-select-selected]')).toHaveAttribute(
+    'data-test-llm-select-selected',
+    optionId,
+  );
+  // The picker closes itself after a choice, with an animation; a click on
+  // the pill while it is closing would open it again. It hides the mode
+  // toggle while open, so if it is still open once the animation has had
+  // its time, a click on the pill closes it (Escape does not).
+  let list = page.locator('[data-test-llm-select-item]');
+  let closed = await expect(list)
+    .toHaveCount(0, { timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  // Look once more right before the click: a list that finished closing
+  // after the probe gave up would be opened again by it.
+  if (!closed && (await list.count()) > 0) {
+    await page.locator('[data-test-llm-select-selected]').click();
+    await expect(list).toHaveCount(0, { timeout: 15_000 });
+  }
   return matches[0].name;
 }
 
@@ -323,16 +344,22 @@ async function selectModel(page: Page, requested: string) {
 // tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
+// The option is found by its mode value, not its label, so a rename of the
+// label does not break the runner. The toggle is disabled while the room
+// activates a mode, so wait for it to be enabled; the radio input is visually
+// hidden, so the check is forced past the visibility test, and Playwright
+// still confirms that it took.
 async function ensureActMode(page: Page, requestedModel: string) {
-  let act = page.locator('[data-test-llm-mode-option="act"]');
-  await act.waitFor({ state: 'visible', timeout: 60_000 });
-  if (!(await act.evaluate((el) => el.classList.contains('selected')))) {
-    await act.click();
+  let toggle = page.locator('[data-test-llm-mode-toggle]');
+  await toggle.waitFor({ state: 'visible', timeout: 60_000 });
+  let act = toggle.locator('[data-test-pretui-segmented-option="act"]');
+  if (!(await act.isChecked())) {
+    await expect(act).toBeEnabled({ timeout: 30_000 });
+    await act.check({ force: true });
   }
-  await expect(act, `${requestedModel}: room is in Act mode`).toHaveClass(
-    /selected/,
-    { timeout: 30_000 },
-  );
+  await expect(act, `${requestedModel}: room is in Act mode`).toBeChecked({
+    timeout: 30_000,
+  });
   console.log(`[eval] ${requestedModel}: mode toggle shows act`);
 }
 
@@ -1007,6 +1034,7 @@ function classify(
   analysis: RunResult['analysis'] & object,
   promptsSent: number,
   promptsTotal: number,
+  expectsNoWrites = false,
 ): { verdict: Verdict; reasons: string[] } {
   let reasons: string[] = [];
   // A run the runner cut short is a failure whatever is on screen when it
@@ -1065,6 +1093,28 @@ function classify(
     return { verdict: 'host-failure', reasons };
   }
   let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  // A conversation-only evaluation is about what the assistant says and which
+  // tools it calls; its criteria forbid writing anything, so a write is the
+  // failure and no card needs to render. `cardReasons` then holds any seeded
+  // card that no longer matches its seed, which catches a change made by a
+  // tool the write counts don't know.
+  if (expectsNoWrites) {
+    reasons.push(...cardReasons);
+    if (writes > 0) {
+      reasons.push(
+        `the evaluation expects no writes, but ${writes} file write(s) were applied`,
+      );
+    }
+    if (promptsSent < promptsTotal) {
+      reasons.push(
+        `only ${promptsSent} of ${promptsTotal} prompts were sent before the run ended`,
+      );
+    }
+    return {
+      verdict: reasons.length === 0 ? 'pass' : 'model-failure',
+      reasons,
+    };
+  }
   if (writes === 0) {
     reasons.push(
       'no file was written (no applied run-realm-code or other writing tool call)',
@@ -1212,6 +1262,18 @@ async function runModel(
           );
         }
       }
+      if (evaluation.pipelineApprovals?.length) {
+        setStep('approve operations for pipelines only');
+        await seedPipelineApprovals(
+          pipelineApprovalTargets(evaluation, realmUrl),
+          {
+            user: credentials.userId,
+            owner: client,
+            password: PASSWORD,
+            log: (line) => console.log(`[eval] ${requestedModel}: ${line}`),
+          },
+        );
+      }
     }
     setStep('open room');
     result.roomId = await openRoom(page);
@@ -1337,14 +1399,33 @@ async function runModel(
           ? [`${seed.path} is expected to change but no longer exists`]
           : [],
     );
+    // A conversation-only evaluation fails on any change to a seeded card,
+    // whichever tool made it, not only on the writes the room analysis counts.
+    if (evaluation?.expectsNoWrites) {
+      let seeds = await Promise.all(
+        seededCardSeeds(evaluation, checkRealmUrl).map((seed) =>
+          seedState(checkClient, checkRealmUrl, seed, 'data'),
+        ),
+      );
+      for (let { seed, state } of seeds) {
+        if (state !== 'same') {
+          cardReasons.push(
+            `${seed.path} was ${state === 'missing' ? 'removed' : 'changed'}, and the evaluation expects no writes`,
+          );
+        }
+      }
+    }
     let indexProblems = await Promise.all(
       changed.map((state) =>
         waitForIndexedChange(checkClient, checkRealmUrl, state),
       ),
     );
     cardReasons.push(...indexProblems.filter((p): p is string => !!p));
-    let rendered =
-      expected.length === 0
+    // A conversation-only evaluation renders no card of its own, so there is
+    // nothing to wait for.
+    let rendered = evaluation?.expectsNoWrites
+      ? { cardId: undefined, reasons: [], where: undefined }
+      : expected.length === 0
         ? await findRenderedCard(page, result.realmUrl, {
             seeded: seededCards,
           })
@@ -1376,6 +1457,7 @@ async function runModel(
       result.analysis,
       result.promptsSent,
       prompts.length,
+      evaluation?.expectsNoWrites ?? false,
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;

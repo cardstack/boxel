@@ -2630,3 +2630,5 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command.ts';
+export * from './policy-share-audit.ts';
+export * from './realm-history.ts';

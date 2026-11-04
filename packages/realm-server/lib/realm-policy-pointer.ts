@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import {
   namesRealmPolicy,
+  realmPolicyCardNamed,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './realm-registry-reconciler.ts';
@@ -61,4 +62,45 @@ export async function mayNameRealmPolicy(
     return true;
   }
   return namesRealmPolicy(doc?.data?.attributes?.policy, virtualNetwork);
+}
+
+// The policy card a realm names, read the way `mayNameRealmPolicy` reads
+// whether it names one: from the pointer a realm this process holds has
+// already read, or else from the `realm.json` in its directory, so asking
+// mounts nothing. Undefined for a realm that names none. Null when the
+// pointer can't be read this way (the realm's directory can't be found from
+// its registry row, or its file can't be read or parsed); the caller then
+// asks the realm itself.
+export async function realmPolicyPointer(
+  url: string,
+  {
+    reconciler,
+    realmsRootPath,
+    virtualNetwork,
+  }: {
+    reconciler: RealmRegistryReconciler;
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+  },
+): Promise<string | undefined | null> {
+  let mounted = reconciler.mounted.get(url);
+  if (mounted) {
+    try {
+      return (await mounted.getRealmPolicy())?.card;
+    } catch {
+      return null;
+    }
+  }
+  let row = reconciler.knownByUrl.get(url);
+  let dir = row ? realmDiskPath(row, realmsRootPath) : null;
+  if (!dir) {
+    return null;
+  }
+  let doc: { data?: { attributes?: { policy?: unknown } } } | null;
+  try {
+    doc = JSON.parse(await readFile(join(dir, 'realm.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+  return realmPolicyCardNamed(doc?.data?.attributes?.policy, virtualNetwork);
 }

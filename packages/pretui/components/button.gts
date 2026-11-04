@@ -3,6 +3,8 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { ComponentLike } from '@glint/template';
 import {
   PRETUI_APPEARANCES,
   PRETUI_TONES,
@@ -98,6 +100,27 @@ const fitBusyContent = modifier(
   },
 );
 
+export const BUTTON_DISPLAYS = ['label', 'short', 'icon'] as const;
+export type ButtonDisplay = (typeof BUTTON_DISPLAYS)[number];
+type ButtonIcon = ComponentLike<{ Element: SVGSVGElement }>;
+
+// The label's contents for each @display. 'short' and 'icon' fall back to
+// the block when their argument is missing, so a bad call never blanks it.
+const ButtonFace: TemplateOnlyComponent<{
+  Args: { display: ButtonDisplay; icon?: ButtonIcon; shortLabel?: string };
+  Blocks: { default: [] };
+}> = <template>
+  {{#if @icon}}<@icon
+      class='pretui-btn-icon'
+      width='1.25em'
+      height='1.25em'
+      aria-hidden='true'
+    />{{/if}}
+  {{#if (isShort @display)}}{{@shortLabel}}{{else if (isLabel @display)}}{{yield}}{{/if}}
+</template>;
+const isShort = (d: ButtonDisplay) => d === 'short';
+const isLabel = (d: ButtonDisplay) => d === 'label';
+
 export const BUTTON_SHAPES = ['rounded', 'pill', 'square'] as const;
 export type ButtonShape = (typeof BUTTON_SHAPES)[number];
 
@@ -123,6 +146,17 @@ export interface ButtonSignature {
     loading?: boolean;
     isLoading?: boolean;
     isPending?: boolean;
+    /** how much the face shows, for a row that runs short of room: 'label'
+     * (default) the block, after @icon if given; 'short' the @shortLabel;
+     * 'icon' the @icon alone, with @label as its aria-label and title */
+    display?: ButtonDisplay;
+    /** the face's icon, before the label; needed by @display 'icon' */
+    icon?: ButtonIcon;
+    /** the full text as a string; names the button under @display 'icon'
+     * and is its title under 'short' */
+    label?: string;
+    /** the text @display 'short' shows */
+    shortLabel?: string;
   };
   Blocks: { default: [] };
   Element: HTMLButtonElement | HTMLAnchorElement;
@@ -166,6 +200,18 @@ export class Button extends Component<ButtonSignature> {
   get busy() {
     return resolveBusy(this.args);
   }
+  get display(): ButtonDisplay {
+    let { display, icon, label, shortLabel } = this.args;
+    if (display === 'icon' && icon && label) return 'icon';
+    if (display === 'short' && shortLabel) return 'short';
+    return 'label';
+  }
+  get displayName() {
+    return this.display === 'icon' ? this.args.label : undefined;
+  }
+  get displayTitle() {
+    return this.display === 'label' ? undefined : this.args.label;
+  }
   get disabled() {
     return resolveDisabled(this.args);
   }
@@ -202,9 +248,16 @@ export class Button extends Component<ButtonSignature> {
         data-size={{this.size}}
         data-shape={{this.shape}}
         {{on 'click' this.blockWhileDisabled capture=true}}
+        data-display={{this.display}}
+        aria-label={{this.displayName}}
+        title={{this.displayTitle}}
         data-test-pretui-button
         ...attributes
-      ><span class='pretui-btn-label'>{{yield}}</span></a>
+      ><span class='pretui-btn-label'><ButtonFace
+            @display={{this.display}}
+            @icon={{@icon}}
+            @shortLabel={{@shortLabel}}
+          >{{yield}}</ButtonFace></span></a>
     {{else}}
       <button
         type='button'
@@ -218,10 +271,17 @@ export class Button extends Component<ButtonSignature> {
         aria-disabled={{this.ariaDisabled}}
         aria-busy={{if this.busy 'true'}}
         {{on 'click' this.blockWhileBusy capture=true}}
+        data-display={{this.display}}
+        aria-label={{this.displayName}}
+        title={{this.displayTitle}}
         data-test-pretui-button
         ...attributes
       >
-        <span class='pretui-btn-label'>{{yield}}</span>
+        <span class='pretui-btn-label'><ButtonFace
+            @display={{this.display}}
+            @icon={{@icon}}
+            @shortLabel={{@shortLabel}}
+          >{{yield}}</ButtonFace></span>
         {{! after the label, so the accessible name starts with the visible
             label (WCAG 2.5.3); CSS order puts the spinner first visually }}
         <span class='pretui-btn-busy' {{fitBusyContent this.busy @busyLabel}}>
@@ -518,6 +578,25 @@ export class Button extends Component<ButtonSignature> {
         /* Busy: the label keeps its box (and its place in the accessible
            name) and the busy layer sits on top of it, so the width never
            changes. fitBusyContent picks what the layer shows. */
+        .pretui-btn-label:has(.pretui-btn-icon) {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.48em;
+        }
+        .pretui-btn-icon {
+          flex: none;
+        }
+        /* @display 'icon': the square IconButton draws for a bare icon. Button
+           keeps its own path so the face swaps in place when a row runs
+           short of room; the width tracks min-height, including the xs
+           24px floor, so the two stay square together. */
+        .pretui-btn[data-display='icon'] {
+          padding: 0;
+          width: var(--pretui-button-h, 2.24em);
+        }
+        .pretui-btn[data-display='icon'][data-size='xs'] {
+          width: max(var(--pretui-button-h, 2.24em), 1.5rem);
+        }
         .pretui-btn[data-state='busy'] .pretui-btn-label {
           opacity: 0;
         }

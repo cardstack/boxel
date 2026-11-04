@@ -64,10 +64,14 @@ module('the inbox', function (hooks) {
   (`@cardstack/choreo/test-support`) — the two invariants to assert
   after any interruption test: nothing parked in a Choreo orphan
   layer, nothing wearing a transform nobody is animating.
-- **`live(selector)` / `liveAll(selector)`** (`@cardstack/choreo/test-support`)
-  — query while a crossing may be aloft. A leaver's skin is parked in
-  `[data-choreo-orphans]`, so a bare `querySelector` can return the ghost
-  rather than the live element.
+- **`live(selector)` / `liveAll(selector)`** (`glimmer-motion/test-support`,
+  re-exported by `@cardstack/choreo/test-support`) — query while an exit may
+  still be playing. A leaver kept on screen for its exit (a Choreo orphan, a
+  `<Presence @mode="snapshot">` copy) is a memory, marked
+  `data-motion-memory`. Its test hooks carry a suffix (`data-test-title`
+  becomes `data-test-title-memory`), so a hook selector finds only the live
+  element, and a test that means the leaver adds the suffix. A class, role or
+  tag selector can still return the memory; `live()` skips it.
 - **`advanceGate()`** opens every parked `c.Gate` and settles;
   **`seekTo(seconds)`** pauses every live run and sets its clock — the way
   to assert a frame mid-timeline without timing it.

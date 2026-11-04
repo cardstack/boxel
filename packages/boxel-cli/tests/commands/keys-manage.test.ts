@@ -14,6 +14,7 @@ import {
   keysDelete,
   keysList,
   keysShow,
+  limitLines,
   runKeysCommand,
 } from '../../src/commands/keys/manage.ts';
 import { canonicalRealmUrl } from '../../src/lib/user-keys.ts';
@@ -407,6 +408,7 @@ describe('boxel keys: managing keys', () => {
         'add',
         'replace',
         'delete',
+        'anonymous',
         'share',
         'unshare',
         'swap',
@@ -425,7 +427,17 @@ describe('boxel keys: managing keys', () => {
       '--api-host',
     ];
     for (let [name, kindOption, oauthOption, replaceOption] of [
-      ['add', ['--kind'], oauthOptions, []],
+      [
+        'add',
+        ['--kind'],
+        [
+          ...oauthOptions,
+          '--anonymous',
+          '--anonymous-cap',
+          '--anonymous-monthly-cap',
+        ],
+        [],
+      ],
       ['replace', [], [], ['--no-subject']],
     ] as const) {
       let command = keys!.commands.find((c) => c.name() === name)!;
@@ -1364,5 +1376,65 @@ describe('boxel keys: OAuth clients and connections', () => {
     } finally {
       quiet.restore();
     }
+  });
+});
+
+describe('limitLines', () => {
+  const defaults = {
+    rateBurst: 25,
+    rateRefillPerMinute: 15,
+    dailyBudget: 2400,
+    monthlyBudgetDays: 30,
+  };
+
+  it('marks each limit at its default, the rate’s halves apart', () => {
+    expect(
+      limitLines('weather', {
+        rateBurst: 5,
+        rateRefillPerMinute: 15,
+        dailyBudget: 2400,
+        monthlyBudget: 72000,
+        set: {
+          rateBurst: 5,
+          rateRefillPerMinute: null,
+          dailyBudget: null,
+          monthlyBudget: null,
+        },
+        defaults,
+      }),
+    ).toEqual([
+      'Limits on weather:',
+      '  rate: 5 calls at once per caller, refilled at 15 a minute (default)',
+      '  daily budget: 2400 calls (default)',
+      '  monthly budget: 72000 calls (default: 30 × the daily budget)',
+    ]);
+  });
+
+  it('marks nothing the owner set, or when the server says nothing of it', () => {
+    let limits = {
+      rateBurst: 5,
+      rateRefillPerMinute: 2,
+      dailyBudget: 76,
+      monthlyBudget: 15000,
+    };
+    let expected = [
+      'Limits on weather:',
+      '  rate: 5 calls at once per caller, refilled at 2 a minute',
+      '  daily budget: 76 calls',
+      '  monthly budget: 15000 calls',
+    ];
+    expect(limitLines('weather', limits)).toEqual(expected);
+    expect(
+      limitLines('weather', {
+        ...limits,
+        set: {
+          rateBurst: 5,
+          rateRefillPerMinute: 2,
+          dailyBudget: 76,
+          monthlyBudget: 15000,
+        },
+        defaults,
+      }),
+    ).toEqual(expected);
   });
 });

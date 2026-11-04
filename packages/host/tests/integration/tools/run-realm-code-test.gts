@@ -4,15 +4,18 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType, type Realm } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   CAPTURE_SOURCE_URL_PREFIX,
   DEFAULT_FALLBACK_MODELS,
+  LOCAL_SOURCE_URL_PREFIX,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
+import type { TelemetryEventInput } from '@cardstack/host/services/client-telemetry';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
@@ -87,6 +90,23 @@ function recipeJSON(
   )}\n`;
 }
 
+// A Pet instance for a test to write straight to a test realm's adapter. The
+// test realm has no file watcher, so the realm then holds the file and no
+// index pass is coming to index it.
+const UNINDEXED_PET = JSON.stringify({
+  data: {
+    type: 'card',
+    attributes: { name: 'Biscuit' },
+    meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+  },
+});
+
+// A script that reads a card, and returns the error's message when the read
+// fails.
+function readCardScript(path: string) {
+  return `try { return await realm.cards.get(${JSON.stringify(path)}); } catch (e) { return e.message; }`;
+}
+
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -135,9 +155,10 @@ module('Integration | tools | run-realm-code', function (hooks) {
   });
 
   let adapter: any;
+  let testRealm: Realm;
 
   hooks.beforeEach(async function () {
-    ({ adapter } = await withCachedRealmSetup(async () =>
+    ({ adapter, realm: testRealm } = await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
@@ -350,19 +371,52 @@ boxel:
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
     let asked = false;
+    let startedAt = 0;
+    let askedAfterMs: number | undefined;
     // The reader never answers.
     command.onAsk = () => {
       asked = true;
+      askedAfterMs = Date.now() - startedAt;
       return new Promise(() => undefined);
     };
 
+    startedAt = Date.now();
     let run = command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
       code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
 return 'answered';`,
     });
-    await waitUntil(() => asked);
+    // How the run ended if it ended before the script asked, for the
+    // failure message.
+    let endedBeforeAsk: string | undefined;
+    run.then(
+      () => {
+        if (!asked) {
+          endedBeforeAsk = 'it returned';
+        }
+      },
+      (error: unknown) => {
+        if (!asked) {
+          endedBeforeAsk = `it failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`;
+        }
+      },
+    );
+    // the sandbox starts before the script asks, slowly on a busy machine
+    await waitUntil(() => asked || endedBeforeAsk !== undefined, {
+      timeout: 10000,
+      timeoutMessage: 'the script did not ask within 10000ms',
+    });
+    assert.true(
+      asked,
+      asked
+        ? `the script asked ${askedAfterMs}ms after the run started`
+        : `the run ended ${
+            Date.now() - startedAt
+          }ms after it started, before the script asked: ${endedBeforeAsk}`,
+    );
     command.stop();
 
     await assert.rejects(run, /stopped/i, 'the run ends without an answer');
@@ -443,6 +497,128 @@ return 'answered';`,
       /stopped|ended/i,
       'the run ends without an answer',
     );
+  });
+
+  test('a question nobody answers ends the run when its wait runs out', async function (assert) {
+    let toolService = getService('tool-service');
+    toolService.__setWaitsForTesting({ scriptAskMaxMs: 50 });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    askThroughToolService(command, 'unanswered-ask-call');
+
+    let run = command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ask({ question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] });
+return 'answered';`,
+    });
+
+    await assert.rejects(
+      run,
+      /No answer came within 50 ms/,
+      'the run ends without an answer',
+    );
+    assert.false(
+      toolService.scriptAsks.has('unanswered-ask-call'),
+      'the picker is withdrawn',
+    );
+  });
+
+  test("a run waiting on the reader's pick outlasts the tool deadline", async function (assert) {
+    let toolService = getService('tool-service');
+    let matrixService = getService('matrix-service');
+    let deadlineMs = 500;
+    toolService.__setWaitsForTesting({ toolExecuteTimeoutMs: deadlineMs });
+    let results: { toolCallId: string; status: string }[] = [];
+    // Why a result was sent before the pick, for the failure message.
+    let earlyFailures: string[] = [];
+    let originalSend = matrixService.sendToolResultEvent;
+    let originalUpdate = matrixService.updateSkillsAndToolsIfNeeded;
+    // The deadline starts when the run claims the call, and only the ask
+    // extends it. Building the tool's input loads the tool module from the
+    // base realm, which can take longer than the deadline on a busy machine,
+    // so the tool here has no input type. Only in-memory steps then run
+    // before the script asks, at once, from `execute`.
+    let startedAt = 0;
+    let askedAfterMs: number | undefined;
+    let originalGetInputType = RunRealmCodeTool.prototype.getInputType;
+    let originalExecute = RunRealmCodeTool.prototype.execute;
+    RunRealmCodeTool.prototype.getInputType = async () => undefined as never;
+    RunRealmCodeTool.prototype.execute = async function (
+      this: RunRealmCodeTool,
+    ) {
+      askedAfterMs = Date.now() - startedAt;
+      await this.onAsk!({
+        question: 'Which one?',
+        kind: 'options',
+        allowOther: false,
+        options: [
+          { label: 'A', value: 'a' },
+          { label: 'B', value: 'b' },
+        ],
+      });
+      return undefined as never;
+    };
+    matrixService.sendToolResultEvent = (async (args: {
+      toolCallId: string;
+      status: string;
+      failureReason?: string;
+    }) => {
+      results.push({ toolCallId: args.toolCallId, status: args.status });
+      if (args.failureReason) {
+        earlyFailures.push(args.failureReason);
+      }
+    }) as unknown as typeof matrixService.sendToolResultEvent;
+    matrixService.updateSkillsAndToolsIfNeeded = async () => undefined;
+    let running: PromiseLike<unknown> | undefined;
+    try {
+      let call = {
+        id: 'waiting-call',
+        name: 'runRealmCode',
+        eventId: '$bot',
+        message: { roomId: '!room:example.com' },
+        codeRef: {
+          module: '@cardstack/boxel-host/tools/run-realm-code',
+          name: 'default',
+        },
+        arguments: { attributes: { realm: testRealmURL, code: 'ignored' } },
+        isResolving: false,
+        resolve: async () => undefined,
+      } as unknown as MessageTool;
+      startedAt = Date.now();
+      running = toolService.run.perform(call, { auto: true });
+      await waitUntil(() => toolService.scriptAsks.has('waiting-call'), {
+        timeout: 10000,
+      });
+      // past the deadline the run started with
+      await new Promise((resolve) =>
+        setTimeout(resolve, startedAt + deadlineMs + 300 - Date.now()),
+      );
+      assert.deepEqual(
+        results,
+        [],
+        `the run is still waiting on the pick (asked ${askedAfterMs}ms into a ${deadlineMs}ms deadline; early results: ${
+          earlyFailures.join('; ') || 'none'
+        })`,
+      );
+      toolService.scriptAsks.get('waiting-call')!.answer('b');
+      await running;
+
+      assert.deepEqual(
+        results,
+        [{ toolCallId: 'waiting-call', status: 'applied' }],
+        `the run finishes with its answer instead of timing out (failures: ${
+          earlyFailures.join('; ') || 'none'
+        })`,
+      );
+    } finally {
+      // A failed assertion leaves the ask and the run behind; end both.
+      toolService.scriptAsks.get('waiting-call')?.cancel();
+      await Promise.resolve(running).catch(() => undefined);
+      RunRealmCodeTool.prototype.getInputType = originalGetInputType;
+      RunRealmCodeTool.prototype.execute = originalExecute;
+      matrixService.sendToolResultEvent = originalSend;
+      matrixService.updateSkillsAndToolsIfNeeded = originalUpdate;
+    }
   });
 
   test('the result attaches the files the run saved, then the captures it took', async function (assert) {
@@ -689,6 +865,57 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
 
+  test('realm.capture refuses a file attached to the chat, and says how to see it again', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let attachment = `${LOCAL_SOURCE_URL_PREFIX}00000000-0000-4000-8000-000000000001/photo.jpg`;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('${attachment}');`,
+      }),
+      (error: Error) =>
+        error.message.includes(`Cannot capture ${attachment}`) &&
+        error.message.includes('attach it again'),
+    );
+    assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.capture refuses the image a capture took, and says to capture what it shows', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let captured = `${CAPTURE_SOURCE_URL_PREFIX}0000000000000001/mango.png`;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('${captured}');`,
+      }),
+      (error: Error) =>
+        error.message.includes(`Cannot capture ${captured}`) &&
+        error.message.includes('capture the card or file it shows') &&
+        !error.message.includes('attach it again'),
+    );
+    assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('the description says realm.capture refuses a file attached to the chat', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    assert.true(
+      command.description.includes(`a ${LOCAL_SOURCE_URL_PREFIX} URL`),
+      'the description names the prefix of a file attached from the computer',
+    );
+    assert.true(
+      command.description.includes('so realm.capture refuses it'),
+      'a model choosing a capture target reads that such a file is not one',
+    );
+  });
+
   test('realm.capture finds the workspace of a prefixed id, whatever form the workspace is known by', async function (assert) {
     let { virtualNetwork } = getService('network');
     virtualNetwork.addRealmMapping(
@@ -813,6 +1040,187 @@ return await realm.cards.get('people/hassan');`,
         code: `await realm.cards.get('https://example.com/card');`,
       }),
       /Path is outside this realm/,
+    );
+  });
+
+  test('realm.cards.get says to read a card that is not indexed again only while the workspace is indexing, and names the call that indexes it otherwise', async function (assert) {
+    await adapter.write('Pet/unindexed.json', UNINDEXED_PET);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let messageService = getService('message-service');
+
+    // An index pass has started in the realm and has not finished.
+    messageService.relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental-index-initiation',
+      updatedFile: `${testRealmURL}task.json`,
+      realmURL: testRealmURL,
+    });
+    let whileIndexing;
+    try {
+      whileIndexing = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/unindexed'),
+      });
+    } finally {
+      // The pass ends having indexed nothing.
+      messageService.relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL: testRealmURL,
+      });
+    }
+    assert.strictEqual(
+      JSON.parse(whileIndexing.scriptResult!),
+      `Card is not indexed yet: ${testRealmURL}Pet/unindexed; read it again ` +
+        `in a moment. If it is still not indexed after a few reads, index ` +
+        `the file with realm.index.invalidate('Pet/unindexed.json')`,
+      'while a pass runs, the row may still come, so the card is read again',
+    );
+
+    let idle = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: readCardScript('Pet/unindexed.json'),
+    });
+    assert.strictEqual(
+      JSON.parse(idle.scriptResult!),
+      `Card is not indexed: ${testRealmURL}Pet/unindexed. Its file ` +
+        `Pet/unindexed.json is in the workspace, and the workspace is not ` +
+        `indexing, so reading the card again will not find it. Index the ` +
+        `file with realm.index.invalidate('Pet/unindexed.json'), then read ` +
+        `the card again. Do not edit the card to make the workspace index it`,
+      'with no pass running, the error names the call that indexes the file',
+    );
+
+    let recovered = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.index.invalidate('Pet/unindexed.json');
+return await realm.cards.get('Pet/unindexed');`,
+    });
+    assert.strictEqual(
+      JSON.parse(recovered.scriptResult!).attributes.name,
+      'Biscuit',
+      'the call the error names indexes the card, and the card reads',
+    );
+    assert.deepEqual(recovered.files, [], 'no file was edited to get there');
+  });
+
+  test('realm.cards.get names the error of a card that failed to index', async function (assert) {
+    await testRealm.write(
+      'Pet/orphan.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { name: 'Orphan' },
+          meta: { adoptsFrom: { module: '../no-such-module', name: 'Pet' } },
+        },
+      }),
+    );
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: readCardScript('Pet/orphan'),
+    });
+
+    let message = JSON.parse(result.scriptResult!);
+    assert.true(
+      message.startsWith(`Card failed to index: ${testRealmURL}Pet/orphan: `),
+      message,
+    );
+    assert.true(
+      /no-such-module/.test(message),
+      `the index error's own text is in the message: ${message}`,
+    );
+    assert.true(
+      message.endsWith(
+        'Reading it again gives the same error until its cause is fixed, ' +
+          'in Pet/orphan.json, in the definition it adopts from, or in a ' +
+          'card it links to',
+      ),
+      message,
+    );
+  });
+
+  test('realm.cards.get says a path that names a file is not a card', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let messages = [];
+for (let path of ['images/existing.png', 'notes/first.md']) {
+  try { await realm.cards.get(path); } catch (e) { messages.push(e.message); }
+}
+return messages;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'Not a card: images/existing.png is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+      'Not a card: notes/first.md is a file, so realm.cards.get cannot read it; read it with realm.fs.readText if it is text, or look at it with realm.capture',
+    ]);
+  });
+
+  test('realm.cards.get does not blame the card for a read that failed for another reason', async function (assert) {
+    let cardURL = `${testRealmURL}Pet/mango`;
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    // The realm answers the card's read with a 500 of its own, with no index
+    // row behind it.
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (String(url) === cardURL) {
+        let err = new Error('realm failure') as any;
+        err.status = 500;
+        err.responseText = JSON.stringify({
+          errors: [
+            {
+              id: cardURL,
+              status: 500,
+              title: 'Internal Server Error',
+              message: 'the database is unavailable',
+            },
+          ],
+        });
+        throw err;
+      }
+      return originalFetchJSON(url, args);
+    };
+    let result;
+    try {
+      result = await new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      ).execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/mango'),
+      });
+    } finally {
+      delete cardService.fetchJSON;
+    }
+
+    assert.strictEqual(
+      JSON.parse(result.scriptResult!),
+      `Unable to read card ${cardURL}: the database is unavailable`,
+    );
+  });
+
+  test('the tool description names the call that indexes a card that is not indexed, and rules out editing the card for it', function (assert) {
+    let { description } = new RunRealmCodeTool(
+      getService('tool-service').toolContext,
+    );
+    assert.true(
+      description.includes("realm.index.invalidate('<card path>.json')"),
+      description,
+    );
+    assert.true(
+      description.includes(
+        "never edit a card's data to make the workspace index it",
+      ),
+      description,
     );
   });
 
@@ -3430,6 +3838,52 @@ return found;`);
   });
 });
 
+// A ward's patients, as a clinic app holds them: the type declares the
+// changes a script may make, and the realm applies each as declared.
+const PATIENT_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation, params } from "@cardstack/base/operations";
+
+  export class Patient extends CardDef {
+    static displayName = 'Patient';
+    @field name = contains(StringField);
+    @field ward = contains(StringField);
+    @field lastVitals = contains(StringField);
+
+    @operation static recordVitals = {
+      base: 'transform',
+      params: { reading: StringField },
+      set: { lastVitals: params('reading') },
+    };
+
+    @operation static transferTo = {
+      base: 'transform',
+      params: { ward: StringField },
+      set: { ward: params('ward') },
+    };
+
+    @operation static amend = { base: 'update' };
+
+    @operation static chart = { base: 'read' };
+
+    @operation static northWard = {
+      base: 'query',
+      query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
+    };
+  }
+`;
+
+function patientFile(name: string, ward: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { name, ward, lastVitals: null },
+      meta: { adoptsFrom: { module: '../patient', name: 'Patient' } },
+    },
+  };
+}
+
 const readOnlyRealmURL = 'http://test-realm/other/';
 
 module(
@@ -3474,6 +3928,8 @@ module(
     ]);
     setupRealmCacheTeardown(hooks);
 
+    let adapter: any;
+
     hooks.beforeEach(async function () {
       captureRequests = [];
       await setupIntegrationTestRealm({
@@ -3485,12 +3941,14 @@ module(
           'brand.md': '# Brand\n',
         },
       });
-      await setupIntegrationTestRealm({
+      ({ adapter } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         enforcePermissions: true,
         permissions: { '*': ['read'] },
         contents: {
           'task.json': '{ "title": "Old title" }\n',
+          'patient.gts': PATIENT_MODULE,
+          'Patient/ana.json': patientFile('Ana', 'Cardiology'),
           'notes/first.md': '# First\n',
           'pet.gts': `
             import { CardDef, field, contains } from '@cardstack/base/card-api';
@@ -3509,7 +3967,7 @@ module(
             },
           },
         },
-      });
+      }));
       await getService('realm').login(testRealmURL);
       await getService('realm').login(readOnlyRealmURL);
     });
@@ -3586,6 +4044,30 @@ return { total: found.total, paths: found.cards.map((card) => card.path) };`,
       });
     });
 
+    test('realm.operations is sent to the realm, which decides by its policy', async function (assert) {
+      getService('operations');
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `try {
+  await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' });
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`,
+      });
+
+      let message = JSON.parse(result.scriptResult!);
+      assert.notStrictEqual(message, 'ran', 'no policy grants the operation');
+      assert.notOk(
+        /You can only read this workspace/.test(message),
+        `the runner does not refuse it before the realm does: ${message}`,
+      );
+    });
+
     test('each write is refused, and the script goes on', async function (assert) {
       let toolService = getService('tool-service');
       let cardService = getService('card-service');
@@ -3655,6 +4137,29 @@ return refused;`,
           `the refusal says why: ${message}`,
         );
       }
+    });
+
+    test('a card that is not indexed asks for a user who can write, not for a call the run would refuse', async function (assert) {
+      await adapter.write('Pet/unindexed.json', UNINDEXED_PET);
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: readCardScript('Pet/unindexed'),
+      });
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        `Card is not indexed: ${testRealmURL}Pet/unindexed. Its file ` +
+          `Pet/unindexed.json is in the workspace, and the workspace is not ` +
+          `indexing, so reading the card again will not find it. You can ` +
+          `only read this workspace, so tell the user that ` +
+          `Pet/unindexed.json needs indexing again by someone who can ` +
+          `write to it`,
+      );
     });
   },
 );
@@ -4080,6 +4585,266 @@ module(
         );
       } finally {
         virtualNetwork.unmount(spy);
+      }
+    });
+
+    test('realm.entries.search records each search that reaches the catalog in client telemetry', async function (assert) {
+      await getService('matrix-service').ready;
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'catalog-reuse',
+      });
+      let { virtualNetwork } = getService('network');
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      // Answers every entry search with a count per realm. The catalog
+      // matches two entries for "kanban" and one for "huge", whose readMe is
+      // too large to return; the workspace matches one for "kanban" and three
+      // for "notes". The search fails for "boom", and the catalog does not
+      // answer for "silent".
+      let federatedSearch = async (request: Request) => {
+        if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+          return null;
+        }
+        let body = await request.clone().text();
+        if (body.includes('boom')) {
+          return new Response('the catalog is down', { status: 500 });
+        }
+        let { realms } = JSON.parse(body) as { realms: string[] };
+        let realmTotals: Record<string, number> = {};
+        let data: unknown[] = [];
+        let included: unknown[] = [];
+        let found = (id: string, readMe = '') => {
+          data.push({
+            type: 'entry',
+            id,
+            relationships: { item: { data: { type: 'card', id } } },
+          });
+          included.push({ type: 'card', id, attributes: { readMe } });
+        };
+        for (let realm of realms) {
+          let url = virtualNetwork.toURL(realm).href;
+          if (url === catalogURL) {
+            if (body.includes('silent')) {
+              continue;
+            }
+            let huge = body.includes('huge');
+            realmTotals[url] = body.includes('kanban') ? 2 : huge ? 1 : 0;
+            if (realmTotals[url] > 0) {
+              found(
+                `${catalogURL}Spec/board`,
+                huge ? 'x'.repeat(1_100_000) : '',
+              );
+            }
+          } else if (url === testRealmURL) {
+            realmTotals[url] = body.includes('kanban')
+              ? 1
+              : body.includes('notes')
+                ? 3
+                : 0;
+            if (realmTotals[url] > 0) {
+              found(`${testRealmURL}note`);
+            }
+          } else {
+            realmTotals[url] = 0;
+          }
+        }
+        return new Response(
+          JSON.stringify({
+            data,
+            included,
+            meta: {
+              page: {
+                total: Object.values(realmTotals).reduce((a, b) => a + b, 0),
+              },
+              realmTotals,
+              ...(Object.keys(realmTotals).length < realms.length
+                ? { incomplete: true }
+                : {}),
+            },
+          }),
+          { headers: { 'content-type': SupportedMimeType.CardJson } },
+        );
+      };
+      virtualNetwork.mount(federatedSearch, { prepend: true });
+      let telemetry = getService('client-telemetry');
+      let recorded: TelemetryEventInput[] = [];
+      let recordEvent = telemetry.recordEvent;
+      telemetry.recordEvent = (event: TelemetryEventInput) => {
+        recorded.push(event);
+      };
+      try {
+        await getService('realm-server').ready;
+        let command = new RunRealmCodeTool(
+          getService('tool-service').toolContext,
+        );
+        let search = (matches: string, realms: string) =>
+          command.execute({
+            realm: testRealmURL,
+            roomId,
+            code: `await realm.entries.search(
+  {
+    filter: {
+      on: { module: '@cardstack/base/spec', name: 'Spec' },
+      matches: ${JSON.stringify(matches)},
+    },
+  },
+  { realms: ${realms} },
+);`,
+          });
+
+        await search('kanban', `['@cardstack/catalog/']`);
+        assert.deepEqual(
+          recorded,
+          [],
+          'a search the feature gate keeps out of the catalog is not recorded',
+        );
+
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          msgtype: 'm.text',
+          body: 'boxel-debug:feature:enable:catalog-reuse',
+        });
+        // The message reaches the room's events a tick after it is sent.
+        await waitUntil(() =>
+          getService('matrix-service')
+            .roomResources.get(roomId)
+            ?.events.some(
+              (event) =>
+                (event.content as { body?: string })?.body ===
+                'boxel-debug:feature:enable:catalog-reuse',
+            ),
+        );
+        await search('kanban board', `['@cardstack/catalog/']`);
+        await search('kanban', `['@cardstack/catalog/', realm.current.url]`);
+        await search('notes', '[]');
+        await search('kanban', '[realm.current.url]');
+        await assert.rejects(
+          search('boom', `['@cardstack/catalog/']`),
+          /the catalog is down/,
+        );
+        await search('silent', `['@cardstack/catalog/', realm.current.url]`);
+        await assert.rejects(
+          search('huge', `['@cardstack/catalog/']`),
+          /too large to return/,
+        );
+        let run = (code: string) =>
+          command.execute({ realm: testRealmURL, roomId, code });
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/'], scope: 'card' });`,
+          ),
+          /Invalid scope "card"/,
+        );
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/', '@nope/realm/'] });`,
+          ),
+          /Unknown realm identifier "@nope\/realm\/"/,
+        );
+        // An emoji, two UTF-16 units, sits where the text is cut.
+        await run(`await realm.entries.search(
+  {
+    filter: {
+      every: [
+        { matches: ${JSON.stringify(`${'x'.repeat(298)}😀${'y'.repeat(100)}`)} },
+        { not: { type: { module: '@cardstack/base/spec', name: 'Spec' } } },
+      ],
+    },
+  },
+  { realms: ['@cardstack/catalog/'] },
+);`);
+
+        type CatalogSearchInput = Extract<
+          TelemetryEventInput,
+          { event_type: 'catalog-search' }
+        >;
+        let spec = '@cardstack/base/spec#Spec';
+        let event = (
+          fields: Pick<
+            CatalogSearchInput,
+            'query_text' | 'total' | 'returned'
+          > &
+            Partial<CatalogSearchInput>,
+        ): CatalogSearchInput => ({
+          event_type: 'catalog-search',
+          tool: 'run-realm-code',
+          query_type: spec,
+          error: '',
+          realm: testRealmURL,
+          ...fields,
+        });
+        let [
+          named,
+          beside,
+          everyRealm,
+          failed,
+          unanswered,
+          tooLarge,
+          excluding,
+          ...rest
+        ] = recorded;
+        assert.deepEqual(
+          named,
+          event({ query_text: 'kanban board', total: 2, returned: 1 }),
+          'a search that names the catalog is recorded with what it found',
+        );
+        assert.deepEqual(
+          beside,
+          event({ query_text: 'kanban', total: 2, returned: 1 }),
+          'only what the catalog matched is counted, not the realm searched beside it',
+        );
+        assert.deepEqual(
+          everyRealm,
+          event({ query_text: 'notes', total: 0, returned: 0 }),
+          'a search of every realm that matched only workspace cards found nothing in the catalog',
+        );
+        let { error, ...failedRest } = failed as CatalogSearchInput;
+        assert.deepEqual(
+          { ...failedRest, error: '' },
+          event({ query_text: 'boom', total: null, returned: null }),
+          'a search that threw is recorded without counts',
+        );
+        assert.true(
+          error.includes('the catalog is down'),
+          `the error is recorded: ${error}`,
+        );
+        assert.deepEqual(
+          unanswered,
+          event({
+            query_text: 'silent',
+            total: null,
+            returned: null,
+            error: 'a catalog realm did not answer',
+          }),
+          'a catalog that did not answer is recorded as a failure, not as finding nothing',
+        );
+        assert.deepEqual(
+          tooLarge,
+          event({
+            query_text: 'huge',
+            total: 1,
+            returned: 1,
+            error: `The entry ${catalogURL}Spec/board is too large to return from a search`,
+          }),
+          'an answer too large to return keeps its counts and records why the script got nothing',
+        );
+        assert.deepEqual(
+          excluding,
+          event({
+            query_text: `${'x'.repeat(298)}😀…`,
+            query_type: '',
+            total: 0,
+            returned: 0,
+          }),
+          'a type the query excludes is not the type it searched for, and long text is cut without splitting a character',
+        );
+        assert.deepEqual(
+          rest,
+          [],
+          'a search of another realm only, or one refused before it was sent, is not recorded',
+        );
+      } finally {
+        telemetry.recordEvent = recordEvent;
+        virtualNetwork.unmount(federatedSearch);
       }
     });
 
@@ -4766,3 +5531,200 @@ await realm.fs.delete('draft.json');`),
     assert.strictEqual(forwarded.length, 2, 'two fixes were asked for');
   });
 });
+
+module(
+  'Integration | tools | run-realm-code | realm.operations',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+    setupRealmCacheTeardown(hooks);
+
+    let adapter: any;
+    hooks.beforeEach(async function () {
+      ({ adapter } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'patient.gts': PATIENT_MODULE,
+          'Patient/ana.json': patientFile('Ana', 'Cardiology'),
+          'Patient/ben.json': patientFile('Ben', 'Cardiology'),
+          'Patient/cleo.json': patientFile('Cleo', 'Cardiology'),
+          'Patient/dev.json': patientFile('Dev', 'Oncology'),
+        },
+      }));
+      await getService('realm').login(testRealmURL);
+      // Looking the service up arms the transport an operation is sent by, as
+      // the app's own boot does.
+      getService('operations');
+    });
+
+    async function run(code: string) {
+      let toolService = getService('tool-service');
+      return await new RunRealmCodeTool(toolService.toolContext).execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+    }
+
+    async function attributesOf(path: string) {
+      let file = await adapter.openFile(path);
+      return JSON.parse(file.content as string).data.attributes;
+    }
+
+    test('realm.operations.invoke runs an operation the type declares', async function (assert) {
+      let result = await run(`
+return await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' });`);
+
+      let answer = JSON.parse(result.scriptResult!);
+      assert.strictEqual(answer.path, 'Patient/ana.json');
+      assert.strictEqual(answer.operation, 'transferTo');
+      assert.strictEqual(answer.id, `${testRealmURL}Patient/ana`);
+      assert.ok(
+        answer.version,
+        'the answer has the version the card now holds',
+      );
+      assert.strictEqual((await attributesOf('Patient/ana.json')).ward, 'ICU');
+    });
+
+    // The example the realm runner is for: find the patients of a ward, then
+    // record their vitals in one batch that the realm carries out whole.
+    test('realm.operations.invokeBatchOperation updates many patients in one batch', async function (assert) {
+      let result = await run(`
+let found = await realm.cards.search({
+  filter: {
+    on: { module: ${JSON.stringify(`${testRealmURL}patient`)}, name: 'Patient' },
+    eq: { ward: 'Cardiology' },
+  },
+});
+let answers = await realm.operations.invokeBatchOperation(
+  found.cards.map((patient) => ({
+    path: patient.path,
+    operation: 'recordVitals',
+    payload: { reading: 'HR 72, BP 120/80' },
+  })),
+);
+return answers.map((answer) => answer.path).sort();`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), [
+        'Patient/ana.json',
+        'Patient/ben.json',
+        'Patient/cleo.json',
+      ]);
+      for (let path of [
+        'Patient/ana.json',
+        'Patient/ben.json',
+        'Patient/cleo.json',
+      ]) {
+        assert.strictEqual(
+          (await attributesOf(path)).lastVitals,
+          'HR 72, BP 120/80',
+          `${path} has the reading`,
+        );
+      }
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        null,
+        'a patient of another ward is not changed',
+      );
+    });
+
+    // Ana's entry is correct and Ben's has no reading. A loop of invoke would
+    // change Ana and then fail on Ben; the batch changes neither.
+    test('a batch with one bad entry changes no card', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invokeBatchOperation([
+    { path: 'Patient/ana', operation: 'recordVitals', payload: { reading: 'HR 80' } },
+    { path: 'Patient/ben', operation: 'recordVitals', payload: {} },
+  ]);
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        'operation "recordVitals" requires a value for params("reading")',
+      );
+      assert.strictEqual(
+        (await attributesOf('Patient/ana.json')).lastVitals,
+        null,
+      );
+    });
+
+    // An update-based entry is a patch of the card, so it travels as a card
+    // resource that names the card's type, in a batch as in a single call.
+    test('an update-based operation patches the card, alone and in a batch', async function (assert) {
+      await run(`
+await realm.operations.invoke('Patient/ana', 'amend', { attributes: { name: 'Ana B' } });
+await realm.operations.invokeBatchOperation([
+  { path: 'Patient/ben', operation: 'amend', payload: { attributes: { name: 'Ben C' } } },
+  { path: 'Patient/cleo', operation: 'recordVitals', payload: { reading: 'HR 64' } },
+]);`);
+
+      assert.strictEqual(
+        (await attributesOf('Patient/ana.json')).name,
+        'Ana B',
+      );
+      assert.strictEqual(
+        (await attributesOf('Patient/ben.json')).name,
+        'Ben C',
+      );
+      assert.strictEqual(
+        (await attributesOf('Patient/cleo.json')).lastVitals,
+        'HR 64',
+      );
+    });
+
+    test('a read-based operation answers the document', async function (assert) {
+      let result = await run(`
+let answer = await realm.operations.invoke('Patient/ana', 'chart');
+return { path: answer.path, id: answer.id, name: answer.document.data.attributes.name };`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        path: 'Patient/ana.json',
+        name: 'Ana',
+      });
+    });
+
+    test('an operation the type does not declare is refused with the ones it does', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke('Patient/ana', 'discharge');
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        '"discharge" is not an operation Patient declares. It declares: amend, chart, recordVitals, transferTo',
+      );
+    });
+
+    test('a query the type declares is refused with where to search instead', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke('Patient/ana', 'northWard');
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      let message = JSON.parse(result.scriptResult!) as string;
+      assert.true(
+        message.startsWith('"northWard" is a query operation'),
+        `the refusal says what the name is: ${message}`,
+      );
+      assert.true(
+        message.includes('realm.cards.search'),
+        `and where results are read instead: ${message}`,
+      );
+    });
+  },
+);

@@ -21,6 +21,10 @@ import {
   pathExists,
 } from '../../lib/sync-manifest.ts';
 import { listUnchangedSince } from '../../lib/git-changes.ts';
+import {
+  confirmPolicyAuditFor,
+  type ConfirmPolicyAudit,
+} from '../../lib/policy-audit.ts';
 
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
@@ -431,6 +435,8 @@ export interface PushCommandOptions {
    */
   realmEvents?: boolean;
   atomicBatchSize?: number;
+  /** See `SyncOptions.confirmPolicyAudit`. */
+  confirmPolicyAudit?: ConfirmPolicyAudit;
   /**
    * Git revisions the realm's files may hold. Only files that differ from any
    * of them in the local git checkout, files git doesn't track, and files the
@@ -477,6 +483,10 @@ export function registerPushCommand(realm: Command): void {
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
+    .option(
+      '--confirm-shared-keys',
+      "Save a policy change that lets people who aren't signed in use keys shared into a workspace, after listing them, without asking",
+    )
     .action(
       async (
         localDir: string,
@@ -488,6 +498,7 @@ export function registerPushCommand(realm: Command): void {
           realmEvents?: boolean;
           changedSince?: string[];
           realmSecretSeed?: boolean;
+          confirmSharedKeys?: boolean;
         },
       ) => {
         const realmSecretSeed = await resolveRealmSecretSeed(
@@ -500,6 +511,9 @@ export function registerPushCommand(realm: Command): void {
           realmEvents: options.realmEvents,
           changedSince: options.changedSince,
           realmSecretSeed,
+          confirmPolicyAudit: confirmPolicyAuditFor({
+            confirmed: options.confirmSharedKeys,
+          }),
         });
       },
     );
@@ -510,7 +524,7 @@ export async function pushCommand(
   realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  const resolvedRealm = resolveRealmIdentifier(realmUrl, {
+  const resolvedRealm = await resolveRealmIdentifier(realmUrl, {
     profileManager: options.profileManager,
   });
   if (!resolvedRealm.ok) {
@@ -556,6 +570,7 @@ export async function pushCommand(
         realmEvents: options.realmEvents,
         atomicBatchSize: options.atomicBatchSize,
         changedSince,
+        confirmPolicyAudit: options.confirmPolicyAudit,
       },
       authenticator,
     );

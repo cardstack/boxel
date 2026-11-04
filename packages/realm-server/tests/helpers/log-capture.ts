@@ -13,7 +13,9 @@ export interface CapturedLogLine {
 // operator would actually see.
 export async function logLinesDuring(
   channels: string[],
-  fn: () => Promise<void>,
+  // Given the lines captured so far, so it can wait for one logged after the
+  // work it started.
+  fn: (lines: CapturedLogLine[]) => Promise<void>,
 ): Promise<CapturedLogLine[]> {
   let lines: CapturedLogLine[] = [];
   let restore: (() => void)[] = [];
@@ -43,7 +45,7 @@ export async function logLinesDuring(
     });
   }
   try {
-    await fn();
+    await fn(lines);
   } finally {
     for (let undo of restore) {
       undo();

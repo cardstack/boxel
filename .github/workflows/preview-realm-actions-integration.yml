@@ -19,6 +19,8 @@ on:
       - .github/workflows/sync-workspace.yml
       - .github/workflows/preview-realm.yml
       - .github/workflows/preview-realm-actions-integration.yml
+      # builds the host this suite downloads
+      - .github/workflows/test-web-assets.yaml
       - packages/boxel-cli/src/commands/realm/publish.ts
       - packages/boxel-cli/src/commands/realm/unpublish.ts
       - packages/boxel-cli/src/commands/realm/push.ts
@@ -29,6 +31,8 @@ on:
       - .github/workflows/sync-workspace.yml
       - .github/workflows/preview-realm.yml
       - .github/workflows/preview-realm-actions-integration.yml
+      # builds the host this suite downloads
+      - .github/workflows/test-web-assets.yaml
       - packages/boxel-cli/src/commands/realm/publish.ts
       - packages/boxel-cli/src/commands/realm/unpublish.ts
       - packages/boxel-cli/src/commands/realm/push.ts

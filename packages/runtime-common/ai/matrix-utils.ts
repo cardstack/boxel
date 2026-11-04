@@ -236,7 +236,7 @@ interface CacheEntry {
 
 const fileCache: Map<string, CacheEntry> = new Map();
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
-// In-flight fetch promises keyed by URL so concurrent requests dedupe
+// In-flight fetches, keyed by Matrix media key, so concurrent requests dedupe
 const inFlightFetches: Map<string, Promise<string>> = new Map();
 
 function cleanupCache() {
@@ -254,50 +254,59 @@ function mediaResponseError(status: number) {
   return Object.assign(new Error(`HTTP error. Status: ${status}`), { status });
 }
 
-async function fetchMatrixMediaWithFallback(
+// The Matrix media key (`mxc://<server>/<id>`) a URL names: an mxc:// URL
+// itself, or a download or thumbnail URL on a Matrix media endpoint (see
+// canonicalizeMatrixMediaKey). Undefined when the URL names no Matrix media
+// item. A server name of `.` or `..` names none: `mxcUrlToHttp`'s
+// server-name check accepts it, but it becomes a dot segment in the download
+// URL's path, which URL resolution collapses.
+function matrixMediaKey(url: string): string | undefined {
+  let key = canonicalizeMatrixMediaKey(url);
+  if (!key?.startsWith('mxc://')) {
+    return undefined;
+  }
+  let serverName = key.slice('mxc://'.length).split('/')[0];
+  return serverName === '.' || serverName === '..' ? undefined : key;
+}
+
+function notMatrixMediaError(url: string) {
+  return new Error(`Not a Matrix media URL: ${url}`);
+}
+
+// Fetches a Matrix media item from the homeserver's authenticated media
+// endpoint. The request carries the bot's Matrix access token, so the URL is
+// never fetched as given: it must name a Matrix media item, and only the
+// homeserver URL that `mxcUrlToHttp` builds for that item is requested. A URL
+// that names no media item is refused without any request.
+async function fetchMatrixMedia(
   client: MatrixClient,
   url: string,
 ): Promise<Response> {
-  let headers = {
-    Authorization: `Bearer ${client.getAccessToken()}`,
-  };
-
-  let primaryError: unknown;
-  try {
-    let primaryResponse = await (globalThis as any).fetch(url, { headers });
-    if (primaryResponse.ok) {
-      return primaryResponse;
-    }
-    primaryError = mediaResponseError(primaryResponse.status);
-  } catch (err) {
-    primaryError = err;
+  let key = matrixMediaKey(url);
+  let downloadUrl = key
+    ? client.mxcUrlToHttp(
+        key,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )
+    : null;
+  if (!downloadUrl) {
+    throw notMatrixMediaError(url);
   }
 
-  let canonical = canonicalizeMatrixMediaKey(url);
-  let fallbackUrl =
-    canonical?.startsWith('mxc://') && canonical !== url
-      ? client.mxcUrlToHttp(
-          canonical,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          true,
-        )
-      : null;
-  if (!fallbackUrl || fallbackUrl === url) {
-    throw primaryError;
-  }
-
-  let fallbackResponse = await (globalThis as any).fetch(fallbackUrl, {
-    headers,
+  let response = await (globalThis as any).fetch(downloadUrl, {
+    headers: {
+      Authorization: `Bearer ${client.getAccessToken()}`,
+    },
   });
-  if (!fallbackResponse.ok) {
-    throw mediaResponseError(fallbackResponse.status);
+  if (!response.ok) {
+    throw mediaResponseError(response.status);
   }
-
-  return fallbackResponse;
+  return response;
 }
 
 // Synapse caps a /messages page at 1000 events.
@@ -583,36 +592,32 @@ export async function downloadFile(
     );
   }
 
-  const canonicalKey = canonicalizeMatrixMediaKey(fileUrl);
+  // The cache and the in-flight fetches are keyed by the Matrix media key,
+  // so every URL naming the same media item shares one entry.
+  const mediaKey = matrixMediaKey(fileUrl);
+  if (!mediaKey) {
+    throw notMatrixMediaError(fileUrl);
+  }
 
-  // Check cache by canonical key first
-  const cachedEntry = canonicalKey
-    ? fileCache.get(canonicalKey)
-    : fileCache.get(fileUrl);
+  const cachedEntry = fileCache.get(mediaKey);
   if (cachedEntry) {
-    // cache hit - minimal logging
     cachedEntry.timestamp = Date.now();
     return cachedEntry.content;
   }
 
-  // If a fetch for this canonical key is already in-flight, wait for it instead
-  const inFlightKey = canonicalKey || fileUrl;
-  const inFlight = inFlightFetches.get(inFlightKey);
+  // If a fetch for this media item is already in-flight, wait for it instead
+  const inFlight = inFlightFetches.get(mediaKey);
   if (inFlight) {
     return await inFlight;
   }
 
-  // cache miss
-
   // create an in-flight promise and store it so others can await
   const fetchPromise = (async () => {
-    let response = await fetchMatrixMediaWithFallback(client, fileUrl);
+    let response = await fetchMatrixMedia(client, fileUrl);
 
     const content = await response.text();
 
-    // store in cache under canonical key when available
-    const cacheKey = canonicalKey || fileUrl;
-    fileCache.set(cacheKey, {
+    fileCache.set(mediaKey, {
       content,
       timestamp: Date.now(),
     });
@@ -623,11 +628,11 @@ export async function downloadFile(
     return content;
   })();
 
-  inFlightFetches.set(inFlightKey, fetchPromise);
+  inFlightFetches.set(mediaKey, fetchPromise);
   try {
     return await fetchPromise;
   } finally {
-    inFlightFetches.delete(inFlightKey);
+    inFlightFetches.delete(mediaKey);
   }
 }
 
@@ -636,7 +641,7 @@ export async function downloadFileAsBase64DataUrl(
   url: string,
   contentType: string,
 ): Promise<string> {
-  let response = await fetchMatrixMediaWithFallback(client, url);
+  let response = await fetchMatrixMedia(client, url);
   let buffer = await response.arrayBuffer();
   let base64 = uint8ArrayToBase64(new Uint8Array(buffer));
   return `data:${contentType};base64,${base64}`;

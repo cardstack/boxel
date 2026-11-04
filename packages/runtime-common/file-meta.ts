@@ -1,4 +1,5 @@
 import { query, param, type DBAdapter, type Expression } from './index.ts';
+import { dbAdapterQuerier, type Querier } from './expression.ts';
 import { now as clockNow } from './clock.ts';
 
 // Returns created_at (epoch seconds) or undefined if not found
@@ -161,11 +162,14 @@ export async function ensureFileCreatedAt(
   return created ?? now;
 }
 
-// Bulk persist created_at for many paths (idempotent) and return a map
+// Bulk persist created_at for many paths (idempotent) and return a map.
+// `querier` runs the statements on a caller's transaction; without it they
+// run on the adapter's own connections.
 export async function persistFileMeta(
   db: DBAdapter,
   realmURL: string,
   rows: { path: string; contentHash?: string; contentSize?: number }[],
+  querier: Querier = dbAdapterQuerier(db),
 ): Promise<
   Map<string, { createdAt: number; contentHash?: string; contentSize?: number }>
 > {
@@ -211,7 +215,7 @@ export async function persistFileMeta(
     ', content_size =',
     'COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',
   );
-  await query(db, expr);
+  await querier(expr);
 
   // Fetch created_at for all affected paths (both pre-existing and new)
   let uniquePaths = Array.from(new Set(rows.map((row) => row.path)));
@@ -227,7 +231,7 @@ export async function persistFileMeta(
       selectExpr.push(param(p));
     });
     selectExpr.push(')');
-    let rowsResult = await query(db, selectExpr);
+    let rowsResult = await querier(selectExpr);
     for (let row of rowsResult) {
       let path = String(row['file_path']);
       let created = row['created_at'];
@@ -253,6 +257,7 @@ export async function removeFileMeta(
   db: DBAdapter,
   realmURL: string,
   paths: string[],
+  querier: Querier = dbAdapterQuerier(db),
 ): Promise<void> {
   if (!db || paths.length === 0) return;
   let expr: Expression = [
@@ -266,5 +271,5 @@ export async function removeFileMeta(
     expr.push(param(p));
   });
   expr.push(')');
-  await query(db, expr);
+  await querier(expr);
 }

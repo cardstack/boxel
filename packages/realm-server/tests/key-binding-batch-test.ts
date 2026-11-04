@@ -23,7 +23,7 @@ import {
   mintKeyWriteTicket,
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
-import { shareKey } from '../lib/key-shares.ts';
+import { listOwnSharedRealms, shareKey } from '../lib/key-shares.ts';
 import { pipelineAdmission } from '../lib/key-bindings.ts';
 import { withinSlotLimit, type BatchGroup } from '../lib/key-binding-batch.ts';
 import { removeGrant } from '../lib/user-key-grants.ts';
@@ -635,10 +635,56 @@ module(basename(import.meta.filename), function (hooks) {
       found.shares.map((s) => s.label),
       ['vendor'],
     );
+    let approvedCalls = async () =>
+      (
+        await listOwnSharedRealms(dbAdapter, WRITER, {
+          keyId: key.id,
+          matrixServerName: 'localhost',
+        })
+      )
+        .get(key.id)
+        ?.flatMap((realm) => realm.shares.map((s) => s.approvedCalls));
+    let cardsForAShare = async () => {
+      let response = await request
+        .post('/_secure-window/cards')
+        .set('Authorization', await secureSessionAuth(dbAdapter, WRITER))
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send({
+          data: {
+            type: 'secure-window-cards',
+            attributes: { realm: realmURL.href, slot: 'apiKey' },
+          },
+        });
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+      return response.body.data.map(
+        (c: { attributes: { name: string } }) => c.attributes.name,
+      );
+    };
+    assert.deepEqual(
+      await approvedCalls(),
+      [0],
+      'a share no operation is approved for yet says so',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      ['Inbox'],
+      "a card whose realm's-key slot no share fills is offered to a share",
+    );
     let approved = await approveFrom(WRITER, found, ['shared'], () => ({
       shareId: found.shares[0]!.id,
     }));
     assert.strictEqual(approved.status, 201, JSON.stringify(approved.body));
+    assert.deepEqual(
+      await approvedCalls(),
+      [1],
+      'the key listing counts the bindings that send the share',
+    );
+    assert.deepEqual(
+      await cardsForAShare(),
+      [],
+      'once a share fills the slot, the card has nothing for another share',
+    );
     assert.notOk(
       operationsIn(await batchOf(OWNER, onType(INBOX))).find(
         (o) => o.name === 'shared',
@@ -708,6 +754,7 @@ module(basename(import.meta.filename), function (hooks) {
           {} as BatchGroup['operations'][number]['slots'][number]['snapshot'],
         fingerprint: `${name}-${i}`,
       })),
+      openToAnonymous: false,
     });
     let destination = (host: string) => ({
       href: `https://${host}/`,
@@ -737,6 +784,36 @@ module(basename(import.meta.filename), function (hooks) {
       'the rest are counted for the next confirmation',
     );
     assert.deepEqual(withinSlotLimit(groups, 100).remaining, 0);
+
+    let pipelinesOnly = (name: string, slots: number) => ({
+      ...operation(name, slots),
+      status: 'pipelines-only' as const,
+    });
+    let mixed: BatchGroup[] = [
+      {
+        destination: destination('a.example'),
+        operations: [pipelinesOnly('approved', 4), operation('pending', 2)],
+      },
+      {
+        destination: destination('b.example'),
+        operations: [pipelinesOnly('alsoApproved', 1)],
+      },
+    ];
+    let capped = withinSlotLimit(mixed, 5);
+    assert.deepEqual(
+      capped.kept.map((g) => g.operations.map((o) => o.name)),
+      [['pending']],
+      'the one that needs approving comes first; ones approved for pipelines only fill what is left, in order',
+    );
+    assert.strictEqual(capped.remaining, 0);
+    assert.strictEqual(capped.remainingPipelinesOnly, 2);
+    assert.deepEqual(
+      withinSlotLimit(mixed, 7).kept.map((g) =>
+        g.operations.map((o) => o.name),
+      ),
+      [['approved', 'pending'], ['alsoApproved']],
+      'with room for all, they keep the order the window shows',
+    );
   });
 
   test('the batch is asked with the secure window’s own session, about what the user can read', async function (assert) {
@@ -800,6 +877,43 @@ module(basename(import.meta.filename), function (hooks) {
       ['Digest', 'Inbox'],
       "the realm's cards' types that send the user's own key",
     );
+
+    let sendingRealmKey = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, slot: 'apiKey' },
+        },
+      });
+    assert.strictEqual(
+      sendingRealmKey.status,
+      200,
+      JSON.stringify(sendingRealmKey.body),
+    );
+    assert.deepEqual(
+      sendingRealmKey.body.data.map(
+        (c: { attributes: { name: string } }) => c.attributes.name,
+      ),
+      ['Inbox'],
+      "with the `apiKey` slot, the types that send the realm's key, which a share there is approved for",
+    );
+
+    let unknownSlot = await request
+      .post('/_secure-window/cards')
+      .set('Authorization', auth)
+      .set('Origin', secureOriginURL.origin)
+      .set('Content-Type', 'application/json')
+      .send({
+        data: {
+          type: 'secure-window-cards',
+          attributes: { realm: realmURL.href, slot: 'botKey' },
+        },
+      });
+    assert.strictEqual(unknownSlot.status, 400, 'a slot no request sends');
 
     let stranger = await request
       .post('/_secure-window/cards')

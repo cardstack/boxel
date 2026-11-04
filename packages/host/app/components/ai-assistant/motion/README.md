@@ -28,6 +28,8 @@ Score, declared once the room's first render has settled (`SETTLE_AFTER_MS`), so
 - inserted messages, live or not, are fixed to the block above them (`arriveWithBlockAbove`): an arrival starts where that block's move puts it and travels on its clock, so the two never overlap (ADR 013 §1.10, §1.20); with nothing above it moving, it fades in and rises `RISE` px;
 - removed messages fade over `DURATION.exit`, `EASE_IN`.
 
+Pret UI's disclosures (a tool row's panel, a thinking block) open and close at once inside the region (`--pretui-disclosure-duration: 0s`), and the messages below take the change as one move. Their own height transition resized the content on every frame, and StickToBottom settles each resize in a render pass, so the move was recompiled from its painted position on every frame.
+
 ### One message: `MessageMotion`
 
 Mounted as each message's `.content`, nested inside the conversation.

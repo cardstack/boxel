@@ -174,6 +174,14 @@ interface ValidationStep {
   at: number;
 }
 
+// The outcome of validating one tool call. `validate()` only decides; the
+// drain sends the result. A validation that times out keeps running, and
+// because it sends nothing itself, its late verdict cannot add a second
+// result to the failed one the drain sent for the timeout. A call that is
+// invalid has a `reason`; one skipped without a result (ai-bot runs it, or it
+// has no name) has none.
+type ValidationVerdict = { valid: true } | { valid: false; reason?: string };
+
 // e.g. "resolve tool foo at +0ms (2950ms); load tool module bar at +2950ms
 // (still running at +3000ms)"
 function describeValidationSteps(
@@ -298,6 +306,15 @@ type ToolProgressListener = (entry: {
 // How long a script's question waits for the reader.
 const SCRIPT_ASK_MAX_MS = 10 * 60 * 1000;
 
+// A wait as a person reads it: whole minutes, or milliseconds when shorter.
+function describeWait(ms: number): string {
+  if (ms < 60_000) {
+    return `${ms} ms`;
+  }
+  let minutes = Math.round(ms / 60_000);
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
 interface ScriptAnswer {
   answer: string;
   label: string;
@@ -305,6 +322,37 @@ interface ScriptAnswer {
 
 // A call the reader denied at its gate, as its result says it.
 export const DENIED_BY_USER = 'Denied by you';
+
+// What the index pass of a tracked write reported: every file it reindexed,
+// dependents included, spelled as an index event spells them, and the realm
+// generation it committed when the event says.
+export interface IndexedWrite {
+  invalidations: string[];
+  generation?: number;
+}
+
+// How long a tracked write waits for its index event.
+const TRACKED_WRITE_MS = 5 * 60 * 1000;
+
+// How many `prerender_html` events a realm's watch keeps.
+const RENDERED_HTML_LOG_SIZE = 100;
+
+// How long a render wait gives a realm's render job by default. The job for
+// a module with a handful of dependents finishes within a few seconds of its
+// index pass; one with hundreds can take minutes.
+const RENDER_JOB_WAIT_MS = 5_000;
+
+// A realm's `prerender_html` events since a module write there was first
+// tracked: which files each render job rendered, as file URLs, and the
+// generation it rendered at. `expired` says the time the realm's last
+// tracked module write gave the watch is up; it then ends with its last wait.
+interface RenderedHTMLWatch {
+  log: { generation: number; files: Set<string> }[];
+  listeners: Set<() => void>;
+  unsubscribe: () => void;
+  expired: boolean;
+  endTimer?: ReturnType<typeof setTimeout>;
+}
 
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
@@ -315,6 +363,12 @@ export default class ToolService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private session: SessionService;
   @service declare private store: StoreService;
+  // How long a tool may run, and how long a script's question waits for the
+  // reader. Only __setWaitsForTesting changes them.
+  #toolExecuteTimeoutMs = TOOL_EXECUTE_TIMEOUT_MS;
+  #scriptAskMaxMs = SCRIPT_ASK_MAX_MS;
+  #renderedHTMLWatchMs = TRACKED_WRITE_MS;
+  #renderJobWaitMs = RENDER_JOB_WAIT_MS;
   currentlyExecutingToolRequestIds = new TrackedSet<string>();
   // The room each running call runs for, by tool call id.
   private executingToolRooms = new TrackedMap<string, string>();
@@ -353,6 +407,26 @@ export default class ToolService extends Service {
     }
   >();
 
+  // Shortens the tool deadline, the wait for a script's question, how long a
+  // realm's render watch outlives a module write and how long a render wait
+  // gives the render job, so a test can reach them. Refused outside tests.
+  __setWaitsForTesting(waits: {
+    toolExecuteTimeoutMs?: number;
+    scriptAskMaxMs?: number;
+    renderedHTMLWatchMs?: number;
+    renderJobWaitMs?: number;
+  }) {
+    if (!isTesting()) {
+      throw new Error('__setWaitsForTesting is only for tests');
+    }
+    this.#toolExecuteTimeoutMs =
+      waits.toolExecuteTimeoutMs ?? this.#toolExecuteTimeoutMs;
+    this.#scriptAskMaxMs = waits.scriptAskMaxMs ?? this.#scriptAskMaxMs;
+    this.#renderedHTMLWatchMs =
+      waits.renderedHTMLWatchMs ?? this.#renderedHTMLWatchMs;
+    this.#renderJobWaitMs = waits.renderJobWaitMs ?? this.#renderJobWaitMs;
+  }
+
   private askFromScript(
     toolRequestId: string,
     request: ScriptAsk,
@@ -360,8 +434,12 @@ export default class ToolService extends Service {
     return new Promise((resolve, reject) => {
       let timer = setTimeout(() => {
         this.scriptAsks.delete(toolRequestId);
-        reject(new Error('No answer came within 10 minutes'));
-      }, SCRIPT_ASK_MAX_MS);
+        reject(
+          new Error(
+            `No answer came within ${describeWait(this.#scriptAskMaxMs)}`,
+          ),
+        );
+      }, this.#scriptAskMaxMs);
       this.scriptAsks.set(toolRequestId, {
         request,
         answer: (value: string) => {
@@ -448,9 +526,12 @@ export default class ToolService extends Service {
       clientRequestId: string;
       roomId: string;
       targetHref: string;
-      deferred: Deferred<void>;
+      // Settles with what the index event reported, or with undefined when
+      // the wait ends without one (replaced by a newer write, reset, timed out).
+      deferred: Deferred<IndexedWrite | undefined>;
     }
   >();
+  private renderedHTMLWatches = new Map<string, RenderedHTMLWatch>();
   private aiAssistantInvalidationWaiters = new Map<
     string,
     { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
@@ -474,11 +555,14 @@ export default class ToolService extends Service {
     this.acceptingAllRoomIds.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
-      invalidation.deferred.fulfill();
+      invalidation.deferred.fulfill(undefined);
     }
     this.aiAssistantInvalidations.clear();
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
       this.cleanupInvalidationWaiter(key);
+    }
+    for (let [realmURL, watch] of [...this.renderedHTMLWatches]) {
+      this.endRenderedHTMLWatch(realmURL, watch);
     }
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
@@ -537,8 +621,14 @@ export default class ToolService extends Service {
       return clientRequestId;
     }
 
-    let deferred = new Deferred<void>();
-    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    // A module write's check waits for its instances to be rendered again, and
+    // the render job can announce that before the check starts waiting.
+    if (fileUrl.endsWith('.gts')) {
+      this.watchRenderedHTML(realmURL);
+    }
+
+    let deferred = new Deferred<IndexedWrite | undefined>();
+    this.aiAssistantInvalidations.get(key)?.deferred.fulfill(undefined);
     this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
@@ -565,17 +655,19 @@ export default class ToolService extends Service {
       }
       this.cleanupInvalidationWaiter(key);
       let current = this.aiAssistantInvalidations.get(key);
-      current?.deferred.fulfill();
+      current?.deferred.fulfill({
+        invalidations: event.invalidations,
+        ...(event.generation !== undefined
+          ? { generation: event.generation }
+          : {}),
+      });
     });
-    let timeoutId = setTimeout(
-      () => {
-        this.cleanupInvalidationWaiter(key);
-        let current = this.aiAssistantInvalidations.get(key);
-        current?.deferred.fulfill();
-        this.aiAssistantInvalidations.delete(key);
-      },
-      5 * 60 * 1000,
-    );
+    let timeoutId = setTimeout(() => {
+      this.cleanupInvalidationWaiter(key);
+      let current = this.aiAssistantInvalidations.get(key);
+      current?.deferred.fulfill(undefined);
+      this.aiAssistantInvalidations.delete(key);
+    }, TRACKED_WRITE_MS);
     this.aiAssistantInvalidationWaiters.set(key, {
       unsubscribe,
       timeoutId,
@@ -600,29 +692,156 @@ export default class ToolService extends Service {
     this.aiAssistantInvalidationWaiters.delete(key);
   }
 
+  // Waits for the index event of the room's last tracked write to the target,
+  // and returns what it reported. Returns undefined when there is no tracked
+  // write to wait for, or when the wait ends without the event.
   async waitForInvalidationAfterAIAssistantRequest(
     roomId: string,
     targetHref: string,
     timeoutMs?: number,
-  ): Promise<void> {
+  ): Promise<IndexedWrite | undefined> {
     if (!roomId || !targetHref) {
-      return;
+      return undefined;
     }
     let key = this.invalidationKey(roomId, targetHref);
     let existing = this.aiAssistantInvalidations.get(key);
     if (!existing) {
-      return;
+      return undefined;
     }
 
-    let invalidated = existing.deferred.promise.then(() => true);
+    let invalidated = existing.deferred.promise.then((indexed) => ({
+      indexed,
+    }));
     let settled = timeoutMs
-      ? await Promise.race([invalidated, delay(timeoutMs).then(() => false)])
+      ? await Promise.race([
+          invalidated,
+          delay(timeoutMs).then(() => undefined),
+        ])
       : await invalidated;
-    // Only a real invalidation consumes the entry. On timeout the deferred is
-    // still live, and a later caller must still be able to wait on it.
-    if (settled) {
+    // Only a settled wait consumes the entry, and only the entry it waited
+    // on: a newer write to the target settles this wait empty and puts its
+    // own entry under the same key. On timeout the deferred is still live,
+    // and a later caller must still be able to wait on it.
+    if (settled && this.aiAssistantInvalidations.get(key) === existing) {
       this.aiAssistantInvalidations.delete(key);
     }
+    return settled?.indexed;
+  }
+
+  // A realm server's index pass leaves rendering its cards' formats to a
+  // render job of its own, which announces the files it rendered in a
+  // `prerender_html` event. The watch records those events for the realm from
+  // the time it starts, for as long as a tracked write waits for its index
+  // event after the realm's last tracked module write. That covers a check
+  // that starts from the write's index event and then waits for its renders.
+  private watchRenderedHTML(realmURL: string) {
+    let existing = this.renderedHTMLWatches.get(realmURL);
+    if (existing) {
+      this.renewRenderedHTMLWatch(realmURL, existing);
+      return;
+    }
+    let watch: RenderedHTMLWatch = {
+      log: [],
+      listeners: new Set(),
+      unsubscribe: () => undefined,
+      expired: false,
+    };
+    watch.unsubscribe = this.messageService.subscribe(realmURL, (event) => {
+      if (event?.eventName !== 'prerender_html') {
+        return;
+      }
+      watch.log.push({
+        generation: event.generation,
+        files: new Set(event.invalidations),
+      });
+      if (watch.log.length > RENDERED_HTML_LOG_SIZE) {
+        watch.log.shift();
+      }
+      for (let listener of [...watch.listeners]) {
+        listener();
+      }
+    });
+    this.renderedHTMLWatches.set(realmURL, watch);
+    this.renewRenderedHTMLWatch(realmURL, watch);
+  }
+
+  // Gives the watch the full time again, from now.
+  private renewRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    watch.expired = false;
+    watch.endTimer = setTimeout(() => {
+      watch.expired = true;
+      if (watch.listeners.size === 0) {
+        this.endRenderedHTMLWatch(realmURL, watch);
+      }
+    }, this.#renderedHTMLWatchMs);
+  }
+
+  // Stops recording the realm's renders, and ends any wait on the watch with
+  // what it recorded.
+  private endRenderedHTMLWatch(realmURL: string, watch: RenderedHTMLWatch) {
+    clearTimeout(watch.endTimer);
+    if (this.renderedHTMLWatches.get(realmURL) === watch) {
+      this.renderedHTMLWatches.delete(realmURL);
+    }
+    watch.unsubscribe();
+    for (let listener of [...watch.listeners]) {
+      listener();
+    }
+  }
+
+  // Waits until every file in `files` has been rendered by a render job at
+  // the generation it maps to or later, or until `timeoutMs` passes (the
+  // render job's default wait unless given), and returns the files that have. The realm's watch lasts at least as long as
+  // the wait. A realm with no recent tracked module write has no watch, so
+  // nothing is known to be rendered there.
+  async waitForRenderedHTML(
+    realmURL: string,
+    files: Map<string, number>,
+    timeoutMs = this.#renderJobWaitMs,
+  ): Promise<Set<string>> {
+    let watch = this.renderedHTMLWatches.get(realmURL);
+    if (!watch) {
+      return new Set();
+    }
+    let rendered = () => {
+      let found = new Set<string>();
+      for (let entry of watch.log) {
+        for (let [href, generation] of files) {
+          if (entry.generation >= generation && entry.files.has(href)) {
+            found.add(href);
+          }
+        }
+      }
+      return found;
+    };
+    if (rendered().size < files.size) {
+      await new Promise<void>((resolve) => {
+        let finish = () => {
+          clearTimeout(timeoutId);
+          watch.listeners.delete(listener);
+          if (
+            watch.expired &&
+            watch.listeners.size === 0 &&
+            this.renderedHTMLWatches.get(realmURL) === watch
+          ) {
+            this.endRenderedHTMLWatch(realmURL, watch);
+          }
+          resolve();
+        };
+        let listener = () => {
+          if (
+            this.renderedHTMLWatches.get(realmURL) !== watch ||
+            rendered().size === files.size
+          ) {
+            finish();
+          }
+        };
+        let timeoutId = setTimeout(finish, timeoutMs);
+        watch.listeners.add(listener);
+      });
+    }
+    return rendered();
   }
 
   public queueEventForToolProcessing(event: Partial<IEvent>) {
@@ -814,7 +1033,7 @@ export default class ToolService extends Service {
           // cost is larger: every later drain pass awaits this one, so every
           // tool in the tab stops. Bound it like execute, and log what it is
           // waiting on if it is slow, so the stuck step can be named.
-          let isValid = false;
+          let verdict: ValidationVerdict = { valid: false };
           // This run's own timeline. A validation that times out keeps
           // running, so it writes only to this array and never to the map
           // entry of a later validation of the same request.
@@ -823,20 +1042,48 @@ export default class ToolService extends Service {
             this.validationSteps.set(messageTool.id, steps);
           }
           let validationSettled = false;
+          let validationStartedAt = performance.now();
           let watchdog = setTimeout(
             () => this.logSlowValidation(messageTool, steps),
             VALIDATE_WATCHDOG_MS,
           );
+          let validation = this.trackValidation(
+            this.validate(messageTool, steps),
+          ).finally(() => {
+            validationSettled = true;
+          });
           try {
-            isValid = await withTimeout(
-              this.validate(messageTool, steps).finally(() => {
-                validationSettled = true;
-              }),
+            verdict = await withTimeout(
+              validation,
               this.validateTimeoutMs,
               `Validating tool "${messageTool.name}"`,
             );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
+            if (!validationSettled) {
+              // The drain stops waiting here and reports the timeout. Log
+              // what the validation that keeps running decides, so a slow
+              // step and a hang read differently; its verdict sends nothing.
+              validation.then(
+                (late) =>
+                  console.warn(
+                    `[tool-validate] "${messageTool.name}" (${messageTool.id}) finished ${Math.round(
+                      performance.now() - validationStartedAt,
+                    )}ms after it started, after its timeout: ${
+                      late.valid
+                        ? 'valid'
+                        : `invalid (${late.reason ?? 'skipped'})`
+                    }; nothing is sent for it`,
+                  ),
+                (late) =>
+                  console.warn(
+                    `[tool-validate] "${messageTool.name}" (${messageTool.id}) threw ${Math.round(
+                      performance.now() - validationStartedAt,
+                    )}ms after it started, after its timeout; nothing is sent for it`,
+                    late,
+                  ),
+              );
+            }
             // The message and step timeline go in the text itself: a test
             // runner's console capture can render an Error argument as
             // "[object Object]". The error argument is still passed for its
@@ -848,32 +1095,7 @@ export default class ToolService extends Service {
               )}]`,
               e,
             );
-            try {
-              await this.matrixService.sendToolResultEvent({
-                roomId: roomId!,
-                invokedToolFromEventId:
-                  this.getCurrentEventIdForCommandRequest(
-                    roomId!,
-                    messageTool.id,
-                  ) ?? messageTool.eventId,
-                toolCallId: messageTool.id!,
-                status: 'failed',
-                failureReason: error.message,
-                context:
-                  await this.operatorModeStateService.getSummaryForAIBot(),
-              });
-            } catch (sendError) {
-              console.error(
-                'could not send failed tool result event to the room',
-                sendError,
-              );
-              // The room never got a terminal result, so nothing else will
-              // clear this tool's spinner — the local failed state at least
-              // restores the Retry affordance in this tab.
-              if (messageTool.id) {
-                this.matrixService.failedToolState.set(messageTool.id, error);
-              }
-            }
+            await this.sendFailedValidationResult(roomId!, messageTool, error);
             continue;
           } finally {
             clearTimeout(watchdog);
@@ -884,7 +1106,14 @@ export default class ToolService extends Service {
               this.validationSteps.delete(messageTool.id);
             }
           }
-          if (!isValid) {
+          if (!verdict.valid) {
+            if (verdict.reason) {
+              await this.sendInvalidValidationResult(
+                roomId!,
+                messageTool,
+                verdict.reason,
+              );
+            }
             continue;
           }
 
@@ -1405,7 +1634,7 @@ export default class ToolService extends Service {
                   onAsk?: (request: ScriptAsk) => Promise<ScriptAnswer>;
                 }
               ).onAsk = (request) => {
-                extendTimeout(SCRIPT_ASK_MAX_MS);
+                extendTimeout(this.#scriptAskMaxMs);
                 return this.askFromScript(requestId, request);
               };
               let stoppable = toolToRun as { stop?: () => void };
@@ -1469,14 +1698,15 @@ export default class ToolService extends Service {
           }
         };
 
-        // checkCorrectness legitimately waits out one index-invalidation
-        // window and then does prerender/refresh work that can take
-        // comparably long, so it gets that much headroom on top of the
-        // standard bound.
+        // checkCorrectness legitimately runs three steps in a row that are
+        // each bounded by the card render timeout: it waits out the write's
+        // index event, prerenders the module, and waits for or renders the
+        // module's instances. So it gets that much headroom on top of the
+        // standard bound, which covers its reads.
         let executeTimeoutMs =
           command.name === CHECK_CORRECTNESS_COMMAND_NAME
-            ? TOOL_EXECUTE_TIMEOUT_MS + 2 * ENV.cardRenderTimeout
-            : TOOL_EXECUTE_TIMEOUT_MS;
+            ? this.#toolExecuteTimeoutMs + 3 * ENV.cardRenderTimeout
+            : this.#toolExecuteTimeoutMs;
 
         [resultCard] = await all([
           withExtendableTimeout(
@@ -1648,12 +1878,104 @@ export default class ToolService extends Service {
       .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
+  // Sends the invalid result for a call the validation rejected. The drain
+  // claimed this request before validating, so this result is terminal for
+  // auto-execution. (The user can still run it manually: "Try Anyway"
+  // bypasses the drain.) When the send fails, a failed result still tells
+  // the model why its call was rejected, so it does not resend the same call.
+  private async sendInvalidValidationResult(
+    roomId: string,
+    messageTool: MessageTool,
+    reason: string,
+  ) {
+    try {
+      // CS-11045: Same canonical-event-id resolution as the run task — emit
+      // the invalid commandResult linked to the bot-message event currently
+      // owning the toolRequest in room state, so ai-bot's /messages view
+      // and the host's own m.replace-aware bookkeeping agree on the linkage.
+      await this.matrixService.sendToolResultEvent({
+        roomId,
+        invokedToolFromEventId:
+          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+          messageTool.eventId,
+        toolCallId: messageTool.id!,
+        status: 'invalid',
+        failureReason: reason,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    } catch (sendError) {
+      let message =
+        sendError instanceof Error ? sendError.message : String(sendError);
+      console.error(
+        `[tool-validate] "${messageTool.name}" (${messageTool.id}) could not send its invalid result; sending a failed result instead`,
+        sendError,
+      );
+      await this.sendFailedValidationResult(
+        roomId,
+        messageTool,
+        new Error(
+          `${reason} (the invalid result could not be sent: ${message})`,
+        ),
+      );
+    }
+  }
+
+  // Sends a failed result for a validation that threw or timed out. When that
+  // send fails too, the room never gets a terminal result, so nothing else
+  // will clear the tool's spinner: the local failed state at least restores
+  // the Retry affordance in this tab.
+  private async sendFailedValidationResult(
+    roomId: string,
+    messageTool: MessageTool,
+    error: Error,
+  ) {
+    try {
+      await this.matrixService.sendToolResultEvent({
+        roomId,
+        invokedToolFromEventId:
+          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+          messageTool.eventId,
+        toolCallId: messageTool.id!,
+        status: 'failed',
+        failureReason: error.message,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    } catch (sendError) {
+      console.error(
+        'could not send failed tool result event to the room',
+        sendError,
+      );
+      if (messageTool.id) {
+        this.matrixService.failedToolState.set(messageTool.id, error);
+      }
+    }
+  }
+
   // The validation timeout. Tests that deliberately hold a validation raise
   // it, so the hold does not use up the time the rest of the validation has.
   validateTimeoutMs = VALIDATE_TIMEOUT_MS;
 
   // The step timeline of each in-flight validation, by tool call id.
   private validationSteps = new Map<string, ValidationStep[]>();
+
+  // Validations still running, including ones the drain stopped waiting for
+  // when they timed out. The drain's test waiter ends with the drain, so
+  // `settled()` does not wait for a timed-out validation; a test that needs
+  // its end waits for this to reach zero.
+  private runningValidations = 0;
+
+  get validationsInFlight(): number {
+    return this.runningValidations;
+  }
+
+  private async trackValidation<T>(validation: Promise<T>): Promise<T> {
+    this.runningValidations++;
+    try {
+      return await validation;
+    } finally {
+      this.runningValidations--;
+    }
+  }
 
   private logSlowValidation(command: MessageTool, steps: ValidationStep[]) {
     let step = steps.at(-1)?.step;
@@ -1662,7 +1984,9 @@ export default class ToolService extends Service {
     console.warn(
       `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
         step ?? 'before the first load'
-      }. Tool still resolving: ${command.isResolving}. Loader imports in flight: ${JSON.stringify(
+      }. Tool still resolving: ${command.isResolving}. Validations in flight: ${
+        this.runningValidations
+      }. Loader imports in flight: ${JSON.stringify(
         moduleImports,
       )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
     );
@@ -1671,27 +1995,27 @@ export default class ToolService extends Service {
   async validate(
     command: MessageTool,
     steps: ValidationStep[] = [],
-  ): Promise<boolean> {
+  ): Promise<ValidationVerdict> {
     let markStep = (step: string) =>
       steps.push({ step, at: performance.now() });
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
     // class to resolve, and never runs it, so there is nothing to validate.
     if (command.executedBy === AI_BOT_EXECUTOR) {
-      return false;
+      return { valid: false };
     }
     if (!command.name) {
       console.warn(
         `Command with id ${command.id} has no name, skipping validation`,
       );
-      return false;
+      return { valid: false };
     }
 
     if (command.argumentsError) {
       error = `The arguments of this "${command.name}" call were not valid JSON (${command.argumentsError}), so the call was not run. Send the call again with complete, valid JSON arguments.`;
     } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
-      return true;
+      return { valid: true };
     }
 
     // The message's tool list is complete as soon as its event is applied, but
@@ -1770,31 +2094,10 @@ export default class ToolService extends Service {
       }
     }
     if (error) {
-      // The caller claimed this request before validating, so this invalid
-      // result is already terminal for auto-execution. (The user can still
-      // run it manually — "Try Anyway" bypasses the drain.)
-      //
-      // CS-11045: Same canonical-event-id resolution as the run task — emit
-      // the invalid commandResult linked to the bot-message event currently
-      // owning the toolRequest in room state, so ai-bot's /messages view
-      // and the host's own m.replace-aware bookkeeping agree on the linkage.
-      let invokedToolFromEventId =
-        this.getCurrentEventIdForCommandRequest(
-          command.message.roomId,
-          command.toolRequest.id,
-        ) ?? command.eventId;
-      await this.matrixService.sendToolResultEvent({
-        roomId: command.message.roomId,
-        invokedToolFromEventId,
-        toolCallId: command.toolRequest.id!,
-        status: 'invalid',
-        failureReason: error,
-        context: await this.operatorModeStateService.getSummaryForAIBot(),
-      });
-      return false;
+      return { valid: false, reason: error };
     }
 
-    return true;
+    return { valid: true };
   }
 
   // Builds the tool's input card from the call's arguments. The input is

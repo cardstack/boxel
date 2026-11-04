@@ -1,5 +1,4 @@
-## Running Commands in Headless Chrome 
-
+# Running Commands in Headless Chrome
 
 ### Command runner architecture
 
@@ -58,14 +57,17 @@ type BotTriggerContent = {
 ## Submission Bot Commands (DB)
 
 Moved to:
+
 - [`packages/bot-runner/README.md#submission-bot-commands-db`](../packages/bot-runner/README.md#submission-bot-commands-db)
 - [`packages/bot-runner/README.md#user-issuing-task`](../packages/bot-runner/README.md#user-issuing-task)
 
 ## Example: Triggering Headless Chrome Command from Bot Runner
 
 1. Ensure bot registrations and command mappings exist:
-  - `pnpm setup-submission-bot` (from `packages/matrix`)
-  - This seeds `bot_commands.command` values such as `@cardstack/boxel-host/commands/show-card/default`.
+
+- `pnpm setup-submission-bot` (from `packages/matrix`)
+- This seeds `bot_commands.command` values such as `@cardstack/boxel-host/commands/show-card/default`.
+
 2. Emit an `app.boxel.bot-trigger` event in the room:
 
 ```ts
@@ -105,7 +107,7 @@ const event = {
 ### Command Normalization in `run-command` task
 
 - Command stays a `string` across bot-runner, job queue, and prerender request.
-- `runtime-common/tasks/run-command.ts` normalizes legacy realm-server URL forms (`/commands/<name>/<export>`) into a realm-local module specifier path when needed.
+- `normalizeCommandSpecifier` in `runtime-common/run-command-request.ts` normalizes legacy realm-server URL forms (`/commands/<name>/<export>`) into a realm-local module specifier path when needed.
 - String -> `ResolvedCodeRef` conversion happens in the host `command-runner` route when it parses the `command` field from the stored localStorage request.
 
 ## Host `command-runner` Route
@@ -158,7 +160,9 @@ https://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2
 Use this when you want to test `command-runner` directly in the browser.
 
 1. Open host in a browser:
-  - `https://localhost:4200`
+
+- `https://localhost:4200`
+
 2. Open browser devtools console and run:
 
 ```js
@@ -180,9 +184,11 @@ localStorage.setItem(
 ```
 
 3. Visit this URL (or refresh if already there):
-  - `https://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2`
+
+- `https://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2`
 
 Notes:
+
 - `request_id` in the URL must match the localStorage key suffix.
 - `nonce` in the URL must match the `nonce` in stored JSON.
 - The entry is consumed once; set it again before another refresh.

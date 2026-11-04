@@ -1,3 +1,4 @@
+import { opensSharedKeysToAnonymous } from './anonymous-key-use.ts';
 import { getDomain } from 'tldts';
 import {
   codeRefWithAbsoluteIdentifier,
@@ -27,6 +28,7 @@ import {
   bindingType,
   canonicalInstance,
   slotBindings,
+  slotToken,
   type SlotBinding,
 } from './key-bindings.ts';
 
@@ -93,7 +95,15 @@ export interface SlotBound {
 }
 
 export interface SecureWindowContext {
-  realm: { url: string; name: string; directWriter: boolean };
+  realm: {
+    url: string;
+    name: string;
+    directWriter: boolean;
+    // Whether the realm's policy lets people who aren't signed in make a call
+    // that sends a shared key (`anonymous-key-use.ts`): sharing a key into it
+    // means they will use it, so only a key that allows it is shared there.
+    opensToAnonymous: boolean;
+  };
   card?: { name: string; module: string; exportName: string };
   operation?: SecureWindowOperation;
 }
@@ -211,6 +221,8 @@ export function validateContextRequest(
 
 export interface Deps {
   dbAdapter: DBAdapter;
+  // The paired homeserver's server name, which a `users` grant is judged by.
+  matrixServerName: string;
   // The realm a URL is in, found among every realm this server serves,
   // mounted or not, and without mounting it (`findRealm`).
   findRealm: (url: URL) => Promise<ServedRealm | undefined>;
@@ -247,9 +259,10 @@ async function realmNamed(
 
 // Read from the realm's permission rows, so a realm need not be mounted to be
 // asked about, by the rule every realm request is checked by. A secure session
-// is a registered Matrix user's, so the `users` row applies to it.
+// is a registered Matrix user's, so the `users` row applies to it when the
+// user is on the paired homeserver.
 async function mayRead(
-  dbAdapter: DBAdapter,
+  { dbAdapter, matrixServerName }: Pick<Deps, 'dbAdapter' | 'matrixServerName'>,
   realmURL: string,
   user: string,
 ): Promise<boolean> {
@@ -257,6 +270,7 @@ async function mayRead(
   let actions = await effectiveRealmPermissions(
     permissions,
     user,
+    matrixServerName,
     async () => true,
   );
   return actions.includes('read');
@@ -322,7 +336,7 @@ export async function resolveWindowRequest(
     let named = target?.kind === 'type' ? target.realm : request.realm;
     served = named ? await realmNamed(deps, named) : undefined;
   }
-  if (!served || !(await mayRead(dbAdapter, served.url, user))) {
+  if (!served || !(await mayRead(deps, served.url, user))) {
     throw notFound();
   }
   // A realm named beside a target must be the target's own. Any other realm
@@ -358,7 +372,7 @@ export async function resolveWindowRequest(
     codeRef.module as RealmResourceIdentifier,
   );
   let moduleRealm = moduleURL ? await findRealm(moduleURL) : undefined;
-  if (!moduleRealm || !(await mayRead(dbAdapter, moduleRealm.url, user))) {
+  if (!moduleRealm || !(await mayRead(deps, moduleRealm.url, user))) {
     throw notFound();
   }
   // The definition is looked up among mounted realms.
@@ -398,6 +412,11 @@ export async function secureWindowContext(
         deps.dbAdapter,
         new URL(realm.url),
         user,
+      ),
+      // A policy that can't be read says nothing; the page reads as signed-in
+      // only, and a share made then serves signed-in people only.
+      opensToAnonymous: await opensSharedKeysToAnonymous(realm).catch(
+        () => false,
       ),
     },
   };
@@ -559,12 +578,17 @@ const MAX_LISTED_TYPES = 200;
 // The card definitions the realm's cards adopt from that declare a `callApi`
 // operation sending the caller's own key (`{{userKey}}`), by display name:
 // the cards whose requests one of the user's keys can be approved for there.
-// Each definition is read from the definition cache, and only from a realm
-// the user may read.
+// With `slot: 'apiKey'`, those with an operation sending the realm's key
+// (`{{apiKey}}`) from a slot no share fills yet: the cards a new share in the
+// realm can be approved for. A slot already filled by a share stays with that
+// share, which its own owner keeps up, so a card whose every such slot is
+// filled has nothing for another share. Each definition is read from the
+// definition cache, and only from a realm the user may read.
 export async function realmCardsWithRequests(
   deps: Deps,
   user: string,
   realmId: RealmResourceIdentifier,
+  slot: 'userKey' | 'apiKey' = 'userKey',
 ): Promise<CardWithRequests[]> {
   let { dbAdapter, findRealm, definitionLookup, virtualNetwork } = deps;
   let { realm } = await resolveWindowRequest(deps, user, { realm: realmId });
@@ -597,6 +621,28 @@ export async function realmCardsWithRequests(
       types.set(`${absolute.module}#${absolute.name}`, absolute);
     }
   }
+  // The realm's slots a share fills, by type, operation and slot, for the
+  // `apiKey` listing. Per-instance operations aren't listed, so only bindings
+  // for a whole type count.
+  let filled = new Set<string>();
+  if (slot === 'apiKey') {
+    let bound = (await query(dbAdapter, [
+      `SELECT definition_url, export_name, operation_name, slot
+         FROM key_bindings
+        WHERE share_id IS NOT NULL AND instance_url IS NULL AND realm_url = `,
+      param(realm.url),
+    ])) as {
+      definition_url: string;
+      export_name: string;
+      operation_name: string;
+      slot: string;
+    }[];
+    for (let b of bound) {
+      filled.add(
+        `${b.definition_url}#${b.export_name}|${b.operation_name}|${b.slot}`,
+      );
+    }
+  }
   let readable = new Map<string, boolean>();
   let found: CardWithRequests[] = [];
   for (let codeRef of types.values()) {
@@ -611,7 +657,7 @@ export async function realmCardsWithRequests(
     if (!readable.has(moduleRealm.url)) {
       readable.set(
         moduleRealm.url,
-        (await mayRead(dbAdapter, moduleRealm.url, user)) &&
+        (await mayRead(deps, moduleRealm.url, user)) &&
           Boolean(await moduleRealm.mount()),
       );
     }
@@ -628,14 +674,23 @@ export async function realmCardsWithRequests(
     }
     // An operation approved per instance is approved from its card, not from
     // the type the key page approves, so it doesn't count here.
-    let sendsUserKey = Object.values(definition.operations ?? {}).some(
-      (operation) =>
+    let type = bindingType(realm.operationCore, codeRef, new URL(realm.url));
+    let sendsKey = Object.entries(definition.operations ?? {}).some(
+      ([name, operation]) =>
         operation.base === 'callApi' &&
         !operation.invalid &&
         !operation.callApi?.perInstance &&
-        operation.callApi?.slots.some((slot) => slot.key === 'userKey'),
+        operation.callApi?.slots.some(
+          (s) =>
+            s.key === slot &&
+            (slot === 'userKey' ||
+              (type !== undefined &&
+                !filled.has(
+                  `${type.module}#${type.name}|${name}|${slotToken(s)}`,
+                ))),
+        ),
     );
-    if (sendsUserKey) {
+    if (sendsKey) {
       found.push({
         module: virtualNetwork.unresolveURL(String(codeRef.module)),
         name: codeRef.name,

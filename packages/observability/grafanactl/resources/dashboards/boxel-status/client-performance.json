@@ -4370,6 +4370,404 @@
         ],
         "title": "Secure origin (sign-in, registration, key pages)",
         "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 69
+        },
+        "id": 107,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Catalog searches the AI assistant made, per interval: realm.entries.search in run-realm-code, and search-entries calls, sent to a catalog realm (@cardstack/catalog/, a catalog the realm server lists, or one the user added). In run-realm-code the room's catalog-reuse feature gate keeps @cardstack/catalog/ out of rooms without the feature. found something is a search in which the catalog realms themselves matched an entry; realms searched beside them are not counted. failed is one that threw, whose catalog realm did not answer, or whose answer was too large to return to the script.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "searches",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 18,
+              "x": 0,
+              "y": 70
+            },
+            "id": 108,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "sum"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "searches"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total > 0 [$__interval]))",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "found something"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error!=\"\" [$__interval]))",
+                "queryType": "range",
+                "refId": "C",
+                "legendFormat": "failed"
+              }
+            ],
+            "title": "Catalog searches",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Of the catalog searches in the time range that answered with a catalog count, the share in which the catalog realms matched an entry. Failed searches, and searches whose answer gave no count per realm, are left out of both sides.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "blue",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "percentunit",
+                "decimals": 0
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 6,
+              "x": 18,
+              "y": 70
+            },
+            "id": 109,
+            "options": {
+              "colorMode": "value",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "textMode": "auto"
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total > 0 [$__range])) / sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" [$__range]))",
+                "queryType": "instant",
+                "refId": "A"
+              }
+            ],
+            "title": "Found something",
+            "type": "stat"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "What the assistant searched the catalog for, most frequent first: the full-text matches text, the card type the query was filtered on, and the tool that searched. An empty search text is a search by type alone.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 10,
+              "w": 12,
+              "x": 0,
+              "y": 78
+            },
+            "id": 110,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "searches"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(100, sum by (tool, query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              }
+            ],
+            "title": "Top catalog searches",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "searches",
+                    "query_text": "search text",
+                    "query_type": "type",
+                    "tool": "tool"
+                  },
+                  "indexByName": {
+                    "query_text": 0,
+                    "query_type": 1,
+                    "tool": 2,
+                    "Value #A": 3
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Catalog searches in which the catalog realms matched nothing, most frequent first. A search here that the catalog should answer points at a missing entry or at ranking.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 10,
+              "w": 12,
+              "x": 12,
+              "y": 78
+            },
+            "id": 111,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "searches"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(100, sum by (tool, query_text, query_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | client_app=~\"$client_app\" | event_type=\"catalog-search\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | error=\"\" | total!=\"\" | total == 0 [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              }
+            ],
+            "title": "Top catalog searches that found nothing",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "searches",
+                    "query_text": "search text",
+                    "query_type": "type",
+                    "tool": "tool"
+                  },
+                  "indexByName": {
+                    "query_text": 0,
+                    "query_type": 1,
+                    "tool": 2,
+                    "Value #A": 3
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "title": "catalog-search (AI assistant catalog searches)",
+        "type": "row"
       }
     ],
     "refresh": "1m",

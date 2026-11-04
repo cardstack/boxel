@@ -411,6 +411,16 @@ export default class StoreService extends Service implements StoreInterface {
   private ready: Promise<void>;
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
+  // Local ids of the instances built from their stored source because the
+  // realm had no index row for them when they were read. Nothing names these
+  // cards when a from-scratch index pass lands — it announces itself with a
+  // bare `full` event — so this is how that event finds them to re-read.
+  #builtFromSource = new Set<string>();
+  // The ids of the cards being built from their source right now, as
+  // `getCardInstance` normalizes them. The instance is in the identity map
+  // from the start of its deserialization, before it is known by a local id
+  // above.
+  #buildingFromSource = new Set<string>();
   private inflightGetFileMeta: Map<
     string,
     Promise<FileDef | CardErrorJSONAPI>
@@ -640,6 +650,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates = new TrackedMap();
     this.fileReadIds.clear();
     this.inflightGetCards = new Map();
+    this.#builtFromSource.clear();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardCreates = new Map();
@@ -693,6 +704,7 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     this.inflightGetCards = new Map();
+    this.#builtFromSource.clear();
     this.inflightGetFileMeta = new Map();
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
@@ -732,6 +744,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.fileReadIds.clear();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
+    this.#builtFromSource.clear();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardCreates = new Map();
@@ -1348,7 +1361,9 @@ export default class StoreService extends Service implements StoreInterface {
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
-  // Bypass cached state and fetch from source of truth
+  // Bypass cached state and fetch from source of truth. A card the realm has
+  // not indexed comes back as the awaiting-index error, so a caller reading
+  // through here learns the index's state rather than a stand-in for it.
   async getWithoutCache<K extends StoreReadType = 'card'>(
     id: string,
     opts?: { type?: K },
@@ -1361,7 +1376,7 @@ export default class StoreService extends Service implements StoreInterface {
           })
         : await this.getCardInstance<CardDef>({
             idOrDoc: id,
-            opts: { noCache: true },
+            opts: { noCache: true, reportUnindexed: true },
           });
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
@@ -1568,7 +1583,7 @@ export default class StoreService extends Service implements StoreInterface {
     // rather than fan out to every realm.
     let searchRealms = opts?.cardInitiated
       ? this.normalizeRealmPaths(realms)
-      : this.normalizeSearchRealms(realms);
+      : this.searchRealmsFor(realms);
     if (searchRealms.length === 0) {
       return { instances: [], meta: { page: { total: 0 } } };
     }
@@ -1626,7 +1641,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<SearchEntryResults> {
     let searchRealms = opts?.cardInitiated
       ? this.normalizeRealmPaths(realms)
-      : this.normalizeSearchRealms(realms);
+      : this.searchRealmsFor(realms);
     if (searchRealms.length === 0) {
       return { data: [], meta: { page: { total: 0 } } };
     }
@@ -1677,9 +1692,9 @@ export default class StoreService extends Service implements StoreInterface {
     return dedupeRealmsByIdentity(this.network.virtualNetwork, realms ?? []);
   }
 
-  // The host default: an absent/empty realm list means every realm the user can
-  // see.
-  private normalizeSearchRealms(realms: string[] | undefined): string[] {
+  // The realms a host search is sent to: the list as the caller spelled it,
+  // or every realm the user can see when it is absent or empty.
+  searchRealmsFor(realms: string[] | undefined): string[] {
     let normalizedRealms = this.normalizeRealmPaths(realms);
     return normalizedRealms.length > 0
       ? normalizedRealms
@@ -3217,6 +3232,17 @@ export default class StoreService extends Service implements StoreInterface {
       this.loadInstanceTask.perform(id);
       return;
     }
+    // A read that found no index row built the card from its source, which may
+    // predate the write this event announces. The card is running now, so it
+    // is re-read in place.
+    let built = this.peek(id);
+    if (
+      isCardInstance(built) &&
+      this.#builtFromSource.has(built[localIdSymbol])
+    ) {
+      this.reloadTask.perform(built);
+      return;
+    }
     // Only when the read actually produced something. A link resolution that
     // 404s plants its sentinel and leaves the store empty for this id, and
     // re-reading an id the store holds nothing for would fetch a row that is
@@ -3260,6 +3286,24 @@ export default class StoreService extends Service implements StoreInterface {
         `deferring reload of ${id} until its in-flight load settles, because a full index of ${realmURL} landed while it was reading`,
       );
       this.reloadAfterInflightLoad.perform(id);
+    }
+    // A card built from its source is running rather than held as an error,
+    // so the sweep above does not see it, yet it is waiting on the same row.
+    // It is re-read in place: the user may already be working in it.
+    for (let localId of this.#builtFromSource) {
+      let instance = this.store.getCard(localId);
+      if (!isCardInstance(instance)) {
+        this.#builtFromSource.delete(localId);
+        continue;
+      }
+      if (!instance.id || this.realm.realmOf(rri(instance.id)) !== realmURL) {
+        continue;
+      }
+      realmEventsLogger.debug(
+        `reloading ${instance.id} because it was built from its source and a full index of ${realmURL} may have landed its row`,
+      );
+      this.reloadTask.perform(instance);
+      reloaded++;
     }
     return reloaded;
   }
@@ -3756,6 +3800,34 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates.delete(instance[localIdSymbol]);
   }
 
+  // The document to build a card from when its card+json read failed because
+  // the realm has not indexed it yet. The realm serves a card's stored source
+  // from its file system whatever state its index is in, and this is the same
+  // read a linked card resolves through, so the card comes up exactly as it
+  // would as the target of a link: its computed fields evaluate in this tab.
+  // Undefined for any other failure, and when the source cannot be read
+  // either, which leaves the awaiting-index error to stand.
+  async #unindexedCardSource(
+    url: string,
+    error: unknown,
+  ): Promise<SingleCardDocument | undefined> {
+    if (!processCardError(url, error).errors[0]?.awaitingIndex) {
+      return undefined;
+    }
+    let doc: SingleCardDocument | CardError;
+    try {
+      doc = await this.store.loadCardDocument(url, { untracked: true });
+    } catch {
+      return undefined;
+    }
+    if (isCardError(doc) || !isSingleCardDocument(doc)) {
+      return undefined;
+    }
+    // The card store hands one document to every concurrent reader of this
+    // URL, and the normalisation below rewrites its id and meta in place.
+    return structuredClone(doc);
+  }
+
   private async getCardInstance<T extends CardDef>({
     idOrDoc,
     relativeTo,
@@ -3769,11 +3841,19 @@ export default class StoreService extends Service implements StoreInterface {
       noCache?: boolean;
       localDir?: string;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+      // Answer a card the realm has not indexed with the awaiting-index error
+      // rather than an instance built from its stored source. For a caller
+      // whose question is the index's state, not the card's content.
+      reportUnindexed?: true;
     };
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
+    let buildingFromSource: string | undefined;
     let id = asURL(idOrDoc, this.network.virtualNetwork);
-    if (id) {
+    // A read that reports the index's state answers a different question
+    // from every other read of the card, so it neither shares their in-flight
+    // read nor offers its own to them.
+    if (id && !opts?.reportUnindexed) {
       let working = this.inflightGetCards.get(id);
       if (working) {
         return working as Promise<T | CardErrorJSONAPI>;
@@ -3832,6 +3912,7 @@ export default class StoreService extends Service implements StoreInterface {
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
+      let builtFromSource = false;
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
@@ -3866,7 +3947,24 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
         } else {
-          json = await this.cardService.fetchJSON(url);
+          try {
+            json = await this.cardService.fetchJSON(url);
+          } catch (error: unknown) {
+            // A card this tab is already running is left as it is: the catch
+            // below hands it back in preference to the realm's report, and
+            // rebuilding it from source would drop edits not yet saved.
+            let source =
+              opts?.reportUnindexed || this.store.getCard(id)
+                ? undefined
+                : await this.#unindexedCardSource(url, error);
+            if (!source) {
+              throw error;
+            }
+            json = source;
+            builtFromSource = true;
+            buildingFromSource = id;
+            this.#buildingFromSource.add(id);
+          }
         }
         if (!isSingleCardDocument(json)) {
           // The URL turned out to be a binary file (e.g. an uploaded
@@ -3935,6 +4033,11 @@ export default class StoreService extends Service implements StoreInterface {
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
       this.store.setCard(url, instance);
+      if (builtFromSource) {
+        this.#builtFromSource.add(instance[localIdSymbol]);
+      } else {
+        this.#builtFromSource.delete(instance[localIdSymbol]);
+      }
       deferred?.fulfill(instance as T);
       if (!existingInstance || !isCardInstance(existingInstance)) {
         this.setIdentityContext(instance);
@@ -3949,12 +4052,28 @@ export default class StoreService extends Service implements StoreInterface {
       // read is the one that gets here with an instance already in hand.
       let running =
         cardError?.awaitingIndex && id ? this.store.getCard(id) : undefined;
+      // A card built from its source is the store standing in for the missing
+      // row, which is exactly what a read reporting the index's state is asking
+      // about, so that read gets the realm's answer instead.
+      if (
+        running &&
+        opts?.reportUnindexed &&
+        (this.#builtFromSource.has(running[localIdSymbol]) ||
+          this.#buildingFromSource.has(id!))
+      ) {
+        running = undefined;
+      }
       if (running) {
         deferred?.fulfill(running as T);
         return running as T;
       }
       deferred?.fulfill(cardError);
-      this.setIdentityContext(cardError);
+      // The awaiting-index answer to such a read is the caller's alone: what
+      // the store records is what every other read of the card is handed, and
+      // for them the card is built from its source.
+      if (!(opts?.reportUnindexed && cardError?.awaitingIndex)) {
+        this.setIdentityContext(cardError);
+      }
       let status = cardError?.status ?? error?.status;
       let isSystemCardDefault = isSystemCardDefaultId(
         id,
@@ -3975,6 +4094,9 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return cardError;
     } finally {
+      if (buildingFromSource) {
+        this.#buildingFromSource.delete(buildingFromSource);
+      }
       // Only retract this call's own entry: a scope boundary clears the map
       // mid-flight, so a newer caller's entry can be sitting under this id.
       if (
@@ -5012,6 +5134,9 @@ export default class StoreService extends Service implements StoreInterface {
         instance.id,
         undefined,
       )) as SingleCardDocument;
+      // The realm has indexed the card, so whatever this reload makes of it
+      // is the indexed state.
+      this.#builtFromSource.delete(instance[localIdSymbol]);
 
       if (!isSingleCardDocument(incomingDoc)) {
         throw new Error(

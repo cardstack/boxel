@@ -31,6 +31,7 @@ import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
+import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -61,7 +62,16 @@ import {
   startOutboundGuard,
 } from './lib/outbound/client.ts';
 import { createCallApiSender } from './lib/outbound/call-api-sender.ts';
+import { publishedMountOf } from './lib/published-realm.ts';
+import { createPolicyWriteAuditor } from './lib/policy-share-audit.ts';
+import { setKeyLimitNoticeSender } from './lib/key-limits.ts';
+import { createSendEvent } from '@cardstack/runtime-common/send-event';
+import { realmPolicyPointer } from './lib/realm-policy-pointer.ts';
 import { probeIntervalFromEnv } from './lib/key-grant-rejection.ts';
+import {
+  keyLimitDefaultsFromEnv,
+  setKeyLimitDefaults,
+} from './lib/key-limit-settings.ts';
 import {
   reportPlaintextCensus,
   reportSealedCensus,
@@ -72,6 +82,10 @@ import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
+import {
+  matrixFederationAllowlistFromEnv,
+  matrixServerNameFromEnv,
+} from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -217,6 +231,8 @@ const SKIP_BOOT_INDEX = process.env.REALM_SERVER_SKIP_BOOT_INDEX === 'true';
 
 // How long a grant whose key the vendor rejected waits between probes.
 const KEY_GRANT_PROBE_INTERVAL_MS = probeIntervalFromEnv();
+// The limits a share or key gets where its owner set none.
+setKeyLimitDefaults(keyLimitDefaultsFromEnv());
 // CS-10953 cross-process prerender coalesce. Off by default — flip on
 // after a stage burn-in. Effectively inert at N=1 (no contention; the
 // in-process #inFlight coalescer already dedups same-process callers),
@@ -671,6 +687,8 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
 
   let matrixClient = new MatrixClient({
     matrixURL: new URL(MATRIX_URL),
+    serverName: matrixServerNameFromEnv(),
+    federationAllowlist: matrixFederationAllowlistFromEnv(),
     username: REALM_SERVER_MATRIX_USERNAME,
     seed: REALM_SECRET_SEED,
   });
@@ -702,6 +720,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+  // One journal shared by every realm this server mounts. Each write appends
+  // its change event through it, on the write's own transaction, for the
+  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
+  // switch: no realm gets a journal, so no write touches it.
+  let changeJournal =
+    process.env.REALM_HISTORY_JOURNAL === 'off'
+      ? undefined
+      : new PostgresChangeJournal();
 
   // One card+json response cache for the whole process, shared across every
   // realm it mounts: entries are keyed on absolute card URLs, and the byte
@@ -780,6 +806,31 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
+  // Tells a user a notice about their keys was recorded for them, so a session
+  // they have open shows that one is waiting.
+  let sendKeyNoticeEvent = createSendEvent({ matrixClient, dbAdapter });
+  setKeyLimitNoticeSender(sendKeyNoticeEvent);
+
+  // One for every realm this process serves: a policy card in one realm can
+  // govern another, so the audit of a write looks across all of them.
+  let policyWriteAuditor = createPolicyWriteAuditor({
+    dbAdapter,
+    realmFor: (url: URL) =>
+      reconciler
+        ? findRealm(url, { realms, reconciler, dbAdapter })
+        : Promise.resolve(undefined),
+    virtualNetwork,
+    policyPointerOf: async (url: string) =>
+      reconciler
+        ? await realmPolicyPointer(url, {
+            reconciler,
+            realmsRootPath,
+            virtualNetwork,
+          })
+        : null,
+    sendEvent: sendKeyNoticeEvent,
+  });
+
   // Construct the reconciler before the server so the server can hold a
   // reference to it. The reconciler doesn't begin its background poll
   // loop until reconciler.start() is called below, after server.start()
@@ -798,6 +849,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
         );
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      let publishedMount = publishedMountOf(row);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
         row.kind,
         FULL_INDEX_ON_STARTUP_OVERRIDE,
@@ -843,11 +895,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
               : Promise.resolve(undefined),
           callApi: createCallApiSender(dbAdapter, {
             probeIntervalMs: KEY_GRANT_PROBE_INTERVAL_MS,
+            ...(publishedMount.publishedFrom
+              ? { publishedFrom: publishedMount.publishedFrom }
+              : {}),
           }),
+          policyWriteAuditor,
+          ...(changeJournal ? { history: { journal: changeJournal } } : {}),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
-          ...(row.kind === 'published' ? { published: true as const } : {}),
+          ...publishedMount.realm,
           // The boot index is system-initiated work, so it inherits the same
           // per-realm tier the post-deploy sweep uses: the base realm above
           // the system tier, every other realm at it. Without this the base

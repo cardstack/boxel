@@ -57,7 +57,6 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
     onMembershipEvent({
       client,
       authUserId: auth.user_id,
-      startTime,
     }),
   );
 

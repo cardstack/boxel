@@ -276,10 +276,28 @@ module(basename(import.meta.filename), function () {
             suspendedAt: null,
             createdAt: attributes.createdAt,
             updatedAt: attributes.updatedAt,
+            limits: {
+              rateBurst: 25,
+              rateRefillPerMinute: 15,
+              dailyBudget: 2400,
+              monthlyBudget: 72000,
+              set: {
+                rateBurst: null,
+                rateRefillPerMinute: null,
+                dailyBudget: null,
+                monthlyBudget: null,
+              },
+              defaults: {
+                rateBurst: 25,
+                rateRefillPerMinute: 15,
+                dailyBudget: 2400,
+                monthlyBudgetDays: 30,
+              },
+            },
             operations: [],
           },
         ],
-        `another writer sees the share's owner and state, not its key`,
+        `another writer sees the share's owner, state and limits, not its key`,
       );
     });
 
@@ -357,6 +375,7 @@ module(basename(import.meta.filename), function () {
               id: shareIds[`${OTHER_REALM} Weather`],
               label: 'Weather',
               state: 'active',
+              approvedCalls: 0,
             },
           ],
         },
@@ -368,11 +387,13 @@ module(basename(import.meta.filename), function () {
               id: shareIds[`${REALM} Team weather`],
               label: 'Team weather',
               state: 'active',
+              approvedCalls: 0,
             },
             {
               id: shareIds[`${REALM} Weather`],
               label: 'Weather',
               state: 'active',
+              approvedCalls: 0,
             },
           ],
         },
@@ -406,6 +427,56 @@ module(basename(import.meta.filename), function () {
           },
         ],
         `an owner removed from a realm still sees their suspended shares there by address, but not the realm's name`,
+      );
+    });
+
+    test("a realm's users row shows its name only to a key owner of the paired homeserver", async function (assert) {
+      const ELSEWHERE = '@share-owner:other.example';
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, pristine_doc)
+         VALUES ($1, $2, 'instance', 1, $3, $4)`,
+        {
+          bind: [
+            `${REALM}realm.json`,
+            `${REALM}realm`,
+            REALM,
+            JSON.stringify({ attributes: { cardInfo: { name: 'Team' } } }),
+          ],
+        },
+      );
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [ELSEWHERE]: ['read', 'write'],
+      });
+      let keyIds: Record<string, string> = {};
+      for (let [user, label] of [
+        [OWNER, 'Paired weather'],
+        [ELSEWHERE, 'Federated weather'],
+      ]) {
+        keyIds[user] = await keyFor(user);
+        let response = await share(user, {
+          realm: REALM,
+          keyId: keyIds[user],
+          label,
+        });
+        assert.strictEqual(response.status, 201, response.text);
+      }
+      await removeRealmPermissions(dbAdapter, new URL(REALM));
+      await insertPermissions(dbAdapter, new URL(REALM), { users: ['read'] });
+
+      let names: Record<string, unknown> = {};
+      for (let user of [OWNER, ELSEWHERE]) {
+        let shown = await request
+          .get(`/_user-keys/${keyIds[user]}`)
+          .set('Authorization', auth(user));
+        assert.strictEqual(shown.status, 200, shown.text);
+        names[user] = shown.body.data.attributes.sharedInto.map(
+          (realm: { name: string | null }) => realm.name,
+        );
+      }
+      assert.deepEqual(
+        names,
+        { [OWNER]: ['Team'], [ELSEWHERE]: [null] },
+        'the users row lets a user of the paired homeserver read the realm, and no one else (ADR 004 §1.4)',
       );
     });
 

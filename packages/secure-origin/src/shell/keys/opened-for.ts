@@ -19,6 +19,7 @@
 // A realm, card or module is a URL or a prefix-form id (`@cardstack/…`);
 // which it names is the realm server's to decide.
 
+import { cliCallback } from '../../security/cli-handoff.js';
 import { keyOfSharePath } from '../pages.js';
 import { currentPage } from '../urls.js';
 
@@ -146,4 +147,29 @@ export function contextRequest(opened: OpenedFor) {
     };
   }
   return opened.realm ? { realm: opened.realm } : undefined;
+}
+
+// The CLI listener a page was opened for (`#cli_port=…&cli_state=…`), which
+// it tells when the change it was opened for is made, and for an approval
+// the operations the CLI asked to approve (`#operations=<name>,…`).
+export function cliOpenedFor(hash: string = window.location.hash) {
+  let fragment = new URLSearchParams(hash.replace(/^#/, ''));
+  let cli = fragment.has('cli_port')
+    ? cliCallback(
+        new URLSearchParams({
+          port: fragment.get('cli_port') ?? '',
+          state: fragment.get('cli_state') ?? '',
+        }),
+        { profile: false },
+      )
+    : undefined;
+  let named = fragment.get('operations');
+  return {
+    cli,
+    operations: named ? new Set(named.split(',').filter(Boolean)) : undefined,
+    // `boxel keys approve --interactive`: the page starts on interactive use.
+    // It is where the page starts, not what it approves: the user still
+    // chooses, and reads the confirmation, before approving.
+    interactive: cli !== undefined && fragment.get('interactive') === '1',
+  };
 }

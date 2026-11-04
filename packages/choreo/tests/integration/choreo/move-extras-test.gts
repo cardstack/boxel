@@ -86,7 +86,7 @@ module('Integration | choreo | move extras', function (hooks) {
         >
           {{#each (array this.gen) key='@identity' as |g|}}
             <div
-              id='skin-{{g}}'
+              data-test-id='skin-{{g}}'
               style='position:absolute;width:60px;height:30px;background:#0af;{{if
                 g
                 "left:180px;top:100px"
@@ -117,7 +117,7 @@ module('Integration | choreo | move extras', function (hooks) {
     // frame budget, which is nobody's subject.
     await waitUntil(
       () => {
-        const el = find('#skin-0') as HTMLElement | null;
+        const el = find('[data-test-id-memory="skin-0"]') as HTMLElement | null;
         return (
           el !== null &&
           bounds(el).left > 10 &&
@@ -126,8 +126,8 @@ module('Integration | choreo | move extras', function (hooks) {
       },
       { timeout: 2000 },
     );
-    const receiver = find('#skin-1') as HTMLElement;
-    const leaver = find('#skin-0') as HTMLElement;
+    const receiver = find('[data-test-id="skin-1"]') as HTMLElement;
+    const leaver = find('[data-test-id-memory="skin-0"]') as HTMLElement;
     assert.ok(leaver, 'the old skin is aloft with the new');
     // both skins wear a real background, so the crossfade carries color
     // (§4.7): the receiver holds SOLID — the ground can never leak through
@@ -144,9 +144,15 @@ module('Integration | choreo | move extras', function (hooks) {
     const lb = bounds(leaver);
     assert.true(lb.left > 10, `the old skin flies too (${lb.left})`);
     await animationsSettled();
-    assert.notOk(find('#skin-0'), 'the old skin is dropped at the landing');
+    assert.notOk(
+      find('[data-test-id-memory="skin-0"]'),
+      'the old skin is dropped at the landing',
+    );
     assert.strictEqual(
-      parseFloat(getComputedStyle(find('#skin-1') as HTMLElement).opacity),
+      parseFloat(
+        getComputedStyle(find('[data-test-id="skin-1"]') as HTMLElement)
+          .opacity,
+      ),
       1,
     );
   });
@@ -166,7 +172,7 @@ module('Integration | choreo | move extras', function (hooks) {
         >
           {{#each (array this.gen) key='@identity' as |g|}}
             <div
-              id='skin-{{g}}'
+              data-test-id='skin-{{g}}'
               style='position:absolute;width:60px;height:30px;background:#0af;{{if
                 g
                 "left:180px;top:100px"
@@ -190,8 +196,8 @@ module('Integration | choreo | move extras', function (hooks) {
     app!.gen = 1;
     await settled();
     await nextFrame();
-    const receiver = find('#skin-1') as HTMLElement;
-    const leaver = find('#skin-0') as HTMLElement;
+    const receiver = find('[data-test-id="skin-1"]') as HTMLElement;
+    const leaver = find('[data-test-id-memory="skin-0"]') as HTMLElement;
     assert.strictEqual(
       parseFloat(getComputedStyle(receiver).opacity),
       0,
@@ -203,9 +209,12 @@ module('Integration | choreo | move extras', function (hooks) {
       'the old rendering is carried whole',
     );
     await animationsSettled();
-    assert.notOk(find('#skin-0'));
+    assert.notOk(find('[data-test-id-memory="skin-0"]'));
     assert.strictEqual(
-      parseFloat(getComputedStyle(find('#skin-1') as HTMLElement).opacity),
+      parseFloat(
+        getComputedStyle(find('[data-test-id="skin-1"]') as HTMLElement)
+          .opacity,
+      ),
       1,
       'the swap happened at the landing',
     );

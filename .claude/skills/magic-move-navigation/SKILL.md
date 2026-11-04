@@ -134,10 +134,12 @@ other demos mount, once, latched permanently. All three acts are in
    to a destination that has moved. Layout is fingerprinted with
    `offsetLeft/Top/Width/Height` — offsets ignore transforms, which is
    exactly the distinction wanted.
-4. **Orphans fly flat.** A `backdrop-filter` inside an orphan cannot
-   cache and samples the NEW scene; the layer kills them outright
-   (`[data-choreo-orphans] * { backdrop-filter: none !important }`) and
-   sets `will-change`, so a lifted skin is one texture being moved.
+4. **Orphans fly flat.** A parked orphan is a memory (glimmer-motion's
+   `keepAsMemory`). A `backdrop-filter` inside one cannot cache and samples
+   the NEW scene, so a memory's are off
+   (`[data-motion-memory] * { backdrop-filter: none !important }`), and it
+   carries `will-change`, so a lifted skin is one texture being moved. Its
+   stylesheet animations hold at the frame it showed instead of replaying.
 5. **Coarse ticks land.** A throttled tab can jump a track's whole
    window; never-started tracks land finals while playing too —
    otherwise an arrival's seeded opacity 0 stands forever.

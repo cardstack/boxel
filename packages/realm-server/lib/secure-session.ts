@@ -8,6 +8,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { isUserOfMatrixServer } from '@cardstack/runtime-common/matrix-server-name';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   getRandomBackgroundURL,
@@ -244,20 +245,6 @@ function userPath(user: string) {
   return `_synapse/admin/v2/users/${encodeURIComponent(user)}`;
 }
 
-// The name of the Matrix server this realm server's own user is on, which
-// every account it resolves by localpart, or the secure origin registers, is
-// on too.
-export async function matrixServerName(
-  deps: Pick<SecureSessionDeps, 'matrixClient'>,
-): Promise<string> {
-  await ensureLoggedIn(deps.matrixClient);
-  let serverName = deps.matrixClient.getUserId()?.split(':').slice(1).join(':');
-  if (!serverName) {
-    throw new Error(`the realm server's Matrix user id names no server`);
-  }
-  return serverName;
-}
-
 // The account holding an email address as a third-party id, by the Matrix
 // server's admin lookup. Undefined when none does.
 async function userByEmail(
@@ -287,15 +274,15 @@ async function resolveMatrixUser(
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    let match = /^@[^:\s]+:(\S+)$/.exec(name);
-    return match && match[1] === (await matrixServerName(deps))
+    return /^@[^:\s]+:\S+$/.test(name) &&
+      isUserOfMatrixServer(name, deps.matrixClient.serverName)
       ? name
       : undefined;
   }
   if (name.includes('@')) {
     return await userByEmail(deps, name.toLowerCase());
   }
-  return `@${name}:${await matrixServerName(deps)}`;
+  return `@${name}:${deps.matrixClient.serverName}`;
 }
 
 interface MatrixResult {
@@ -1100,7 +1087,7 @@ async function linkOrCreateForGoogle(
   config: GoogleSignInConfig,
   identity: GoogleIdentity,
 ): Promise<string> {
-  let serverName = await matrixServerName(deps);
+  let serverName = deps.matrixClient.serverName;
   // Localparts this sign-in failed to make an account with. Synapse's
   // registration refuses a localpart that any account has ignoring case, as
   // the mapping provider's `check_user_exists` does, while the admin lookup

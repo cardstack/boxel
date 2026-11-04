@@ -13,10 +13,11 @@ export { readKeyValue, type KeyValueSource } from '../../lib/key-value.ts';
 // with a vendor that connect mode offers everyone. Authorized with the realm
 // secret seed. A value is typed at a masked prompt or read from stdin or a
 // file, never taken as an argument, and no command prints one: the server
-// never answers with a value. Every change to a system key carries an
-// operator note, which the server records in the key's history next to what
-// it observed itself: the caller's address and when the operator token was
-// signed. A name in a note is as the operator typed it; nothing verifies it.
+// never answers with a value. Every change to a system key or a platform
+// client carries an operator note, which the server records in its history
+// next to what it observed itself: the caller's address and when the operator
+// token was signed. A name in a note is as the operator typed it; nothing
+// verifies it.
 
 export type SystemKeyAuthMethod = 'header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
@@ -30,15 +31,20 @@ export interface SystemKey {
   supportsStreaming: boolean;
   hasValue: boolean;
   keyId: string | null;
+  // The key's own response size cap in bytes; null when it takes the
+  // system-key path's cap.
+  responseSizeCap: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface SystemKeyChange {
-  action: 'add' | 'replace' | 'delete';
+  action: 'add' | 'replace' | 'delete' | 'set-response-cap';
   destination: string;
   note: string;
   keyId: string | null;
+  // For `set-response-cap`, the cap it set, or null for one that cleared it.
+  responseSizeCap: number | null;
   changedAt: string;
   clientAddress: string | null;
   tokenIssuedAt: string | null;
@@ -78,10 +84,22 @@ export interface PlatformClient {
   updatedAt: string;
 }
 
+export interface PlatformClientChange {
+  action: 'add' | 'replace' | 'delete';
+  name: string;
+  clientId: string;
+  note: string;
+  keyId: string | null;
+  changedAt: string;
+  clientAddress: string | null;
+  tokenIssuedAt: string | null;
+}
+
 export interface NewPlatformClient {
   name: string;
   label: string;
   secret: string;
+  note: string;
   oauth: {
     clientId: string;
     authorizeUrl: string;
@@ -95,7 +113,7 @@ export interface NewPlatformClient {
 async function operatorFetch(
   options: SystemKeysOptions,
   path: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<any> {
   let { url, response } = await operatorRequest(
@@ -177,11 +195,61 @@ export async function deleteSystemKey(
   ).deleted;
 }
 
+// Sets a system key's own response size cap in bytes, or with `null` clears
+// it, so the key takes the system-key path's cap again. It applies to the
+// key's next call, with no deploy.
+export async function setSystemKeyResponseCap(
+  options: SystemKeysOptions,
+  id: string,
+  change: { bytes: number | null; note: string },
+): Promise<SystemKey> {
+  return (
+    await operatorFetch(
+      options,
+      `_system-keys/${encodeURIComponent(id)}/response-size-cap`,
+      'PUT',
+      change,
+    )
+  ).key;
+}
+
+/**
+ * The cap `set-response-cap` takes: a whole number of bytes, with no unit.
+ */
+export function parseResponseCapBytes(raw: string): number {
+  if (!/^[1-9][0-9]*$/.test(raw.trim())) {
+    throw new Error(
+      `The response size cap must be a whole number of bytes, such as 134217728 for 128 MiB (got "${raw}")`,
+    );
+  }
+  let bytes = Number(raw.trim());
+  if (!Number.isSafeInteger(bytes)) {
+    throw new Error(`The response size cap ${raw} is too large`);
+  }
+  return bytes;
+}
+
+function describeBytes(bytes: number): string {
+  let mib = bytes / (1024 * 1024);
+  return `${bytes} bytes (${Number.isInteger(mib) ? mib : mib.toFixed(1)} MiB)`;
+}
+
 export async function listPlatformClients(
   options: SystemKeysOptions,
 ): Promise<PlatformClient[]> {
   return (await operatorFetch(options, '_platform-oauth-clients', 'GET'))
     .clients;
+}
+
+export async function showPlatformClient(
+  options: SystemKeysOptions,
+  name: string,
+): Promise<{ client: PlatformClient; history: PlatformClientChange[] }> {
+  return operatorFetch(
+    options,
+    `_platform-oauth-clients/${encodeURIComponent(name)}`,
+    'GET',
+  );
 }
 
 export async function addPlatformClient(
@@ -197,14 +265,14 @@ export async function addPlatformClient(
 export async function replacePlatformClientSecret(
   options: SystemKeysOptions,
   name: string,
-  secret: string,
+  change: { secret: string; note: string },
 ): Promise<PlatformClient> {
   return (
     await operatorFetch(
       options,
       `_platform-oauth-clients/${encodeURIComponent(name)}`,
       'PATCH',
-      { secret },
+      change,
     )
   ).client;
 }
@@ -212,11 +280,13 @@ export async function replacePlatformClientSecret(
 export async function deletePlatformClient(
   options: SystemKeysOptions,
   name: string,
+  change: { note: string },
 ): Promise<void> {
   await operatorFetch(
     options,
     `_platform-oauth-clients/${encodeURIComponent(name)}`,
     'DELETE',
+    change,
   );
 }
 
@@ -250,13 +320,17 @@ export async function confirmPlatformClientDelete(
       'Pass --yes to delete a platform client without a terminal to confirm in',
     );
   }
-  let client = (await listPlatformClients(options)).find(
-    (candidate) => candidate.name === name,
-  );
-  if (!client) {
-    throw new Error(`No platform client is named ${name}`);
+  let shown;
+  try {
+    shown = await showPlatformClient(options, name);
+  } catch (e: any) {
+    if (/answered HTTP 404/.test(e?.message ?? '')) {
+      throw new Error(`No platform client is named ${name}`);
+    }
+    throw e;
   }
-  printClient(client);
+  printClient(shown.client);
+  printHistory(shown.history);
   console.log(
     'Every connection made through it will need an administrator, and adding the client again does not restore them.',
   );
@@ -311,7 +385,7 @@ export async function readNote(
   }
   if (stdinUsed || !process.stdin.isTTY) {
     throw new Error(
-      'Pass --note: the operator note, recorded in the key history, says who made the change and why. A name in it is recorded as given, not verified',
+      'Pass --note: the operator note, recorded in the history, says who made the change and why. A name in it is recorded as given, not verified',
     );
   }
   let answer = await prompt(
@@ -331,6 +405,9 @@ function printKey(key: SystemKey): void {
   );
   console.log(`  credit strategy: ${key.creditStrategy}`);
   console.log(`  streaming: ${key.supportsStreaming ? 'yes' : 'no'}`);
+  console.log(
+    `  response size cap: ${key.responseSizeCap == null ? "the system-key path's (none of its own)" : describeBytes(key.responseSizeCap)}`,
+  );
   console.log(
     `  value: ${key.hasValue ? (key.keyId ? `sealed under data key ${key.keyId}` : 'in plain text only, until the backfill seals it') : 'none'}`,
   );
@@ -353,14 +430,26 @@ function printClient(client: PlatformClient): void {
   console.log(`  updated: ${client.updatedAt}`);
 }
 
-function printHistory(history: SystemKeyChange[]): void {
+function printHistory(
+  history: (SystemKeyChange | PlatformClientChange)[],
+): void {
   if (history.length === 0) {
     console.log('  history: none recorded');
     return;
   }
   console.log('  history:');
   for (let change of history) {
-    console.log(`    ${change.changedAt} ${change.action}: ${change.note}`);
+    // A platform client's history is kept by name, so an entry may be for an
+    // earlier client deleted under that name: the vendor's client id tells
+    // them apart.
+    let client = 'clientId' in change ? ` (client id ${change.clientId})` : '';
+    let cap =
+      change.action === 'set-response-cap'
+        ? ` to ${change.responseSizeCap == null ? "the path's cap" : describeBytes(change.responseSizeCap)}`
+        : '';
+    console.log(
+      `    ${change.changedAt} ${change.action}${client}${cap}: ${change.note}`,
+    );
     console.log(
       `      from ${change.clientAddress ?? 'an unknown address'}, token signed ${change.tokenIssuedAt ?? 'at an unknown time'}`,
     );
@@ -388,6 +477,7 @@ export interface KeysCliOptions {
   keyFile?: string;
   note?: string;
   yes?: boolean;
+  clear?: boolean;
   json?: boolean;
 }
 
@@ -429,7 +519,6 @@ function kindOf(options: KeysCliOptions): SystemKeyKind {
 // A platform client is named by `--name`; a system key by `--id` or
 // `--destination`. Each refuses the other's selectors.
 function clientName(options: KeysCliOptions): string {
-  refuseNoteForClient(options);
   if (options.id || options.destination) {
     throw new Error(
       'Name a platform client with --name, not --id or --destination',
@@ -439,16 +528,6 @@ function clientName(options: KeysCliOptions): string {
     throw new Error('Name the platform client with --name');
   }
   return options.name;
-}
-
-// The server keeps no history of platform clients, so a note would be
-// recorded nowhere.
-export function refuseNoteForClient(options: KeysCliOptions): void {
-  if (options.note !== undefined) {
-    throw new Error(
-      "--note is recorded in a system key's history; the server keeps none for a platform client",
-    );
-  }
 }
 
 export function refuseClientOptions(options: KeysCliOptions): void {
@@ -533,7 +612,7 @@ export function registerKeysCommand(realmServer: Command): void {
   keys
     .command('show')
     .description(
-      'Show one system key and its recent history, or one platform client, without secrets',
+      'Show one system key or platform client and its recent history, without secrets',
     )
     .requiredOption('--realm-server <url>', 'The realm server to ask')
     .option('--kind <kind>', KIND_HELP)
@@ -545,13 +624,14 @@ export function registerKeysCommand(realmServer: Command): void {
       run(async () => {
         if (kindOf(options) === 'oauth-client') {
           let name = clientName(options);
-          let client = (
-            await listPlatformClients(await seedOptions(options))
-          ).find((c) => c.name === name);
-          if (!client) {
-            throw new Error(`No platform client is named ${name}`);
-          }
-          output(options.json, client, () => printClient(client));
+          let shown = await showPlatformClient(
+            await seedOptions(options),
+            name,
+          );
+          output(options.json, shown, () => {
+            printClient(shown.client);
+            printHistory(shown.history);
+          });
           return;
         }
         refuseClientOptions(options);
@@ -681,7 +761,13 @@ export function registerKeysCommand(realmServer: Command): void {
           let name = clientName(options);
           let seed = await seedOptions(options);
           let secret = await readKeyValue(options);
-          let client = await replacePlatformClientSecret(seed, name, secret);
+          let note = await readNote(options.note, {
+            stdinUsed: Boolean(options.stdin),
+          });
+          let client = await replacePlatformClientSecret(seed, name, {
+            secret,
+            note,
+          });
           output(options.json, client, () => {
             console.log(
               `${FG_GREEN}Replaced the platform client's secret.${RESET}`,
@@ -730,7 +816,8 @@ export function registerKeysCommand(realmServer: Command): void {
           let name = clientName(options);
           let seed = await seedOptions(options);
           await confirmPlatformClientDelete(seed, name, options);
-          await deletePlatformClient(seed, name);
+          let note = await readNote(options.note, { stdinUsed: false });
+          await deletePlatformClient(seed, name, { note });
           output(options.json, { deleted: name }, () => {
             console.log(
               `${FG_GREEN}Deleted the platform client ${name}.${RESET}`,
@@ -747,6 +834,44 @@ export function registerKeysCommand(realmServer: Command): void {
           console.log(
             `${FG_GREEN}Deleted the system key for ${key.destination}.${RESET}`,
           );
+        });
+      }),
+    );
+
+  keys
+    .command('set-response-cap')
+    .description(
+      "Set a system key's own response size cap in bytes, or with --clear return it to the system-key path's cap. It applies to the key's next call, with no deploy",
+    )
+    .argument('[bytes]', 'The cap, a whole number of bytes')
+    .requiredOption('--realm-server <url>', 'The realm server to change')
+    .option('--id <id>', SELECT_HELP.id)
+    .option('--destination <url>', SELECT_HELP.destination)
+    .option('--clear', "Clear the key's own cap")
+    .option(
+      '--note <text>',
+      'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
+    )
+    .option('--json', 'Output JSON')
+    .action(async (raw: string | undefined, options: KeysCliOptions) =>
+      run(async () => {
+        refuseClientOptions(options);
+        if (options.clear && raw !== undefined) {
+          throw new Error('Pass a cap or --clear, not both');
+        }
+        if (!options.clear && raw === undefined) {
+          throw new Error('Pass the cap in bytes, or --clear');
+        }
+        let bytes = options.clear ? null : parseResponseCapBytes(raw!);
+        let seed = await seedOptions(options);
+        let id = await resolveSystemKeyId(seed, options);
+        let note = await readNote(options.note, { stdinUsed: false });
+        let key = await setSystemKeyResponseCap(seed, id, { bytes, note });
+        output(options.json, key, () => {
+          console.log(
+            `${FG_GREEN}${bytes === null ? 'Cleared the response size cap' : 'Set the response size cap'}.${RESET}`,
+          );
+          printKey(key);
         });
       }),
     );
@@ -771,7 +896,6 @@ export function refuseSystemOptions(options: KeysCliOptions): void {
 }
 
 async function addClientCommand(options: KeysCliOptions): Promise<void> {
-  refuseNoteForClient(options);
   refuseSystemOptions(options);
   let missing = (
     [
@@ -798,10 +922,14 @@ async function addClientCommand(options: KeysCliOptions): Promise<void> {
   }
   let seed = await seedOptions(options);
   let secret = await readKeyValue(options);
+  let note = await readNote(options.note, {
+    stdinUsed: Boolean(options.stdin),
+  });
   let client = await addPlatformClient(seed, {
     name: options.name!,
     label: options.label!,
     secret,
+    note,
     oauth: {
       clientId: options.clientId!,
       authorizeUrl: options.authorizeUrl!,

@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "units": "metric",
+      "locations": [
+        {
+          "name": "Lisbon",
+          "region": "Lisbon",
+          "country": "PT",
+          "latitude": 38.7077507,
+          "longitude": -9.1365919
+        },
+        {
+          "name": "Dubai",
+          "region": "Dubai",
+          "country": "AE",
+          "latitude": 25.2653471,
+          "longitude": 55.2924914
+        },
+        {
+          "name": "Sydney",
+          "region": "New South Wales",
+          "country": "AU",
+          "latitude": -33.8698439,
+          "longitude": 151.2082848
+        },
+        {
+          "name": "Singapore",
+          "region": "",
+          "country": "SG",
+          "latitude": 1.2899175,
+          "longitude": 103.8519072
+        },
+        {
+          "name": "Tromsø",
+          "region": "Troms",
+          "country": "NO",
+          "latitude": 69.6496,
+          "longitude": 18.956
+        }
+      ],
+      "cardInfo": {
+        "name": "Weather"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../weather-app",
+        "name": "WeatherApp"
+      }
+    }
+  }
+}

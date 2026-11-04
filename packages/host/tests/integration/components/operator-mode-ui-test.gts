@@ -3,6 +3,7 @@ import {
   waitUntil,
   click,
   fillIn,
+  find,
   settled,
   typeIn,
   triggerEvent,
@@ -21,6 +22,20 @@ import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
+
+async function copiedBy(selector: string) {
+  let original = navigator.clipboard.writeText;
+  let copied: string | undefined;
+  navigator.clipboard.writeText = async (text: string) => {
+    copied = text;
+  };
+  try {
+    await click(selector);
+  } finally {
+    navigator.clipboard.writeText = original;
+  }
+  return copied;
+}
 
 module('Integration | operator-mode | ui', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
@@ -70,7 +85,16 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     await waitFor('[data-test-more-options-button]');
     await click('[data-test-more-options-button]');
-    await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
+    let copied = await copiedBy(
+      '[data-test-boxel-menu-item-text="Copy Card URL"]',
+    );
+    assert.strictEqual(
+      copied,
+      getService('network').virtualNetwork.keyForIdentifier(
+        `${testRealmURL}Person/burcu`,
+      ),
+      'copies the URL the realm serves the card from',
+    );
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 
@@ -831,7 +855,11 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
   });
 
-  test('edit card and finish editing should not animate', async function (assert) {
+  // The stack's motion region plays a card's entrance when the card is
+  // inserted. A card that changes format, or that is uncovered, is kept: the
+  // same element, so no entrance plays for it.
+  test('editing a card and finishing keeps the same stack card element', async function (assert) {
+    let cardSelector = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
     ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -840,22 +868,25 @@ module('Integration | operator-mode | ui', function (hooks) {
       },
     );
 
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
-    await click(
-      `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-edit-button]`,
+    await waitFor(cardSelector);
+    let cardElement = find(cardSelector);
+    await click(`${cardSelector} [data-test-edit-button]`);
+    assert.strictEqual(
+      find(cardSelector),
+      cardElement,
+      'entering edit keeps the card element',
     );
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .doesNotHaveClass('opening-animation');
 
     await click('[data-test-edit-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
-      .doesNotHaveClass('opening-animation');
+    await waitFor(cardSelector);
+    assert.strictEqual(
+      find(cardSelector),
+      cardElement,
+      'finishing editing keeps the card element',
+    );
   });
 
-  test('close card should not trigger opening animation again', async function (assert) {
+  test('closing the top card keeps the element of the card it uncovers', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -869,12 +900,16 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(
       `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"] .field-component-card`,
     );
+    await waitFor(`[data-test-stack-card-index="1"]`);
+    let gridElement = find(`[data-test-stack-card-index="0"]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
 
-    await waitFor(`[data-test-stack-card-index="0"]`);
-    assert
-      .dom(`[data-test-stack-card-index="0"]`)
-      .doesNotHaveClass('opening-animation');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+    assert.strictEqual(
+      find(`[data-test-stack-card-index="0"]`),
+      gridElement,
+      'the uncovered card keeps its element',
+    );
   });
 
   test('stack item with custom header color does not lose the color when opening other cards in the stack', async function (assert) {

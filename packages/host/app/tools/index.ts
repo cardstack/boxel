@@ -41,6 +41,7 @@ import * as GetCardTypeSchemaToolModule from './get-card-type-schema';
 import * as GetCatalogRealmIdentifiersToolModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmToolModule from './get-default-writable-realm';
 import * as GetEventsFromRoomToolModule from './get-events-from-room';
+import * as GetKeyShareUsageToolModule from './get-key-share-usage';
 import * as GetPublishedRealmsToolModule from './get-published-realms';
 import * as GetRealmOfResourceIdentifierToolModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardToolModule from './get-user-system-card';
@@ -341,6 +342,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   );
   shimHostToolModule(
     virtualNetwork,
+    'get-key-share-usage',
+    GetKeyShareUsageToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
     'suspend-key-share',
     SuspendKeyShareToolModule,
   );
@@ -536,6 +542,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   InvokeCardOperationToolModule.default,
   LintAndFixToolModule.default,
   ListRealmKeySharesToolModule.default,
+  GetKeyShareUsageToolModule.default,
   ListingBuildToolModule.default,
   CreateListingPRRequestToolModule.default,
   OneShotLlmRequestToolModule.default,

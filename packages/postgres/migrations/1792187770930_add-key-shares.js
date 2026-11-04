@@ -39,7 +39,9 @@
 // other roles granted that way. A role that only administers the membership
 // isn't one (on Postgres 16 the role that creates `readonly_role` holds that
 // membership, and it is often the tables' owner), and a table's owner is never
-// treated as one, so its own privileges are left alone.
+// treated as one, so its own privileges are left alone. A later migration
+// grants the read-only role SELECT on `key_shares`, which holds no secret;
+// `key_share_notices` stays withheld.
 //
 // A REVOKE removes only the grants its grantor made, so `up` revokes each
 // SELECT grant those roles hold on a table or its columns acting as the role

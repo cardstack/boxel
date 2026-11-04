@@ -16,7 +16,7 @@ import OpenInInteractModeTool from '@cardstack/boxel-host/commands/open-in-inter
 import ShowFileTool from '@cardstack/boxel-host/commands/show-file';
 import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 
-import type { FileDef } from './card-api';
+import { openableURLOf, type FileDef } from './card-api';
 import type { GetMenuItemParams } from './menu-items';
 
 export function getDefaultFileMenuItems(
@@ -32,7 +32,10 @@ export function getDefaultFileMenuItems(
   ) {
     menuItems.push({
       label: 'Copy File URL',
-      action: () => copyCardURLToClipboard(fileDefInstanceId),
+      action: () =>
+        copyCardURLToClipboard(
+          openableURLOf(fileDefInstance) ?? fileDefInstanceId,
+        ),
       icon: LinkIcon,
       disabled: !fileDefInstanceId,
     });

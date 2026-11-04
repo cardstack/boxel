@@ -6,6 +6,7 @@ import { baseRealm } from '../constants.ts';
 import { indexedInstance, readOperation } from './read.ts';
 import {
   callApiOperation,
+  type AnonymousCallApiCaller,
   type CallApiMode,
   type CallApiSender,
 } from './call-api.ts';
@@ -345,6 +346,11 @@ export interface RunOperationOptions {
   // realm sets `pipeline` only for a run it makes on its own, never for a
   // request off the network.
   callApiMode?: CallApiMode;
+  // Where a `callApi` invoked by a caller who isn't signed in was admitted
+  // from, which the share filling its slots counts them by. A request the
+  // realm admitted without a session from an address it couldn't place sets
+  // none, and a keyed `callApi` is refused to it.
+  callApiAnonymous?: AnonymousCallApiCaller;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
   //
@@ -1597,6 +1603,7 @@ async function runBaseOperation(
         duringPrerender: opts.duringPrerender ?? false,
         mode: opts.callApiMode ?? 'interactive',
         sender: core.callApi,
+        ...(opts.callApiAnonymous ? { anonymous: opts.callApiAnonymous } : {}),
         type: () => resolvedTypeOf(core, canonical.target, scope),
         ...(canonical.target.kind === 'instance'
           ? {

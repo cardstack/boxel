@@ -23,10 +23,14 @@ import { modifier } from 'ember-modifier';
 import {
   closestMotionConfig,
   flushPendingMounts,
+  keepAsMemory,
   motionSpeed,
   postRender,
+  readAnimations,
   registerBusyProbe,
+  type Shown,
   snapshotOnRender,
+  trackScrolls,
 } from 'glimmer-motion';
 
 import { type BeaconRef, measureBeacons } from './beacons.ts';
@@ -40,13 +44,18 @@ import {
   setPassScheduler,
 } from './far.ts';
 import { GESTURE, type GestureRef, trackGestures } from './gesture.ts';
-import { boundsOf as bounds, measure, type Snapshot } from './measure.ts';
+import {
+  boundsOf as bounds,
+  isRendered,
+  measure,
+  type Snapshot,
+} from './measure.ts';
 import {
   type ChoreoHost,
   type ChoreoProvider,
   setChoreoHost,
 } from './registry.ts';
-import { type ChoreoRun, execute } from './run.ts';
+import { type ChoreoRun, execute, type LoopPhases } from './run.ts';
 import {
   Aim,
   Attach,
@@ -286,43 +295,6 @@ interface Signature {
 let debugStyle: HTMLStyleElement | undefined;
 
 /**
- * Two rules every region shares. An orphaned skin flies with its
- * backdrop-filters OFF: a backdrop-filter can never be cached — it
- * re-samples and re-blurs whatever is behind it on every frame — and
- * inside a scaling, fading leaver that is paid at full price for the
- * whole flight (the camera demo's four glass panels, over its gradient
- * washes, was the return trip's jank). It is also the wrong picture: a
- * skin is a memory of the OLD scene, and its glass sampling the new
- * scene behind it shows the wrong world. The panels keep their own
- * translucent grounds, so they still read as glass in the crossfade.
- *
- * And an orphaned skin does not REPLAY ITS BIRTH: re-inserting a node
- * restarts every CSS animation on it, so a leaver re-parented into the
- * orphan layer re-ran its entrance choreography — rules drawing
- * themselves, letters settling out of a blur — while it was supposed to
- * be dying. A one-frame-old memory acting out its own arrival is the
- * flash the Towers film chased for a night. The run's own exit motion
- * is WAAPI and survives re-parenting untouched; only stylesheet
- * animations restart, and on a memory they are all lies.
- */
-let orphanStyle: HTMLStyleElement | undefined;
-function ensureOrphanStyle() {
-  if (orphanStyle) {
-    return;
-  }
-  orphanStyle = document.createElement('style');
-  orphanStyle.setAttribute('data-choreo-style', '');
-  orphanStyle.textContent =
-    '[data-choreo-orphans] *,' +
-    '[data-choreo-orphans] *::before,' +
-    '[data-choreo-orphans] *::after' +
-    '{backdrop-filter:none!important;' +
-    '-webkit-backdrop-filter:none!important;' +
-    'animation:none!important;}';
-  document.head.appendChild(orphanStyle);
-}
-
-/**
  * A fingerprint of the collected timeline tree, for telling an EDIT from
  * noise while a run's own orphans are aloft. Mid-flight, compiled cues are
  * value-laden (every re-measure shifts them), so sameScore cannot answer
@@ -452,6 +424,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** participants whose Presence is letting them go: removed once, not on every pass while they leave */
   private leaving = new Set<ChoreoNode>();
   private snapshots = new Map<ChoreoNode, Snapshot>();
+  /** the stylesheet animations the region showed before the render, for the memories of what it removes */
+  private shownAnimations: Shown['animations'] = new Map();
+  /** every scroll offset inside the region, kept as it scrolls: a removed element has lost its own */
+  private scrolls?: Shown['scrolls'];
+  /** participants with no layout box before this pass (display: none) */
+  private unrendered = new Set<ChoreoNode>();
+  /** the whole region had no layout box before this pass (hidden by an ancestor) */
+  private covered = false;
+  /** where the run stopped by a cover had its loops: the next run carries them on */
+  private coveredLoops?: LoopPhases;
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
@@ -499,6 +481,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // a quiet region must not take its pause to the grave
       this.unquiet();
       this.viewObserver?.disconnect();
+      this.snapshots.clear();
+      this.unrendered.clear();
+      this.coveredLoops = undefined;
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -634,7 +619,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (this.viewObserver) {
         const near = this.nearViewBand();
         for (const node of this.participants) {
-          const r = node.element?.getBoundingClientRect();
+          const r = node.element && measure(node.element)?.el;
           if (r && r.bottom >= near.top && r.top <= near.bottom) {
             this.nearView.add(node);
           }
@@ -713,7 +698,18 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   private snapshot() {
     this.snapshots.clear();
+    this.unrendered.clear();
+    this.covered = !!this.element && !isRendered(this.element);
+    if (this.covered) {
+      // the whole region is hidden (a buried stack card): nothing in it has
+      // a box. If it is still hidden when the pass measures, the pass is
+      // declined; if it is shown by then, the pass measures it then.
+      return;
+    }
     this.rootSnapshot = this.element?.getBoundingClientRect();
+    this.shownAnimations = this.element
+      ? readAnimations(this.element)
+      : new Map();
     const wired = this.args.inView ? this.nearView : undefined;
     for (const node of this.participants) {
       const el = node.element;
@@ -722,7 +718,49 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         !this.orphans.has(node) &&
         (!wired || wired.has(node) || this.flying.has(node))
       ) {
-        this.snapshots.set(node, measure(el));
+        const snap = measure(el);
+        if (snap) {
+          this.snapshots.set(node, snap);
+        } else {
+          this.unrendered.add(node);
+        }
+      }
+    }
+  }
+
+  /**
+   * A pass on a region hidden by an ancestor plays nothing: arrivals were
+   * never seen arriving, and leavers go now. A <Presence>-managed leaver
+   * belongs to its Presence, as on any pass with nothing to play, unless
+   * the run that played its exit is stopped here.
+   *
+   * The run in flight is stopped too. Nobody can see it, and a run left
+   * going under the cover keeps its clock ticking and writing every frame
+   * (a standing tether redraws its wire on each one). Its loops' phases
+   * are kept, so the run that follows the cover carries them on.
+   */
+  private declineUnseen() {
+    const run = this.run;
+    if (run) {
+      this.coveredLoops = run.loopPhases();
+      run.cancel();
+      this.run = undefined;
+      this.unquiet();
+    }
+    this.arrived.clear();
+    this.snapshots.clear();
+    this.unrendered.clear();
+    for (const node of [...this.claimed, ...this.orphans]) {
+      this.drop(node);
+    }
+    for (const node of this.participants) {
+      if (
+        !node.isPresent &&
+        (!node.presenceManaged || (run && this.leaving.has(node)))
+      ) {
+        // a leaver whose exit the stopped run was playing completes it now
+        this.leaving.delete(node);
+        node.exitComplete();
       }
     }
   }
@@ -733,6 +771,18 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     const root = this.element;
     if (!root) {
       return undefined;
+    }
+    if (!isRendered(root)) {
+      // hidden by an ancestor: none of this is seen, so none of it plays.
+      // What arrived or changed meanwhile lands as layout puts it when the
+      // region is shown again, as on waking (@idle).
+      this.declineUnseen();
+      return undefined;
+    }
+    if (this.covered) {
+      // shown again since the snapshot: nothing moved while nobody could
+      // see it, so each participant starts the pass where it now is
+      this.snapshot();
     }
     // THE FAST PATH: a volatile re-pass that cannot change the run. On a
     // busy page every app render replays every region's pass, and the full
@@ -787,6 +837,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       type,
     });
     const near = this.args.inView ? this.nearViewBand() : undefined;
+    // an arrival, or one shown again (a fold opening): it arrives where it
+    // now lives. One that arrives hidden has nowhere to land yet.
+    const arrive = (node: ChoreoNode, el: Element) => {
+      const now = measure(el);
+      if (!now) {
+        return;
+      }
+      if (near) {
+        if (now.el.bottom < near.top || now.el.top > near.bottom) {
+          // it lands out of reach of the view: layout places it
+          return;
+        }
+        // wired now: the observer reports only after the next frame
+        this.nearView.add(node);
+      }
+      inserted.push(sprite(node, 'inserted', undefined, bounds(now, after)));
+    };
     const candidates = new Set([
       ...this.participants,
       ...this.claimed,
@@ -803,18 +870,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         const prior = this.orphanBounds.get(node);
         removed.push(sprite(node, 'removed', prior));
       } else if (this.arrived.has(node)) {
-        if (near) {
-          const r = el.getBoundingClientRect();
-          if (r.bottom < near.top || r.top > near.bottom) {
-            // it lands out of reach of the view: layout places it
-            continue;
-          }
-          // wired now: the observer reports only after the next frame
-          this.nearView.add(node);
-        }
-        inserted.push(
-          sprite(node, 'inserted', undefined, bounds(measure(el), after)),
-        );
+        arrive(node, el);
       } else if (!el.isConnected || this.claimed.has(node)) {
         if (this.leaving.has(node)) {
           // its Presence has let it go — we already played its exit
@@ -826,20 +882,23 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           this.drop(node);
         }
       } else if (!node.isPresent) {
-        if (!this.leaving.has(node) && snap) {
+        if (!this.leaving.has(node) && (snap || this.unrendered.has(node))) {
+          // one that leaves while hidden has no box to fade from, but its
+          // exit still has to complete
           this.leaving.add(node);
-          removed.push(sprite(node, 'removed', bounds(snap, before)));
+          removed.push(sprite(node, 'removed', snap && bounds(snap, before)));
         }
+      } else if (this.unrendered.has(node)) {
+        arrive(node, el);
       } else if (snap) {
         this.leaving.delete(node);
-        kept.push(
-          sprite(
-            node,
-            'kept',
-            bounds(snap, before),
-            bounds(measure(el), after),
-          ),
-        );
+        const now = measure(el);
+        if (now) {
+          kept.push(
+            sprite(node, 'kept', bounds(snap, before), bounds(now, after)),
+          );
+        }
+        // else hidden this pass: it has no box to move to, and nothing to fade
       }
     }
     // an inserted id that matches a removed one: the new element carries the old as its counterpart
@@ -882,6 +941,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     this.arrived.clear();
     this.snapshots.clear();
+    this.unrendered.clear();
     const claimed = [...this.claimed];
     this.claimed.clear();
     // the barrier now pairs any id inserted here against the same id removed in
@@ -1154,7 +1214,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // an ambient loop outlives its run's end, so a done run's loops are
     // still going round: the replacement carries each on from where it is
     // rather than sending it back to the top — read before cancel stops them
-    const loops = prior?.loopPhases();
+    const loops = prior?.loopPhases() ?? this.coveredLoops;
+    this.coveredLoops = undefined;
     // a run in flight is motion on screen: its replacement carries that on
     // through its first frame rather than standing still on it — read
     // before cancel ends the run
@@ -1469,10 +1530,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     el.style.height = `${page.height / sy}px`;
     el.style.boxSizing = 'border-box';
     el.style.margin = '0';
-    el.style.pointerEvents = 'none';
-    // one texture, transformed — not a subtree re-rastered per frame
-    el.style.willChange = 'transform, opacity';
-    layer.appendChild(el);
+    // a memory of the old scene: inert, held at the frame it showed, and one
+    // texture transformed rather than a subtree re-rastered per frame
+    keepAsMemory(
+      el,
+      { animations: this.shownAnimations, scrolls: this.scrolls ?? new Map() },
+      () => layer.appendChild(el),
+    );
     this.orphans.add(s.node);
     this.orphanBounds.set(s.node, s.initial);
   }
@@ -1533,7 +1597,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   host = modifier((el: HTMLDivElement) => {
     this.element = el;
     setChoreoHost(el, this);
-    ensureOrphanStyle();
+    const scrolls = trackScrolls(el);
+    this.scrolls = scrolls.scrolls;
     if (getComputedStyle(el).position === 'static') {
       el.style.position = 'relative';
     }
@@ -1547,6 +1612,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     return () => {
+      scrolls.stop();
       setChoreoHost(el, undefined);
       this.element = undefined;
     };
@@ -1582,11 +1648,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    */
   <template>
     {{this.renderDetector}}
+    {{! the render-detector marker goes after the splat, so a caller cannot drop it: glimmer-motion's ungrouped-layout check finds the region by it }}
     <div
       data-choreo={{if @id @id ''}}
       data-motion-host
       {{this.host}}
       ...attributes
+      data-motion-render-detector
     >
       <div
         data-choreo-orphans

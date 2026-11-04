@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   fetchRealmPermissions,
   rri,
+  trimExecutableExtension,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
@@ -11,6 +12,7 @@ import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
 import {
   approveBindings,
+  canonicalInstance,
   listOwnBindings,
   previewBindings,
   revokeBinding,
@@ -26,7 +28,11 @@ import {
   sendJSON,
 } from './handle-user-keys.ts';
 import { codeRefOf, secureClientOf } from './handle-user-key-grants.ts';
-import { approvalBatch } from '../lib/key-binding-batch.ts';
+import {
+  approvalBatch,
+  bindingNames,
+  type BindingNames,
+} from '../lib/key-binding-batch.ts';
 import { findRealm } from '../lib/realm-routing.ts';
 import { isSecureSession } from '../lib/secure-session.ts';
 import { validateContextRequest } from '../lib/secure-window.ts';
@@ -49,6 +55,7 @@ const APPROVE_ATTRIBUTES = new Set([
   'operations',
   'interactive',
   'anonymous',
+  'dailyBudgets',
 ]);
 const OPERATION_MEMBERS = new Set([
   'codeRef',
@@ -65,7 +72,11 @@ function resolved(network: VirtualNetwork, identifier: string): string {
     : identifier;
 }
 
-function serializeBinding(network: VirtualNetwork, binding: KeyBinding) {
+function serializeBinding(
+  network: VirtualNetwork,
+  binding: KeyBinding,
+  names?: BindingNames,
+) {
   let { id, realm, type, instance, ...attributes } = binding;
   return {
     type: 'key-binding',
@@ -75,6 +86,7 @@ function serializeBinding(network: VirtualNetwork, binding: KeyBinding) {
       type: { ...type, module: network.unresolveURL(type.module) },
       instance: instance === null ? null : network.unresolveURL(instance),
       ...attributes,
+      ...names,
     },
   };
 }
@@ -192,9 +204,21 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be set here`);
       }
     }
-    let { realm, operations, interactive, anonymous } = attributes;
+    let { realm, operations, interactive, anonymous, dailyBudgets } =
+      attributes;
     if (!Array.isArray(operations)) {
       throw new UserKeyError(400, 'an approval lists its operations');
+    }
+    if (
+      dailyBudgets !== undefined &&
+      (!dailyBudgets ||
+        typeof dailyBudgets !== 'object' ||
+        Array.isArray(dailyBudgets))
+    ) {
+      throw new UserKeyError(
+        400,
+        'dailyBudgets names a daily budget by share id',
+      );
     }
     let approvals = operations.map((operation) =>
       operationOf(args.virtualNetwork, operation),
@@ -211,6 +235,7 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
         operations: approvals,
         interactive: interactive === true,
         anonymous: anonymous === true,
+        dailyBudgets: (dailyBudgets ?? {}) as Record<string, number>,
       },
     );
     await sendJSON(ctxt, 201, {
@@ -220,16 +245,82 @@ export function handleApproveKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-// The bindings the signed-in user approved, in every realm.
+// Which of the user's bindings `?realm=&module=&name=&operation=&instance=`
+// asks for. Each is optional, and each may be named in prefix form or as a
+// URL: it is resolved here, as a binding is keyed, so a caller needn't know
+// how the server spells a realm or a module. An instance is named within the
+// realm, so it is asked for with `realm`.
+function bindingFilter(
+  network: VirtualNetwork,
+  query: Koa.Context['query'],
+): (binding: KeyBinding) => boolean {
+  let one = (name: string) => {
+    let value = query[name];
+    if (value === undefined) {
+      return undefined;
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new UserKeyError(400, `${name} is given once, as text`);
+    }
+    return value;
+  };
+  let realm = one('realm');
+  let module = one('module');
+  let name = one('name');
+  let operation = one('operation');
+  let instance = one('instance');
+  let realmURL = realm ? normalizeRealmURL(resolved(network, realm)) : null;
+  if (realm && !realmURL) {
+    throw new UserKeyError(400, 'realm is a realm');
+  }
+  if (instance && !realmURL) {
+    throw new UserKeyError(400, 'an instance is asked for with its realm');
+  }
+  let moduleURL = module
+    ? trimExecutableExtension(resolved(network, module))
+    : undefined;
+  let instanceURL =
+    instance && realmURL
+      ? canonicalInstance(realmURL, resolved(network, instance))
+      : undefined;
+  return (binding) =>
+    (!realmURL || binding.realm === realmURL.href) &&
+    (!moduleURL || binding.type.module === moduleURL) &&
+    (!name || binding.type.name === name) &&
+    (!operation || binding.operation === operation) &&
+    (!instanceURL || binding.instance === instanceURL);
+}
+
+// The bindings the signed-in user approved, in every realm, or those
+// `bindingFilter` asks for, each with what the key page names it by: its
+// operation's label and its card's display name (`bindingNames`).
 export function handleListKeyBindings({
   dbAdapter,
+  definitionLookup,
   virtualNetwork,
+  realms,
+  reconciler,
+  matrixClient,
 }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    let bindings = await listOwnBindings(dbAdapter, owner);
+    let wanted = bindingFilter(virtualNetwork, ctxt.query);
+    let bindings = (await listOwnBindings(dbAdapter, owner)).filter(wanted);
+    let names = await bindingNames(
+      {
+        dbAdapter,
+        findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
+        definitionLookup,
+        virtualNetwork,
+        matrixServerName: matrixClient.serverName,
+      },
+      owner,
+      bindings,
+    );
     await sendJSON(ctxt, 200, {
-      data: bindings.map((b) => serializeBinding(virtualNetwork, b)),
+      data: bindings.map((b, i) =>
+        serializeBinding(virtualNetwork, b, names[i]),
+      ),
     });
   });
 }
@@ -276,15 +367,15 @@ export function handlePreviewKeyBindings(args: CreateRoutesArgs): Handler {
   });
 }
 
-const BATCH_ATTRIBUTES = new Set(['target', 'review']);
+const BATCH_ATTRIBUTES = new Set(['target', 'review', 'interactive']);
 
 // The batch the secure window approves in one confirmation
-// (`lib/key-binding-batch.ts`): `attributes.{target, review?}`,
+// (`lib/key-binding-batch.ts`): `attributes.{target, review?, interactive?}`,
 // where `target` names a card or a card type in its realm as the window's
 // context does. Answers every operation on the card's definition that needs
 // the caller's approval, grouped by destination, with the caller's keys and
-// shares a slot can take. Asked with the window's own session, as every
-// request the window makes is.
+// shares a slot can take. Asked with a session signed in on the secure
+// origin: the window's own, or the CLI's (`boxel keys approve`).
 export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
   let { dbAdapter, definitionLookup, virtualNetwork, realms, reconciler } =
     args;
@@ -298,7 +389,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
     ) {
       throw new UserKeyError(
         403,
-        'the secure window asks this with its own session',
+        'a batch is asked for only by a session signed in on the secure origin',
       );
     }
     let body = await readJSON(ctxt);
@@ -321,9 +412,12 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
         throw new UserKeyError(400, `'${name}' can't be asked about here`);
       }
     }
-    let { review } = attributes;
+    let { review, interactive } = attributes;
     if (review !== undefined && typeof review !== 'boolean') {
       throw new UserKeyError(400, 'review is true or false');
+    }
+    if (interactive !== undefined && typeof interactive !== 'boolean') {
+      throw new UserKeyError(400, 'interactive is true or false');
     }
     let { target } = validateContextRequest({ target: attributes.target });
     if (!target) {
@@ -332,6 +426,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
     let batch = await approvalBatch(
       {
         dbAdapter,
+        matrixServerName: args.matrixClient.serverName,
         findRealm: (url) => findRealm(url, { realms, reconciler, dbAdapter }),
         definitionLookup,
         virtualNetwork,
@@ -340,6 +435,7 @@ export function handleKeyBindingBatch(args: CreateRoutesArgs): Handler {
       {
         target,
         review: review === true,
+        interactive: interactive === true,
       },
     );
     await sendJSON(ctxt, 200, {

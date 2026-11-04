@@ -678,6 +678,40 @@ export class ProfileManager implements RealmAuthenticator {
     }
   }
 
+  // The realm, among those the active profile holds a token for, that serves
+  // `url`: the longest whose URL `url` starts with, as it is served. A
+  // bootstrap realm's token is keyed by its `https://cardstack.com/<name>/`
+  // id and served at `<realm server>/<name>/`, which is what this answers.
+  async realmUrlFor(url: string): Promise<string | undefined> {
+    let find = () => {
+      let active = this.getActiveProfile();
+      if (!active) {
+        return undefined;
+      }
+      let serverUrl = active.profile.realmServerUrl.replace(/\/+$/, '') + '/';
+      return Object.entries(active.profile.realmTokens ?? {})
+        .filter(([, token]) => token)
+        .flatMap(([realmUrl]) => {
+          let aliasedName = aliasedRealmName(realmUrl);
+          let served = aliasedName ? `${serverUrl}${aliasedName}/` : realmUrl;
+          return [realmUrl, served]
+            .filter((prefix) => url.startsWith(prefix))
+            .map((prefix) => ({ prefix, served }));
+        })
+        .sort((a, b) => b.prefix.length - a.prefix.length)[0]?.served;
+    };
+    let found = find();
+    if (found) {
+      return found;
+    }
+    try {
+      await this.fetchAndStoreAllRealmTokens();
+    } catch {
+      return undefined;
+    }
+    return find();
+  }
+
   async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
@@ -830,19 +864,20 @@ export class ProfileManager implements RealmAuthenticator {
       return null;
     }
 
-    const isProduction = matrixUrl.includes('boxel.ai');
-    const domain = isProduction ? 'boxel.ai' : 'stack.cards';
-    const matrixId = `@${username}:${domain}`;
+    // The homeserver names the account it signs in. Its server name can
+    // differ from the hostname in MATRIX_URL, so the profile is keyed by the
+    // user id the sign-in returns.
+    const auth = await this.matrixLoginFn(matrixUrl, username, password);
+    const matrixId = auth.userId;
 
-    const created = !this.config.profiles[matrixId];
-    await this.addProfile(
+    const existing = this.config.profiles[matrixId];
+    await this.addProfileWithAuth(
       matrixId,
-      password,
-      undefined,
-      matrixUrl,
+      auth,
+      existing?.displayName,
       realmServerUrl,
     );
-    return { profileId: matrixId, created };
+    return { profileId: matrixId, created: !existing };
   }
 
   printStatus(): void {

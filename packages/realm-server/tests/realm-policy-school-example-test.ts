@@ -628,28 +628,44 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('the definitions every staff member renders with are in the Code realm, which every signed-in user reads', async function (assert) {
-      // The `users` row admits a caller the homeserver has a profile for. The
-      // staff ids here name no test homeserver, so the lookup answers as a
-      // homeserver that knows them would.
+    test('the definitions every staff member renders with are in the Code realm, which every signed-in user of the paired homeserver reads', async function (assert) {
+      // The `users` row admits a caller of the paired homeserver that it has a
+      // profile for (ADR 004 §1.4). The lookup answers as a homeserver that
+      // knows the caller would.
+      const SUBSTITUTE = '@substitute:localhost';
       let profile = sinon
         .stub(MatrixClient.prototype, 'getProfile')
-        .resolves({ displayname: 'Alice Rivera' });
+        .resolves({ displayname: 'Sam Okafor' });
       try {
         let response = await request
           .get(path(`${CODE}classroom.gts`))
           .set('Accept', SupportedMimeType.CardSource)
-          .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
+          );
         assert.strictEqual(response.status, 200);
-        profile.resolves(undefined);
-        let unknown = await request
+        let elsewhere = await request
           .get(path(`${CODE}classroom.gts`))
           .set('Accept', SupportedMimeType.CardSource)
           .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
         assert.notStrictEqual(
+          elsewhere.status,
+          200,
+          'a user of another homeserver is not admitted by the users row, however well the homeserver knows them',
+        );
+        profile.resolves(undefined);
+        let unknown = await request
+          .get(path(`${CODE}classroom.gts`))
+          .set('Accept', SupportedMimeType.CardSource)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(code, SUBSTITUTE, ['read'])}`,
+          );
+        assert.notStrictEqual(
           unknown.status,
           200,
-          'and refuses a caller the homeserver does not know',
+          'and a caller the homeserver does not know is refused',
         );
       } finally {
         profile.restore();

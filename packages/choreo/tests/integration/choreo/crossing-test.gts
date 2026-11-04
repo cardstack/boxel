@@ -32,19 +32,25 @@ class Pages extends Component {
       as |c|
     >
       {{#if (eq this.page 'grid')}}
-        <div id='old-only' {{motion id='menu' role='chrome'}}>menu</div>
         <div
-          id='tile'
+          data-test-id='old-only'
+          {{motion id='menu' role='chrome'}}
+        >menu</div>
+        <div
+          data-test-id='tile'
           style='position:absolute;left:10px;top:30px;width:60px;height:40px;background:#0af'
           {{motion id='stage-a' role='stage'}}
         ></div>
       {{else}}
         <div
-          id='hero'
+          data-test-id='hero'
           style='position:absolute;left:80px;top:60px;width:180px;height:120px;background:#0af'
           {{motion id='stage-a' role='stage'}}
         ></div>
-        <div id='new-only' {{motion id='pager' role='foot'}}>pager</div>
+        <div
+          data-test-id='new-only'
+          {{motion id='pager' role='foot'}}
+        >pager</div>
       {{/if}}
       <c.Crossing
         @duration={{0.12}}
@@ -74,13 +80,13 @@ class ColorPages extends Component {
       {{grabColors c}}
       {{#if (eq this.page 'grid')}}
         <div
-          id='tileC'
+          data-test-id='tileC'
           style='position:absolute;left:10px;top:30px;width:60px;height:40px;background:rgba(40,80,160,0.5)'
           {{motion id='stage-e' role='stage'}}
         ></div>
       {{else}}
         <div
-          id='heroC'
+          data-test-id='heroC'
           style='position:absolute;left:190px;top:110px;width:90px;height:70px;background:rgba(200,60,40,0.5)'
           {{motion id='stage-e' role='stage'}}
         ></div>
@@ -120,12 +126,12 @@ class SubstancePages extends Component {
       {{#if (eq this.page 'grid')}}
         {{! the subject sits in the LEFT HALF of the small frame }}
         <div
-          id='tileS'
+          data-test-id='tileS'
           style='position:absolute;left:10px;top:20px;width:100px;height:80px;background:#0af'
           {{motion id='stage-s' role='stage'}}
         >
           <div
-            id='tileSub'
+            data-test-id='tileSub'
             data-choreo-substance
             style='position:absolute;left:0;top:20px;width:40px;height:20px;background:#fff'
           ></div>
@@ -134,12 +140,12 @@ class SubstancePages extends Component {
         {{! …and in the RIGHT HALF of the big one: matching frames would
             let the subject drift; the flight must match the SUBSTANCE }}
         <div
-          id='heroS'
+          data-test-id='heroS'
           style='position:absolute;left:140px;top:120px;width:240px;height:160px;background:#0af'
           {{motion id='stage-s' role='stage'}}
         >
           <div
-            id='heroSub'
+            data-test-id='heroSub'
             data-choreo-substance
             style='position:absolute;left:120px;top:40px;width:120px;height:80px;background:#fff'
           ></div>
@@ -172,12 +178,12 @@ class WidthPages extends Component {
       {{#if (eq this.page 'grid')}}
         {{! a SQUARE subject leaving… }}
         <div
-          id='tileW'
+          data-test-id='tileW'
           style='position:absolute;left:10px;top:20px;width:100px;height:80px;background:#0af'
           {{motion id='stage-w' role='stage'}}
         >
           <div
-            id='tileWSub'
+            data-test-id='tileWSub'
             data-choreo-substance
             style='position:absolute;left:10px;top:10px;width:40px;height:40px;background:#fff'
           ></div>
@@ -187,12 +193,12 @@ class WidthPages extends Component {
             height and splash the width; the rule keys on WIDTH, pins the
             TOPS, and crops the bottom }}
         <div
-          id='heroW'
+          data-test-id='heroW'
           style='position:absolute;left:140px;top:120px;width:240px;height:160px;background:#0af'
           {{motion id='stage-w' role='stage'}}
         >
           <div
-            id='heroWSub'
+            data-test-id='heroWSub'
             data-choreo-substance
             style='position:absolute;left:40px;top:30px;width:160px;height:52px;background:#fff'
           ></div>
@@ -225,13 +231,13 @@ class PackPages extends Component {
       {{#if (eq this.page 'grid')}}
         {{! a full-bleed title: the LAYOUT box is the stage, the word is not }}
         <b
-          id='oldType'
+          data-test-id='oldType'
           style='position:absolute;left:0;right:0;top:40px;width:auto;font-size:20px;text-align:center;white-space:nowrap'
           {{motion id='pack-title' role='type' pack='content'}}
         >Hi</b>
       {{else}}
         <b
-          id='newType'
+          data-test-id='newType'
           style='position:absolute;left:24px;top:90px;width:max-content;font-size:48px;white-space:nowrap'
           {{motion id='pack-title' role='type' pack='content'}}
         >Hello</b>
@@ -263,16 +269,19 @@ class QuietPages extends Component {
     >
       {{! a bystander: not a participant, just a thing with its own
           animation running — the crossing must freeze it for the span }}
-      <div id='bystander' style='width:20px;height:20px;background:#888'></div>
+      <div
+        data-test-id='bystander'
+        style='width:20px;height:20px;background:#888'
+      ></div>
       {{#if (eq this.page 'grid')}}
         <div
-          id='tileQ'
+          data-test-id='tileQ'
           style='position:absolute;left:10px;top:30px;width:60px;height:40px;background:#0af'
           {{motion id='stage-q' role='stage'}}
         ></div>
       {{else}}
         <div
-          id='heroQ'
+          data-test-id='heroQ'
           style='position:absolute;left:190px;top:110px;width:90px;height:70px;background:#0af'
           {{motion id='stage-q' role='stage'}}
         ></div>
@@ -303,18 +312,18 @@ class ExitPages extends Component {
     >
       {{#if (eq this.page 'grid')}}
         <div
-          id='menu4'
+          data-test-id='menu4'
           style='position:absolute;left:10px;top:5px;width:80px;height:20px'
           {{motion role='chrome'}}
         >menu</div>
         <div
-          id='tile4'
+          data-test-id='tile4'
           style='position:absolute;left:10px;top:30px;width:60px;height:40px;background:#0af'
           {{motion id='stage-d' role='stage'}}
         ></div>
       {{else}}
         <div
-          id='hero4'
+          data-test-id='hero4'
           style='position:absolute;left:190px;top:110px;width:90px;height:70px;background:#0af'
           {{motion id='stage-d' role='stage'}}
         ></div>
@@ -355,26 +364,26 @@ class TallPages extends Component {
       as |c|
     >
       {{#if (eq this.page 'grid')}}
-        <div id='near' {{motion role='chrome'}}>near the top</div>
+        <div data-test-id='near' {{motion role='chrome'}}>near the top</div>
         <div
-          id='far'
+          data-test-id='far'
           style='position:absolute;top:5000px;left:10px;width:60px;height:40px'
           {{motion role='chrome'}}
         >far below the fold</div>
         <div
-          id='tile3'
+          data-test-id='tile3'
           style='position:absolute;left:10px;top:30px;width:60px;height:40px;background:#0af'
           {{motion id='stage-c' role='stage'}}
         ></div>
       {{else}}
         <div
-          id='hero3'
+          data-test-id='hero3'
           style='position:absolute;left:190px;top:110px;width:90px;height:70px;background:#0af'
           {{motion id='stage-c' role='stage'}}
         ></div>
-        <div id='new-near' {{motion role='foot'}}>arrives in view</div>
+        <div data-test-id='new-near' {{motion role='foot'}}>arrives in view</div>
         <div
-          id='new-far'
+          data-test-id='new-far'
           style='position:absolute;top:5000px;left:10px'
           {{motion role='foot'}}
         >arrives below the fold</div>
@@ -409,19 +418,19 @@ class NestedPages extends Component {
             container of named things froze the page); the crossing must
             not inherit that rule }}
         <div
-          id='wrap2'
+          data-test-id='wrap2'
           style='position:absolute;left:10px;top:30px;width:120px;height:90px;background:#333'
           {{motion role='card'}}
         >
           <div
-            id='tile2'
+            data-test-id='tile2'
             style='position:absolute;left:10px;top:10px;width:60px;height:40px;background:#0af'
             {{motion id='stage-b' role='stage'}}
           ></div>
         </div>
       {{else}}
         <div
-          id='hero2'
+          data-test-id='hero2'
           style='position:absolute;left:190px;top:110px;width:90px;height:70px;background:#0af'
           {{motion id='stage-b' role='stage'}}
         ></div>
@@ -449,31 +458,37 @@ module('Integration | choreo | crossing', function (hooks) {
   test('the crossing: leaves fade, the flight carries the identity, arrivals land late', async function (assert) {
     await render(<template><Pages /></template>);
     await animationsSettled();
-    const before = bounds(find('#tile') as HTMLElement);
+    const before = bounds(find('[data-test-id="tile"]') as HTMLElement);
     app.page = 'detail';
     await settled();
     await nextFrame();
     await nextFrame();
-    const mid = bounds(find('#hero') as HTMLElement);
+    const mid = bounds(find('[data-test-id="hero"]') as HTMLElement);
     assert.true(
       mid.left < 79 && mid.left >= before.left - 1,
       `the received stage is mid-flight from its old seat (${mid.left})`,
     );
-    const menu = find('#old-only') as HTMLElement;
+    const menu = find('[data-test-id-memory="old-only"]') as HTMLElement;
     assert.ok(menu, 'the leave is still aloft, fading');
-    const arriving = find('#new-only') as HTMLElement;
+    const arriving = find('[data-test-id="new-only"]') as HTMLElement;
     assert.true(
       parseFloat(getComputedStyle(arriving).opacity) < 0.5,
       'what only the new scene has waits for the settle',
     );
     await animationsSettled();
-    assert.notOk(find('#old-only'), 'leaves are dropped at the end');
+    assert.notOk(
+      find('[data-test-id-memory="old-only"]'),
+      'leaves are dropped at the end',
+    );
     assert.strictEqual(
-      parseFloat(getComputedStyle(find('#new-only') as HTMLElement).opacity),
+      parseFloat(
+        getComputedStyle(find('[data-test-id="new-only"]') as HTMLElement)
+          .opacity,
+      ),
       1,
       'arrivals landed',
     );
-    const rest = bounds(find('#hero') as HTMLElement);
+    const rest = bounds(find('[data-test-id="hero"]') as HTMLElement);
     assert.true(
       Math.abs(rest.left - 80) < 1.5,
       `the flight closed on the real seat (${rest.left})`,
@@ -502,7 +517,9 @@ module('Integration | choreo | crossing', function (hooks) {
     await waitUntil(
       () =>
         colorsCtx.run !== null &&
-        document.querySelector('[data-choreo-orphans] #tileC') !== null,
+        document.querySelector(
+          '[data-choreo-orphans] [data-test-id-memory="tileC"]',
+        ) !== null,
       { timeout: 2000 },
     );
     // Read the crossfade as a still at the run's midpoint. Played live, the
@@ -515,7 +532,7 @@ module('Integration | choreo | crossing', function (hooks) {
     await nextFrame();
     const at = `at ${run.time.toFixed(3)}s of ${run.duration.toFixed(3)}s`;
 
-    const hero = find('#heroC') as HTMLElement;
+    const hero = find('[data-test-id="heroC"]') as HTMLElement;
     const mid = channels(getComputedStyle(hero).backgroundColor);
     // the two skins' EFFECTIVE colors over the rgb(16,32,48) ground:
     // old ≈ (28,56,104), new ≈ (108,46,44). Mid-flight the receiver wears a
@@ -541,7 +558,7 @@ module('Integration | choreo | crossing', function (hooks) {
       'the receiver holds full opacity: the dissolve rides above, on the old skin',
     );
     const skin = document.querySelector(
-      '[data-choreo-orphans] #tileC',
+      '[data-choreo-orphans] [data-test-id-memory="tileC"]',
     ) as HTMLElement;
     assert.ok(skin, 'the old skin rides the flight');
     const skinOpacity = parseFloat(getComputedStyle(skin).opacity);
@@ -555,7 +572,8 @@ module('Integration | choreo | crossing', function (hooks) {
     // beat five: landed, the solid is handed back to the stylesheet's own
     // alpha — computed style, not the attribute
     assert.strictEqual(
-      getComputedStyle(find('#heroC') as HTMLElement).backgroundColor,
+      getComputedStyle(find('[data-test-id="heroC"]') as HTMLElement)
+        .backgroundColor,
       'rgba(200, 60, 40, 0.5)',
       'at rest the real alpha blend returns',
     );
@@ -573,7 +591,7 @@ module('Integration | choreo | crossing', function (hooks) {
     await nextFrame();
     await nextFrame();
 
-    const hero = find('#heroC') as HTMLElement;
+    const hero = find('[data-test-id="heroC"]') as HTMLElement;
     const m = new DOMMatrix(getComputedStyle(hero).transform);
     assert.true(
       Math.abs(m.a - m.d) < 0.02,
@@ -585,7 +603,7 @@ module('Integration | choreo | crossing', function (hooks) {
       'the aspect mismatch is carried by a crop window instead',
     );
     const skin = document.querySelector(
-      '[data-choreo-orphans] #tileC',
+      '[data-choreo-orphans] [data-test-id-memory="tileC"]',
     ) as HTMLElement;
     const sm = new DOMMatrix(getComputedStyle(skin).transform);
     assert.true(
@@ -594,7 +612,9 @@ module('Integration | choreo | crossing', function (hooks) {
     );
 
     await animationsSettled();
-    const clip = getComputedStyle(find('#heroC') as HTMLElement).clipPath;
+    const clip = getComputedStyle(
+      find('[data-test-id="heroC"]') as HTMLElement,
+    ).clipPath;
     assert.true(
       clip === 'none' || /inset\(0px(?: 0px)*\)/.test(clip),
       `the landing wears no crop (${clip})`,
@@ -605,12 +625,12 @@ module('Integration | choreo | crossing', function (hooks) {
   test('the flight matches the SUBSTANCE, not the frame', async function (assert) {
     await render(<template><SubstancePages /></template>);
     await animationsSettled();
-    const oldSub = bounds(find('#tileSub') as HTMLElement);
+    const oldSub = bounds(find('[data-test-id="tileSub"]') as HTMLElement);
 
     substance.page = 'detail';
     await settled();
     await nextFrame();
-    const nowSub = bounds(find('#heroSub') as HTMLElement);
+    const nowSub = bounds(find('[data-test-id="heroSub"]') as HTMLElement);
     // the receiver's SUBJECT opens where the old subject stood — even
     // though the frames' fractions disagree, so frame-matching would put
     // it somewhere else entirely
@@ -627,7 +647,7 @@ module('Integration | choreo | crossing', function (hooks) {
 
     await animationsSettled();
     const region = bounds(find('.stage') as HTMLElement);
-    const rest = bounds(find('#heroS') as HTMLElement);
+    const rest = bounds(find('[data-test-id="heroS"]') as HTMLElement);
     assert.true(
       Math.abs(rest.left - (region.left + 140)) < 1.5 &&
         Math.abs(rest.top - (region.top + 120)) < 1.5,
@@ -639,7 +659,7 @@ module('Integration | choreo | crossing', function (hooks) {
   test('pack=content matches the shrink-wrap, not a stretched title frame', async function (assert) {
     await render(<template><PackPages /></template>);
     await animationsSettled();
-    const leaving = find('#oldType') as HTMLElement;
+    const leaving = find('[data-test-id="oldType"]') as HTMLElement;
     assert.true(
       leaving.getBoundingClientRect().width > 300,
       'the leaving title layout box is the stage',
@@ -649,7 +669,7 @@ module('Integration | choreo | crossing', function (hooks) {
     await settled();
     await nextFrame();
     await nextFrame();
-    const now = bounds(find('#newType') as HTMLElement);
+    const now = bounds(find('[data-test-id="newType"]') as HTMLElement);
     assert.true(
       now.width < 160,
       `the receiver opens at the WORD, not the 400px frame (${now.width.toFixed(0)})`,
@@ -666,12 +686,12 @@ module('Integration | choreo | crossing', function (hooks) {
     // past the exiting subject's height. (Symmetric on the way out.)
     await render(<template><WidthPages /></template>);
     await animationsSettled();
-    const oldSub = bounds(find('#tileWSub') as HTMLElement);
+    const oldSub = bounds(find('[data-test-id="tileWSub"]') as HTMLElement);
 
     widths.page = 'detail';
     await settled();
     await nextFrame();
-    const sub = bounds(find('#heroWSub') as HTMLElement);
+    const sub = bounds(find('[data-test-id="heroWSub"]') as HTMLElement);
     assert.true(
       Math.abs(sub.width - oldSub.width) < 6,
       `the entering subject opens at the exiting subject's WIDTH ` +
@@ -682,7 +702,7 @@ module('Integration | choreo | crossing', function (hooks) {
       `with its TOP on the exiting subject's top ` +
         `(${sub.top.toFixed(0)} vs ${oldSub.top.toFixed(0)})`,
     );
-    const hero = find('#heroW') as HTMLElement;
+    const hero = find('[data-test-id="heroW"]') as HTMLElement;
     const m = new DOMMatrix(getComputedStyle(hero).transform);
     assert.true(
       Math.abs(m.a - m.d) < 0.02,
@@ -703,7 +723,7 @@ module('Integration | choreo | crossing', function (hooks) {
 
     await animationsSettled();
     const region = bounds(find('.stage') as HTMLElement);
-    const rest = bounds(find('#heroW') as HTMLElement);
+    const rest = bounds(find('[data-test-id="heroW"]') as HTMLElement);
     assert.true(
       Math.abs(rest.left - (region.left + 140)) < 1.5 &&
         Math.abs(rest.top - (region.top + 120)) < 1.5,
@@ -715,7 +735,7 @@ module('Integration | choreo | crossing', function (hooks) {
   test('@quiet: the rest of the page freezes for the crossing, and resumes after', async function (assert) {
     await render(<template><QuietPages /></template>);
     await animationsSettled();
-    const bystander = find('#bystander') as HTMLElement;
+    const bystander = find('[data-test-id="bystander"]') as HTMLElement;
     const loop = bystander.animate([{ opacity: 0.4 }, { opacity: 1 }], {
       direction: 'alternate',
       duration: 300,
@@ -733,7 +753,7 @@ module('Integration | choreo | crossing', function (hooks) {
       'the crossing quiets the rest of the page for its span',
     );
     // and the crossing itself still moves: quiet is for everyone else
-    const mid = bounds(find('#heroQ') as HTMLElement);
+    const mid = bounds(find('[data-test-id="heroQ"]') as HTMLElement);
     assert.true(
       mid.left < 189,
       `the flight is not frozen with them (${mid.left})`,
@@ -758,7 +778,9 @@ module('Integration | choreo | crossing', function (hooks) {
     await nextFrame();
     await nextFrame();
 
-    const menu = document.querySelector('#menu4') as HTMLElement;
+    const menu = document.querySelector(
+      '[data-test-id-memory="menu4"]',
+    ) as HTMLElement;
     assert.ok(menu, 'the leaver with its own exit is retained');
     const m = /translateY\((-?[\d.]+)px\)/.exec(menu.style.transform);
     assert.true(
@@ -772,8 +794,11 @@ module('Integration | choreo | crossing', function (hooks) {
     );
 
     await animationsSettled();
-    assert.notOk(document.querySelector('#menu4'), 'the exit still completes');
-    const rest = bounds(find('#hero4') as HTMLElement);
+    assert.notOk(
+      document.querySelector('[data-test-id-memory="menu4"]'),
+      'the exit still completes',
+    );
+    const rest = bounds(find('[data-test-id="hero4"]') as HTMLElement);
     assert.true(
       Math.abs(rest.left - 190) < 1.5,
       `the flight closed on the real seat (${rest.left})`,
@@ -791,20 +816,22 @@ module('Integration | choreo | crossing', function (hooks) {
 
     const layer = find('[data-choreo-orphans]') as HTMLElement;
     assert.ok(
-      layer.querySelector('#near'),
+      layer.querySelector('[data-test-id-memory="near"]'),
       'the visible leaver is retained, fading',
     );
     assert.notOk(
-      document.querySelector('#far'),
+      document.querySelector('[data-test-id-memory="far"]'),
       'a leaver below the fold is dropped without a frame — nobody was watching',
     );
     assert.true(
-      parseFloat(getComputedStyle(find('#new-near') as HTMLElement).opacity) <
-        0.5,
+      parseFloat(
+        getComputedStyle(find('[data-test-id="new-near"]') as HTMLElement)
+          .opacity,
+      ) < 0.5,
       'a visible arrival waits for its cue',
     );
     assert.strictEqual(
-      getComputedStyle(find('#new-far') as HTMLElement).opacity,
+      getComputedStyle(find('[data-test-id="new-far"]') as HTMLElement).opacity,
       '1',
       'an arrival below the fold simply stands — no cue was compiled for it',
     );
@@ -824,8 +851,12 @@ module('Integration | choreo | crossing', function (hooks) {
     // progress — on a busy CI machine the first frame can arrive late.
     await waitUntil(
       () => {
-        const s = find('[data-choreo-orphans] #tile2') as HTMLElement | null;
-        const w = find('[data-choreo-orphans] #wrap2') as HTMLElement | null;
+        const s = find(
+          '[data-choreo-orphans] [data-test-id-memory="tile2"]',
+        ) as HTMLElement | null;
+        const w = find(
+          '[data-choreo-orphans] [data-test-id-memory="wrap2"]',
+        ) as HTMLElement | null;
         return (
           s !== null &&
           w !== null &&
@@ -837,8 +868,10 @@ module('Integration | choreo | crossing', function (hooks) {
     );
 
     const layer = find('[data-choreo-orphans]') as HTMLElement;
-    const wrap = layer.querySelector('#wrap2');
-    const skin = layer.querySelector('#tile2') as HTMLElement | null;
+    const wrap = layer.querySelector('[data-test-id-memory="wrap2"]');
+    const skin = layer.querySelector(
+      '[data-test-id-memory="tile2"]',
+    ) as HTMLElement | null;
     assert.ok(wrap, 'the card rides the orphan layer as a leaver');
     assert.ok(skin, 'the claimed skin is in the layer too');
     assert.notOk(
@@ -866,7 +899,7 @@ module('Integration | choreo | crossing', function (hooks) {
       0,
       'the orphan layer is empty once the crossing lands',
     );
-    const rest = bounds(find('#hero2') as HTMLElement);
+    const rest = bounds(find('[data-test-id="hero2"]') as HTMLElement);
     assert.true(
       Math.abs(rest.left - 190) < 1.5,
       `the flight closed on the real seat (${rest.left})`,

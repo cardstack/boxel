@@ -1,7 +1,10 @@
 // Pretui — SearchInput: a search field with a clear button.
 import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
+import SearchIcon from '@cardstack/boxel-icons/search';
 import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
@@ -20,6 +23,53 @@ const SEARCH_METRICS = htmlSafe(
   `${TYPED_BLOCK_RULES} ${SEARCH_START_PADDING} padding-inline-end: 1.75rem;`,
 );
 
+interface SearchFieldSignature {
+  Args: {
+    value: string;
+    placeholder?: string;
+    disabled?: boolean;
+    controlId?: string;
+    showClear: boolean;
+    onInput: (value: string) => void;
+    onClear: (event: Event) => void;
+  };
+  Element: HTMLDivElement;
+}
+
+// the field both displays share; the input is named from the placeholder
+// unless the caller labels it through @controlId
+const SearchField: TemplateOnlyComponent<SearchFieldSignature> = <template>
+  <FieldDress data-filled={{if @showClear 'true'}} ...attributes>
+    <BoxelInput
+      @value={{@value}}
+      @placeholder={{@placeholder}}
+      @disabled={{@disabled}}
+      @onInput={{@onInput}}
+      id={{@controlId}}
+      aria-label={{unless @controlId (if @placeholder @placeholder 'Search')}}
+      style={{SEARCH_METRICS}}
+    />
+    <SearchGlyph @dimmed={{@disabled}} />
+    {{#if @showClear}}
+      <button
+        type='button'
+        class='pretui-searchclear'
+        aria-label='Clear search'
+        data-test-pretui-search-clear
+        {{on 'click' @onClear}}
+      >
+        <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'><path
+            d='M3 3l6 6M9 3l-6 6'
+            fill='none'
+            stroke='currentColor'
+            stroke-width='1.5'
+            stroke-linecap='round'
+          /></svg>
+      </button>
+    {{/if}}
+  </FieldDress>
+</template>;
+
 export interface SearchInputSignature {
   Args: ControlAliasArgs & {
     value?: string;
@@ -29,12 +79,79 @@ export interface SearchInputSignature {
     /** show the clear button once the field holds text — true by default */
     clearable?: boolean;
     onInput?: (value: string) => void;
+    /** 'field' (default) the whole field; 'collapsed' a square button
+     * showing the magnifier, which opens the full field over the row on
+     * click; Escape or leaving it closes it again */
+    display?: 'field' | 'collapsed';
   };
   Element: HTMLDivElement;
 }
 
 export class SearchInput extends Component<SearchInputSignature> {
   @tracked internal = this.args.value ?? '';
+  @tracked open = false;
+
+  get collapsed() {
+    return this.args.display === 'collapsed';
+  }
+  get showField() {
+    return !this.collapsed || this.open;
+  }
+  get collapsedName() {
+    let name = this.args.placeholder || 'Search';
+    return this.current ? `${name}: ${this.current}` : name;
+  }
+  expand = () => {
+    // a second activation inside one render would write open twice, an
+    // autotracking error
+    if (this.open || this.disabled) {
+      return;
+    }
+    this.open = true;
+  };
+  // keydown and focusout from inside the field, on the wrapper
+  closesOnLeave = modifier((root: HTMLElement) => {
+    root.addEventListener('keydown', this.closeOnEscape);
+    root.addEventListener('focusout', this.closeOnLeave);
+    return () => {
+      root.removeEventListener('keydown', this.closeOnEscape);
+      root.removeEventListener('focusout', this.closeOnLeave);
+    };
+  });
+  private closeOnEscape = (event: KeyboardEvent) => {
+    if (!this.open || event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    // keep an enclosing dialog or card from also closing on this Escape
+    event.stopPropagation();
+    let root = (event.currentTarget as HTMLElement).closest(
+      '[data-pretui-search-collapsible]',
+    );
+    this.open = false;
+    // the button renders in the same frame the field leaves
+    requestAnimationFrame(() => {
+      root
+        ?.querySelector<HTMLElement>('[data-pretui-search-toggle]')
+        ?.focus();
+    });
+  };
+  private closeOnLeave = (event: FocusEvent) => {
+    let root = event.currentTarget as HTMLElement;
+    // Deferred: unmounting the toggle fires focusout while the field is still
+    // rendering, and tracked state can't change inside that render. By the
+    // microtask focusOnOpen has moved focus into the field. Safari and Firefox
+    // on macOS don't focus a button on mouse press, so activeElement is body
+    // while the pointer is down on the clear button; :active covers that.
+    queueMicrotask(() => {
+      if (!root.contains(document.activeElement) && !root.matches(':active')) {
+        this.open = false;
+      }
+    });
+  };
+  focusOnOpen = modifier((el: HTMLElement) => {
+    el.querySelector('input')?.focus();
+  });
 
   get current() {
     return this.args.value ?? this.internal;
@@ -57,42 +174,67 @@ export class SearchInput extends Component<SearchInputSignature> {
     this.internal = value;
     this.notify(value);
   };
-  clear = (_e: Event) => {
+  clear = (event: Event) => {
     this.internal = '';
     this.notify('');
+    // the button leaves with the text; focus stays in the field
+    (event.currentTarget as HTMLElement).parentElement
+      ?.querySelector('input')
+      ?.focus();
   };
   <template>
-    <FieldDress
-      data-filled={{if this.showClear 'true'}}
-      data-test-pretui-search-input
-      ...attributes
-    >
-      <BoxelInput
+    {{#if this.collapsed}}
+      <div
+        class='pretui-searchcollapse'
+        data-pretui-search-collapsible
+        data-open={{if this.open 'true'}}
+        {{this.closesOnLeave}}
+        data-test-pretui-search-input
+        ...attributes
+      >
+        {{#if this.open}}
+          <SearchField
+            class='pretui-searchcollapse-field'
+            @value={{this.current}}
+            @placeholder={{@placeholder}}
+            @disabled={{this.disabled}}
+            @onInput={{this.handleInput}}
+            @controlId={{@controlId}}
+            @showClear={{this.showClear}}
+            @onClear={{this.clear}}
+            {{this.focusOnOpen}}
+          />
+        {{else}}
+          {{! a raw button, not Button: the square is the field's own face
+              (--field, --input), which Button's variants don't draw }}
+          <button
+            type='button'
+            class='pretui-searchtoggle'
+            id={{@controlId}}
+            aria-label={{unless @controlId this.collapsedName}}
+            title={{this.collapsedName}}
+            disabled={{this.disabled}}
+            data-pretui-search-toggle
+            {{on 'click' this.expand}}
+            data-test-pretui-search-toggle
+          >
+            <SearchIcon width='14' height='14' aria-hidden='true' />
+          </button>
+        {{/if}}
+      </div>
+    {{else}}
+      <SearchField
         @value={{this.current}}
         @placeholder={{@placeholder}}
         @disabled={{this.disabled}}
         @onInput={{this.handleInput}}
-        id={{@controlId}}
-        style={{SEARCH_METRICS}}
+        @controlId={{@controlId}}
+        @showClear={{this.showClear}}
+        @onClear={{this.clear}}
+        data-test-pretui-search-input
+        ...attributes
       />
-      <SearchGlyph @dimmed={{this.disabled}} />
-      {{#if this.showClear}}
-        <button
-          type='button'
-          class='pretui-searchclear'
-          aria-label='Clear search'
-          {{on 'click' this.clear}}
-        >
-          <svg width='12' height='12' viewBox='0 0 12 12' aria-hidden='true'><path
-              d='M3 3l6 6M9 3l-6 6'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='1.5'
-              stroke-linecap='round'
-            /></svg>
-        </button>
-      {{/if}}
-    </FieldDress>
+    {{/if}}
     <style scoped>
       @layer PretComponent {
         /* inset the same on the block and inline sides, with the field's
@@ -124,6 +266,48 @@ export class SearchInput extends Component<SearchInputSignature> {
           outline: 2px solid var(--ring);
           outline-offset: -2px;
           --host-outline-offset: -2px;
+        }
+        /* @display 'collapsed': a square the height of the field; the open
+           field lies over the row from the square's start */
+        .pretui-searchcollapse {
+          --_search-h: var(--pretui-field-h, var(--boxel-form-control-height-sm));
+          position: relative;
+          inline-size: var(--_search-h);
+          block-size: var(--_search-h);
+          flex: none;
+        }
+        .pretui-searchtoggle {
+          display: grid;
+          place-items: center;
+          inline-size: 100%;
+          block-size: 100%;
+          padding: 0;
+          border: 1px solid var(--input);
+          border-radius: calc(var(--radius) - 0.125rem);
+          background-color: var(--field);
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-searchtoggle:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
+        }
+        @media (hover: hover) {
+          .pretui-searchtoggle:hover:not(:disabled) {
+            background-color: var(--hover);
+            color: var(--foreground);
+          }
+        }
+        .pretui-searchtoggle:disabled {
+          opacity: var(--boxel-disabled-opacity);
+          cursor: default;
+        }
+        .pretui-searchcollapse-field {
+          position: absolute;
+          inset-block-start: 0;
+          inset-inline-start: 0;
+          z-index: var(--pretui-z-raised, 1);
+          inline-size: var(--pretui-search-open-w, 15rem);
         }
         .pretui-searchclear:hover {
           background-color: var(--hover);

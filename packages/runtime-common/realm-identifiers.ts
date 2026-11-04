@@ -48,23 +48,46 @@ export function isPrefixForm(identifier: string): boolean {
 }
 
 /**
- * The last path segment of an identifier in either form, without its query or
- * fragment: `photo.jpg` for both `https://example.test/r/photo.jpg` and
- * `@cardstack/catalog/photo.jpg`. A trailing slash is ignored. A URL's origin
- * and a prefix's `@scope/name` namespace are not path segments, so a URL with
- * no path and a bare prefix have none.
+ * Whether an identifier is absolute: an `http:`/`https:` URL or prefix form.
+ * A relative reference, a bare package specifier and any other scheme
+ * (`data:`, `blob:`, …) are not.
+ *
+ * Like `isPrefixForm`, it reads the spelling only.
+ */
+export function isAbsoluteIdentifier(identifier: string): boolean {
+  return (
+    identifier.startsWith('http://') ||
+    identifier.startsWith('https://') ||
+    isPrefixForm(identifier)
+  );
+}
+
+/**
+ * The path segments of an identifier in either form, without its query or
+ * fragment: `['r', 'photo.jpg']` for `https://example.test/r/photo.jpg` and
+ * `['r', 'photo.jpg']` for `@cardstack/catalog/r/photo.jpg`. Empty segments
+ * are dropped, so a trailing slash is ignored. A URL's origin and a prefix's
+ * `@scope/name` namespace are not path segments, so a URL with no path and a
+ * bare prefix have none.
  *
  * It reads the spelling only, so a prefix-form identifier never goes through
- * a URL parser. The segment keeps any percent-encoding it was written with.
+ * a URL parser. Segments keep any percent-encoding they were written with.
  */
-export function lastSegmentOfIdentifier(identifier: string): string {
+export function pathSegmentsOfIdentifier(identifier: string): string[] {
   let path = identifier
     .split(/[?#]/, 1)[0]
     .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '');
   let segments = path.split('/').filter(Boolean);
-  if (isPrefixForm(identifier)) {
-    segments = segments.slice(2);
-  }
+  return isPrefixForm(identifier) ? segments.slice(2) : segments;
+}
+
+/**
+ * The last of `pathSegmentsOfIdentifier`: `photo.jpg` for both
+ * `https://example.test/r/photo.jpg` and `@cardstack/catalog/photo.jpg`, or ''
+ * when the identifier has no path segments.
+ */
+export function lastSegmentOfIdentifier(identifier: string): string {
+  let segments = pathSegmentsOfIdentifier(identifier);
   return segments[segments.length - 1] ?? '';
 }
 

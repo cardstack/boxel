@@ -1,10 +1,10 @@
 // A choice between a few options, as a row of a card's edit format: a radio
 // button for each, with its label and, under it, a line saying what it means.
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import FieldContainer from '../../components/field-container.gts';
+import Radio from '../../components/radio.gts';
 import type { IconComponent } from '../../components/icons/types.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
@@ -37,12 +37,12 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
       <legend class='visually-hidden'>{{@label}}</legend>
       {{#each @choices as |choice|}}
         <label class='choice' data-test-radio-choice={{choice.value}}>
-          <input
-            type='radio'
-            name={{@name}}
-            value={{choice.value}}
-            checked={{eq @selected choice.value}}
-            {{on 'change' (fn @onSelect choice.value)}}
+          <Radio
+            class='radio'
+            @name={{@name}}
+            @value={{choice.value}}
+            @checked={{eq @selected choice.value}}
+            @onChange={{fn @onSelect choice.value}}
           />
           <span class='text'>
             <span class='label'>{{choice.label}}</span>
@@ -78,9 +78,15 @@ const RadioChoices: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xs);
       cursor: pointer;
     }
-    .choice input {
-      margin: 0.1875rem 0 0;
-      accent-color: var(--primary, var(--boxel-highlight));
+    /* Centered on the label's first line. */
+    .radio {
+      margin-top: calc(
+        (
+            var(--boxel-font-size-sm) * var(--boxel-line-height-sm) -
+              var(--boxel-body-font-size)
+          ) /
+          2
+      );
     }
     .text {
       display: grid;

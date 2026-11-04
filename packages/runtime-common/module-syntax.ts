@@ -162,7 +162,7 @@ export class ModuleSyntax {
   private canonicalModule(specifier: string): string {
     let href: string;
     try {
-      href = resolveModuleHref(specifier, this.url, this.virtualNetwork);
+      href = resolveModuleHref(rri(specifier), this.url, this.virtualNetwork);
     } catch {
       return specifier;
     }

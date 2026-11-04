@@ -36,10 +36,12 @@
 // share is, and returns them to `active` when it resumes, however the share's
 // state changes.
 //
-// The three tables hold no secret, but they are withheld from the read-only
-// role, as `user_keys`, `user_key_grants` and `key_shares` are, and from every
-// role that reads with its privileges, by the same steps the grants migration
-// takes. They are excluded from the SQLite schema dump.
+// The three tables hold no secret, but `up` withholds them from the read-only
+// role, as `user_keys` and `user_key_grants` are, and from every role that
+// reads with its privileges, by the same steps the grants migration takes. A
+// later migration grants the read-only role SELECT on `key_bindings`;
+// `key_binding_approvals` and `key_binding_notices` stay withheld. They are
+// excluded from the SQLite schema dump.
 
 exports.up = (pgm) => {
   pgm.sql(`
