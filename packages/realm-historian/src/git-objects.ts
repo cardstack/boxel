@@ -78,14 +78,23 @@ export function treeBody(entries: TreeEntry[]): Uint8Array {
     Buffer.compare(Buffer.from(sortKey(a)), Buffer.from(sortKey(b))),
   );
   let parts: Uint8Array[] = [];
+  let names = new Set<string>();
   for (let entry of sorted) {
+    // The names git fsck refuses: empty, with a slash or NUL, `.git` in any
+    // case, `.` and `..`, and a name used twice, which a file and a
+    // directory of one name would be.
     if (
       entry.name === '' ||
+      entry.name === '.' ||
+      entry.name === '..' ||
+      entry.name.toLowerCase() === '.git' ||
       entry.name.includes('/') ||
-      entry.name.includes('\0')
+      entry.name.includes('\0') ||
+      names.has(entry.name)
     ) {
       throw new Error(`invalid tree entry name ${JSON.stringify(entry.name)}`);
     }
+    names.add(entry.name);
     parts.push(textEncoder.encode(`${entry.mode} ${entry.name}\0`));
     parts.push(Uint8Array.from(Buffer.from(entry.id, 'hex')));
   }
@@ -216,9 +225,22 @@ function concat(parts: Uint8Array[]): Uint8Array {
 export class TreeBuilder {
   #entries = new Map<string, { mode: TreeEntry['mode']; id: string }>();
 
+  // Sets a path's entry. A path that is a directory of another entry, or
+  // lies under another entry, is refused: one name can't be both a file
+  // and a directory.
   set(path: string, entry: { mode: TreeEntry['mode']; id: string }): void {
     if (path === '' || path.startsWith('/') || path.endsWith('/')) {
       throw new Error(`invalid path ${JSON.stringify(path)}`);
+    }
+    for (let other of this.#entries.keys()) {
+      if (
+        other !== path &&
+        (other.startsWith(`${path}/`) || path.startsWith(`${other}/`))
+      ) {
+        throw new Error(
+          `${JSON.stringify(path)} collides with the entry at ${JSON.stringify(other)}`,
+        );
+      }
     }
     this.#entries.set(path, entry);
   }

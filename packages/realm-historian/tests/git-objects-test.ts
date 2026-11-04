@@ -12,6 +12,7 @@ import {
   TreeBuilder,
   hashObject,
   blobBody,
+  treeBody,
   type TreeEntry,
 } from '../src/git-objects.ts';
 import { initRepo } from '../src/repo-format.ts';
@@ -198,6 +199,37 @@ module('git objects', (hooks) => {
     let after = await stat(store.pathOf(id));
     assert.strictEqual(after.mtimeMs, before.mtimeMs, 'the file is untouched');
     assert.strictEqual(after.mode & 0o777, 0o444, 'objects are read-only');
+  });
+
+  test('names git refuses are refused', async (assert) => {
+    let { id: blob } = await store.writeBlob('x');
+    let { id: sub } = await store.writeTree([]);
+    for (let name of ['', '.', '..', '.git', '.GIT', 'a/b', 'a\0b']) {
+      assert.throws(
+        () => treeBody([{ mode: BLOB_MODE, name, id: blob }]),
+        /invalid tree entry name/,
+        JSON.stringify(name),
+      );
+    }
+    assert.throws(
+      () =>
+        treeBody([
+          { mode: BLOB_MODE, name: 'Author', id: blob },
+          { mode: TREE_MODE, name: 'Author', id: sub },
+        ]),
+      /invalid tree entry name "Author"/,
+      'a file and a directory of one name',
+    );
+    let builder = new TreeBuilder();
+    builder.set('Author/jane.json', { mode: BLOB_MODE, id: blob });
+    assert.throws(
+      () => builder.set('Author', { mode: BLOB_MODE, id: blob }),
+      /collides with the entry at "Author\/jane.json"/,
+    );
+    assert.throws(
+      () => builder.set('Author/jane.json/x', { mode: BLOB_MODE, id: blob }),
+      /collides with the entry at "Author\/jane.json"/,
+    );
   });
 
   test('a tree builder writes nested trees from flat paths', async (assert) => {
