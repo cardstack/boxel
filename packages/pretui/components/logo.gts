@@ -50,7 +50,7 @@ export class Logo extends Component<LogoSignature> {
     if (variant === 'mark' || variant === 'wordmark') return variant;
     // auto: the image's own ratio once it has loaded; the text is a wordmark
     let { measured } = this;
-    if (this.showImage && measured?.src === this.args.src) {
+    if (measured && this.showImage && measured.src === this.args.src) {
       return measured.ratio > WORDMARK_RATIO ? 'wordmark' : 'mark';
     }
     return this.showImage ? 'mark' : 'wordmark';
