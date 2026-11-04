@@ -4376,6 +4376,69 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a read that reports the index state answers awaiting-index without changing what other reads of the card get', async function (assert) {
+    async function writeUnindexed(path: string, name: string) {
+      await testRealmAdapter.write(
+        path,
+        JSON.stringify({
+          data: {
+            attributes: { name },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+    }
+
+    // Read for the index state first, then as the user opening the card.
+    let readFirst = `${testRealmURL}Person/report-first`;
+    await writeUnindexed('Person/report-first.json', 'Report First');
+    let reported = await storeService.getWithoutCache(readFirst);
+    assert.true(
+      (reported as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read reports the card as awaiting index',
+    );
+    assert.strictEqual(
+      storeService.peekError(readFirst),
+      undefined,
+      'and records nothing in the store',
+    );
+    assert.true(
+      isCardInstance(await storeService.get(readFirst)),
+      'so opening the card afterwards still builds it from its source',
+    );
+
+    // Opened first, then read for the index state.
+    let openedFirst = `${testRealmURL}Person/opened-first`;
+    await writeUnindexed('Person/opened-first.json', 'Opened First');
+    let opened = await storeService.get(openedFirst);
+    assert.true(isCardInstance(opened), 'the opened card is running');
+    reported = await storeService.getWithoutCache(openedFirst);
+    assert.true(
+      (reported as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read is not handed the card built from source',
+    );
+    assert.strictEqual(
+      storeService.peek(openedFirst),
+      opened,
+      'and the running card stays in place',
+    );
+
+    // Both at once: neither read is handed the other's answer.
+    let concurrent = `${testRealmURL}Person/concurrent`;
+    await writeUnindexed('Person/concurrent.json', 'Concurrent');
+    let [got, reportedConcurrently] = await Promise.all([
+      storeService.get(concurrent),
+      storeService.getWithoutCache(concurrent),
+    ]);
+    assert.true(isCardInstance(got), 'the plain read gets the card');
+    assert.true(
+      (reportedConcurrently as CardErrorJSONAPI).awaitingIndex,
+      'the index-state read gets the awaiting-index answer',
+    );
+  });
+
   test('an index event that lands while a card is being built from its source re-reads it once it is built', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();

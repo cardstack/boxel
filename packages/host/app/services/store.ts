@@ -3844,7 +3844,10 @@ export default class StoreService extends Service implements StoreInterface {
   }): Promise<T | CardErrorJSONAPI> {
     let deferred: Deferred<T | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc, this.network.virtualNetwork);
-    if (id) {
+    // A read that reports the index's state answers a different question
+    // from every other read of the card, so it neither shares their in-flight
+    // read nor offers its own to them.
+    if (id && !opts?.reportUnindexed) {
       let working = this.inflightGetCards.get(id);
       if (working) {
         return working as Promise<T | CardErrorJSONAPI>;
@@ -4041,12 +4044,27 @@ export default class StoreService extends Service implements StoreInterface {
       // read is the one that gets here with an instance already in hand.
       let running =
         cardError?.awaitingIndex && id ? this.store.getCard(id) : undefined;
+      // A card built from its source is the store standing in for the missing
+      // row, which is exactly what a read reporting the index's state is asking
+      // about, so that read gets the realm's answer instead.
+      if (
+        running &&
+        opts?.reportUnindexed &&
+        this.#builtFromSource.has(running[localIdSymbol])
+      ) {
+        running = undefined;
+      }
       if (running) {
         deferred?.fulfill(running as T);
         return running as T;
       }
       deferred?.fulfill(cardError);
-      this.setIdentityContext(cardError);
+      // The awaiting-index answer to such a read is the caller's alone: what
+      // the store records is what every other read of the card is handed, and
+      // for them the card is built from its source.
+      if (!(opts?.reportUnindexed && cardError?.awaitingIndex)) {
+        this.setIdentityContext(cardError);
+      }
       let status = cardError?.status ?? error?.status;
       let isSystemCardDefault = isSystemCardDefaultId(
         id,
