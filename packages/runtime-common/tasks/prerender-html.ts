@@ -364,7 +364,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   reportProgress,
   reportRealmEvent,
   dbAdapter,
-  matrixURL,
+  matrixServerName,
   indexWriter,
   getReader,
   getAuthedFetch,
@@ -398,7 +398,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} (${changes.length} changes, spawning index jobs [${spawningIndexJobIds.join(', ')}], generation ${generation}, preWarm ${preWarm})`,
     );
     reportStatus(jobInfo, 'start');
-    let userId = userIdFromUsername(realmUsername, matrixURL);
+    let userId = userIdFromUsername(realmUsername, matrixServerName);
     let permissions = await fetchUserPermissions(dbAdapter, {
       userId,
       includePublicRealms: true,

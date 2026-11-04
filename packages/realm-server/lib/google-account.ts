@@ -1,14 +1,11 @@
 // How a Google identity with no account linked to its subject resolves to a
-// Matrix account: the rules of Boxel's OIDC mapping provider
-// (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`),
-// which Synapse runs for the app's Google sign-in. The realm server's own
-// Google sign-in on the secure origin applies the same rules, so a Google
-// account lands in the same Matrix account whichever page the user signs in
-// on.
+// Matrix account, in the realm server's Google sign-in on the secure origin.
+// The rules are the ones the accounts already linked to Google were made by,
+// so a Google account always lands in the same Matrix account: link by
+// verified email, refuse an email more than one account holds, and otherwise
+// make an account whose localpart comes from the email.
 //
-// The two can't share code, so they share test vectors instead:
-// `test_google_sign_in_vectors.json`, next to the provider, runs against both
-// the provider's unit tests and this module's.
+// `tests/google-sign-in-vectors.json` holds the cases.
 
 // The identity Google's ID token describes.
 export interface GoogleIdentity {

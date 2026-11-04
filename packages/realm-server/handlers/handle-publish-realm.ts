@@ -14,13 +14,18 @@ import {
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
+  publishedSpaceHost,
   notifyAllFileChanges,
   baseRealm,
   effectiveHasError,
+  realmPolicyCardNamed,
+  RealmPaths,
+  sameResourceIn,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
+import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
 import { join } from 'path';
 import fsExtra from 'fs-extra';
@@ -43,6 +48,7 @@ const {
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForError,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
@@ -60,6 +66,12 @@ import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-r
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts';
 
 const log = logger('handle-publish');
+
+class PublishedRealmURLTakenError extends Error {
+  constructor(publishedRealmURL: string) {
+    super(`${publishedRealmURL} is already published from another realm`);
+  }
+}
 
 // A base CardDef can be referenced two equivalent ways in a
 // `meta.adoptsFrom.module` field — the absolute base-realm URL, or
@@ -131,6 +143,7 @@ function parseOverrideHost(rawOverride: string): OverrideHost | null {
 async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
+  matrixServerName: string,
   sourceRealmURL: string,
   publishedRealmURL: string,
 ): Promise<{ applied: boolean; publishedRealmURL: string }> {
@@ -164,12 +177,16 @@ async function maybeApplyPublishedRealmOverride(
     dbAdapter,
     new URL(sourceRealmURL),
   );
-  let effectivePermissions = new Set([
-    ...(permissions['*'] ?? []),
-    ...(permissions['users'] ?? []),
-    ...(permissions[ownerUserId] ?? []),
-  ]);
-  if (!effectivePermissions.has('write')) {
+  // The publisher is the signed-in user of this request, whose account the
+  // realm server verified when it issued their session, so the `users` row
+  // applies whenever they are on the paired homeserver (ADR 004 §1.4).
+  let effectivePermissions = await effectiveRealmPermissions(
+    permissions,
+    ownerUserId,
+    matrixServerName,
+    async () => true,
+  );
+  if (!effectivePermissions.includes('write')) {
     return { applied: false, publishedRealmURL };
   }
 
@@ -254,19 +271,39 @@ async function ensureRealmIndexBoilerplateOptIn(
   }
 }
 
-// A published realm names no policy, so it answers on its ACL alone. The
-// source's pointer is an absolute card id, so a copy of it would name the
-// source's policy card rather than anything in the snapshot: the published
-// realm would be governed by the source's live policy, and a grant there of
-// any writing operation (create, update, delete, transform, …) could admit a
-// signed-in caller's write into a realm nobody may write. Removed from the
-// copy before it is swapped in, so the file a mounted published realm reads
-// after the swap never names the source's pointer.
+// A published realm is governed by the snapshot of its source's policy card,
+// never by the source's live one. The source's pointer is an absolute card id,
+// so a verbatim copy of it would name the source's card, whose rules name the
+// source's types rather than the snapshot's, and whose grants change whenever
+// the source's owner edits them.
+//
+// So where the pointer names a card in the source realm, the copy's pointer
+// names the same path in the published realm: the policy card copied with the
+// rest of the realm, whose rules resolve against the published realm's own
+// modules. A published realm keeps only that policy's grants on a `callApi`
+// whose every credential slot takes a key shared with the realm
+// (`sharedKeyCallsOnly`), which send a request outside the realm and write
+// nothing in it; so the copy still admits no write by any caller. A pointer to
+// a card in any other realm is removed, and the published realm answers on its
+// ACL alone. Either way the file is rewritten before the copy is swapped in,
+// so the file a mounted published realm reads after the swap never names the
+// source's pointer.
 //
 // A `realm.json` that doesn't parse is left alone, since a realm reads no
 // policy from it either. Any other failure to read or rewrite it fails the
 // publish.
-async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
+async function rebaseRealmPolicyPointer(
+  realmPath: string,
+  {
+    sourceRealmURL,
+    publishedRealmURL,
+    virtualNetwork,
+  }: {
+    sourceRealmURL: string;
+    publishedRealmURL: string;
+    virtualNetwork: VirtualNetwork;
+  },
+): Promise<void> {
   let realmJsonPath = join(realmPath, 'realm.json');
   if (!(await pathExists(realmJsonPath))) {
     return;
@@ -288,7 +325,19 @@ async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
   ) {
     return;
   }
-  delete attributes.policy;
+  let card = realmPolicyCardNamed(attributes.policy, virtualNetwork);
+  let copy = card
+    ? sameResourceIn(
+        new RealmPaths(new URL(sourceRealmURL)),
+        new RealmPaths(new URL(publishedRealmURL)),
+        new URL(card),
+      )
+    : undefined;
+  if (copy) {
+    attributes.policy = copy;
+  } else {
+    delete attributes.policy;
+  }
   await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
 }
 
@@ -311,7 +360,7 @@ function sameRealmConfig(a: Buffer | undefined, b: Buffer | undefined) {
 
 // The copy keeps every file's mtime, so the index skips the files that did
 // not change since the last publish. The publish then rewrites the copied
-// realm.json (dropRealmPolicyPointer, ensureRealmIndexBoilerplateOptIn), and
+// realm.json (rebaseRealmPolicyPointer, ensureRealmIndexBoilerplateOptIn), and
 // each write stamps it with the current time. Give it the source file's mtime
 // back, so an unchanged realm.json also reads as unchanged.
 async function restoreRealmConfigMtime(
@@ -467,6 +516,7 @@ export default function handlePublishRealm({
     let overrideResult = await maybeApplyPublishedRealmOverride(
       dbAdapter,
       ownerUserId,
+      matrixClient.serverName,
       sourceRealmURL,
       publishedRealmURL,
     );
@@ -521,19 +571,21 @@ export default function handlePublishRealm({
         return;
       }
 
-      // Within the owner's own published space (`<username>.<spaceDomain>`), a
+      // Within the owner's own published space (`publishedSpaceHost`), a
       // subdirectory publish may target only the realm-name path (the "Your
       // Boxel Space" target) or the server-issued unlisted-link slug — never an
       // arbitrary, client-chosen path — so the unlisted link's unguessable
       // path can't be hand-picked through a direct API call. Publishes to any
       // other host (claimed custom domains, etc.) are left permissive.
       let spaceDomain = domainsForPublishedRealms?.boxelSpace;
-      let matrixUsername = getMatrixUsername(ownerUserId);
       let publishedURLForPath = new URL(publishedRealmURL);
+      let ownerSpaceHost = spaceDomain
+        ? publishedSpaceHost(getMatrixUsername(ownerUserId), spaceDomain)
+        : undefined;
       let isOwnerSpaceHost =
-        !!spaceDomain &&
-        (publishedURLForPath.host === `${matrixUsername}.${spaceDomain}` ||
-          publishedURLForPath.hostname === `${matrixUsername}.${spaceDomain}`);
+        !!ownerSpaceHost &&
+        (publishedURLForPath.host === ownerSpaceHost ||
+          publishedURLForPath.hostname === ownerSpaceHost);
       if (isOwnerSpaceHost) {
         let publishedPath = publishedURLForPath.pathname
           .split('/')
@@ -623,14 +675,28 @@ export default function handlePublishRealm({
       let { lastPublishedAt, publishedRealmId, isNewRealm, renderEveryCard } =
         await dbAdapter.withWriteLock(publishedRealmURL, async () => {
           let existingRows = (await query(dbAdapter, [
-            `SELECT disk_id, owner_username, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
+            `SELECT disk_id, owner_username, source_url, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
           ])) as {
             disk_id: string;
             owner_username: string;
+            source_url: string;
             last_published_at: string | number | null;
           }[];
           let isNewRealm = existingRows.length === 0;
+
+          // A published URL belongs to the realm it was first published
+          // from. Republishing it from any other source realm would replace
+          // someone else's site, e.g. when two usernames map to the same
+          // Boxel Space host (see `publishedSpaceSubdomain`). Checked inside
+          // the write lock so two first-time publishes of one URL cannot
+          // both pass it.
+          if (
+            !isNewRealm &&
+            ensureTrailingSlash(existingRows[0].source_url) !== sourceRealmURL
+          ) {
+            throw new PublishedRealmURLTakenError(publishedRealmURL);
+          }
 
           let publishedRealmId: string;
           let realmUsername: string;
@@ -707,7 +773,11 @@ export default function handlePublishRealm({
             );
           }
           try {
-            await dropRealmPolicyPointer(tempCopyPath);
+            await rebaseRealmPolicyPointer(tempCopyPath, {
+              sourceRealmURL,
+              publishedRealmURL,
+              virtualNetwork,
+            });
             if (await pathExists(publishedRealmPath)) {
               await move(publishedRealmPath, backupPath);
             }
@@ -726,10 +796,11 @@ export default function handlePublishRealm({
           }
 
           // A mounted realm memoizes the policy pointer it read from
-          // `realm.json`. When the file this swap replaced named one, the memo
-          // still holds it, and a write resolved against it would wait out
-          // this lock and then commit. Drop it while the lock still excludes
-          // every writer in the realm.
+          // `realm.json`. The memo still holds whatever the file this swap
+          // replaced named, which may be a pointer no publish writes, and a
+          // write resolved against it would wait out this lock and then
+          // commit. Drop it while the lock still excludes every writer in the
+          // realm, so the realm reads the pointer the swap put in place.
           reconciler.mounted
             .get(publishedRealmURL)
             ?.invalidateCachedRealmInfo();
@@ -1014,6 +1085,10 @@ export default function handlePublishRealm({
       await setContextResponse(ctxt, response);
       return;
     } catch (error: any) {
+      if (error instanceof PublishedRealmURLTakenError) {
+        await sendResponseForError(ctxt, 409, 'Conflict', error.message);
+        return;
+      }
       log.error('Error publishing realm:', error);
       await sendResponseForSystemError(ctxt, error.message);
     }

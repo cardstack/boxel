@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Brazil Mogiana Washed",
+      "category": "coffee",
+      "origin": "Mogiana, Brazil",
+      "variants": [
+        {
+          "sku": "CF-008-250",
+          "size": "250 g",
+          "price": 12.49
+        },
+        {
+          "sku": "CF-008-500",
+          "size": "500 g",
+          "price": 24.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

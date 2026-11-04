@@ -69,6 +69,7 @@ import {
   type LooseSingleCardDocument,
   type CardDocument,
   type CardResourceMeta,
+  type KeyReadiness,
   type ResolvedCodeRef,
   type getCard,
   type getCards,
@@ -99,6 +100,7 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  decodedLastSegmentOfIdentifier,
   fileNameFromUrl,
   referenceNamesFile,
   isDeclaredCaptureFormat,
@@ -433,6 +435,27 @@ export interface CardContext<T extends CardDef = CardDef> {
     target: CardDef | string | typeof CardDef,
     opts?: { realm?: string },
   ) => boolean | undefined;
+  // Would the `callApi` named `operation` on `target` have the credentials it
+  // sends, if this session invoked it here, and if not, what would fix it?
+  // Asked on the same request as `canInvoke` and answered the same way:
+  // synchronously, `undefined` while the realm is being asked, and asked
+  // again when the user comes back from the secure window. One template
+  // branch per answer: `ready` shows the data, `needs-connect`,
+  // `needs-approval` and `needs-reapproval` show a button that opens the
+  // secure window, `needs-admin` says an administrator of the realm needs to
+  // set this up, `needs-sign-in` asks the user to sign in.
+  //
+  // `undefined` means "not known yet", never "not ready": it is always the
+  // answer in prerendered HTML, which every viewer is served, so a template
+  // shows nothing for it rather than a Connect button. Advisory, like
+  // `canInvoke`: the call checks again.
+  //
+  // Absent where nothing can answer, so consumers guard on it.
+  keyReadiness?: (
+    operation: string,
+    target: CardDef | string | typeof CardDef,
+    opts?: { realm?: string },
+  ) => KeyReadiness | undefined;
   store: Store;
   // Host bridge for the markdown editor's embed chooser. Provided by
   // operator-mode; absent in contexts with no chooser modal (prerender,
@@ -676,6 +699,9 @@ export interface CardStore {
   // depth, so it can't be recovered from the path — `/user/alice/` is a realm
   // and `/user/` is not.
   realmForId(id: string): string | undefined;
+  // The URL a browser can open for `id`: a prefix-form or aliased id folded
+  // onto the realm's served URL, and any id nothing maps returned unchanged.
+  openableURL(id: string): string;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   // Whether an instance this store is already holding for `url` is current
@@ -4163,10 +4189,7 @@ export class FileDef extends BaseDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile> {
-    let parsed = new URL(url);
-    let name = decodeURIComponent(
-      parsed.pathname.split('/').pop() ?? parsed.pathname,
-    );
+    let name = decodedLastSegmentOfIdentifier(url);
     let contentType = inferContentType(name);
     let contentHash: string | undefined = options.contentHash;
     let contentSize: number | undefined = options.contentSize;
@@ -6285,6 +6308,13 @@ export function resolveInstanceURL(
   }
 }
 
+// The URL a browser can open for the instance, through the instance's own
+// store. Undefined for an instance with no id yet.
+export function openableURLOf(instance: CardDef | FileDef): string | undefined {
+  let id = instance.id as string | undefined;
+  return id ? getStore(instance).openableURL(id) : undefined;
+}
+
 // The instance's realm, in the same form as its id. A card id is canonical
 // RRI, so for a realm registered under a prefix it reads `@scope/name/...`
 // while the realm meta is the realm's URL. Folding the realm through the
@@ -6373,6 +6403,16 @@ class FallbackCardStore implements CardStore {
       return undefined;
     }
     return vn?.realmForReference(id);
+  }
+
+  openableURL(id: string): string {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return id;
+    }
+    return vn ? vn.keyForIdentifier(id) : id;
   }
 
   // Mirror the host stores' bucket-key fold: every spelling of the same

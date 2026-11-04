@@ -181,6 +181,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       canInvoke: this.capabilities.canInvoke,
+      keyReadiness: this.capabilities.keyReadiness,
       store: this.cardStore,
       toolContext: this.toolContext,
       commandContext: this.toolContext,

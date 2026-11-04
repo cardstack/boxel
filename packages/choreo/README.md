@@ -116,8 +116,10 @@ the hard way.
   correctly even while an outer one is flying the box it lives in.
 - **Leavers belong to the timeline.** A removed participant stays on screen, locked where it stood,
   for exactly as long as the score names it. The region parks it in an orphan layer and releases it
-  when its row ends. There's no `<Presence>` inside a scene, no clones, and no "keep this in state a
-  bit longer" flags.
+  when its row ends. Parked, it is a memory (glimmer-motion's `keepAsMemory`, the same treatment a
+  `<Presence @mode="snapshot">` copy gets): inert, held at the frame it showed, with no ids or form
+  names, and with its test hooks suffixed (`data-test-title-memory`). There's no `<Presence>` inside a scene, no clones, and no "keep this in state a bit longer"
+  flags.
 - **Identity pairs across renders.** An inserted id that replaces a removed one _claims_ it: one
   flight, two skins, crossfaded over the moving box. The same bare id in two different regions pairs
   across them (**far matching**), and the arrival flies from the departure's box as one continuous
@@ -388,13 +390,13 @@ import {
 } from '@cardstack/choreo/test-support';
 ```
 
-| export                        | what it is for                                                                                                                |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `setupChoreo(hooks)`          | glimmer-motion's `setupMotion(hooks)`, plus the state a region leaves behind: beacons, the far-match barrier, gesture samples |
-| `orphanCount()`               | leavers currently parked in an orphan layer                                                                                   |
-| `strandedTransforms()`        | elements wearing a transform nobody is animating                                                                              |
-| `live(sel)` / `liveAll(sel)`  | `querySelector` that skips mid-flight ghosts in the orphan layer: a person never clicks one, so a selector mustn't either     |
-| `advanceGate()` / `seekTo(s)` | drive a parked run; scrub to a second                                                                                         |
+| export                        | what it is for                                                                                                                                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setupChoreo(hooks)`          | glimmer-motion's `setupMotion(hooks)`, plus the state a region leaves behind: beacons, the far-match barrier, gesture samples                                                                           |
+| `orphanCount()`               | leavers currently parked in an orphan layer                                                                                                                                                             |
+| `strandedTransforms()`        | elements wearing a transform nobody is animating                                                                                                                                                        |
+| `live(sel)` / `liveAll(sel)`  | `querySelector` that skips memories, such as leavers parked in the orphan layer, for selectors other than test hooks (a memory's are suffixed): a person never clicks one, so a selector mustn't either |
+| `advanceGate()` / `seekTo(s)` | drive a parked run; scrub to a second                                                                                                                                                                   |
 
 `animationsSettled()` from glimmer-motion waits for `<Choreo>` runs as well as the engine's own
 animations, because a region registers its in-flight runs as a busy probe. It is explicit rather

@@ -52,15 +52,139 @@ module('Unit | secure-window', function () {
     });
   });
 
+  test("a share's limits page names the realm and the share", function (assert) {
+    let url = secureWindowURL({
+      mode: 'share-limits',
+      realm: REALM,
+      share: '00000000-0000-4000-8000-000000000001',
+      reason: 'Change the limits',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('share-limits'));
+    assert.deepEqual(fragmentOf(url), {
+      realm: REALM,
+      share: '00000000-0000-4000-8000-000000000001',
+      reason: 'Change the limits',
+    });
+  });
+
+  test('replacing the key an operation sends names the operation and what it is on', function (assert) {
+    let onCard = secureWindowURL({
+      mode: 'replace-key',
+      target: { kind: 'instance', card: CARD, operation: 'forecast' },
+      reason: 'The forecast service rejected your key',
+    });
+    assert.strictEqual(onCard.split('#')[0], secureOriginPage('replace-key'));
+    assert.strictEqual(new URL(onCard).search, '');
+    assert.deepEqual(fragmentOf(onCard), {
+      card: CARD,
+      operation: 'forecast',
+      reason: 'The forecast service rejected your key',
+    });
+    let onType = secureWindowURL({
+      mode: 'replace-key',
+      target: {
+        kind: 'type',
+        module: `${REALM}weather-station`,
+        name: 'WeatherStation',
+        realm: REALM,
+        operation: 'forecast',
+      },
+    });
+    assert.deepEqual(fragmentOf(onType), {
+      module: `${REALM}weather-station`,
+      name: 'WeatherStation',
+      realm: REALM,
+      operation: 'forecast',
+    });
+  });
+
   test('a key entered for nothing in particular carries no fragment', function (assert) {
     let url = secureWindowURL({ mode: 'enter-key' });
     assert.strictEqual(url, secureOriginPage('enter-key'));
+  });
+
+  test('approving names the one operation the card is blocked on, on its card', function (assert) {
+    let url = secureWindowURL({
+      mode: 'approve',
+      target: { kind: 'instance', card: CARD, operation: 'forecast' },
+      reason: 'To show your forecast',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('approve'));
+    assert.deepEqual(fragmentOf(url), {
+      card: CARD,
+      operation: 'forecast',
+      reason: 'To show your forecast',
+    });
+  });
+
+  test('reviewing changes names the operation on a card type, its module, export and realm', function (assert) {
+    let url = secureWindowURL({
+      mode: 'review-changes',
+      target: {
+        kind: 'type',
+        module: `${REALM}weather`,
+        name: 'Weather',
+        realm: REALM,
+        operation: 'forecast',
+      },
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('review-changes'));
+    assert.deepEqual(fragmentOf(url), {
+      module: `${REALM}weather`,
+      name: 'Weather',
+      realm: REALM,
+      operation: 'forecast',
+    });
   });
 
   test('sharing a key names the realm', function (assert) {
     let url = secureWindowURL({ mode: 'share-key', realm: REALM });
     assert.strictEqual(url.split('#')[0], secureOriginPage('share-key'));
     assert.deepEqual(fragmentOf(url), { realm: REALM });
+  });
+
+  test('connecting an account for an operation on a card names the card and the operation', function (assert) {
+    let url = secureWindowURL({
+      mode: 'connect',
+      target: { kind: 'instance', card: CARD, operation: 'listRepos' },
+      reason: 'Lists your repositories',
+    });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('connect'));
+    assert.strictEqual(new URL(url).search, '', 'nothing in the query string');
+    assert.deepEqual(fragmentOf(url), {
+      card: CARD,
+      operation: 'listRepos',
+      reason: 'Lists your repositories',
+    });
+  });
+
+  test('connecting an account for an operation on a card type names its module, export and realm', function (assert) {
+    let url = secureWindowURL({
+      mode: 'connect',
+      target: {
+        kind: 'type',
+        module: `${REALM}repo-list`,
+        name: 'RepoList',
+        realm: REALM,
+        operation: 'listRepos',
+      },
+    });
+    assert.deepEqual(fragmentOf(url), {
+      module: `${REALM}repo-list`,
+      name: 'RepoList',
+      realm: REALM,
+      operation: 'listRepos',
+    });
+  });
+
+  test('connecting an account for a workspace names the realm, and for nothing carries no fragment', function (assert) {
+    let url = secureWindowURL({ mode: 'connect', realm: REALM });
+    assert.strictEqual(url.split('#')[0], secureOriginPage('connect'));
+    assert.deepEqual(fragmentOf(url), { realm: REALM });
+    assert.strictEqual(
+      secureWindowURL({ mode: 'connect' }),
+      secureOriginPage('connect'),
+    );
   });
 
   test('the window reads http(s) URLs and prefix-form ids, and nothing else', function (assert) {

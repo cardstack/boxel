@@ -859,6 +859,9 @@ importers:
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.61.0
+      '@types/jsonwebtoken':
+        specifier: 'catalog:'
+        version: 9.0.10
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -868,6 +871,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      jsonwebtoken:
+        specifier: 'catalog:'
+        version: 9.0.3
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -4369,6 +4375,9 @@ importers:
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@ember/test-waiters':
+        specifier: 'catalog:'
+        version: 4.1.2(supports-color@8.1.1)
       '@embroider/core':
         specifier: ^4.6.3
         version: 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
@@ -4578,15 +4587,33 @@ importers:
 
   packages/test-realm-cards:
     devDependencies:
+      '@babel/plugin-proposal-decorators':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@typescript-eslint/parser':
+        specifier: 'catalog:'
+        version: 8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(eslint@8.57.1(supports-color@8.1.1)))(@typescript-eslint/parser@8.67.0(eslint@8.57.1(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(typescript@5.9.3)
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1(supports-color@8.1.1)
 
   packages/vscode-boxel-tools:
     dependencies:
@@ -21588,7 +21615,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 26.1.2
+      '@types/node': 24.13.2
 
   '@types/keygrip@1.0.6': {}
 

@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Brazil Mogiana Natural",
+      "category": "coffee",
+      "origin": "Mogiana, Brazil",
+      "variants": [
+        {
+          "sku": "CF-007-250",
+          "size": "250 g",
+          "price": 11.4
+        },
+        {
+          "sku": "CF-007-500",
+          "size": "500 g",
+          "price": 20.99
+        },
+        {
+          "sku": "CF-007-1KG",
+          "size": "1 kg",
+          "price": 38.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

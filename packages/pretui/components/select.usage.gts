@@ -2,7 +2,9 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
-import { Select } from './select';
+import Globe from '@cardstack/boxel-icons/globe';
+import { SELECT_DISPLAYS, Select } from './select';
+import type { SelectDisplay } from './select';
 
 const COUNTRY_NAMES = [
   'United States',
@@ -31,6 +33,13 @@ export class SelectUsage extends Component {
   @tracked placeholder = 'Select Item';
   @tracked disabled = false;
   @tracked searchEnabled = false;
+  @tracked display = 'full';
+  displays = [...SELECT_DISPLAYS];
+  globe = Globe;
+  setDisplay = (v: string) => (this.display = v);
+  get displayVal() {
+    return this.display as SelectDisplay;
+  }
   setValue = (v: string) => (this.value = v);
   setPlaceholder = (v: string) => (this.placeholder = v);
   setDisabled = (v: boolean) => (this.disabled = v);
@@ -41,6 +50,8 @@ export class SelectUsage extends Component {
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
     if (this.searchEnabled) bits.push('@searchEnabled={{true}}');
+    if (this.display !== 'full')
+      bits.push(`@display='${this.display}' @icon={{Globe}}`);
     bits.push('@onValueChange={{this.setValue}}');
     return `<Select ${bits.join(' ')} />`;
   }
@@ -58,6 +69,8 @@ export class SelectUsage extends Component {
           @placeholder={{this.placeholder}}
           @disabled={{this.disabled}}
           @searchEnabled={{this.searchEnabled}}
+          @display={{this.displayVal}}
+          @icon={{this.globe}}
           @onValueChange={{this.setValue}}
         />
       </:example>
@@ -98,6 +111,20 @@ export class SelectUsage extends Component {
           @value={{this.searchEnabled}}
           @description='Adds a search box above the list; it takes focus when the list opens.'
           @onInput={{this.setSearchEnabled}}
+        />
+        <Args.String
+          @name='display'
+          @value={{this.display}}
+          @options={{this.displays}}
+          @defaultValue='full'
+          @description="full shows the chosen label on the trigger; icon shows @icon alone, and the trigger's accessible name and title carry @label and the current value ('Country: Spain'). The list opens unchanged. --pretui-select-h sets the trigger's height."
+          @onInput={{this.setDisplay}}
+        />
+        <Args.Base
+          @name='icon'
+          @typeLabel='Component'
+          @description='The trigger icon @display icon shows; without it the trigger stays full.'
+          @hideControls={{true}}
         />
       </:api>
     </FreestyleUsage>

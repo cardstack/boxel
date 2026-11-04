@@ -1,6 +1,8 @@
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
 
+import { isAskUserTool } from './ask-user';
+
 import type MessageTool from './matrix-classes/message-tool';
 
 export const CHECK_CORRECTNESS_COMMAND_NAME = 'checkCorrectness';
@@ -35,6 +37,13 @@ export function isAutoExecutableTool(
   // The tool class itself insists on the user's click (e.g. deleting a
   // workspace): no mode or approval flag overrides that.
   if (command.neverAutoExecutes) {
+    return false;
+  }
+  // A question runs only from the user's pick. Its tool says so too, but
+  // that is read from its class, which a realm-defined copy may not have
+  // loaded yet when Act mode decides; run with no pick, it fails, and the
+  // picker goes with it.
+  if (isAskUserTool(command)) {
     return false;
   }
   if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {

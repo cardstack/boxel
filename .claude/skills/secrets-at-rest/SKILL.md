@@ -37,6 +37,28 @@ or destination by a database writer doesn't open: the caller gets
 field is what keeps two secrets on one row, such as an OAuth client secret and
 its refresh token sent to the same token endpoint, from being swapped.
 
+Every value that fails to open, wherever it was being opened, is also one
+JSON line on the `boxel:secrets-at-rest` channel, at `warn`:
+
+```json
+{
+  "channel": "boxel:secrets-at-rest",
+  "event": "open-failed",
+  "field": "user_key_grants.value",
+  "id": "<row id>",
+  "keyId": "kms-3f9c0a1b2c4d5e6f",
+  "reason": "not-authentic"
+}
+```
+
+`reason` is `unknown-data-key` (sealed under a data key this process hasn't
+loaded), `malformed` (its nonce or tag has the wrong length) or
+`not-authentic` (GCM refused it: altered bytes, or moved to another binding).
+The line names the field, the row and the data key, never the owner or the
+value. The "Stored secret failed to open" alert fires on any of them, and the
+`key-outage-triage` skill reads them. Tests capture them with
+`setSecretOpenFailureSink`.
+
 - A secret with no destination of its own, such as a user's key's master
   copy, is sealed under field, owner and id only. A user's key is never
   re-bound to a destination: each grant seals its own copy, sealed afresh from
@@ -521,6 +543,15 @@ principal can create a grant on a key whose policy allows no `CreateGrant`.
 
 ### 3. Who used the key
 
+Every allowed `Decrypt` on the key, and every denied one that names the key or
+carries its encryption context, is also copied as it happens
+into the CloudWatch log group `/aws/events/<env>-boxel-secrets-decrypts` by an
+EventBridge rule in `cardstack/infra:configs/boxel-secrets-kms`. The Keys
+dashboard charts it by principal, and the "Secrets key Decrypt by an
+unexpected principal" alert fires on any Decrypt from neither task role, or
+any denied one (see the `key-outage-triage` skill). The audit below still
+reads CloudTrail, which covers every other call on the key.
+
 Every call on the key is in CloudTrail event history for 90 days. For a first
 audit, start the window at the key's `CreationDate` (from `describe-key`).
 After that, start it where the previous audit ended:
@@ -623,6 +654,10 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   -c "SELECT * FROM key_write_tickets LIMIT 0" \
   -c "SELECT * FROM user_key_grants LIMIT 0" \
   -c "SELECT * FROM secure_sessions LIMIT 0" \
+  -c "SELECT * FROM oauth_clients LIMIT 0" \
+  -c "SELECT * FROM platform_oauth_clients LIMIT 0" \
+  -c "SELECT * FROM oauth_connections LIMIT 0" \
+  -c "SELECT * FROM oauth_connect_requests LIMIT 0" \
   -c "WITH RECURSIVE reader (oid) AS (
         SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
         UNION
@@ -633,7 +668,9 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
       CROSS JOIN pg_class t JOIN pg_attribute c ON c.attrelid = t.oid
       WHERE t.oid IN (to_regclass('proxy_endpoints'), to_regclass('incoming_webhooks'),
                       to_regclass('user_keys'), to_regclass('key_write_tickets'),
-                      to_regclass('user_key_grants'), to_regclass('secure_sessions'))
+                      to_regclass('user_key_grants'), to_regclass('secure_sessions'),
+                      to_regclass('oauth_clients'), to_regclass('platform_oauth_clients'),
+                      to_regclass('oauth_connections'), to_regclass('oauth_connect_requests'))
         AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
         AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')" \
   -c "SELECT attrelid::regclass, attname FROM pg_attribute
@@ -662,7 +699,8 @@ exist` instead. Check that against the revision from step 0 before taking it
 
 The list of tables is the one that migration
 (`check-readonly-role-cant-read-withheld-tables`) checks, plus
-`user_key_grants` and `secure_sessions`, whose own migrations check them. A table added to either one
+`user_key_grants`, `secure_sessions` and the four OAuth tables, whose own
+migrations check them. A table added to either one
 goes here too.
 
 The role is also denied the wrapped data key itself. Expect

@@ -19,7 +19,8 @@ function runRealmCodeCall(args: Record<string, unknown>) {
     'Run',
     'ready',
     undefined,
-    {} as Owner,
+    // no service is registered, so no call is always allowed
+    { lookup: () => undefined } as unknown as Owner,
     undefined,
     {
       neverAutoExecutesFor:

@@ -4,6 +4,11 @@
 // has goes in: adding one is a change of its own, made on the key page. Only a
 // direct writer of the realm may swap a key in; anyone else is told an
 // administrator needs to set it up.
+//
+// Opened by `boxel keys swap` (`#cli_port=…&cli_state=…`), for a swap that
+// grants the key a destination it has none for, the page tells the CLI's
+// listener when the swap is made, or that it was cancelled when the user
+// cancels or closes the window first (`KeysWindow`), and nothing else.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -19,6 +24,7 @@ import BusyMessage from '../../components/busy-message.gts';
 import Button from '../../components/button.gts';
 import FieldContainer from '../../components/field-container.gts';
 import Tag from '../../components/icons/tag.gts';
+import Users from '../../components/icons/users.gts';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
 
@@ -32,12 +38,14 @@ import {
 import type { KeyShare, UserKey, WindowContext } from './context.ts';
 import DonePage from './done-page.gts';
 import EditPage from './edit-page.gts';
+import { servesVisitors } from './anonymous-use-fields.gts';
 import KeyPicker from './key-picker.gts';
 import KeysWindow, { type KeysWindowAPI } from './keys-window.gts';
 import LoadFailed from './load-failed.gts';
 import NeedsAdmin from './needs-admin.gts';
 import OpenedForSummary from './opened-for-summary.gts';
-import { openedFor } from './opened-for.ts';
+import { cliOpenedFor, openedFor } from './opened-for.ts';
+import { anonymousCapsClause } from './anonymous-caps.ts';
 
 type State =
   | { name: 'loading' }
@@ -118,6 +126,40 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
               @onSelect={{this.select}}
               @onGoToKeys={{this.goToKeys}}
             />
+            {{#if this.keyAllowsAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-swap-key-key-allows
+              >
+                <p class='visitors'>This workspace lets people who aren’t signed
+                  in use the keys shared into it, so
+                  <strong>they will use this key</strong>{{anonymousCapsClause
+                    this.chosenKey
+                  }}. It allows them.</p>
+              </FieldContainer>
+            {{else if this.keyRefusesAnonymous}}
+              <FieldContainer
+                @tag='div'
+                @label='People who aren’t signed in'
+                @icon={{Users}}
+                data-test-swap-key-key-refuses
+              >
+                <div class='refuses'>
+                  <p class='visitors'>This workspace lets people who aren’t
+                    signed in use the keys shared into it, and this key doesn’t
+                    allow them. Allow it on your key page first.</p>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    @size='small'
+                    data-test-swap-key-go-to-key
+                    {{on 'click' this.goToKeys}}
+                  >Go to your keys</Button>
+                </div>
+              </FieldContainer>
+            {{/if}}
             {{#if this.form.error}}
               <div class='keys-error' role='alert' data-test-keys-error>
                 {{this.form.error}}
@@ -125,6 +167,14 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
             {{/if}}
           </:default>
           <:actions>
+            {{#if @api.forCli}}
+              <Button
+                @kind='secondary'
+                @disabled={{this.form.saving}}
+                data-test-keys-cancel
+                {{on 'click' @api.close}}
+              >Cancel</Button>
+            {{/if}}
             <Button
               type='submit'
               @kind='primary'
@@ -152,6 +202,16 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         background-color: var(--card, var(--background));
         box-shadow: 0 0 0 1px var(--border);
         overflow-wrap: anywhere;
+      }
+      .refuses {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        justify-items: start;
+      }
+      .visitors {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
       }
       .share-label {
         font-size: var(--boxel-font-size-sm);
@@ -265,7 +325,39 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
   };
 
   private get submitDisabled() {
-    return this.form.saving || !this.form.selected;
+    return this.form.saving || !this.form.selected || this.keyRefusesAnonymous;
+  }
+
+  private get chosenKey(): UserKey | undefined {
+    return this.form.keys.find((k) => k.id === this.form.selected);
+  }
+
+  // Swapping a key in puts it where sharing would, so it is held to the same
+  // rule: where the workspace's policy lets people who aren't signed in use a
+  // shared key, they will use this one, and a key that doesn't allow them
+  // isn't swapped in until its owner allows it on the key page.
+  private get opensToAnonymous() {
+    return this.choosing?.context.realm.opensToAnonymous === true;
+  }
+
+  private get keyAllowsAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      key.anonymous === true
+    );
+  }
+
+  private get keyRefusesAnonymous() {
+    let key = this.chosenKey;
+    return (
+      this.opensToAnonymous &&
+      key !== undefined &&
+      servesVisitors(key) &&
+      !key.anonymous
+    );
   }
 
   private select = (selected: string) => {
@@ -284,34 +376,45 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
     }
     this.form.saving = true;
     this.form.error = undefined;
-    try {
-      let share = await swapKey(this.args.api.config, {
-        keyId,
-        shareId: choosing.share.id,
-      });
-      this.page.state = {
-        name: 'done',
-        context: choosing.context,
-        share,
-        key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
-      };
-      this.args.api.close();
-    } catch (e) {
-      if (isSignedOut(e)) {
-        this.args.api.signedOut();
-        return;
+    await this.args.api.saving(async () => {
+      try {
+        let share = await swapKey(this.args.api.config, {
+          keyId,
+          shareId: choosing.share.id,
+        });
+        this.page.state = {
+          name: 'done',
+          context: choosing.context,
+          share,
+          key: this.form.keys.find((k) => k.id === keyId)?.name ?? '',
+        };
+        if (!this.args.api.tellCliDone()) {
+          this.args.api.close();
+        }
+      } catch (e) {
+        if (isSignedOut(e)) {
+          this.args.api.signedOut();
+          return;
+        }
+        this.form.error = failureMessage(e);
+      } finally {
+        this.form.saving = false;
       }
-      this.form.error = failureMessage(e);
-    } finally {
-      this.form.saving = false;
-    }
+    });
   };
 }
 
 export default class SwapKeyPage extends Component {
   <template>
-    <KeysWindow @title='Boxel · Your keys' @page='swap-key' as |api|>
+    <KeysWindow
+      @title='Boxel · Your keys'
+      @page='swap-key'
+      @cli={{this.cli}}
+      as |api|
+    >
       <SwapKey @api={{api}} />
     </KeysWindow>
   </template>
+
+  private cli = cliOpenedFor().cli;
 }

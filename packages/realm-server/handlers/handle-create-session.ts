@@ -51,12 +51,8 @@ export default function handleCreateSessionRequest({
             ? EXTENDED_SESSION_TOKEN_TTL
             : SESSION_TOKEN_TTL,
         ),
-      ensureSessionRoom: async (userId: string, registrationToken?: string) =>
-        await ensureSessionRoom(
-          { dbAdapter, matrixClient },
-          userId,
-          registrationToken,
-        ),
+      ensureSessionRoom: async (userId: string) =>
+        await ensureSessionRoom({ dbAdapter, matrixClient }, userId),
     } as Utils,
   );
 

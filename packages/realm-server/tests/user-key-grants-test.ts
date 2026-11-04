@@ -606,11 +606,19 @@ module(basename(import.meta.filename), function () {
       );
 
       await assert.rejects(
-        removeGrant(dbAdapter, { owner: OTHER_USER, grantId: removed.id }),
+        removeGrant(dbAdapter, {
+          owner: OTHER_USER,
+          grantId: removed.id,
+          via: 'window',
+        }),
         /no such grant/,
       );
       assert.deepEqual(
-        await removeGrant(dbAdapter, { owner: OWNER, grantId: removed.id }),
+        await removeGrant(dbAdapter, {
+          owner: OWNER,
+          grantId: removed.id,
+          via: 'window',
+        }),
         { revokedBindings: [] },
       );
       await assert.rejects(

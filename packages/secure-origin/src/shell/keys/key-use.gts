@@ -7,9 +7,20 @@
 // derives one. A workspace the user can no longer read has no name, and is
 // shown by its address alone.
 //
+// A key that can be shared also says whether people who aren't signed in can
+// use it, with its anonymous cap, and offers to change that
+// (`@onChangeAnonymousUse`). It is the key's own setting: a workspace it is
+// shared into decides only whether such people can use its cards there.
+//
 // Each workspace can be unshared. Unshare asks first, saying what stops, and
 // then hands the key and the workspace to `@onUnshare`, which takes the key's shares
 // there out and answers whether it did. The key stays shared everywhere else.
+//
+// An active share that no operation in its workspace is approved to send
+// says so, since until one is, no card there calls with it: the workspace's
+// cards keep asking each caller for a key of their own. Approve for a card
+// hands the share to `@onApproveShare`, which sets it up for one of the
+// workspace's cards.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -18,8 +29,10 @@ import { trackedObject } from '@ember/reactive/collections';
 import Button from '../../components/button.gts';
 import Globe from '../../components/icons/globe.gts';
 import LayoutGrid from '../../components/icons/layout-grid.gts';
+import Users from '../../components/icons/users.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
+import { anonymousUseSummary } from './anonymous-use-fields.gts';
 import type { ListedKey, SharedWorkspace } from './context.ts';
 import { addressOf } from './workspace-dropdown.gts';
 
@@ -27,7 +40,36 @@ interface Signature {
   Args: {
     key: ListedKey;
     onUnshare: (key: ListedKey, workspace: SharedWorkspace) => Promise<boolean>;
+    // Setting up a share that no operation is approved to send yet.
+    onApproveShare?: (
+      key: ListedKey,
+      workspace: SharedWorkspace,
+      share: Share,
+    ) => void;
+    // Given for a key that can be shared: changing whether people who aren't
+    // signed in can use it.
+    onChangeAnonymousUse?: (key: ListedKey) => void;
   };
+  // Rows of the key's own, such as an OAuth key's details, listed first.
+  Blocks: { default: [] };
+}
+
+type Share = SharedWorkspace['shares'][number];
+
+// The workspace's active shares of the key that no operation there is
+// approved to send.
+function unapproved(workspace: SharedWorkspace): Share[] {
+  return workspace.shares.filter(
+    (share) => share.state === 'active' && share.approvedCalls === 0,
+  );
+}
+
+// What an unapproved share says: the workspace's only share is the one its
+// row is about, and one of several is named by its label.
+function unapprovedText(workspace: SharedWorkspace, share: Share): string {
+  return workspace.shares.length === 1
+    ? 'Not approved for any calls yet'
+    : `“${share.label}” isn’t approved for any calls yet`;
 }
 
 // What a workspace is called on the page: its name, or its address when it
@@ -48,6 +90,7 @@ function labelsOf(workspace: SharedWorkspace): string {
 export default class KeyUse extends Component<Signature> {
   <template>
     <div class='key-use'>
+      {{yield}}
       <div class='use-row' data-test-key-used-with>
         <Globe class='use-icon' aria-hidden='true' />
         {{#if @key.usedWith.length}}
@@ -58,7 +101,7 @@ export default class KeyUse extends Component<Signature> {
                 data-test-key-used-with-domain
               >{{domain}}</span>{{/each}}</p>
         {{else}}
-          <p class='use-text none'>Not used with any service yet</p>
+          <p class='use-text none'>Not used with any site yet</p>
         {{/if}}
       </div>
       <div class='use-row' data-test-key-shared-into>
@@ -137,6 +180,32 @@ export default class KeyUse extends Component<Signature> {
                       {{on 'click' (fn this.ask workspace)}}
                     >Unshare</Button>
                   {{/if}}
+                  {{#each (unapproved workspace) as |share|}}
+                    <div
+                      class='unapproved'
+                      data-test-key-share-unapproved={{share.id}}
+                    >
+                      <p class='unapproved-text'>{{unapprovedText
+                          workspace
+                          share
+                        }}</p>
+                      {{#if @onApproveShare}}
+                        <Button
+                          type='button'
+                          @kind='secondary'
+                          @size='extra-small'
+                          aria-label='Approve for a card: “{{share.label}}” in {{workspaceTitle
+                            workspace
+                          }}'
+                          data-test-key-share-approve={{share.id}}
+                          {{on
+                            'click'
+                            (fn @onApproveShare @key workspace share)
+                          }}
+                        >Approve for a card…</Button>
+                      {{/if}}
+                    </div>
+                  {{/each}}
                 </li>
               {{/each}}
             </ul>
@@ -145,13 +214,31 @@ export default class KeyUse extends Component<Signature> {
           <p class='use-text none'>Not shared with any workspace</p>
         {{/if}}
       </div>
+      {{#if @onChangeAnonymousUse}}
+        <div class='use-row' data-test-key-anonymous-use>
+          <Users class='use-icon' aria-hidden='true' />
+          <div class='anonymous'>
+            <p class='use-text' data-test-key-anonymous-use-summary>
+              {{anonymousUseSummary @key}}
+            </p>
+            <Button
+              type='button'
+              @kind='secondary'
+              @size='extra-small'
+              aria-label='Change whether people who aren’t signed in can use {{@key.name}}'
+              data-test-key-anonymous-use-change
+              {{on 'click' (fn @onChangeAnonymousUse @key)}}
+            >Change</Button>
+          </div>
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
       .key-use {
         display: grid;
-        gap: var(--boxel-sp-4xs);
-        padding-top: var(--boxel-sp-4xs);
+        gap: var(--boxel-sp-xs);
+        padding-top: var(--boxel-sp-xs);
         border-top: 1px solid var(--border);
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
@@ -180,6 +267,12 @@ export default class KeyUse extends Component<Signature> {
       .workspace-name {
         font-weight: 600;
       }
+      .anonymous {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        align-items: start;
+      }
       .workspaces {
         list-style: none;
         margin: var(--boxel-sp-4xs) 0 0;
@@ -206,6 +299,21 @@ export default class KeyUse extends Component<Signature> {
       .address,
       .labels {
         color: var(--muted-foreground);
+        overflow-wrap: anywhere;
+      }
+      .unapproved {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--boxel-sp-xs);
+        align-items: center;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+      }
+      .unapproved-text {
+        margin: 0;
         overflow-wrap: anywhere;
       }
       .confirm {

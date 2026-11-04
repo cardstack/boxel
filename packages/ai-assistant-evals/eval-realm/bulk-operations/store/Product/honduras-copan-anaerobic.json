@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Honduras Copán Anaerobic",
+      "category": "coffee",
+      "origin": "Copán, Honduras",
+      "variants": [
+        {
+          "sku": "CF-056-250",
+          "size": "250 g",
+          "price": 18.49
+        },
+        {
+          "sku": "CF-056-500",
+          "size": "500 g",
+          "price": 34.99
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

@@ -1,16 +1,19 @@
-import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
-import { buildWaiter, type Token } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
+import { motion, Presence, to, tween } from 'glimmer-motion';
 
 import { Button, Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
-const waiter = buildWaiter('pill-menu:collapse-animation-waiter');
+import {
+  DURATION,
+  EASE_IN,
+  motionEnabled,
+} from '../ai-assistant/motion/tokens';
 
 export type PillMenuItem = {
   cardId: string;
@@ -21,6 +24,13 @@ export type PillMenuItem = {
 interface Signature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
+    /**
+     * The edge of the menu's containing block that holds still when the menu
+     * collapses: the menu's fading copy is pinned to it. `bottom` in a
+     * container that is anchored at its bottom and grows upward, such as the
+     * AI assistant's composer. Default `top`.
+     */
+    anchorY?: 'top' | 'bottom';
     title?: string;
     onExpand?: () => void;
     onCollapse?: () => void;
@@ -28,21 +38,73 @@ interface Signature {
   Blocks: {
     headerIcon: [];
     headerDetail: [];
-    content: [];
+    content: [collapseMenu: () => void];
     contentActions: [];
   };
 }
 
+// The expanded menu is the one item of a <Presence>, so its exit can play
+// after `isExpanded` has already flipped. One stable array per state: the
+// presence diffs its items by identity.
+type MenuFace = { id: 'menu' };
+const MENU_PRESENT: MenuFace[] = [{ id: 'menu' }];
+const MENU_ABSENT: MenuFace[] = [];
+const faceKey = (face: MenuFace) => face.id;
+
+// Leaving eases in (ADR 007 §1.5). Opacity only: a fade cannot deform the
+// menu's text, and under reduced motion it is the short fade §1.5 asks for.
+const MENU_EXIT = to({ opacity: 0 });
+const MENU_EXIT_TRANSITION = tween({
+  duration: DURATION.exit,
+  ease: [...EASE_IN],
+});
+
+/**
+ * A pill that expands into a menu and collapses back to the pill.
+ *
+ * Expanding and collapsing are state changes (ADR 007 §1.1): `isExpanded`
+ * flips and `@onExpand` / `@onCollapse` fire in the click handler, and the
+ * other face renders in the same pass. The expand animation is CSS on the
+ * menu root, so no state tracks whether it is playing.
+ *
+ * The menu's exit belongs to the motion engine (ADR 007 §1.2). Its header and
+ * content are the caller's blocks, rendered from state that `@onCollapse` has
+ * already moved on, so the live menu cannot stay on screen to fade: it would
+ * re-render as the collapsed face, beside the pill, and stay focusable and
+ * clickable while it faded. The menu is the one item of a
+ * `<Presence @mode="snapshot">` instead: the live menu leaves with the render
+ * that collapses it, and the engine fades a static, inert copy of its last
+ * frame over the pill. With motion off nothing is copied.
+ */
 export default class PillMenu extends Component<Signature> {
   <template>
-    {{#if this.isExpanded}}
+    {{#unless this.isExpanded}}
+      <Button
+        @kind='secondary'
+        @size='extra-small'
+        @pill={{true}}
+        {{on 'click' this.expandMenu}}
+        class='pill-menu-button'
+        data-test-pill-menu-button
+        data-test-pill-menu-collapsed
+        ...attributes
+      >
+        {{yield to='headerIcon'}}
+        {{yield to='headerDetail'}}
+        <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
+      </Button>
+    {{/unless}}
+    <Presence
+      @items={{this.menuFaces}}
+      @key={{faceKey}}
+      @mode='snapshot'
+      @anchorY={{@anchorY}}
+      as |_face h|
+    >
       <div
         class='pill-menu
-          {{if (has-block "contentActions") "has-content-actions"}}
-          {{if this.isExpanding "is-expanding"}}
-          {{if this.isCollapsing "is-collapsing"}}'
-        {{on 'animationend' this.handleMenuAnimationEnd}}
-        {{on 'animationcancel' this.handleMenuAnimationEnd}}
+          {{if (has-block "contentActions") "has-content-actions"}}'
+        {{motion presence=h exit=this.menuExit transition=MENU_EXIT_TRANSITION}}
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
@@ -74,7 +136,7 @@ export default class PillMenu extends Component<Signature> {
         </Header>
         <div class='menu-content'>
           <div class='menu-content-scroll'>
-            {{yield to='content'}}
+            {{yield this.collapseMenu to='content'}}
 
             {{#if (has-block 'contentActions')}}
               <div class='menu-content-actions'>
@@ -84,21 +146,7 @@ export default class PillMenu extends Component<Signature> {
           </div>
         </div>
       </div>
-    {{else}}
-      <Button
-        @kind='secondary'
-        @size='extra-small'
-        @pill={{true}}
-        {{on 'click' this.expandMenu}}
-        class='pill-menu-button'
-        data-test-pill-menu-button
-        ...attributes
-      >
-        {{yield to='headerIcon'}}
-        {{yield to='headerDetail'}}
-        <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
-      </Button>
-    {{/if}}
+    </Presence>
     <style scoped>
       .pill-menu {
         --boxel-header-gap: var(--boxel-sp-4xs);
@@ -125,30 +173,29 @@ export default class PillMenu extends Component<Signature> {
       }
       @media (prefers-reduced-motion: no-preference) {
         .pill-menu {
-          /* The collapsed pill row's height, so the swap between button and
-             menu lands exactly where the height animation starts/ends. */
+          /* The collapsed pill row's height, so the menu grows out of the
+             place the pill occupied. */
           --pill-menu-collapsed-height: 2.5rem;
 
-          /* Lets the height keyframe interpolate to its auto endpoint. */
+          /* Lets the height keyframe interpolate to its auto endpoint.
+             --pill-menu-expand-duration is a knob a caller may set (the LLM
+             menu does), so it is only ever read, with the same fallback here
+             and on the scroll region below. */
           interpolate-size: allow-keywords;
           overflow: hidden;
           animation: pill-menu-expand var(--pill-menu-expand-duration, 0.2s)
             ease-out;
         }
-        .pill-menu.is-collapsing {
-          /* A separately named animation: only an animation-name change
-             restarts the animation and re-arms its animationend event. */
-          animation: pill-menu-collapse
-            var(--pill-menu-collapse-duration, 0.15s) ease-in forwards;
-        }
 
         /* While the menu height is animating, the squeezed content region
-           would briefly become scrollable and flash a scrollbar; suppress it
-           for the duration. hidden (not clip) keeps the region
-           programmatically scrollable for the scroll-into-view modifier. */
-        .pill-menu.is-expanding .menu-content-scroll,
-        .pill-menu.is-collapsing .menu-content-scroll {
-          overflow-y: hidden;
+           would briefly become scrollable and flash a scrollbar. An animation
+           of the same length holds overflow hidden for exactly that time, so
+           no state has to know when the expand ends. hidden (not clip) keeps
+           the region programmatically scrollable for the scroll-into-view
+           modifier. */
+        .pill-menu .menu-content-scroll {
+          animation: pill-menu-settle-scroll
+            var(--pill-menu-expand-duration, 0.2s);
         }
       }
       .pill-menu-button {
@@ -308,14 +355,10 @@ export default class PillMenu extends Component<Signature> {
         }
       }
 
-      @keyframes pill-menu-collapse {
-        from {
-          height: auto;
-          min-height: 0;
-        }
+      @keyframes pill-menu-settle-scroll {
+        from,
         to {
-          height: var(--pill-menu-collapsed-height);
-          min-height: 0;
+          overflow-y: hidden;
         }
       }
 
@@ -334,76 +377,30 @@ export default class PillMenu extends Component<Signature> {
   </template>
 
   @tracked isExpanded = false;
-  @tracked private isExpanding = false;
-  @tracked private isCollapsing = false;
-  private collapseWaiterToken: Token | undefined;
+  private motion = motionEnabled();
 
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    registerDestructor(this, () => this.releaseCollapseWaiter());
+  private get menuFaces(): MenuFace[] {
+    return this.isExpanded ? MENU_PRESENT : MENU_ABSENT;
   }
 
-  private get prefersReducedMotion() {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** With motion off the menu has no exit to play, and nothing is copied. */
+  private get menuExit() {
+    return this.motion ? MENU_EXIT : undefined;
   }
 
   @action expandMenu() {
-    this.isCollapsing = false;
-    this.releaseCollapseWaiter();
+    if (this.isExpanded) {
+      return;
+    }
     this.isExpanded = true;
-    // Mirrors the expand animation's lifetime; with reduced motion no
-    // animation (and no animationend to clear this) runs.
-    this.isExpanding = !this.prefersReducedMotion;
     this.args.onExpand?.();
   }
 
   @action collapseMenu() {
-    if (this.isCollapsing) {
+    if (!this.isExpanded) {
       return;
     }
-    if (this.prefersReducedMotion) {
-      // No exit animation will run, so there is no animationend to wait for.
-      this.finishCollapse();
-      return;
-    }
-    this.isCollapsing = true;
-    this.collapseWaiterToken = waiter.beginAsync();
-  }
-
-  // The menu stays in the DOM while the collapse animation plays; removal
-  // happens here, once that animation on the menu root itself completes.
-  // Animation names are matched by prefix: scoped CSS appends a suffix to
-  // keyframe names.
-  @action private handleMenuAnimationEnd(event: Event) {
-    if (
-      !(event instanceof AnimationEvent) ||
-      event.target !== event.currentTarget
-    ) {
-      return;
-    }
-    if (event.animationName.startsWith('pill-menu-expand')) {
-      this.isExpanding = false;
-      return;
-    }
-    if (
-      this.isCollapsing &&
-      event.animationName.startsWith('pill-menu-collapse')
-    ) {
-      this.finishCollapse();
-    }
-  }
-
-  private finishCollapse() {
-    this.isCollapsing = false;
-    this.releaseCollapseWaiter();
     this.isExpanded = false;
     this.args.onCollapse?.();
-  }
-
-  private releaseCollapseWaiter() {
-    if (this.collapseWaiterToken) {
-      waiter.endAsync(this.collapseWaiterToken);
-      this.collapseWaiterToken = undefined;
-    }
   }
 }

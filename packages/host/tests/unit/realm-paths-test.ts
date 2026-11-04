@@ -39,6 +39,36 @@ module('Unit | RealmPaths', function (hooks) {
       ),
       'éxample?stripped=ü',
     );
+
+    let rootPaths = new RealmPaths(new URL('https://cardstack.com/'));
+    assert.strictEqual(
+      rootPaths.local(new URL('https://cardstack.com//example.org/a?b=c')),
+      'example.org/a',
+      'a pathname that starts with // stays on the realm host',
+    );
+    assert.strictEqual(
+      rootPaths.local(new URL('https://cardstack.com//example.org%2f..')),
+      'example.org%2f..',
+      'a pathname that starts with // and names no valid host does not throw',
+    );
+    assert.strictEqual(
+      realmPaths.local(new URL('https://cardstack.com/hümans/a%5Cb')),
+      'a/b',
+      'a decoded backslash is normalized to a slash, as fileURL does',
+    );
+    assert.strictEqual(
+      realmPaths.local(new URL('https://cardstack.com/hümans//x.json')),
+      'x.json',
+      'an extra slash after the realm path is not kept in the local path',
+    );
+    assert.throws(
+      () =>
+        realmPaths.local(
+          new URL('https://cardstack.com/hümans/%252e%252e/other/a'),
+        ),
+      /does not contain/,
+      'a pathname whose decoding leaves the realm is refused',
+    );
   });
 
   test('#fileURL', function (assert) {

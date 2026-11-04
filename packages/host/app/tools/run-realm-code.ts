@@ -9,6 +9,7 @@ import {
   ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
+  isFileDefInstance,
   isPrefixForm,
   isRelativePath,
   isResolvedCodeRef,
@@ -30,12 +31,26 @@ import {
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
+  type BaseOperation,
+  type OperationWriteResult,
 } from '@cardstack/runtime-common';
 import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
+import { isWrite } from '@cardstack/runtime-common/card-operations';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  BATCH_MEMBER,
+  assertInstanceOperation,
+  assertPayloadSuppliesParams,
+  type OperationsBucket,
+} from '../lib/card-operation-invocation';
+import {
+  recordCatalogSearch,
+  type CatalogSearch,
+} from '../lib/catalog-search-telemetry';
 import {
   generateImage,
   IMAGE_EXTENSION_RE,
@@ -48,12 +63,47 @@ import HostBaseTool, {
   type ClickReason,
   type ResultAttachment,
 } from '../lib/host-base-tool';
+import {
+  autoFixable,
+  checkFix,
+  MAX_AUTO_FIX_ATTEMPTS,
+  MAX_AUTO_FIX_CODE_CHARS,
+  proposeFix,
+} from '../lib/realm-runner/auto-fix';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
+import {
+  compactDiff,
+  CARD_CHANGES_IN_DETAIL,
+  cardChanges,
+  type CardFieldChange,
+  type RealmFileEdit,
+} from '../lib/realm-runner/edits';
+import {
+  DEFAULT_WEB_SEARCH_LLM,
+  jsonBytes,
+  resolve as resolveJSON,
+  resolveRequest,
+  webRead,
+  webReadRequest,
+  webSearch,
+  webSearchRequest,
+  type ProxySend,
+  type ResolveRequest,
+  type ResolveResult,
+  type WebReadRequest,
+  type WebReadResult,
+  type WebSearchRequest,
+  type WebSearchResult,
+} from '../lib/realm-runner/research';
 import {
   RoomActions,
   type RequestedRoomChanges,
 } from '../lib/realm-runner/room-actions';
-import runRealmCode from '../lib/realm-runner/runner';
+import runRealmCode, {
+  DeadlineExtension,
+  RealmScriptError,
+} from '../lib/realm-runner/runner';
+import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
 import {
@@ -73,6 +123,7 @@ import OpenWorkspaceTool from './open-workspace';
 import PreviewFormatTool from './preview-format';
 import {
   composeSearchEntriesQuery,
+  resolveSearchEntryScope,
   searchEntrySummaries,
   type EntrySummary,
   type SearchEntriesFn,
@@ -83,9 +134,13 @@ import ShowFileTool from './show-file';
 import SwitchSubmodeTool from './switch-submode';
 import UpdateRoomSkillsTool from './update-room-skills';
 
-import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
+import type {
+  RealmRunnerCallMethod,
+  RealmScriptErrorInfo,
+} from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
@@ -96,7 +151,9 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
+import type * as OperationsModule from '@cardstack/base/operations';
 
 const log = logger('tools:run-realm-code');
 
@@ -106,6 +163,9 @@ const MAX_FILES = 20;
 // search found must not stop at MAX_FILES. The updates are saved in one
 // request when the script finishes, not one save each.
 const MAX_CARD_UPDATES = 200;
+// realm.operations calls in one run, each entry of a batch counted on its
+// own, so a bulk change can reach as many cards as cards.update can.
+const MAX_OPERATIONS = 200;
 const MAX_FILE_SIZE = 500_000;
 // A UTF-8 character is at most 4 bytes, so a larger body is always too large.
 const MAX_READ_BYTES = MAX_FILE_SIZE * 4;
@@ -160,6 +220,57 @@ const CALL_DEADLINE_MS = 100_000;
 const MAX_IMAGES = 4;
 const IMAGE_TIMEOUT_MS = 60_000;
 const IMAGE_TIME_BUDGET_MS = 120_000;
+// realm.web.search, realm.web.read and realm.resolve limits. They only read,
+// so they need no click, but each one is a paid request through the realm
+// server's proxy, and its answer is parsed inside the sandbox.
+const MAX_WEB_CALLS = 20;
+const MAX_RESOLVE_CALLS = 3;
+// The bytes of JSON these calls hand the sandbox in one run. A read keeps at
+// most 64k characters of markdown, so this is about twenty full pages.
+const MAX_RESEARCH_BYTES_PER_RUN = 1_500_000;
+// One call may take this long. It counts toward the run's own time limit too.
+const RESEARCH_TIMEOUT_MS = 30_000;
+// They run beside the run's other calls, a few at a time, so a script can read
+// several pages at once.
+const MAX_PARALLEL_RESEARCH = 4;
+// A run that names one of these calls gets this much more time, as a run that
+// names realm.images.generate does: a few pages read one after another
+// outlast the usual limit.
+const RESEARCH_TIME_MS = 60_000;
+// realm.activity limits. A step past the limit is not recorded, and the
+// script goes on.
+const MAX_ACTIVITIES = 50;
+const MAX_ACTIVITY_MESSAGE_CHARS = 200;
+// realm.plan: the steps a script names before it takes them
+const MAX_PLAN_STEPS = 12;
+const MAX_PLAN_STEP_CHARS = 80;
+// How long the auto-fix model call may take, within the call's deadline.
+const AUTO_FIX_TIMEOUT_MS = 20_000;
+// A stopped run answers within this long, whatever its sandbox or its calls
+// in flight are still doing: one that ignores its signal must not hold the
+// reader's Stop (and the composer's "Stopping…") open for good.
+const STOP_GRACE_MS = 3_000;
+const RESEARCH_CALL_RE = /realm\.(?:web\.(?:search|read)|resolve)\b/;
+const RESEARCH_METHODS = new Set<RealmRunnerCallMethod>([
+  'web.search',
+  'web.read',
+  'resolve',
+]);
+
+// The run's research requests. Each goes through the realm server's proxy,
+// which holds the credentials.
+interface Research {
+  search(
+    request: WebSearchRequest,
+    signal: AbortSignal,
+  ): Promise<{ results: WebSearchResult[]; model: string }>;
+  read(
+    request: WebReadRequest,
+    timeoutMs: number,
+    signal: AbortSignal,
+  ): Promise<WebReadResult>;
+  resolve(request: ResolveRequest, signal: AbortSignal): Promise<ResolveResult>;
+}
 // A file as the realm serves it. `content` is empty unless the file is UTF-8
 // text; `tooLarge` marks a text file whose body was not read.
 type ReadSource = (url: string) => Promise<{
@@ -248,8 +359,41 @@ type UiAction =
   | { action: 'openWorkspace' };
 
 // Reads one card instance as JSON data, computed fields included, with every
-// URL in it absolute.
-type ReadCard = (id: string) => Promise<LooseSingleCardDocument>;
+// URL in it absolute, or says why there is none to read.
+type ReadCard = (id: string) => Promise<CardRead>;
+
+// What reading a card found. A card whose file the realm holds without an
+// index row is `indexing` while the realm is indexing, since the pass that is
+// running may add the row, and `unindexed` while it is not, since no pass is
+// coming to add it. `error` is a card whose index row records an error;
+// `unreadable` is a read that failed for any other reason. `not-a-card` is a
+// path that names a file, such as an image, rather than a card instance.
+type CardRead =
+  | { doc: LooseSingleCardDocument }
+  | { unread: 'indexing' | 'unindexed' | 'not-found' | 'not-a-card' }
+  | { unread: 'error' | 'unreadable'; message: string };
+
+// One operation a card's type declares, named by the card it acts on.
+interface OperationEntry {
+  cardId: string;
+  operation: string;
+  payload: Record<string, unknown> | undefined;
+}
+
+// What the realm answered for one operation: a write names the card it wrote
+// and the version that card now holds, a read answers the document, and a
+// delete answers nothing.
+interface OperationAnswer {
+  id?: string;
+  version?: string;
+  indexPending?: boolean;
+  document?: Record<string, unknown>;
+}
+
+// Sends operations on cards of a realm in one `_operations` request, which
+// the realm carries out whole or not at all, and answers each in the order it
+// was given.
+type RunOperations = (entries: OperationEntry[]) => Promise<OperationAnswer[]>;
 
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
@@ -328,6 +472,11 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'cards.search': false,
   'cards.get': false,
   'cards.update': true,
+  // An operation is authorized by the realm's policy for the operation, not
+  // by write access to the workspace, so it can run where the user can only
+  // read. The realm refuses one the policy does not allow.
+  'operations.invoke': false,
+  'operations.invokeBatchOperation': false,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -345,6 +494,12 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'index.reindex': true,
   'index.fullReindex': true,
   'index.cancelJob': true,
+  'web.search': false,
+  'web.read': false,
+  resolve: false,
+  activity: false,
+  plan: false,
+  ask: false,
 };
 
 // Runs one search in the run's realm and answers with the entry document.
@@ -355,6 +510,13 @@ type SearchCards = (
 // Resolves a reference — a URL, a realm's prefix-form identifier, or a path
 // relative to `base` — to a URL.
 type ResolveURL = (reference: string, base?: string) => string;
+
+// Told about each realm.entries.search that was sent: what it asked for, the
+// realms it was sent to, and what it found or the error it ended with. A
+// query refused before it is sent is not reported.
+type RecordEntriesSearch = (
+  search: Pick<CatalogSearch, 'query' | 'realms' | 'found' | 'error'>,
+) => void;
 
 // One card a search found, as plain data. `id` is the card's URL and `path`
 // its file relative to the realm root, which `realm.fs` takes. The type and
@@ -376,6 +538,19 @@ interface FoundCard {
 // its end. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
 // land in the realm as it goes.
+// Where a run is, as `realm.activity({ current, total, message, count, of })`
+// reported it, and the steps `realm.plan([...])` named ahead of it.
+export interface RealmRunnerProgress {
+  step: number;
+  of: number;
+  label: string;
+  // the steps the script means to take, in order
+  plan?: string[];
+  // how far through the current step: `count` of `countOf`
+  count?: number;
+  countOf?: number;
+}
+
 class RealmFsSession {
   // url -> content as the realm now holds it, as far as this run knows;
   // undefined means the file does not exist.
@@ -411,6 +586,11 @@ class RealmFsSession {
   // `realm.index` calls this run made, in order. The realm server has started
   // each one, so a retry must not start it again.
   readonly indexActions: string[] = [];
+  // Operations the realm carried out for this run, in order, as
+  // "<operation> on <path>". They cannot be undone, so a failed run names them
+  // and a retry does not run them again.
+  readonly operationsRun: string[] = [];
+  private operationCount = 0;
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -425,6 +605,40 @@ class RealmFsSession {
   // Image request time this run has used, in ms, of IMAGE_TIME_BUDGET_MS.
   private imageTimeUsed = 0;
   private downloadedBytes = 0;
+  private webCalls = 0;
+  private reportedActivities = 0;
+  private resolveCalls = 0;
+  private researchBytes = 0;
+  private researchSlots = MAX_PARALLEL_RESEARCH;
+  private researchWaiters: (() => void)[] = [];
+  // Research calls run outside the queue: they touch no file, so they cannot
+  // race one. `idle` still waits for them.
+  private researchInFlight = new Set<Promise<unknown>>();
+  // Each file this run changed: its text before the first change and after
+  // the last, in the order of the first change. The transcript shows them
+  // as diffs and Undo puts them back.
+  readonly edits = new Map<string, Omit<RealmFileEdit, 'url'>>();
+  // The files the script read, and how much, for the row's quiet count.
+  readonly readUrls = new Set<string>();
+  bytesRead = 0;
+  // Each fs.copy, as "from → to" paths, for the row's own line.
+  readonly copies: string[] = [];
+  // What the run's research calls did, one line each, in the order they
+  // ended: what was searched or read, and the reason a call failed.
+  readonly activity: string[] = [];
+  // Asks the reader a question and waits for the pick (realm.ask). Set by
+  // the tool for a run with a reader; a run without one is refused.
+  ask?: (request: ScriptAsk) => Promise<{ answer: string; label: string }>;
+  // Called as each line is recorded, so the host can show a run's steps
+  // while it is still running rather than only in its result.
+  onActivity?: (line: string, progress?: RealmRunnerProgress) => void;
+  // What the run's searches found, each entry once, best match first. Called
+  // after every search, so the row can show the matches while the run goes on.
+  onFound?: (found: EntrySummary[]) => void;
+  private found = new Map<string, EntrySummary>();
+  // realm.* calls the script has made, realm.activity aside. A script that
+  // fails before its first one did nothing, so it may be fixed and run again.
+  callsMade = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // What `realm.ui` asked for, in the order the script asked.
@@ -452,7 +666,12 @@ class RealmFsSession {
     private search: SearchCards,
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
+    private runOperations: RunOperations,
     private searchEntries: SearchEntriesFn,
+    // The realms a search of `realms` is sent to, none when the room's feature
+    // gate keeps out every realm it would reach. Refuses a realm identifier
+    // that names no realm the host knows.
+    private resolveSearchRealms: (realms: string[] | undefined) => string[],
     captureURL: CaptureURL,
     // Whether a URL or card id is held by this realm itself rather than by
     // another workspace, including one nested under this realm's URL.
@@ -466,6 +685,8 @@ class RealmFsSession {
     // The most bytes a card file may hold, as the realm enforces it.
     private cardSizeLimitBytes: number,
     readonly room: RoomActions,
+    private research: Research,
+    private recordEntriesSearch: RecordEntriesSearch,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -478,6 +699,25 @@ class RealmFsSession {
   // Calls run one at a time, so two unawaited calls cannot race over the same
   // file.
   call(method: RealmRunnerCallMethod, args: unknown[]): Promise<unknown> {
+    if (method === 'activity' || method === 'plan') {
+      try {
+        return Promise.resolve(
+          method === 'plan'
+            ? this.reportPlan(args[0])
+            : this.reportActivity(args[0]),
+        );
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+    this.callsMade += 1;
+    if (RESEARCH_METHODS.has(method)) {
+      let result = this.researchCall(method, args);
+      let tracked = result.catch(() => undefined);
+      this.researchInFlight.add(tracked);
+      tracked.finally(() => this.researchInFlight.delete(tracked));
+      return result;
+    }
     let result = this.queue.then(() => {
       if (this.closed) {
         this.refused += 1;
@@ -499,11 +739,307 @@ class RealmFsSession {
     this.closed = true;
     this.captures.close();
     this.inFlight.abort();
+    // Calls waiting for a research slot wake and are refused.
+    for (let wake of this.researchWaiters.splice(0)) {
+      wake();
+    }
   }
 
   // Settles once every call already made has finished or been refused.
   idle(): Promise<unknown> {
+    return Promise.all([this.queue, ...this.researchInFlight]);
+  }
+
+  // Settles once every queued call (each save and delete among them) has
+  // finished or been refused. Research calls are not waited on.
+  queueSettled(): Promise<unknown> {
     return this.queue;
+  }
+
+  // A step the script reports, such as `Step 2 of 4 · Gather sources`. It
+  // changes nothing, so it needs no write access and runs at once.
+  private reportActivity(raw: unknown) {
+    if (this.closed) {
+      throw new Error('The run has ended; this activity was not recorded');
+    }
+    let details = typeof raw === 'string' ? { message: raw } : raw;
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      throw new TypeError(
+        'realm.activity expects { operation?, phase?, message, current?, total?, count?, of? }',
+      );
+    }
+    let { operation, phase, message, current, total, count, of } =
+      details as Record<string, unknown>;
+    let unknown = Object.keys(details).find(
+      (key) =>
+        ![
+          'operation',
+          'phase',
+          'message',
+          'current',
+          'total',
+          'count',
+          'of',
+        ].includes(key),
+    );
+    if (unknown) {
+      throw new TypeError(`realm.activity does not take ${unknown}`);
+    }
+    if (
+      typeof message !== 'string' ||
+      !message.trim() ||
+      message.length > MAX_ACTIVITY_MESSAGE_CHARS
+    ) {
+      throw new TypeError(
+        `realm.activity message must be 1 to ${MAX_ACTIVITY_MESSAGE_CHARS} characters`,
+      );
+    }
+    for (let [key, value] of Object.entries({ operation, phase })) {
+      if (
+        value !== undefined &&
+        value !== null &&
+        (typeof value !== 'string' || value.length > 60)
+      ) {
+        throw new TypeError(
+          `realm.activity ${key} must be a string of at most 60 characters`,
+        );
+      }
+    }
+    for (let [key, value] of Object.entries({ current, total, count, of })) {
+      if (
+        value !== undefined &&
+        value !== null &&
+        (typeof value !== 'number' || !Number.isInteger(value) || value < 0)
+      ) {
+        throw new TypeError(
+          `realm.activity ${key} must be a whole number of 0 or more`,
+        );
+      }
+    }
+    if (
+      typeof current === 'number' &&
+      typeof total === 'number' &&
+      current > total
+    ) {
+      throw new TypeError('realm.activity current cannot be more than total');
+    }
+    if (typeof count === 'number' && typeof of === 'number' && count > of) {
+      throw new TypeError('realm.activity count cannot be more than of');
+    }
+    if (this.reportedActivities >= MAX_ACTIVITIES) {
+      return { recorded: false };
+    }
+    this.reportedActivities += 1;
+    let step =
+      typeof current === 'number'
+        ? `Step ${current}${typeof total === 'number' ? ` of ${total}` : ''} · `
+        : '';
+    let label = [operation, phase].filter(Boolean).join(' · ');
+    this.noteActivity(
+      `${step}${message.trim()}${label ? ` (${label})` : ''}`,
+      typeof current === 'number'
+        ? {
+            step: current,
+            of: typeof total === 'number' ? total : current,
+            label: message.trim(),
+            ...(this.planSteps ? { plan: this.planSteps } : {}),
+            ...(typeof count === 'number' && typeof of === 'number'
+              ? { count, countOf: of }
+              : {}),
+          }
+        : undefined,
+    );
+    return { recorded: true };
+  }
+
+  // The steps the script named with realm.plan, shown as a checklist that
+  // realm.activity's `current` ticks through. A second call revises them.
+  private planSteps: string[] | undefined;
+
+  private reportPlan(raw: unknown) {
+    if (this.closed) {
+      throw new Error('The run has ended; this plan was not recorded');
+    }
+    if (
+      !Array.isArray(raw) ||
+      raw.length === 0 ||
+      raw.length > MAX_PLAN_STEPS ||
+      raw.some(
+        (step) =>
+          typeof step !== 'string' ||
+          !step.trim() ||
+          step.length > MAX_PLAN_STEP_CHARS,
+      )
+    ) {
+      throw new TypeError(
+        `realm.plan expects 1 to ${MAX_PLAN_STEPS} step names, each 1 to ${MAX_PLAN_STEP_CHARS} characters`,
+      );
+    }
+    this.planSteps = (raw as string[]).map((step) => step.trim());
+    this.noteActivity(`Plan · ${this.planSteps.join(' · ')}`, {
+      step: 0,
+      of: this.planSteps.length,
+      label: '',
+      plan: this.planSteps,
+    });
+    return { recorded: true };
+  }
+
+  private noteActivity(line: string, progress?: RealmRunnerProgress) {
+    this.activity.push(line);
+    this.onActivity?.(line, progress);
+  }
+
+  private async researchCall(
+    method: RealmRunnerCallMethod,
+    args: unknown[],
+  ): Promise<unknown> {
+    while (this.researchSlots === 0 && !this.closed) {
+      await new Promise<void>((wake) => this.researchWaiters.push(wake));
+    }
+    if (this.closed) {
+      this.refused += 1;
+      throw new Error('The run has ended; this realm call was not made');
+    }
+    this.researchSlots -= 1;
+    try {
+      switch (method) {
+        case 'web.search':
+          return await this.webSearch(args[0], args[1]);
+        case 'web.read':
+          return await this.webRead(args[0], args[1]);
+        case 'resolve':
+          return await this.resolveData(args[0]);
+        default:
+          throw new Error(`Unknown realm call: ${String(method)}`);
+      }
+    } finally {
+      this.researchSlots += 1;
+      this.researchWaiters.shift()?.();
+    }
+  }
+
+  private async webSearch(query: unknown, options: unknown) {
+    let request = webSearchRequest(query, options);
+    this.takeWebCall('realm.web.search');
+    try {
+      let { results, model } = await this.withResearchTimeout(
+        'realm.web.search',
+        (signal) => this.research.search(request, signal),
+      );
+      this.chargeResearch('realm.web.search', results);
+      this.noteActivity(
+        `Exa searched for "${request.query}" through ${model}: ${results.length} result${results.length === 1 ? '' : 's'}`,
+      );
+      return results;
+    } catch (error) {
+      this.noteActivity(
+        `Exa search for "${request.query}" failed: ${coerceErrorMessage(error, 'unknown error')}`,
+      );
+      throw error;
+    }
+  }
+
+  private async webRead(url: unknown, options: unknown) {
+    let request = webReadRequest(url, options);
+    let host = new URL(request.url).host;
+    this.takeWebCall('realm.web.read');
+    try {
+      let page = await this.withResearchTimeout('realm.web.read', (signal) =>
+        this.research.read(request, RESEARCH_TIMEOUT_MS, signal),
+      );
+      this.chargeResearch('realm.web.read', page);
+      this.noteActivity(
+        `Firecrawl read ${host}${page.metadata.statusCode && page.metadata.statusCode !== 200 ? ` (HTTP ${page.metadata.statusCode})` : ''}`,
+      );
+      return page;
+    } catch (error) {
+      this.noteActivity(
+        `Firecrawl could not read ${host}: ${coerceErrorMessage(error, 'unknown error')}`,
+      );
+      throw error;
+    }
+  }
+
+  private async resolveData(raw: unknown) {
+    // A refused request asks no model, so it does not count toward the
+    // limit.
+    let request = resolveRequest(raw);
+    if (this.resolveCalls >= MAX_RESOLVE_CALLS) {
+      throw new Error(
+        `Realm code may call realm.resolve at most ${MAX_RESOLVE_CALLS} times per run`,
+      );
+    }
+    this.resolveCalls += 1;
+    try {
+      let result = await this.withResearchTimeout('realm.resolve', (signal) =>
+        this.research.resolve(request, signal),
+      );
+      this.chargeResearch('realm.resolve', result);
+      this.noteActivity(
+        `Resolved data with ${result.model}${request.webSearch ? ' and Exa search' : ''}`,
+      );
+      return result;
+    } catch (error) {
+      this.noteActivity(
+        `realm.resolve failed: ${coerceErrorMessage(error, 'unknown error')}`,
+      );
+      throw error;
+    }
+  }
+
+  private takeWebCall(name: string) {
+    if (this.webCalls >= MAX_WEB_CALLS) {
+      throw new Error(
+        `Realm code may make at most ${MAX_WEB_CALLS} realm.web calls per run; ${name} was not made`,
+      );
+    }
+    this.webCalls += 1;
+  }
+
+  // Charged once the answer is in, so an answer past the limit is refused
+  // rather than handed to the sandbox.
+  private chargeResearch(name: string, value: unknown) {
+    let bytes = jsonBytes(value);
+    this.researchBytes += bytes;
+    if (this.researchBytes > MAX_RESEARCH_BYTES_PER_RUN) {
+      throw new Error(
+        `Research calls may return at most ${MAX_RESEARCH_BYTES_PER_RUN} bytes per run; the ${name} answer of ${bytes} bytes was dropped`,
+      );
+    }
+  }
+
+  // Runs one research request within RESEARCH_TIMEOUT_MS, and stops it when
+  // the run ends.
+  private async withResearchTimeout<T>(
+    name: string,
+    request: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    let stop = new AbortController();
+    let timer = setTimeout(
+      () =>
+        stop.abort(
+          new Error(`${name} took longer than ${RESEARCH_TIMEOUT_MS / 1000} s`),
+        ),
+      RESEARCH_TIMEOUT_MS,
+    );
+    let onRunEnd = () =>
+      stop.abort(new Error(`The run has ended; ${name} was stopped`));
+    this.inFlight.signal.addEventListener('abort', onRunEnd, { once: true });
+    try {
+      // A request that ignores the signal still ends the call when it aborts.
+      return await new Promise<T>((resolvePromise, reject) => {
+        stop.signal.addEventListener(
+          'abort',
+          () => reject(stop.signal.reason),
+          { once: true },
+        );
+        request(stop.signal).then(resolvePromise, reject);
+      });
+    } finally {
+      clearTimeout(timer);
+      this.inFlight.signal.removeEventListener('abort', onRunEnd);
+    }
   }
 
   private async dispatch(
@@ -608,6 +1144,11 @@ class RealmFsSession {
           throw new Error(`File already exists: ${to}`);
         }
         await this.save(to, content, undefined, { lint: false });
+        let copied = this.edits.get(to);
+        if (copied) {
+          copied.copiedFrom = from;
+        }
+        this.copies.push(`${this.relative(from)} → ${this.relative(to)}`);
         return { path: this.relative(to), saved: true };
       }
       case 'fs.writeBytes': {
@@ -642,6 +1183,7 @@ class RealmFsSession {
         this.known.delete(url);
         this.binary.add(url);
         this.markCreated(url);
+        this.noteBinaryCreate(url);
         return {
           path: this.relative(url),
           size: bytes.byteLength,
@@ -659,7 +1201,11 @@ class RealmFsSession {
       // model, and not an instance.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
-        let { data } = await this.readCard(id);
+        let read = await this.readCard(id);
+        if (!('doc' in read)) {
+          throw new Error(this.cardReadError(id, read));
+        }
+        let { data } = read.doc;
         // The same shape as a card `realm.cards.search` finds: the type, and
         // each link keyed by its field path (`field.0`, `field.1`, … for a
         // `linksToMany` field). Every URL is already absolute.
@@ -681,6 +1227,33 @@ class RealmFsSession {
       }
       case 'cards.update':
         return await this.updateCard(args[0], args[1]);
+      case 'operations.invoke': {
+        let entry = this.operationEntry(method, args[0], args[1], args[2]);
+        let [answer] = await this.runOperationEntries([entry]);
+        return answer;
+      }
+      case 'operations.invokeBatchOperation': {
+        let list = args[0];
+        if (!Array.isArray(list) || list.length === 0) {
+          throw new TypeError(
+            'realm.operations.invokeBatchOperation expects a non-empty array of { path, operation, payload } entries',
+          );
+        }
+        let entries = list.map((item: unknown) => {
+          if (
+            item === null ||
+            typeof item !== 'object' ||
+            Array.isArray(item)
+          ) {
+            throw new TypeError(
+              'each realm.operations.invokeBatchOperation entry is { path, operation, payload }',
+            );
+          }
+          let { path, operation, payload } = item as Record<string, unknown>;
+          return this.operationEntry(method, path, operation, payload);
+        });
+        return await this.runOperationEntries(entries);
+      }
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
       // Deletes a file, one this run created or one that was there before
@@ -717,6 +1290,13 @@ class RealmFsSession {
               : undefined,
         );
         let created = this.created.has(url);
+        if (content !== BINARY) {
+          this.noteEdit(url, content, undefined);
+        } else if (created) {
+          this.edits.delete(url);
+        } else {
+          this.edits.set(url, { irreversible: true });
+        }
         this.forgetDeleted(url);
         (created ? this.deleted : this.deletedExisting).add(url);
         return { path: this.relative(url), deleted: true };
@@ -770,6 +1350,7 @@ class RealmFsSession {
         this.known.delete(url);
         this.binary.add(url);
         this.markCreated(url);
+        this.noteBinaryCreate(url);
         return {
           path: this.relative(url),
           size: bytes.byteLength,
@@ -927,8 +1508,9 @@ class RealmFsSession {
       }
       case 'ui.openWorkspace':
         return this.queueUiAction({ action: 'openWorkspace' });
-      // Indexing runs on the realm server after the call returns: each call
-      // starts the work, and the script does not wait for it to finish.
+      // realm.index.invalidate returns once the realm has indexed the paths,
+      // so a read later in the same script sees the result. The other calls
+      // start their work on the realm server and return without waiting.
       case 'index.invalidate': {
         let paths = typeof args[0] === 'string' ? [args[0]] : args[0];
         if (
@@ -964,9 +1546,52 @@ class RealmFsSession {
         await this.index.cancelJob();
         this.indexActions.push('cancelJob');
         return { cancelled: true };
+      // `call` sends these to `researchCall`, outside the queue.
+      case 'web.search':
+      case 'web.read':
+      case 'resolve':
+        return await this.researchCall(method, args);
+      case 'activity':
+        return this.reportActivity(args[0]);
+      case 'plan':
+        return this.reportPlan(args[0]);
+      case 'ask':
+        return await this.askReader(args[0]);
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
+  }
+
+  // realm.ask: the script pauses on a question in its own row, and goes on
+  // with the reader's pick. The wait is not the script's time.
+  private async askReader(input: unknown): Promise<DeadlineExtension> {
+    let request = scriptAsk(input);
+    if (!this.ask) {
+      throw new Error('realm.ask needs a reader to answer; none is here');
+    }
+    let ask = this.ask;
+    let askedAt = Date.now();
+    // The run can end (Stop, its deadline) while the reader has not picked;
+    // the question then gives up, so the run's queue settles.
+    let { signal } = this.inFlight;
+    let onRunEnd: () => void = () => undefined;
+    let { answer, label } = await new Promise<{
+      answer: string;
+      label: string;
+    }>((resolve, reject) => {
+      onRunEnd = () =>
+        reject(new Error('The run has ended; realm.ask got no answer'));
+      if (signal.aborted) {
+        onRunEnd();
+        return;
+      }
+      signal.addEventListener('abort', onRunEnd, { once: true });
+      ask(request).then(resolve, reject);
+    }).finally(() => signal.removeEventListener('abort', onRunEnd));
+    let line = `Asked: ${request.question} · ${label}`;
+    this.activity.push(line);
+    this.onActivity?.(line);
+    return new DeadlineExtension({ answer, label }, Date.now() - askedAt);
   }
 
   // Card updates the script asked for that are not saved yet.
@@ -1089,9 +1714,84 @@ class RealmFsSession {
     }));
     await this.saveCards(updates);
     this.cardUpdates.clear();
-    for (let { url } of updates) {
+    for (let { url, expected, content } of updates) {
+      this.noteEdit(url, expected, content);
       this.saved.add(url);
     }
+  }
+
+  // An operation names the card it acts on by its path, as cards.update does.
+  private operationEntry(
+    method: RealmRunnerCallMethod,
+    path: unknown,
+    operation: unknown,
+    payload: unknown,
+  ): OperationEntry {
+    if (typeof operation !== 'string' || operation.length === 0) {
+      throw new TypeError(
+        `realm.${method} expects a card path and an operation name`,
+      );
+    }
+    if (
+      payload !== undefined &&
+      payload !== null &&
+      (typeof payload !== 'object' || Array.isArray(payload))
+    ) {
+      throw new TypeError(
+        `realm.${method}: the payload of "${operation}" must be an object`,
+      );
+    }
+    let url = this.resolve(method, path);
+    let cardId = url.replace(/\.json$/, '');
+    // A cards.update of the same card is saved after the script, and would
+    // overwrite what the operation did, or be refused for it.
+    this.assertNoCardUpdate(`${cardId}.json`);
+    return {
+      cardId,
+      operation,
+      payload: (payload ?? undefined) as Record<string, unknown> | undefined,
+    };
+  }
+
+  // Sends the operations at once, not when the script finishes: the realm
+  // can refuse one, and the script reads the answer.
+  //
+  // invoke and invokeBatchOperation both reach the realm's `_operations`
+  // endpoint, not `_atomic`: the realm applies each declaration and its policy
+  // authorizes each entry. They differ in what one failure leaves behind. A
+  // loop of invoke is one request per card, each committed on its own, so
+  // when card 40 of 100 is refused, cards 1 to 39 stay changed. A batch is one
+  // request, one commit under one write lock and one indexing pass, and the
+  // realm carries out every entry or none.
+  private async runOperationEntries(entries: OperationEntry[]) {
+    if (this.closed) {
+      this.refused += 1;
+      throw new Error('The run has ended; the operations were not run');
+    }
+    // Held while the request is out, so calls the script makes at once cannot
+    // pass the limit together, and given back when the operations did not
+    // run, so a refused batch, which changed nothing, can be fixed and sent
+    // again.
+    if (this.operationCount + entries.length > MAX_OPERATIONS) {
+      throw new Error(
+        `Realm code may run at most ${MAX_OPERATIONS} operations per run`,
+      );
+    }
+    this.operationCount += entries.length;
+    let answers: OperationAnswer[];
+    try {
+      answers = await this.runOperations(entries);
+    } catch (error) {
+      this.operationCount -= entries.length;
+      throw error;
+    }
+    return entries.map((entry, index) => {
+      let path = `${this.relative(entry.cardId)}.json`;
+      // The card's text changed on the realm, so this run reads it again.
+      this.known.delete(`${entry.cardId}.json`);
+      this.operationsRun.push(`${entry.operation} on ${path}`);
+      return { path, operation: entry.operation, ...answers[index] };
+    });
   }
 
   // realm.fs does not see a card update until it is saved, so it may not
@@ -1113,6 +1813,8 @@ class RealmFsSession {
     let url: string;
     if (/^[a-z][a-z0-9+.-]*:/i.test(path)) {
       url = new URL(path).href;
+    } else if (isPrefixForm(path)) {
+      url = this.prefixPathURL(path);
     } else {
       if (
         path.startsWith('/') ||
@@ -1129,6 +1831,17 @@ class RealmFsSession {
       throw new Error(`Path is outside this realm: ${path}`);
     }
     return url;
+  }
+
+  // A prefix-form path (`@cardstack/catalog/...`) names a realm by its
+  // prefix, so it resolves to that realm's URL, not to a path inside this
+  // realm. A prefix that is not registered names no realm this run can reach.
+  private prefixPathURL(path: string): string {
+    try {
+      return this.resolveURL(path);
+    } catch {
+      throw new Error(`Path is outside this realm: ${path}`);
+    }
   }
 
   // Finds cards, specs and files across realms, the catalog among them, and
@@ -1185,22 +1898,57 @@ class RealmFsSession {
         : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
     let query = pruneEmptyQueryParts(rawQuery as Query);
     assertQuery(query);
-    let { rows, total, incomplete } = await searchEntrySummaries(
-      this.searchEntries,
-      query,
-      { scope, limit: size, realms: realms as string[] | undefined },
-    );
+    // Refused here rather than in the search, so a call refused before
+    // anything is sent is not reported as a failed search.
+    resolveSearchEntryScope(scope);
+    let searchRealms = this.resolveSearchRealms(realms as string[] | undefined);
+    if (searchRealms.length === 0) {
+      return { entries: [], total: 0, truncated: false, incomplete: false };
+    }
+    let found;
+    try {
+      found = await searchEntrySummaries(this.searchEntries, query, {
+        scope,
+        limit: size,
+        realms: searchRealms,
+      });
+    } catch (error) {
+      this.recordEntriesSearch({ query, realms: searchRealms, error });
+      throw error;
+    }
+    let { rows, total, incomplete, realmTotals } = found;
+    let record = (error?: unknown) =>
+      this.recordEntriesSearch({
+        query,
+        realms: searchRealms,
+        found: { total, realmTotals, rowURLs: rows.map((row) => row.url) },
+        error,
+      });
     let resultSize = 0;
     for (let [index, row] of rows.entries()) {
       resultSize += JSON.stringify(row).length;
       if (resultSize > MAX_ENTRY_RESULT_SIZE) {
-        throw new Error(
+        let error = new Error(
           index > 0
             ? `These entries are too large to return; search again with limit ${index} or less`
             : `The entry ${row.url} is too large to return from a search`,
         );
+        record(error);
+        throw error;
       }
     }
+    record();
+    for (let row of rows) {
+      let seen = this.found.get(row.url);
+      if (!seen || (row.matchRelevance ?? 0) > (seen.matchRelevance ?? 0)) {
+        this.found.set(row.url, row);
+      }
+    }
+    this.onFound?.(
+      [...this.found.values()].sort(
+        (a, b) => (b.matchRelevance ?? 0) - (a.matchRelevance ?? 0),
+      ),
+    );
     return {
       entries: rows,
       total,
@@ -1216,11 +1964,25 @@ class RealmFsSession {
   // trailing slash. No path, or an empty one, is the realm root; a missing
   // argument arrives as null, since the call's arguments cross as JSON.
   private resolveDirectory(path: unknown): string {
-    if (path === undefined || path === null || path === '') {
+    // '/' and '.' name the realm's root as '' does: trimming the slash off
+    // '/' would otherwise leave no path at all
+    if (
+      path === undefined ||
+      path === null ||
+      path === '' ||
+      path === '/' ||
+      path === '.' ||
+      path === './'
+    ) {
       return this.realmURL;
     }
-    if (typeof path === 'string' && /^[a-z][a-z0-9+.-]*:/i.test(path)) {
-      let url = new URL(path).href;
+    if (
+      typeof path === 'string' &&
+      (/^[a-z][a-z0-9+.-]*:/i.test(path) || isPrefixForm(path))
+    ) {
+      let url = isPrefixForm(path)
+        ? this.prefixPathURL(path)
+        : new URL(path).href;
       if ((url.endsWith('/') ? url : `${url}/`) === this.realmURL) {
         return this.realmURL;
       }
@@ -1347,6 +2109,7 @@ class RealmFsSession {
     this.known.delete(savedURL);
     this.binary.add(savedURL);
     this.markCreated(savedURL);
+    this.noteBinaryCreate(savedURL);
     return {
       path: this.relative(savedURL),
       contentType: image.mimeType,
@@ -1408,6 +2171,58 @@ class RealmFsSession {
 
   private relative(url: string): string {
     return url.slice(this.realmURL.length);
+  }
+
+  // Why realm.cards.get found no card, with the next step that helps: a read
+  // again only for a card a running index pass may still add, and otherwise
+  // the call that indexes the file or the fix its error needs. A model that
+  // is told to wait for a card no pass will add polls, or edits the card to
+  // make the realm index it.
+  private cardReadError(id: string, read: Exclude<CardRead, { doc: unknown }>) {
+    let path = `${this.relative(id)}.json`;
+    switch (read.unread) {
+      // The realm-level flag can stay set after a pass whose end event was
+      // lost, so the read-again advice carries the same way out as an idle
+      // workspace's: an extra invalidate costs one more pass.
+      case 'indexing':
+        return (
+          `Card is not indexed yet: ${id}; read it again in a moment. If it ` +
+          `is still not indexed after a few reads, ` +
+          (this.mayWrite
+            ? `index the file with realm.index.invalidate('${path}')`
+            : `tell the user that ${path} needs indexing again by someone ` +
+              `who can write to it`)
+        );
+      case 'unindexed':
+        return (
+          `Card is not indexed: ${id}. Its file ${path} is in the workspace, ` +
+          `and the workspace is not indexing, so reading the card again ` +
+          `will not find it. ` +
+          (this.mayWrite
+            ? `Index the file with realm.index.invalidate('${path}'), then ` +
+              `read the card again. Do not edit the card to make the ` +
+              `workspace index it`
+            : `You can only read this workspace, so tell the user that ` +
+              `${path} needs indexing again by someone who can write to it`)
+        );
+      case 'not-found':
+        return `Card not found: ${id}`;
+      case 'not-a-card':
+        return (
+          `Not a card: ${this.relative(id)} is a file, so realm.cards.get ` +
+          `cannot read it; read it with realm.fs.readText if it is text, or ` +
+          `look at it with realm.capture`
+        );
+      case 'error':
+        return (
+          `Card failed to index: ${id}: ${read.message.replace(/[.\s]+$/, '')}. ` +
+          `Reading it again gives the same error until its cause is fixed, ` +
+          `in ${path}, in the definition it adopts from, or in a card it ` +
+          `links to`
+        );
+      case 'unreadable':
+        return `Unable to read card ${id}: ${read.message}`;
+    }
   }
 
   private async searchCards(raw: unknown): Promise<{
@@ -1559,6 +2374,10 @@ class RealmFsSession {
     if (content === BINARY) {
       throw new Error(`${url} is a binary file; realm.fs reads only text`);
     }
+    if (content !== undefined && !this.readUrls.has(url)) {
+      this.readUrls.add(url);
+      this.bytesRead += content.length;
+    }
     return content;
   }
 
@@ -1620,12 +2439,33 @@ class RealmFsSession {
       return;
     }
     this.unchanged.delete(url);
+    this.noteEdit(url, expected, saved);
     this.known.set(url, saved);
     if (expected === undefined) {
       this.markCreated(url);
     } else {
       this.saved.add(url);
     }
+  }
+
+  // A file's first `before` stays; its `after` is the latest. A file the
+  // run created and then deleted is no change at all.
+  private noteEdit(
+    url: string,
+    before: string | undefined,
+    after: string | undefined,
+  ) {
+    let previous = this.edits.get(url);
+    let first = previous ? previous.before : before;
+    if (first === undefined && after === undefined) {
+      this.edits.delete(url);
+      return;
+    }
+    this.edits.set(url, { before: first, after });
+  }
+
+  private noteBinaryCreate(url: string) {
+    this.edits.set(url, { binarySha256: this.binaryDigests.get(url) });
   }
 
   private markCreated(url: string) {
@@ -1645,6 +2485,103 @@ class RealmFsSession {
     this.binaryDigests.delete(url);
     this.known.set(url, undefined);
   }
+}
+
+// A script's question to the reader, as realm.ask takes it.
+export interface ScriptAsk {
+  question: string;
+  kind: 'options' | 'cards' | 'swatches' | 'recommend';
+  options: {
+    label: string;
+    value: string;
+    cardId?: string;
+    color?: string;
+    detail?: string;
+    confidence?: string;
+  }[];
+  allowOther: boolean;
+}
+
+function scriptAsk(input: unknown): ScriptAsk {
+  let request = (input ?? {}) as Record<string, unknown>;
+  let question = request.question;
+  if (
+    typeof question !== 'string' ||
+    !question.trim() ||
+    question.length > 300
+  ) {
+    throw new TypeError(
+      'realm.ask expects { question: string (up to 300 characters), options: [{ label, value?, cardId?, color?, detail?, confidence? }], kind?, allowOther? }',
+    );
+  }
+  let kind: ScriptAsk['kind'] =
+    request.kind === 'cards' ||
+    request.kind === 'swatches' ||
+    request.kind === 'recommend'
+      ? request.kind
+      : 'options';
+  let options = Array.isArray(request.options) ? request.options : [];
+  if (options.length < 1 || options.length > 8) {
+    throw new TypeError('realm.ask takes 1 to 8 options');
+  }
+  return {
+    question: question.trim(),
+    kind,
+    allowOther: request.allowOther === true,
+    options: options.map((option, index) => {
+      let o = (option ?? {}) as Record<string, unknown>;
+      let label = typeof o.label === 'string' ? o.label : String(o.value ?? '');
+      if (!label) {
+        throw new TypeError(`realm.ask option ${index + 1} needs a label`);
+      }
+      return {
+        label,
+        value: typeof o.value === 'string' ? o.value : label,
+        cardId: typeof o.cardId === 'string' ? o.cardId : undefined,
+        color: typeof o.color === 'string' ? o.color : undefined,
+        detail: typeof o.detail === 'string' ? o.detail : undefined,
+        confidence: typeof o.confidence === 'string' ? o.confidence : undefined,
+      };
+    }),
+  };
+}
+
+// The run's quiet record: what it copied, and how much it read.
+function runSummary(session: RealmFsSession): string[] {
+  let lines = session.copies.map((copy) => `Copied ${copy}`);
+  let reads = session.readUrls.size;
+  if (reads > 0) {
+    let kb = Math.max(1, Math.round(session.bytesRead / 1024));
+    lines.push(`Read ${reads} ${reads === 1 ? 'file' : 'files'} · ${kb} KB`);
+  }
+  return lines;
+}
+
+// The compact diff of one file the run changed, for the result.
+// What a run changed on a card it saved, field by field, for the
+// transcript's change table and the model.
+function fileCardChanges(
+  session: RealmFsSession,
+  url: string,
+): CardFieldChange[] {
+  if (!url.endsWith('.json')) {
+    return [];
+  }
+  let edit = session.edits.get(url);
+  return edit && edit.before !== undefined
+    ? cardChanges(edit.before, edit.after)
+    : [];
+}
+
+function withCardChanges(detail: string, changes: CardFieldChange[]): string {
+  return changes.length
+    ? `${detail}${CARD_CHANGES_IN_DETAIL}${JSON.stringify(changes)}`
+    : detail;
+}
+
+function fileDiff(session: RealmFsSession, url: string): string | undefined {
+  let edit = session.edits.get(url);
+  return edit ? compactDiff({ url, ...edit }) : undefined;
 }
 
 // What a failed run reports: the error, and everything the run already did,
@@ -1690,6 +2627,11 @@ function failureReport(session: RealmFsSession, error: unknown): string {
   if (session.indexActions.length > 0) {
     report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
   }
+  // An operation the realm carried out stays done, so name it, so a retry
+  // does not run it again.
+  if (session.operationsRun.length > 0) {
+    report += ` Operations already run by this run: ${session.operationsRun.join('; ')}`;
+  }
   // Room changes are made only after a run that finished, so a failed
   // run made none.
   if (session.room.requested) {
@@ -1704,6 +2646,11 @@ function failureReport(session: RealmFsSession, error: unknown): string {
   // a failed run saved none of them.
   if (session.pendingCardUpdates > 0) {
     report += ' The card updates it asked for were not saved.';
+  }
+  // Research calls change nothing, but each one is a paid request, so a
+  // retry should know which it already made.
+  if (session.activity.length > 0) {
+    report += ` Research calls this run made: ${session.activity.join('; ')}`;
   }
   return report;
 }
@@ -1740,6 +2687,19 @@ function downloadSource(value: unknown): string {
   return url.href;
 }
 
+// The time a run gets on top of RUN_TIMEOUT_MS and CALL_DEADLINE_MS for the
+// calls its code names.
+function extraRunTimeMs(code: unknown): number {
+  return (
+    (clickRequiredCallsIn(code).has('realm.images.generate')
+      ? IMAGE_TIME_BUDGET_MS
+      : 0) +
+    (typeof code === 'string' && RESEARCH_CALL_RE.test(code)
+      ? RESEARCH_TIME_MS
+      : 0)
+  );
+}
+
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
 // The base64 content of a writeBytes call, without a `data:` URL prefix or
 // whitespace.
@@ -1774,6 +2734,27 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
+// One entry's result as the script reads it. A write names the card it wrote
+// and the version that card now holds; a read answers the document, which is
+// the one result that carries attributes; a delete answers nothing.
+function operationAnswer(
+  result: unknown,
+  base: BaseOperation,
+): OperationAnswer {
+  if (!result || typeof result !== 'object') {
+    return {};
+  }
+  if (!isWrite(base)) {
+    return { document: result as Record<string, unknown> };
+  }
+  let { id, version, indexPending } = result as OperationWriteResult;
+  return {
+    id,
+    ...(version ? { version } : {}),
+    indexPending: indexPending === true,
+  };
+}
+
 // What a search answers when every realm it would reach is gated.
 function noSearchResults() {
   return { data: [], meta: { page: { total: 0 } } };
@@ -1784,6 +2765,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -1797,24 +2779,119 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
-    'realm.cards.get, changes card fields with realm.cards.update, finds ' +
+    'realm.cards.get, changes card fields with realm.cards.update, runs ' +
+    'the operations a card type declares (its @operation statics) with ' +
+    'realm.operations.invoke(path, operation, payload), or several in one ' +
+    'request with realm.operations.invokeBatchOperation([{ path, operation, ' +
+    'payload }]) (prefer them over realm.cards.update when the type ' +
+    'declares one for the change; each runs at once and answers { path, ' +
+    'operation, id, version } for a write). invoke in a loop sends one ' +
+    'request per card, and when one fails the cards before it stay ' +
+    'changed; invokeBatchOperation sends all of them in one request that ' +
+    'the realm carries out whole or not at all, so use it when the changes ' +
+    'must go together or there are many cards. finds ' +
     'cards, specs and files across realms with ' +
     'realm.entries.search, can look at cards and files with realm.capture ' +
     '(a path in the realm, or the URL of a card or file in any workspace ' +
-    'the user can read), can generate images into the realm with ' +
+    `the user can read; a ${LOCAL_SOURCE_URL_PREFIX} URL names a file the ` +
+    'user attached from their computer or an image a capture took; neither ' +
+    'is in a workspace, so realm.capture refuses it), can generate images ' +
+    'into the realm with ' +
     'realm.images.generate, can save a file from a URL with ' +
-    'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
+    'realm.fs.download, can search the web with realm.web.search (Exa; ' +
+    'returns [{ url, title, snippet }]), can read a web page as markdown ' +
+    'with realm.web.read (Firecrawl; throws with the reason a page cannot ' +
+    'be read), can repair or normalize data into a JSON schema with ' +
+    'realm.resolve (at most 3 calls per run; it refuses requests for code), ' +
+    'can ask the user a question mid-script and wait for the pick with ' +
+    'realm.ask({ question, options: [{ label, value?, detail?, confidence? }], kind?, allowOther? }) ' +
+    '(kind "recommend" proposes the first option, with its detail as the reason), ' +
+    'can name the steps of a multi-step script up front with ' +
+    'realm.plan(["Search calendars", "Read each page", "Compare"]) and ' +
+    'report which step it is on with ' +
+    'realm.activity({ message, current, total }) (current is 1-based into the ' +
+    'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
+    'can create workspaces with realm.workspaces.create, ' +
     'can change the skills and model of this room with room.*, and can ' +
-    'refresh the index of the workspace with realm.index.*. In a workspace ' +
-    'the user can only read, reads work and each write is refused. realm ' +
+    'refresh the index of the workspace with realm.index.*. A card that ' +
+    'realm.cards.get reports as not indexed while the workspace is not ' +
+    'indexing will not index by waiting: run ' +
+    "realm.index.invalidate('<card path>.json') and read it again, and " +
+    "never edit a card's data to make the workspace index it. In a workspace " +
+    'the user can only read, reads work and each write is refused, except ' +
+    'realm.operations, which the realm allows when its policy grants the ' +
+    'operation. realm ' +
     'is the root of the workspace, and paths are relative to it, so a file ' +
     'in a folder is named with its folder (folder/file.json). Return ' +
-    '{ show: "<card path>" } to open a card in the realm when the run ends.';
+    '{ show: "<card path>" } to open a card in the realm when the run ends. ' +
+    'A script that fails to compile, or throws a ReferenceError or ' +
+    'TypeError before its first realm call, may be auto-fixed and run ' +
+    'again; scriptFixes in the result shows the diff, so write it ' +
+    'correctly next time.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
   // `roomId` to that room, so a model cannot point the changes at another
   // room it has joined.
   static bindsToInvokingRoom = true;
+  // The tool service hands each run a progress hook, so the transcript can
+  // show `realm.activity` steps and research lines while the run is going.
+  static reportsProgress = true;
+  onProgress?: (entry: {
+    line: string;
+    progress?: RealmRunnerProgress;
+  }) => void;
+  private publishActivity = (line: string, progress?: RealmRunnerProgress) => {
+    this.onProgress?.({ line, progress });
+  };
+  // The tool service hands a run a hook for what its searches found, so the
+  // row shows the matches the script read and not only that it searched.
+  onFound?: (found: EntrySummary[]) => void;
+  private publishFound = (found: EntrySummary[]) => {
+    this.onFound?.(found);
+  };
+  // The tool service hands each run a hook for what it changed, so the tab
+  // that ran the call keeps each file's full before and after: the inline
+  // diff and Undo read them, whatever base the realm server runs.
+  onEdits?: (edits: RealmFileEdit[]) => void;
+  // The tool service hands a run a way to ask its reader (realm.ask).
+  onAsk?: (request: ScriptAsk) => Promise<{ answer: string; label: string }>;
+  private publishEdits(session: RealmFsSession) {
+    this.onEdits?.([...session.edits].map(([url, edit]) => ({ url, ...edit })));
+  }
+  // Stop ends the run the way its deadline does: the script stops, calls in
+  // flight are refused, and what it already saved stays and is reported.
+  private stopper = new AbortController();
+  // Settles STOP_GRACE_MS after Stop, or never.
+  private stopGrace = new Promise<void>((resolve) =>
+    this.stopper.signal.addEventListener(
+      'abort',
+      () => setTimeout(resolve, STOP_GRACE_MS),
+      { once: true },
+    ),
+  );
+  // `work`, or the stop's reason once Stop has had its grace
+  private untilStopped<T>(work: Promise<T>): Promise<T> {
+    return Promise.race([
+      work,
+      this.stopGrace.then(() => {
+        throw this.stopper.signal.reason;
+      }),
+    ]);
+  }
+  // the session's calls settled, or Stop's grace over. Stop never cuts the
+  // wait for a save or delete already under way, so the result reports
+  // every change the realm got; only research is given up on.
+  private async idleOrStopped(session: RealmFsSession): Promise<unknown> {
+    await Promise.race([session.idle(), this.stopGrace]);
+    return session.queueSettled();
+  }
+  stop = () => {
+    this.stopper.abort(
+      new Error(
+        `${STOPPED_BY_USER}. Do not run it again unless they ask you to`,
+      ),
+    );
+  };
 
   // A run waits for the click when its script names a click-required call.
   static clickReasonsFor(
@@ -1831,9 +2908,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   static extraExecuteTimeMsFor(
     attributes: Record<string, unknown> | undefined,
   ): number {
-    return clickRequiredCallsIn(attributes?.code).has('realm.images.generate')
-      ? IMAGE_TIME_BUDGET_MS
-      : 0;
+    return extraRunTimeMs(attributes?.code);
   }
 
   async getInputType() {
@@ -1897,123 +2972,208 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
 
     let namedCalls = clickRequiredCallsIn(input.code);
-    let imageTime = namedCalls.has('realm.images.generate')
-      ? IMAGE_TIME_BUDGET_MS
-      : 0;
-    let runTimeoutMs = RUN_TIMEOUT_MS + imageTime;
-    let callDeadlineMs = CALL_DEADLINE_MS + imageTime;
+    let extraTime = extraRunTimeMs(input.code);
+    let runTimeoutMs = RUN_TIMEOUT_MS + extraTime;
+    let callDeadlineMs = CALL_DEADLINE_MS + extraTime;
     // The room's features can't change during a run, so read them once, on
     // the first search: reading the room's events loads the room.
-    let gatedRealmsOfRun: RealmIdentifier[] | undefined;
-    let gatedRealms = () => (gatedRealmsOfRun ??= this.gatedRealms(roomId));
-    let session = new RealmFsSession(
-      rootURL,
-      (url) => this.readSource(url),
-      (url, content, expected, options) =>
-        this.writeFile(roomId, url, content, expected, options),
-      (updates) => this.saveCards(roomId, rootURL, updates),
-      (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
-      (url, expected) => this.deleteFile(url, expected),
-      (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
-      (url) => this.listDirectory(url),
-      // The run reads only the rows' own data, so the linked cards' resources
-      // are not asked for. A script run in a feature-gated realm finds
-      // nothing there unless the room enabled the feature.
-      async (query) =>
-        this.isGatedRealm(gatedRealms(), realmURL)
-          ? noSearchResults()
-          : await this.store.searchEntries(query, [realmURL], {
-              linksOnly: true,
-            }),
-      (reference, base) =>
-        this.network.virtualNetwork.resolveURL(reference, base).href,
-      (id) => this.readCard(id),
-      async (query, realms) => {
-        this.assertKnownRealmIdentifiers(realms);
-        let searchable = this.searchableRealms(gatedRealms(), realms);
-        // An empty list would make the store search every realm.
-        return searchable?.length === 0
-          ? noSearchResults()
-          : await this.store.searchEntries(query, searchable);
-      },
-      (url, options, doneBy, signal) =>
-        this.captureURL(url, options, doneBy, signal),
-      (reference) =>
-        workspaceOf(reference, { network: this.network, realm: this.realm })
-          ?.realmURL === rootURL,
-      (workspaceInput) =>
-        createWorkspace(
-          { matrixService: this.matrixService, realm: this.realm },
-          workspaceInput,
-        ),
-      (realmIdentifier) =>
-        deleteWorkspace(
-          {
-            matrixService: this.matrixService,
-            operatorModeStateService: this.operatorModeStateService,
-            realm: this.realm,
-            realmServer: this.realmServer,
-            recentFilesService: this.recentFilesService,
-          },
-          realmIdentifier,
-        ),
-      (imageInput) => this.generateImage(imageInput),
-      namedCalls,
-      {
-        invalidate: (urls) => this.realm.invalidateUrls(realmURL, urls),
-        reindex: () => this.realm.reindex(realmURL),
-        fullReindex: () => this.realm.fullReindex(realmURL),
-        cancelJob: () => this.realm.cancelIndexingJob(realmURL),
-      },
-      this.realm.canWrite(realmURL),
-      this.environmentService.cardSizeLimitBytes,
-      new RoomActions({
-        checkSkill: (id) => this.checkSkill(id),
-        knownModels: () => this.matrixService.pickableModelIds(roomId),
-      }),
-    );
+    let gateOfRun: ((realm: string) => boolean) | undefined;
+    let isGated = (realm: string) =>
+      (gateOfRun ??= this.featureGate(roomId))(realm);
+    // A script fixed after a failure runs again in a fresh session: it made
+    // no realm call the first time, so there is nothing to carry over.
+    let newSession = () =>
+      new RealmFsSession(
+        rootURL,
+        (url) => this.readSource(url),
+        (url, content, expected, options) =>
+          this.writeFile(roomId, url, content, expected, options),
+        (updates) => this.saveCards(roomId, rootURL, updates),
+        (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
+        (url, expected) => this.deleteFile(url, expected),
+        (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
+        (url) => this.listDirectory(url),
+        // The run reads only the rows' own data, so the linked cards' resources
+        // are not asked for. A script run in a feature-gated realm finds
+        // nothing there unless the room enabled the feature.
+        async (query) =>
+          isGated(realmURL)
+            ? noSearchResults()
+            : await this.store.searchEntries(query, [realmURL], {
+                linksOnly: true,
+              }),
+        (reference, base) =>
+          this.network.virtualNetwork.resolveURL(reference, base).href,
+        (id) => this.readCard(id, realmURL),
+        (entries) => this.runOperations(entries),
+        (query, realms) => this.store.searchEntries(query, realms),
+        // Resolved before the search, so the search and its telemetry
+        // record name the same realms.
+        (realms) => {
+          this.assertKnownRealmIdentifiers(realms);
+          return this.store
+            .searchRealmsFor(realms)
+            .filter((realm) => !isGated(realm));
+        },
+        (url, options, doneBy, signal) =>
+          this.captureURL(url, options, doneBy, signal),
+        (reference) =>
+          workspaceOf(reference, { network: this.network, realm: this.realm })
+            ?.realmURL === rootURL,
+        (workspaceInput) =>
+          createWorkspace(
+            { matrixService: this.matrixService, realm: this.realm },
+            workspaceInput,
+          ),
+        (realmIdentifier) =>
+          deleteWorkspace(
+            {
+              matrixService: this.matrixService,
+              operatorModeStateService: this.operatorModeStateService,
+              realm: this.realm,
+              realmServer: this.realmServer,
+              recentFilesService: this.recentFilesService,
+            },
+            realmIdentifier,
+          ),
+        (imageInput) => this.generateImage(imageInput),
+        namedCalls,
+        {
+          invalidate: (urls) => this.realm.invalidateUrls(realmURL, urls),
+          reindex: () => this.realm.reindex(realmURL),
+          fullReindex: () => this.realm.fullReindex(realmURL),
+          cancelJob: () => this.realm.cancelIndexingJob(realmURL),
+        },
+        this.realm.canWrite(realmURL),
+        this.environmentService.cardSizeLimitBytes,
+        new RoomActions({
+          checkSkill: (id) => this.checkSkill(id),
+          knownModels: () => this.matrixService.pickableModelIds(roomId),
+        }),
+        this.research(roomId),
+        (search) =>
+          recordCatalogSearch(
+            {
+              clientTelemetry: this.clientTelemetry,
+              network: this.network,
+              realmServer: this.realmServer,
+            },
+            { ...search, tool: 'run-realm-code', realm: rootURL },
+          ),
+      );
+    let session = newSession();
+    session.onActivity = this.publishActivity;
+    session.onFound = this.publishFound;
     let runnerResult;
     let deadline = new AbortController();
-    let deadlineTimer = setTimeout(
-      () =>
-        deadline.abort(
-          new Error(
-            `Realm code did not finish within ${callDeadlineMs / 1000} s`,
+    // The call's own deadline, which a question to the reader pauses.
+    let deadlineEndsAt = Date.now() + callDeadlineMs;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let armDeadline = () => {
+      clearTimeout(deadlineTimer);
+      deadlineTimer = setTimeout(
+        () =>
+          deadline.abort(
+            new Error(
+              `Realm code did not finish within ${callDeadlineMs / 1000} s`,
+            ),
           ),
-        ),
-      callDeadlineMs,
-    );
+        Math.max(0, deadlineEndsAt - Date.now()),
+      );
+    };
+    armDeadline();
+    let askReader = this.onAsk
+      ? async (request: ScriptAsk) => {
+          let askedAt = Date.now();
+          clearTimeout(deadlineTimer);
+          try {
+            return await this.onAsk!(request);
+          } finally {
+            deadlineEndsAt += Date.now() - askedAt;
+            if (!deadline.signal.aborted) {
+              armDeadline();
+            }
+          }
+        }
+      : undefined;
+    session.ask = askReader;
     // The worker allows the script `runTimeoutMs` once QuickJS is ready;
     // measured from here it is a conservative end, since sandbox start only
     // pushes the real one later.
-    session.captures.runEndsAt = Date.now() + runTimeoutMs;
-    try {
-      runnerResult = await runRealmCode(
-        {
-          code: input.code,
-          realmURL: rootURL,
-          timeoutMs: runTimeoutMs,
-        },
-        (method, args) => session.call(method, args),
-        deadline.signal,
-      );
-    } catch (error) {
-      clearTimeout(deadlineTimer);
-      // Stop the session before reading what it saved: a call the script did
-      // not await can still be running, and must neither save after this
-      // report nor be missing from it.
-      session.close();
-      await session.idle();
-      throw new Error(failureReport(session, error));
+    let code = input.code;
+    // What auto-fix did, for the activity and for the model.
+    let fixActivity: string[] = [];
+    let scriptFixes: string[] = [];
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0) {
+        session = newSession();
+        session.onActivity = this.publishActivity;
+        session.onFound = this.publishFound;
+        session.ask = askReader;
+      }
+      session.captures.runEndsAt = Date.now() + runTimeoutMs;
+      try {
+        runnerResult = await this.untilStopped(
+          runRealmCode(
+            {
+              code,
+              realmURL: rootURL,
+              timeoutMs: runTimeoutMs,
+            },
+            (method, args) => session.call(method, args),
+            AbortSignal.any([deadline.signal, this.stopper.signal]),
+          ),
+        );
+        break;
+      } catch (error) {
+        // Stop the session before reading what it saved: a call the script
+        // did not await can still be running, and must neither save after
+        // this report nor be missing from it.
+        session.close();
+        await this.idleOrStopped(session);
+        this.publishEdits(session);
+        let fixed =
+          error instanceof RealmScriptError &&
+          autoFixable(error.scriptError, session.callsMade) &&
+          attempt < MAX_AUTO_FIX_ATTEMPTS &&
+          code.length <= MAX_AUTO_FIX_CODE_CHARS &&
+          !deadline.signal.aborted &&
+          !this.stopper.signal.aborted
+            ? await this.autoFix(code, error.scriptError, deadline.signal)
+            : undefined;
+        if (!fixed || 'rejected' in fixed) {
+          clearTimeout(deadlineTimer);
+          let notes = [
+            ...(scriptFixes.length
+              ? [
+                  `The runner auto-fixed the script before this error: ${fixActivity.join('; ')}.`,
+                ]
+              : []),
+            ...(fixed ? [fixed.rejected] : []),
+          ];
+          throw new Error([failureReport(session, error), ...notes].join(' '));
+        }
+        code = fixed.code;
+        fixActivity.push(fixed.activity);
+        this.publishActivity(fixed.activity);
+        scriptFixes.push(`${fixed.activity}\n${fixed.diff}`);
+      }
     }
 
     clearTimeout(deadlineTimer);
     session.close();
-    await session.idle();
+    await this.idleOrStopped(session);
     try {
       await session.saveCardUpdates();
     } catch (error) {
+      this.publishEdits(session);
       throw new Error(failureReport(session, error));
+    }
+    this.publishEdits(session);
+    // what the run read and copied, said once, after its own steps
+    let summaryLines = runSummary(session);
+    for (let line of summaryLines) {
+      this.publishActivity(line);
     }
     await this.openCreatedWorkspace(session);
     let roomChanges = session.room.requested
@@ -2032,6 +3192,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       );
     }
     return new commandModule.RunRealmCodeResult({
+      realm: this.realmRootURL(realmURL),
       uiActions,
       ...shown,
       files: [
@@ -2040,9 +3201,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
             new commandModule.RealmCodeFileResult({
               fileUrl,
               status: 'saved',
-              detail: session.binary.has(fileUrl)
-                ? 'Binary file saved.'
-                : 'Source saved; correctness validation will run after this tool result.',
+              detail: withCardChanges(
+                session.binary.has(fileUrl)
+                  ? 'Binary file saved.'
+                  : 'Source saved; correctness validation will run after this tool result.',
+                fileCardChanges(session, fileUrl),
+              ),
+              diff: fileDiff(session, fileUrl),
             }),
         ),
         ...[...session.unchanged].map(
@@ -2068,6 +3233,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
               fileUrl,
               status: 'deleted',
               detail: 'Existed before this run; deleted.',
+              diff: fileDiff(session, fileUrl),
             }),
         ),
       ],
@@ -2088,6 +3254,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
       indexActions: [...session.indexActions],
+      activity: [...fixActivity, ...session.activity, ...summaryLines],
+      scriptFixes,
       roomChanges,
     });
   }
@@ -2423,8 +3591,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // downloaded: its content type alone says whether it is binary, and a text
   // one is too large.
   private async readSource(url: string): ReturnType<ReadSource> {
+    // Never from the browser's cache: a conflict check that reads the 404
+    // it saw before the run's own save would refuse that file's next edit.
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
+      cache: 'no-store',
     });
     let { status } = response;
     if (status !== 200) {
@@ -2494,30 +3665,121 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
   }
 
-  private async readCard(id: string): Promise<LooseSingleCardDocument> {
+  // Runs operations a card's type declares, on cards in the run's realm, as
+  // one `_operations` request.
+  //
+  // Each card is loaded first, all at once, because only its type says what an
+  // entry is: whether a name is declared or is a behavior every card carries,
+  // whether it is a query, which params it needs, and which base it runs. The
+  // request is then built by the operations client, as invoke-card-operation
+  // builds it, so the method (QUERY for reads, POST for writes), each entry's
+  // data and the decoded answer are the client's and not a copy of them.
+  private async runOperations(
+    entries: OperationEntry[],
+  ): Promise<OperationAnswer[]> {
+    let operationsModule = await this.loaderService.loader.import<
+      typeof OperationsModule
+    >('@cardstack/base/operations');
+    let cardIds = [...new Set(entries.map((entry) => entry.cardId))];
+    let loaded = await Promise.all(
+      cardIds.map((id) => this.store.getWithoutCache(id)),
+    );
+    let cards = new Map<string, CardDef>();
+    for (let [index, card] of loaded.entries()) {
+      let cardId = cardIds[index]!;
+      if (!isCardInstance(card)) {
+        let entry = entries.find((one) => one.cardId === cardId)!;
+        throw new Error(
+          `cannot run "${entry.operation}": ${cardId} did not load: ${card.message}`,
+        );
+      }
+      cards.set(cardId, card);
+    }
+    let bases = entries.map((entry) => {
+      let card = cards.get(entry.cardId)!;
+      let base = assertInstanceOperation(
+        operationsModule,
+        card,
+        entry.operation,
+      );
+      assertPayloadSuppliesParams(
+        entry.operation,
+        operationsModule.getDeclaredOperations(card)[entry.operation],
+        entry.payload,
+      );
+      return base;
+    });
+    let bucketFor = operationsModule.operations as (
+      target: unknown,
+    ) => OperationsBucket;
+    let results: unknown[];
+    if (entries.length === 1) {
+      let [entry] = entries;
+      let member = bucketFor(cards.get(entry!.cardId)!)[entry!.operation] as (
+        payload?: unknown,
+      ) => Promise<unknown>;
+      results = [await member(entry!.payload)];
+    } else {
+      let atomic = bucketFor(cards.get(entries[0]!.cardId)!)[BATCH_MEMBER] as (
+        build: (builder: { on(card: CardDef): OperationsBucket }) => void,
+      ) => Promise<unknown[]>;
+      results = await atomic((builder) => {
+        for (let entry of entries) {
+          let member = builder.on(cards.get(entry.cardId)!)[
+            entry.operation
+          ] as (payload?: unknown) => unknown;
+          member(entry.payload);
+        }
+      });
+    }
+    return results.map((result, index) =>
+      operationAnswer(result, bases[index]!),
+    );
+  }
+
+  private async readCard(id: string, realmURL: string): Promise<CardRead> {
     // The store's cached instance can lag a write this run just made, or hold
     // edits not saved yet, so the card is read from the realm.
     let card = await this.store.getWithoutCache(id);
+    // A path that holds a file rather than a card instance reads as the
+    // file's FileDef.
+    if (isFileDefInstance(card)) {
+      return { unread: 'not-a-card' };
+    }
     if (!isCardInstance(card)) {
       if (card.awaitingIndex) {
-        throw new Error(
-          `Card is not indexed yet: ${id}; read it again in a moment`,
-        );
+        // The realm holds the card's file and has no index row for it, which
+        // is the same answer for a file a queued pass is about to index and
+        // for one no pass will index. The realm's index events are what tell
+        // them apart: between a pass's start and its end, the row may still
+        // come.
+        return {
+          unread: this.realm.info(realmURL).isIndexing
+            ? 'indexing'
+            : 'unindexed',
+        };
       }
-      throw new Error(
-        card.status === 404
-          ? `Card not found: ${id}`
-          : `Unable to read card ${id}: ${card.message}`,
-      );
+      if (card.status === 404) {
+        return { unread: 'not-found' };
+      }
+      // The realm marks the error its index row records, whatever status the
+      // row carries. Any other failure (permissions, the network, the realm
+      // itself) says nothing about the card's source.
+      return {
+        unread: card.meta?.indexError ? 'error' : 'unreadable',
+        message: card.message,
+      };
     }
     let { default: Base64ImageField } = await this.loaderService.loader.import<{
       default: typeof Base64ImageFieldType;
     }>('@cardstack/base/base64-image');
-    return await this.cardService.serializeCard(card, {
-      omitFields: [Base64ImageField],
-      useAbsoluteURL: true,
-      includeComputeds: true,
-    });
+    return {
+      doc: await this.cardService.serializeCard(card, {
+        omitFields: [Base64ImageField],
+        useAbsoluteURL: true,
+        includeComputeds: true,
+      }),
+    };
   }
 
   // Checks the realm still holds what the run saved, and deletes the file.
@@ -2556,6 +3818,77 @@ export default class RunRealmCodeTool extends HostBaseTool<
       return undefined;
     }
     return await sha256(new Uint8Array(await response.arrayBuffer()));
+  }
+
+  // Asks the model for a fix to a script that failed before it did anything,
+  // and checks the fix. A fix that fails a guard, or a model that fails to
+  // answer, leaves the original error, with the reason added.
+  private async autoFix(
+    code: string,
+    error: RealmScriptErrorInfo,
+    signal: AbortSignal,
+  ): Promise<
+    { code: string; activity: string; diff: string } | { rejected: string }
+  > {
+    let where = error.line ? ` at line ${error.line}` : '';
+    let proposed;
+    try {
+      proposed = await proposeFix(
+        code,
+        error,
+        this.proxySend(),
+        AbortSignal.any([signal, AbortSignal.timeout(AUTO_FIX_TIMEOUT_MS)]),
+      );
+    } catch (cause) {
+      return {
+        rejected: `The runner could not auto-fix the ${error.name}${where}: ${coerceErrorMessage(cause, 'unknown error')}.`,
+      };
+    }
+    let { diff, problem } = checkFix(code, proposed.code);
+    if (problem) {
+      return {
+        rejected: `The runner tried to auto-fix the ${error.name}${where} and rejected the fix: ${problem}.\n${diff}`,
+      };
+    }
+    return {
+      code: proposed.code,
+      activity: `Fixed a ${error.name}${where}: ${proposed.summary} (auto-fix by ${proposed.model})`,
+      diff,
+    };
+  }
+
+  private proxySend(): ProxySend {
+    return ({ url, requestBody, signal }) =>
+      this.realmServer.requestForward({
+        url,
+        method: 'POST',
+        requestBody,
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        signal,
+      });
+  }
+
+  // The research calls send through the same proxy as images. A search asks
+  // the room's model; the resolver picks its own small model.
+  private research(roomId: string): Research {
+    let send = this.proxySend();
+    return {
+      search: async (request, signal) => {
+        let model =
+          this.matrixService.getRoomData(roomId)?.activeLLM ||
+          DEFAULT_WEB_SEARCH_LLM;
+        return {
+          results: await webSearch(request, model, send, signal),
+          model,
+        };
+      },
+      read: (request, timeoutMs, signal) =>
+        webRead(request, timeoutMs, send, signal),
+      resolve: (request, signal) => resolveJSON(request, send, signal),
+    };
   }
 
   private async generateImage({
@@ -2695,8 +4028,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // A realm gated behind a skill feature (SKILL_FEATURE_REALMS) is searched
   // only in a room that enabled the feature; elsewhere it is left out of every
   // entry and card search, whether the script named it, ran in it, or relied
-  // on the default of every readable realm.
-  private gatedRealms(roomId: string): RealmIdentifier[] {
+  // on the default of every readable realm. Answers whether a realm is gated
+  // in the room.
+  private featureGate(roomId: string): (realm: string) => boolean {
     // Only delivered events: one still sending, or that failed to send, has
     // not reached the bot that built the prompt.
     let events = (
@@ -2707,34 +4041,23 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let aiBotUserId = this.matrixService.userId
       ? this.matrixService.aiBotUserId
       : '';
+    let { virtualNetwork } = this.network;
     // Named by prefix, which every build registers: a test build clears the
     // catalog's URL but keeps the prefix.
-    return realmsOfDisabledFeatures(
+    let gated = realmsOfDisabledFeatures(
       sessionSkillFeatures(events, aiBotUserId),
-    ).map((realm) =>
-      canonicalRealmIdentifier(this.network.virtualNetwork, realm),
+    ).map(
+      (realm) =>
+        new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
     );
-  }
-
-  // A path beneath a gated realm, such as one of its folders, is gated too.
-  private isGatedRealm(gated: RealmIdentifier[], realm: string): boolean {
-    let identifier = canonicalRealmIdentifier(
-      this.network.virtualNetwork,
-      realm,
-    );
-    return gated.some((gatedRealm) => identifier.startsWith(gatedRealm));
-  }
-
-  private searchableRealms(
-    gated: RealmIdentifier[],
-    realms: string[] | undefined,
-  ): string[] | undefined {
-    if (gated.length === 0) {
-      return realms;
-    }
-    return (
-      realms?.length ? realms : this.realmServer.availableRealmIdentifiers
-    ).filter((realm) => !this.isGatedRealm(gated, realm));
+    // A path beneath a gated realm, such as one of its folders, is gated too.
+    return (realm) => {
+      if (gated.length === 0) {
+        return false;
+      }
+      let id = rri(canonicalRealmIdentifier(virtualNetwork, realm));
+      return gated.some((paths) => paths.inRealm(id));
+    };
   }
 
   // A scoped identifier the host has no mapping for would reach the realm

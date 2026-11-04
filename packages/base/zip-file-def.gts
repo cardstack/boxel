@@ -3,6 +3,7 @@ import FolderIcon from '@cardstack/boxel-icons/folder';
 import FileIcon from '@cardstack/boxel-icons/file';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
+import { extensionOfIdentifier } from '@cardstack/runtime-common';
 
 import type { BaseDefComponent } from './card-api';
 import {
@@ -25,18 +26,6 @@ import {
 import { humanSize } from './file-formats/file-presentation';
 import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { extractZipListing } from './zip-archive';
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
 
 // One file inside the archive, as its central-directory header declares it. No
 // bytes are inflated to produce this: the sizes and timestamp come straight from
@@ -510,7 +499,7 @@ export class ZipDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile<ZipAttributes>> {
-    let extension = getExtension(url);
+    let extension = extensionOfIdentifier(url);
     if (extension !== '.zip') {
       throw new FileContentMismatchError(
         `Expected a .zip file extension, got "${extension || 'none'}"`,

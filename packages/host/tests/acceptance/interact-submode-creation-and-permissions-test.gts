@@ -952,8 +952,10 @@ module(
           },
         ]);
         assert
-          .dom('[data-test-llm-mode-option="act"]')
-          .hasClass('selected', 'LLM mode starts in act mode');
+          .dom(
+            '[data-test-llm-mode-toggle] [data-test-pretui-segmented-option="act"]',
+          )
+          .isChecked('LLM mode starts in act mode');
 
         // Verify the GETTING STARTED section with Welcome to Boxel
         assert

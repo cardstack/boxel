@@ -13,18 +13,20 @@ const TextContent: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .message {
       position: relative;
-      font-size: var(--boxel-font-size-sm);
+      /* reading type: answers and the reader's bubble, 14 on 22 */
+      font-size: var(--type-read, 14px);
       font-weight: 400;
-      line-height: 1.5em;
-      letter-spacing: var(--boxel-lsp-xs);
+      line-height: var(--leading-read, 22px);
       text-wrap: pretty;
-      overflow: hidden;
+      /* its own block context, without clipping: a reply's table and a
+         framed row hang their inset into the gutter */
+      display: flow-root;
     }
     .message > :deep(*) {
       margin-block: 0;
     }
     .message > :deep(* + *) {
-      margin-top: var(--boxel-sp-sm);
+      margin-top: var(--step-12, 12px);
     }
   </style>
 </template>;

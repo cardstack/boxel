@@ -3,6 +3,7 @@ import {
   computeContentHashFromRanges,
 } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
+import type { PolicyAuditOptions } from '../policy-share-audit.ts';
 import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -179,6 +180,8 @@ export interface BatchCore {
       // See `CommitBatchOptions.broadcastRealmEvents`.
       broadcastRealmEvents?: boolean;
       initiatingUser?: string | null;
+      // See `CommitBatchOptions.policyAudit`.
+      policyAudit?: PolicyAuditOptions;
       // Where the commit stamps the stages it owns. The durable write, the
       // index enqueue, the wait for the worker and the invalidation that
       // follows it all happen inside this call, and each can be the whole of
@@ -231,6 +234,11 @@ export interface BatchCore {
 }
 
 export interface CommitBatchOptions {
+  // Set for a batch a request makes on a caller's behalf: the commit audits a
+  // policy change among its writes against the shares it opens to people who
+  // aren't signed in, and refuses it without the confirmation the request
+  // carries (see `policy-share-audit.ts`).
+  policyAudit?: PolicyAuditOptions;
   // The caller's own id for this batch. Echoed on the realm's index event so a
   // client can tell its own batch's event from anyone else's.
   clientRequestId?: string | null;
@@ -2436,6 +2444,7 @@ async function commitStaged(
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
+      ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,
     },

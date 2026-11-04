@@ -112,12 +112,14 @@ path). In order:
 JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 
 `userPermissions` on that last line is the **effective** set, never the raw
-per-username row: `effectiveRealmPermissions` unions the realm's `users` grant
-(gated on the matrix account existing), its `*` grant, and the user's own row.
-It is the single derivation — `RealmPermissionChecker.for` and
-`fetchEffectiveRealmPermissions` both call it, the latter resolving the `users`
-grant from a homeserver URL for callers that hold no matrix client. **Every mint
-site must produce that same union.** Minting the bare row is the standing bug in
+per-username row: `effectiveRealmPermissions` unions the realm's `users` grant,
+its `*` grant, and the user's own row. The `users` grant counts only for a user
+of the paired homeserver, named by `matrixServerName` (ADR 004 §1.4), whose
+matrix account exists. It is the single derivation —
+`RealmPermissionChecker.for` and `fetchEffectiveRealmPermissions` both call it,
+the latter resolving the `users` grant from a homeserver URL and the configured
+server name for callers that hold no matrix client. **Every mint site must
+produce that same union.** Minting the bare row is the standing bug in
 this area: on a realm with a shared grant it yields a token that can never match,
 and the failure is a flat `PermissionMismatch` 401 with nothing pointing at the
 minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops the
@@ -259,11 +261,10 @@ re-mint, while a legitimate device recovers without the user noticing.
   revocation and refuses a delegated session — `handle-download-realm` is the
   precedent. Calling `retrieveTokenClaim` alone accepts a delegated session as
   the user in full.
-- Match the sync/async shape of any interface you implement exactly. Synapse's
-  `OidcMappingProvider.get_remote_user_id` is **sync** while its siblings are
-  async; declaring it `async def` made the stored external id a coroutine repr
-  containing a reused heap address, which cross-linked Google identities into
-  each other's accounts. Mocked unit tests cannot catch an interface-shape
-  mismatch — assert the shape, or drive the real handler.
+- Match the sync/async shape of any interface you implement exactly. A sync
+  method declared async returns a coroutine, and storing its repr as an
+  identifier (which embeds a reused heap address) can cross-link one user's
+  external identity into another's account. Mocked unit tests cannot catch an
+  interface-shape mismatch — assert the shape, or drive the real handler.
 - Reads of the `users` row treat a missing row as _not_ revoked. That is safe
   only because `revokeUserSessions` upserts; preserve that pairing.

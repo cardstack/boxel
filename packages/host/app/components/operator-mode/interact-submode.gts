@@ -155,6 +155,9 @@ export default class InteractSubmode extends Component {
   @action private handleEscape(event: KeyboardEvent) {
     // A modal owns Escape regardless of where focus is.
     if (document.body.classList.contains('has-modal')) return;
+    // The workspace chooser covers the stacks, so Escape never reaches a
+    // card hidden behind it.
+    if (this.operatorModeStateService.workspaceChooserOpened) return;
 
     if (usesEscape(event.target)) {
       // Field inside a stack card: move focus out to the card, so a

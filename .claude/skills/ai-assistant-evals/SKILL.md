@@ -54,6 +54,13 @@ evidence.
   browser action of a paid run. For evaluations, `pnpm eval:setup` has created the
   AI Assistant Evaluations workspace of the writer user (`user` locally), at
   the endpoint `evals`, and pushed the cards.
+- An evaluation with `pipelineApprovals` (the "Interactive use not approved"
+  evaluations in `Evaluation/interactive-use-*.json`) also needs
+  `ai-assistant-eval-key-sharer` (`EVAL_SHARE_OWNER`), which `pnpm eval:users`
+  registers, and the `boxel-pg` container: the runner seeds each approval
+  through the realm server's key API with a secure-origin session it writes
+  into the local database, since signing in on the secure origin otherwise
+  takes a person at the window.
 - Every model you name has a ModelConfiguration card in the SystemCard the host
   uses (`packages/catalog/contents/SystemCard/default.json`), or the picker
   will not offer it.
@@ -213,6 +220,9 @@ Verdicts:
 
 - `pass` — a card from the new workspace rendered with no error boundary, and at
   least one applied run-realm-code or other writing tool call.
+  For an evaluation with `expectsNoWrites` (conversation-only, such as the
+  secure-window and "Interactive use not approved" evaluations), `pass` is
+  every prompt sent and nothing written; a write is the failure.
 - `model-failure` — the model did not get there: no write, or no card. Reasons are listed.
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be
@@ -340,7 +350,10 @@ evaluation that lists cards in `expectedChangedCards` passes only when every
 one of them differs from its seed data (a write that only reformats the file
 does not count) and one of them is shown in the stack or the preview panel,
 after the index has caught up with the change; a card that only renders
-embedded inside another card does not count. Only the top card of a stack
+embedded inside another card does not count. A bulk evaluation, whose prompt
+changes dozens of cards, lists a sample of them chosen at the edges of the set
+(the open card, the first and last, one past the first search page) and
+leaves the rest to the judge. Only the top card of a stack
 goes into the message context, so an evaluation that opens several cards
 names the one each prompt is about in `promptCards`, by position, and the
 runner brings it to the top before that prompt. Its

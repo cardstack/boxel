@@ -8,7 +8,6 @@ import pluralize from 'pluralize';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type {
-  CodeRef,
   Filter,
   RenderableSearchEntryLike,
   SearchEntryWireQuery,
@@ -25,6 +24,7 @@ import {
   buildQuerySections,
   buildRecentsSection,
   buildUrlSection,
+  type OfferToCreate,
   type RealmSection,
   type RecentsSection,
   type SearchSheetSection,
@@ -75,7 +75,7 @@ interface Signature {
     // suppressed rather than offered.
     realmsLocked?: boolean;
     baseFilter?: Filter;
-    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
+    offerToCreate?: OfferToCreate;
     // The main search's query, which a realm section re-issues scoped to its
     // own realm to load rows past the first page.
     pageQuery?: SearchEntryWireQuery;
@@ -211,6 +211,8 @@ export default class SheetResults extends Component<Signature> {
         realmURLs: this.args.realms,
         offerToCreate: this.args.offerToCreate,
         realm: this.realm,
+        canonical: (identifier) =>
+          this.network.virtualNetwork.keyForIdentifier(identifier),
         realmTotals: this.args.mainResults.meta.realmTotals,
       }),
       this.args.pagination.focusedSection,

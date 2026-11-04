@@ -105,6 +105,15 @@ export function setupPublicReadableRealms(
   }
 }
 
+// Leave a realm out of the sessions the signed-in user is handed, so the app
+// learns of it only by looking it up, as it does a realm it meets in a link.
+// Requests to the realm are still answered.
+export function withholdRealmSession(realmURL: string) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  state.realmPermissions.delete(ensureTrailingSlash(realmURL));
+}
+
 // Simulate a realm being archived or unarchived out of band (another tab, the
 // CLI, an AI agent): flip its membership in the archived set that the mock's
 // `_realm-auth` (active list) and `_archived-realms` endpoints read from,

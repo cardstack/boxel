@@ -26,10 +26,12 @@ import {
   handleDeleteSystemKey,
   handleListSystemKeys,
   handleReplaceSystemKey,
+  handleSetSystemKeyResponseCap,
   handleShowSystemKey,
 } from './handlers/handle-system-keys.ts';
 import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handlePrefixRealmsRequest from './handlers/handle-prefix-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
@@ -106,10 +108,15 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_BINDINGS_PATH,
+  KEY_LIMIT_NOTICES_PATH,
+  KEY_POLICY_NOTICES_PATH,
   KEY_SHARE_NOTICES_PATH,
   KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
+  OAUTH_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
+  PLATFORM_OAUTH_CLIENTS_PATH,
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
@@ -132,6 +139,7 @@ import {
 } from './handlers/handle-secure-session.ts';
 import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
+import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   handleAddUserKey,
@@ -146,8 +154,18 @@ import {
   handleRemoveUserKeyGrant,
 } from './handlers/handle-user-key-grants.ts';
 import {
+  handleApproveKeyBindings,
+  handleListKeyBindings,
+  handlePreviewKeyBindings,
+  handleKeyBindingBatch,
+  handleRevokeKeyBinding,
+} from './handlers/handle-key-bindings.ts';
+import {
+  handleDeclineKeyPolicyNotice,
+  handleListKeyPolicyNotices,
   handleListKeyShareNotices,
   handleListKeyShares,
+  handleMarkKeyPolicyNoticesRead,
   handleResumeKeyShare,
   handleShareKey,
   handleSuspendKeyShare,
@@ -155,9 +173,32 @@ import {
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
 import {
+  handleListKeyLimitNotices,
+  handleMarkKeyLimitNoticesRead,
+  handleSetKeyShareLimits,
+  handleSetUserKeyLimits,
+  handleSetUserKeyAnonymousUse,
+} from './handlers/handle-key-limits.ts';
+import {
+  handleKeyShareUsage,
+  handleUserKeyUsage,
+} from './handlers/handle-key-usage.ts';
+import {
   handleSecureWindowContext,
   handleSecureWindowRealms,
+  handleSecureWindowCards,
 } from './handlers/handle-secure-window.ts';
+import {
+  handleAddPlatformClient,
+  handleCompleteConnect,
+  handleDeletePlatformClient,
+  handleListConnectableClients,
+  handleListPlatformClients,
+  handleOAuthCallback,
+  handleReplacePlatformClient,
+  handleShowPlatformClient,
+  handleStartConnect,
+} from './handlers/handle-oauth.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -270,6 +311,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get(`/${PREFIX_REALMS_ENDPOINT}`, handlePrefixRealmsRequest(args));
   router.get(
     '/_public-realms',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -390,6 +432,21 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
   );
+  router.put(
+    `${USER_KEYS_PATH}/:keyId/limits`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetUserKeyLimits(args),
+  );
+  router.get(
+    `${USER_KEYS_PATH}/:keyId/usage`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUserKeyUsage(args),
+  );
+  router.put(
+    `${USER_KEYS_PATH}/:keyId/anonymous-use`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetUserKeyAnonymousUse(args),
+  );
   router.post(
     USER_KEY_GRANTS_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -399,6 +456,31 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEY_GRANTS_PATH}/:grantId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRemoveUserKeyGrant(args),
+  );
+  router.get(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyBindings(args),
+  );
+  router.get(
+    `${KEY_BINDINGS_PATH}/preview`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePreviewKeyBindings(args),
+  );
+  router.post(
+    KEY_BINDINGS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleApproveKeyBindings(args),
+  );
+  router.post(
+    `${KEY_BINDINGS_PATH}/batch`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleKeyBindingBatch(args),
+  );
+  router.delete(
+    `${KEY_BINDINGS_PATH}/:bindingId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRevokeKeyBinding(args),
   );
   router.get(
     KEY_SHARES_PATH,
@@ -430,11 +512,64 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSwapKeyIntoShare(args),
   );
+  router.put(
+    `${KEY_SHARES_PATH}/:shareId/limits`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetKeyShareLimits(args),
+  );
+  router.get(
+    `${KEY_SHARES_PATH}/:shareId/usage`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleKeyShareUsage(args),
+  );
   router.get(
     KEY_SHARE_NOTICES_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListKeyShareNotices(args),
   );
+  router.get(
+    KEY_POLICY_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyPolicyNotices(args),
+  );
+  router.post(
+    `${KEY_POLICY_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyPolicyNoticesRead(args),
+  );
+  router.post(
+    `${KEY_POLICY_NOTICES_PATH}/:id/decline`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeclineKeyPolicyNotice(args),
+  );
+  router.get(
+    KEY_LIMIT_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyLimitNotices(args),
+  );
+  router.post(
+    `${KEY_LIMIT_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkKeyLimitNoticesRead(args),
+  );
+  router.get(
+    `${OAUTH_PATH}/clients`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListConnectableClients(args),
+  );
+  router.post(
+    `${OAUTH_PATH}/connections`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleStartConnect(args),
+  );
+  router.post(
+    `${OAUTH_PATH}/connections/complete`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCompleteConnect(args),
+  );
+  // The vendor sends the person here with no Boxel session; it only hands
+  // the code on to the secure window, which finishes under its own session.
+  router.get(`${OAUTH_PATH}/callback`, handleOAuthCallback(args));
   router.post(
     `${SECURE_WINDOW_PATH}/context`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -444,6 +579,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${SECURE_WINDOW_PATH}/realms`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowRealms(args),
+  );
+  router.post(
+    `${SECURE_WINDOW_PATH}/cards`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSecureWindowCards(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,
@@ -517,6 +657,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
@@ -528,6 +669,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
@@ -539,6 +681,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       prerenderer: args.prerenderer,
       dbAdapter: args.dbAdapter,
       matrixURL: args.matrixClient.matrixURL.href,
+      matrixServerName: args.matrixClient.serverName,
       createPrerenderAuth,
     }),
   );
@@ -630,6 +773,38 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_system-keys/:id',
     systemKeysAuthorization,
     handleDeleteSystemKey(args),
+  );
+  router.put(
+    '/_system-keys/:id/response-size-cap',
+    systemKeysAuthorization,
+    handleSetSystemKeyResponseCap(args),
+  );
+  // The OAuth clients Boxel registers itself, which connect mode offers
+  // everyone. The same operator token as system keys reaches these.
+  router.get(
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    systemKeysAuthorization,
+    handleListPlatformClients(args),
+  );
+  router.post(
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    systemKeysAuthorization,
+    handleAddPlatformClient(args),
+  );
+  router.get(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleShowPlatformClient(args),
+  );
+  router.patch(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleReplacePlatformClient(args),
+  );
+  router.delete(
+    `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
+    systemKeysAuthorization,
+    handleDeletePlatformClient(args),
   );
 
   // Diagnostic sessions: what an operator renders a live card under to see it

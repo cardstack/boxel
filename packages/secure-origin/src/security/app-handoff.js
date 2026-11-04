@@ -79,7 +79,12 @@ export function rememberReturn(listed) {
     '',
     window.location.pathname + window.location.search,
   );
-  let target = returnFromFragment(hash, listed);
+  keepReturn(returnFromFragment(hash, listed));
+}
+
+// Keeps `target`, already checked, as the page this tab's sign-in hands over
+// to; undefined forgets any kept before.
+export function keepReturn(target) {
   if (target) {
     sessionStorage.setItem(RETURN_KEY, target);
   } else {

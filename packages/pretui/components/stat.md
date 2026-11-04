@@ -6,12 +6,15 @@ A headline number with a label and an optional signed change: the KPI tile. Use 
 
 ```
 @label, @value
+@tone? (unset = no dot)
 @delta?, @roll? (default true), @minDigits?, @placeholder? ('—')
 @locale?, @style?, @currency?, @minimumFractionDigits?, @maximumFractionDigits?, @useGrouping?, @options?
 @announce?, @duration?, @ease?, @stagger?
 ```
 
 The `Intl.NumberFormat` surface is passed through wholesale, so currency, percent and grouping are the platform's, not a bespoke formatter.
+
+`@tone` takes the same tone spellings as **Chip** (`PretuiToneArg`) and draws a small dot before the label in that tone's hue (`--success`, `--warning`, `--destructive`, …). The dot is `aria-hidden` decoration: colour is never the only carrier, so the label or hint must still say the status ("At risk", "offers stalled").
 
 Three decisions worth understanding.
 
@@ -50,7 +53,7 @@ Gaps:
 
 ## Theming
 
-`--pretui-stat-line` (the headline line-height ratio, and the thing the digit cell height is derived from — the one token that moves both together), `--pretui-stat-min-digits` (set from `@minDigits`), plus the kit's type scale for the headline and `--muted-foreground` for the label. The delta's colours are **Delta**'s (`--success`, `--destructive`, `--muted-foreground`), and the rolling digits' motion tokens are **Odometer**'s (`@duration`, `@ease`, `@stagger` are args, not tokens).
+`--pretui-stat-line` (the headline line-height ratio, and the thing the digit cell height is derived from — the one token that moves both together), `--pretui-stat-min-digits` (set from `@minDigits`), `--pretui-stat-dot-hue` (the `@tone` dot's colour, set per tone), plus the kit's type scale for the headline and `--muted-foreground` for the label. The delta's colours are **Delta**'s (`--success`, `--destructive`, `--muted-foreground`), and the rolling digits' motion tokens are **Odometer**'s (`@duration`, `@ease`, `@stagger` are args, not tokens).
 
 `--pretui-stat-line` is the important one: a theme that restyles the headline's line-height through it gets the digit cells moving in lockstep and the baseline staying put. An override that instead sets `line-height` directly on `.pretui-stat-value` will desynchronize the two and the label will shift when the value rolls.
 

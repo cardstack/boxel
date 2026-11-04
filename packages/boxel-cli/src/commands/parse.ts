@@ -15,6 +15,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { prefixRealmNetworkFor } from '@cardstack/runtime-common/prefix-realm-network';
+import {
+  baseRealmRRI,
+  PREFIX_REALM_PREFIXES,
+} from '@cardstack/runtime-common/realm-prefixes';
 import {
   REALM_CACHE_DIR,
   collectGateDiagnostics,
@@ -28,7 +33,10 @@ import {
   NO_ACTIVE_PROFILE_ERROR,
   type ProfileManager,
 } from '../lib/profile-manager.ts';
-import { resolveRealmIdentifier } from '../lib/resolve-realm-identifier.ts';
+import {
+  resolveRealmIdentifier,
+  resolveRealmServerUrl,
+} from '../lib/resolve-realm-identifier.ts';
 import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { findBoxelCliRoot } from '../lib/find-package-root.ts';
@@ -220,24 +228,14 @@ const CLI_DEPENDENCY_PACKAGES = (() => {
 })();
 
 /**
- * The realm prefixes a card may import and this command can fetch.
- *
- * Spelled out here rather than imported from
- * `@cardstack/runtime-common/realm-prefixes`: that module's type-only imports
- * reach `@cardstack/base/*`, which this package's deliberately dependency-light
- * `lint:types` cannot resolve. The cost of the copy is that a realm added to
- * the declaration has to be added here too; the check that catches it is this
- * package's own type-check staying green.
- *
- * The base realm is deliberately absent: it is already aliased to real sources
- * below and needs no network call.
+ * The realm prefixes a card may import and this command can fetch: the
+ * declared set, minus the base realm, which is aliased to real sources below
+ * and needs no network call. Names only — where each is served comes from the
+ * realm server's prefix map at parse time.
  */
-const RESOLVABLE_PREFIXES = [
-  '@cardstack/catalog/',
-  '@cardstack/skills/',
-  '@cardstack/openrouter/',
-  '@cardstack/pretui/',
-];
+const RESOLVABLE_PREFIXES = PREFIX_REALM_PREFIXES.filter(
+  (prefix) => prefix !== baseRealmRRI,
+);
 
 export interface ParseError {
   file: string;
@@ -314,18 +312,21 @@ async function retryWithPoll<T>(
 }
 
 /**
- * The origin realm prefixes resolve against.
- *
- * When `--realm` was passed, that realm's own origin serves the prefix realms
- * alongside it. A workspace parse has no realm, so fall back to the active
- * profile's realm server — the same host `boxel search` would query. Neither
- * available means the imports get the shim.
+ * Where each prefix realm is served, read off the network built from the
+ * prefix map of the realm server this CLI is configured against — the same
+ * server `boxel search` queries. Undefined when no server is configured, and
+ * rejects when its map cannot be read; the staging calls this only once a file
+ * references a prefix realm, and reports either case as a fall back to the
+ * shim.
  */
-function realmOriginForPrefixes(
-  realmUrl: string | undefined,
+async function prefixRealmURLsForParse(
   pm: ProfileManager,
-): string | undefined {
-  return realmUrl || pm.getActiveProfile()?.profile.realmServerUrl;
+): Promise<Record<string, string> | undefined> {
+  let server = resolveRealmServerUrl({ profileManager: pm });
+  if (!server.ok) {
+    return undefined;
+  }
+  return (await prefixRealmNetworkFor(server.url)).prefixRealmURLs();
 }
 
 // ---------------------------------------------------------------------------
@@ -357,7 +358,7 @@ export async function parseRealm(
   }
 
   if (realmUrl) {
-    let resolvedRealm = resolveRealmIdentifier(realmUrl, {
+    let resolvedRealm = await resolveRealmIdentifier(realmUrl, {
       profileManager: pm,
     });
     if (!resolvedRealm.ok) {
@@ -453,7 +454,7 @@ export async function parseRealm(
     if (gtsContents.length > 0) {
       try {
         let glintResult = await runGlintCheck(gtsContents, {
-          realmOrigin: realmOriginForPrefixes(normalizedRealmUrl, pm),
+          readPrefixRealmURLs: () => prefixRealmURLsForParse(pm),
           // The staging walk authenticates the same way fetchSource above
           // does, so a non-public prefix realm resolves to real sources
           // instead of degrading to the shim.
@@ -706,11 +707,12 @@ function linkResolvedDeps(nodeModulesDir: string): void {
  */
 interface RunGlintCheckOptions {
   /**
-   * Origin the realm prefixes are served from — the realm being parsed, or the
-   * active profile's realm server when parsing a local workspace. Without it,
+   * Reads where each prefix realm is served, as the realm server's prefix map
+   * has it; the staging calls it only when a file references a prefix realm
+   * (see `StageRealmSourcesOptions.readPrefixRealmURLs`). Without it,
    * realm-prefixed imports fall back to the ambient shim.
    */
-  realmOrigin?: string;
+  readPrefixRealmURLs?: () => Promise<Record<string, string> | undefined>;
   fetchFn?: typeof globalThis.fetch;
   /** Identity behind `fetchFn`, partitioning the realm-source memo. */
   cacheScope?: string;
@@ -746,7 +748,8 @@ export async function runGlintCheck(
       tempDir,
       files,
       prefixes: RESOLVABLE_PREFIXES,
-      origin: glintOptions.realmOrigin,
+      readPrefixRealmURLs:
+        glintOptions.readPrefixRealmURLs ?? (async () => undefined),
       fetchFn: glintOptions.fetchFn,
       cacheScope: glintOptions.cacheScope,
       onWarn: (message) => cliLog.warn(message),

@@ -166,6 +166,7 @@ import {
   CAPTURE_SERVING_PREFIX,
   PARTIAL_WRITE_SUFFIX,
   RealmPaths,
+  sameResourceIn,
   ensureTrailingSlash,
   isCaptureServingPath,
   withoutCaptureServingPrefix,
@@ -204,6 +205,11 @@ import {
   getContentMeta,
   getFileMetaForPaths,
 } from './file-meta.ts';
+import type {
+  ChangeEventChange,
+  ChangeEventInput,
+  RealmHistory,
+} from './realm-history.ts';
 import {
   systemError,
   notFound,
@@ -321,6 +327,7 @@ import {
 } from './card-operations/capabilities.ts';
 import {
   emitCapabilityCheck,
+  emitChangeJournal,
   type CapabilityCheckEvent,
   type PolicyRoute,
 } from './card-operations/telemetry.ts';
@@ -548,6 +555,13 @@ import {
   validateWriteSize,
 } from './write-size-validation.ts';
 import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import {
+  POLICY_OPENS_SHARES_CODE,
+  policyAuditOptionsFor,
+  type PolicyAuditOptions,
+  type PolicyShareAudit,
+  type PolicyWriteAuditor,
+} from './policy-share-audit.ts';
 import type { JsonValue } from './json-validation.ts';
 import {
   computeContentHash,
@@ -706,6 +720,19 @@ export function namesRealmPolicy(
     !namesNoRealmPolicy(policy) &&
     !('problem' in readRealmPolicyReference(policy, virtualNetwork))
   );
+}
+
+// The policy card a RealmConfig `policy` value names, as the realm reads it,
+// or undefined where it names none the realm would keep.
+export function realmPolicyCardNamed(
+  policy: unknown,
+  virtualNetwork: VirtualNetwork,
+): string | undefined {
+  if (namesNoRealmPolicy(policy)) {
+    return undefined;
+  }
+  let reference = readRealmPolicyReference(policy, virtualNetwork);
+  return 'problem' in reference ? undefined : reference.card;
 }
 
 // The reference a `policy` value makes, or what is wrong with it in words for
@@ -1677,6 +1704,9 @@ type ModuleLoadResult =
   | { kind: 'not-found'; response: ResponseWithNodeStream }
   | { kind: 'non-module'; response: ResponseWithNodeStream }
   | { kind: 'shimmed'; response: ResponseWithNodeStream }
+  // A module answered from the in-memory module cache for a caller the policy
+  // gate admitted. The entry is already cached, so there is nothing to fill.
+  | { kind: 'cache-hit'; response: ResponseWithNodeStream }
   | {
       kind: 'not-modified';
       canonicalPath: LocalPath;
@@ -2108,6 +2138,38 @@ async function readRangeBytes(
   return bytes;
 }
 
+// A write refused for want of the confirmation of what its policy change opens
+// to people who aren't signed in. The list goes in `meta` for a client to show
+// and confirm; the message says the same for a reader of the error alone.
+function policyShareAuditRefusal(audit: PolicyShareAudit): CardError {
+  let starting = audit.entries.filter((entry) => entry.keyAllowsAnonymous);
+  let refusing = audit.entries.filter((entry) => !entry.keyAllowsAnonymous);
+  let names = (entries: PolicyShareAudit['entries']) =>
+    entries
+      .map((entry) =>
+        entry.label === null
+          ? `a key shared into ${entry.realm}`
+          : `${entry.label} (${entry.realm})`,
+      )
+      .join(', ');
+  let parts = [
+    `This change lets people who aren't signed in make calls that send a key shared into the workspace.`,
+    ...(starting.length ? [`They will start using: ${names(starting)}.`] : []),
+    ...(refusing.length
+      ? [
+          `These keys don't allow it, and will refuse them until their owners allow it: ${names(refusing)}.`,
+        ]
+      : []),
+    `Confirm to save it; the keys' owners are told.`,
+  ];
+  let error = new CardError(parts.join(' '), {
+    status: 409,
+    title: 'Confirm the shared keys this change opens',
+  });
+  error.meta = { code: POLICY_OPENS_SHARES_CODE, audit };
+  return error;
+}
+
 // Which ceiling a write is held to. A card's `.json` and a description of one
 // are both cards; everything else is a file. Read once here so what a batch is
 // held to before it commits is what the commit applies.
@@ -2281,8 +2343,21 @@ export interface CommitBatchResult {
   indexPending?: true;
 }
 
+// Who an operations request is from, as the batch and its operations read it.
+interface OperationsCaller {
+  actor: string;
+  clientRequestId: string;
+  policyAudit?: PolicyAuditOptions;
+}
+
 export interface WriteOptions {
   clientRequestId?: string | null;
+  // Set by a request that writes on a caller's behalf: the write is audited
+  // for the shares a policy it changes opens to people who aren't signed in,
+  // and refused unless it carries the confirmation of what the audit lists
+  // (see `policy-share-audit.ts`). A write the realm makes on its own account
+  // leaves it unset and is not audited.
+  policyAudit?: PolicyAuditOptions;
   // The cards among this write's own files whose content the caller supplied
   // verbatim, named the way the invalidation event names them. Reported on
   // that event so a client holding these cards can tell them from the ones
@@ -2522,8 +2597,13 @@ interface Options {
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
   // identify carries no server stack (see `withholdsStacksFrom`), and, at a
   // host's root, a crawler's `/robots.txt` gets a default answer when the
-  // realm holds none.
+  // realm holds none. Its policy keeps only the grants that send a key shared
+  // with its source (see `sharedKeyCallsOnly`).
   published?: true;
+  // For a published realm, the realm it was published from. Its policy card is
+  // the source's, copied, so a rule naming a type by the source's own URL names
+  // the copy of that type here.
+  sourceRealmURL?: string;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2800,6 +2880,7 @@ export class Realm {
   #realmSecretSeed: string;
   #disableModuleCaching = false;
   #published = false;
+  #sourceRealmURL: string | undefined;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   // The root ignore files' mtimes when their rules were last read.
@@ -2808,11 +2889,16 @@ export class Realm {
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
-    for await (let _entry of this.#adapter.readdir(directory)) {
-      // draining the listing is the whole effect; the entries are not used
-    }
-  });
+  #directoryViewRefresher = new DirectoryViewRefresher(
+    async (directory) => {
+      let names: string[] = [];
+      for await (let entry of this.#adapter.readdir(directory)) {
+        names.push(entry.name);
+      }
+      return names;
+    },
+    { exists: (path) => this.#adapter.exists(path) },
+  );
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -2863,12 +2949,6 @@ export class Realm {
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
   // promise's eventual settle.
-  // Compiles for callers the policy gate admitted, keyed by path and the
-  // validator of the version being compiled, so concurrent admitted callers
-  // share one and nothing outlives it (see `#moduleForGatedCaller`). Kept apart
-  // from `#inFlightTranspiles`, which a reader's request joins without the gate.
-  #inFlightGatedCompiles: Map<string, Promise<ModuleTranspileResult>> =
-    new Map();
   #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
     new Map();
   // Monotonic count of transpileJS invocations, used by the CS-11029
@@ -2904,7 +2984,16 @@ export class Realm {
   #moduleEtagVariant: string;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
+  #policyWriteAuditor: PolicyWriteAuditor | undefined;
+  // The requests the realm server handed to `handlePipeline`: runs it makes
+  // on its own, never a request off the network, which is a new object every
+  // time and so never in here.
+  #pipelineRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
+  // The change journal every write appends to, and the reader the history
+  // operations read from. Absent in a realm that records no history, such as
+  // the in-browser realm.
+  #history: RealmHistory | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
   // Absent in deployments that don't configure one (the in-browser realm),
@@ -3084,6 +3173,8 @@ export class Realm {
       realmFor,
       anonymousRateLimiter,
       callApi,
+      policyWriteAuditor,
+      history,
     }: {
       url: string;
       // The name the realm's resources have wherever they are referred to
@@ -3133,6 +3224,14 @@ export class Realm {
       // outbound client. Without it, the realm sends no request outside
       // itself and refuses every `callApi`.
       callApi?: CallApiSender;
+      // Audits a write that may change a policy in force against the shares
+      // in the realms that policy governs (see `policy-share-audit.ts`).
+      // Without it, a write is never audited.
+      policyWriteAuditor?: PolicyWriteAuditor;
+      // The change journal every write appends to, in the transaction that
+      // updates its file meta, and the reader the history operations use.
+      // Without it, the realm records no history.
+      history?: RealmHistory;
     },
     opts?: Options,
   ) {
@@ -3146,6 +3245,8 @@ export class Realm {
     this.#virtualNetwork = virtualNetwork;
     this.#realmFor = realmFor;
     this.#callApi = callApi;
+    this.#policyWriteAuditor = policyWriteAuditor;
+    this.#history = history;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -3153,7 +3254,7 @@ export class Realm {
     this.#matrixClient = matrixClient;
     this.#matrixClientUserId = userIdFromUsername(
       this.#matrixClient.username,
-      this.#matrixClient.matrixURL.href,
+      this.#matrixClient.serverName,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
     this.#transpileCoordinator = transpileCoordinator;
@@ -3167,6 +3268,7 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#published = Boolean(opts?.published);
+    this.#sourceRealmURL = opts?.published ? opts.sourceRealmURL : undefined;
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -4683,6 +4785,15 @@ export class Realm {
     // about to be discarded by the generation guard); they install
     // their own pending against current source instead.
     this.#inFlightTranspiles.delete(path);
+    // A compile in flight is keyed by the name its request asked for, and an
+    // import names a module without its extension, so the compile of this
+    // file may sit under that name instead. Dropped too: a caller asking for
+    // the name after this point resolves it afresh, perhaps to a sibling with
+    // another extension, and must not be handed this file's old compile.
+    let extensionless = trimExecutableExtension(path);
+    if (extensionless !== path) {
+      this.#inFlightTranspiles.delete(extensionless);
+    }
     // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
     // because invalidateCache is sync (called from the LISTEN handler
     // among others). Best-effort by design — every peer's listener
@@ -5161,6 +5272,146 @@ export class Realm {
     }
   }
 
+  // The audit of a write that may change a policy in force, refusing it when
+  // the policy it puts in force opens shares to people who aren't signed in
+  // and the write doesn't carry the confirmation of that list. Undefined where
+  // the write isn't audited or opens nothing.
+  async #auditPolicyWrite(
+    files: Map<LocalPath, WriteContent>,
+    options: WriteOptions | undefined,
+  ): Promise<PolicyShareAudit | undefined> {
+    let auditor = this.#policyWriteAuditor;
+    let requested = options?.policyAudit;
+    if (!auditor || !requested || files.size === 0) {
+      return undefined;
+    }
+    let audited = await auditor.audit({
+      realmURL: this.url,
+      paths: [...files.keys()],
+      actor: requested.actor,
+      contentOf: (path) => this.#auditedContentOf(files, path),
+      writesPolicyCard: async (path) =>
+        this.#writesPolicyCard(path, await this.#auditedContentOf(files, path)),
+    });
+    if (!audited || audited.audit.entries.length === 0) {
+      return undefined;
+    }
+    if (requested.confirmation !== audited.audit.confirmation) {
+      throw policyShareAuditRefusal(audited.shown);
+    }
+    return audited.audit;
+  }
+
+  async #auditedContentOf(
+    files: Map<LocalPath, WriteContent>,
+    path: LocalPath,
+  ): Promise<string> {
+    let content = files.get(path);
+    if (content === undefined) {
+      throw new Error(`${path} is not among the files being written`);
+    }
+    return await this.#writeContentText(content);
+  }
+
+  // Whether `content`, written at `path`, is a policy card: its `adoptsFrom`
+  // names RealmPolicy or a type descending from it, resolved against the card
+  // as the realm resolves it. A document naming no type, or one that doesn't
+  // resolve, isn't one.
+  async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
+    if (!content.includes('adoptsFrom')) {
+      return false;
+    }
+    let adoptsFrom: unknown;
+    try {
+      adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
+    } catch {
+      return false;
+    }
+    if (
+      !adoptsFrom ||
+      typeof adoptsFrom !== 'object' ||
+      typeof (adoptsFrom as { module?: unknown }).module !== 'string' ||
+      typeof (adoptsFrom as { name?: unknown }).name !== 'string'
+    ) {
+      return false;
+    }
+    let { module, name } = adoptsFrom as { module: string; name: string };
+    // A type that doesn't resolve, or a deployment that maps no catalog for
+    // RealmPolicy to come from, names no policy card: no realm there can be
+    // governed by one.
+    try {
+      let codeRef = codeRefWithAbsoluteIdentifier(
+        { module: rri(module), name },
+        this.paths.fileURL(path),
+        undefined,
+        this.#virtualNetwork,
+      );
+      if (!isResolvedCodeRef(codeRef)) {
+        return false;
+      }
+      if (
+        this.#isPolicyCard([
+          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+        ])
+      ) {
+        return true;
+      }
+      return this.#isPolicyCard(
+        (await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // A notice that can't be recorded costs the write nothing: it has landed.
+  async #notifyPolicyShareAudit(
+    audit: PolicyShareAudit,
+    savedBy: string | null,
+  ): Promise<void> {
+    try {
+      await this.#policyWriteAuditor?.notify(audit, savedBy);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `could not record the notices of a policy change that opens shares to people who aren't signed in: ${stringifyErrorForLog(err)}`,
+      );
+    }
+  }
+
+  // What a write's content will be once written, as text. A splice is
+  // assembled from the stored file it edits; that is only ever asked of a
+  // policy card or a realm's config, which are small.
+  async #writeContentText(content: WriteContent): Promise<string> {
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (content instanceof Uint8Array) {
+      return new TextDecoder().decode(content);
+    }
+    let parts: Uint8Array[] = [];
+    for (let segment of content.segments) {
+      if (segment.kind === 'text') {
+        parts.push(segment.bytes);
+      } else if (segment.end > segment.start) {
+        parts.push(
+          await readRangeBytes(
+            this.#adapter,
+            content.path,
+            segment.start,
+            segment.end - segment.start,
+          ),
+        );
+      }
+    }
+    let bytes = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+    let offset = 0;
+    for (let part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return new TextDecoder().decode(bytes);
+  }
+
   async #commitBatchUnlockedInner(
     batch: CommitBatch,
     options?: WriteOptions,
@@ -5195,6 +5446,9 @@ export class Realm {
       // time here however many gates it passed through.
       stageCursor?.mark('drain');
     }
+    // Audited once the drain has settled what the realm resolves against and
+    // before any byte is written, so a refusal leaves the realm as it was.
+    let policyShareAudit = await this.#auditPolicyWrite(files, options);
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: {
@@ -5321,374 +5575,404 @@ export class Realm {
       return aIsModule ? -1 : 1;
     });
 
-    for (let [path, content] of orderedFiles) {
-      let url = this.paths.fileURL(path);
-      if (isSplicedSource(content)) {
-        // A splice edits a stored card, so it neither needs a module flushed
-        // to the index ahead of it — nothing about it is serialized — nor
-        // stands in for the instance that does. `lastWriteType` is therefore
-        // left as the last write that did serialize.
-        announceIndexing(url);
-        let written = await this.#writeSplicedUnlocked(path, content);
-        results.push(written.result);
-        fileMetaRows.push(written.row);
-        updatedFiles.push(path);
-        urls.push(url);
-        continue;
-      }
-      let currentWriteType: 'module' | 'instance' | undefined =
-        hasExecutableExtension(path)
-          ? 'module'
-          : typeof content === 'string' &&
-              path.endsWith('.json') &&
-              isCardDocumentString(content)
-            ? 'instance'
-            : undefined;
-
-      // Flush any modules written so far in this batch to the index
-      // BEFORE we serialize the next instance. fileSerialization calls
-      // lookupDefinition, which needs dependent modules to be indexed;
-      // without this, the first instance after a module in the batch
-      // throws FilterRefersToNonexistentTypeError and the whole atomic
-      // batch rolls back.
-      // TODO: we could be more precise here and keep track of what
-      // modules the instances depend on and only flush when an instance
-      // depends on a module that is part of this operation.
-      if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // The bytes written so far belong to this batch's durable write, not
-        // to the index pass about to run. Closed here so each pass's files
-        // are reported ahead of the queue insert that follows them, the same
-        // order the single-pass case reports them in.
-        stageCursor?.mark('persist');
-        await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
-        urls = [];
-      }
-
-      // The document this write stores, when the write re-serializes a card.
-      // The unchanged-file check below compares a stored card with it by
-      // JSON value rather than by bytes.
-      let serializedCard: LooseSingleCardDocument | undefined;
-      if (typeof content === 'string') {
-        try {
-          let doc = JSON.parse(content);
-          if (isCardResource(doc.data) && options?.serializeFile) {
-            serializedCard = await this.fileSerialization(
-              { data: merge(doc.data, { meta: { realmURL: this.url } }) },
-              url,
-            );
-            content = JSON.stringify(serializedCard, null, 2);
-          }
-        } catch (e: any) {
-          if (
-            e.message?.includes?.('not found') ||
-            isFilterRefersToNonexistentTypeError(e)
-          ) {
-            throw e;
-          }
+    let deleteURLs: URL[] = [];
+    // The paths the append leg changed, whose recorded size is the file's
+    // length after the append rather than the length of the bytes added.
+    let appendedPaths = new Set<LocalPath>();
+    // The three legs below run inside this `try`. Whatever they leave on disk
+    // when one of them throws is still described in `fileMetaRows` and
+    // `removedFiles`, and the `catch` records it before the error reaches the
+    // caller: the rows and the change event for a batch that failed partway,
+    // which is what history and reconciliation see of it.
+    try {
+      for (let [path, content] of orderedFiles) {
+        let url = this.paths.fileURL(path);
+        if (isSplicedSource(content)) {
+          // A splice edits a stored card, so it neither needs a module flushed
+          // to the index ahead of it — nothing about it is serialized — nor
+          // stands in for the instance that does. `lastWriteType` is therefore
+          // left as the last write that did serialize.
+          announceIndexing(url);
+          let written = await this.#writeSplicedUnlocked(path, content);
+          results.push(written.result);
+          fileMetaRows.push(written.row);
+          updatedFiles.push(path);
+          urls.push(url);
+          continue;
         }
-      }
-      let sizeType: 'card' | 'file' =
-        typeof content === 'string' &&
-        path.endsWith('.json') &&
-        isCardDocumentString(content)
-          ? 'card'
-          : 'file';
-      this.assertWriteSize(content, sizeType, path);
-      // The stored file is opened before it is read, so its length can rule
-      // the comparison out without any of it being held. Only a file of
-      // exactly the staged content's length can be the staged content, and
-      // a replacement almost never is — so this is what keeps replacing a
-      // file that is large from costing its size. `openFile` reports the
-      // length from a stat it already performs, and reading the body stays
-      // a separate step because the body is a lazy, single-use stream on
-      // every streaming adapter.
-      let stored = await this.#adapter.openFile(path);
-      let couldMatch =
-        stored !== undefined &&
-        (stored.size === undefined ||
-          stored.size === computeContentSize(content));
-      let unchanged: { lastModified: number } | undefined;
-      if (
-        stored &&
-        typeof content === 'string' &&
-        (couldMatch || serializedCard)
-      ) {
-        let existingFile = await readFileAsText(path, (p) =>
-          this.#adapter.openFile(p),
-        );
-        if (existingFile?.content === content) {
-          unchanged = existingFile;
-        } else if (
-          existingFile &&
-          serializedCard &&
-          sameJSON(existingFile.content, content)
-        ) {
-          // A stored card can hold exactly the JSON this write stores and
-          // still differ in bytes: a trailing newline, indentation, or keys
-          // in another order, as a source checkout lays them out. None of
-          // that is content, so the stored card is kept byte for byte, and
-          // the result below reports its own bytes rather than the ones this
-          // write would have stored. Any difference in the JSON itself — a
-          // reference spelled another way, a field the definition no longer
-          // declares — is content, and the write goes ahead.
-          unchanged = existingFile;
-          content = existingFile.content;
+        let currentWriteType: 'module' | 'instance' | undefined =
+          hasExecutableExtension(path)
+            ? 'module'
+            : typeof content === 'string' &&
+                path.endsWith('.json') &&
+                isCardDocumentString(content)
+              ? 'instance'
+              : undefined;
+
+        // Flush any modules written so far in this batch to the index
+        // BEFORE we serialize the next instance. fileSerialization calls
+        // lookupDefinition, which needs dependent modules to be indexed;
+        // without this, the first instance after a module in the batch
+        // throws FilterRefersToNonexistentTypeError and the whole atomic
+        // batch rolls back.
+        // TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush when an instance
+        // depends on a module that is part of this operation.
+        if (lastWriteType === 'module' && currentWriteType === 'instance') {
+          // The bytes written so far belong to this batch's durable write, not
+          // to the index pass about to run. Closed here so each pass's files
+          // are reported ahead of the queue insert that follows them, the same
+          // order the single-pass case reports them in.
+          stageCursor?.mark('persist');
+          await performIndex(asUpdates(urls), { deferPrerenderHtml: true });
+          urls = [];
         }
-      } else if (
-        couldMatch &&
-        stored &&
-        content instanceof Uint8Array &&
-        (await this.#indexDescribesFile(url, computeContentHash(content))) &&
-        (await fileContentEquals(stored, content))
-      ) {
-        // Matching bytes are not enough on their own here. Re-sending an
-        // upload is how a caller recovers from one whose bytes landed but
-        // whose metadata row or queue insert then failed, and how a file
-        // whose last index pass errored gets another one — and both look
-        // exactly like a repeat of an upload that fully landed. So the file
-        // is left alone only when the index already holds a live row built
-        // from these bytes; otherwise the upload proceeds as a write, which
-        // queues the pass the earlier attempt never got.
-        //
-        // Bytes are compared as bytes and never decoded, so a match is a
-        // byte-for-byte one. The stored file is read a chunk at a time against
-        // a body already held whole, which keeps a large upload from being
-        // held twice. Not the hash recorded at the last write: only the
-        // file's length vouches for that record, so a file rewritten out of
-        // band at the same length would read as unchanged, and the bytes a
-        // caller sent to replace it would be dropped.
-        unchanged = stored;
-      }
-      if (unchanged) {
-        // Identical bytes: the file is left alone, so its modification time
-        // stands and nothing is queued for indexing. The content hash is
-        // still the file's own — the bytes in hand are the bytes on disk —
-        // so a caller reading a version off this result gets the one the
-        // file already holds rather than nothing.
-        //
-        // Recorded on the row as well as returned. A file written before
-        // the realm began recording hashes carries none, and the row is
-        // what the file's metadata resource reports as its content hash —
-        // so a file the realm has never rewritten would answer without one
-        // until something changed its bytes. Writing the hash it already
-        // has is a no-op for every file that has one. This is not what
-        // makes `baseVersion` work: that is computed from the bytes read
-        // inside the write lock and never consults the row.
-        let unchangedHash = computeContentHash(content);
-        results.push({
-          path,
-          lastModified: unchanged.lastModified,
-          contentHash: unchangedHash,
-        });
-        fileMetaRows.push({
-          path,
-          contentHash: unchangedHash,
-          contentSize: computeContentSize(content),
-        });
-        // The module flush above has already run for this file if it was
-        // owed. Recording the file's kind keeps the next instance from
-        // running it again over no URLs, which would replace the flush's
-        // parked prerender set with an empty one and leave the changed
-        // module's dependents unrendered.
-        lastWriteType = currentWriteType ?? lastWriteType;
-        continue;
-      }
-      // From the open above rather than from a read, which a file whose
-      // length already settled the comparison never had.
-      let isNewFile = stored === undefined;
-      let contentHash = computeContentHash(content);
-      let contentSize = computeContentSize(content);
-      // Read before the write replaces the bytes it compares against.
-      if (
-        currentWriteType === 'module' &&
-        (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
-      ) {
-        modulesWithoutSchemaChange.add(url.href);
-      }
-      announceIndexing(url);
-      await this.trackOwnWrite(path);
-      let { lastModified } = await this.#adapter.write(path, content);
-      (isNewFile ? addedFiles : updatedFiles).push(path);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      if (currentWriteType === 'module') {
-        // The definition cache is keyed by module URL with no freshness
-        // check on the row — `readFromDatabaseCache` never compares content
-        // hashes or mtimes, and only error rows carry a TTL — so a cached
-        // definition for this module stays authoritative until something
-        // deletes it. Dropping it here, where the bytes change, keeps a
-        // written module's cached definition in step with the file rather
-        // than with the index: the next `lookupDefinition` misses and reads
-        // the rewritten module through `prerenderModule`, off disk.
-        //
-        // Leaving this to the index job's `onInvalidation` instead would
-        // leave a window — the whole of it on the deferred-indexing paths —
-        // in which `fileSerialization` resolves an instance against the
-        // module's previous schema. `serializeCardResource` skips every
-        // attribute whose field that schema doesn't declare, so the
-        // instance lands on disk missing the new field and the write still
-        // reports success; a dropped attribute is indistinguishable from an
-        // unset one, so nothing downstream can tell it happened.
-        //
-        // Ordered after `#notifyFileChange` deliberately. This replica dropped
-        // its own byte caches synchronously in `invalidateCache(path)` above,
-        // but peer replicas only drop theirs when they receive that
-        // notification. Deleting the definition row is what makes the next
-        // `lookupDefinition` — on any replica — prerender the module; a peer
-        // that prerenders while still holding pre-write bytes derives the old
-        // schema and caches THAT, reinstating the staleness this call removes
-        // and making it durable until indexing lands. Publishing the byte
-        // invalidation first narrows that to peers which have not yet
-        // processed the notification; it does not close it, since the notify
-        // is best-effort and applied asynchronously. The index job's own
-        // invalidation stays the backstop.
-        //
-        // Best-effort, like `#notifyFileChange` above. The bytes are already
-        // durable at this point but `urls` has not been appended to yet, so
-        // letting either step throw would abandon the batch before ANY index
-        // job is enqueued — for this file and for every file written ahead of
-        // it — and the caller's natural remedy makes it worse: a retry with
-        // the same bytes takes the unchanged-content short-circuit above, so
-        // it enqueues nothing either and the file stays on disk and out of
-        // the index until an unrelated edit or a full reindex. Swallowing
-        // leaves only the staleness these steps exist to remove, which the
-        // index job's own invalidation still clears. They are caught
-        // separately so a failure in one still leaves the other's benefit:
-        // the delete alone still drops the row a stale definition sits in,
-        // and the epoch alone still stops a later invalidation from
-        // re-deriving that definition off a warm tab.
-        //
-        // Deleting the cached definition only guarantees the next lookup
-        // re-derives one; it says nothing about what that lookup derives it
-        // FROM. `lookupDefinition` repopulates by prerendering the module,
-        // and a prerender tab that already evaluated this module keeps
-        // serving the evaluated copy — the route re-reads the file's metadata
-        // (so the response even carries the post-write mtime) but imports out
-        // of the loader it is holding. The result is the pre-write schema,
-        // cached under the post-write module's URL and durable until
-        // something else invalidates it: the staleness the delete removes,
-        // reinstated one layer down.
-        //
-        // Minting a loader epoch is how this codebase already says "warm tabs
-        // are stale for this realm" — an index pass whose invalidation set
-        // contains an executable mints one, and the render routes reset a
-        // tab's loader once per epoch it has not cleared for. The write path
-        // has to mint too, because every definition resolved between the
-        // write and that index pass — the whole of the window on the
-        // deferred-indexing paths — is resolved before the pass's epoch
-        // exists. Ordered before the delete so the epoch is already current
-        // for any lookup that observes the missing row.
-        if (!mintedLoaderEpoch) {
+
+        // The document this write stores, when the write re-serializes a card.
+        // The unchanged-file check below compares a stored card with it by
+        // JSON value rather than by bytes.
+        let serializedCard: LooseSingleCardDocument | undefined;
+        if (typeof content === 'string') {
           try {
-            await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
-            // Only on success: a transient failure here gets another attempt
-            // from the next module in the batch rather than leaving every
-            // module in it renderable off a warm tab.
-            mintedLoaderEpoch = true;
+            let doc = JSON.parse(content);
+            if (isCardResource(doc.data) && options?.serializeFile) {
+              serializedCard = await this.fileSerialization(
+                { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+                url,
+              );
+              content = JSON.stringify(serializedCard, null, 2);
+            }
+          } catch (e: any) {
+            if (
+              e.message?.includes?.('not found') ||
+              isFilterRefersToNonexistentTypeError(e)
+            ) {
+              throw e;
+            }
+          }
+        }
+        let sizeType: 'card' | 'file' =
+          typeof content === 'string' &&
+          path.endsWith('.json') &&
+          isCardDocumentString(content)
+            ? 'card'
+            : 'file';
+        this.assertWriteSize(content, sizeType, path);
+        // The stored file is opened before it is read, so its length can rule
+        // the comparison out without any of it being held. Only a file of
+        // exactly the staged content's length can be the staged content, and
+        // a replacement almost never is — so this is what keeps replacing a
+        // file that is large from costing its size. `openFile` reports the
+        // length from a stat it already performs, and reading the body stays
+        // a separate step because the body is a lazy, single-use stream on
+        // every streaming adapter.
+        let stored = await this.#adapter.openFile(path);
+        let couldMatch =
+          stored !== undefined &&
+          (stored.size === undefined ||
+            stored.size === computeContentSize(content));
+        let unchanged: { lastModified: number } | undefined;
+        if (
+          stored &&
+          typeof content === 'string' &&
+          (couldMatch || serializedCard)
+        ) {
+          let existingFile = await readFileAsText(path, (p) =>
+            this.#adapter.openFile(p),
+          );
+          if (existingFile?.content === content) {
+            unchanged = existingFile;
+          } else if (
+            existingFile &&
+            serializedCard &&
+            sameJSON(existingFile.content, content)
+          ) {
+            // A stored card can hold exactly the JSON this write stores and
+            // still differ in bytes: a trailing newline, indentation, or keys
+            // in another order, as a source checkout lays them out. None of
+            // that is content, so the stored card is kept byte for byte, and
+            // the result below reports its own bytes rather than the ones this
+            // write would have stored. Any difference in the JSON itself — a
+            // reference spelled another way, a field the definition no longer
+            // declares — is content, and the write goes ahead.
+            unchanged = existingFile;
+            content = existingFile.content;
+          }
+        } else if (
+          couldMatch &&
+          stored &&
+          content instanceof Uint8Array &&
+          (await this.#indexDescribesFile(url, computeContentHash(content))) &&
+          (await fileContentEquals(stored, content))
+        ) {
+          // Matching bytes are not enough on their own here. Re-sending an
+          // upload is how a caller recovers from one whose bytes landed but
+          // whose metadata row or queue insert then failed, and how a file
+          // whose last index pass errored gets another one — and both look
+          // exactly like a repeat of an upload that fully landed. So the file
+          // is left alone only when the index already holds a live row built
+          // from these bytes; otherwise the upload proceeds as a write, which
+          // queues the pass the earlier attempt never got.
+          //
+          // Bytes are compared as bytes and never decoded, so a match is a
+          // byte-for-byte one. The stored file is read a chunk at a time against
+          // a body already held whole, which keeps a large upload from being
+          // held twice. Not the hash recorded at the last write: only the
+          // file's length vouches for that record, so a file rewritten out of
+          // band at the same length would read as unchanged, and the bytes a
+          // caller sent to replace it would be dropped.
+          unchanged = stored;
+        }
+        if (unchanged) {
+          // Identical bytes: the file is left alone, so its modification time
+          // stands and nothing is queued for indexing. The content hash is
+          // still the file's own — the bytes in hand are the bytes on disk —
+          // so a caller reading a version off this result gets the one the
+          // file already holds rather than nothing.
+          //
+          // Recorded on the row as well as returned. A file written before
+          // the realm began recording hashes carries none, and the row is
+          // what the file's metadata resource reports as its content hash —
+          // so a file the realm has never rewritten would answer without one
+          // until something changed its bytes. Writing the hash it already
+          // has is a no-op for every file that has one. This is not what
+          // makes `baseVersion` work: that is computed from the bytes read
+          // inside the write lock and never consults the row.
+          let unchangedHash = computeContentHash(content);
+          results.push({
+            path,
+            lastModified: unchanged.lastModified,
+            contentHash: unchangedHash,
+          });
+          fileMetaRows.push({
+            path,
+            contentHash: unchangedHash,
+            contentSize: computeContentSize(content),
+          });
+          // The module flush above has already run for this file if it was
+          // owed. Recording the file's kind keeps the next instance from
+          // running it again over no URLs, which would replace the flush's
+          // parked prerender set with an empty one and leave the changed
+          // module's dependents unrendered.
+          lastWriteType = currentWriteType ?? lastWriteType;
+          continue;
+        }
+        // From the open above rather than from a read, which a file whose
+        // length already settled the comparison never had.
+        let isNewFile = stored === undefined;
+        let contentHash = computeContentHash(content);
+        let contentSize = computeContentSize(content);
+        // Read before the write replaces the bytes it compares against.
+        if (
+          currentWriteType === 'module' &&
+          (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
+        ) {
+          modulesWithoutSchemaChange.add(url.href);
+        }
+        announceIndexing(url);
+        await this.trackOwnWrite(path);
+        let { lastModified } = await this.#adapter.write(path, content);
+        (isNewFile ? addedFiles : updatedFiles).push(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        if (currentWriteType === 'module') {
+          // The definition cache is keyed by module URL with no freshness
+          // check on the row — `readFromDatabaseCache` never compares content
+          // hashes or mtimes, and only error rows carry a TTL — so a cached
+          // definition for this module stays authoritative until something
+          // deletes it. Dropping it here, where the bytes change, keeps a
+          // written module's cached definition in step with the file rather
+          // than with the index: the next `lookupDefinition` misses and reads
+          // the rewritten module through `prerenderModule`, off disk.
+          //
+          // Leaving this to the index job's `onInvalidation` instead would
+          // leave a window — the whole of it on the deferred-indexing paths —
+          // in which `fileSerialization` resolves an instance against the
+          // module's previous schema. `serializeCardResource` skips every
+          // attribute whose field that schema doesn't declare, so the
+          // instance lands on disk missing the new field and the write still
+          // reports success; a dropped attribute is indistinguishable from an
+          // unset one, so nothing downstream can tell it happened.
+          //
+          // Ordered after `#notifyFileChange` deliberately. This replica dropped
+          // its own byte caches synchronously in `invalidateCache(path)` above,
+          // but peer replicas only drop theirs when they receive that
+          // notification. Deleting the definition row is what makes the next
+          // `lookupDefinition` — on any replica — prerender the module; a peer
+          // that prerenders while still holding pre-write bytes derives the old
+          // schema and caches THAT, reinstating the staleness this call removes
+          // and making it durable until indexing lands. Publishing the byte
+          // invalidation first narrows that to peers which have not yet
+          // processed the notification; it does not close it, since the notify
+          // is best-effort and applied asynchronously. The index job's own
+          // invalidation stays the backstop.
+          //
+          // Best-effort, like `#notifyFileChange` above. The bytes are already
+          // durable at this point but `urls` has not been appended to yet, so
+          // letting either step throw would abandon the batch before ANY index
+          // job is enqueued — for this file and for every file written ahead of
+          // it — and the caller's natural remedy makes it worse: a retry with
+          // the same bytes takes the unchanged-content short-circuit above, so
+          // it enqueues nothing either and the file stays on disk and out of
+          // the index until an unrelated edit or a full reindex. Swallowing
+          // leaves only the staleness these steps exist to remove, which the
+          // index job's own invalidation still clears. They are caught
+          // separately so a failure in one still leaves the other's benefit:
+          // the delete alone still drops the row a stale definition sits in,
+          // and the epoch alone still stops a later invalidation from
+          // re-deriving that definition off a warm tab.
+          //
+          // Deleting the cached definition only guarantees the next lookup
+          // re-derives one; it says nothing about what that lookup derives it
+          // FROM. `lookupDefinition` repopulates by prerendering the module,
+          // and a prerender tab that already evaluated this module keeps
+          // serving the evaluated copy — the route re-reads the file's metadata
+          // (so the response even carries the post-write mtime) but imports out
+          // of the loader it is holding. The result is the pre-write schema,
+          // cached under the post-write module's URL and durable until
+          // something else invalidates it: the staleness the delete removes,
+          // reinstated one layer down.
+          //
+          // Minting a loader epoch is how this codebase already says "warm tabs
+          // are stale for this realm" — an index pass whose invalidation set
+          // contains an executable mints one, and the render routes reset a
+          // tab's loader once per epoch it has not cleared for. The write path
+          // has to mint too, because every definition resolved between the
+          // write and that index pass — the whole of the window on the
+          // deferred-indexing paths — is resolved before the pass's epoch
+          // exists. Ordered before the delete so the epoch is already current
+          // for any lookup that observes the missing row.
+          if (!mintedLoaderEpoch) {
+            try {
+              await mintRealmLoaderEpoch(this.#dbAdapter, this.url);
+              // Only on success: a transient failure here gets another attempt
+              // from the next module in the batch rather than leaving every
+              // module in it renderable off a warm tab.
+              mintedLoaderEpoch = true;
+            } catch (err: unknown) {
+              this.#log.error(
+                `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+              );
+            }
+          }
+          try {
+            await this.#definitionLookup.invalidate(url.href);
           } catch (err: unknown) {
             this.#log.error(
-              `failed to mint a loader epoch for ${this.url} after writing ${url.href}; a prerender tab holding the pre-write module may re-derive its previous schema: ${stringifyErrorForLog(err)}`,
+              `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
             );
           }
         }
+        results.push({ path, lastModified, contentHash });
+        fileMetaRows.push({ path, contentHash, contentSize });
+        urls.push(url);
+        lastWriteType = currentWriteType ?? lastWriteType;
+      }
+
+      // The append leg. Each path gets the same per-file treatment a write does
+      // — the ceiling, the commit's initiation if none has gone out yet, the
+      // own-write tracking, the byte-cache drop, the peer notification, and a
+      // `realm_file_meta` row — with two differences, both of which follow from
+      // never holding the file.
+      //
+      // The ceiling is applied to what is being added rather than to what the
+      // file will hold, and it is the file ceiling whatever the path's
+      // extension: the limit is over the bytes a caller hands the realm, and a
+      // file that grew past it one line at a time is what an append-only file
+      // is. Nothing here classifies the content as a card, because appending to
+      // a card's stored JSON is not something the operation core permits —
+      // bytes added after a document's closing brace are no longer a document.
+      //
+      // And the fingerprint is assembled from bounded reads of the file once the
+      // append has landed, rather than computed from bytes in hand. That is the
+      // same value hashing the whole content would produce, and its cost has a
+      // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
+      // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
+      // adding a line to a file of any size costs the line plus a bounded read.
+      for (let [path, content] of appends) {
+        let url = this.paths.fileURL(path);
+        this.assertWriteSize(content, 'file', path);
+        let existed = await this.#adapter.exists(path);
+        announceIndexing(url);
+        await this.trackOwnWrite(path);
+        let { lastModified, size } = await this.#adapter.append(path, content);
+        appendedPaths.add(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        let contentHash = await computeContentHashFromRanges(
+          size,
+          async (start, length) =>
+            await readRangeBytes(this.#adapter, path, start, length),
+        );
+        // The write leg may have reached this file already, which is one file
+        // changing twice rather than two files changing — a caller that replaces
+        // a log and then adds a line to it. Everything the write recorded
+        // describes bytes the file no longer holds, so the readings here replace
+        // them rather than joining them: one result, one `realm_file_meta` row
+        // (two rows for one path in the same statement is an error Postgres
+        // raises outright), one entry in the announcement, and one index change.
+        let written = results.findIndex((result) => result.path === path);
+        if (written === -1) {
+          results.push({ path, lastModified, contentHash });
+          fileMetaRows.push({ path, contentHash, contentSize: size });
+        } else {
+          results[written] = { path, lastModified, contentHash };
+          let row = fileMetaRows.findIndex((meta) => meta.path === path);
+          fileMetaRows[row] = { path, contentHash, contentSize: size };
+        }
+        // Asked separately from the readings above, because recording a result
+        // and announcing a change are not the same question. A write that found
+        // the file already holding the bytes it staged records a result and
+        // announces nothing — it left the file alone. This leg did not: the
+        // append changed the file whatever the write before it did, so the
+        // announcement is made here unless one of the earlier legs already made
+        // it. Without this, a batch that replaces a file with its own content
+        // and then appends to it broadcasts no file change at all.
+        if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
+          (existed ? updatedFiles : addedFiles).push(path);
+        }
+        // Pushed unless it is already pending, which is a different question
+        // from whether the write leg handled it: a mid-loop flush empties this,
+        // and a file indexed from its pre-append state needs indexing again.
+        if (!urls.some((pending) => pending.href === url.href)) {
+          urls.push(url);
+        }
+      }
+
+      // The removal leg. Each path gets the same per-file treatment a write
+      // does — the commit's initiation if none has gone out yet, the own-write
+      // tracking that stops the file watcher from re-reporting this replica's
+      // own change, the byte-cache drop, and the peer notification — and then
+      // the whole batch's file changes are announced together below.
+      for (let path of deletes) {
+        let url = this.paths.fileURL(path);
+        announceIndexing(url);
+        await this.trackOwnWrite(path, { isDelete: true });
+        await this.#adapter.remove(path);
+        this.invalidateCache(path);
+        await this.#notifyFileChange(path);
+        removedFiles.push(path);
+        deleteURLs.push(url);
+      }
+    } catch (err: unknown) {
+      if (fileMetaRows.length > 0 || removedFiles.length > 0) {
         try {
-          await this.#definitionLookup.invalidate(url.href);
-        } catch (err: unknown) {
+          await this.#persistWriteOutcome({
+            fileMetaRows,
+            removedFiles,
+            addedFiles,
+            updatedFiles,
+            appendedPaths,
+            initiatingUser,
+            partial: true,
+          });
+        } catch (persistErr: unknown) {
           this.#log.error(
-            `failed to invalidate the definition cache for ${url.href}; a stale cached definition may drop unknown attributes from instances serialized before indexing lands: ${stringifyErrorForLog(err)}`,
+            `could not record the file meta of a write to ${this.url} that failed partway: ${stringifyErrorForLog(persistErr)}`,
           );
         }
       }
-      results.push({ path, lastModified, contentHash });
-      fileMetaRows.push({ path, contentHash, contentSize });
-      urls.push(url);
-      lastWriteType = currentWriteType ?? lastWriteType;
-    }
-
-    // The append leg. Each path gets the same per-file treatment a write does
-    // — the ceiling, the commit's initiation if none has gone out yet, the
-    // own-write tracking, the byte-cache drop, the peer notification, and a
-    // `realm_file_meta` row — with two differences, both of which follow from
-    // never holding the file.
-    //
-    // The ceiling is applied to what is being added rather than to what the
-    // file will hold, and it is the file ceiling whatever the path's
-    // extension: the limit is over the bytes a caller hands the realm, and a
-    // file that grew past it one line at a time is what an append-only file
-    // is. Nothing here classifies the content as a card, because appending to
-    // a card's stored JSON is not something the operation core permits —
-    // bytes added after a document's closing brace are no longer a document.
-    //
-    // And the fingerprint is assembled from bounded reads of the file once the
-    // append has landed, rather than computed from bytes in hand. That is the
-    // same value hashing the whole content would produce, and its cost has a
-    // ceiling no file can exceed: `computeContentHashFromRanges` asks for at
-    // most `CONTENT_HASH_WHOLE_LIMIT_BYTES` however large the file is, so
-    // adding a line to a file of any size costs the line plus a bounded read.
-    for (let [path, content] of appends) {
-      let url = this.paths.fileURL(path);
-      this.assertWriteSize(content, 'file', path);
-      let existed = await this.#adapter.exists(path);
-      announceIndexing(url);
-      await this.trackOwnWrite(path);
-      let { lastModified, size } = await this.#adapter.append(path, content);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      let contentHash = await computeContentHashFromRanges(
-        size,
-        async (start, length) =>
-          await readRangeBytes(this.#adapter, path, start, length),
-      );
-      // The write leg may have reached this file already, which is one file
-      // changing twice rather than two files changing — a caller that replaces
-      // a log and then adds a line to it. Everything the write recorded
-      // describes bytes the file no longer holds, so the readings here replace
-      // them rather than joining them: one result, one `realm_file_meta` row
-      // (two rows for one path in the same statement is an error Postgres
-      // raises outright), one entry in the announcement, and one index change.
-      let written = results.findIndex((result) => result.path === path);
-      if (written === -1) {
-        results.push({ path, lastModified, contentHash });
-        fileMetaRows.push({ path, contentHash, contentSize: size });
-      } else {
-        results[written] = { path, lastModified, contentHash };
-        let row = fileMetaRows.findIndex((meta) => meta.path === path);
-        fileMetaRows[row] = { path, contentHash, contentSize: size };
-      }
-      // Asked separately from the readings above, because recording a result
-      // and announcing a change are not the same question. A write that found
-      // the file already holding the bytes it staged records a result and
-      // announces nothing — it left the file alone. This leg did not: the
-      // append changed the file whatever the write before it did, so the
-      // announcement is made here unless one of the earlier legs already made
-      // it. Without this, a batch that replaces a file with its own content
-      // and then appends to it broadcasts no file change at all.
-      if (!addedFiles.includes(path) && !updatedFiles.includes(path)) {
-        (existed ? updatedFiles : addedFiles).push(path);
-      }
-      // Pushed unless it is already pending, which is a different question
-      // from whether the write leg handled it: a mid-loop flush empties this,
-      // and a file indexed from its pre-append state needs indexing again.
-      if (!urls.some((pending) => pending.href === url.href)) {
-        urls.push(url);
-      }
-    }
-
-    // The removal leg. Each path gets the same per-file treatment a write
-    // does — the commit's initiation if none has gone out yet, the own-write
-    // tracking that stops the file watcher from re-reporting this replica's
-    // own change, the byte-cache drop, and the peer notification — and then
-    // the whole batch's file changes are announced together below.
-    let deleteURLs: URL[] = [];
-    for (let path of deletes) {
-      let url = this.paths.fileURL(path);
-      announceIndexing(url);
-      await this.trackOwnWrite(path, { isDelete: true });
-      await this.#adapter.remove(path);
-      this.invalidateCache(path);
-      await this.#notifyFileChange(path);
-      removedFiles.push(path);
-      deleteURLs.push(url);
+      throw err;
     }
 
     if (
@@ -5719,9 +6003,17 @@ export class Realm {
       } as UpdateRealmEventContent);
     }
 
-    // persist file meta (created_at) to DB independent of index and retrieve created
-    let createdMap = await this.persistFileMeta(fileMetaRows);
-    await this.removeFileMeta(removedFiles);
+    // The rows describing what landed and the change event that records it,
+    // committed together, independent of the index.
+    let createdMap = await this.#persistWriteOutcome({
+      fileMetaRows,
+      removedFiles,
+      addedFiles,
+      updatedFiles,
+      appendedPaths,
+      initiatingUser,
+      partial: false,
+    });
     // Everything the caller asked for is durable at this point: the bytes, the
     // removals, and the rows describing them. What follows is indexing, which
     // the caller may or may not be waiting for — so this is the boundary that
@@ -5738,6 +6030,12 @@ export class Realm {
     // its card, whichever pass runs first and whether or not the queue merged
     // the two.
     options?.onDurable?.();
+    if (policyShareAudit) {
+      await this.#notifyPolicyShareAudit(
+        policyShareAudit,
+        options?.policyAudit?.actor ?? null,
+      );
+    }
     // What each file this commit wrote now holds, named the way the event's
     // `invalidations` names a card. That spelling is not a second opinion about
     // it: the index reports its own row keys and `RealmIndexUpdater` maps them
@@ -6033,6 +6331,7 @@ export class Realm {
   // persist created_at into realm_file_meta table using db adapter
   private async persistFileMeta(
     rows: { path: LocalPath; contentHash?: string; contentSize?: number }[],
+    querier?: Querier,
   ): Promise<
     Map<
       LocalPath,
@@ -6048,6 +6347,7 @@ export class Realm {
         contentHash: r.contentHash,
         contentSize: r.contentSize,
       })),
+      querier,
     );
     // maintain LocalPath typing on keys
     return new Map(
@@ -6056,9 +6356,129 @@ export class Realm {
   }
 
   // remove file meta rows for deleted paths
-  private async removeFileMeta(paths: LocalPath[]): Promise<void> {
+  private async removeFileMeta(
+    paths: LocalPath[],
+    querier?: Querier,
+  ): Promise<void> {
     if (!this.#dbAdapter || paths.length === 0) return;
-    await removeFileMeta(this.#dbAdapter, this.url, paths);
+    await removeFileMeta(this.#dbAdapter, this.url, paths, querier);
+  }
+
+  // The rows that describe what a write left on disk, and the change event
+  // that records it, committed together. `realm_file_meta` is written and
+  // trimmed on one transaction, and the event is appended on the same one
+  // under a savepoint: if the journal insert fails, only the insert rolls
+  // back, the file meta still commits, and the write still succeeds, with the
+  // failure recorded so reconciliation can attribute the change to no one.
+  // Reconciliation therefore never sees a file-meta change whose event is
+  // still on its way.
+  //
+  // Called for a commit that completed and for one that failed partway, with
+  // whatever paths had landed by then; the `partial` event records them,
+  // attributed, as soon as it would have for a complete write. A commit that
+  // changed nothing appends no event. Returns the `created_at` map the
+  // results are built from.
+  async #persistWriteOutcome({
+    fileMetaRows,
+    removedFiles,
+    addedFiles,
+    updatedFiles,
+    appendedPaths,
+    initiatingUser,
+    partial,
+  }: {
+    fileMetaRows: {
+      path: LocalPath;
+      contentHash?: string;
+      contentSize?: number;
+    }[];
+    removedFiles: LocalPath[];
+    addedFiles: LocalPath[];
+    updatedFiles: LocalPath[];
+    appendedPaths: Set<LocalPath>;
+    initiatingUser: string | null;
+    partial: boolean;
+  }): Promise<
+    Map<
+      LocalPath,
+      { createdAt: number; contentHash?: string; contentSize?: number }
+    >
+  > {
+    let metaByPath = new Map(fileMetaRows.map((row) => [row.path, row]));
+    let describe = (path: LocalPath, status: 'A' | 'M'): ChangeEventChange => {
+      let row = metaByPath.get(path);
+      return {
+        path,
+        status,
+        ...(row?.contentHash !== undefined
+          ? { contentHash: row.contentHash }
+          : {}),
+        ...(row?.contentSize !== undefined ? { size: row.contentSize } : {}),
+        ...(appendedPaths.has(path) ? { appended: true } : {}),
+      };
+    };
+    let changes: ChangeEventChange[] = [
+      ...addedFiles.map((path) => describe(path, 'A')),
+      ...updatedFiles.map((path) => describe(path, 'M')),
+      ...removedFiles.map((path) => ({ path, status: 'D' as const })),
+    ];
+    let journal = this.#history?.journal;
+    if (!journal) {
+      // No history, so nothing to commit together: the rows are written as
+      // the adapter's own statements. The in-browser realm's SQLite adapter
+      // runs one connection with no transaction nesting, so a realm that
+      // records nothing never opens a transaction here.
+      let createdMap = await this.persistFileMeta(fileMetaRows);
+      await this.removeFileMeta(removedFiles);
+      return createdMap;
+    }
+    let event: ChangeEventInput | undefined =
+      changes.length > 0
+        ? {
+            realmURL: this.url,
+            // The effective authenticated user, never a client-supplied
+            // header. A write with no user is the realm's own Matrix user's.
+            author: initiatingUser ?? this.#matrixClientUserId,
+            channel: 'api',
+            ...(partial ? { partial: true } : {}),
+            changes,
+          }
+        : undefined;
+    return await this.#dbAdapter.withTransaction(
+      async (querier) => {
+        let createdMap = await this.persistFileMeta(fileMetaRows, querier);
+        await this.removeFileMeta(removedFiles, querier);
+        if (event) {
+          let started = performance.now();
+          await querier(['SAVEPOINT change_journal']);
+          try {
+            let written = await journal.append(querier, event);
+            emitChangeJournal({
+              realm: this.url,
+              outcome: written ? 'written' : 'skipped',
+              durationMs: Math.round(performance.now() - started),
+              paths: changes.length,
+              partial,
+            });
+          } catch (err: unknown) {
+            await querier(['ROLLBACK TO SAVEPOINT change_journal']);
+            this.#log.error(
+              `could not append the change event for ${changes.length} path(s) in ${this.url} to the change journal; reconciliation will record the change unattributed: ${stringifyErrorForLog(err)}`,
+            );
+            emitChangeJournal({
+              realm: this.url,
+              outcome: 'failed',
+              durationMs: Math.round(performance.now() - started),
+              paths: changes.length,
+              partial,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        return createdMap;
+      },
+      { label: 'realm write outcome' },
+    );
   }
 
   private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
@@ -6384,6 +6804,10 @@ export class Realm {
               waitForIndex,
               initiatingUser: requestContext.authenticatedUser ?? null,
               broadcastRealmEvents: !realmEventsSuppressed(request),
+              policyAudit: policyAuditOptionsFor(
+                request,
+                requestContext.authenticatedUser,
+              ),
             });
           } catch (e: any) {
             if (e instanceof CardError) {
@@ -6492,10 +6916,17 @@ export class Realm {
       // a program failing there answers 400 over a batch that landed. The
       // status is the same and what it says about the realm is not.
       let error = this.#refusalSeenBy(err.error, requestContext);
+      let retryAfterSeconds = error.meta?.retryAfterSeconds;
       return this.#operationsResponse(
         errorsDocument(error),
         error.status,
         requestContext,
+        // A refusal for a limit says when to come back, as the header a
+        // client's backoff reads as well as in `meta`.
+        (error.status === 429 || error.status === 503) &&
+          typeof retryAfterSeconds === 'number'
+          ? { 'Retry-After': String(retryAfterSeconds) }
+          : undefined,
       );
     }
   }
@@ -6779,6 +7210,13 @@ export class Realm {
               this.#duringRender(request, requestContext)
                 ? { duringPrerender: true }
                 : {}),
+              ...(definition.base === 'callApi' &&
+              this.#pipelineRequests.has(request)
+                ? { callApiMode: 'pipeline' as const }
+                : {}),
+              ...(definition.base === 'callApi'
+                ? this.#callApiAnonymous(requestContext)
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -6833,6 +7271,7 @@ export class Realm {
           {
             clientRequestId: caller.clientRequestId || null,
             actor: caller.actor || undefined,
+            ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
             // One request, several cards, and not all of them from the same
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
@@ -6920,7 +7359,7 @@ export class Realm {
   // them — see `card-operations/transforms.ts`.
   #transformContext(
     entry: EnvelopeEntry,
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
   ): TransformContext {
     return {
       name: entry.name,
@@ -7026,7 +7465,7 @@ export class Realm {
     }: {
       coarseDeclined: CoarseDeclined;
       tree: readonly EnvelopeNode[];
-      caller: { actor: string; clientRequestId: string };
+      caller: OperationsCaller;
     },
     resolved: readonly ResolvedEnvelopeEntry[],
     // The lock's decisions, for a batch that reached it.
@@ -7109,7 +7548,7 @@ export class Realm {
   async #rehearsedDecisions(
     tree: readonly EnvelopeNode[],
     resolved: readonly ResolvedEnvelopeEntry[],
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
     // The creates are rehearsed under the ids the batch itself mints them
     // under (see `#mintPosture`), so a card a write is judged by is the card
     // the lock would judge it by.
@@ -7168,7 +7607,7 @@ export class Realm {
   // `admit` is what decides it there, handed the card staging judges it by.
   async #stagedWrite(
     write: ResolvedEnvelopeEntry,
-    caller: { actor: string; clientRequestId: string },
+    caller: OperationsCaller,
     admit: (
       pending: PendingWrite,
       judged: AdmissionSubject | undefined,
@@ -7208,6 +7647,7 @@ export class Realm {
     body: unknown,
     status: number,
     requestContext: RequestContext,
+    headers?: Record<string, string>,
   ): Response {
     return createResponse({
       body: JSON.stringify(body, null, 2),
@@ -7216,6 +7656,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.BoxelOperations,
           'cache-control': 'no-store',
+          ...headers,
         },
       },
       requestContext,
@@ -7276,6 +7717,7 @@ export class Realm {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
           anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
+          ...this.#callApiAnonymous(requestContext),
           ...lanes,
         },
       );
@@ -7380,6 +7822,9 @@ export class Realm {
           ? { writesDeclinedOutright: true as const }
           : {}),
         ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+        ...(writeCaller?.rateLimitKey
+          ? { callApiAnonymous: { address: writeCaller.rateLimitKey } }
+          : {}),
       };
     }
     return {
@@ -7549,8 +7994,15 @@ export class Realm {
     }
     this.invalidateCache(path);
     await this.#notifyFileChange(path);
-    // Remove file meta for this path
-    await this.removeFileMeta([path]);
+    await this.#persistWriteOutcome({
+      fileMetaRows: [],
+      removedFiles: [path],
+      addedFiles: [],
+      updatedFiles: [],
+      appendedPaths: new Set(),
+      initiatingUser: options?.initiatingUser ?? null,
+      partial: false,
+    });
     let waitForIndex = options?.waitForIndex !== false;
     if (waitForIndex) {
       let { invalidations, generation, invalidatedTypes, sharedPass } =
@@ -7604,13 +8056,23 @@ export class Realm {
     }
   }
 
-  async deleteAll(paths: LocalPath[]): Promise<void> {
+  async deleteAll(
+    paths: LocalPath[],
+    options?: {
+      // The user whose request removes the files, recorded as the author of
+      // the change. Absent for a system-originated removal.
+      initiatingUser?: string | null;
+    },
+  ): Promise<void> {
     await this.#dbAdapter.withFileWriteLocks(this.url, paths, () =>
-      this._deleteAllUnlocked(paths),
+      this._deleteAllUnlocked(paths, options),
     );
   }
 
-  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
+  private async _deleteAllUnlocked(
+    paths: LocalPath[],
+    options?: { initiatingUser?: string | null },
+  ): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -7635,8 +8097,15 @@ export class Realm {
       removed: paths,
       realmURL: this.url,
     });
-    // Remove file meta for all deleted paths
-    await this.removeFileMeta(paths);
+    await this.#persistWriteOutcome({
+      fileMetaRows: [],
+      removedFiles: paths,
+      addedFiles: [],
+      updatedFiles: [],
+      appendedPaths: new Set(),
+      initiatingUser: options?.initiatingUser ?? null,
+      partial: false,
+    });
     let { invalidations, generation, invalidatedTypes, sharedPass } =
       await this.updateIndexAndCollectInvalidations(
         urls.map((url) => ({ url, operation: 'delete' as const })),
@@ -8031,6 +8500,16 @@ export class Realm {
     return anonymousRequest ? { anonymousRequest } : {};
   }
 
+  // Where a caller the realm admitted without a session called from, which a
+  // `callApi` filled from a share counts them by. Nothing for a signed-in
+  // caller, or for one whose address the realm server couldn't work out.
+  #callApiAnonymous(
+    requestContext: RequestContext,
+  ): Pick<RunOperationOptions, 'callApiAnonymous'> {
+    let address = requestContext.anonymousCaller?.rateLimitKey;
+    return address ? { callApiAnonymous: { address } } : {};
+  }
+
   // Who an operation dispatched from an HTTP request is running for. The actor
   // is the identity the realm authenticated, which is empty for an anonymous
   // caller — an operation that reads it has to treat "nobody" as a value
@@ -8040,10 +8519,14 @@ export class Realm {
   #callerOf(
     request: Request,
     requestContext: RequestContext,
-  ): { actor: string; clientRequestId: string } {
+  ): OperationsCaller {
     return {
       actor: requestContext.authenticatedUser ?? '',
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id') ?? '',
+      policyAudit: policyAuditOptionsFor(
+        request,
+        requestContext.authenticatedUser,
+      ),
     };
   }
 
@@ -8276,6 +8759,20 @@ export class Realm {
       return null;
     }
     return await this.internalHandle(request, false);
+  };
+
+  // Handles a request a pipeline makes: an `_operations` batch the realm server
+  // runs on its own, carrying the session of the user it runs as (a
+  // schedule's payer, or whoever started the run). It is authorized as that
+  // user's request would be, and a `callApi` in it is a pipeline invocation,
+  // which a binding approved for pipelines only fills. Only code in this
+  // process can call this; nothing that arrives off the network is a pipeline
+  // invocation.
+  handlePipeline = async (
+    request: Request,
+  ): Promise<ResponseWithNodeStream | null> => {
+    this.#pipelineRequests.add(request);
+    return await this.handle(request);
   };
 
   async getRealmOwnerUserId(): Promise<string> {
@@ -9184,15 +9681,13 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-    // A caller whose read the policy gate decides is never answered from the
-    // module cache, which holds what was compiled for a reader, and nothing
-    // compiled for them fills it (see `#moduleForGatedCaller`).
-    let moduleCachingDisabled =
-      this.#coarseDeclined(requestContext) === 'all' ||
-      this.#disableModuleCaching ||
-      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
+    // A caller whose read the policy gate decides is answered from the module
+    // cache only once the gate has admitted them, so the lookup below, which
+    // runs before any gate, is not theirs (see `#moduleForGatedCaller`).
+    let gated = this.#coarseDeclined(requestContext) === 'all';
+    let moduleCachingDisabled = this.#moduleCachingDisabled(request);
 
-    if (!moduleCachingDisabled) {
+    if (!moduleCachingDisabled && !gated) {
       // Answered from memory: these bytes were compiled from a read that
       // already happened, so nothing here reaches a file and no `readSource`
       // is dispatched for this request. Worth knowing wherever something is
@@ -9283,12 +9778,17 @@ export class Realm {
               dependencyKeys: result.dependencyKeys,
             });
           }
+          // The cache holds the module as a reader is served it; a gated
+          // caller's copy of it is marked private on the way out.
           response = createResponse({
             body: result.body,
             init: {
               status: 200,
               headers: {
                 ...result.headers,
+                ...(gated
+                  ? { 'cache-control': GRANTED_MODULE_CACHE_CONTROL }
+                  : {}),
                 [CACHE_HEADER]: CACHE_MISS_VALUE,
               },
             },
@@ -9332,10 +9832,15 @@ export class Realm {
           break;
         }
         case 'non-module':
-        case 'shimmed': {
+        case 'shimmed':
+        case 'cache-hit': {
           response = result.response;
           break;
         }
+      }
+      if (result.kind === 'cache-hit') {
+        this.#logRequestPerformance(request, start, 'cache hit');
+        return response;
       }
     } catch (err) {
       this.#logRequestPerformance(request, start, 'cache miss');
@@ -9344,6 +9849,15 @@ export class Realm {
 
     this.#logRequestPerformance(request, start, 'cache miss');
     return response;
+  }
+
+  // Whether this realm, or this request, opts out of the in-memory module
+  // cache.
+  #moduleCachingDisabled(request: Request): boolean {
+    return (
+      this.#disableModuleCaching ||
+      Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'))
+    );
   }
   private async loadModuleFromDisk(
     localPath: LocalPath,
@@ -9448,6 +9962,7 @@ export class Realm {
       return await this.#moduleForGatedCaller(
         request,
         requestContext,
+        localPath,
         fileRef,
         notThere,
       );
@@ -9508,37 +10023,51 @@ export class Realm {
   }
 
   // A module for a caller the realm ACL declined, whose read the policy gate
-  // decides. Its source is read through the gate, as the card+source read
-  // reads it, and compiled for this caller alone: no module cache answers
-  // them, and nothing compiled for them is kept, so what a reader's compile
-  // left behind reaches nobody the gate refuses and what was compiled for a
-  // granted caller reaches nobody else. Their validator is compared only once
-  // the gate has admitted the read, so a reader's `ETag` tells them nothing
-  // either, and what they are served is marked `private`.
+  // decides. The gate decides first, on a read that asks for no bytes: a
+  // refused caller is answered as a path that holds nothing, before any cache
+  // is consulted, so nothing a reader compiled reaches them and a cache hit
+  // tells them nothing. Their validator is compared only once the gate has
+  // admitted the read, so a reader's `ETag` tells them nothing either.
   //
-  // Admitted callers asking for the same version of a module at once share one
-  // compile, joined only once the gate has admitted each of them (see
-  // `#inFlightGatedCompiles`). A browser that has the module revalidates it on
-  // its next import and is answered 304 without a compile.
+  // An admitted caller is then served from the same caches a reader is: the
+  // in-memory module cache, the transpile cache row, and the compile a reader's
+  // request may already have in flight. A compile is a function of the file's
+  // text alone, so the module compiled for one caller is byte for byte the
+  // module compiled for any other, and a cached compile of the version the
+  // gate admitted holds nothing beyond the source the grant opens. A miss
+  // compiles and fills those caches for whoever reads next. The compile reads
+  // the source for this caller without the gate, which has already decided
+  // this request, so the caller decides only who the read is recorded against,
+  // as a reader's does.
+  //
+  // What they are served is marked `private`. A shared cache answering in the
+  // realm's place would serve without the gate: past each grant's blocklist and
+  // rate limit, and after a grant is narrowed or removed.
   //
   // A shimmed module is served from the host's own bundle rather than the
   // realm's files, so no grant reaches it.
   async #moduleForGatedCaller(
     request: Request,
     requestContext: RequestContext,
+    localPath: LocalPath,
     fileRef: FileRef,
     notThere: () => ModuleLoadResult,
   ): Promise<ModuleLoadResult> {
     if (fileRef[Symbol.for('shimmed-module')]) {
       return notThere();
     }
-    let source: OperationSourceResult | undefined;
+    let caller = this.#callerOf(request, requestContext);
+    let admitted: OperationSourceResult | undefined;
     try {
-      source = await this.#readStoredSource(
-        this.#callerOf(request, requestContext),
-        fileRef.path,
-        { ...this.#gatedRead(requestContext), route: byteRoute('module') },
-      );
+      admitted = await this.#readStoredSource(caller, fileRef.path, {
+        ...this.#gatedRead(requestContext),
+        route: byteRoute('module'),
+        // Only the gate's decision is wanted here. The bytes are read by the
+        // compile, if one runs, and the validator is built from the file
+        // itself rather than from the realm's record of it.
+        headersOnly: true,
+        skipStoredFileMeta: true,
+      });
     } catch (e: unknown) {
       if (e instanceof CardError) {
         return {
@@ -9548,7 +10077,7 @@ export class Realm {
       }
       throw e;
     }
-    if (!source) {
+    if (!admitted) {
       return notThere();
     }
     let etag = buildEtag(
@@ -9559,7 +10088,8 @@ export class Realm {
       this.#moduleEtagVariant,
     );
     // What the caller asked for is served from here on, so a caller who isn't
-    // signed in is counted against the realm's limit for it.
+    // signed in is counted against the realm's limit for it, a cache hit
+    // included.
     servedAnonymous(requestContext);
     if (etag && request.headers.get('if-none-match') === etag) {
       return {
@@ -9575,30 +10105,64 @@ export class Realm {
         },
       };
     }
-    let compileKey = `${fileRef.path}\n${etag ?? ''}`;
-    let compiling = this.#inFlightGatedCompiles.get(compileKey);
-    if (!compiling) {
-      let pending: Promise<ModuleTranspileResult>;
-      pending = fileContentToText({
-        content: source.body as FileRef['content'],
-      })
-        .then((text) => this.#compileModule(fileRef, text, etag))
-        .finally(() => {
-          if (this.#inFlightGatedCompiles.get(compileKey) === pending) {
-            this.#inFlightGatedCompiles.delete(compileKey);
-          }
-        });
-      compiling = pending;
-      this.#inFlightGatedCompiles.set(compileKey, pending);
+    // The entry has to be a compile of the file the gate judged, at the
+    // version it judged: an entry the name holds for another file, or for a
+    // version since overwritten, is compiled over like a miss.
+    let cached = this.#moduleCachingDisabled(request)
+      ? undefined
+      : this.#transpiledModuleCache.get(localPath);
+    if (
+      cached &&
+      cached.canonicalPath === fileRef.path &&
+      etag &&
+      cached.headers.etag === etag
+    ) {
+      return {
+        kind: 'cache-hit',
+        response: createResponse({
+          body: cached.body,
+          init: {
+            status: 200,
+            headers: {
+              ...cached.headers,
+              'cache-control': GRANTED_MODULE_CACHE_CONTROL,
+              [CACHE_HEADER]: CACHE_HIT_VALUE,
+            },
+          },
+          requestContext,
+        }),
+      };
     }
-    let compiled = await compiling;
-    return {
-      ...compiled,
-      headers: {
-        ...compiled.headers,
-        'cache-control': GRANTED_MODULE_CACHE_CONTROL,
-      },
-    };
+    // A compile in flight under the requested name may be of another file the
+    // name resolved to, or of an earlier version of this one, so what it
+    // produced is served only when it is a compile of what the gate judged.
+    // Anything else is compiled over, by the canonical path, which is what
+    // the transpile cache row is keyed and validated on. That includes a
+    // joined compile that failed: its error describes the file it was
+    // compiling, which may be one the gate never opened to this caller. A
+    // compile this request started itself fails with its own error.
+    let joined = this.#inFlightTranspiles.has(localPath);
+    let compiled: ModuleTranspileResult | undefined;
+    try {
+      compiled = await this.#transpileModuleDeduped(
+        localPath,
+        fileRef,
+        etag,
+        caller,
+      );
+    } catch (e: unknown) {
+      if (!joined) {
+        throw e;
+      }
+    }
+    if (
+      compiled &&
+      compiled.canonicalPath === fileRef.path &&
+      compiled.headers.etag === etag
+    ) {
+      return compiled;
+    }
+    return await this.#transpileWithLayers(fileRef, etag, caller);
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
@@ -11892,6 +12456,10 @@ export class Realm {
           actor: requestContext.authenticatedUser ?? undefined,
           waitForIndex: false,
           broadcastRealmEvents: !realmEventsSuppressed(request),
+          policyAudit: policyAuditOptionsFor(
+            request,
+            requestContext.authenticatedUser,
+          ),
         },
       );
     } catch (err: unknown) {
@@ -12916,6 +13484,10 @@ export class Realm {
         await commitBatch(this.batchCore, [entry], {
           ...admission.batch,
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          policyAudit: policyAuditOptionsFor(
+            request,
+            requestContext.authenticatedUser,
+          ),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),
@@ -13443,6 +14015,10 @@ export class Realm {
           {
             ...admission.batch,
             clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            policyAudit: policyAuditOptionsFor(
+              request,
+              requestContext.authenticatedUser,
+            ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
               : {}),
@@ -15014,6 +15590,10 @@ export class Realm {
           cardTitle: error.cardTitle,
           scopedCssUrls: error.scopedCssUrls,
           stack: error.stack,
+          // The card's index row records this error, whatever its status, so
+          // a client can tell a card to fix from a read that failed for
+          // another reason.
+          ...(error.fromIndexRow ? { indexError: true } : {}),
         },
       },
     });
@@ -17166,6 +17746,128 @@ export class Realm {
     return await this.#policyCache.anonymousAdmission();
   }
 
+  // The operations on `codeRef`'s cards that the realm's policy opens to
+  // callers who aren't signed in and that send a key shared with the realm: a
+  // live grant naming `"anonymous"` on such a `callApi`, in a rule for the
+  // type or one it descends from. The secure window reads it to say which
+  // calls such callers can make through a share. Empty for a realm whose
+  // policy opens none, or won't compile.
+  async sharedKeyOperationsOpenToAnonymous(
+    codeRef: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let policy = await this.getCompiledPolicy();
+    let rules = (policy?.anonymous ? policy.rules : []).filter((rule) =>
+      rule.grants.some((grant) => grant.anonymous?.sendsSharedKey),
+    );
+    if (rules.length === 0) {
+      return [];
+    }
+    let chain: string[];
+    try {
+      chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
+    } catch {
+      return [];
+    }
+    let names = new Set<string>();
+    for (let rule of rules) {
+      let keys = await this.#realmIndexQueryEngine.typeKeysFor(rule.targetType);
+      if (!keys.some((key) => chain.includes(key))) {
+        continue;
+      }
+      for (let grant of rule.grants) {
+        if (grant.anonymous?.sendsSharedKey) {
+          names.add(grant.operation);
+        }
+      }
+    }
+    return [...names];
+  }
+
+  // Which of `asked` — operations on a card type, as a share's bindings name
+  // them — a policy would open to people who aren't signed in with a shared
+  // key while the realm's policy in force doesn't. `next` is the policy the
+  // realm would be governed by: a card it would name, with the attributes it
+  // would hold where those are being written (otherwise the card as stored),
+  // or null for none. Compiled as this realm compiles its own policy, and
+  // kept by nothing.
+  //
+  // An operation counts as opened where some live grant names `"anonymous"` on
+  // it with a shared-key slot, in a rule for its type or one the type descends
+  // from, as `sharedKeyOperationsOpenToAnonymous` reads the policy in force.
+  async sharedKeyOpeningsAdded(
+    next: { card: string; attributes?: Record<string, any> } | null,
+    asked: { codeRef: ResolvedCodeRef; operation: string }[],
+  ): Promise<boolean[]> {
+    if (!next || asked.length === 0) {
+      return asked.map(() => false);
+    }
+    let env = this.#policyCompileEnvironment();
+    let nextPolicy = next.attributes
+      ? (await compileDraftPolicy(next.card, next.attributes, env)).compiled
+      : (await compilePolicyCard(next.card, env)).compiled;
+    let currentPolicy = await this.getCompiledPolicy();
+    let openings = async (policy: CompiledRealmPolicy | undefined) => {
+      let found: { operation: string; typeKeys: string[] }[] = [];
+      for (let rule of policy?.anonymous ? policy.rules : []) {
+        let operations = rule.grants
+          .filter((grant) => grant.anonymous?.sendsSharedKey)
+          .map((grant) => grant.operation);
+        if (operations.length === 0) {
+          continue;
+        }
+        let typeKeys = await this.#realmIndexQueryEngine.typeKeysFor(
+          rule.targetType,
+        );
+        for (let operation of operations) {
+          found.push({ operation, typeKeys });
+        }
+      }
+      return found;
+    };
+    let [opened, alreadyOpen] = await Promise.all([
+      openings(nextPolicy),
+      openings(currentPolicy),
+    ]);
+    if (opened.length === 0) {
+      return asked.map(() => false);
+    }
+    let chains = new Map<string, string[]>();
+    let chainOf = async (codeRef: ResolvedCodeRef) => {
+      let key = `${codeRef.module}#${codeRef.name}`;
+      let chain = chains.get(key);
+      if (!chain) {
+        try {
+          chain = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+            .types;
+        } catch {
+          chain = [];
+        }
+        chains.set(key, chain);
+      }
+      return chain;
+    };
+    let reaches = (
+      found: { operation: string; typeKeys: string[] }[],
+      operation: string,
+      chain: string[],
+    ) =>
+      found.some(
+        (opening) =>
+          opening.operation === operation &&
+          opening.typeKeys.some((key) => chain.includes(key)),
+      );
+    let answers: boolean[] = [];
+    for (let { codeRef, operation } of asked) {
+      let chain = await chainOf(codeRef);
+      answers.push(
+        reaches(opened, operation, chain) &&
+          !reaches(alreadyOpen, operation, chain),
+      );
+    }
+    return answers;
+  }
+
   __testOnlyPolicyCacheStats(): {
     compiles: number;
     revalidations: number;
@@ -17222,7 +17924,9 @@ export class Realm {
           undefined,
           this.#virtualNetwork,
         );
-        return isResolvedCodeRef(absolute) ? absolute : undefined;
+        return isResolvedCodeRef(absolute)
+          ? this.#ownCopyOf(absolute)
+          : undefined;
       },
       lookupDefinitionEntry: (codeRef) =>
         this.#definitionLookup.lookupDefinitionEntry(codeRef),
@@ -17239,7 +17943,26 @@ export class Realm {
         (await this.#realmIndexQueryEngine.fetchCardTypeSummary()).instances
           .map((summary) => summary.code_ref)
           .sort(),
+      ...(this.#published ? { sharedKeyCallsOnly: true } : {}),
     };
+  }
+
+  // A type in a published realm's source, as the published realm names its
+  // copy: the module at the same path in this realm. A policy card copied from
+  // the source may name the source's types by their absolute URLs, while the
+  // published realm's cards adopt from its own copies of those modules. Any
+  // other type is named as it is.
+  #ownCopyOf(codeRef: ResolvedCodeRef): ResolvedCodeRef {
+    let source = this.#sourceRealmURL;
+    if (!source) {
+      return codeRef;
+    }
+    let copy = sameResourceIn(
+      new RealmPaths(new URL(source)),
+      new RealmPaths(new URL(this.url)),
+      this.#virtualNetwork.toURL(codeRef.module),
+    );
+    return copy ? { ...codeRef, module: copy } : codeRef;
   }
 
   // Indexes the policy card stored at `file` again, in the realm at `realmURL`
@@ -17432,7 +18155,7 @@ export class Realm {
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
-        this.#matrixClient.matrixURL.href,
+        this.#matrixClient.serverName,
       ),
       publishable: metadata.publishable,
       lastPublishedAt,
@@ -18022,6 +18745,7 @@ function cardJsonAssemblyFromFailure(
     return {
       kind: 'error',
       error: {
+        fromIndexRow: false,
         status: error.status,
         title: error.title,
         message: error.detail,
@@ -18038,6 +18762,7 @@ function cardJsonAssemblyFromFailure(
   return {
     kind: 'error',
     error: {
+      fromIndexRow: true,
       status: row.status,
       title: row.title,
       message: row.message,

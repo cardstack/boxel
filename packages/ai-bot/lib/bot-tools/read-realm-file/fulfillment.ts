@@ -1,4 +1,7 @@
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -7,7 +10,7 @@ import {
 import type { MatrixClient } from 'matrix-js-sdk';
 import {
   executeReadRealmFile,
-  fileLabelFromUrl,
+  fileLabelFromIdentifier,
   READ_REALM_FILE_MAX_URLS,
   selectReadRealmFileUrls,
   type ReadRealmFileTool,
@@ -131,7 +134,7 @@ function discoveredToolDefinitions(
 // Reads and uploads a single file of a call. An upload failure is folded into
 // the same shape as a read failure so the caller reports both alike.
 async function readAndUpload(
-  reference: string,
+  reference: RealmResourceIdentifier,
   deps: ReadRealmFileFulfillmentDeps,
   upload: (content: string, contentType: string) => Promise<string>,
 ): Promise<FileRead> {
@@ -163,7 +166,7 @@ async function readAndUpload(
     attachment: {
       sourceUrl: url,
       url: fileUrl,
-      name: fileLabelFromUrl(url) ?? url,
+      name: fileLabelFromIdentifier(url) ?? url,
       contentType: READ_FILE_CONTENT_TYPE,
       contentSize: Buffer.byteLength(result.content),
     },

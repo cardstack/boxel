@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "El Salvador Santa Ana Anaerobic",
+      "category": "coffee",
+      "origin": "Santa Ana, El Salvador",
+      "variants": [
+        {
+          "sku": "CF-036-250",
+          "size": "250 g",
+          "price": 11.29
+        },
+        {
+          "sku": "CF-036-500",
+          "size": "500 g",
+          "price": 21.4
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

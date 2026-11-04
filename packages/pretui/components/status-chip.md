@@ -8,9 +8,10 @@ A **Chip** whose color is derived from the value rather than chosen. Pass `@valu
 @value: string   (required)
 @hue?            — override; the exception, not the norm
 @tone?           — Chip's tone (default neutral)
+@appearance?, @dot?  — passed straight to Chip
 ```
 
-Three args, and the last two you should rarely reach for. A toned StatusChip is outlined in that tone and its dot takes the tone unless `@hue` is passed, so `@tone` is for a status whose meaning is fixed, like `live`; the hash hue stays on a neutral chip.
+`@value` is the one that matters; `@hue` and `@tone` you should rarely reach for, and `@appearance` / `@dot` are Chip's look knobs, forwarded unchanged. A toned StatusChip is outlined in that tone and its dot takes the tone unless `@hue` is passed, so `@tone` is for a status whose meaning is fixed, like `live`; the hash hue stays on a neutral chip.
 
 **The hue is a hash, and the hash is the point.** `statusHue()` runs a 32-bit polynomial rolling hash (`h * 31 + charCode`, unsigned) over the string and takes `h % 5` to index `--chart-1` … `--chart-5`. Deterministic, dependency-free, and — the property that matters — **stable across cards, realms and sessions**. No registry, no config, no design review to add a status.
 

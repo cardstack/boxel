@@ -47,15 +47,18 @@ export interface TooltipSignature {
  * - **Association.** The bubble gets a generated id and a modifier wires
  *   `aria-describedby` (or `aria-labelledby` with `@labels`) onto the first
  *   focusable descendant — the trigger is a caller block, so the component
- *   cannot put the attribute there itself. The modifier restores whatever was
- *   there before on teardown, so it composes with a caller's own value.
+ *   cannot put the attribute there itself. It appends its id to a caller's
+ *   own value, keeps it there when the caller's value changes, and removes
+ *   only its id on teardown.
  * - **Presence.** Hidden state is `visibility: hidden`, not opacity alone, so
  *   the bubble leaves the accessibility tree between reveals. A directly
  *   referenced `aria-describedby` target is still announced while hidden —
  *   that is the accname rule this pattern is built on.
  * - **Dismissible.** Escape hides it, in the capture phase, while it is open.
+ * - **Keyboard focus only.** Focus from a mouse press doesn't open it, so a
+ *   clicked trigger doesn't keep its tip up after the pointer leaves.
  * - **Hoverable.** `pointer-events` are live and a transparent bridge spans
- *   the 6px gap, so the pointer can travel from trigger to bubble.
+ *   the gap, so the pointer can travel from trigger to bubble.
  *
  * The reveal is state-driven rather than pure CSS because Escape needs a
  * dismissed flag; the state is only ever written from event handlers, never
@@ -65,6 +68,7 @@ export class Tooltip extends Component<TooltipSignature> {
   @tracked private hovered = false;
   @tracked private focused = false;
   @tracked private dismissed = false;
+  private pressed = false;
   tipId = `${guidFor(this)}-tip`;
   get side() {
     return this.args.side ?? 'top';
@@ -72,7 +76,7 @@ export class Tooltip extends Component<TooltipSignature> {
   get shown() {
     return (this.hovered || this.focused) && !this.dismissed;
   }
-  /** Wires the tip onto the yielded trigger and puts it back on teardown. */
+  /** Wires the tip onto the yielded trigger and takes it off on teardown. */
   describeTrigger = modifier(
     (el: HTMLElement, [id, labels]: [string, boolean | undefined]) => {
       let attr = labels ? 'aria-labelledby' : 'aria-describedby';
@@ -81,13 +85,27 @@ export class Tooltip extends Component<TooltipSignature> {
           (candidate) => candidate.id !== id,
         ) ?? (el.firstElementChild as HTMLElement | null);
       if (!trigger || trigger.id === id) return;
-      let previous = trigger.getAttribute(attr);
-      trigger.setAttribute(attr, previous ? `${previous} ${id}` : id);
+      let target = trigger;
+      let ids = () =>
+        (target.getAttribute(attr) ?? '').split(/\s+/).filter(Boolean);
+      let addId = () => {
+        let current = ids();
+        if (!current.includes(id)) {
+          target.setAttribute(attr, [...current, id].join(' '));
+        }
+      };
+      addId();
+      // The caller can rewrite the attribute after insert (a bound value that
+      // changes), which would drop the tip's id; put it back each time.
+      let observer = new MutationObserver(addId);
+      observer.observe(target, { attributeFilter: [attr] });
       return () => {
-        if (previous === null) {
-          trigger.removeAttribute(attr);
+        observer.disconnect();
+        let rest = ids().filter((token) => token !== id);
+        if (rest.length) {
+          target.setAttribute(attr, rest.join(' '));
         } else {
-          trigger.setAttribute(attr, previous);
+          target.removeAttribute(attr);
         }
       };
     },
@@ -96,13 +114,22 @@ export class Tooltip extends Component<TooltipSignature> {
     this.hovered = true;
   };
   onLeave = () => {
+    this.pressed = false;
     this.hovered = false;
     this.dismissed = false;
   };
+  // A click focuses the trigger too, but only keyboard focus opens the tip:
+  // otherwise it would stay up after the pointer leaves, until focus moves.
+  onPress = () => {
+    this.pressed = true;
+    this.focused = false;
+  };
   onFocusIn = () => {
-    this.focused = true;
+    this.focused = !this.pressed;
+    this.pressed = false;
   };
   onFocusOut = () => {
+    this.pressed = false;
     this.focused = false;
     this.dismissed = false;
   };
@@ -122,6 +149,7 @@ export class Tooltip extends Component<TooltipSignature> {
       {{this.describeTrigger this.tipId @labels}}
       {{listen 'mouseenter' this.onEnter}}
       {{listen 'mouseleave' this.onLeave}}
+      {{listen 'mousedown' this.onPress}}
       {{listen 'focusin' this.onFocusIn}}
       {{listen 'focusout' this.onFocusOut}}
       ...attributes
@@ -151,18 +179,20 @@ export class Tooltip extends Component<TooltipSignature> {
           display: none;
         }
         .pretui-tooltip {
+          /* the space between trigger and bubble, which the bridge spans */
+          --_tip-gap: 0.375rem;
           position: absolute;
           /* kit stacking scale (pretui-css.gts): a tooltip describes whatever
              is under the pointer, which may be an item inside a dropdown or a
              popover, so it is the highest non-modal tier. */
           z-index: var(--pretui-z-tooltip, 80);
-          background: var(--tooltip, var(--boxel-dark));
-          color: var(--tooltip-foreground, var(--boxel-light));
-          font-size: var(--text-ui-sm, 11.5px);
+          background-color: var(--tooltip);
+          color: var(--tooltip-foreground);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
-          padding: 4px 8px;
-          border-radius: 6px;
-          box-shadow: 0 4px 14px var(--shadow-ink-strong, rgb(0 0 0 / 0.16));
+          padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
+          box-shadow: var(--shadow-lg);
           white-space: nowrap;
           width: max-content;
           opacity: 0;
@@ -184,25 +214,25 @@ export class Tooltip extends Component<TooltipSignature> {
         .pretui-tooltip::before {
           content: '';
           position: absolute;
-          inset: -6px;
+          inset: calc(-1 * var(--_tip-gap));
         }
         .pretui-tooltip[data-side='top'] {
-          bottom: calc(100% + 6px);
+          bottom: calc(100% + var(--_tip-gap));
           left: 50%;
           transform: translateX(-50%);
         }
         .pretui-tooltip[data-side='bottom'] {
-          top: calc(100% + 6px);
+          top: calc(100% + var(--_tip-gap));
           left: 50%;
           transform: translateX(-50%);
         }
         .pretui-tooltip[data-side='left'] {
-          right: calc(100% + 6px);
+          right: calc(100% + var(--_tip-gap));
           top: 50%;
           transform: translateY(-50%);
         }
         .pretui-tooltip[data-side='right'] {
-          left: calc(100% + 6px);
+          left: calc(100% + var(--_tip-gap));
           top: 50%;
           transform: translateY(-50%);
         }

@@ -4,8 +4,11 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
+import { tracked } from '@glimmer/tracking';
 import {
   render,
+  settled,
+  click,
   focus,
   blur,
   triggerEvent,
@@ -71,6 +74,27 @@ module('Pretui | components/tooltip', function (hooks) {
     );
   });
 
+  test('Tooltip keeps its id when the caller changes its own describedby', async function (assert) {
+    class State {
+      @tracked hint = 'first-hint';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Tooltip @content='Extra'>
+          <button type='button' data-test-trigger aria-describedby={{state.hint}}>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    state.hint = 'second-hint';
+    await settled();
+    assert.strictEqual(
+      q('[data-test-trigger]').getAttribute('aria-describedby'),
+      `second-hint ${q('[role="tooltip"]').id}`,
+      'the new value, with the tip id put back',
+    );
+  });
+
   test('Tooltip opens on hover and on focus, and closes again', async function (assert) {
     await render(
       <template>
@@ -92,6 +116,29 @@ module('Pretui | components/tooltip', function (hooks) {
     assert.strictEqual(tip.dataset['open'], 'true', 'keyboard focus opens it too');
     await blur('[data-test-trigger]');
     assert.strictEqual(tip.dataset['open'], undefined);
+  });
+
+  test('Tooltip stays closed after a click once the pointer leaves', async function (assert) {
+    await render(
+      <template>
+        <Tooltip @content='Hint'>
+          <button type='button' data-test-trigger>Go</button>
+        </Tooltip>
+      </template>,
+    );
+    let wrap = q('[data-test-pretui-tooltip]');
+    let tip = q('[role="tooltip"]');
+
+    await triggerEvent(wrap, 'mouseenter');
+    await click('[data-test-trigger]');
+    assert.strictEqual(tip.dataset['open'], 'true', 'open while hovered');
+    await triggerEvent(wrap, 'mouseleave');
+    assert.strictEqual(document.activeElement, q('[data-test-trigger]'), 'the trigger keeps focus');
+    assert.strictEqual(tip.dataset['open'], undefined, 'and the tip closes');
+
+    await blur('[data-test-trigger]');
+    await focus('[data-test-trigger]');
+    assert.strictEqual(tip.dataset['open'], 'true', 'keyboard focus still opens it');
   });
 
   test('Tooltip is dismissible with Escape while the pointer stays put (WCAG 1.4.13)', async function (assert) {

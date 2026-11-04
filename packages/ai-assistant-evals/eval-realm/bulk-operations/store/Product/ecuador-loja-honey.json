@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ecuador Loja Honey",
+      "category": "coffee",
+      "origin": "Loja, Ecuador",
+      "variants": [
+        {
+          "sku": "CF-032-250",
+          "size": "250 g",
+          "price": 16.49
+        },
+        {
+          "sku": "CF-032-500",
+          "size": "500 g",
+          "price": 29.0
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

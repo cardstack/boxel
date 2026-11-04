@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "name": "Ethiopia Sidamo Natural",
+      "category": "coffee",
+      "origin": "Sidamo, Ethiopia",
+      "variants": [
+        {
+          "sku": "CF-042-250",
+          "size": "250 g",
+          "price": 19.99
+        },
+        {
+          "sku": "CF-042-500",
+          "size": "500 g",
+          "price": 36.29
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product",
+        "name": "Product"
+      }
+    }
+  }
+}

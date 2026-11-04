@@ -954,6 +954,22 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
+  // Opens a realm file in code mode. The file is resolved before the submode
+  // changes, so code mode never shows the previous file first.
+  openFileInCodeMode = async (url: string) => {
+    if (this.workspaceChooserOpened) {
+      this.closeWorkspaceChooser();
+    }
+    if (
+      this._state.submode === Submodes.Code &&
+      this.toCodePathRRI(url) === this._state.codePath
+    ) {
+      return;
+    }
+    await this.updateCodePath(rri(url));
+    this.updateSubmode(Submodes.Code);
+  };
+
   async updateCodePath(
     codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
@@ -1351,6 +1367,14 @@ export default class OperatorModeStateService extends Service {
 
   @cached
   get realmURL(): string {
+    return this.openRealmURL ?? this.realm.defaultReadableRealm.path;
+  }
+
+  // The realm currently open: that of the open file, stack or host card, or
+  // else of the workspace last opened. Undefined when there is none, where
+  // `realmURL` falls back to a default realm.
+  @cached
+  get openRealmURL(): string | undefined {
     let { submode } = this._state;
     if (submode === Submodes.Code) {
       if (isReady(this.openFile.current)) {
@@ -1395,11 +1419,7 @@ export default class OperatorModeStateService extends Service {
       }
     }
 
-    if (this.cachedRealmURL) {
-      return this.cachedRealmURL.href;
-    }
-
-    return this.realm.defaultReadableRealm.path;
+    return this.cachedRealmURL?.href;
   }
 
   get currentRealmInfo() {

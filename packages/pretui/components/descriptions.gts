@@ -16,7 +16,8 @@ import { resolveSize } from '../pretui-primitives';
 //     Different job, different territory.
 //   • NOT an alias for `KeyValue` either, though it is the
 //     nearest thing. `KeyValue` is a fixed two-column `<dl>`: one pair per
-//     row, no borders, no header, no spans, no density, no fold. It stays
+//     row, at most a hairline between rows (`@divided`), no header, no
+//     spans, no density, no fold. It stays
 //     exactly that and this does not deprecate it — six facts beside a card
 //     still want `KeyValue`.
 //   • `Descriptions` is the multi-column, optionally bordered record GRID

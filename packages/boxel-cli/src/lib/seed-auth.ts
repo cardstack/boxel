@@ -145,7 +145,7 @@ export async function operatorRequest(
   },
   scope: OperatorScope,
   path: string,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<{ url: string; response: Response }> {
   let url = operatorEndpointURL(realmServerUrl, path);
