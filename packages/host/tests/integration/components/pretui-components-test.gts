@@ -4,6 +4,7 @@ import { click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import { Button } from '@cardstack/pretui/components/button';
 import { EmailInput } from '@cardstack/pretui/components/email-input';
 import { Field } from '@cardstack/pretui/components/field';
@@ -43,6 +44,46 @@ module('Integration | pretui components', function (hooks) {
       .hasAttribute('data-tone', 'danger')
       .hasAttribute('data-appearance', 'outlined')
       .hasAttribute('data-size', 'l');
+  });
+
+  test('an icon passed to Button as a child is centred on the label line, like @icon', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#each (array 'xs' 's' 'm' 'l' 'xl') as |size|}}
+            <Button @size={{size}}><PlusIcon
+                width='14'
+                height='14'
+                aria-hidden='true'
+              />New ticket</Button>
+            <Button @size={{size}}><PlusIcon
+                width='16'
+                height='16'
+                aria-hidden='true'
+              />New ticket</Button>
+            <Button @size={{size}} @icon={{PlusIcon}}>New ticket</Button>
+          {{/each}}
+        </template>
+      },
+    );
+    let centre = (el: Element) => {
+      let r = el.getBoundingClientRect();
+      return r.top + r.height / 2;
+    };
+    let labels = document.querySelectorAll('[data-test-pretui-button-label]');
+    assert.strictEqual(labels.length, 15);
+    for (let label of labels) {
+      let svg = label.querySelector('svg')!;
+      let size = label.closest('[data-size]')!.getAttribute('data-size');
+      // measured in layout px; the test container is scaled
+      let scale =
+        label.getBoundingClientRect().height / label.clientHeight || 1;
+      let delta = Math.abs(centre(svg) - centre(label)) / scale;
+      assert.true(
+        delta <= 0.5,
+        `${size} ${svg.getAttribute('width') ?? '@icon'}: icon centre is ${delta}px from the label centre`,
+      );
+    }
   });
 
   test("a Select's options take the font size its trigger is given", async function (assert) {
