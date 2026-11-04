@@ -229,8 +229,9 @@ export async function capture(
       let base = realmFlag ?? jobs[0].card;
       let asUser: string;
       try {
-        // The authenticator above resolved the same server name, so a
-        // missing one has already been reported without this suffix.
+        // resolveRealmAuthenticator above has already failed when no server
+        // name is configured, so the --as-user hint below is never given
+        // for a missing one.
         let matrixServerName = resolveMatrixServerName(
           options.matrixServerName,
         );
