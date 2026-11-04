@@ -1352,6 +1352,131 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
   });
 
+  test('says so when it cannot check which cards use a definition', async function (assert) {
+    let store = getService('store');
+    let original = store.searchEntries;
+    store.searchEntries = async () => {
+      throw new Error('search failed');
+    };
+    try {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+      await click('[data-test-delete-module-button]');
+
+      assert
+        .dom('[data-test-cards-using-failed]')
+        .includesText('Could not check which cards use this definition');
+      assert.dom('[data-test-also-delete-cards]').doesNotExist();
+      assert.dom('[data-test-confirm-delete-button]').isEnabled();
+    } finally {
+      store.searchEntries = original;
+    }
+  });
+
+  test('holds Delete until it knows which cards use the definition', async function (assert) {
+    let store = getService('store');
+    let original = store.searchEntries.bind(store);
+    let release = new Deferred<void>();
+    store.searchEntries = async (...args) => {
+      await release.promise;
+      return original(...args);
+    };
+    try {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+      let opening = click('[data-test-delete-module-button]');
+      await waitFor('[data-test-cards-using-loading]');
+      assert.dom('[data-test-confirm-delete-button]').isDisabled();
+      release.fulfill();
+      await opening;
+      await waitFor('[data-test-cards-using-definition]');
+      assert.dom('[data-test-cards-using-loading]').doesNotExist();
+      assert.dom('[data-test-confirm-delete-button]').isEnabled();
+    } finally {
+      store.searchEntries = original;
+    }
+  });
+
+  test('keeps the definition when a card that uses it cannot be deleted', async function (assert) {
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let original = operatorModeStateService.deleteCard.bind(
+      operatorModeStateService,
+    );
+    operatorModeStateService.deleteCard = async (id: string) => {
+      if (id === `${testRealmURL}Pet/mango`) {
+        throw new Error('delete failed');
+      }
+      return original(id);
+    };
+    try {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+      await click('[data-test-delete-module-button]');
+      await waitFor('[data-test-cards-using-definition]');
+      await click('[data-test-confirm-delete-button]');
+
+      assert
+        .dom('[data-test-delete-modal-container]')
+        .includesText(
+          '1 card could not be deleted, so the definition was kept. Try again.',
+        );
+      assert.notStrictEqual(
+        await adapter.openFile('pet.gts'),
+        undefined,
+        'the definition is kept',
+      );
+      assert.notStrictEqual(
+        await adapter.openFile('Pet/mango.json'),
+        undefined,
+        'the card that failed to delete is still there',
+      );
+      assert.strictEqual(
+        await adapter.openFile('Pet/vangogh.json'),
+        undefined,
+        'the other card was deleted',
+      );
+      assert
+        .dom('[data-test-cards-using-definition]')
+        .includesText('1 card uses this definition');
+    } finally {
+      operatorModeStateService.deleteCard = original;
+    }
+  });
+
+  test('lists five cards and counts the rest', async function (assert) {
+    for (let name of ['Ada', 'Bo', 'Cy', 'Di']) {
+      await realm.write(
+        `Pet/${name.toLowerCase()}.json`,
+        JSON.stringify({
+          data: {
+            attributes: { name },
+            meta: { adoptsFrom: { module: `${testRealmURL}pet`, name: 'Pet' } },
+          },
+        }),
+      );
+    }
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await click('[data-test-delete-module-button]');
+    await waitFor('[data-test-cards-using-definition]');
+    assert
+      .dom('[data-test-cards-using-definition]')
+      .includesText('6 cards use this definition and will stop loading:');
+    assert.dom('[data-test-card-using-definition]').exists({ count: 5 });
+    assert.dom('[data-test-cards-using-definition]').includesText('and 1 more');
+    assert
+      .dom('[data-test-cards-using-definition]')
+      .includesText('Also delete these 6 cards');
+  });
+
   test('deleting a module that only re-exports card definitions offers no cards', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
