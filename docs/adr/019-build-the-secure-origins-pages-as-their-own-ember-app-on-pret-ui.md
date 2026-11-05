@@ -35,8 +35,8 @@ it without that review. So the pages get a package of their own: an Ember app
 with an import allowlist enforced by the build, and a reviewed record of
 everything it ships. The pages are built from Pret UI's components, the
 library the rest of Boxel's new UI uses (ADR 009), rather than from copies the
-package keeps of boxel-ui's. Pret UI is allowed as a whole, with what it
-depends on, boxel-ui included. A module ships on the origin only when it
+package keeps of boxel-ui's. Pret UI is allowed as a whole, with the
+packages it depends on that this ADR names, boxel-ui included. A module ships on the origin only when it
 meets the origin's policy, and a change to one shows in the build record of
 the pull request that makes it.
 
@@ -66,8 +66,10 @@ The package MAY import anything Pret UI (`@cardstack/pretui`) exports, and
 the build MAY ship whatever Pret UI reaches, boxel-ui (`@cardstack/boxel-ui`)
 included. The package MUST NOT import boxel-ui itself: boxel-ui reaches the
 pages only through Pret UI. The package MUST NOT import from `packages/host`,
-`@cardstack/runtime-common`, the base realm, or any realm or card module,
-directly or through a Pret UI module. Every module in the build's output MUST come from
+`@cardstack/runtime-common`, or the base realm, and MUST NOT load a module
+through the card loader, directly or through a Pret UI module. Pret UI being a
+realm itself does not change this: what is banned is the base realm and card
+modules, not Pret UI's own components. Every module in the build's output MUST come from
 the package itself or from a package named in its allowlist. A plugin in the
 package's build MUST fail the build when the output holds any other module,
 or any module of Ember's runtime template compiler (§1.2). Adding a package to
@@ -75,12 +77,29 @@ the allowlist is a change to the secure origin's trusted code, and MUST be
 reviewed as one. That holds for a package that Pret UI imports as much as for
 one the package imports by name.
 
-This ADR is that review for Pret UI as a whole and for every package Pret UI
-depends on, directly or through boxel-ui, at the versions the lockfile pins:
-among them `@cardstack/boxel-icons`, `ember-modifier`,
-`ember-provide-consume-context`, `glimmer-motion`, `@cardstack/boxel-ui` and
-boxel-ui's own dependencies. The allowlist MAY name any of them. A package
-outside that tree MUST be added in a change reviewed for it.
+The allowlist is a committed list of package names. The build MUST fail on a
+module from a package outside it, naming the package. A package joins the list
+only by a change to that list, never because a package already on it, Pret UI
+or boxel-ui included, starts depending on it.
+
+This ADR is that review for the following packages, at the versions the
+lockfile pins, and the allowlist MAY name any of them:
+
+- Pret UI (`@cardstack/pretui`), and the packages it reaches at run time:
+  `@cardstack/boxel-ui`, `@cardstack/boxel-icons`, `ember-modifier`,
+  `ember-provide-consume-context`, `glimmer-motion` and `framer-motion`.
+- boxel-ui's run-time dependencies: `@ember/string`, `@ember/test-waiters`,
+  `@embroider/addon-shim`, `@floating-ui/dom`, `awesome-phonenumber`,
+  `classnames`, `countries-list`, `dayjs`, `dompurify`, `ember-animated`,
+  `ember-basic-dropdown`, `ember-concurrency`, `ember-css-url`,
+  `ember-draggable-modifiers`, `ember-focus-trap`, `ember-power-calendar`,
+  `ember-power-calendar-moment`, `ember-power-select`,
+  `ember-resize-modifier`, `ember-sortable`, `ember-velcro`, `focus-trap`,
+  `lodash-es`, `pluralize` and `tracked-built-ins`.
+
+Any other package, including a package the build reaches through one of these,
+MUST be added in a change reviewed for it, the change that first lets Pret UI
+into the build included.
 
 ### 1.4. Styles
 
