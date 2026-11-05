@@ -69,6 +69,44 @@ const SearchField: TemplateOnlyComponent<SearchFieldSignature> = <template>
       </button>
     {{/if}}
   </FieldDress>
+    <style scoped>
+      @layer PretComponent {
+        /* inset the same on the block and inline sides, with the field's
+           corner less that inset, so the button and its ring sit concentric
+           in the field */
+        .pretui-searchclear {
+          --_inset: calc((var(--boxel-input-height) - 1.25rem) / 2);
+          position: absolute;
+          top: var(--_inset);
+          inset-inline-end: var(--_inset);
+          display: grid;
+          place-items: center;
+          width: 1.25rem;
+          height: 1.25rem;
+          border: 0;
+          padding: 0;
+          border-radius: max(
+            0rem,
+            calc(var(--boxel-form-control-border-radius) - var(--_inset))
+          );
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        /* the kit's 2px --ring, drawn inside so it stays clear of the
+           field's edge; host's global button focus rule reads its offset
+           from --host-outline-offset */
+        .pretui-searchclear:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+          --host-outline-offset: -2px;
+        }
+        .pretui-searchclear:hover {
+          background-color: var(--hover);
+          color: var(--foreground);
+        }
+      }
+    </style>
 </template>;
 
 export interface SearchInputSignature {
@@ -249,36 +287,6 @@ export class SearchInput extends Component<SearchInputSignature> {
     {{/if}}
     <style scoped>
       @layer PretComponent {
-        /* inset the same on the block and inline sides, with the field's
-           corner less that inset, so the button and its ring sit concentric
-           in the field */
-        .pretui-searchclear {
-          --_inset: calc((var(--boxel-input-height) - 1.25rem) / 2);
-          position: absolute;
-          top: var(--_inset);
-          inset-inline-end: var(--_inset);
-          display: grid;
-          place-items: center;
-          width: 1.25rem;
-          height: 1.25rem;
-          border: 0;
-          padding: 0;
-          border-radius: max(
-            0rem,
-            calc(var(--boxel-form-control-border-radius) - var(--_inset))
-          );
-          background: none;
-          color: var(--muted-foreground);
-          cursor: pointer;
-        }
-        /* the kit's 2px --ring, drawn inside so it stays clear of the
-           field's edge; host's global button focus rule reads its offset
-           from --host-outline-offset */
-        .pretui-searchclear:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: -2px;
-          --host-outline-offset: -2px;
-        }
         /* @display 'collapsed': a square the height of the field; the open
            field lies over the square from its start, in the top layer */
         .pretui-searchcollapse {
@@ -327,10 +335,6 @@ export class SearchInput extends Component<SearchInputSignature> {
         .pretui-searchcollapse-field {
           margin-block-start: calc(-1 * var(--_search-h));
           inline-size: var(--pretui-search-open-w, 15rem);
-        }
-        .pretui-searchclear:hover {
-          background-color: var(--hover);
-          color: var(--foreground);
         }
       }
     </style>
