@@ -8202,7 +8202,8 @@ export class Realm {
             }
             let checker = new RealmPermissionChecker(
               await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
-              this.#matrixClient,
+              this.#dbAdapter,
+              this.#matrixClient.serverName,
             );
             return (await checker.can(user, 'write'))
               ? { user }
@@ -8348,7 +8349,11 @@ export class Realm {
       if (caller.actor === this.#matrixClientUserId) {
         return { read: true, write: true };
       }
-      let checker = new RealmPermissionChecker(permissions, this.#matrixClient);
+      let checker = new RealmPermissionChecker(
+        permissions,
+        this.#dbAdapter,
+        this.#matrixClient.serverName,
+      );
       may = (action) => checker.can(caller.actor, action);
     } else {
       may = async (action) => Boolean(permissions['*']?.includes(action));
@@ -8864,7 +8869,8 @@ export class Realm {
 
           let userPermissions = await new RealmPermissionChecker(
             permissions,
-            this.#matrixClient,
+            this.#dbAdapter,
+            this.#matrixClient.serverName,
           ).for(user);
           return this.#adapter.createJWT(
             {
@@ -10883,7 +10889,8 @@ export class Realm {
     // through — a principal that can mint here must be able to serve here.
     let permissionChecker = new RealmPermissionChecker(
       requestContext.permissions,
-      this.#matrixClient,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
     );
     if (
       claims.user !== this.#matrixClientUserId &&
@@ -12220,7 +12227,8 @@ export class Realm {
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,
-        this.#matrixClient,
+        this.#dbAdapter,
+        this.#matrixClient.serverName,
       );
 
       let user = token.user;

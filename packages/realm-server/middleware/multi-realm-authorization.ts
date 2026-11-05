@@ -22,6 +22,7 @@ import {
   query,
   SearchRequestError,
   separatedByCommas,
+  userExists,
   type Expression,
 } from '@cardstack/runtime-common';
 import {
@@ -317,9 +318,9 @@ export function multiRealmAuthorization(
       // The readability above is built from the caller's own rows and, for a
       // realm they have no row of their own on, its `*` grant. A realm judges a
       // caller by the union of their row, its `*` grant, and its `users` grant
-      // for any caller with a Matrix account, so each realm still unreadable is
-      // judged here by the grants it shares with callers, as the realm judges
-      // it.
+      // for any caller of the paired homeserver with a Boxel account, so each
+      // realm still unreadable is judged here by the grants it shares with
+      // callers, as the realm judges it.
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
@@ -471,18 +472,19 @@ async function admitAnonymousSearch(
 // The realms among `urls` that let `principal` read them through a grant they
 // share with callers rather than through a row of the caller's own: their `*`
 // grant, which lets anyone read, or their `users` grant, which lets any caller
-// with an account on the paired homeserver read, judged as
+// of the paired homeserver with a Boxel account read, judged as
 // `effectiveRealmPermissions` judges it (ADR 004 §1.4).
 //
 // The `users` grant is a user's alone. A realm-authority principal is a render,
 // and what it renders is served to every viewer, signed in or not, so it reads
 // only what the realm's ACL grants it by name or grants everyone.
 //
-// The homeserver is asked for the user's profile only when one of the realms
-// carries a `users` grant, and once however many do, so a search naming none
-// costs no round trip. A homeserver that can't answer leaves those realms
-// unread rather than failing the request, so the realms the caller reads
-// outright still answer. An archived realm is sealed, and lets no one read it.
+// The user's account is looked up in the realm server's `users` table (see
+// `accountCheck`), and only when one of the realms carries a `users` grant,
+// once however many do, so a search naming none costs no query. A session
+// alone is not taken as proof of an account: a token signed with the realm
+// secret seed can name any user, and the realm judges the same token by the
+// same table. An archived realm is sealed, and lets no one read it.
 async function realmsReadableThroughSharedGrants(
   dbAdapter: DBAdapter,
   matrixClient: MatrixClient,
@@ -513,28 +515,13 @@ async function realmsReadableThroughSharedGrants(
     readableToUsers.length > 0 &&
     principal?.kind === 'user' &&
     isUserOfMatrixServer(principal.user, matrixClient.serverName) &&
-    (await hasMatrixProfile(matrixClient, principal.user))
+    (await userExists(dbAdapter, principal.user))
   ) {
     for (let realmURL of readableToUsers) {
       readable.add(realmURL);
     }
   }
   return [...readable];
-}
-
-async function hasMatrixProfile(
-  matrixClient: MatrixClient,
-  user: string,
-): Promise<boolean> {
-  try {
-    return !!(await matrixClient.getProfile(user));
-  } catch (e) {
-    log.warn(
-      `could not get the Matrix profile of ${user}, so the realms they would read through a \`users\` grant are left unread`,
-      e,
-    );
-    return false;
-  }
 }
 
 export function getMultiRealmAuthorization(
