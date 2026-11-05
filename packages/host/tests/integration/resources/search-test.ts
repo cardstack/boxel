@@ -1616,53 +1616,87 @@ module(`Integration | search resource`, function (hooks) {
     }
   });
 
-  test(`can perform a live search for file-meta instances`, async function (assert) {
-    let query: Query = {
-      filter: {
-        type: {
-          module: baseRRI('card-api'),
-          name: 'FileDef',
-        },
-      },
-    };
-    let search = getSearchResourceForTest(loaderService, () => ({
-      named: {
-        query,
-        realms: [testRealmURL],
-        isLive: true,
-        isAutoSaved: false,
-        storeService,
-        owner: this.owner,
-      },
-    }));
-    await search.loaded;
+  // STRESS (do not merge): each variant registered many times.
+  for (let stressRun = 0; stressRun < 40; stressRun++)
+    for (let variant of ['fixed', 'control-1s'] as const)
+      test(`can perform a live search for file-meta instances [stress ${variant} ${stressRun}]`, async function (assert) {
+        let query: Query = {
+          filter: {
+            type: {
+              module: baseRRI('card-api'),
+              name: 'FileDef',
+            },
+          },
+        };
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query,
+            realms: [testRealmURL],
+            isLive: true,
+            isAutoSaved: false,
+            storeService,
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
 
-    let initialCount = search.instances.length;
-    assert.ok(initialCount >= 2, 'initial results include file-meta instances');
+        let initialCount = search.instances.length;
+        assert.ok(
+          initialCount >= 2,
+          'initial results include file-meta instances',
+        );
 
-    // Write a new file to trigger a live update
-    await realm.write('files/new-file.txt', 'New content');
+        let writeStart = performance.now();
+        await realm.write('files/new-file.txt', 'New content');
+        let waitStart = performance.now();
+        let writeMs = Math.round(waitStart - writeStart);
+        let reachedMs: number | undefined;
+        let reached = () => {
+          let done = search.instances.length > initialCount;
+          if (done && reachedMs === undefined) {
+            reachedMs = Math.round(performance.now() - waitStart);
+          }
+          return done;
+        };
+        let outcome = 'ok';
+        try {
+          if (variant === 'fixed') {
+            await waitForLiveRefresh(
+              search,
+              reached,
+              `more than ${initialCount} instances`,
+            );
+          } else {
+            await waitUntil(reached);
+          }
+        } catch (e) {
+          outcome = `timeout: ${e}`;
+          // keep polling so the log says whether the refresh came late
+          await waitUntil(reached, { timeout: 15_000 }).catch(() => {});
+        }
+        console.warn(
+          `[stress-timing] variant=${variant} copy=${stressRun} writeMs=${writeMs} reachedMs=${reachedMs} totalWaitMs=${Math.round(
+            performance.now() - waitStart,
+          )} outcome=${outcome}`,
+        );
+        if (outcome !== 'ok') {
+          throw new Error(`reachedMs=${reachedMs}: ${outcome}`);
+        }
 
-    await waitForLiveRefresh(
-      search,
-      () => search.instances.length > initialCount,
-      `more than ${initialCount} instances`,
-    );
-
-    let ids = search.instances.map((i) => i.id);
-    assert.ok(
-      ids.includes(rri(`${testRealmURL}files/new-file.txt`)),
-      'new file appears in live search results',
-    );
-    assert.ok(
-      isFileDefInstance(
-        search.instances.find(
-          (i) => i.id === `${testRealmURL}files/new-file.txt`,
-        ),
-      ),
-      'new file is a FileDef instance',
-    );
-  });
+        let ids = search.instances.map((i) => i.id);
+        assert.ok(
+          ids.includes(rri(`${testRealmURL}files/new-file.txt`)),
+          'new file appears in live search results',
+        );
+        assert.ok(
+          isFileDefInstance(
+            search.instances.find(
+              (i) => i.id === `${testRealmURL}files/new-file.txt`,
+            ),
+          ),
+          'new file is a FileDef instance',
+        );
+      });
 
   module(`in-flight search dedup`, function (innerHooks) {
     // Holds outbound `maybeAuthedFetchForRealms` calls until the test
