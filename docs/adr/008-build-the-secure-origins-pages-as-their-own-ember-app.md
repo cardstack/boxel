@@ -1,5 +1,6 @@
 ---
-status: accepted
+status: superseded
+superseded-by: 019
 date: 2026-10-20
 scope:
   - packages/secure-origin/**

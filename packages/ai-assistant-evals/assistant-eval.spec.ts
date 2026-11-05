@@ -157,7 +157,7 @@ async function loginViaLocalStorage(page: Page, username: string) {
   await page.goto('/');
   let rendered = page
     .locator(
-      '[data-test-workspace-chooser], [data-test-workspace-chooser-toggle], [data-test-login-form]',
+      '[data-test-dashboard], [data-test-workspace-chooser-toggle], [data-test-login-form]',
     )
     .first();
   // The first tab of a fresh browser context can lose every module load to
@@ -200,15 +200,15 @@ async function createWorkspace(
   displayName: string,
   endpoint: string,
 ) {
-  // A fresh login lands on the chooser; a restored session lands in the last
-  // workspace, where the chooser is behind a toggle. Wait for whichever is
-  // there before deciding.
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  // A fresh login lands on the dashboard; a restored session lands in the
+  // last workspace, where the dashboard is behind a toggle. Wait for whichever
+  // is there before deciding.
+  let dashboard = page.locator('[data-test-dashboard]');
   let toggle = page.locator('[data-test-workspace-chooser-toggle]');
-  await expect(chooser.or(toggle).first()).toBeVisible({ timeout: 60_000 });
-  if (!(await chooser.isVisible())) {
+  await expect(dashboard.or(toggle).first()).toBeVisible({ timeout: 60_000 });
+  if (!(await dashboard.isVisible())) {
     await toggle.click();
-    await chooser.waitFor();
+    await dashboard.waitFor();
   }
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(displayName);
@@ -374,7 +374,7 @@ async function ensureInsideWorkspace(
   realmUrl: string,
   openCards: string[] = [],
 ) {
-  let chooser = page.locator('[data-test-workspace-chooser]');
+  let dashboard = page.locator('[data-test-dashboard]');
   let indexCard = page.locator(`[data-test-stack-card="${realmUrl}index"]`);
   let missingOpenCard = false;
   for (let id of openCards) {
@@ -383,15 +383,15 @@ async function ensureInsideWorkspace(
     }
   }
   if (
-    (await chooser.count()) > 0 ||
+    (await dashboard.count()) > 0 ||
     (await indexCard.count()) === 0 ||
     missingOpenCard
   ) {
     // Re-enter through the URL rather than the tile, so this works whatever
-    // state the chooser is in.
+    // state the dashboard is in.
     await openStack(page, realmUrl, openCards);
   }
-  await expect(chooser).toHaveCount(0);
+  await expect(dashboard).toHaveCount(0);
   await expect(indexCard).toBeVisible();
 }
 

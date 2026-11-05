@@ -1,4 +1,4 @@
-import { click, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -18,7 +18,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupFeatureFlag } from '../helpers/feature-flags';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
@@ -28,7 +27,19 @@ const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
 const delegatedOwnerRealmURL =
   'http://test-realm/otheruser/delegated-owner-workspace/';
 
-module('Acceptance | workspace-chooser-delete', function (hooks) {
+const cardsGridIndex = {
+  data: {
+    type: 'card',
+    meta: {
+      adoptsFrom: {
+        module: '@cardstack/base/cards-grid',
+        name: 'CardsGrid',
+      },
+    },
+  },
+};
+
+module('Acceptance | dashboard delete', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupRealmCacheTeardown(hooks);
@@ -50,17 +61,7 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
       },
       contents: {
         'realm.json': realmConfigCardJSON({ name: 'Owned Workspace' }),
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
+        'index.json': cardsGridIndex,
         'Person/1.json': {
           data: {
             type: 'card',
@@ -88,17 +89,7 @@ export class Person extends CardDef {}
       },
       contents: {
         'realm.json': realmConfigCardJSON({ name: 'Shared Workspace' }),
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
+        'index.json': cardsGridIndex,
       },
     });
 
@@ -113,17 +104,7 @@ export class Person extends CardDef {}
         'realm.json': realmConfigCardJSON({
           name: 'Delegated Owner Workspace',
         }),
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
+        'index.json': cardsGridIndex,
       },
     });
   });
@@ -132,7 +113,10 @@ export class Person extends CardDef {}
     window.localStorage.removeItem(SessionLocalStorageKey);
   });
 
-  async function assertDeleteOnlyOnOwnedWorkspaces(assert: Assert) {
+  test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    assert.dom('[data-test-dashboard]').exists();
+
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
@@ -152,24 +136,9 @@ export class Person extends CardDef {}
     assert
       .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
       .exists('a workspace the user co-owns offers Delete');
-  }
-
-  test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
-    await visitOperatorMode({ workspaceChooserOpened: true });
-    await assertDeleteOnlyOnOwnedWorkspaces(assert);
   });
 
-  module('on the dashboard', function (hooks) {
-    setupFeatureFlag(hooks, 'DASHBOARD_V2');
-
-    test('only workspaces the current user owns offer Delete Workspace', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-      assert.dom('[data-test-dashboard]').exists();
-      await assertDeleteOnlyOnOwnedWorkspaces(assert);
-    });
-  });
-
-  test('can delete a workspace the current user owns from the chooser', async function (assert) {
+  test('deleting an owned workspace removes it, its session and its recent files, and keeps the dashboard open', async function (assert) {
     await visitOperatorMode({
       workspaceChooserOpened: true,
       stacks: [[{ id: `${ownedRealmURL}index`, format: 'isolated' }]],
@@ -204,18 +173,6 @@ export class Person extends CardDef {}
       }),
     );
 
-    let sessionsBeforeDelete = JSON.parse(
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}',
-    ) as Record<string, string>;
-    assert.ok(
-      sessionsBeforeDelete[ownedRealmURL],
-      'owned realm session token exists before deletion',
-    );
-    assert.ok(
-      sessionsBeforeDelete[sharedRealmURL],
-      'shared realm session token exists before deletion',
-    );
-
     recentFilesService.recentFiles.push(
       {
         realmURL: new URL(ownedRealmURL),
@@ -237,7 +194,9 @@ export class Person extends CardDef {}
       },
     );
 
-    assert.dom('[data-test-workspace="Owned Workspace"]').exists();
+    assert
+      .dom('[data-test-workspace-list] [data-test-workspace="Owned Workspace"]')
+      .exists();
     assertRecentFileURLs(assert, recentFilesService.recentFiles, [
       `${ownedRealmURL}Person/1.json`,
       `${ownedRealmURL}person.gts`,
@@ -247,6 +206,7 @@ export class Person extends CardDef {}
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
 
+    await waitFor(`[data-test-delete-modal="${ownedRealmURL}"]`);
     assert.dom(`[data-test-delete-modal="${ownedRealmURL}"]`).exists();
 
     await click('[data-test-confirm-delete-button]');
@@ -256,18 +216,22 @@ export class Person extends CardDef {}
     );
 
     assert.dom('[data-test-workspace="Owned Workspace"]').doesNotExist();
-    assert.dom('[data-test-workspace="Shared Workspace"]').exists();
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert
+      .dom(
+        '[data-test-workspace-list] [data-test-workspace="Shared Workspace"]',
+      )
+      .exists();
+    assert.dom('[data-test-dashboard]').exists('the dashboard stays open');
     let sessionsAfterDelete = JSON.parse(
       window.localStorage.getItem(SessionLocalStorageKey) ?? '{}',
     ) as Record<string, string>;
     assert.notOk(
       sessionsAfterDelete[ownedRealmURL],
-      'deleted realm session token is removed',
+      'the deleted realm session token is removed',
     );
     assert.ok(
       sessionsAfterDelete[sharedRealmURL],
-      'other realm session token remains',
+      'the other realm session token remains',
     );
     assertRecentFileURLs(
       assert,

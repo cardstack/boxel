@@ -39,7 +39,7 @@ import {
   ArchiveWorkspaceModal,
   DeleteWorkspaceModal,
   DuplicateWorkspaceModal,
-} from '../workspace-chooser/workspace-modals';
+} from '../dashboard-modals/workspace-modals';
 
 import HostedPill from './hosted-pill';
 import ItemContainer from './item-container';

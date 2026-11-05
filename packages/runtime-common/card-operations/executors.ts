@@ -52,6 +52,7 @@ import {
   type EntryPosition,
   type OperationErrorCode,
   type OperationProgram,
+  unresolvableAsUndefined,
 } from './types.ts';
 import {
   OperationReadTally,
@@ -921,12 +922,9 @@ async function replacePrimitiveValues(
   if (!adoptsFrom || !Object.values(patch).some(isPlainRecord)) {
     return;
   }
-  let definition: Definition | undefined;
-  try {
-    definition = await ctx.lookupDefinition(adoptsFrom, url);
-  } catch {
-    definition = undefined;
-  }
+  let definition = await unresolvableAsUndefined(() =>
+    ctx.lookupDefinition(adoptsFrom, url),
+  );
   if (!definition) {
     throw new OperationFailure({
       id: url.href,

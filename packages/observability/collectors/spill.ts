@@ -1,9 +1,10 @@
-// Decides when host CI spills from GitHub's runners onto RunsOn.
+// Decides when CI spills from GitHub's runners onto RunsOn.
 //
 // GitHub's hosted runners cost nothing for a public repository, and RunsOn's
-// instances in our AWS account do not. So pull request host jobs use GitHub's
-// runners, and take RunsOn only while a repo variable (HOST_TEST_SPILL) is
-// `true`; see the `host-test` job in .github/workflows/ci-host.yaml. This
+// instances in our AWS account do not. So the host, Realm Server and Matrix
+// test jobs use GitHub's runners, and take RunsOn only while a repo variable
+// (RUNS_ON_SPILL) is `true`; see the `host-test` job in
+// .github/workflows/ci-host.yaml and `realm-server-test` in ci.yaml. This
 // module turns one sample of the GitHub-hosted pool into the value that
 // variable should hold.
 //
@@ -141,9 +142,28 @@ export interface PoolJob {
   labels: readonly string[];
   // How long a queued job has waited, or null if unknown.
   waitedSeconds: number | null;
-  // False for a job that uses RunsOn whatever the spill says: in
-  // ci-host.yaml, a job of a push to `main`.
+  // False for a job that uses RunsOn whatever the spill says; see
+  // isDivertible.
   divertible: boolean;
+}
+
+// The workflow whose pushes to `main` take RunsOn whatever the spill says, for
+// one machine type under its memory baseline and Percy builds. A RunsOn job of
+// any other workflow, main included, is there because of the spill. Matched on
+// the workflow file, which a rename of the workflow's `name:` does not change.
+export const ALWAYS_RUNS_ON_MAIN_WORKFLOW_PATH =
+  '.github/workflows/ci-host.yaml';
+
+export function isDivertible(job: {
+  event: string | undefined;
+  branch: string | null | undefined;
+  workflowPath: string | null | undefined;
+}): boolean {
+  return !(
+    job.event === 'push' &&
+    job.branch === 'main' &&
+    job.workflowPath === ALWAYS_RUNS_ON_MAIN_WORKFLOW_PATH
+  );
 }
 
 // Adds one job to the pool count. Only `queued` jobs wait for a runner: a
