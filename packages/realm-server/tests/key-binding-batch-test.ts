@@ -734,10 +734,17 @@ module(basename(import.meta.filename), function (hooks) {
       });
     }
     let found = await batchOf(WRITER, onType(INBOX));
+    let destinationOf = (operation: string) =>
+      found.groups.find((g) => g.operations.some((o) => o.name === operation))!
+        .destination.href;
     assert.deepEqual(
       found.shares.map((s) => [s.label, s.serves]),
-      [['other robot', []]],
-      "the sign-in app's share is left out, and the robot's tokens are good at none of the batch's destinations",
+      [['other robot', [destinationOf('elsewhere')]]],
+      "the sign-in app's share is left out, and the robot's tokens are good only at its API host",
+    );
+    assert.notOk(
+      found.shares[0]!.serves.includes(destinationOf('shared')),
+      'so it is not good at the destination the share slot is sent to',
     );
   });
 
